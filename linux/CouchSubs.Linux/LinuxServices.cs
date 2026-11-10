@@ -79,6 +79,14 @@ public sealed class LinuxServices : IAppServices
     }
 
     public IStreamSession MakeStream(RegisteredConsole console, byte[] accountId) => new StreamSession(console, accountId);
+    public bool SupportsTvCapture => true;
+
+    /// <summary>
+    /// Sunucunun boş çekirdekleri: TV'den saniyede ~4 kare gelirken bir okuma 70–300 ms sürüyor; tek okuma sırasında
+    /// gelen kare atlanıyor, hareketli sahnede (bölge her karede değişir) kareler kaçıyordu.
+    /// </summary>
+    public int ParallelReads => 2;
+    public IStreamSession MakeTvCaptureStream(LgTv tv, string devKey) => new TvCaptureStream(tv.Host, devKey);
 
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
     {

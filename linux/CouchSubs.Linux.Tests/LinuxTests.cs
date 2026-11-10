@@ -34,6 +34,39 @@ public sealed class ClaudeTranslatorTests
     }
 }
 
+public sealed class TvCaptureTests
+{
+    [Fact]
+    public void CaptureScriptKeepsToolOpenAndPacesFrames()
+    {
+        var script = TvCaptureStream.CaptureScript(TimeSpan.FromMilliseconds(100));
+        Assert.DoesNotContain('\r', script);
+        Assert.DoesNotContain("COUCHSUBS", script);
+        Assert.Contains("usleep 100000", script);
+        Assert.Contains("exit 127", script);
+        Assert.Contains("trap cleanup", script);
+    }
+
+    [Fact]
+    public void LumaPlaneIsScaledToFullHdAndFullRange()
+    {
+        var luma = new byte[960 * 540];
+        luma[0] = 16;
+        luma[960] = 73;
+        luma[^1] = 235;
+        var frame = TvCaptureStream.DecodeLuma(luma);
+        Assert.Equal((1920, 1080, 1920 * 4), (frame.Width, frame.Height, frame.Stride));
+        Assert.Equal(new byte[] { 0, 0, 0, 255 }, frame.Pixels[..4]);
+        // 2. satırın ilk pikseli büyütülmüş karede 2. ve 3. satırların ilk iki pikseli olur; 73 tam aralıkta 66'dır.
+        byte[] gray = [66, 66, 66, 255];
+        foreach (var (row, column) in new[] { (2, 0), (2, 1), (3, 0), (3, 1) })
+            Assert.Equal(gray, frame.Pixels[(row * frame.Stride + column * 4)..(row * frame.Stride + column * 4 + 4)]);
+        Assert.Equal(new byte[] { 0, 0, 0, 255 }, frame.Pixels[(4 * frame.Stride)..(4 * frame.Stride + 4)]);
+        Assert.Equal(new byte[] { 255, 255, 255, 255 }, frame.Pixels[^4..]);
+        Assert.Throws<ArgumentException>(() => TvCaptureStream.DecodeLuma(luma.AsSpan(1)));
+    }
+}
+
 public sealed class FileAppStoreTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), "couchsubs-test-" + Guid.NewGuid().ToString("N"));

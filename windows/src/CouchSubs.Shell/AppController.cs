@@ -33,6 +33,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private byte[]? accountId;
     private RegisteredConsole? console;
     private LgTv? tv;
+    private bool useTvCapture;
     private TvAppState tvApp = TvAppState.Unknown;
     /// <summary>Son eşleşmede TV uygulaması açılamadı.</summary>
     private bool tvAppMissing;
@@ -42,6 +43,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private UserSettings settings;
     private bool isRunning;
     private bool isStarting;
+    private int startAttempt;
     private SessionState sessionState = SessionState.Disconnected(DisconnectKind.Stopped);
     private int tvClients;
     private string lastSource = "";
@@ -88,9 +90,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         accountId = store.Load<byte[]>(StoreKeys.AccountId);
         console = store.Load<RegisteredConsole>(StoreKeys.Console);
         tv = store.Load<LgTv>(StoreKeys.Tv);
+        useTvCapture = services.SupportsTvCapture && store.Load<bool>(StoreKeys.TvCapture);
         settings = settingsStore.Load();
-        var ready = accountId is not null && console is not null && tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
-        step = ready ? OnboardingStep.Done : OnboardingStep.Welcome;
+        step = ReadyForSource ? OnboardingStep.Done : OnboardingStep.Welcome;
         server.ClientsChanged += OnClientsChanged;
     }
 
@@ -110,6 +112,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool HasAccount => accountId is not null;
     public RegisteredConsole? Console => console;
     public LgTv? Tv => tv;
+    public bool UseTvCapture => useTvCapture;
+    public bool NeedsTvCaptureKey => useTvCapture && tv?.Brand == TvBrand.Lg && store.Load<string>(StoreKeys.TvDevKey) is null;
+    private bool TvReady => tv is not null && store.Load<string>(StoreKeys.TvKey) is not null &&
+        (!useTvCapture || (tv.Brand == TvBrand.Lg && !NeedsTvCaptureKey));
+    private bool ReadyForSource => TvReady && (useTvCapture || (accountId is not null && console is not null));
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
     public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
@@ -164,7 +171,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         OnboardingStep.Welcome or OnboardingStep.SecondAccount or OnboardingStep.Test => true,
         OnboardingStep.PsnLogin => accountId is not null,
         OnboardingStep.Console => console is not null,
-        OnboardingStep.Tv => tv is not null && store.Load<string>(StoreKeys.TvKey) is not null,
+        OnboardingStep.Tv => TvReady,
         OnboardingStep.Translation => ModelInstalled,
         _ => false,
     };
@@ -174,12 +181,28 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (!CanAdvance || step == OnboardingStep.Done) return;
         // Model büyük; kullanıcı diğer adımlarla uğraşırken arka planda iner.
         if (step == OnboardingStep.Welcome) StartModelDownload();
-        Step = step + 1;
+        Step = useTvCapture && step == OnboardingStep.Welcome ? OnboardingStep.Tv : step + 1;
     }
 
     public void Back()
     {
-        if (step > OnboardingStep.Welcome) Step = step - 1;
+        if (step > OnboardingStep.Welcome)
+            Step = useTvCapture && step == OnboardingStep.Tv ? OnboardingStep.Welcome : step - 1;
+    }
+
+    public void SelectTvCapture(bool enabled)
+    {
+        if (isRunning || isStarting) throw new InvalidOperationException(text["Stop translating"]);
+        if (step is not (OnboardingStep.Welcome or OnboardingStep.Done))
+            throw new InvalidOperationException(text.Language == "tr" ? "Kaynağı değiştirmek için ilk adıma dönün." : "Return to the first step to change the source.");
+        if (enabled && !services.SupportsTvCapture) throw new NotSupportedException();
+        if (enabled == useTvCapture) return;
+
+        store.Save(StoreKeys.TvCapture, enabled);
+        useTvCapture = enabled;
+        LastFrame = null;
+        if (step == OnboardingStep.Done && !ReadyForSource) Step = enabled ? OnboardingStep.Tv : OnboardingStep.Welcome;
+        Changed(nameof(UseTvCapture), nameof(NeedsTvCaptureKey), nameof(CanAdvance));
     }
 
     public async Task CompletePsnLoginAsync(Uri redirect)
@@ -239,8 +262,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public async Task PairAsync(LgTv target)
     {
+        if (useTvCapture && target.Brand != TvBrand.Lg)
+            throw new InvalidOperationException(text.Language == "tr" ? "Bu kaynak için LG webOS TV seçin." : "Select an LG webOS TV for this source.");
         await StartServerAsync();
-        var pairing = await services.PairTvAsync(target, store.Load<string>(StoreKeys.TvKey), ServerAddress(target));
+        var differentTv = tv is { } previous && (previous.Brand != target.Brand || previous.Host != target.Host);
+        var pairing = await services.PairTvAsync(target, differentTv ? null : store.Load<string>(StoreKeys.TvKey), ServerAddress(target));
+        if (differentTv) store.Remove(StoreKeys.TvDevKey);
         if (tv?.Brand != target.Brand || (target.Brand != TvBrand.AndroidTv && tv?.Host != target.Host))
             store.Remove(StoreKeys.TvAppVersion);
         tv = target;
@@ -319,12 +346,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (services.BundledTvAppVersion is not { } bundled) return;
         if (!await services.IsDevModeOnAsync(target.Host))
         {
-            TvApp = tvAppMissing ? new TvAppState(TvAppKind.DevModeOff) : TvAppState.Unknown;
+            TvApp = tvAppMissing || useTvCapture ? new TvAppState(TvAppKind.DevModeOff) : TvAppState.Unknown;
             return;
         }
         if (store.Load<string>(StoreKeys.TvDevKey) is not { } devKey)
         {
-            TvApp = tvAppMissing ? new TvAppState(TvAppKind.NeedsPassphrase) : TvAppState.Unknown;
+            TvApp = tvAppMissing || useTvCapture ? new TvAppState(TvAppKind.NeedsPassphrase) : TvAppState.Unknown;
             return;
         }
         await InstallTvAppAsync(target, devKey, bundled);
@@ -429,7 +456,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         try
         {
             var devKey = await services.FetchDevKeyAsync(target.Host, passphrase.Trim());
+            if (tv != target) return;
             store.Save(StoreKeys.TvDevKey, devKey);
+            Changed(nameof(NeedsTvCaptureKey), nameof(CanAdvance));
             await InstallTvAppAsync(target, devKey, bundled);
         }
         catch (DevModeException error)
@@ -723,10 +752,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public void ResetSetup()
     {
         Stop();
-        foreach (var key in new[] { StoreKeys.AccountId, StoreKeys.Console, StoreKeys.Tv, StoreKeys.TvKey, StoreKeys.TvDevKey, StoreKeys.TvAppVersion }) store.Remove(key);
+        foreach (var key in new[] { StoreKeys.AccountId, StoreKeys.Console, StoreKeys.Tv, StoreKeys.TvKey, StoreKeys.TvDevKey, StoreKeys.TvAppVersion, StoreKeys.TvCapture }) store.Remove(key);
         accountId = null;
         console = null;
         tv = null;
+        useTvCapture = false;
         tvAppMissing = false;
         TvApp = TvAppState.Unknown;
         Step = OnboardingStep.Welcome;
@@ -738,27 +768,30 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task StartAsync()
     {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
-        if (isRunning || isStarting || console is null || accountId is null || tv is null) return;
+        if (isRunning || isStarting || tv is not { } target || !ReadyForSource) return;
         IsStarting = true;
+        var attempt = ++startAttempt;
         try
         {
             RefreshTranslatorStatus();
             try { await StartServerAsync(); } catch { /* port açılamadıysa TV durumu "bekleniyor" kalır */ }
+            if (attempt != startAttempt || tv != target || !ReadyForSource) return;
             server.SendStyle(settings.Style);
             SubtitlesPaused = false;
             MakePipeline();
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
 
-            var stream = services.MakeStream(console, accountId);
-            stream.StateChanged += state => post(() => SessionStateChanged(state));
-            stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
-            stream.FrameReceived += HandleFrame;
-            stream.Start();
+            var stream = useTvCapture ? services.MakeTvCaptureStream(target, store.Load<string>(StoreKeys.TvDevKey)!)
+                : services.MakeStream(console!, accountId!);
             session = stream;
+            stream.StateChanged += state => post(() => { if (session == stream) SessionStateChanged(state); });
+            stream.ConsoleMoved += moved => post(() => { if (session == stream) ConsoleMoved(moved); });
+            stream.FrameReceived += frame => HandleFrame(stream, frame);
+            stream.Start();
 
             // TV uygulamasını başlat ve açık tut; TV kapalıysa açıldığında bağlanır.
             var running = server;
-            var tvKeeper = services.MakeKeeper(tv, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(tv) },
+            var tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target) },
                 () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)));
             tvKeeper.Start(TimeSpan.FromSeconds(5));
             keeper = tvKeeper;
@@ -768,6 +801,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             IsRunning = true;
             UpdateTroubleClocks();
         }
+        catch
+        {
+            Stop();
+            throw;
+        }
         finally
         {
             IsStarting = false;
@@ -776,6 +814,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void Stop()
     {
+        startAttempt++;
         session?.Stop();
         session?.Dispose();
         session = null;
@@ -945,20 +984,28 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // Bağlantı koptuysa TV'de eski altyazı kalmasın.
         if (state.Phase == SessionPhase.Disconnected)
         {
+            if (useTvCapture) LastFrame = null;
             pipeline?.Reset();
             server.Clear();
             dubber?.Stop();
         }
     }
 
-    private async void HandleFrame(Frame frame)
+    private async void HandleFrame(IStreamSession stream, Frame frame)
     {
-        post(() => LastFrame = frame);
+        if (session != stream) return;
+        post(() => { if (session == stream) LastFrame = frame; });
         // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
         if (subtitlesPaused) return;
-        // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
+        // Okunan kare sayısı sınırdaysa bu kare atlanır; okuma kareleri biriktirmez. Sınır genelde 1'dir; seyrek kare
+        // veren kaynakta (TV'den yakalama) boştaki çekirdekler hareketli sahnede kare kaçırmamak için kullanılır.
         var current = pipeline;
-        if (current is null || Interlocked.Exchange(ref processing, 1) == 1) return;
+        if (current is null) return;
+        if (Interlocked.Increment(ref processing) > Math.Max(1, services.ParallelReads))
+        {
+            Interlocked.Decrement(ref processing);
+            return;
+        }
         try
         {
             await current.ProcessAsync(frame, settings.Region);
@@ -969,7 +1016,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            Volatile.Write(ref processing, 0);
+            Interlocked.Decrement(ref processing);
         }
     }
 

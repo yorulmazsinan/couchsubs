@@ -13,6 +13,7 @@ public static class StoreKeys
     public const string Tv = "tv";
     public const string TvKey = "tvKey";
     public const string TvDevKey = "tvDevKey";
+    public const string TvCapture = "tvCapture";
     /// <summary>Samsung ve Android TV'ye CouchSubs'ın kurduğu sürüm (LG'de sürüm TV'den okunur).</summary>
     public const string TvAppVersion = "tvAppVersion";
     /// <summary>LG geliştirici modu süresinin son uzatıldığı an.</summary>
@@ -121,6 +122,10 @@ public interface IAppServices
     /// <summary>TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.</summary>
     Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server);
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId);
+    bool SupportsTvCapture => false;
+    /// <summary>Aynı anda okunabilecek kare sayısı; fazlası atlanır.</summary>
+    int ParallelReads => 1;
+    IStreamSession MakeTvCaptureStream(LgTv tv, string devKey) => throw new NotSupportedException();
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>
     /// <param name="onMoved">TV ağda yeni bir adreste bulununca çağrılır.</param>
     IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved);

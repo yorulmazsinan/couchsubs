@@ -79,6 +79,50 @@ public class SubtitleStabilizerTests
         Assert.Equal(StabilizerAction.Clear, s.Feed(""));
     }
 
+    /// Yavaş kaynakta (saniyede ~3 kare) altyazı kalkınca TV'deki çeviri 6 kare (2 sn) beklemeden kalkmalı.
+    [Fact]
+    public void SlowSourceClearsAfterEmptyTime()
+    {
+        long time = 0;
+        var s = new SubtitleStabilizer(emptyFramesToClear: 6, emptyTimeToClear: TimeSpan.FromMilliseconds(300), clock: () => time);
+        s.Feed("Hello there.");
+        time += 333;
+        Assert.Equal(StabilizerAction.None, s.Feed(""));
+        time += 333;
+        Assert.Equal(StabilizerAction.Clear, s.Feed(""));
+        time += 333;
+        Assert.Equal(StabilizerAction.None, s.Feed(""));
+    }
+
+    /// Hızlı kaynakta süre kuralı tek hatalı okumayla silmez; kare sayısı kuralı aynen çalışır.
+    [Fact]
+    public void FastSourceStillNeedsEmptyFrames()
+    {
+        long time = 0;
+        var s = new SubtitleStabilizer(emptyFramesToClear: 6, emptyTimeToClear: TimeSpan.FromMilliseconds(300), clock: () => time);
+        s.Feed("Hello there.");
+        for (var i = 0; i < 5; i++)
+        {
+            time += 50;
+            Assert.Equal(StabilizerAction.None, s.Feed(""));
+        }
+        time += 50;
+        Assert.Equal(StabilizerAction.Clear, s.Feed(""));
+    }
+
+    /// Süre geçse bile tek boş kare (ör. bir karelik hatalı okuma) altyazıyı silmez.
+    [Fact]
+    public void SingleEmptyFrameNeverClearsByTime()
+    {
+        long time = 0;
+        var s = new SubtitleStabilizer(emptyFramesToClear: 6, emptyTimeToClear: TimeSpan.FromMilliseconds(300), clock: () => time);
+        s.Feed("Hello there.");
+        time += 1000;
+        Assert.Equal(StabilizerAction.None, s.Feed(""));
+        time += 100;
+        Assert.Equal(StabilizerAction.None, s.Feed("Hello there."));
+    }
+
     /// Önceden çeviren çevirmenle: bozuk ilk kare tek başına gönderilmez; doğrulanan satır ilk okunan hâliyle gider
     /// (çevirisi o metinle başlatılmıştı).
     [Fact]

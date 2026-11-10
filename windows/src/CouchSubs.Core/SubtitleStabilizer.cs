@@ -16,6 +16,12 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
 /// Kare kare gelen OCR çıktısını izler; altyazı kararlı hale gelince çevrilmesini,
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
 /// </summary>
+/// <param name="emptyTimeToClear">
+/// Verilirse bölge en az <see cref="MinEmptyFramesForTime"/> kare ve bu süre boş kalınca da temizlenir. Kare sayısı tek
+/// başına kare hızına bağlıdır: saniyede 20 karede 6 kare 0,3 sn iken TV'den yakalamada (saniyede ~3 kare) 2 sn
+/// ediyor ve çeviri TV'de oyundaki altyazıdan çok sonra kalkıyordu.
+/// </param>
+/// <param name="clock">Milisaniye saati (testlerde sahtesi verilir).</param>
 /// <param name="cleanFastPathOnly">
 /// Noktalamayla biten satır ilk karede gönderilir. Açıksa bu yalnız temiz okumada olur (<see cref="LooksClean"/>):
 /// altyazı belirirken okunan bozuk kare ("f fe &amp; ie want it.") <paramref name="stableFrames"/> kare doğrulanmayı
@@ -23,7 +29,7 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
 /// Temiz satırın da beklemesi kısa görünen satırları hiç göstermiyordu.
 /// </param>
 public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2, int emptyFramesToClear = 2,
-    bool cleanFastPathOnly = false)
+    TimeSpan? emptyTimeToClear = null, Func<long>? clock = null, bool cleanFastPathOnly = false)
 {
     /// <summary>İngilizcede tek başına geçen kısa sözcükler; bunların dışındaki 1–2 harflik parçalar OCR çöpüdür.</summary>
     private static readonly HashSet<string> ShortWords = new(StringComparer.OrdinalIgnoreCase)
@@ -50,11 +56,16 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         return true;
     }
 
+    /// <summary>Süreyle temizlemede de en az bu kadar boş kare gerekir; tek bir hatalı okuma altyazıyı silmesin.</summary>
+    public const int MinEmptyFramesForTime = 2;
+
+    private readonly Func<long> now = clock ?? (() => Environment.TickCount64);
     private string candidate = "";
     private string candidateRaw = "";
     private int candidateCount;
     private string sent = "";
     private int emptyCount;
+    private long emptySince;
 
     public StabilizerAction Feed(string rawText)
     {
@@ -65,7 +76,11 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             candidate = "";
             candidateCount = 0;
             emptyCount++;
-            if (emptyCount == emptyFramesToClear && sent.Length > 0)
+            var time = now();
+            if (emptyCount == 1) emptySince = time;
+            var longEnough = emptyTimeToClear is { } wait && emptyCount >= MinEmptyFramesForTime &&
+                             time - emptySince >= wait.TotalMilliseconds;
+            if ((emptyCount >= emptyFramesToClear || longEnough) && sent.Length > 0)
             {
                 sent = "";
                 return StabilizerAction.Clear;

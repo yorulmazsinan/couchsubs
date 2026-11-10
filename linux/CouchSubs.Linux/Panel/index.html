@@ -112,6 +112,14 @@ function input(id, label, attrs) {
 }
 
 var STEPS = ['Welcome', 'SecondAccount', 'PsnLogin', 'Console', 'Tv', 'Translation', 'Test'];
+var TV_CAPTURE_STEPS = ['Welcome', 'Tv', 'Translation', 'Test'];
+
+function sourcePicker(s) {
+  return '<label for="videoSource">' + t('Görüntü kaynağı', 'Video source') + '</label>' +
+    '<select id="videoSource"' + (s.running || s.starting || busy.source ? ' disabled' : '') + '>' +
+    '<option value="ps5"' + (!s.tvCapture ? ' selected' : '') + '>' + t('PS5 Uzaktan Oynatma', 'PS5 Remote Play') + '</option>' +
+    '<option value="tv"' + (s.tvCapture ? ' selected' : '') + '>' + t('LG TV’den yakala (deneysel)', 'Capture from LG TV (experimental)') + '</option></select>' + err('source');
+}
 
 function wizard(s) {
   var body = '';
@@ -120,7 +128,9 @@ function wizard(s) {
       body = '<h1>' + t('PS5 oyunlarına Türkçe altyazı', 'Subtitles for your PS5 games') + '</h1>' +
         '<p>' + t('CouchSubs oyundaki altyazıyı okur, çevirir ve TV\'de oyunun üstünde gösterir. Kurulum birkaç dakika sürer.',
                   'CouchSubs reads the in-game subtitles, translates them and shows them on your TV on top of the game. Setup takes a few minutes.') + '</p>' +
-        '<div class="card"><p>' + t('Aynı ağda PS5, desteklenen bir TV ve ikinci bir PSN hesabı gerekir.', 'You need a PS5, a supported TV on the same network and a second PSN account.') + '</p></div>' +
+        '<div class="card">' + sourcePicker(s) + (s.tvCapture
+          ? '<p>' + t('LG webOS TV’de Developer Mode açık olmalı. PSN girişi ve PS5 eşleştirmesi gerekmez.', 'Enable Developer Mode on the LG webOS TV. No PSN sign-in or PS5 pairing is required.') + '</p>'
+          : '<p>' + t('Aynı ağda PS5, desteklenen bir TV ve ikinci bir PSN hesabı gerekir.', 'You need a PS5, a supported TV on the same network and a second PSN account.') + '</p>') + '</div>' +
         health(s);
       break;
     case 'SecondAccount':
@@ -162,10 +172,12 @@ function wizard(s) {
       body = '<h1>' + t('TV\'yi bağlayın', 'Connect your TV') + '</h1>' +
         '<p>' + t('TV açık ve bu sunucuyla aynı ağda olmalı. TV\'yi seçince ekranında bir izin sorusu çıkar; onaylayın.',
                   'The TV must be on and on the same network. When you pick it, the TV asks for permission; accept it.') + '</p>' +
+        (s.tvCapture ? '<p>' + t('LG TV’nizi seçin ve geliştirici anahtarıyla CouchSubs TV uygulamasını kurun.', 'Select your LG TV and install the CouchSubs TV app with the developer key.') + '</p>' : '') +
         '<div class="card">' +
         (s.tv ? '<p class="ok">' + t('Bağlandı: ', 'Connected: ') + esc(s.tv.name) + ' (' + esc(s.tv.host) + ')</p>' : '') +
         '<div class="row">' + btn('tvs', t('TV\'leri ara', 'Search for TVs')) + '</div>' + err('tvs') +
         '<div class="list" style="margin-top:12px">' + (lists.tvs || []).map(function (tv, i) {
+          if (s.tvCapture && tv.brand !== 'Lg') return '';
           return '<button data-pick-tv="' + i + '"' + (busy.pair ? ' disabled' : '') + '><span>' + esc(tv.name) + '</span><span class="muted">' + esc(tv.brand) + ' · ' + esc(tv.host) + '</span></button>';
         }).join('') + (lists.tvs && !lists.tvs.length ? '<p class="warn">' + t('TV bulunamadı. Adresini elle yazabilirsiniz.', 'No TV found. You can type its address.') + '</p>' : '') + '</div>' +
         input('tvHost', t('LG TV adresi (elle)', 'LG TV address (manual)'), 'placeholder="192.168.1.30" inputmode="decimal" autocomplete="off"') +
@@ -186,16 +198,16 @@ function wizard(s) {
         '<div class="row" style="margin-top:12px">' + btn('test', t('Deneme altyazısı gönder', 'Send a test subtitle'), 'primary') + '</div>' + err('test') + '</div>';
       break;
   }
-  var steps = STEPS, index = steps.indexOf(s.step);
+  var steps = s.tvCapture ? TV_CAPTURE_STEPS : STEPS, index = steps.indexOf(s.step);
   return '<div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="' + steps.length + '" aria-valuenow="' + (index + 1) + '"><div style="width:' + ((index + 1) / steps.length * 100) + '%"></div></div>' +
     body + '<div class="row end">' +
     (index > 0 ? btn('back', t('Geri', 'Back')) : '<span></span>') +
-    btn('advance', s.step === 'Test' ? t('Bitir', 'Finish') : s.step === 'Welcome' ? t('Başla', 'Start') : t('Devam', 'Continue'), 'primary', s.canAdvance ? '' : 'disabled') + '</div>';
+    btn('advance', s.step === 'Test' ? t('Bitir', 'Finish') : s.step === 'Welcome' ? t('Başla', 'Start') : t('Devam', 'Continue'), 'primary', s.canAdvance && !busy.source ? '' : 'disabled') + '</div>';
 }
 
 function health(s) {
   var problems = [];
-  if (!s.nativeAvailable) problems.push(t('PS5 bağlantı kütüphanesi (couchsubs_native.so) yüklenemedi.', 'The PS5 connection library (couchsubs_native.so) could not be loaded.'));
+  if (!s.tvCapture && !s.nativeAvailable) problems.push(t('PS5 bağlantı kütüphanesi (couchsubs_native.so) yüklenemedi.', 'The PS5 connection library (couchsubs_native.so) could not be loaded.'));
   if (s.ocrMissing) problems.push(t('Yazı tanıma (Tesseract) bulunamadı.', 'Text recognition (Tesseract) was not found.'));
   if (!s.bundledTvApp) problems.push(t('LG TV paketi bu kurulumda yok; TV uygulaması buradan kurulamaz.', 'The LG TV package is missing from this build; the TV app cannot be installed from here.'));
   return problems.length ? '<div class="card"><h2 class="warn">' + t('Dikkat', 'Attention') + '</h2>' + problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>' : '';
@@ -203,7 +215,10 @@ function health(s) {
 
 function tvApp(s) {
   var a = s.tvApp, body = '';
-  switch (a.kind) {
+  var kind = a.kind;
+  if (s.needsTvCaptureKey && (kind === 'Unknown' || kind === 'UpToDate')) kind = 'NeedsPassphrase';
+  if (s.tvCapture && kind === 'Failed' && a.error === 'KeyRefused') kind = 'NeedsPassphrase';
+  switch (kind) {
     case 'Working': body = '<p class="busy">' + t('TV uygulaması kuruluyor…', 'Installing the TV app…') + '</p>'; break;
     case 'UpToDate': body = '<p class="ok">' + t('TV uygulaması kurulu', 'TV app installed') + (a.version ? ' (' + esc(a.version) + ')' : '') + '</p>' +
       (s.devModeHoursLeft != null ? '<p class="muted">' + t('Geliştirici modu süresi: ', 'Developer mode time left: ') + s.devModeHoursLeft + t(' saat', ' h') + '</p>' : ''); break;
@@ -245,7 +260,7 @@ function statusRow(name, st) {
 
 function home(s) {
   var r = s.settings.region, style = s.settings.style;
-  return '<div class="card">' + statusRow('PS5', s.ps5) + (s.ps5.detail ? '<p class="muted">' + esc(s.ps5.detail) + '</p>' : '') + statusRow('TV', s.tvStatus) +
+  return '<div class="card">' + statusRow(s.tvCapture ? t('LG görüntü kaynağı', 'LG video source') : 'PS5', s.ps5) + (s.ps5.detail ? '<p class="muted">' + esc(s.ps5.detail) + '</p>' : '') + statusRow('TV', s.tvStatus) +
     (s.translator !== 'Ready' ? '<p class="warn">' + t('Çeviri modeli hazır değil.', 'The translation model is not ready.') + '</p>' + model(s) : '') +
     (s.ocrMissing ? '<p class="error">' + t('Yazı tanıma (Tesseract) bulunamadı.', 'Text recognition (Tesseract) was not found.') + '</p>' : '') + '</div>' +
     (s.running
@@ -276,8 +291,8 @@ function home(s) {
     '<div class="row" style="margin-top:12px">' + btn('translateTest', t('Çevir', 'Translate')) + '</div>' + err('translateTest') +
     (extra.translation ? '<p style="margin-top:8px"><b>' + esc(extra.translation.text) + '</b> <span class="muted">' + extra.translation.ms + ' ms · ' + esc(extra.translation.engine) + '</span></p>' : '') + '</div>' +
 
-    '<div class="card"><h2>' + t('Kurulum', 'Setup') + '</h2><p class="muted">' +
-    'PS5: ' + esc(s.console ? s.console.name + ' (' + s.console.host + ')' : '-') + ' · ' +
+    '<div class="card"><h2>' + t('Kurulum', 'Setup') + '</h2>' + sourcePicker(s) + '<p class="muted">' +
+    (s.tvCapture ? '' : 'PS5: ' + esc(s.console ? s.console.name + ' (' + s.console.host + ')' : '-') + ' · ') +
     'TV: ' + esc(s.tv ? s.tv.name + ' (' + s.tv.host + ')' : '-') + '</p>' +
     (s.tv ? tvAppLine(s) : '') + '<div class="row">' + btn('tvRefresh', t('TV uygulamasını denetle', 'Check the TV app')) + btn('reset', t('Kurulumu sıfırla', 'Reset setup')) + '</div>' + err('tvRefresh') + err('reset') + '</div>' +
     '<div class="card"><details id="logBox"' + (extra.logOpen ? ' open' : '') + '><summary>' + t('Günlük', 'Log') + '</summary><pre id="log"></pre></details></div>';
@@ -337,7 +352,9 @@ document.addEventListener('input', function (e) {
 });
 document.addEventListener('change', function (e) {
   var el = e.target;
-  if (el.dataset.region) {
+  if (el.id === 'videoSource') {
+    run('source', 'POST', '/api/source', { tvCapture: el.value === 'tv' }, function () { frameStamp = Date.now(); delete extra.read; });
+  } else if (el.dataset.region) {
     var r = Object.assign({}, state.settings.region);
     r[el.dataset.region] = Number(el.value) / 100;
     el.blur();

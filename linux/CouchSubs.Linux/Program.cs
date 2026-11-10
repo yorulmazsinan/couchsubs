@@ -74,6 +74,7 @@ internal static class Panel
     private sealed record PassphraseRequest(string Passphrase);
     private sealed record KeyRequest(string Key);
     private sealed record TextRequest(string Text);
+    private sealed record SourceRequest(bool TvCapture);
     private sealed record SettingsRequest(CropRegion? Region, SubtitleStyle? Style, bool? OnlineTranslation);
 
     public static void Map(WebApplication app, AppController controller, LinuxServices services, UiThread ui)
@@ -85,6 +86,7 @@ internal static class Panel
         app.MapGet("/api/log", () => new { lines = Log.Tail() });
 
         // --- Kurulum sihirbazı ---
+        app.MapPost("/api/source", (SourceRequest body) => Act(ui, () => controller.SelectTvCapture(body.TvCapture)));
         app.MapPost("/api/advance", () => Act(ui, controller.Advance));
         app.MapPost("/api/back", () => Act(ui, controller.Back));
         app.MapPost("/api/psn", (PsnRequest body) => Act(ui, () => controller.CompletePsnLoginAsync(ParseRedirect(body.Redirect))));
@@ -154,6 +156,8 @@ internal static class Panel
         stepCount = AppController.StepCount,
         canAdvance = c.CanAdvance,
         hasAccount = c.HasAccount,
+        tvCapture = c.UseTvCapture,
+        needsTvCaptureKey = c.NeedsTvCaptureKey,
         psnLoginUrl = PsnAccount.AuthorizeUrl.AbsoluteUri,
         redirectPrefix = PsnAccount.RedirectPrefix,
         console = c.Console is { } console ? new { console.Name, console.Host } : null,

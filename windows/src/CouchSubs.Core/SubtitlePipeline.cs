@@ -10,10 +10,17 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private readonly object gate = new();
     /// <summary>Varsayılanı her kareyi okur; uygulama gereksiz okumaları atlayan planı verir.</summary>
     private readonly ReadScheduler schedule = scheduler ?? ReadScheduler.Always();
-    /// <summary>Kareler saniyede ~20 kez okunur; yaklaşık 0,3 sn boş kalan bölge altyazının kalktığı anlamına gelir.</summary>
-    private readonly SubtitleStabilizer stabilizer = new(emptyFramesToClear: 6, cleanFastPathOnly: translator.Prefetches);
+    /// <summary>
+    /// Yaklaşık 0,3 sn boş kalan bölge altyazının kalktığı anlamına gelir: saniyede ~20 karede 6 kare, daha yavaş
+    /// kaynaklarda (TV'den yakalama, saniyede ~3 kare) en az 2 kare.
+    /// </summary>
+    private readonly SubtitleStabilizer stabilizer = new(emptyFramesToClear: 6, emptyTimeToClear: TimeSpan.FromMilliseconds(300),
+        cleanFastPathOnly: translator.Prefetches);
     /// <summary>En son önceden çevirisi başlatılan okuma; aynı metin her karede yeniden istenmez.</summary>
     private string lastPrefetched = "";
+    /// <summary>Okumaya başlanan son karenin ve kararlılığa verilen son karenin sıra numarası.</summary>
+    private long framesStarted;
+    private long lastFedFrame;
     private readonly Dictionary<int, Task> translations = [];
     /// <summary>
     /// Her çeviri isteği sıra numarası alır. Hızlı konuşmada çeviriler sırasız dönebilir:
@@ -43,6 +50,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Okuma çeviriyi beklemez; böylece çeviri sürerken gelen satırlar da yakalanır.</summary>
     public async Task ProcessAsync(Frame frame, CropRegion region)
     {
+        // Kareler aynı anda okunabilir; sırasız biten eski kare yenisinden sonra kararlılığa verilmez.
+        var order = Interlocked.Increment(ref framesStarted);
         // Yazı tanıma uzun sürebilir; çağıranı (arayüzü) bekletmemek için iş parçacığı havuzunda yapılır.
         var raw = await Task.Run(() =>
         {
@@ -73,6 +82,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
         lock (gate)
         {
+            if (order < lastFedFrame) return;
+            lastFedFrame = order;
             var action = stabilizer.Feed(reading.Text);
             // Satır henüz doğrulanmadı: çevirisi şimdiden başlasın, doğrulanınca beklemeden gösterilsin.
             if (action.Kind == StabilizerKind.None && translator.Prefetches && reading.Text.Trim() is { Length: >= 6 } early && early != lastPrefetched)

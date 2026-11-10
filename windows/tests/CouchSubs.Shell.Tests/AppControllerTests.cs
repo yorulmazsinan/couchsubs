@@ -92,6 +92,8 @@ internal sealed class FakeServices : IAppServices
     public Exception? RegisterError { get; set; }
     public string? LaunchedServer { get; private set; }
     public List<FakeStream> Streams { get; } = [];
+    public bool SupportsTvCapture { get; set; }
+    public FakeStream? CaptureStream { get; private set; }
     public List<FakeKeeper> Keepers { get; } = [];
     public List<string> ReaderLanguages { get; } = [];
     /// <summary>Okuyucunun her karede bulduğu satırlar (verilmezse karede yazı yoktur).</summary>
@@ -139,6 +141,7 @@ internal sealed class FakeServices : IAppServices
         Streams.Add(stream);
         return stream;
     }
+    public IStreamSession MakeTvCaptureStream(LgTv tv, string devKey) => CaptureStream = new FakeStream();
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
     {
         var keeper = new FakeKeeper();
@@ -371,6 +374,46 @@ public class AppControllerTests
         Assert.Equal(OnboardingStep.Test, controller.Step); controller.Advance();
         Assert.Equal(OnboardingStep.Done, controller.Step);
         controller.Dispose();
+    }
+
+    [Fact]
+    public async Task TvCaptureSkipsPsnAndStartsWithThePairedLgsDeveloperKey()
+    {
+        var services = new FakeServices { SupportsTvCapture = true, DevMode = true };
+        var store = new MemoryStore();
+        using var controller = Make(services, store);
+
+        controller.SelectTvCapture(true);
+        controller.Advance();
+        Assert.Equal(OnboardingStep.Tv, controller.Step);
+        controller.Back();
+        Assert.Equal(OnboardingStep.Welcome, controller.Step);
+        controller.Advance();
+        await controller.PairAsync(new LgTv("LG TV", "127.0.0.1"));
+        Assert.True(controller.NeedsTvCaptureKey);
+        Assert.False(controller.CanAdvance);
+
+        await controller.InstallTvAppAsync("ABC123");
+        Assert.True(controller.CanAdvance);
+        controller.Advance();
+        Assert.Equal(OnboardingStep.Translation, controller.Step);
+        controller.Advance();
+        controller.Advance();
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.False(controller.HasAccount);
+
+        using var reopened = Make(services, store);
+        Assert.Equal(OnboardingStep.Done, reopened.Step);
+        await reopened.StartAsync();
+        Assert.Empty(services.Streams);
+        Assert.True(services.CaptureStream?.Started);
+        var frame = Frame.Blank(960, 540);
+        services.CaptureStream!.Emit(frame);
+        Assert.Same(frame, reopened.LastFrame);
+        reopened.Stop();
+        reopened.SelectTvCapture(false);
+        Assert.Equal(OnboardingStep.Welcome, reopened.Step);
+        Assert.Null(reopened.LastFrame);
     }
 }
 

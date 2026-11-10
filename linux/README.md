@@ -35,6 +35,19 @@ Ortam değişkenleri: `COUCHSUBS_LANG` (`tr`/`en`, sunucunun hata iletileri), `C
 `COUCHSUBS_AUTOSTART=1` (sunucu yeniden başlayınca çeviri kendiliğinden sürer; dinlenme modundaki PS5'i de
 uyandırdığı için varsayılan kapalıdır).
 
+## LG TV’den görüntü yakalama (deneysel)
+
+Panelde **Görüntü kaynağı → LG TV’den yakala (deneysel)** seçin. Kurulumu tamamladıysanız kaynak seçimi ana
+ekrandaki **Kurulum** kartında da bulunur. PSN girişi ve PS5 eşleştirmesi atlanır. LG TV’de **Developer Mode**’u
+açın ve panelin **TV uygulaması** adımında ekrandaki Passphrase ile geliştirici anahtarını alın.
+
+Bu kaynak, TV’nin geliştirici oturumunda çalıştırılabilen `vtCaptureTestSuite` aracını gerektirir. Araç 960×540
+kare verir; kare gri tonlamaya çevrilip okuma hattının 1080p'ye göre ayarlı eşikleri için 2 kat büyütülür. Araç TV'de
+tek SSH bağlantısı üzerinden açık tutulur ve kareler sürekli akar (saniyede yaklaşık 3 kare). PS5'te **Ayarlar › Sistem › HDMI › HDCP'yi Etkinleştir** kapalı olmalı; oyunda altyazı zemini
+(yarı saydam siyah şerit) açmak açık renkli sahnelerde okumayı belirgin kolaylaştırır. Oyunu HDMI girişinde açın, **Çeviriyi başlat**’a basın ve **Altyazı alanı**
+kartında sarı çerçeveyi oyunun altyazısına hizalayın. **Bu bölgeyi şimdi oku** ile sonucu kontrol edin. Kare
+gelmezse panelde **LG görüntü kaynağı** satırını ve **Günlük** bölümünü kontrol edin.
+
 ## Tanı
 
 - Panelde **Günlük**: PS5 bağlantısının uyarı ve hataları; ayrıntılısı veri klasöründeki `remoteplay.log`.
