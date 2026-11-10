@@ -22,4 +22,10 @@
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
+  <!-- Linux'ta aynı kütüphane couchsubs_native.so olarak derlenir (linux/Dockerfile). -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\bin\couchsubs_native.so')">
+    <None Include="$(MSBuildThisFileDirectory)..\..\native\bin\couchsubs_native.so" Link="couchsubs_native.so"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
 </Project>

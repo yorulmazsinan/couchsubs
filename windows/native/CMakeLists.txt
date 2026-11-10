@@ -12,6 +12,12 @@ set(CHIAKI_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/chiaki-ng" 
 set(FFMPEG_PREFIX "" CACHE PATH "FFmpeg kurulumu (include/, lib/)")
 option(COUCHSUBS_NATIVE_TESTS "Yerel testleri derle" ON)
 
+if(NOT WIN32)
+	# Statik libchiaki paylaşımlı kütüphanenin (.so, .dylib) içine bağlanır; Linux'ta bunun için konumdan bağımsız
+	# kod şarttır (yoksa bağlayıcı "recompile with -fPIC" der).
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 if(WIN32)
 	# Yalnız statik kütüphaneler bulunsun: DLL, MSYS2'nin çalışma zamanı DLL'lerine bağlı kalmamalı.
 	set(CMAKE_FIND_LIBRARY_SUFFIXES .a)

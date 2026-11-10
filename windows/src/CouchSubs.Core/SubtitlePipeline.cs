@@ -11,7 +11,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <summary>Varsayılanı her kareyi okur; uygulama gereksiz okumaları atlayan planı verir.</summary>
     private readonly ReadScheduler schedule = scheduler ?? ReadScheduler.Always();
     /// <summary>Kareler saniyede ~20 kez okunur; yaklaşık 0,3 sn boş kalan bölge altyazının kalktığı anlamına gelir.</summary>
-    private readonly SubtitleStabilizer stabilizer = new(emptyFramesToClear: 6);
+    private readonly SubtitleStabilizer stabilizer = new(emptyFramesToClear: 6, cleanFastPathOnly: translator.Prefetches);
+    /// <summary>En son önceden çevirisi başlatılan okuma; aynı metin her karede yeniden istenmez.</summary>
+    private string lastPrefetched = "";
     private readonly Dictionary<int, Task> translations = [];
     /// <summary>
     /// Her çeviri isteği sıra numarası alır. Hızlı konuşmada çeviriler sırasız dönebilir:
@@ -72,6 +74,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         lock (gate)
         {
             var action = stabilizer.Feed(reading.Text);
+            // Satır henüz doğrulanmadı: çevirisi şimdiden başlasın, doğrulanınca beklemeden gösterilsin.
+            if (action.Kind == StabilizerKind.None && translator.Prefetches && reading.Text.Trim() is { Length: >= 6 } early && early != lastPrefetched)
+            {
+                lastPrefetched = early;
+                translator.Prefetch(early);
+            }
             switch (action.Kind)
             {
                 case StabilizerKind.Clear:

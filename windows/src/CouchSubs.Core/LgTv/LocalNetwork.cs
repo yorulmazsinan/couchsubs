@@ -17,7 +17,8 @@ public static class LocalNetwork
             return
             [
                 .. NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                    .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                                && !IsContainerBridge(n.Name))
                     .SelectMany(n => n.GetIPProperties().UnicastAddresses)
                     .Select(a => a.Address)
                     .Where(a => a.AddressFamily == AddressFamily.InterNetwork && IsPrivate(a)),
@@ -28,6 +29,14 @@ public static class LocalNetwork
             return [];
         }
     }
+
+    /// <summary>
+    /// Linux'ta Docker ve sanal makine köprüleri (docker0, br-…, veth…, virbr…) de özel adres taşır ama arkalarında TV
+    /// ya da PS5 yoktur; her biri ağ taramasına 254 adres ekleyip aramayı yarım dakikaya çıkarıyordu.
+    /// </summary>
+    public static bool IsContainerBridge(string interfaceName) =>
+        OperatingSystem.IsLinux() && (interfaceName.StartsWith("docker", StringComparison.Ordinal) || interfaceName.StartsWith("br-", StringComparison.Ordinal)
+                                      || interfaceName.StartsWith("veth", StringComparison.Ordinal) || interfaceName.StartsWith("virbr", StringComparison.Ordinal));
 
     public static bool IsPrivate(IPAddress address)
     {

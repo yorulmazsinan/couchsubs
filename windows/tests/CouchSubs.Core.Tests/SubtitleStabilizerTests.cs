@@ -79,6 +79,43 @@ public class SubtitleStabilizerTests
         Assert.Equal(StabilizerAction.Clear, s.Feed(""));
     }
 
+    /// Önceden çeviren çevirmenle: bozuk ilk kare tek başına gönderilmez; doğrulanan satır ilk okunan hâliyle gider
+    /// (çevirisi o metinle başlatılmıştı).
+    [Fact]
+    public void GarbledFirstReadingIsConfirmedThenSentAsFirstRead()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.None, s.Feed("xa Oh, I know exactly who gave you your orders."));
+        Assert.Equal(StabilizerAction.Translate("xa Oh, I know exactly who gave you your orders."), s.Feed("Oh, I know exactly who gave you your orders."));
+        Assert.Equal(StabilizerAction.None, s.Feed("Oh, I know exactly who gave you your orders."));
+    }
+
+    [Fact]
+    public void SingleGarbledFrameIsNeverSentButCleanLineGoesAtOnce()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.None, s.Feed("f fe & ie want it."));
+        Assert.Equal(StabilizerAction.Translate("In fact, sir, now you can do me a favor..."), s.Feed("In fact, sir, now you can do me a favor..."));
+    }
+
+    /// Bir kez görünüp kalkan kısa satır da gösterilmeli (yalnız iki kare doğrulaması bunu hiç göstermiyordu).
+    [Fact]
+    public void CleanLineSeenOnceIsSent()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.Translate("you boys... how'd you boys like a couple of bucks?"), s.Feed("you boys... how'd you boys like a couple of bucks?"));
+    }
+
+    [Theory]
+    [InlineData("Peter: I did it.", true)]
+    [InlineData("Spider-Man: First cover!", true)]
+    [InlineData("Head over to the tavern run by Mr. Gray...", true)]
+    [InlineData("f fe & ie want it.", false)]
+    [InlineData("A _ there's an extra ten bucks if you do.", false)]
+    [InlineData("4 Pr and give the stuff out for free.", false)]
+    [InlineData("Spider-Man **: can't believe you have this!", false)]
+    public void CleanReadingsAreRecognised(string raw, bool clean) => Assert.Equal(clean, SubtitleStabilizer.LooksClean(raw));
+
     [Fact]
     public void AlreadyTranslatedIsSkipped()
     {

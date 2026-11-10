@@ -1,0 +1,14 @@
+# Linux imajı (linux/Dockerfile) depo kökünden derlenir; gerekmeyen büyük klasörler bağlama girmesin.
+.git
+graphify-out
+store
+docs
+prototip
+tv-android
+tv-tizen
+dist
+**/bin
+**/obj
+!windows/native/bin
+mac/CouchSubs.xcodeproj
+third-party/build

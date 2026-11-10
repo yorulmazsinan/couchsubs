@@ -16,9 +16,42 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
 /// Kare kare gelen OCR çıktısını izler; altyazı kararlı hale gelince çevrilmesini,
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
 /// </summary>
-public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2, int emptyFramesToClear = 2)
+/// <param name="cleanFastPathOnly">
+/// Noktalamayla biten satır ilk karede gönderilir. Açıksa bu yalnız temiz okumada olur (<see cref="LooksClean"/>):
+/// altyazı belirirken okunan bozuk kare ("f fe &amp; ie want it.") <paramref name="stableFrames"/> kare doğrulanmayı
+/// bekler. Satır ilk okunan hâliyle gönderilir (çeviri ilk karede önceden başlatıldıysa aynı metin olsun diye).
+/// Temiz satırın da beklemesi kısa görünen satırları hiç göstermiyordu.
+/// </param>
+public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2, int emptyFramesToClear = 2,
+    bool cleanFastPathOnly = false)
 {
+    /// <summary>İngilizcede tek başına geçen kısa sözcükler; bunların dışındaki 1–2 harflik parçalar OCR çöpüdür.</summary>
+    private static readonly HashSet<string> ShortWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "i", "o", "an", "am", "as", "at", "be", "by", "do", "go", "ha", "he", "hi", "if", "in", "is", "it", "me", "mr",
+        "ms", "mrs", "dr", "st", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "tv", "uh", "um", "up", "us", "we", "ya", "ye",
+    };
+
+    /// <summary>
+    /// Okumada çöp parça yok mu: her parça (noktalama ayıklanınca) harf, rakam, kesme ve tireden oluşur; 1–2 harflik
+    /// parçalar bilinen kısa sözcüklerdir. Yanlış "kirli" sayılan satır yalnız bir kare gecikir.
+    /// </summary>
+    public static bool LooksClean(string raw)
+    {
+        var tokens = raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0) return false;
+        foreach (var token in tokens)
+        {
+            var word = token.Trim('.', ',', '!', '?', '…', ':', ';', '"', '\'', '“', '”', '‘', '’', '(', ')');
+            if (word.Length == 0) return false;
+            if (!word.All(c => char.IsLetterOrDigit(c) || c is '\'' or '’' or '-')) return false;
+            if (word.Length <= 2 && word.All(char.IsLetter) && !ShortWords.Contains(word)) return false;
+        }
+        return true;
+    }
+
     private string candidate = "";
+    private string candidateRaw = "";
     private int candidateCount;
     private string sent = "";
     private int emptyCount;
@@ -48,15 +81,17 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         else
         {
             candidate = text;
+            candidateRaw = rawText.Trim();
             candidateCount = 1;
         }
         // Daktilo efektinde metin büyürken aday değişir; tamamlanıp kararlı olunca gider.
         // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider.
-        var ready = candidateCount == stableFrames || (candidateCount == 1 && EndsSentence(rawText));
+        var ready = candidateCount == stableFrames ||
+                    (candidateCount == 1 && EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
         if (!ready || TextMatch.IsSimilar(text, sent, similarity) || TextMatch.IsSameSubtitle(text, sent)) return StabilizerAction.None;
         sent = text;
-        return StabilizerAction.Translate(rawText.Trim());
+        return StabilizerAction.Translate(cleanFastPathOnly ? candidateRaw : rawText.Trim());
     }
 
     /// <summary>Satır nokta, ünlem, soru ya da üç noktayla bitiyor mu (kapanan tırnak ve parantezler yok sayılır).</summary>

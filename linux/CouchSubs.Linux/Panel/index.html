@@ -1,0 +1,398 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- CouchSubs Linux paneli: kurulum sihirbazı ve çeviri denetimi. Renk ve ölçüler design/tokens.json ile aynıdır
+     (docs/TASARIM.md): tek vurgu rengi, sakin zemin, süs yok. Bağımlılığı yoktur; durum /api/state'ten okunur. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CouchSubs</title>
+<link rel="icon" href="/logo.svg">
+<style>
+  :root {
+    --background: #F6F4EF; --surface: #FFFFFF; --border: #E2DED4; --text: #17181B; --text2: #5B5954;
+    --accent: #F5B83D; --on-accent: #17181B; --accent-text: #7E5300; --accent-soft: #FBEBC8;
+    --success: #256B43; --warning: #9A4A08; --danger: #B3261E; --on-danger: #FFFFFF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #141518; --surface: #1E2024; --border: #30333A; --text: #F3EEE4; --text2: #A9A59C;
+      --accent-text: #F5B83D; --accent-soft: #3A3020;
+      --success: #62C990; --warning: #F2A55A; --danger: #F28B82; --on-danger: #17181B;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background); color: var(--text); font: 15px/1.35 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  header img { width: 40px; height: 40px; border-radius: 10px; }
+  header .name { font-size: 17px; font-weight: 600; }
+  header .meta { margin-left: auto; color: var(--text2); font-size: 12px; }
+  h1 { font-size: 30px; font-weight: 600; line-height: 1.15; margin: 0 0 8px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 0 0 8px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--text2); font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 16px 0; }
+  .progress { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin: 0 0 24px; }
+  .progress > div { height: 100%; background: var(--accent); transition: width .2s; }
+  button, .button { font: inherit; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  button.primary, .button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  button.big { min-height: 52px; width: 100%; font-size: 17px; }
+  button.danger { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, .button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row.end { justify-content: space-between; margin-top: 24px; }
+  label { display: block; font-size: 14px; color: var(--text2); margin: 12px 0 4px; }
+  input[type=text], select { font: inherit; width: 100%; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--background); color: var(--text); }
+  input.code { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  ol { padding-left: 20px; margin: 0 0 12px; } li { margin-bottom: 6px; }
+  .error { color: var(--danger); margin: 12px 0 0; }
+  .ok { color: var(--success); font-weight: 600; }
+  .warn { color: var(--warning); }
+  .list button { width: 100%; justify-content: space-between; margin-bottom: 8px; font-weight: 400; }
+  .status { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text2); flex: none; }
+  .dot.Good { background: var(--success); } .dot.Warning { background: var(--warning); }
+  .status b { min-width: 48px; }
+  .pair .src { color: var(--text2); font-size: 14px; } .pair .dst { font-size: 22px; font-weight: 600; }
+  .preview { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
+  .preview img { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .preview .region { position: absolute; border: 2px solid var(--accent); background: rgba(245, 184, 61, .15); pointer-events: none; }
+  pre { margin: 0; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; color: var(--text2); }
+  details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+  .busy::after { content: ""; width: 14px; height: 14px; margin-left: 8px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .busy::after { animation: none; } .progress > div { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/logo.svg" alt="">
+    <span class="name">CouchSubs</span>
+    <span class="meta" id="meta"></span>
+  </header>
+  <div id="view" aria-live="polite"></div>
+</main>
+<script>
+'use strict';
+var TR = (navigator.language || 'en').toLowerCase().indexOf('tr') === 0;
+document.documentElement.lang = TR ? 'tr' : 'en';
+function t(tr, en) { return TR ? tr : en; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+var state = null, lastRendered = '', form = {}, lists = {}, busy = {}, errors = {}, extra = {}, frameStamp = 0;
+
+function api(method, path, body) {
+  return fetch(path, { method: method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
+}
+// Her eylem: düğme beklerken döner, hata eylemin yanında gösterilir, sonra durum yenilenir.
+function run(name, method, path, body, then) {
+  if (busy[name]) return;
+  busy[name] = true; delete errors[name]; render(true);
+  api(method, path, body).then(function (result) { if (then) then(result); })
+    .catch(function (e) { errors[name] = e.message; })
+    .then(function () { delete busy[name]; return refresh(true); });
+}
+function refresh(force) {
+  return api('GET', '/api/state').then(function (s) { state = s; render(force); })
+    .catch(function () { document.getElementById('meta').textContent = t('Sunucuya ulaşılamıyor', 'Server unreachable'); });
+}
+function btn(name, label, cls, attrs) {
+  return '<button data-act="' + name + '" class="' + (cls || '') + (busy[name] ? ' busy' : '') + '"' + (busy[name] ? ' disabled' : '') + ' ' + (attrs || '') + '>' + esc(label) + '</button>';
+}
+function err(name) { return errors[name] ? '<p class="error" role="alert">' + esc(errors[name]) + '</p>' : ''; }
+function input(id, label, attrs) {
+  return '<label for="' + id + '">' + esc(label) + '</label><input type="text" id="' + id + '" value="' + esc(form[id] || '') + '" ' + (attrs || '') + '>';
+}
+
+var STEPS = ['Welcome', 'SecondAccount', 'PsnLogin', 'Console', 'Tv', 'Translation', 'Test'];
+
+function wizard(s) {
+  var body = '';
+  switch (s.step) {
+    case 'Welcome':
+      body = '<h1>' + t('PS5 oyunlarına Türkçe altyazı', 'Subtitles for your PS5 games') + '</h1>' +
+        '<p>' + t('CouchSubs oyundaki altyazıyı okur, çevirir ve TV\'de oyunun üstünde gösterir. Kurulum birkaç dakika sürer.',
+                  'CouchSubs reads the in-game subtitles, translates them and shows them on your TV on top of the game. Setup takes a few minutes.') + '</p>' +
+        '<div class="card"><p>' + t('Aynı ağda PS5, desteklenen bir TV ve ikinci bir PSN hesabı gerekir.', 'You need a PS5, a supported TV on the same network and a second PSN account.') + '</p></div>' +
+        health(s);
+      break;
+    case 'SecondAccount':
+      body = '<h1>' + t('İkinci PSN hesabı', 'Second PSN account') + '</h1>' +
+        '<p>' + t('Kendi hesabınızla bağlanılırsa PS5 kolunuzu kapatır. Bu yüzden CouchSubs PS5\'e ikinci bir hesapla bağlanır; oyununuz kesilmez.',
+                  'If CouchSubs connected with your own account the PS5 would turn off your controller. So it connects with a second account and your game is not interrupted.') + '</p>' +
+        '<div class="card"><ol>' +
+        '<li>' + t('PS5\'te yeni bir kullanıcı ekleyin ve ücretsiz yeni bir PSN hesabı açın.', 'Add a new user on the PS5 and create a free new PSN account.') + '</li>' +
+        '<li>' + t('O kullanıcıyla: Ayarlar › Sistem › Uzaktan Oynatma › Uzaktan Oynatmayı Etkinleştir.', 'As that user: Settings › System › Remote Play › Enable Remote Play.') + '</li>' +
+        '<li>' + t('O kullanıcıda giriş parolası olmamalı.', 'That user must not have a login passcode.') + '</li></ol></div>';
+      break;
+    case 'PsnLogin':
+      body = '<h1>' + t('PSN girişi', 'PSN sign-in') + '</h1>' +
+        '<p>' + t('İkinci hesapla Sony\'nin sayfasında giriş yapın. Parolanız yalnız Sony\'ye gider.', 'Sign in with the second account on Sony\'s page. Your password goes only to Sony.') + '</p>' +
+        '<div class="card"><ol>' +
+        '<li><a class="button primary" target="_blank" rel="noopener" href="' + esc(s.psnLoginUrl) + '">' + t('Sony giriş sayfasını aç', 'Open Sony sign-in') + '</a></li>' +
+        '<li>' + t('Giriş bitince boş ya da "redirect" yazan bir sayfa açılır. O sayfanın adres çubuğundaki adresin tamamını kopyalayın.',
+                   'After signing in you land on an empty or "redirect" page. Copy the whole address from that page\'s address bar.') + '</li>' +
+        '<li>' + t('Adresi aşağıya yapıştırın.', 'Paste the address below.') + '</li></ol>' +
+        input('redirect', t('Yönlendirme adresi', 'Redirect address'), 'placeholder="https://remoteplay.dl.playstation.net/remoteplay/redirect?code=…" autocomplete="off" autocapitalize="off" spellcheck="false"') +
+        '<div class="row" style="margin-top:12px">' + btn('psn', t('Girişi tamamla', 'Complete sign-in'), 'primary') +
+        (s.hasAccount ? '<span class="ok">' + t('Hesap alındı', 'Account saved') + '</span>' : '') + '</div>' + err('psn') + '</div>';
+      break;
+    case 'Console':
+      body = '<h1>' + t('PS5\'i eşleyin', 'Pair your PS5') + '</h1>' +
+        '<p>' + t('PS5\'te ikinci kullanıcıyla: Ayarlar › Sistem › Uzaktan Oynatma › Cihaz Bağla. Ekrandaki 8 haneli kodu girin.',
+                  'On the PS5 as the second user: Settings › System › Remote Play › Link Device. Enter the 8-digit code shown.') + '</p>' +
+        '<div class="card">' +
+        (s.console ? '<p class="ok">' + t('Eşlendi: ', 'Paired: ') + esc(s.console.name) + ' (' + esc(s.console.host) + ')</p>' : '') +
+        '<div class="row">' + btn('consoles', t('PS5\'leri ara', 'Search for PS5s')) + '</div>' + err('consoles') +
+        '<div class="list" style="margin-top:12px">' + (lists.consoles || []).map(function (c) {
+          return '<button data-pick-console="' + esc(c.host) + '"><span>' + esc(c.name) + '</span><span class="muted">' + esc(c.host) + (c.isAwake ? '' : ' · ' + t('dinlenme modunda', 'in rest mode')) + '</span></button>';
+        }).join('') + (lists.consoles && !lists.consoles.length ? '<p class="warn">' + t('PS5 bulunamadı. Açık olduğundan emin olun ya da adresini elle yazın.', 'No PS5 found. Make sure it is on, or type its address.') + '</p>' : '') + '</div>' +
+        input('consoleHost', t('PS5 adresi', 'PS5 address'), 'placeholder="192.168.1.20" inputmode="decimal" autocomplete="off"') +
+        input('pin', t('8 haneli kod', '8-digit code'), 'class="code" inputmode="numeric" maxlength="9" autocomplete="off"') +
+        '<div class="row" style="margin-top:12px">' + btn('register', t('Eşle', 'Pair'), 'primary') + '</div>' + err('register') + '</div>';
+      break;
+    case 'Tv':
+      body = '<h1>' + t('TV\'yi bağlayın', 'Connect your TV') + '</h1>' +
+        '<p>' + t('TV açık ve bu sunucuyla aynı ağda olmalı. TV\'yi seçince ekranında bir izin sorusu çıkar; onaylayın.',
+                  'The TV must be on and on the same network. When you pick it, the TV asks for permission; accept it.') + '</p>' +
+        '<div class="card">' +
+        (s.tv ? '<p class="ok">' + t('Bağlandı: ', 'Connected: ') + esc(s.tv.name) + ' (' + esc(s.tv.host) + ')</p>' : '') +
+        '<div class="row">' + btn('tvs', t('TV\'leri ara', 'Search for TVs')) + '</div>' + err('tvs') +
+        '<div class="list" style="margin-top:12px">' + (lists.tvs || []).map(function (tv, i) {
+          return '<button data-pick-tv="' + i + '"' + (busy.pair ? ' disabled' : '') + '><span>' + esc(tv.name) + '</span><span class="muted">' + esc(tv.brand) + ' · ' + esc(tv.host) + '</span></button>';
+        }).join('') + (lists.tvs && !lists.tvs.length ? '<p class="warn">' + t('TV bulunamadı. Adresini elle yazabilirsiniz.', 'No TV found. You can type its address.') + '</p>' : '') + '</div>' +
+        input('tvHost', t('LG TV adresi (elle)', 'LG TV address (manual)'), 'placeholder="192.168.1.30" inputmode="decimal" autocomplete="off"') +
+        '<div class="row" style="margin-top:12px">' + btn('pair', t('Bu adresle bağlan', 'Connect to this address')) + '</div>' + err('pair') + '</div>' +
+        (s.tv ? tvApp(s) : '');
+      break;
+    case 'Translation':
+      body = '<h1>' + t('Çeviri modeli', 'Translation model') + '</h1>' +
+        '<p>' + t('Çeviri bu sunucuda yapılır; altyazılar internete gönderilmez. Model bir kez indirilir (yaklaşık 530 MB).',
+                  'Translation runs on this server; subtitles are never sent to the internet. The model is downloaded once (about 530 MB).') + '</p>' +
+        '<div class="card">' + model(s) + '</div>';
+      break;
+    case 'Test':
+      body = '<h1>' + t('Deneme', 'Test') + '</h1>' +
+        '<p>' + t('TV\'de CouchSubs uygulaması açıkken deneme altyazısı gönderin. Oyunun üstünde görünmeli.',
+                  'With the CouchSubs app open on the TV, send a test subtitle. It should appear on top of the game.') + '</p>' +
+        '<div class="card">' + statusRow(t('TV', 'TV'), s.tvStatus) +
+        '<div class="row" style="margin-top:12px">' + btn('test', t('Deneme altyazısı gönder', 'Send a test subtitle'), 'primary') + '</div>' + err('test') + '</div>';
+      break;
+  }
+  var steps = STEPS, index = steps.indexOf(s.step);
+  return '<div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="' + steps.length + '" aria-valuenow="' + (index + 1) + '"><div style="width:' + ((index + 1) / steps.length * 100) + '%"></div></div>' +
+    body + '<div class="row end">' +
+    (index > 0 ? btn('back', t('Geri', 'Back')) : '<span></span>') +
+    btn('advance', s.step === 'Test' ? t('Bitir', 'Finish') : s.step === 'Welcome' ? t('Başla', 'Start') : t('Devam', 'Continue'), 'primary', s.canAdvance ? '' : 'disabled') + '</div>';
+}
+
+function health(s) {
+  var problems = [];
+  if (!s.nativeAvailable) problems.push(t('PS5 bağlantı kütüphanesi (couchsubs_native.so) yüklenemedi.', 'The PS5 connection library (couchsubs_native.so) could not be loaded.'));
+  if (s.ocrMissing) problems.push(t('Yazı tanıma (Tesseract) bulunamadı.', 'Text recognition (Tesseract) was not found.'));
+  if (!s.bundledTvApp) problems.push(t('LG TV paketi bu kurulumda yok; TV uygulaması buradan kurulamaz.', 'The LG TV package is missing from this build; the TV app cannot be installed from here.'));
+  return problems.length ? '<div class="card"><h2 class="warn">' + t('Dikkat', 'Attention') + '</h2>' + problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>' : '';
+}
+
+function tvApp(s) {
+  var a = s.tvApp, body = '';
+  switch (a.kind) {
+    case 'Working': body = '<p class="busy">' + t('TV uygulaması kuruluyor…', 'Installing the TV app…') + '</p>'; break;
+    case 'UpToDate': body = '<p class="ok">' + t('TV uygulaması kurulu', 'TV app installed') + (a.version ? ' (' + esc(a.version) + ')' : '') + '</p>' +
+      (s.devModeHoursLeft != null ? '<p class="muted">' + t('Geliştirici modu süresi: ', 'Developer mode time left: ') + s.devModeHoursLeft + t(' saat', ' h') + '</p>' : ''); break;
+    case 'DevModeOff': body = '<p class="warn">' + t('TV\'de geliştirici modu kapalı.', 'Developer mode is off on the TV.') + '</p>' + devHelp(s) + btn('tvRefresh', t('Yeniden dene', 'Try again')); break;
+    case 'NeedsPassphrase': body = (a.error ? '<p class="error">' + esc(passError(a.error)) + '</p>' : '') + devHelp(s) +
+      input('passphrase', t('TV ekranındaki parola (Passphrase)', 'Passphrase shown on the TV'), 'class="code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false"') +
+      '<div class="row" style="margin-top:12px">' + btn('tvInstall', t('TV uygulamasını kur', 'Install the TV app'), 'primary') + '</div>'; break;
+    case 'Failed': body = '<p class="error">' + t('Kurulum başarısız', 'Installation failed') + (a.error ? ': ' + esc(a.error) : '') + '</p>' +
+      (a.reason ? '<p class="muted">' + esc(a.reason) + '</p>' : '') + btn('tvRefresh', t('Yeniden dene', 'Try again')); break;
+    case 'SignIn': body = '<p>' + t('Samsung hesabınızla giriş yapın:', 'Sign in with your Samsung account:') + '</p><a class="button primary" target="_blank" rel="noopener" href="' + esc(a.url) + '">' + t('Samsung girişini aç', 'Open Samsung sign-in') + '</a>'; break;
+    case 'ApproveOnTv': body = '<p class="warn">' + t('TV ekranındaki "hata ayıklamaya izin ver" sorusunu onaylayın.', 'Approve the "allow debugging" prompt on the TV.') + '</p>'; break;
+    default: body = '<p class="muted">' + t('TV uygulamasının durumu henüz bilinmiyor.', 'The TV app state is not known yet.') + '</p>' + btn('tvRefresh', t('Denetle', 'Check'));
+  }
+  return '<div class="card"><h2>' + t('TV uygulaması', 'TV app') + '</h2>' + body + err('tvInstall') + err('tvRefresh') + '</div>';
+}
+function passError(code) {
+  return code === 'WrongPassphrase' ? t('Parola yanlış. TV ekranındaki 6 karakteri büyük-küçük harfe dikkat ederek yazın.', 'Wrong passphrase. Type the 6 characters shown on the TV exactly.')
+    : code === 'KeyServerOff' ? t('TV\'deki Developer Mode uygulamasında "Key Server" açık olmalı.', '"Key Server" must be on in the Developer Mode app on the TV.')
+    : code === 'Unreachable' ? t('TV\'ye ulaşılamadı.', 'The TV could not be reached.')
+    : code === 'ToolMissing' ? t('Sunucuda ssh-keygen yok (openssh-client kurun).', 'ssh-keygen is missing on the server (install openssh-client).') : code;
+}
+function devHelp(s) {
+  if (!s.tv || s.tv.brand !== 'Lg') return s.tv && s.tv.brand === 'Samsung' && s.computerAddress
+    ? '<p class="muted">' + t('Samsung geliştirici modunda "Host PC IP": ', 'In Samsung developer mode, "Host PC IP": ') + '<b>' + esc(s.computerAddress) + '</b></p>' : '';
+  return '<ol class="muted">' +
+    '<li>' + t('TV\'de LG Content Store\'dan "Developer Mode" uygulamasını kurun ve LG geliştirici hesabınızla giriş yapın.', 'On the TV install "Developer Mode" from the LG Content Store and sign in with your LG developer account.') + '</li>' +
+    '<li>' + t('"Dev Mode Status"u açın; TV yeniden başlar.', 'Turn "Dev Mode Status" on; the TV restarts.') + '</li>' +
+    '<li>' + t('Uygulamayı yeniden açıp "Key Server"ı açın. Ekranda 6 karakterli parola (Passphrase) görünür.', 'Open the app again and turn "Key Server" on. A 6-character passphrase appears.') + '</li></ol>';
+}
+function model(s) {
+  var m = s.model;
+  if (m.installed) return '<p class="ok">' + t('Model kurulu', 'Model installed') + '</p>';
+  if (m.downloading) return '<p>' + t('İndiriliyor… ', 'Downloading… ') + Math.round(m.progress * 100) + '%</p><div class="progress"><div style="width:' + (m.progress * 100) + '%"></div></div>';
+  return (m.error ? '<p class="error">' + esc(m.error) + '</p>' : '') + btn('model', t('Çeviri modelini indir', 'Download the translation model'), 'primary') + err('model');
+}
+function statusRow(name, st) {
+  return '<div class="status"><span class="dot ' + esc(st.tone) + '"></span><b>' + esc(name) + '</b><span>' + esc(st.text) + '</span></div>';
+}
+
+function home(s) {
+  var r = s.settings.region, style = s.settings.style;
+  return '<div class="card">' + statusRow('PS5', s.ps5) + (s.ps5.detail ? '<p class="muted">' + esc(s.ps5.detail) + '</p>' : '') + statusRow('TV', s.tvStatus) +
+    (s.translator !== 'Ready' ? '<p class="warn">' + t('Çeviri modeli hazır değil.', 'The translation model is not ready.') + '</p>' + model(s) : '') +
+    (s.ocrMissing ? '<p class="error">' + t('Yazı tanıma (Tesseract) bulunamadı.', 'Text recognition (Tesseract) was not found.') + '</p>' : '') + '</div>' +
+    (s.running
+      ? btn('stop', t('Çeviriyi durdur', 'Stop translating'), 'danger big')
+      : btn('start', s.starting ? t('Başlatılıyor…', 'Starting…') : t('Çeviriyi başlat', 'Start translating'), 'primary big')) + err('start') + err('stop') +
+    (s.running ? '<div class="row" style="margin-top:8px">' + btn('pause', s.paused ? t('Altyazıyı sürdür', 'Resume subtitles') : t('Altyazıyı duraklat', 'Pause subtitles')) + btn('test', t('Deneme altyazısı', 'Test subtitle')) + '</div>' + err('test') : '') +
+    '<div class="card pair"><h2>' + t('Son altyazı', 'Last subtitle') + '</h2>' +
+    (s.lastTranslation ? '<p class="dst">' + esc(s.lastTranslation) + '</p><p class="src">' + esc(s.lastSource) + '</p>' : '<p class="muted">' + t('Henüz altyazı okunmadı.', 'No subtitle read yet.') + '</p>') + '</div>' +
+
+    '<div class="card"><h2>' + t('Altyazı alanı', 'Subtitle area') + '</h2>' +
+    '<p class="muted">' + t('Oyundaki altyazının çıktığı bölge. Görüntü çeviri sürerken gelir.', 'The region where the game shows subtitles. The picture is available while translating.') + '</p>' +
+    '<div class="preview">' + (s.hasFrame ? '<img alt="' + t('Oyun görüntüsü', 'Game picture') + '" src="/api/frame.png?width=640&amp;t=' + frameStamp + '">' : '') +
+    '<div class="region" style="left:' + r.left * 100 + '%;top:' + r.top * 100 + '%;width:' + (r.right - r.left) * 100 + '%;height:' + (r.bottom - r.top) * 100 + '%"></div></div>' +
+    '<div class="row" style="margin-top:8px">' + btn('frame', t('Görüntüyü yenile', 'Refresh picture')) + btn('readTest', t('Bu bölgeyi şimdi oku', 'Read this region now')) + '</div>' + err('readTest') +
+    (extra.read ? '<p class="muted" style="margin-top:8px">' + extra.read.ms + ' ms · ' + extra.read.width + '×' + extra.read.height + '</p><pre>' + esc((extra.read.lines || []).join('\n') || t('(yazı bulunamadı)', '(no text found)')) + '</pre>' : '') +
+    range('top', t('Üst', 'Top'), r.top) + range('bottom', t('Alt', 'Bottom'), r.bottom) + range('left', t('Sol', 'Left'), r.left) + range('right', t('Sağ', 'Right'), r.right) + err('settings') + '</div>' +
+
+    '<div class="card"><h2>' + t('TV\'de görünüm', 'On the TV') + '</h2>' +
+    '<label for="fontSize">' + t('Yazı boyutu', 'Text size') + '</label><select id="fontSize" data-style="fontSize">' +
+    [[36, t('Küçük', 'Small')], [46, t('Orta', 'Medium')], [58, t('Büyük', 'Large')], [72, t('Çok büyük', 'Extra large')]].map(function (o) { return '<option value="' + o[0] + '"' + (style.fontSize === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+    '<label for="placement">' + t('Çevirinin yeri', 'Translation position') + '</label><select id="placement" data-style="placement">' +
+    [['Cover', t('İngilizce altyazının üstünü örter', 'Covers the original subtitle')], ['Above', t('İngilizce altyazının üstünde', 'Above the original')], ['Below', t('İngilizce altyazının altında', 'Below the original')], ['Fixed', t('Ekranın altında sabit', 'Fixed at the bottom')]]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (style.placement === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+
+    online(s) +
+
+    '<div class="card"><h2>' + t('Çeviri denemesi', 'Translation test') + '</h2>' + input('sample', t('İngilizce cümle', 'English sentence'), 'placeholder="We need to get out of here before sunrise."') +
+    '<div class="row" style="margin-top:12px">' + btn('translateTest', t('Çevir', 'Translate')) + '</div>' + err('translateTest') +
+    (extra.translation ? '<p style="margin-top:8px"><b>' + esc(extra.translation.text) + '</b> <span class="muted">' + extra.translation.ms + ' ms · ' + esc(extra.translation.engine) + '</span></p>' : '') + '</div>' +
+
+    '<div class="card"><h2>' + t('Kurulum', 'Setup') + '</h2><p class="muted">' +
+    'PS5: ' + esc(s.console ? s.console.name + ' (' + s.console.host + ')' : '-') + ' · ' +
+    'TV: ' + esc(s.tv ? s.tv.name + ' (' + s.tv.host + ')' : '-') + '</p>' +
+    (s.tv ? tvAppLine(s) : '') + '<div class="row">' + btn('tvRefresh', t('TV uygulamasını denetle', 'Check the TV app')) + btn('reset', t('Kurulumu sıfırla', 'Reset setup')) + '</div>' + err('tvRefresh') + err('reset') + '</div>' +
+    '<div class="card"><details id="logBox"' + (extra.logOpen ? ' open' : '') + '><summary>' + t('Günlük', 'Log') + '</summary><pre id="log"></pre></details></div>';
+}
+// Çevrimiçi çeviri: Claude (sk-ant-…) ya da DeepL anahtarı. Ulaşılamazsa satır yerel modelle çevrilir.
+function online(s) {
+  var on = s.settings.onlineTranslation, engine = s.onlineEngine;
+  var body = engine
+    ? '<p class="' + (on ? 'ok' : 'muted') + '">' + (on ? t('Açık: ', 'On: ') : t('Kapalı: ', 'Off: ')) + esc(engine === 'Claude' ? 'Claude Haiku' : 'DeepL') + '</p>' +
+      '<div class="row">' + btn('onlineToggle', on ? t('Çevrimiçi çeviriyi kapat', 'Turn online translation off') : t('Çevrimiçi çeviriyi aç', 'Turn online translation on')) +
+      btn('onlineRemove', t('Anahtarı sil', 'Remove the key')) + '</div>'
+    : '<label for="onlineKey">' + t('Claude API anahtarı (sk-ant-…) ya da DeepL anahtarı', 'Claude API key (sk-ant-…) or DeepL key') + '</label>' +
+      '<input type="password" id="onlineKey" autocomplete="off" value="' + esc(form.onlineKey || '') + '">' +
+      '<div class="row" style="margin-top:12px">' + btn('onlineSave', t('Kaydet ve dene', 'Save and check'), 'primary') + '</div>';
+  return '<div class="card"><h2>' + t('Çevrimiçi çeviri', 'Online translation') + '</h2>' +
+    '<p class="muted">' + t('Daha doğal ve genelde daha hızlı çeviri. Altyazı metinleri çeviri için Anthropic\'e (ya da DeepL\'e) gönderilir; internet yoksa ya da yanıt 3 sn içinde gelmezse o satırı sunucudaki model çevirir.',
+      'More natural and usually faster translation. Subtitle text is sent to Anthropic (or DeepL) for translation; without internet, or if no answer comes within 3 s, the model on this server translates that line.') + '</p>' +
+    body + err('onlineSave') + err('onlineToggle') + err('onlineRemove') +
+    (extra.onlineCheck ? '<p class="error" role="alert">' + esc(extra.onlineCheck) + '</p>' : '') + '</div>';
+}
+function onlineState(code) {
+  return code === 'Invalid' ? t('Anahtar geçersiz.', 'The key is not valid.')
+    : code === 'QuotaExceeded' ? t('Kota ya da hız sınırı dolu.', 'Quota or rate limit reached.')
+    : code === 'Unreachable' ? t('Hizmete ulaşılamadı; internet bağlantısını kontrol edin.', 'The service could not be reached; check the internet connection.') : '';
+}
+function tvAppLine(s) {
+  var a = s.tvApp;
+  if (a.kind === 'NeedsPassphrase' || a.kind === 'DevModeOff' || a.kind === 'Failed' || a.kind === 'Working' || a.kind === 'SignIn' || a.kind === 'ApproveOnTv') return tvApp(s);
+  return a.kind === 'UpToDate' ? '<p class="muted">' + t('TV uygulaması: ', 'TV app: ') + esc(a.version || '') + (s.devModeHoursLeft != null ? ' · ' + t('geliştirici modu ', 'developer mode ') + s.devModeHoursLeft + t(' saat', ' h') : '') + '</p>' : '';
+}
+function range(side, label, value) {
+  return '<label for="r-' + side + '">' + esc(label) + ' <span id="v-' + side + '">' + Math.round(value * 100) + '%</span></label><input type="range" id="r-' + side + '" data-region="' + side + '" min="0" max="100" step="1" value="' + Math.round(value * 100) + '">';
+}
+
+// Durum değişmedikçe sayfa yeniden çizilmez; çizilirken yazılan metin ve odak korunur.
+function render(force) {
+  if (!state) return;
+  var html = state.step === 'Done' ? home(state) : wizard(state);
+  document.getElementById('meta').textContent = 'v' + state.version;
+  if (!force && html === lastRendered) return;
+  var active = document.activeElement, id = active && active.id, start = id && active.selectionStart;
+  if (id && active.type === 'range') return;   // sürgü sürüklenirken dokunma
+  lastRendered = html;
+  document.getElementById('view').innerHTML = html;
+  var log = document.getElementById('log');
+  if (log && extra.log) log.textContent = extra.log.join('\n');
+  if (id) {
+    var again = document.getElementById(id);
+    if (again) { again.focus(); try { if (start != null) again.setSelectionRange(start, start); } catch (e) { } }
+  }
+}
+
+document.addEventListener('input', function (e) {
+  var el = e.target;
+  if (el.type === 'text' || el.type === 'password') form[el.id] = el.value;
+  if (el.dataset.region) document.getElementById('v-' + el.dataset.region).textContent = el.value + '%';
+});
+document.addEventListener('change', function (e) {
+  var el = e.target;
+  if (el.dataset.region) {
+    var r = Object.assign({}, state.settings.region);
+    r[el.dataset.region] = Number(el.value) / 100;
+    el.blur();
+    run('settings', 'POST', '/api/settings', { region: r });
+  } else if (el.dataset.style) {
+    var style = Object.assign({}, state.settings.style);
+    style[el.dataset.style] = el.dataset.style === 'fontSize' ? Number(el.value) : el.value;
+    run('settings', 'POST', '/api/settings', { style: style });
+  }
+});
+document.addEventListener('toggle', function (e) { if (e.target.id === 'logBox') { extra.logOpen = e.target.open; if (extra.logOpen) loadLog(); } }, true);
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('button');
+  if (!el) return;
+  if (el.dataset.pickConsole) { form.consoleHost = el.dataset.pickConsole; render(true); var pin = document.getElementById('pin'); if (pin) pin.focus(); return; }
+  if (el.dataset.pickTv) { var tv = lists.tvs[Number(el.dataset.pickTv)]; run('pair', 'POST', '/api/pair', { name: tv.name, host: tv.host, brand: tv.brand }); return; }
+  switch (el.dataset.act) {
+    case 'advance': run('advance', 'POST', '/api/advance'); break;
+    case 'back': run('back', 'POST', '/api/back'); break;
+    case 'psn': run('psn', 'POST', '/api/psn', { redirect: form.redirect || '' }, function () { form.redirect = ''; }); break;
+    case 'consoles': run('consoles', 'GET', '/api/consoles', null, function (list) { lists.consoles = list; if (list.length === 1) form.consoleHost = list[0].host; }); break;
+    case 'register': run('register', 'POST', '/api/register', { host: form.consoleHost || '', pin: form.pin || '' }, function () { form.pin = ''; }); break;
+    case 'tvs': run('tvs', 'GET', '/api/tvs', null, function (list) { lists.tvs = list; }); break;
+    case 'pair': run('pair', 'POST', '/api/pair', { name: 'LG TV', host: form.tvHost || '', brand: 'Lg' }); break;
+    case 'tvInstall': run('tvInstall', 'POST', '/api/tv-app/install', { passphrase: form.passphrase || '' }); break;
+    case 'tvRefresh': run('tvRefresh', 'POST', '/api/tv-app/refresh'); break;
+    case 'model': run('model', 'POST', '/api/model/download'); break;
+    case 'test': run('test', 'POST', '/api/test-subtitle'); break;
+    case 'start': run('start', 'POST', '/api/start'); break;
+    case 'stop': run('stop', 'POST', '/api/stop'); break;
+    case 'pause': run('pause', 'POST', '/api/pause'); break;
+    case 'frame': frameStamp = Date.now(); render(true); break;
+    case 'readTest': frameStamp = Date.now(); run('readTest', 'POST', '/api/read-test', null, function (result) { extra.read = result; }); break;
+    case 'translateTest': run('translateTest', 'POST', '/api/translate-test', { text: form.sample || 'We need to get out of here before sunrise.' }, function (result) { extra.translation = result; }); break;
+    case 'onlineSave':
+      delete extra.onlineCheck;
+      run('onlineSave', 'POST', '/api/deepl', { key: form.onlineKey || '' }, function (r) {
+        if (r.state === 'Valid' || r.state === 'QuotaExceeded') form.onlineKey = '';
+        extra.onlineCheck = r.state === 'Valid' ? '' : onlineState(r.state);
+      });
+      break;
+    case 'onlineToggle': run('onlineToggle', 'POST', '/api/settings', { onlineTranslation: !state.settings.onlineTranslation }); break;
+    case 'onlineRemove': delete extra.onlineCheck; run('onlineRemove', 'DELETE', '/api/deepl'); break;
+    case 'reset': if (confirm(t('Kayıtlı hesap, PS5 ve TV bilgileri silinsin mi?', 'Delete the saved account, PS5 and TV?'))) run('reset', 'POST', '/api/reset'); break;
+  }
+});
+function loadLog() {
+  api('GET', '/api/log').then(function (r) {
+    extra.log = r.lines;
+    var box = document.getElementById('log');
+    if (box) { box.textContent = r.lines.join('\n'); box.scrollTop = box.scrollHeight; }
+  }).catch(function () { });
+}
+refresh(true);
+setInterval(function () { refresh(false); if (extra.logOpen) loadLog(); }, 1500);
+</script>
+</body>
+</html>
