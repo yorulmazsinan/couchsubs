@@ -5,41 +5,77 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.sp
+import com.couchsubs.mobile.R
+import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.core.SubtitleTextColor
 import com.couchsubs.mobile.service.LiveState
-import com.couchsubs.mobile.settings.AppSettings
+import kotlinx.coroutines.delay
 
-/** Altyazı bu telefonun ekranında: yatay, siyah zeminde büyük yazı (TV yerine telefonu TV'nin önüne koyanlar için). */
+/**
+ * Altyazı bu telefonun ekranında (tuval Telefon-Altyazi): yatay, siyah zeminde büyük yazı; üstte durum hapı ve kapat.
+ * Ekran açık kalır; bir süre sonra parlaklık kısılır (oyun çoğunlukla karanlık odada oynanır).
+ */
 class PhoneSubtitleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val settings = AppSettings(this)
-        if (settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val color = if (settings.textColor == SubtitleTextColor.YELLOW) Tokens.Dark.accent else Color.White
-        val size = settings.phoneTextSize
+        val settings = Services.settings
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val color = if (settings.textColor == SubtitleTextColor.YELLOW) Tokens.Color.accent else Tokens.Color.text
+        val scale = settings.subtitleScale / 100f
+        val streaming = getString(R.string.phase_streaming)
         setContent {
-            val status by LiveState.status.collectAsState()
-            Box(Modifier.fillMaxSize().background(Color.Black).padding(Tokens.Space.xxl), contentAlignment = Alignment.Center) {
-                Text(
-                    text = status.current.ifEmpty { if (status.running) "" else "CouchSubs" },
-                    color = color, fontSize = size.sp, lineHeight = (size * 1.25).sp, fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                )
-                if (status.current.isEmpty() && status.running)
-                    Text(status.phase, color = Tokens.Dark.textSecondary, modifier = Modifier.align(Alignment.BottomCenter))
+            CouchSubsTheme {
+                val status by LiveState.status.collectAsState()
+                LaunchedEffect(Unit) {
+                    delay(10_000)
+                    window.attributes = window.attributes.apply { screenBrightness = 0.35f }
+                }
+                Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(Tokens.Space.screen)) {
+                    Row(Modifier.fillMaxWidth().align(Alignment.TopCenter), verticalAlignment = Alignment.CenterVertically) {
+                        val connected = status.running && status.phase == streaming
+                        val pack = status.packInUse?.let { stringResource(R.string.running_pack, it) }
+                        Pill(listOfNotNull(stringResource(if (connected) R.string.subtitle_connected else R.string.subtitle_waiting), pack).joinToString(" · "),
+                            if (connected) Tokens.Color.success else Tokens.Color.secondary)
+                        Spacer(Modifier.weight(1f))
+                        IconAction(Icons.Filled.Close, stringResource(R.string.close)) { finish() }
+                    }
+                    Column(Modifier.align(Alignment.Center).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+                        val style = Tokens.Type.subtitleLandscape
+                        val previous = status.recent.getOrNull(1)?.translation
+                        if (previous != null && status.current.isNotEmpty() && previous != status.current) Text(previous,
+                            style = style.copy(fontSize = style.fontSize * scale * 0.8f, lineHeight = style.lineHeight * scale * 0.8f),
+                            color = color.copy(alpha = 0.4f), textAlign = TextAlign.Center)
+                        Text(status.current.ifEmpty { if (status.running) "" else "CouchSubs" },
+                            style = style.copy(fontSize = style.fontSize * scale, lineHeight = style.lineHeight * scale),
+                            color = color, textAlign = TextAlign.Center)
+                    }
+                    Text(stringResource(R.string.subtitle_screen_note), style = Tokens.Type.caption, color = Tokens.Color.secondary,
+                        modifier = Modifier.align(Alignment.BottomCenter))
+                }
             }
         }
     }
