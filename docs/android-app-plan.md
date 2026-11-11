@@ -97,10 +97,49 @@ TV tarafında değişiklik gerekmez: TV uygulaması ağı `:8787/hello` ile tara
 5. **AGPL**: kaynak zaten açık; uygulama içinde kaynak bağlantısı ve üçüncü taraf lisansları (chiaki-ng, OpenSSL, curl,
    ML Kit koşulları) gösterilmeli.
 
-## Bilinen eksikler (MVP sonrası)
+## Aşama 2: hesap, abonelik, ölçüm (telefon uygulaması)
 
-- Ekranlar yer tutucu; onaylanan tasarıma göre yeniden yapılacak (welcome, PSN, eşleme, hedef seçimi, ana ekran,
-  yatay altyazı, ayarlar, paket listesi).
+İş modeli: uygulama ücretsiz (ücretsiz motor, DeepL ve kendi API anahtarıyla çeviri). Hazır çeviri paketleri Pro
+abonelikle: aylık 399 TL, yıllık 3.588 TL (aylık 299 TL). Masaüstü tamamen ücretsiz kalır. Play Console hesabı Enmera
+adına **kuruluş** hesabıdır: 12 test kullanıcısı / 14 günlük kapalı test şartı yoktur; geliştirici adı "Enmera".
+
+| Parça | Nerede | Not |
+|---|---|---|
+| Firebase Analytics, Auth (Google, e-posta/şifre, şifre sıfırlama, Apple), Crashlytics, Remote Config | `account/Backend.kt` | `app/google-services.json` yoksa Firebase hiç açılmaz; derleme ve uygulama çalışır |
+| RevenueCat (Play Billing) | `account/Subscriptions.kt` | appUserID = Firebase UID; hak `packs`; teklif `default` (`$rc_monthly` → `couchsubs_packs_monthly`, `$rc_annual` → `couchsubs_packs_annual`); satın alma ekranı bizim (`PaywallScreen`) |
+| Meta App Events | `account/Ads.kt` | yalnız "Reklam ölçümü" izniyle; otomatik başlatma manifestte kapalı |
+| AdMob + UMP | `account/Ads.kt` | Remote Config `ads_enabled` (varsayılan false) açılmadan başlatılmaz, reklam gösterilmez |
+| İzin (KVKK/GDPR) | `ConsentScreen`, `account/Policies.kt` | ölçüm ve reklam ölçümü ayrı; karar verilene kadar hiçbir şey toplanmaz (Consent Mode v2) |
+| Paket kapısı | `PackGate`, `Services.packsAllowed()` | abonelik + ayar; hata ayıklamada "abonelik olmadan dene" |
+| Paket indirme | `packs/PackStore.kt`, `server/packs` | aboneye sunucudan, SHA-256 doğrulamalı, haftada bir; abonelik bitince silinir |
+
+Mağaza APK'sında paket yoktur; hata ayıklama APK'sında `core/.../packs` gömülüdür (sunucusuz deneme).
+
+Olaylar: `sign_up`, `login`, `paywall_view`, `purchase`, `pack_hit` (oturumda paket başına bir kez),
+`tv_connected`, ekran görüntülemeleri. Firebase `session_start` adını ayırdığı için okuma oturumu
+`subtitle_session_start` / `subtitle_session_stop` adını taşır.
+
+### Sahibin vermesi gerekenler
+
+1. **Firebase**: proje oluştur, Android uygulaması ekle (paket `com.couchsubs.mobile`, hata ayıklama ve sürüm SHA-1/
+   SHA-256), `google-services.json`'u `couchsubs-android/app/` altına koy (depoya girmez). Authentication'da
+   E-posta/Şifre, Google ve (isteğe bağlı) Apple sağlayıcılarını aç; Apple için Apple Developer'da Services ID ve
+   anahtar. Remote Config'de `ads_enabled` (boolean, false). Crashlytics'i aç.
+2. **RevenueCat**: proje + Google Play uygulaması, Play servis hesabı bağlantısı; hak `packs`, teklif `default`,
+   paketler `$rc_monthly`/`$rc_annual`. Public SDK anahtarı (`goog_…`) → `couchsubs-android/secrets.properties`
+   `revenuecat.apiKey`. Gizli anahtar (`sk_…`) → Worker sırrı `REVENUECAT_SECRET`.
+3. **Play Console**: abonelik ürünleri `couchsubs_packs_monthly` (399 TL/ay) ve `couchsubs_packs_annual` (3.588 TL/yıl);
+   uygulama imza anahtarı; veri güvenliği formu; ön plan hizmeti (connectedDevice) beyanı.
+4. **Cloudflare**: R2 kovası `couchsubs-packs`, `server/packs/wrangler.toml` içinde `FIREBASE_PROJECT_ID`,
+   `wrangler deploy`; adres → `secrets.properties` `packs.url` (bkz. `server/packs/README.md`).
+5. **Meta**: uygulama kimliği ve istemci tokeni → `facebook.appId`, `facebook.clientToken`.
+6. **AdMob** (reklam açılacaksa): uygulama kimliği ve banner birimi → `admob.appId`, `admob.bannerId`; AEA/İngiltere için
+   AdMob'da GDPR mesajı (UMP).
+7. **Metinler**: Kullanım koşulları sayfası (şimdilik `TERMS.md` bağlantısı, dosya yok) ve gizlilik metnine telefon
+   bölümü (Firebase, RevenueCat, Meta, AdMob, ortak havuz).
+
+## Bilinen eksikler
+
 - TV uygulamasını telefondan kurma yok: "TV uygulamasını ilk kez kurmak için bir kez bilgisayardaki CouchSubs'ı
   kullanın". Android TV için ADB-over-Wi-Fi kurulumu (`CouchSubs.TvInstall/Android/AdbConnection.cs` taşınarak) sonraki
   adım; LG (geliştirici modu, SSH) mümkün, Samsung (Samsung hesabıyla imza) zor.
@@ -130,4 +169,5 @@ CI önerisi: `.github/workflows/android-app.yml` (yalnız `couchsubs-android/**`
 2. Tasarımın uygulanması ve İngilizce metinler (`values-en`).
 3. İmza: TV uygulamasıyla aynı anahtar (depo sırları); `release.yml`'e `CouchSubs-android.apk` olarak eklenmesi.
 4. Uygulama içi güncelleme denetimi (masaüstündeki gibi GitHub sürümleri) — Play dışı dağıtım için.
-5. Play: kapalı test kanalı, veri güvenliği formu, FGS beyanı, marka kullanımının gözden geçirilmesi.
+5. Play (kuruluş hesabı, kapalı test şartı yok): iç test kanalı, veri güvenliği formu, FGS beyanı, abonelik ürünleri,
+   marka kullanımının gözden geçirilmesi.
