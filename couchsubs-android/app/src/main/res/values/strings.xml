@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- İlk sürüm Türkçe; ekranlar onaylanan tasarıma göre yeniden yapılınca İngilizcesi (values-en) eklenecek. -->
+<resources>
+    <string name="channel_translation">Altyazı çevirisi</string>
+    <string name="notification_title">CouchSubs çalışıyor</string>
+    <string name="notification_text">PS5 altyazıları okunup Türkçeye çevriliyor</string>
+    <string name="stop">Durdur</string>
+    <string name="start">Başlat</string>
+
+    <string name="phase_preparing">Hazırlanıyor…</string>
+    <string name="phase_connecting">PS5\'e bağlanılıyor…</string>
+    <string name="phase_streaming">Altyazılar okunuyor</string>
+    <string name="phase_reconnecting">Bağlantı koptu, yeniden bağlanılıyor…</string>
+    <string name="phase_in_use">PS5 başka bir Remote Play bağlantısında. Diğer cihazı kapatın.</string>
+    <string name="phase_not_found">PS5 ağda bulunamadı. Telefon ve PS5 aynı ağda mı?</string>
+    <string name="phase_asleep">PS5 dinlenme modundan uyanmadı.</string>
+    <string name="phase_passcode">İkinci hesapta Remote Play şifresi açık. PS5\'te bu hesabın oturum açma şifresini kapatın.</string>
+    <string name="phase_refused">PS5 bağlantıyı reddetti. Eşlemeyi yenileyin.</string>
+
+    <string name="error_not_paired">Önce PSN girişi ve PS5 eşlemesi gerekiyor.</string>
+    <string name="error_native">Bu cihazda Remote Play kütüphanesi yüklenemedi.</string>
+    <string name="error_port">Altyazı sunucusu açılamadı (8787 kullanımda).</string>
+    <string name="error_translation">Çeviri şu an yapılamıyor; yeniden deneniyor.</string>
+    <string name="error_model">Ücretsiz çeviri modeli indirilemedi. İnternet bağlantınızı kontrol edin.</string>
+
+    <string name="welcome_title">Türkçe dil desteği olmayan PS5 oyunlarını Türkçe altyazıyla oynayın</string>
+    <string name="welcome_body">CouchSubs oyundaki İngilizce altyazıyı telefonda okur, Türkçeye çevirir ve TV\'de ya da bu ekranda gösterir. Oyunu her zamanki gibi oynarsınız.</string>
+    <string name="welcome_start">Kuruluma başla</string>
+    <string name="psn_title">İkinci PSN hesabıyla giriş</string>
+    <string name="psn_body">Kendi hesabınızla Remote Play kolunuzu kapatırdı; ücretsiz ikinci bir hesap kullanın. Parolanız yalnız Sony\'ye gider.</string>
+    <string name="psn_open">Sony girişini aç</string>
+    <string name="psn_done">Giriş tamam</string>
+    <string name="psn_failed">Giriş tamamlanmadı: %1$s</string>
+    <string name="pair_title">PS5 eşleme</string>
+    <string name="pair_body">PS5\'te ikinci hesapla: Ayarlar › Sistem › Remote Play › Cihazı Bağla. Ekrandaki 8 haneli kodu yazın.</string>
+    <string name="pair_searching">PS5 aranıyor…</string>
+    <string name="pair_none">Ağda PS5 bulunamadı. Adresini elle yazabilirsiniz.</string>
+    <string name="pair_address">PS5 adresi (ör. 192.168.1.20)</string>
+    <string name="pair_code">8 haneli kod</string>
+    <string name="pair_button">Eşle</string>
+    <string name="pair_working">PS5\'e bağlanılıyor (en çok 30 sn)…</string>
+    <string name="pair_failed">Eşleme olmadı: %1$s</string>
+    <string name="target_title">Altyazılar nerede görünsün?</string>
+    <string name="target_tv">TV\'de (CouchSubs TV uygulaması kurulu)</string>
+    <string name="target_tv_body">TV uygulaması açılınca bu telefonu ağda kendisi bulur. TV uygulamasını ilk kez kurmak için bir kez bilgisayardaki CouchSubs\'ı kullanın.</string>
+    <string name="target_phone">Bu telefonun ekranında</string>
+    <string name="target_phone_body">Telefonu yatay tutun; altyazı büyük yazıyla gösterilir.</string>
+    <string name="target_tvs_found">Ağda görülen TV\'ler:</string>
+    <string name="target_tvs_none">Ağda TV görülmedi (TV kapalı olabilir; sorun değil).</string>
+    <string name="finish">Bitir</string>
+
+    <string name="main_idle">Hazır. Oyunu açın ve Başlat\'a basın.</string>
+    <string name="main_tvs">Bağlı TV: %1$d</string>
+    <string name="main_pack">%1$s paketi kullanılıyor</string>
+    <string name="main_recent">Son altyazılar</string>
+    <string name="main_phone_view">Altyazıyı bu ekranda göster</string>
+    <string name="settings">Ayarlar</string>
+
+    <string name="settings_engine">Çeviri motoru</string>
+    <string name="engine_free">Ücretsiz (cihaz üstü)</string>
+    <string name="settings_key">Anahtar</string>
+    <string name="settings_packs">Oyun paketleri</string>
+    <string name="settings_packs_body">Pakette bulunan satırlar hazır Türkçesiyle, beklemeden gösterilir.</string>
+    <string name="settings_text_size">Telefon ekranında yazı boyu</string>
+    <string name="settings_color">Yazı rengi</string>
+    <string name="color_white">Beyaz</string>
+    <string name="color_yellow">Sarı</string>
+    <string name="settings_pool">Ortak havuza katkı</string>
+    <string name="settings_pool_body">Hiçbir pakette olmayan İngilizce satırlar (yalnız metin, kimliksiz) yeni paketler için gönderilir.</string>
+    <string name="settings_screen_on">Ekranı açık tut</string>
+    <string name="settings_repair">Eşlemeyi yenile</string>
+    <string name="back">Geri</string>
+</resources>
