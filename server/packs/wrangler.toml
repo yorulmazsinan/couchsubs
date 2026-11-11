@@ -1,0 +1,16 @@
+name = "couchsubs-packs"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# Firebase projesinin kimliği (Firebase konsolu › Proje ayarları › Proje kimliği). Yer tutucu: değiştirin.
+FIREBASE_PROJECT_ID = "REPLACE_WITH_FIREBASE_PROJECT_ID"
+
+[[r2_buckets]]
+binding = "PACKS"
+bucket_name = "couchsubs-packs"
+
+# REVENUECAT_SECRET bir sırdır (RevenueCat › Project settings › API keys › Secret API key, "sk_…"):
+#   wrangler secret put REVENUECAT_SECRET
+# Asla depoya yazılmaz.
