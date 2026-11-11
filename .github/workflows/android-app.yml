@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Telefon/tablet uygulaması (couchsubs-android): JVM testleri ve hata ayıklama APK'sı. Öneri aşamasında: yalnız bu klasör
+# değişince ve elle çalışır; sürüm iş akışına (release.yml) henüz bağlı değildir. İmza, TV uygulamasıyla aynı sırlardan
+# (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD) yapılabilir; şimdilik geliştirme anahtarıyla imzalanır.
+name: android-app
+
+on:
+  push:
+    branches: [main, "feat/android-*"]
+    paths: ["couchsubs-android/**", "core/Sources/CouchSubsCore/Resources/**", ".github/workflows/android-app.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+      - name: JVM testleri (paket anahtarı, kararlılık, SSE biçimi)
+        working-directory: couchsubs-android
+        run: gradle testDebugUnitTest -Pcouchsubs.skipNative=true --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-app-test-report
+          path: couchsubs-android/app/build/reports/tests
+
+  apk:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: chiaki-ng ve gereken alt modüller
+        run: |
+          git submodule update --init --depth 1 third-party/chiaki-ng
+          git -C third-party/chiaki-ng submodule update --init --depth 1 third-party/nanopb third-party/jerasure third-party/gf-complete third-party/curl
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+      # nanopb'nin kod üreteci protobuf paketli Python ister.
+      - name: Python
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet protobuf grpcio-tools
+          echo "COUCHSUBS_PYTHON=$RUNNER_TEMP/venv/bin/python3" >> "$GITHUB_ENV"
+      - name: NDK ve CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1" > /dev/null
+      - name: Derle
+        working-directory: couchsubs-android
+        run: |
+          gradle assembleDebug -Pcouchsubs.patchChiaki=true --no-daemon
+          mkdir -p ../dist
+          cp app/build/outputs/apk/debug/*.apk ../dist/CouchSubs-android-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: couchsubs-android-app
+          path: dist/*.apk
+          if-no-files-found: error
