@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+// Depo kökü: oyun paketleri, model listesi ve chiaki-ng buradan okunur (masaüstüyle ortak).
+def repoRoot = rootProject.projectDir.parentFile
+def abis = (findProperty('couchsubs.abis') ?: 'arm64-v8a').toString().split(',')*.trim()
+// Yerel kütüphane olmadan (yalnız Kotlin ve arayüz) derlemek için: -Pcouchsubs.skipNative=true
+def skipNative = (findProperty('couchsubs.skipNative') ?: 'false').toString().toBoolean()
+// nanopb'nin kod üreteci protobuf paketli bir Python ister (Mac betiğindeki venv gibi).
+def python = (findProperty('couchsubs.python') ?: System.getenv('COUCHSUBS_PYTHON') ?: 'python3').toString()
+
+android {
+    namespace 'com.couchsubs.mobile'
+    compileSdk 35
+    ndkVersion '27.0.12077973'
+
+    defaultConfig {
+        applicationId 'com.couchsubs.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        ndk { abiFilters(*abis) }
+        if (!skipNative) {
+            externalNativeBuild {
+                cmake {
+                    // Yalnız kendi kütüphanemiz derlenir; chiaki-ng'nin eski Android uygulaması (chiaki-jni) derlenmez.
+                    targets 'couchsubs-jni'
+                    arguments "-DPYTHON_EXECUTABLE=${python}", "-DPython3_EXECUTABLE=${python}", '-DANDROID_STL=c++_static'
+                }
+            }
+        }
+    }
+
+    if (!skipNative) {
+        externalNativeBuild {
+            cmake {
+                path 'src/main/cpp/CMakeLists.txt'
+                version '3.22.1'
+            }
+        }
+    }
+
+    // Sürümde imza depo sırrından gelir; yoksa geliştirme anahtarıyla imzalanır (TV uygulamasıyla aynı).
+    signingConfigs {
+        release {
+            def store = System.getenv('ANDROID_KEYSTORE_FILE')
+            if (store) {
+                storeFile file(store)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias 'couchsubs'
+                keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv('ANDROID_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-assets')
+    testOptions { unitTests.returnDefaultValues = true }
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
+}
+
+// Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
+tasks.register('copyCouchSubsAssets', Copy) {
+    into layout.buildDirectory.dir('generated/couchsubs-assets')
+    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'packs/*.json.gz', 'ai-models.json' }
+}
+preBuild.dependsOn 'copyCouchSubsAssets'
+
+// CI'da chiaki-ng yamaları masaüstü derlemeleri gibi uygulanır (scripts/patch-chiaki.sh): -Pcouchsubs.patchChiaki=true
+if ((findProperty('couchsubs.patchChiaki') ?: 'false').toString().toBoolean()) {
+    tasks.register('patchChiaki', Exec) {
+        workingDir repoRoot
+        commandLine 'sh', 'scripts/patch-chiaki.sh'
+    }
+    preBuild.dependsOn 'patchChiaki'
+}
+
+// Testler, gömülü paketleri depodaki yerinden okur.
+tasks.withType(Test).configureEach {
+    systemProperty 'couchsubs.packs', "$repoRoot/core/Sources/CouchSubsCore/Resources/packs"
+}
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2024.12.01')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0'
+    // Cihaz üstü yazı tanıma (Latin modeli uygulamayla gelir) ve ücretsiz çeviri (EN→TR modeli ilk kullanımda iner).
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:translate:17.0.3'
+
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar'daki org.json yalnız iskelettir; JVM testleri gerçeğini kullanır.
+    testImplementation 'org.json:json:20240303'
+}
