@@ -1,8 +1,8 @@
 # CouchSubs Android (telefon ve tablet): fizibilite ve plan
 
-Durum: ilk çalışan sürüm (MVP) `couchsubs-android/` klasöründe, `feat/android-app` dalında. Ekranlar yer tutucudur;
-onaylanan tasarım gelince yeniden yapılacak. Motor ve tesisat (Remote Play, yazı tanıma, paketler, çeviri, SSE sunucusu,
-ön plan hizmeti) masaüstüyle aynı kurallarla yazıldı.
+Durum: `couchsubs-android/` klasöründe, `feat/android-app` dalında. Ekranlar onaylanan mobil tasarımla (bento,
+TASARIM-MOBIL.md) yapıldı. Motor ve tesisat (Remote Play, yazı tanıma, paketler, çeviri, SSE sunucusu, ön plan hizmeti)
+masaüstüyle aynı kurallarla yazıldı. **Uygulama tamamen ücretsizdir; oyun paketleri dahil. Hesap ve giriş yoktur.**
 
 ## Ne yapıyor
 
@@ -97,46 +97,51 @@ TV tarafında değişiklik gerekmez: TV uygulaması ağı `:8787/hello` ile tara
 5. **AGPL**: kaynak zaten açık; uygulama içinde kaynak bağlantısı ve üçüncü taraf lisansları (chiaki-ng, OpenSSL, curl,
    ML Kit koşulları) gösterilmeli.
 
-## Aşama 2: hesap, abonelik, ölçüm (telefon uygulaması)
+## Ücretsiz model: ölçüm, izin ve paket güncelleme
 
-İş modeli: uygulama ücretsiz (ücretsiz motor, DeepL ve kendi API anahtarıyla çeviri). Hazır çeviri paketleri Pro
-abonelikle: aylık 399 TL, yıllık 3.588 TL (aylık 299 TL). Masaüstü tamamen ücretsiz kalır. Play Console hesabı Enmera
-adına **kuruluş** hesabıdır: 12 test kullanıcısı / 14 günlük kapalı test şartı yoktur; geliştirici adı "Enmera".
+Uygulama ve oyun paketleri ücretsizdir; abonelik, satın alma ve hesap yoktur (masaüstü gibi). Ayarlar yalnız telefonda
+durur. Play Console hesabı Enmera adına **kuruluş** hesabıdır: 12 test kullanıcısı / 14 günlük kapalı test şartı yoktur;
+geliştirici adı "Enmera".
 
 | Parça | Nerede | Not |
 |---|---|---|
-| Firebase Analytics, Auth (Google, e-posta/şifre, şifre sıfırlama, Apple), Crashlytics, Remote Config | `account/Backend.kt` | `app/google-services.json` yoksa Firebase hiç açılmaz; derleme ve uygulama çalışır |
-| RevenueCat (Play Billing) | `account/Subscriptions.kt` | appUserID = Firebase UID; hak `packs`; teklif `default` (`$rc_monthly` → `couchsubs_packs_monthly`, `$rc_annual` → `couchsubs_packs_annual`); satın alma ekranı bizim (`PaywallScreen`) |
-| Meta App Events | `account/Ads.kt` | yalnız "Reklam ölçümü" izniyle; otomatik başlatma manifestte kapalı |
+| Firebase Analytics, Crashlytics, Remote Config | `account/Backend.kt` | `app/google-services.json` yoksa Firebase hiç açılmaz; derleme ve uygulama çalışır |
+| Meta App Events | `account/Ads.kt` | yalnız "Reklam ölçümü" izniyle; otomatik başlatma manifestte kapalı; kurulumun bitişi "kayıt tamam" olayı olarak gider (reklam dönüşümü) |
 | AdMob + UMP | `account/Ads.kt` | Remote Config `ads_enabled` (varsayılan false) açılmadan başlatılmaz, reklam gösterilmez |
 | İzin (KVKK/GDPR) | `ConsentScreen`, `account/Policies.kt` | ölçüm ve reklam ölçümü ayrı; karar verilene kadar hiçbir şey toplanmaz (Consent Mode v2) |
-| Paket kapısı | `PackGate`, `Services.packsAllowed()` | abonelik + ayar; hata ayıklamada "abonelik olmadan dene" |
-| Paket indirme | `packs/PackStore.kt`, `server/packs` | aboneye sunucudan, SHA-256 doğrulamalı, haftada bir; abonelik bitince silinir |
+| Paketler | `core/GamePacks.kt`, `packs/PackStore.kt`, `server/packs` | uygulamayla gelir; yenileri ve güncellemeleri hesapsız iner, SHA-256 doğrulamalı, haftada bir |
+| Profil | `ProfileScreen` | hesapsız: PS5, TV'ler, ikinci PSN hesabı, bildirimler, ortak havuz, kullanım verisi, gizlilik |
 
-Mağaza APK'sında paket yoktur; hata ayıklama APK'sında `core/.../packs` gömülüdür (sunucusuz deneme).
+Olaylar: `onboarding_done`, `pack_hit` (oturumda paket başına bir kez), `tv_connected`, ekran görüntülemeleri.
+Firebase `session_start` adını ayırdığı için okuma oturumu `subtitle_session_start` / `subtitle_session_stop` adını
+taşır.
 
-Olaylar: `sign_up`, `login`, `paywall_view`, `purchase`, `pack_hit` (oturumda paket başına bir kez),
-`tv_connected`, ekran görüntülemeleri. Firebase `session_start` adını ayırdığı için okuma oturumu
-`subtitle_session_start` / `subtitle_session_stop` adını taşır.
+### Paketler mağaza derlemesinde de gömülü (karar)
+
+Altı paket gzip'le ~16 MB (APK içinde zip sıkıştırmasıyla benzer). **Her derlemede uygulamayla gelir**, sunucu yalnız
+yeni oyunları ve düzeltmeleri verir; aynı kimlikte inen sürüm gömülünün yerine geçer. Gerekçe:
+
+- İlk açılışta (internetsiz, sunucu kapalı ya da henüz kurulmamışken) paketler hemen çalışır; tanıtımdaki "anında,
+  internetsiz" sözü ilk günden doğru olur.
+- 16 MB, Play'in sınırlarının (AAB 200 MB, cihaz başı indirme) çok altında; ML Kit kütüphaneleri zaten ~27 MB.
+- Paketler ücretsiz olduğu için sunucuda gizlenecek bir şey yok; sunucu düşerse kullanıcı yalnız güncellemeyi kaçırır.
+- Paket sayısı 100 MB'ı geçecek kadar büyürse Play Asset Delivery'ye (install-time / on-demand paket) geçilir.
+
+`server/packs`: herkese açık `GET /v1/packs` ve `GET /v1/packs/:id` (R2'den akış, `ETag`/`304`, önbellek başlıkları,
+IP başına saatte 60 indirme sınırı).
 
 ### Sahibin vermesi gerekenler
 
-1. **Firebase**: proje oluştur, Android uygulaması ekle (paket `com.couchsubs.mobile`, hata ayıklama ve sürüm SHA-1/
-   SHA-256), `google-services.json`'u `couchsubs-android/app/` altına koy (depoya girmez). Authentication'da
-   E-posta/Şifre, Google ve (isteğe bağlı) Apple sağlayıcılarını aç; Apple için Apple Developer'da Services ID ve
-   anahtar. Remote Config'de `ads_enabled` (boolean, false). Crashlytics'i aç.
-2. **RevenueCat**: proje + Google Play uygulaması, Play servis hesabı bağlantısı; hak `packs`, teklif `default`,
-   paketler `$rc_monthly`/`$rc_annual`. Public SDK anahtarı (`goog_…`) → `couchsubs-android/secrets.properties`
-   `revenuecat.apiKey`. Gizli anahtar (`sk_…`) → Worker sırrı `REVENUECAT_SECRET`.
-3. **Play Console**: abonelik ürünleri `couchsubs_packs_monthly` (399 TL/ay) ve `couchsubs_packs_annual` (3.588 TL/yıl);
-   uygulama imza anahtarı; veri güvenliği formu; ön plan hizmeti (connectedDevice) beyanı.
-4. **Cloudflare**: R2 kovası `couchsubs-packs`, `server/packs/wrangler.toml` içinde `FIREBASE_PROJECT_ID`,
-   `wrangler deploy`; adres → `secrets.properties` `packs.url` (bkz. `server/packs/README.md`).
-5. **Meta**: uygulama kimliği ve istemci tokeni → `facebook.appId`, `facebook.clientToken`.
-6. **AdMob** (reklam açılacaksa): uygulama kimliği ve banner birimi → `admob.appId`, `admob.bannerId`; AEA/İngiltere için
+1. **Firebase**: proje oluştur, Android uygulaması ekle (paket `com.couchsubs.mobile`), `google-services.json`'u
+   `couchsubs-android/app/` altına koy (depoya girmez). Remote Config'de `ads_enabled` (boolean, false). Crashlytics'i aç.
+2. **Cloudflare**: R2 kovası `couchsubs-packs`, paketleri ve `index.json`'u yükle, `wrangler deploy`; adres →
+   `couchsubs-android/secrets.properties` `packs.url` (bkz. `server/packs/README.md`).
+3. **Meta**: uygulama kimliği ve istemci tokeni → `facebook.appId`, `facebook.clientToken`.
+4. **AdMob** (reklam açılacaksa): uygulama kimliği ve banner birimi → `admob.appId`, `admob.bannerId`; AEA/İngiltere için
    AdMob'da GDPR mesajı (UMP).
-7. **Metinler**: Kullanım koşulları sayfası (şimdilik `TERMS.md` bağlantısı, dosya yok) ve gizlilik metnine telefon
-   bölümü (Firebase, RevenueCat, Meta, AdMob, ortak havuz).
+5. **Play Console**: uygulama imza anahtarı, veri güvenliği formu (Firebase Analytics/Crashlytics, Meta, AdMob, ortak
+   havuz; hesap yok), ön plan hizmeti (connectedDevice) beyanı.
+6. **Gizlilik metni**: `PRIVACY.md`'ye telefon bölümü (Firebase, Meta, AdMob, ortak havuz).
 
 ## Bilinen eksikler
 
@@ -159,7 +164,7 @@ gradle assembleDebug -Pcouchsubs.python=/yol/venv/bin/python3 --no-daemon --max-
 İlk sonuç (Mac, Kasım 2026): 59 JVM testi geçti; `assembleDebug` yerel kütüphaneyle birlikte ~7,5 dk'da derlendi.
 Hata ayıklama APK'sı 64 MB: `libcouchsubs-jni.so` 4,8 MB, ML Kit çeviri 16 MB ve yazı tanıma 11 MB yerel kütüphanesi,
 oyun paketleri (AGP `.gz` uzantısını atıp APK içinde zip sıkıştırmasıyla saklar; kod `.json`'u da okur). Sürümde
-yalnız arm64 ve küçültme (R8) ile küçülür; paketler ileride ilk açılışta indirilebilir.
+yalnız arm64 ve küçültme (R8) ile küçülür.
 
 CI önerisi: `.github/workflows/android-app.yml` (yalnız `couchsubs-android/**` değişince ve elle; sürüm iş akışına bağlı değil).
 
@@ -169,5 +174,5 @@ CI önerisi: `.github/workflows/android-app.yml` (yalnız `couchsubs-android/**`
 2. Tasarımın uygulanması ve İngilizce metinler (`values-en`).
 3. İmza: TV uygulamasıyla aynı anahtar (depo sırları); `release.yml`'e `CouchSubs-android.apk` olarak eklenmesi.
 4. Uygulama içi güncelleme denetimi (masaüstündeki gibi GitHub sürümleri) — Play dışı dağıtım için.
-5. Play (kuruluş hesabı, kapalı test şartı yok): iç test kanalı, veri güvenliği formu, FGS beyanı, abonelik ürünleri,
-   marka kullanımının gözden geçirilmesi.
+5. Play (kuruluş hesabı, kapalı test şartı yok): iç test kanalı, veri güvenliği formu, FGS beyanı, marka kullanımının
+   gözden geçirilmesi.
