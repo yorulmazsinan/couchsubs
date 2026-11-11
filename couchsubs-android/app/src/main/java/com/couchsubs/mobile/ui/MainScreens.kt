@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ana ekran (tuval: Telefon-Ana, -Calisiyor, -Tur), oyun paketleri (-Paketler, -Paketler-Kilitli) ve satın alma
-// ekranı (-Paywall).
+// Ana ekran (tuval: Telefon-Ana, -Calisiyor, -Tur) ve oyun paketleri (-Paketler). Uygulama ve paketler ücretsiz.
 package com.couchsubs.mobile.ui
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -40,7 +38,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,24 +57,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.Account
 import com.couchsubs.mobile.account.AdBanner
-import com.couchsubs.mobile.account.Backend
-import com.couchsubs.mobile.account.Plan
-import com.couchsubs.mobile.account.PlanKind
-import com.couchsubs.mobile.account.Pricing
-import com.couchsubs.mobile.account.PurchaseException
-import com.couchsubs.mobile.account.Subscriptions
-import com.couchsubs.mobile.account.Telemetry
 import com.couchsubs.mobile.service.LiveStatus
 import com.couchsubs.mobile.settings.SubtitleTarget
-import com.revenuecat.purchases.Package
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Turda vurgulanan öğeler (TASARIM-MOBIL.md §10, tuval Telefon-Tur). */
@@ -117,22 +103,18 @@ fun MainScreen(
     onTarget: () -> Unit,
     onPairing: () -> Unit,
     onPacks: () -> Unit,
-    onPaywall: () -> Unit,
     onProfile: () -> Unit,
     onSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val settings = Services.settings
-    val access by Subscriptions.access.collectAsState()
-    val user by Account.user.collectAsState()
     val bounds = remember { mutableStateMapOf<TourStep, Rect>() }
     var tour by remember { mutableStateOf(if (settings.tourShown) null else TourStep.START) }
     fun mark(step: TourStep) = Modifier.onGloballyPositioned { bounds[step] = it.boundsInRoot() }
-    val avatar = initials(user?.name, user?.email)
     val topBar: @Composable () -> Unit = {
         TopBar {
             SettingsAction(onSettings)
-            Box(mark(TourStep.PROFILE)) { AvatarAction(avatar, onProfile) }
+            Box(mark(TourStep.PROFILE)) { ProfileAction(onProfile) }
         }
     }
 
@@ -152,14 +134,14 @@ fun MainScreen(
                     it.then(mark(TourStep.TARGET)), style = TileStyle.ACTIVE, onClick = onTarget) },
             )
             Box(mark(TourStep.PACKS)) {
-                Tile(Modifier.fillMaxWidth(), style = TileStyle.PRO, onClick = if (access.active) onPacks else onPaywall) {
+                Tile(Modifier.fillMaxWidth(), style = TileStyle.PRO, onClick = onPacks) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                         IconBadge(Icons.Filled.Star, Tokens.Color.pro)
                         Column(Modifier.weight(1f)) {
                             Text(stringResource(R.string.main_packs_title), style = Tokens.Type.headline, color = Tokens.Color.text)
                             Text(stringResource(R.string.main_packs_games), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                         }
-                        Pill(stringResource(if (access.active) R.string.main_packs_on else R.string.main_packs_pro), Tokens.Color.pro)
+                        Pill(stringResource(if (settings.packsEnabled) R.string.main_packs_on else R.string.main_packs_off), Tokens.Color.pro)
                     }
                 }
             }
@@ -283,44 +265,29 @@ private fun TourOverlay(step: TourStep, target: Rect?, onSkip: () -> Unit, onNex
 
 /** Oyun paketleri: Pro ise etkin (paket başına kapatılabilir), değilse kilitli tanıtım. */
 @Composable
-fun PacksScreen(onBack: () -> Unit, onPaywall: () -> Unit, packInUse: String?) {
+fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
     val context = LocalContext.current
     val settings = Services.settings
-    val access by Subscriptions.access.collectAsState()
     val version by Services.packsVersion.collectAsState()
     var catalog by remember { mutableStateOf<List<Services.CatalogEntry>?>(null) }
     var disabled by remember { mutableStateOf(settings.disabledPacks) }
-    var debugFree by remember { mutableStateOf(settings.debugFreePacks) }
-    var prices by remember { mutableStateOf<List<Plan>>(emptyList()) }
+    var packsOn by remember { mutableStateOf(settings.packsEnabled) }
     LaunchedEffect(version) { catalog = withContext(Dispatchers.IO) { Services.catalog(context) } }
-    LaunchedEffect(Unit) { prices = runCatching { Subscriptions.plans().map { it.first } }.getOrDefault(emptyList()) }
-    val unlocked = access.active || debugFree
+    val unlocked = packsOn
     val list = catalog.orEmpty()
     ScreenScaffold(top = {
-        TopBar(stringResource(R.string.packs_title), onBack = onBack) { if (unlocked) Pill("Pro", Tokens.Color.pro) }
+        TopBar(stringResource(R.string.packs_title), onBack = onBack) { Pill(stringResource(R.string.packs_free), Tokens.Color.pro) }
     }, bottom = {
-        if (!unlocked) {
-            val monthly = prices.firstOrNull { it.kind == PlanKind.MONTHLY }
-            val annual = prices.firstOrNull { it.kind == PlanKind.ANNUAL }
-            if (monthly != null && annual?.perMonth != null) Text(stringResource(R.string.packs_price_line, monthly.price, annual.perMonth),
-                style = Tokens.Type.caption, color = Tokens.Color.secondary, textAlign = TextAlign.Center)
-            ProButton(stringResource(R.string.packs_see_pro), onClick = onPaywall)
-        } else SecondaryButton(stringResource(R.string.packs_refresh)) { Services.refreshPacks(force = true) }
+        SecondaryButton(stringResource(R.string.packs_refresh)) { Services.refreshPacks(force = true) }
     }) {
-        if (unlocked) Text(stringResource(R.string.packs_auto), style = Tokens.Type.body, color = Tokens.Color.secondary)
-        else Tile(Modifier.fillMaxWidth(), style = TileStyle.PRO) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                IconBadge(Icons.Filled.Lock, Tokens.Color.pro)
-                Column {
-                    Text(stringResource(R.string.packs_locked_title), style = Tokens.Type.headline, color = Tokens.Color.text)
-                    Text(stringResource(R.string.packs_locked_summary, list.size.coerceAtLeast(6), list.sumOf { it.entries }.let { if (it > 0) (it + 500) / 1000 else 517 }),
-                        style = Tokens.Type.caption, color = Tokens.Color.secondary)
-                }
+        Text(stringResource(R.string.packs_auto), style = Tokens.Type.body, color = Tokens.Color.secondary)
+        RowList(listOf({
+            RowItem(stringResource(R.string.settings_packs), stringResource(R.string.packs_switch_note)) {
+                androidx.compose.material3.Switch(packsOn, { packsOn = it; settings.packsEnabled = it })
             }
-            Text(stringResource(R.string.packs_free_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-        }
+        }))
         if (catalog == null) Text(stringResource(R.string.paywall_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
-        else if (list.isEmpty()) NoteTile(stringResource(if (unlocked) R.string.packs_none_yet else R.string.packs_list_after), Tokens.Color.secondary)
+        else if (list.isEmpty()) NoteTile(stringResource(R.string.packs_none_yet), Tokens.Color.secondary)
         list.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                 row.forEach { entry ->
@@ -331,15 +298,15 @@ fun PacksScreen(onBack: () -> Unit, onPaywall: () -> Unit, packInUse: String?) {
                         style = if (playing) TileStyle.ACTIVE else TileStyle.NORMAL, dim = !unlocked || !on,
                         corner = { if (playing) StatusPill(stringResource(R.string.packs_now), ok = true) else if (unlocked && !on) Pill(stringResource(R.string.packs_off), Tokens.Color.secondary) },
                         note = linesText(context, entry.entries),
-                        onClick = if (!unlocked) onPaywall else ({
+                        onClick = {
                             disabled = if (on) disabled + entry.id else disabled - entry.id
                             settings.disabledPacks = disabled
-                        }))
+                        })
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        if (unlocked) Tile(Modifier.fillMaxWidth()) {
+        Tile(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                 IconBadge(Icons.Filled.Refresh, Tokens.Color.secondary)
                 Column {
@@ -347,125 +314,6 @@ fun PacksScreen(onBack: () -> Unit, onPaywall: () -> Unit, packInUse: String?) {
                     Text(stringResource(R.string.packs_next_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                 }
             }
-        }
-        if (BuildConfig.DEBUG) RowList(listOf({
-            RowItem(stringResource(R.string.packs_debug_free), stringResource(R.string.packs_debug_free_body)) {
-                androidx.compose.material3.Switch(debugFree, { debugFree = it; settings.debugFreePacks = it })
-            }
-        }))
-    }
-}
-
-/** Kendi satın alma ekranımız (tuval Telefon-Paywall); ürün ve fiyatlar RevenueCat teklifinden (yerel fiyat Play'den). */
-@Composable
-fun PaywallScreen(source: String, onClose: () -> Unit, onSignIn: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val user by Account.user.collectAsState()
-    val access by Subscriptions.access.collectAsState()
-    var plans by remember { mutableStateOf<List<Pair<Plan, Package>>?>(null) }
-    var selected by remember { mutableStateOf(PlanKind.ANNUAL) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        Telemetry.event(Telemetry.PAYWALL_VIEW, "source" to source)
-        plans = try {
-            Subscriptions.plans()
-        } catch (error: PurchaseException) {
-            message = error.message
-            emptyList()
-        }
-    }
-    val needsAccount = Backend.available && user == null
-    val chosen = plans?.firstOrNull { it.first.kind == selected } ?: plans?.firstOrNull()
-    ScreenScaffold(top = {
-        TopBar(onClose = onClose) { Box(Modifier.weight(1f)) { Pill(stringResource(R.string.paywall_badge), Tokens.Color.pro) } }
-    }, bottom = {
-        when {
-            access.active -> PrimaryButton(stringResource(R.string.paywall_active), onClick = onClose)
-            !Subscriptions.available || plans?.isEmpty() == true -> ProButton(stringResource(R.string.paywall_soon), enabled = false) {}
-            needsAccount -> ProButton(stringResource(R.string.paywall_sign_in), onClick = onSignIn)
-            else -> ProButton(stringResource(R.string.paywall_cta), enabled = !busy && chosen != null) {
-                val (plan, pkg) = chosen ?: return@ProButton
-                busy = true
-                scope.launch {
-                    try {
-                        Subscriptions.purchase(context as Activity, plan, pkg)
-                        Services.refreshPacks(force = true)
-                        onClose()
-                    } catch (error: PurchaseException) {
-                        if (!error.cancelled) message = error.message
-                    } finally {
-                        busy = false
-                    }
-                }
-            }
-        }
-        Text(stringResource(R.string.paywall_cancel_anytime), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            GhostButton(stringResource(R.string.paywall_restore), color = Tokens.Color.secondary) {
-                scope.launch {
-                    message = try {
-                        if (Subscriptions.restore().active) context.getString(R.string.paywall_restored) else context.getString(R.string.paywall_nothing)
-                    } catch (error: PurchaseException) {
-                        error.message
-                    }
-                }
-            }
-            Text("·", color = Tokens.Color.secondary)
-            GhostButton(stringResource(R.string.terms_short), color = Tokens.Color.secondary) { open(context, context.getString(R.string.url_terms)) }
-            Text("·", color = Tokens.Color.secondary)
-            GhostButton(stringResource(R.string.privacy), color = Tokens.Color.secondary) { open(context, context.getString(R.string.url_privacy)) }
-        }
-    }) {
-        Heading(stringResource(R.string.paywall_title), stringResource(R.string.paywall_body))
-        TwoColumns(
-            { FeatureTile(Icons.Filled.Star, stringResource(R.string.paywall_feature1), it) },
-            { FeatureTile(Icons.Filled.PlayArrow, stringResource(R.string.paywall_feature2), it) },
-        )
-        TwoColumns(
-            { FeatureTile(Icons.Filled.Check, stringResource(R.string.paywall_feature3), it) },
-            { FeatureTile(Icons.Filled.List, stringResource(R.string.paywall_feature4), it) },
-        )
-        val list = plans
-        when {
-            list == null -> Text(stringResource(R.string.paywall_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
-            list.isEmpty() -> NoteTile(stringResource(R.string.paywall_soon_body), Tokens.Color.secondary)
-            else -> {
-                val monthly = list.firstOrNull { it.first.kind == PlanKind.MONTHLY }?.first
-                list.sortedByDescending { it.first.kind == PlanKind.ANNUAL }.forEach { (plan, _) ->
-                    PlanTile(plan, plan.kind == selected, monthly) { selected = plan.kind }
-                }
-            }
-        }
-        message?.let { NoteTile(it) }
-    }
-}
-
-@Composable
-private fun FeatureTile(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, modifier: Modifier) {
-    Tile(modifier) {
-        IconBadge(icon, Tokens.Color.pro)
-        Text(text, style = Tokens.Type.headline, color = Tokens.Color.text)
-    }
-}
-
-@Composable
-private fun PlanTile(plan: Plan, selected: Boolean, monthly: Plan?, onClick: () -> Unit) {
-    Tile(Modifier.fillMaxWidth(), style = if (selected) TileStyle.ACTIVE else TileStyle.NORMAL, onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-            Box(Modifier.background(if (selected) Tokens.Color.accent else Tokens.Color.borderStrong, CircleShape).padding(6.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.inline)) {
-                    Text(stringResource(if (plan.kind == PlanKind.ANNUAL) R.string.plan_annual else R.string.plan_monthly),
-                        style = Tokens.Type.headline, color = Tokens.Color.text)
-                    if (plan.kind == PlanKind.ANNUAL && monthly != null)
-                        Pill(stringResource(R.string.plan_saving, Pricing.savingPercent(monthly.priceMicros, plan.priceMicros)))
-                }
-                Text(if (plan.kind == PlanKind.ANNUAL) stringResource(R.string.plan_annual_note, plan.price, plan.perMonth ?: "")
-                    else stringResource(R.string.plan_monthly_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-            }
-            Text(if (plan.kind == PlanKind.ANNUAL) plan.perMonth ?: plan.price else plan.price, style = Tokens.Type.title, color = Tokens.Color.text)
         }
     }
 }

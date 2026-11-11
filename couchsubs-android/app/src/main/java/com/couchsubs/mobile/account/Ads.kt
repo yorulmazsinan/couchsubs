@@ -20,7 +20,6 @@ import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
-import java.util.Currency
 
 /**
  * Reklam tarafı: Meta App Events (reklam kampanyalarının kurulum ve satın alma ölçümü) ve AdMob. İkisi de yalnız izinle
@@ -71,21 +70,11 @@ object Ads {
         }
     }
 
-    /** Ürün olaylarından reklam ölçümü için gerekenler Meta'nın standart olaylarına çevrilir. */
-    fun mirror(name: String, params: Map<String, Any?>) {
-        if (!metaOn) return
+    /** Kurulumun bitmesi reklam ölçümü için Meta'nın standart "kayıt tamam" olayına çevrilir (kurulum dönüşümü). */
+    fun mirror(name: String) {
+        if (!metaOn || name != Telemetry.ONBOARDING_DONE) return
         val app = application ?: return
-        val logger = AppEventsLogger.newLogger(app)
-        when (name) {
-            Telemetry.SIGN_UP -> logger.logEvent(AppEventsConstants.EVENT_NAME_COMPLETED_REGISTRATION,
-                Bundle().apply { putString(AppEventsConstants.EVENT_PARAM_REGISTRATION_METHOD, params["method"]?.toString()) })
-            Telemetry.PURCHASE -> {
-                val value = (params["value"] as? Double) ?: return
-                val currency = params["currency"]?.toString() ?: return
-                logger.logEvent(AppEventsConstants.EVENT_NAME_SUBSCRIBE, value,
-                    Bundle().apply { putString(AppEventsConstants.EVENT_PARAM_CURRENCY, Currency.getInstance(currency).currencyCode) })
-            }
-        }
+        AppEventsLogger.newLogger(app).logEvent(AppEventsConstants.EVENT_NAME_COMPLETED_REGISTRATION)
     }
 
     /** UMP (AEA/İngiltere'de Google'ın izin formu); yalnız reklam açılacaksa sorulur. */

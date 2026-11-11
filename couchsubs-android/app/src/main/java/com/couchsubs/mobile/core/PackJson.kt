@@ -17,8 +17,9 @@ object PackJson {
         val rootStrings: List<Pair<String, String>>,
     )
 
-    fun parse(data: ByteArray, onEntry: (String, String) -> Unit): Result = try {
-        Reader(data).root(onEntry)
+    /** [onSegment]: biçim 2'deki "segments" nesnesinin satırları (oyunun ayrı gösterdiği parçalar). */
+    fun parse(data: ByteArray, onEntry: (String, String) -> Unit, onSegment: (String, String) -> Unit = { _, _ -> }): Result = try {
+        Reader(data).root(onEntry, onSegment)
     } catch (error: IndexOutOfBoundsException) {
         throw InvalidPackException("Paket JSON değil", error)
     }
@@ -27,7 +28,7 @@ object PackJson {
         private var position = 0
         private val buffer = java.io.ByteArrayOutputStream(256)
 
-        fun root(onEntry: (String, String) -> Unit): Result {
+        fun root(onEntry: (String, String) -> Unit, onSegment: (String, String) -> Unit): Result {
             skipSpace()
             if (peek() != '{'.code) throw InvalidPackException(if (peek() == '['.code) "Paket JSON nesnesi değil" else "Paket JSON değil")
             position++
@@ -40,6 +41,10 @@ object PackJson {
                         wrapped = true
                         position++
                         members { key -> if (peek() == '"'.code) onEntry(key, string()) else skipValue() }
+                    }
+                    name == "segments" && peek() == '{'.code -> {
+                        position++
+                        members { key -> if (peek() == '"'.code) onSegment(key, string()) else skipValue() }
                     }
                     name == "format" && isNumberStart(peek()) -> format = number()
                     peek() == '"'.code -> strings.add(name to string())

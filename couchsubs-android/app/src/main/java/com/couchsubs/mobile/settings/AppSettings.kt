@@ -198,17 +198,6 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("notify.packs", true)
         set(value) = prefs.edit().putBoolean("notify.packs", value).apply()
 
-    /** Yalnız hata ayıklama derlemesi: paketleri abonelik olmadan dene. */
-    var debugFreePacks: Boolean
-        get() = com.couchsubs.mobile.BuildConfig.DEBUG && prefs.getBoolean("debugFreePacks", false)
-        set(value) = prefs.edit().putBoolean("debugFreePacks", value).apply()
-
-    /** Hesap silinince: bütün ayarlar, şifreli değerler ve Keystore anahtarı. */
-    fun clearAll() {
-        prefs.edit().clear().commit()
-        secrets.clear()
-    }
-
     fun apiKey(engine: EngineChoice): String? = secrets.get("key." + engine.name)
     fun setApiKey(engine: EngineChoice, key: String?) = secrets.put("key." + engine.name, key?.trim())
 

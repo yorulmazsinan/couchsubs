@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Kurulum akışı (tuval: Telefon-Karsilama, -Kayit, -PSN, -PS5, -Hedef): izin → karşılama (3 sayfa) → kayıt/giriş →
-// PSN girişi → PS5 eşleme → altyazı nerede.
+// Kurulum akışı (tuval: Telefon-Karsilama, -PSN, -PS5, -Hedef): izin → karşılama (3 sayfa) → PSN girişi (ikinci
+// hesap) → PS5 eşleme → altyazı nerede. Uygulamada hesap yoktur.
 package com.couchsubs.mobile.ui
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -55,9 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.Account
-import com.couchsubs.mobile.account.AccountException
-import com.couchsubs.mobile.account.Backend
 import com.couchsubs.mobile.account.ConsentChoice
 import com.couchsubs.mobile.remoteplay.ConsoleDiscovery
 import com.couchsubs.mobile.remoteplay.ConsoleInfo
@@ -161,84 +157,6 @@ fun WelcomeScreen(onDone: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-/** Kayıt ve giriş: Apple, Google, e-posta/şifre; şifre sıfırlama. Firebase'siz derlemede atlanabilir. */
-@Composable
-fun AuthScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var signUp by remember { mutableStateOf(true) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val errors = accountErrors()
-    fun run(block: suspend () -> Unit) {
-        busy = true
-        message = null
-        scope.launch {
-            try {
-                block()
-                onDone()
-            } catch (error: AccountException) {
-                if (error.reason != AccountException.Reason.CANCELLED) message = errors(error.reason)
-            } finally {
-                busy = false
-            }
-        }
-    }
-    ScreenScaffold(top = { TopBar(onBack = onBack) }, bottom = {
-        if (!Backend.available) GhostButton(stringResource(R.string.auth_skip), onClick = onDone)
-        PrimaryButton(stringResource(if (signUp) R.string.auth_sign_up_short else R.string.auth_sign_in),
-            enabled = !busy && email.contains('@') && password.length >= 8) {
-            run { if (signUp) Account.signUp(email, password, "") else Account.signIn(email, password) }
-        }
-        Text(stringResource(R.string.auth_terms), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-    }) {
-        Heading(stringResource(if (signUp) R.string.auth_sign_up else R.string.auth_welcome_back), stringResource(R.string.auth_body))
-        Segmented(listOf(stringResource(R.string.auth_sign_up_short), stringResource(R.string.auth_sign_in)), if (signUp) 0 else 1) { signUp = it == 0 }
-        if (!Backend.available) NoteTile(stringResource(R.string.auth_unavailable), Tokens.Color.secondary)
-        AppleButton(stringResource(R.string.auth_apple), enabled = !busy && Backend.available) { run { Account.signInWithApple(context as Activity) } }
-        SecondaryButton(stringResource(R.string.auth_google), enabled = !busy && Account.googleClientId(context) != null) {
-            run { Account.signInWithGoogle(context as Activity) }
-        }
-        DividerText(stringResource(R.string.auth_or_email))
-        Field(email, { email = it.trim() }, stringResource(R.string.auth_email), keyboard = KeyboardOptions(keyboardType = KeyboardType.Email))
-        Field(password, { password = it }, stringResource(R.string.auth_password), secret = true,
-            keyboard = KeyboardOptions(keyboardType = KeyboardType.Password))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.auth_password_rule), style = Tokens.Type.caption, color = Tokens.Color.secondary, modifier = Modifier.weight(1f))
-            GhostButton(stringResource(R.string.auth_forgot)) {
-                scope.launch {
-                    message = try {
-                        Account.resetPassword(email)
-                        context.getString(R.string.auth_reset_sent)
-                    } catch (error: AccountException) {
-                        errors(error.reason)
-                    }
-                }
-            }
-        }
-        message?.let { NoteTile(it) }
-    }
-}
-
-/** Hata nedenlerinin Türkçesi. */
-@Composable
-fun accountErrors(): (AccountException.Reason) -> String {
-    val context = LocalContext.current
-    return { reason ->
-        context.getString(when (reason) {
-            AccountException.Reason.UNAVAILABLE -> R.string.auth_error_unavailable
-            AccountException.Reason.INVALID_CREDENTIALS -> R.string.auth_error_credentials
-            AccountException.Reason.EMAIL_IN_USE -> R.string.auth_error_in_use
-            AccountException.Reason.WEAK_PASSWORD -> R.string.auth_error_weak
-            AccountException.Reason.RECENT_LOGIN_REQUIRED -> R.string.auth_error_recent
-            AccountException.Reason.NETWORK -> R.string.auth_error_network
-            else -> R.string.auth_error_other
-        })
     }
 }
 

@@ -139,10 +139,9 @@ class TranslationService : Service() {
         startedAt = System.currentTimeMillis()
         LiveState.update { LiveStatus(running = true, phase = getString(R.string.phase_preparing), startedAt = startedAt, engineLabel = engineLabel()) }
         Telemetry.event(Telemetry.SESSION_START, "target" to settings.target.name.lowercase(), "engine" to settings.engine.name.lowercase(),
-            "packs" to Services.packsAllowed())
+            "packs" to settings.packsEnabled)
 
-        // Paketler aboneliğe bağlı: kitaplık sunucudan inmiş paketlerden (hata ayıklamada APK'dakilerden de) kurulur,
-        // her satırda hak yeniden denetlenir (abonelik oturum sırasında biterse paket araması durur).
+        // Paketler ücretsiz: uygulamayla gelenler ve sunucudan inmiş güncel sürümler. Ayardan kapatılırsa aranmaz.
         val library = Services.packLibrary(this)
         packs = library
         val free = MlKitTranslator().also { freeTranslator = it }
@@ -170,7 +169,7 @@ class TranslationService : Service() {
         val packTitles = library.infos.associate { it.id to it.title }
         reader = SubtitleReader()
         pipeline = SubtitlePipeline(translator, subtitleServer).apply {
-            packLookup = { text -> if (Services.packsAllowed()) PackLookup.match(library, text) else null }
+            packLookup = { text -> if (settings.packsEnabled) PackLookup.match(library, text) else null }
             onPackMissed = { text -> linePool.offer(text) }
             onPairShown = { pair ->
                 LiveState.shown(pair, pair.packId?.let { packTitles[it] ?: it })

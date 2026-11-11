@@ -12,25 +12,24 @@ import java.security.MessageDigest
 /** Sunucudaki bir paket (server/packs: GET /v1/packs). */
 data class RemotePack(val id: String, val title: String, val version: Long, val sha256: String, val size: Long, val entries: Int)
 
-/** Paket indirilemedi; [status] HTTP kodu (403: abonelik yok, 401: oturum geçersiz), ağ hatasında null. */
+/** Paket indirilemedi; [status] HTTP kodu (429: sınır aşıldı), ağ hatasında null. */
 class PackDownloadException(val status: Int?, message: String) : IOException(message)
 
 /** Paket sunucusu (gerçeği [HttpPackServer]; testlerde sahtesi). */
 interface PackServer {
     fun list(): List<RemotePack>
-    /** [idToken]: Firebase ID token'ı. */
-    fun download(id: String, idToken: String): ByteArray
+    fun download(id: String): ByteArray
 }
 
 /**
- * Abonenin oyun paketleri: sunucudan indirilir, SHA-256 ile doğrulanıp uygulamanın klasöründe saklanır, haftada bir
+ * Sunucudaki yeni ve güncellenen oyun paketleri (ücretsiz, hesapsız): sunucudan indirilir, SHA-256 ile doğrulanıp uygulamanın klasöründe saklanır, haftada bir
  * yenilenir. Sürümü değişmeyen paket yeniden indirilmez; sunucudan kalkan paket silinir. Bozuk ya da yarım dosya hiçbir
- * zaman yüklenmez (önce geçici dosyaya yazılır, doğrulanınca yerine konur).
+ * zaman yüklenmez (önce geçici dosyaya yazılır, doğrulanınca yerine konur). Uygulamayla gelen paketlerle aynı
+ * kimlikteki indirilmiş paket onların yerine geçer (bkz. GamePackLibrary).
  */
 class PackStore(
     private val directory: File,
     private val server: PackServer,
-    private val idToken: () -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     companion object {
@@ -59,13 +58,12 @@ class PackStore(
 
     /**
      * Süresi geldiyse (ya da [force]) sunucuya bakar ve değişen paketleri indirir (bloklar). Liste alınamazsa elde
-     * olanlar kalır. Abonelik yoksa ([PackDownloadException] 403) paketler silinir: aboneliği biten kullanıcıda kalmaz.
+     * olanlar kalır; inemeyen paket bir sonraki açılışta yeniden denenir.
      */
     fun refresh(force: Boolean = false): Refresh = synchronized(lock) {
         val (checked, current) = manifest()
         if (!force && current.isNotEmpty() && clock() - checked < REFRESH_INTERVAL_MS) return Refresh(skipped = true)
         val remote = server.list()
-        val token = idToken() ?: throw PackDownloadException(401, "not signed in")
         directory.mkdirs()
         val kept = mutableListOf<Local>()
         val downloaded = mutableListOf<String>()
@@ -79,12 +77,8 @@ class PackStore(
                 continue
             }
             val data = try {
-                server.download(pack.id, token)
+                server.download(pack.id)
             } catch (error: PackDownloadException) {
-                if (error.status == 403) {
-                    clearLocked()
-                    throw error
-                }
                 // Bu paket şimdi inmedi: eski sürümü varsa o kalır, sonraki yenilemede yeniden denenir.
                 if (existing != null && file.isFile) kept.add(existing.copy(version = -1))
                 continue
@@ -110,7 +104,7 @@ class PackStore(
         Refresh(downloaded, removed)
     }
 
-    /** Hesap silinince ya da abonelik bitince. */
+    /** Ayarlardan "indirilen paketleri sil". */
     fun clear() = synchronized(lock) { clearLocked() }
 
     private fun clearLocked() {
@@ -150,7 +144,7 @@ class PackStore(
 /** server/packs Worker'ı. */
 class HttpPackServer(private val baseUrl: String) : PackServer {
     override fun list(): List<RemotePack> {
-        val body = String(request("$baseUrl/v1/packs", null), Charsets.UTF_8)
+        val body = String(request("$baseUrl/v1/packs"), Charsets.UTF_8)
         val packs = JSONObject(body).optJSONArray("packs") ?: return emptyList()
         return (0 until packs.length()).map { index ->
             val item = packs.getJSONObject(index)
@@ -159,14 +153,13 @@ class HttpPackServer(private val baseUrl: String) : PackServer {
         }
     }
 
-    override fun download(id: String, idToken: String): ByteArray = request("$baseUrl/v1/packs/$id", idToken)
+    override fun download(id: String): ByteArray = request("$baseUrl/v1/packs/$id")
 
-    private fun request(url: String, token: String?): ByteArray {
+    private fun request(url: String): ByteArray {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 15_000
             connection.readTimeout = 60_000
-            token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
             val status = connection.responseCode
             if (status !in 200..299) throw PackDownloadException(status, "HTTP $status")
             return connection.inputStream.use { it.readBytes() }

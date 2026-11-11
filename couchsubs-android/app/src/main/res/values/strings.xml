@@ -10,13 +10,8 @@
     <string name="next">İleri</string>
     <string name="skip">Geç</string>
     <string name="save">Kaydet</string>
-    <string name="cancel">Vazgeç</string>
     <string name="back">Geri</string>
-    <string name="privacy">Gizlilik</string>
-    <!-- Sahibin yayımlayacağı sayfalar; şimdilik depodaki belgeler. -->
-    <string name="url_terms" translatable="false">https://github.com/yorulmazsinan/couchsubs/blob/main/TERMS.md</string>
-    <string name="url_privacy" translatable="false">https://github.com/yorulmazsinan/couchsubs/blob/main/PRIVACY.md</string>
-
+    
     <string name="phase_preparing">Hazırlanıyor…</string>
     <string name="phase_connecting">PS5\'e bağlanılıyor…</string>
     <string name="phase_streaming">Altyazılar okunuyor</string>
@@ -47,31 +42,11 @@
     <string name="welcome1_title">PS5 oyunları Türkçe altyazıyla</string>
     <string name="welcome1_body">Türkçe dili olmayan oyunlarda İngilizce altyazıyı telefonun okur ve Türkçeye çevirir. Sen her zamanki gibi oynarsın.</string>
     <string name="welcome2_title">Hazır paketlerle anında</string>
-    <string name="welcome2_body">Popüler oyunların bütün metni önceden çevrildi. Altyazı beklemeden, internetsiz gelir. Diğer oyunlarda ücretsiz çeviri çalışır.</string>
+    <string name="welcome2_body">Popüler oyunların bütün metni önceden çevrildi ve ücretsiz. Altyazı beklemeden, internetsiz gelir. Diğer oyunlarda ücretsiz çeviri çalışır.</string>
     <string name="welcome3_title">İstediğin ekranda</string>
     <string name="welcome3_body">Altyazıyı TV\'de oyunun üstünde ya da telefonunda büyük yazıyla göster. Kurulum birkaç dakika sürer.</string>
     <string name="welcome_start">Başlayalım</string>
 
-    <string name="auth_sign_up">Hesap oluştur</string>
-    <string name="auth_sign_in">Giriş yap</string>
-    <string name="auth_google">Google ile devam et</string>
-    <string name="auth_apple">Apple ile devam et</string>
-    <string name="auth_or_email">ya da e-posta ile</string>
-    <string name="auth_email">E-posta</string>
-    <string name="auth_password">Şifre</string>
-    <string name="auth_forgot">Şifremi unuttum</string>
-    <string name="auth_reset_sent">Şifre sıfırlama bağlantısı e-postana gönderildi.</string>
-    <string name="auth_skip">Şimdilik hesapsız devam et</string>
-    <string name="auth_terms">Devam ederek Kullanım koşulları ve Gizlilik metnini kabul edersin.</string>
-    <string name="auth_unavailable">Bu derlemede hesap özellikleri kapalı (Firebase yapılandırılmadı). Uygulamayı hesapsız kullanabilirsin.</string>
-    <string name="auth_unavailable_short">Hesap özellikleri kapalı</string>
-    <string name="auth_error_unavailable">Hesap hizmeti bu derlemede yok.</string>
-    <string name="auth_error_credentials">E-posta ya da şifre yanlış.</string>
-    <string name="auth_error_in_use">Bu e-postayla zaten bir hesap var.</string>
-    <string name="auth_error_weak">Şifre çok zayıf; daha uzun bir şifre seç.</string>
-    <string name="auth_error_recent">Güvenlik için yeniden giriş yapman gerekiyor. Çıkış yapıp yeniden gir, sonra tekrar dene.</string>
-    <string name="auth_error_network">İnternete bağlanılamadı.</string>
-    <string name="auth_error_other">Bir şeyler ters gitti. Yeniden dene.</string>
 
     <string name="psn_title">İkinci PSN hesabı</string>
     <string name="psn_body">Telefon PS5\'e Remote Play ile bağlanır. Oyunu oynadığın hesaptan ayrı, ücretsiz ikinci bir PSN hesabıyla giriş yap.</string>
@@ -95,68 +70,28 @@
     <string name="main_target">Altyazı</string>
     <string name="main_target_tv">TV</string>
     <string name="main_target_phone">Bu telefon</string>
-    <string name="main_packs_on">Etkin</string>
-    <string name="main_packs_pro">Pro</string>
+    <string name="main_packs_on">Açık</string>
     <string name="tour1_title">Çeviriyi buradan başlat</string>
     <string name="tour1_body">PS5\'te oyunu açtıktan sonra dokun. Telefon görüntüyü alır, altyazıyı okuyup çevirir.</string>
     <string name="tour2_title">Altyazı nerede görünsün</string>
     <string name="tour2_body">TV\'de oyunun üstünde ya da bu telefonda. Dokunup değiştirebilirsin.</string>
     <string name="tour3_title">Hazır paketler</string>
-    <string name="tour3_body">Desteklenen oyunlarda önceden çevrilmiş altyazı beklemeden gelir (Pro).</string>
+    <string name="tour3_body">Desteklenen oyunlarda önceden çevrilmiş altyazı beklemeden gelir. Ücretsiz.</string>
     <string name="tour4_title">Profil ve ayarlar</string>
-    <string name="tour4_body">Hesabın, aboneliğin, cihazların ve çeviri motoru burada.</string>
+    <string name="tour4_body">Cihazların, PSN hesabın, bildirimler ve çeviri motoru burada.</string>
     <string name="tour_done">Tamam</string>
 
     <string name="packs_title">Oyun paketleri</string>
-    <string name="packs_none_yet">Paketler henüz inmedi. İnternete bağlıyken Güncelle\'ye bas.</string>
-    <string name="packs_list_after">Abone olunca paket listesi burada görünür.</string>
+    <string name="packs_none_yet">Paket bulunamadı. İnternete bağlıyken Paketleri güncelle\'ye bas.</string>
     <string name="packs_refresh">Paketleri güncelle</string>
-    <string name="packs_debug_free">Abonelik olmadan dene</string>
-    <string name="packs_debug_free_body">Yalnız hata ayıklama derlemesinde: APK\'daki paketleri abonelik denetimi olmadan kullanır.</string>
 
-    <string name="paywall_title">Beklemeden, anında Türkçe</string>
-    <string name="paywall_feature1">6 oyun, 517 bin satır</string>
-    <string name="paywall_feature2">Gecikmesiz altyazı</string>
-    <string name="paywall_feature3">İnternetsiz çeviri</string>
-    <string name="paywall_feature4">Yeni oyunlar dahil</string>
-    <string name="plan_monthly">Aylık</string>
-    <string name="plan_annual">Yıllık</string>
-    <string name="plan_saving">%%%1$d tasarruf</string>
-    <string name="per_month">/ay</string>
-    <string name="per_year">/yıl</string>
-    <string name="paywall_cta">Pro\'ya geç</string>
-    <string name="paywall_active">Pro etkin</string>
-    <string name="paywall_sign_in">Abone olmak için giriş yap</string>
-    <string name="paywall_soon">Yakında</string>
-    <string name="paywall_soon_body">Abonelik çok yakında açılacak.</string>
     <string name="paywall_loading">Planlar yükleniyor…</string>
-    <string name="paywall_cancel_anytime">İstediğin zaman iptal edebilirsin.</string>
-    <string name="paywall_restore">Satın alımları geri yükle</string>
-    <string name="paywall_restored">Aboneliğin geri yüklendi.</string>
-    <string name="paywall_nothing">Geri yüklenecek abonelik bulunamadı.</string>
 
     <string name="profile">Profil</string>
-    <string name="profile_no_name">Adsız</string>
-    <string name="profile_signed_out">Giriş yapılmadı</string>
-    <string name="profile_password">Şifre</string>
-    <string name="profile_new_email">Yeni e-posta</string>
-    <string name="profile_new_password">Yeni şifre</string>
-    <string name="profile_current_password">Şu anki şifren</string>
-    <string name="profile_email_sent">Yeni adresine doğrulama bağlantısı gönderildi; tıklayınca e-postan değişir.</string>
-    <string name="profile_password_changed">Şifren değişti.</string>
-    <string name="profile_subscription">Abonelik</string>
-    <string name="profile_pro_active">Pro etkin</string>
-    <string name="profile_free">Ücretsiz</string>
-    <string name="profile_devices">Cihazlar</string>
     <string name="profile_not_paired">Eşlenmedi</string>
     <string name="profile_psn">PSN hesabı</string>
     <string name="profile_psn_missing">Bağlı değil</string>
-    <string name="profile_notifications">Bildirimler</string>
     <string name="notify_packs">Yeni paket geldiğinde</string>
-    <string name="profile_sign_out">Çıkış yap</string>
-    <string name="profile_delete">Hesabı sil</string>
-    <string name="profile_delete_body">Hesabın ve bu telefondaki bütün CouchSubs verileri (ayarlar, anahtarlar, PS5 eşlemesi, paketler) kalıcı olarak silinir. Abonelik Google Play\'de ayrıca iptal edilmelidir.</string>
-    <string name="profile_delete_confirm">Kalıcı olarak sil</string>
 
     <string name="settings">Ayarlar</string>
     <string name="settings_engine">Çeviri motoru</string>
@@ -168,7 +103,6 @@
     <string name="close">Kapat</string>
     <string name="ok">Tamam</string>
     <string name="next_continue">Devam</string>
-    <string name="terms_short">Koşullar</string>
     <string name="setup_step">Kurulum · Adım %1$d/3</string>
     <string name="url_help" translatable="false">https://github.com/yorulmazsinan/couchsubs/issues</string>
     <string name="url_source" translatable="false">https://github.com/yorulmazsinan/couchsubs</string>
@@ -190,10 +124,6 @@
     <string name="welcome3_phone">Telefonda</string>
     <string name="welcome3_wifi">Aynı Wi-Fi yeter</string>
     <string name="welcome3_wifi_body">PS5, TV ve telefon aynı ağda olsun</string>
-    <string name="auth_sign_up_short">Kayıt ol</string>
-    <string name="auth_welcome_back">Tekrar hoş geldin</string>
-    <string name="auth_body">Ayarların, cihazların ve aboneliğin her telefonda seninle olsun.</string>
-    <string name="auth_password_rule">En az 8 karakter</string>
     <string name="psn_free">Ücretsiz hesap</string>
     <string name="psn_free_note">PS Plus gerekmez</string>
     <string name="psn_you_play">Sen oynarsın</string>
@@ -238,48 +168,17 @@
     <string name="subtitle_connected">PS5 bağlı</string>
     <string name="subtitle_waiting">Bağlanıyor</string>
     <string name="subtitle_screen_note">Ekran açık kalır · parlaklık otomatik kısılır</string>
-    <string name="packs_auto">Oyun açılınca paket kendiliğinden seçilir. Pakette olmayan satır seçtiğin motorla çevrilir.</string>
-    <string name="packs_locked_title">Hazır çeviri Pro\'da</string>
-    <string name="packs_locked_summary">%1$d oyun · %2$d bin satır · internetsiz</string>
-    <string name="packs_free_note">Ücretsiz çeviri, DeepL ve kendi anahtarınla çeviri her zaman ücretsiz.</string>
-    <string name="packs_price_line">%1$s/ay ya da yıllık alımda aylık %2$s</string>
-    <string name="packs_see_pro">Pro\'yu incele</string>
+    <string name="packs_auto">Oyun açılınca paket kendiliğinden seçilir. Pakette olmayan satır seçtiğin motorla çevrilir. Paketler ücretsiz; yenileri ve düzeltmeler kendiliğinden iner.</string>
     <string name="packs_now">şimdi</string>
     <string name="packs_off">kapalı</string>
-    <string name="packs_next">Sırada yeni oyunlar</string>
-    <string name="packs_next_note">Pro\'da yeni oyunlar ek ücretsiz gelir</string>
-    <string name="paywall_badge">CouchSubs Pro</string>
-    <string name="paywall_body">Hazır çeviri paketleriyle altyazı oyunla aynı anda gelir.</string>
-    <string name="plan_annual_note">%1$s/yıl · aylık %2$s</string>
-    <string name="plan_monthly_note">Her ay yenilenir</string>
-    <string name="profile_account_info">Hesap bilgileri</string>
+    <string name="packs_next">Yeni oyunlar yolda</string>
+    <string name="packs_next_note">Yeni paketler ve düzeltmeler haftada bir kendiliğinden iner</string>
     <string name="profile_privacy">Veri ve gizlilik</string>
     <string name="profile_help">Yardım</string>
-    <string name="profile_pro_annual">Pro · Yıllık</string>
-    <string name="profile_pro_monthly">Pro · Aylık</string>
-    <string name="profile_devices_value">%1$d PS5 · %2$d TV</string>
     <string name="profile_psn_linked_short">Bağlı</string>
-    <string name="profile_name">Ad</string>
-    <string name="profile_verified">doğrulandı</string>
-    <string name="profile_change">Değiştir</string>
-    <string name="profile_saved">Kaydedildi.</string>
     <string name="profile_usage">Kullanım verisi</string>
     <string name="profile_usage_note">Hata ve kullanım istatistikleri</string>
-    <string name="profile_delete_note">Abonelik mağazadan ayrıca iptal edilir</string>
     <string name="settings_pool_short">Okunan İngilizce satırlar, anonim</string>
-    <string name="subscription_annual">Yıllık plan</string>
-    <string name="subscription_monthly">Aylık plan</string>
-    <string name="subscription_renewal">Yenileme</string>
-    <string name="subscription_ends">Bitiş</string>
-    <string name="subscription_benefit1">6 oyunda hazır çeviri</string>
-    <string name="subscription_benefit2">Yeni paketler ek ücretsiz</string>
-    <string name="subscription_benefit3">Tüm cihazlarında aynı hesap</string>
-    <string name="subscription_to_monthly">Aylık plana geç</string>
-    <string name="subscription_to_annual">Yıllık plana geç</string>
-    <string name="subscription_switch_note">%1$s · dönem sonunda başlar</string>
-    <string name="subscription_manage">Google Play\'de yönet</string>
-    <string name="subscription_cancel_note">İptal ve iade Google Play › Ödemeler ve abonelikler\'den yapılır.</string>
-    <string name="subscription_free_body">Ücretsiz motor, DeepL ve kendi anahtarınla çeviri her zaman ücretsiz. Hazır paketler Pro ile açılır.</string>
     <string name="settings_key_for">%1$s anahtarı</string>
     <string name="settings_key_saved">kayıtlı</string>
     <string name="settings_engine_note">Hazır paketi olan oyunlarda bu motor yalnız eksik satırlar için çalışır.</string>
@@ -289,4 +188,10 @@
     <string name="settings_ps5">PS5 ve bağlantı</string>
     <string name="settings_about">Hakkında</string>
     <string name="settings_copyright">CouchSubs · © 2026 Sinan Yorulmaz · AGPL-3.0 · Enmera</string>
+    <string name="main_packs_off">Kapalı</string>
+    <string name="packs_free">Ücretsiz</string>
+    <string name="packs_switch_note">Kapalıysa bütün satırlar seçtiğin motorla çevrilir.</string>
+    <string name="profile_no_account">CouchSubs\'ta hesap yok: ayarların yalnız bu telefonda durur. Uygulama ve oyun paketleri ücretsizdir.</string>
+    <string name="notify_disconnect">PS5 bağlantısı koptuğunda</string>
+    <string name="profile_tvs">TV ve altyazı hedefi</string>
 </resources>

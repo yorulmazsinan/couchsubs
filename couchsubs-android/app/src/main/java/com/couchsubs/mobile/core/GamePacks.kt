@@ -91,61 +91,75 @@ object PackKey {
 class InvalidPackException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 /**
- * Bir oyunun çeviri paketi. Dosya gzip'li JSON'dur: `{"format":1,"id":…,"title":…,"entries":{anahtar: Türkçe}}`;
- * yalnız `{anahtar: Türkçe}` nesnesi de kabul edilir (adı dosya adından gelir).
+ * Bir oyunun çeviri paketi. Dosya gzip'li JSON'dur: `{"format":1|2,"id":…,"title":…,"entries":{anahtar: Türkçe}}`;
+ * yalnız `{anahtar: Türkçe}` nesnesi de kabul edilir (adı dosya adından gelir). Biçim 2 ayrıca `segments` taşır (oyunun
+ * ayrı gösterdiği parçalar ve çok cümleli satırların cümleleri; aynı düzen). Masaüstünün biçim 2'deki `fuzzy` imzaları
+ * (OCR'ın bozduğu satırı bulma) telefonda henüz kullanılmıyor.
  *
  * Telefonda bellek sınırlıdır (uygulamayla gelen altı pakette ~520 bin satır): satırlar sıralı anahtar dizisi ve tek bir
  * UTF-8 bayt bloğunda tutulur (~30 MB; HashMap<Long, String> bunun üç katından fazlasını isterdi), ikili aramayla bulunur.
  * Dosya da akış hâlinde okunur ([PackJson]); bütün JSON bir nesne ağacına dönüştürülmez.
  */
-class GamePack private constructor(
-    val id: String,
-    val title: String,
-    private val keys: LongArray,
-    private val offsets: IntArray,
-    private val blob: ByteArray,
-) {
-    val size: Int get() = keys.size
+class GamePack private constructor(val id: String, val title: String, private val entries: Table, private val segments: Table) {
+    /** Sıralı anahtarlar ve UTF-8 metin bloğu. */
+    internal class Table(private val keys: LongArray, private val offsets: IntArray, private val blob: ByteArray) {
+        val size get() = keys.size
 
-    /** Anahtarın (sayı hâli) Türkçesi. */
-    operator fun get(key: Long): String? {
-        val index = java.util.Arrays.binarySearch(keys, key)
-        if (index < 0) return null
-        return String(blob, offsets[index], offsets[index + 1] - offsets[index], Charsets.UTF_8)
+        operator fun get(key: Long): String? {
+            val index = java.util.Arrays.binarySearch(keys, key)
+            if (index < 0) return null
+            return String(blob, offsets[index], offsets[index + 1] - offsets[index], Charsets.UTF_8)
+        }
+
+        companion object {
+            fun of(map: Map<Long, String>): Table {
+                val keys = map.keys.toLongArray().also { it.sort() }
+                val offsets = IntArray(keys.size + 1)
+                val blob = java.io.ByteArrayOutputStream(map.size * 48)
+                for ((index, key) in keys.withIndex()) {
+                    offsets[index] = blob.size()
+                    blob.write(map.getValue(key).toByteArray(Charsets.UTF_8))
+                }
+                offsets[keys.size] = blob.size()
+                return Table(keys, offsets, blob.toByteArray())
+            }
+        }
     }
+
+    /** Tam satır sayısı (parçalar hariç). */
+    val size: Int get() = entries.size
+
+    /** Anahtarın (sayı hâli) tam satır Türkçesi. */
+    operator fun get(key: Long): String? = entries[key]
+
+    /** Anahtarın parça ("segments") Türkçesi. */
+    fun segment(key: Long): String? = segments[key]
 
     companion object {
         /** [name]: dosya adı uzantısız ("mafia-the-old-country"); düz biçimde kimlik ve başlık olur. */
         fun decode(data: ByteArray, name: String): GamePack {
             val json = if (data.size >= 2 && data[0] == 0x1f.toByte() && data[1] == 0x8b.toByte()) decompress(data) else data
-            val latest = HashMap<Long, String>()
-            fun add(key: String, value: String) {
+            val entries = HashMap<Long, String>()
+            val segments = HashMap<Long, String>()
+            fun add(target: HashMap<Long, String>, key: String, value: String) {
                 val number = PackKey.number(key.lowercase(Locale.ROOT)) ?: return
                 val text = cleaned(value)
                 // Aynı anahtar iki kez varsa sonraki kazanır.
-                if (text.isNotEmpty()) latest[number] = text
+                if (text.isNotEmpty()) target[number] = text
             }
-            val parsed = PackJson.parse(json, ::add)
+            val parsed = PackJson.parse(json, { key, value -> add(entries, key, value) }, { key, value -> add(segments, key, value) })
             if (!parsed.wrapped) {
-                parsed.rootStrings.forEach { (key, value) -> add(key, value) }
-                return build(name, name, latest)
+                parsed.rootStrings.forEach { (key, value) -> add(entries, key, value) }
+                return build(name, name, entries, emptyMap())
             }
-            if (parsed.format != null && parsed.format != 1.0) throw InvalidPackException("Desteklenmeyen paket biçimi")
+            if (parsed.format != null && parsed.format != 1.0 && parsed.format != 2.0) throw InvalidPackException("Desteklenmeyen paket biçimi")
             val id = parsed.id?.takeIf { it.isNotEmpty() } ?: name
-            return build(id, parsed.title?.takeIf { it.isNotEmpty() } ?: id, latest)
+            return build(id, parsed.title?.takeIf { it.isNotEmpty() } ?: id, entries, segments)
         }
 
-        private fun build(id: String, title: String, latest: Map<Long, String>): GamePack {
-            if (latest.isEmpty()) throw InvalidPackException("Pakette satır yok")
-            val keys = latest.keys.toLongArray().also { it.sort() }
-            val offsets = IntArray(keys.size + 1)
-            val blob = java.io.ByteArrayOutputStream(latest.size * 48)
-            for ((index, key) in keys.withIndex()) {
-                offsets[index] = blob.size()
-                blob.write(latest.getValue(key).toByteArray(Charsets.UTF_8))
-            }
-            offsets[keys.size] = blob.size()
-            return GamePack(id, title, keys, offsets, blob.toByteArray())
+        private fun build(id: String, title: String, entries: Map<Long, String>, segments: Map<Long, String>): GamePack {
+            if (entries.isEmpty()) throw InvalidPackException("Pakette satır yok")
+            return GamePack(id, title, Table.of(entries), Table.of(segments))
         }
 
         /** Paketteki Türkçede de oyunun biçim etiketleri kalmış olabilir ("<b><h>…</>"); TV'de görünmesinler. */
@@ -218,6 +232,12 @@ class GamePackLibrary(
             val pack = current[index].first
             if (pack.id in off) continue
             pack[number]?.let { return PackMatch(it, pack.id) }
+        }
+        // Tam satır yoksa parçalar: bir oyunun tam satırı başka oyunun parçasına yenilmez (masaüstüyle aynı öncelik).
+        for (index in current.indices.reversed()) {
+            val pack = current[index].first
+            if (pack.id in off) continue
+            pack.segment(number)?.let { return PackMatch(it, pack.id) }
         }
         return null
     }

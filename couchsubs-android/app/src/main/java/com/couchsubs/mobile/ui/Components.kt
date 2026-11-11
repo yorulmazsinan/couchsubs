@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Tuvaldeki (design-canvas, Telefon-*) tekrar eden parçalar: başlık satırı, ikonlu kare karo, segmentli seçim, kod
-// haneleri, Apple düğmesi, satır listesi.
+// haneleri, satır listesi.
 package com.couchsubs.mobile.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,16 +64,9 @@ fun IconAction(icon: ImageVector, label: String, onClick: () -> Unit) =
 @Composable
 fun SettingsAction(onClick: () -> Unit) = IconAction(Icons.Filled.Settings, stringResource(R.string.settings), onClick)
 
-/** Baş harfler (MK) amber yazıyla simge düğmesinde. */
+/** Profil (cihazlar ve tercihler) simge düğmesi. */
 @Composable
-fun AvatarAction(initials: String, onClick: () -> Unit) = IconSquare(stringResource(R.string.profile), onClick = onClick) {
-    Text(initials, style = Tokens.Type.caption, color = Tokens.Color.accent)
-}
-
-fun initials(name: String?, email: String?): String {
-    val source = name?.takeIf { it.isNotBlank() } ?: email?.substringBefore('@') ?: return "?"
-    return source.split(' ', '.', '_').filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1).uppercase() }
-}
+fun ProfileAction(onClick: () -> Unit) = IconAction(Icons.Filled.Person, stringResource(R.string.profile), onClick)
 
 /** Ekran başlığı (display) ve altında açıklama; üstte isteğe bağlı "Kurulum · Adım 1/3". */
 @Composable
@@ -162,14 +156,6 @@ fun CodeCells(code: String, length: Int = 8) {
             ) { Text(digit, style = Tokens.Type.title, color = Tokens.Color.text) }
         }
     }
-}
-
-/** Apple ile giriş: platform kuralı, beyaz dolgu siyah yazı; ölçü ikincil düğmeyle aynı. */
-@Composable
-fun AppleButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(onClick, enabled = enabled, shape = RoundedCornerShape(Tokens.Radius.control),
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-        modifier = Modifier.fillMaxWidth().height(Tokens.Control.button)) { Text(" " + text, style = Tokens.Type.headline) }
 }
 
 /** Geniş karonun içindeki satırlar, aralarında 1 px ayraç. */

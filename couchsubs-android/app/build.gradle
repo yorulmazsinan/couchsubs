@@ -5,7 +5,7 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
-// Firebase (Analytics, Auth, Crashlytics, Remote Config) yapılandırması app/google-services.json'dan gelir. Dosya depoda
+// Firebase (Analytics, Crashlytics, Remote Config) yapılandırması app/google-services.json'dan gelir. Dosya depoda
 // yoktur (.gitignore); yoksa eklentiler uygulanmaz, uygulama Firebase'siz derlenir ve çalışır (bkz. Backend.kt).
 def hasGoogleServices = file('google-services.json').exists()
 if (hasGoogleServices) {
@@ -42,13 +42,10 @@ android {
         versionCode 1
         versionName '0.1.0'
         ndk { abiFilters(*abis) }
-        buildConfigField 'String', 'REVENUECAT_API_KEY', "\"${secret('revenuecat.apiKey')}\""
         buildConfigField 'String', 'PACKS_URL', "\"${secret('packs.url')}\""
         buildConfigField 'String', 'FACEBOOK_APP_ID', "\"${secret('facebook.appId')}\""
         buildConfigField 'String', 'ADMOB_BANNER_ID', "\"${secret('admob.bannerId', admobTestBanner)}\""
         buildConfigField 'boolean', 'HAS_FIREBASE', "${hasGoogleServices}"
-        // Hata ayıklama derlemesinde paketler APK'nın içindedir (sunucusuz deneme); mağaza derlemesinde sunucudan iner.
-        buildConfigField 'boolean', 'BUNDLED_PACKS', 'false'
         manifestPlaceholders = [
             facebookAppId      : secret('facebook.appId'),
             facebookClientToken: secret('facebook.clientToken'),
@@ -87,9 +84,6 @@ android {
         }
     }
     buildTypes {
-        debug {
-            buildConfigField 'boolean', 'BUNDLED_PACKS', 'true'
-        }
         release {
             minifyEnabled false
             signingConfig System.getenv('ANDROID_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
@@ -105,8 +99,8 @@ android {
         buildConfig true
     }
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-assets')
-    // Uygulamayla gelen paketler yalnız hata ayıklama APK'sında (mağaza APK'sında paket yoktur).
-    sourceSets.debug.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
+    // Paketler ücretsiz ve her derlemede uygulamayla gelir (~16 MB); sunucudan yalnız yenileri ve güncellemeleri iner.
+    sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
     testOptions { unitTests.returnDefaultValues = true }
     packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
 }
@@ -154,15 +148,8 @@ dependencies {
     // Firebase: google-services.json yoksa da derlenir; çalışırken Backend.kt Firebase'in açılıp açılmadığına bakar.
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-analytics'
-    implementation 'com.google.firebase:firebase-auth'
     implementation 'com.google.firebase:firebase-crashlytics'
     implementation 'com.google.firebase:firebase-config'
-    // Google ile giriş (Credential Manager).
-    implementation 'androidx.credentials:credentials:1.3.0'
-    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
-    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
-    // Abonelik (Google Play Billing, RevenueCat üstünden). Satın alma ekranı bizim; ürün ve fiyatlar RevenueCat'ten.
-    implementation 'com.revenuecat.purchases:purchases:8.10.0'
     // Reklam ölçümü: Meta App Events (izinle) ve AdMob + UMP izin formu (reklam varsayılan olarak kapalı).
     implementation 'com.facebook.android:facebook-core:17.0.0'
     implementation 'com.google.android.gms:play-services-ads:23.4.0'

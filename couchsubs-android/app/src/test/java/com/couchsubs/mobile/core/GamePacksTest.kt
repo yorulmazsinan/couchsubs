@@ -74,8 +74,21 @@ class GamePackTest {
     fun brokenFilesAreRejected() {
         assertThrows(InvalidPackException::class.java) { GamePack.decode("not json".toByteArray(), "x") }
         assertThrows(InvalidPackException::class.java) { GamePack.decode(byteArrayOf(0x1f, 0x8b.toByte(), 8, 0) + ByteArray(30) { 7 }, "x") }
-        assertThrows(InvalidPackException::class.java) { GamePack.decode("{\"format\":2,\"entries\":{\"0123456789abcdef\":\"x\"}}".toByteArray(), "x") }
+        assertThrows(InvalidPackException::class.java) { GamePack.decode("{\"format\":3,\"entries\":{\"0123456789abcdef\":\"x\"}}".toByteArray(), "x") }
         assertThrows(InvalidPackException::class.java) { GamePack.decode("{\"bad\":\"x\"}".toByteArray(), "x") }
+    }
+
+    /** Biçim 2: tam satırlar önce, "segments" (parçalar) yalnız tam satır bulunmazsa (masaüstüyle aynı öncelik). */
+    @Test
+    fun formatTwoSegmentsAreFoundAfterWholeLines() {
+        val down = PackKey.key("Get Down!")!!
+        val back = PackKey.key("Get back!")!!
+        val json = "{\"format\":2,\"id\":\"g\",\"entries\":{\"$down\":\"Yere yat!\"}," +
+            "\"segments\":{\"$back\":\"Geri çekil!\",\"$down\":\"Eğil!\"},\"fuzzy\":{\"x\":[1,2]}}"
+        assertEquals(1, GamePack.decode(json.toByteArray(), "g").size)
+        val library = GamePackLibrary({ listOf("g.json" to json.toByteArray()) }, null)
+        assertEquals("Yere yat!", library.find("Get Down!"))
+        assertEquals("Geri çekil!", library.find("Get back!"))
     }
 
     @Test
