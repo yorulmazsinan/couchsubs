@@ -55,6 +55,15 @@ class SecretStore(context: Context) {
         prefs.edit().putString(name, Base64.encodeToString(sealed, Base64.NO_WRAP)).apply()
     }
 
+    /** Bütün şifreli değerler ve anahtarın kendisi silinir. */
+    fun clear() {
+        prefs.edit().clear().commit()
+        try {
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
+        } catch (error: Exception) {
+        }
+    }
+
     fun get(name: String): String? {
         val stored = prefs.getString(name, null) ?: return null
         return try {
@@ -147,6 +156,58 @@ class AppSettings(context: Context) {
                 .put("registKey", Base64.encodeToString(it.registKey, Base64.NO_WRAP))
                 .put("morning", Base64.encodeToString(it.morning, Base64.NO_WRAP)).toString()
         })
+
+    /** Hedef seçiminde görülen TV'nin adı (ana ekrandaki "Altyazı · Salon TV"). */
+    var tvName: String?
+        get() = prefs.getString("tvName", null)
+        set(value) = prefs.edit().putString("tvName", value).apply()
+
+    /** Son okuma oturumunun süresi (ms). */
+    var lastSessionMs: Long
+        get() = prefs.getLong("lastSessionMs", 0)
+        set(value) = prefs.edit().putLong("lastSessionMs", value).apply()
+
+    /** Altyazı yazı ölçeği, yüzde (80–160; tasarım: Ayarlar › Altyazı görünümü). */
+    var subtitleScale: Int
+        get() = prefs.getInt("subtitleScale", 100)
+        set(value) = prefs.edit().putInt("subtitleScale", value.coerceIn(80, 160)).apply()
+
+    /** KVKK/GDPR izni (ilk açılışta sorulur). */
+    var consent: com.couchsubs.mobile.account.ConsentChoice
+        get() = com.couchsubs.mobile.account.ConsentChoice(
+            prefs.getBoolean("consent.decided", false), prefs.getBoolean("consent.analytics", false), prefs.getBoolean("consent.ads", false),
+        )
+        set(value) = prefs.edit().putBoolean("consent.decided", value.decided).putBoolean("consent.analytics", value.analytics)
+            .putBoolean("consent.ads", value.ads).apply()
+
+    /** Tanıtım (3 sayfa) ve ana ekran turu (4 adım) bir kez gösterilir. */
+    var welcomeSeen: Boolean
+        get() = prefs.getBoolean("welcomeSeen", false)
+        set(value) = prefs.edit().putBoolean("welcomeSeen", value).apply()
+
+    var tourShown: Boolean
+        get() = prefs.getBoolean("tourShown", false)
+        set(value) = prefs.edit().putBoolean("tourShown", value).apply()
+
+    /** Bildirim tercihleri: bağlantı koptuğunda ve yeni paket geldiğinde. */
+    var notifyDisconnect: Boolean
+        get() = prefs.getBoolean("notify.disconnect", true)
+        set(value) = prefs.edit().putBoolean("notify.disconnect", value).apply()
+
+    var notifyNewPacks: Boolean
+        get() = prefs.getBoolean("notify.packs", true)
+        set(value) = prefs.edit().putBoolean("notify.packs", value).apply()
+
+    /** Yalnız hata ayıklama derlemesi: paketleri abonelik olmadan dene. */
+    var debugFreePacks: Boolean
+        get() = com.couchsubs.mobile.BuildConfig.DEBUG && prefs.getBoolean("debugFreePacks", false)
+        set(value) = prefs.edit().putBoolean("debugFreePacks", value).apply()
+
+    /** Hesap silinince: bütün ayarlar, şifreli değerler ve Keystore anahtarı. */
+    fun clearAll() {
+        prefs.edit().clear().commit()
+        secrets.clear()
+    }
 
     fun apiKey(engine: EngineChoice): String? = secrets.get("key." + engine.name)
     fun setApiKey(engine: EngineChoice, key: String?) = secrets.put("key." + engine.name, key?.trim())

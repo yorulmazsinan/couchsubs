@@ -20,6 +20,13 @@ data class LiveStatus(
     val packInUse: String? = null,
     val error: String? = null,
     val framesReceived: Long = 0,
+    /** Okumanın başladığı an (duvar saati, ms); süre göstergesi için. */
+    val startedAt: Long = 0,
+    /** Seçili çeviri motorunun görünen adı ("DeepL", "Ücretsiz"). */
+    val engineLabel: String = "",
+    /** Bu oturumda gösterilen satır ve paketten gelenler. */
+    val shownLines: Int = 0,
+    val packLines: Int = 0,
 )
 
 object LiveState {
@@ -31,6 +38,7 @@ object LiveState {
 
     fun shown(pair: ShownPair, packTitle: String?) = state.update {
         // Paketten gelen son satırın oyunu, oturum boyunca "… paketi kullanılıyor" olarak kalır.
-        it.copy(recent = (listOf(pair) + it.recent).take(RECENT), packInUse = packTitle ?: it.packInUse)
+        it.copy(recent = (listOf(pair) + it.recent).take(RECENT), packInUse = packTitle ?: it.packInUse,
+            shownLines = it.shownLines + 1, packLines = it.packLines + if (pair.origin == "paket") 1 else 0)
     }
 }

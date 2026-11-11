@@ -16,6 +16,8 @@ import android.os.PowerManager
 import android.util.Log
 import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
+import com.couchsubs.mobile.Services
+import com.couchsubs.mobile.account.Telemetry
 import com.couchsubs.mobile.core.CropRegion
 import com.couchsubs.mobile.core.GamePackLibrary
 import com.couchsubs.mobile.core.LinePool
@@ -134,15 +136,24 @@ class TranslationService : Service() {
             return
         }
         acquireLocks()
-        LiveState.update { LiveStatus(running = true, phase = getString(R.string.phase_preparing)) }
+        startedAt = System.currentTimeMillis()
+        LiveState.update { LiveStatus(running = true, phase = getString(R.string.phase_preparing), startedAt = startedAt, engineLabel = engineLabel()) }
+        Telemetry.event(Telemetry.SESSION_START, "target" to settings.target.name.lowercase(), "engine" to settings.engine.name.lowercase(),
+            "packs" to Services.packsAllowed())
 
-        val library = GamePackLibrary({ bundledPacks() }, File(filesDir, "packs")).also { it.setDisabled(settings.disabledPacks) }
+        // Paketler aboneliğe bağlı: kitaplık sunucudan inmiş paketlerden (hata ayıklamada APK'dakilerden de) kurulur,
+        // her satırda hak yeniden denetlenir (abonelik oturum sırasında biterse paket araması durur).
+        val library = Services.packLibrary(this)
         packs = library
         val free = MlKitTranslator().also { freeTranslator = it }
         val translator = onlineTranslator(free) ?: free
         val subtitleServer = SubtitleServer().also { server = it }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
-        subtitleServer.onClientsChanged = { count -> LiveState.update { it.copy(connectedTvs = count) } }
+        subtitleServer.onClientsChanged = { count ->
+            val before = LiveState.status.value.connectedTvs
+            LiveState.update { it.copy(connectedTvs = count) }
+            if (before == 0 && count > 0) Telemetry.event(Telemetry.TV_CONNECTED, "count" to count)
+        }
         subtitleServer.onEvent = { event ->
             LiveState.update { it.copy(current = if (event is SubtitleEvent.Subtitle) event.text else "") }
         }
@@ -159,9 +170,13 @@ class TranslationService : Service() {
         val packTitles = library.infos.associate { it.id to it.title }
         reader = SubtitleReader()
         pipeline = SubtitlePipeline(translator, subtitleServer).apply {
-            if (settings.packsEnabled) packLookup = { text -> PackLookup.match(library, text) }
+            packLookup = { text -> if (Services.packsAllowed()) PackLookup.match(library, text) else null }
             onPackMissed = { text -> linePool.offer(text) }
-            onPairShown = { pair -> LiveState.shown(pair, pair.packId?.let { packTitles[it] ?: it }) }
+            onPairShown = { pair ->
+                LiveState.shown(pair, pair.packId?.let { packTitles[it] ?: it })
+                // Paket başına oturumda bir kez (her satırda olay göndermeyelim); toplam sayı oturum sonunda gider.
+                pair.packId?.let { id -> if (packsUsed.add(id)) Telemetry.event(Telemetry.PACK_HIT, "pack" to id) }
+            }
             onTranslationResult = { error ->
                 LiveState.update { it.copy(error = error?.let { getString(R.string.error_translation) }) }
             }
@@ -238,9 +253,6 @@ class TranslationService : Service() {
         emptyMap()
     }
 
-    private fun bundledPacks(): List<Pair<String, ByteArray>> =
-        (assets.list("packs") ?: emptyArray()).map { name -> name to assets.open("packs/$name").use { it.readBytes() } }
-
     private fun describe(state: SessionState): String = when (state) {
         SessionState.Connecting -> getString(R.string.phase_connecting)
         SessionState.Streaming -> getString(R.string.phase_streaming)
@@ -262,7 +274,22 @@ class TranslationService : Service() {
         wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).createWifiLock(mode, "CouchSubs").apply { acquire() }
     }
 
+    private val packsUsed = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private var startedAt = 0L
+
+    /** Ana ekrandaki "Çeviri · DeepL" karosu ve satırlardaki motor hapı için. */
+    private fun engineLabel(): String = when (settings.engine) {
+        EngineChoice.FREE -> getString(R.string.engine_free_short)
+        EngineChoice.DEEPL -> "DeepL"
+        EngineChoice.GEMINI -> "Gemini"
+        EngineChoice.OPENAI -> "OpenAI"
+        EngineChoice.CLAUDE -> "Claude"
+    }
+
     override fun onDestroy() {
+        if (startedAt > 0) settings.lastSessionMs = System.currentTimeMillis() - startedAt
+        if (startedAt > 0) Telemetry.event(Telemetry.SESSION_STOP, "seconds" to (System.currentTimeMillis() - startedAt) / 1000,
+            "pack_lines" to (pipeline?.packHits ?: 0), "lines" to LiveState.status.value.recent.size)
         session?.dispose()
         session = null
         pipeline?.reset()
