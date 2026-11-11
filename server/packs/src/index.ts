@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// CouchSubs game packs (Cloudflare Worker + R2). Telefon uygulaması aboneler için paketleri buradan indirir; masaüstü
-// uygulamaları paketleri kendi içinde taşımaya devam eder (ücretsiz).
-// GET /v1/packs     : paket listesi ve sürümleri (herkese açık; R2'deki index.json).
-// GET /v1/packs/:id : paket dosyası (.json.gz). Firebase ID token ("Authorization: Bearer …") ve RevenueCat'te etkin
-//                     "packs" hakkı gerekir.
+// CouchSubs game packs (Cloudflare Worker + R2). Paketler ücretsizdir: telefon uygulaması yeni ve güncellenen paketleri
+// buradan indirir (uygulamayla gelenlerin üstüne). Hesap ya da giriş yoktur.
+// GET /v1/packs     : paket listesi ve sürümleri (R2'deki index.json).
+// GET /v1/packs/:id : paket dosyası (.json.gz), x-pack-sha256 başlığıyla.
+// Kötüye kullanıma karşı IP başına basit sınır: saatte RATE_LIMIT indirme (Worker örneği başına, bellekte).
 
-import { TokenError, verifyIdToken } from "./firebase";
-import { RevenueCatError, hasEntitlement } from "./revenuecat";
-
-/** Kullandığımız kadarıyla R2 (Workers türlerine bağımlı kalmamak için). */
 export interface R2ObjectLike {
   body: ReadableStream | null;
   size: number;
@@ -18,13 +14,11 @@ export interface R2ObjectLike {
 }
 
 export interface R2BucketLike {
-  get(key: string): Promise<R2ObjectLike | null>;
+  get(key: string, options?: { onlyIf?: { etagDoesNotMatch?: string } }): Promise<R2ObjectLike | null>;
 }
 
 export interface Env {
   PACKS: R2BucketLike;
-  FIREBASE_PROJECT_ID: string;
-  REVENUECAT_SECRET: string;
 }
 
 export interface PackInfo {
@@ -37,9 +31,35 @@ export interface PackInfo {
 }
 
 const PACK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** Bir IP'nin bir saatte indirebileceği paket dosyası (altı paketin tamamı birkaç kez sığar). */
+export const RATE_LIMIT = 60;
+const WINDOW_MS = 60 * 60 * 1000;
 
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", ...extra } });
+
+/** IP → bu penceredeki indirme sayısı. Örnek yeniden başlayınca sıfırlanır; amaç kaba kötüye kullanımı kesmek. */
+export class RateLimiter {
+  private readonly hits = new Map<string, { count: number; since: number }>();
+
+  constructor(private readonly limit = RATE_LIMIT, private readonly windowMs = WINDOW_MS) {}
+
+  /** İzin verilirse null, yoksa kaç saniye sonra yeniden denenebileceği. */
+  take(ip: string, now: number): number | null {
+    let entry = this.hits.get(ip);
+    if (!entry || now - entry.since >= this.windowMs) {
+      entry = { count: 0, since: now };
+      this.hits.set(ip, entry);
+    }
+    if (entry.count >= this.limit) return Math.ceil((entry.since + this.windowMs - now) / 1000);
+    entry.count++;
+    // Bellek büyümesin: çok IP birikirse süresi geçenler atılır.
+    if (this.hits.size > 10_000) for (const [key, value] of this.hits) if (now - value.since >= this.windowMs) this.hits.delete(key);
+    return null;
+  }
+}
+
+const limiter = new RateLimiter();
 
 async function readIndex(env: Env): Promise<PackInfo[]> {
   const object = await env.PACKS.get("index.json");
@@ -52,25 +72,11 @@ async function list(env: Env): Promise<Response> {
   return json({ packs: await readIndex(env) }, 200, { "cache-control": "public, max-age=3600" });
 }
 
-async function download(request: Request, env: Env, id: string, fetcher: typeof fetch): Promise<Response> {
+async function download(request: Request, env: Env, id: string, rate: RateLimiter, now: number): Promise<Response> {
   if (!PACK_ID.test(id)) return json({ error: "not_found" }, 404);
-  const token = /^Bearer (.+)$/.exec(request.headers.get("authorization") ?? "")?.[1];
-  if (!token) return json({ error: "unauthorized" }, 401);
-  let uid: string;
-  try {
-    uid = (await verifyIdToken(token, env.FIREBASE_PROJECT_ID, fetcher)).uid;
-  } catch (error) {
-    if (error instanceof TokenError) return json({ error: "unauthorized", reason: error.message }, 401);
-    throw error;
-  }
-  let entitled: boolean;
-  try {
-    entitled = await hasEntitlement(uid, env.REVENUECAT_SECRET, fetcher);
-  } catch (error) {
-    if (error instanceof RevenueCatError) return json({ error: "entitlement_unavailable" }, 503, { "retry-after": "60" });
-    throw error;
-  }
-  if (!entitled) return json({ error: "subscription_required" }, 403);
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const retry = rate.take(ip, now);
+  if (retry !== null) return json({ error: "rate_limited" }, 429, { "retry-after": String(retry) });
 
   const object = await env.PACKS.get(`packs/${id}.json.gz`);
   if (!object || !object.body) return json({ error: "not_found" }, 404);
@@ -78,20 +84,21 @@ async function download(request: Request, env: Env, id: string, fetcher: typeof 
     "content-type": "application/gzip",
     "content-length": String(object.size),
     etag: object.httpEtag,
-    // Dosya kullanıcıya özel izinle verilir; ara önbellekte paylaşılmaz.
-    "cache-control": "private, no-store",
+    // Sürüm değişince dosya da değişir (ETag); bir gün önbellekte kalabilir, uygulama SHA-256 ile doğrular.
+    "cache-control": "public, max-age=86400",
   };
   const sha = object.customMetadata?.sha256;
   if (sha) headers["x-pack-sha256"] = sha;
+  if (request.headers.get("if-none-match") === object.httpEtag) return new Response(null, { status: 304, headers });
   return new Response(object.body, { status: 200, headers });
 }
 
-export async function handle(request: Request, env: Env, fetcher: typeof fetch = fetch): Promise<Response> {
+export async function handle(request: Request, env: Env, rate: RateLimiter = limiter, now: number = Date.now()): Promise<Response> {
   const url = new URL(request.url);
   if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405);
   if (url.pathname === "/v1/packs") return list(env);
   const match = /^\/v1\/packs\/([^/]+)$/.exec(url.pathname);
-  if (match) return download(request, env, decodeURIComponent(match[1]), fetcher);
+  if (match) return download(request, env, decodeURIComponent(match[1]), rate, now);
   return json({ error: "not_found" }, 404);
 }
 

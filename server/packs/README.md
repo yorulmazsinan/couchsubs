@@ -1,21 +1,17 @@
 # couchsubs-packs
 
-Telefon uygulamasının (couchsubs-android) abonelere oyun paketi verdiği Cloudflare Worker. Paketler R2'de durur;
-masaüstü uygulamaları paketleri kendi içinde taşımaya devam eder ve ücretsizdir.
+Telefon uygulamasının (couchsubs-android) yeni ve güncellenen oyun paketlerini indirdiği Cloudflare Worker. Paketler
+ücretsizdir; hesap, giriş ya da anahtar yoktur. Dosyalar R2'de durur. Uygulama, kendi içinde gelen paketlerin üstüne
+buradaki daha yeni sürümleri koyar; masaüstü uygulamaları paketleri kendi içinde taşımaya devam eder.
 
-| Yol | Erişim | Ne verir |
+| Yol | Ne verir | Önbellek |
 |---|---|---|
-| `GET /v1/packs` | herkese açık | `{"packs":[{id,title,version,sha256,size,entries}]}` (R2'deki `index.json`) |
-| `GET /v1/packs/:id` | Firebase ID token + RevenueCat `packs` hakkı | `packs/<id>.json.gz`, `x-pack-sha256` başlığıyla |
+| `GET /v1/packs` | `{"packs":[{id,title,version,sha256,size,entries}]}` (R2'deki `index.json`) | `public, max-age=3600` |
+| `GET /v1/packs/:id` | `packs/<id>.json.gz`, `x-pack-sha256` ve `etag` başlıklarıyla; `If-None-Match` eşleşirse `304` | `public, max-age=86400` |
 
-Yanıtlar: `401` token yok/geçersiz, `403 subscription_required`, `503 entitlement_unavailable` (RevenueCat'e
-ulaşılamadı; `retry-after: 60`), `404` paket yok.
-
-Doğrulama: Firebase Admin SDK olmadan, WebCrypto ile ([Firebase belgesi](https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library)):
-RS256 imza Google'ın securetoken anahtarlarıyla (JWK adresi, `Cache-Control` süresince önbellekte), `aud` = proje kimliği,
-`iss` = `https://securetoken.google.com/<proje>`, `exp`/`iat`/`auth_time`, `sub`. Abonelik: RevenueCat REST v1
-`GET /v1/subscribers/{uid}` (uygulama RevenueCat'i Firebase UID'siyle yapılandırır), `entitlements.packs.expires_date`
-boş ya da gelecekte (ödeme sorununda `grace_period_expires_date` de sayılır).
+Kötüye kullanıma karşı IP başına (`CF-Connecting-IP`) saatte 60 paket indirme; aşılırsa `429` ve `retry-after`.
+Sınır Worker örneği başına bellektedir (kaba kesme içindir); daha sıkı gerekirse Cloudflare'in Rate Limiting kuralı
+eklenir. Uygulama indirdiği dosyayı listedeki SHA-256 ile doğrular, haftada bir yeniler.
 
 ## Kurulum (sahibin hesabıyla; henüz yapılmadı)
 
@@ -23,8 +19,6 @@ boş ya da gelecekte (ödeme sorununda `grace_period_expires_date` de sayılır)
 cd server/packs
 npm install
 npx wrangler r2 bucket create couchsubs-packs
-# wrangler.toml: FIREBASE_PROJECT_ID'yi Firebase projesinin kimliğiyle değiştirin
-npx wrangler secret put REVENUECAT_SECRET        # RevenueCat gizli anahtarı (sk_…)
 
 # Paketleri ve listeyi yükle (sürüm: artan bir sayı; uygulama sürümü değişen paketi yeniden indirir)
 node scripts/build-index.mjs ../../core/Sources/CouchSubsCore/Resources/packs 1 > index.json
@@ -44,6 +38,6 @@ Uygulamadaki adres `couchsubs-android/secrets.properties` içindeki `packs.url` 
 
 ```sh
 npm install
-npm test          # vitest: token doğrulama (sahte RSA anahtarı), RevenueCat eşlemesi, yollar
+npm test          # vitest: liste, indirme, 304, geçersiz kimlik, IP sınırı
 npm run typecheck
 ```
