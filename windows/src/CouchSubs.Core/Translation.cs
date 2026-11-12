@@ -11,6 +11,16 @@ public interface ITextTranslator
 
     /// <summary>Son çevrilen altyazının seslendirilecek cümleleri (konuşmacısıyla); dublaj için.</summary>
     IReadOnlyList<SpokenLine> SpokenLines(string text) => [];
+
+    /// <summary>
+    /// Çevirmen <see cref="Prefetch"/> destekliyor mu. Destekleyen (ör. çevrimiçi) çevirmende okuma hattı satırı ilk
+    /// karede çevirmeye başlar; temiz okunmayan satırı TV'ye ancak sonraki kare doğrulayınca gönderir: altyazı
+    /// belirirken okunan bozuk ilk kare ekrana hiç çıkmaz, bekleme de çeviri süresine gizlenir.
+    /// </summary>
+    bool Prefetches => false;
+
+    /// <summary>Satırın çevirisini arka planda başlatır; aynı metin için sonraki <see cref="TranslateAsync"/> onu bekler.</summary>
+    void Prefetch(string text) { }
 }
 
 public enum TranslatorStatus
@@ -20,11 +30,16 @@ public enum TranslatorStatus
     NeedsDownload,
     /// <summary>Bu dil çifti desteklenmiyor.</summary>
     Unsupported,
+    /// <summary>
+    /// Model kurulu ama cihaz üstü çeviri motoru bu bilgisayarda açılamadı (ör. ONNX Runtime'ın yerel DLL'i
+    /// yüklenemedi). Kullanıcı çevrimiçi bir motor seçebilir; oyun paketleri çalışmayı sürdürür.
+    /// </summary>
+    EngineFailed,
 }
 
-/// <summary>Kullanıcının düzeltebileceği çeviri hatası (model eksik, dil desteklenmiyor).</summary>
-public sealed class TranslatorException(TranslatorStatus status)
-    : Exception($"Translator not available: {status}")
+/// <summary>Kullanıcının düzeltebileceği çeviri hatası (model eksik, dil desteklenmiyor, motor açılamadı).</summary>
+public sealed class TranslatorException(TranslatorStatus status, Exception? innerException = null)
+    : Exception($"Translator not available: {status}", innerException)
 {
     public TranslatorStatus Status { get; } = status;
 }

@@ -70,7 +70,19 @@ internal sealed class FakeTranslation : ITranslationModel
         Installed = true;
         progress.Report(1);
     }
-    public ITextTranslator Create(string source, string target) => new EchoTranslator();
+    /// <summary>Verilirse Create bunu fırlatır (ör. onnxruntime.dll yüklenemedi).</summary>
+    public Exception? CreateError { get; set; }
+    public ITextTranslator Create(string source, string target) => CreateError is { } error ? throw error : new EchoTranslator();
+
+    public bool EngineFailed { get; private set; }
+    public event Action? EngineFailure;
+
+    /// <summary>Motor arka planda (ısınırken) açılamadı.</summary>
+    public void Fail()
+    {
+        EngineFailed = true;
+        EngineFailure?.Invoke();
+    }
 
     private sealed class EchoTranslator : ITextTranslator
     {
@@ -128,6 +140,18 @@ internal sealed class FakeServices : IAppServices
     public ITextTranslator? MakeAiTranslator(AiProvider provider, string key, string model, ITextTranslator? fallback)
     {
         AiTranslators.Add((provider, key, model));
+        return fallback ?? Translation.Create("en", "tr");
+    }
+    public List<(LocalAiServer Server, string Key)> LocalTests { get; } = [];
+    public List<(LocalAiServer Server, string Key)> LocalTranslators { get; } = [];
+    public Task<AiTestResult> TestLocalAiAsync(LocalAiServer server, string key)
+    {
+        LocalTests.Add((server, key));
+        return Task.FromResult(AiTest);
+    }
+    public ITextTranslator? MakeLocalAiTranslator(LocalAiServer server, string key, ITextTranslator? fallback)
+    {
+        LocalTranslators.Add((server, key));
         return fallback ?? Translation.Create("en", "tr");
     }
 
@@ -277,6 +301,62 @@ public class AppControllerTests
         store.Save(StoreKeys.Tv, new LgTv("LG TV", "192.168.1.153"));
         store.Save(StoreKeys.TvKey, "tv-key");
         Assert.Equal(OnboardingStep.Done, Make(store: store).Step);
+        Assert.True(store.Load<bool?>(StoreKeys.SetupComplete), "Eski kurulum bir kez 'bitti' diye kaydedilir");
+    }
+
+    /// Sihirbaz PS5 adımını geçmiş: hesap ve konsol kayıtlı, kurulum bitmemiş.
+    private static MemoryStore StoreUpToTv()
+    {
+        var store = new MemoryStore();
+        store.Save(StoreKeys.AccountId, Enumerable.Repeat((byte)1, 8).ToArray());
+        store.Save(StoreKeys.Console, Console);
+        return store;
+    }
+
+    /// Samsung: TV eşleşti, uygulama kurulurken CouchSubs kapatıldı. Yeniden açılınca kurulum bitmiş sayılmaz, TV
+    /// adımından sürer.
+    [Fact]
+    public async Task InterruptedTvInstallIsNotComplete()
+    {
+        var store = StoreUpToTv();
+        var controller = Make(store: store);
+        Assert.Equal(OnboardingStep.Tv, controller.Step);
+        await controller.PairAsync(new LgTv("Samsung", "192.168.1.20", TvBrand.Samsung));
+        Assert.True(controller.HasTv);
+        var reopened = Make(store: store);
+        Assert.Equal(OnboardingStep.Tv, reopened.Step);
+        Assert.True(reopened.HasTv, "Eşleşme kaybolmaz; TV adımında uygulama kurulumu sürer");
+        Assert.False(store.Load<bool?>(StoreKeys.SetupComplete));
+    }
+
+    [Fact]
+    public async Task FinishedTvSetupIsComplete()
+    {
+        var store = StoreUpToTv();
+        var controller = Make(store: store);
+        await controller.PairAsync(new LgTv("Samsung", "192.168.1.20", TvBrand.Samsung));
+        controller.Advance(); // TV -> çeviri modeli
+        controller.Advance(); // çeviri modeli -> deneme
+        controller.Advance(); // deneme -> daha iyi çeviri
+        controller.Advance(); // daha iyi çeviri -> bitti
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.Equal(OnboardingStep.Done, Make(store: store).Step);
+    }
+
+    /// "TV'm yok, bilgisayar ekranında göster" de kurulumu bitirir; yarıda kapatılırsa TV adımından sürer.
+    [Fact]
+    public void ComputerScreenChoiceCompletesSetup()
+    {
+        var store = StoreUpToTv();
+        var settings = new MemorySettings();
+        var controller = Make(store: store, settings: settings);
+        controller.UseComputerScreen();
+        Assert.Equal(OnboardingStep.Tv, Make(store: store, settings: settings).Step);
+        controller.Advance();
+        controller.Advance();
+        controller.Advance();
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.Equal(OnboardingStep.Done, Make(store: store, settings: settings).Step);
     }
 
     [Fact]
@@ -300,6 +380,87 @@ public class AppControllerTests
         await controller.RegisterAsync("192.168.1.253", "12345678");
         Assert.True(controller.CanAdvance);
         Assert.Equal("192.168.1.253", services.Registered?.Host);
+    }
+
+    /// Eşleşme açıkça söylenir (kullanıcılar fark etmeyip tekrar Bağlan'a basıyordu) ve kaydedildiği günlüğe yazılır.
+    [Fact]
+    public async Task PairingSuccessIsAnnouncedAndLogged()
+    {
+        var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        void Collect(string line) => lines.Enqueue(line);
+        RemotePlayLog.MessageLogged += Collect;
+        try
+        {
+            var store = new MemoryStore();
+            var controller = Make(store: store);
+            await controller.CompletePsnLoginAsync(new Uri("https://x/?code=x"));
+            controller.Step = OnboardingStep.Console;
+            Assert.Equal("", controller.PairedText);
+            await controller.RegisterAsync("192.168.1.253", "12345678");
+            Assert.Equal("PS5 paired: PS5-789 (192.168.1.253). Press Continue.", controller.PairedText);
+            Assert.NotNull(store.Load<RegisteredConsole>(StoreKeys.Console));
+            Assert.Contains("[couchsubs] PS5 kaydı kaydedildi (192.168.1.253): PS5-789", lines);
+        }
+        finally
+        {
+            RemotePlayLog.MessageLogged -= Collect;
+        }
+    }
+
+    [Fact]
+    public async Task PairingTextIsTurkish()
+    {
+        var controller = new AppController(new FakeServices(), new MemoryStore(), new MemorySettings(), new FakeSleep(), Localizer.ForLanguage("tr"), action => action());
+        await controller.CompletePsnLoginAsync(new Uri("https://x/?code=x"));
+        await controller.RegisterAsync("192.168.1.253", "12345678");
+        Assert.Equal("PS5 eşleşti: PS5-789 (192.168.1.253). Devam'a basın.", controller.PairedText);
+    }
+
+    /// Eşleşince sonraki adıma kendiliğinden geçilir; kullanıcı bu arada Geri'ye bastıysa ilerlenmez.
+    [Fact]
+    public async Task ContinueAfterPairingAdvancesOnlyFromConsoleStep()
+    {
+        var controller = Make();
+        await controller.CompletePsnLoginAsync(new Uri("https://x/?code=x"));
+        controller.Step = OnboardingStep.Console;
+        controller.ContinueAfterPairing();
+        Assert.Equal(OnboardingStep.Console, controller.Step);
+        await controller.RegisterAsync("192.168.1.253", "12345678");
+        controller.Back();
+        controller.ContinueAfterPairing();
+        Assert.Equal(OnboardingStep.PsnLogin, controller.Step);
+        controller.Step = OnboardingStep.Console;
+        controller.ContinueAfterPairing();
+        Assert.Equal(OnboardingStep.Tv, controller.Step);
+    }
+
+    /// Sony girişi engellenen kullanıcı hesap kimliğini base64 olarak elle yazar; web girişiyle aynı biçimde saklanır.
+    [Fact]
+    public void ManualAccountIdIsStoredLikeWebLogin()
+    {
+        var store = new MemoryStore();
+        var controller = Make(store: store);
+        controller.Step = OnboardingStep.PsnLogin;
+        var id = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        Assert.True(controller.UseManualAccountId($"  {Convert.ToBase64String(id)} "));
+        Assert.True(controller.HasAccount);
+        Assert.True(controller.CanAdvance);
+        Assert.Equal(id, store.Load<byte[]>(StoreKeys.AccountId));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("AQIDBAUGBw==")] // 7 bayt
+    [InlineData("AQIDBAUGBwgJ")] // 9 bayt
+    [InlineData("AQIDBAUGBw!=")]
+    [InlineData("1234567890")]
+    public void InvalidManualAccountIdIsRejected(string value)
+    {
+        var store = new MemoryStore();
+        var controller = Make(store: store);
+        Assert.False(controller.UseManualAccountId(value));
+        Assert.False(controller.HasAccount);
+        Assert.Null(store.Load<byte[]>(StoreKeys.AccountId));
     }
 
     /// PS5 hesabı tanımazsa kullanıcıya kodu hangi kullanıcıdan alacağı söylenmeli.
@@ -587,6 +748,11 @@ public class AppControllerTests
     [InlineData("Subtitle text is sent to Google. With a free key, Google may use it to improve its products, and people at Google may read it. Only the game's subtitles are sent.")]
     [InlineData("The free key has a per-minute limit. When it is reached, that line is translated by the free translation.")]
     public void FreeGeminiStringsAreTranslated(string key) => Assert.NotEqual(key, Localizer.ForLanguage("tr")[key]);
+
+    [Theory]
+    [InlineData("The free translation engine could not start on this computer.", "Ücretsiz çeviri motoru bu bilgisayarda açılamadı.")]
+    [InlineData("Choose Gemini (free) or DeepL in Settings › Translation.", "Ayarlar › Çeviri'den Gemini (ücretsiz) ya da DeepL seçin.")]
+    public void EngineFailureStringsAreTranslated(string key, string turkish) => Assert.Equal(turkish, Localizer.ForLanguage("tr")[key]);
 }
 
 public class AppControllerRunTests
@@ -660,7 +826,8 @@ public class AppControllerRunTests
         var settings = new MemorySettings();
         var controller = AppControllerTests.Make(store: store, settings: settings);
         controller.Settings = controller.Settings with { Style = new SubtitleStyle(58, 7) };
-        Assert.Empty(store.Values);
+        // Güvenli depoda yalnız kurulumun bitip bitmediği durur.
+        Assert.Equal([StoreKeys.SetupComplete], store.Values.Keys);
         Assert.Equal(58, AppControllerTests.Make(store: store, settings: settings).Settings.Style.FontSize);
     }
 
@@ -736,6 +903,44 @@ public class AppControllerRunTests
         controller.Dispose();
     }
 
+    /// Ücretsiz motor açılamazsa (onnxruntime.dll yüklenemedi) çeviri yine başlar ve ana ekranda uyarı çıkar.
+    [Fact]
+    public async Task StartSurvivesFreeEngineThatCannotBeCreated()
+    {
+        var services = new FakeServices();
+        services.Translation.CreateError = new TypeInitializationException("Microsoft.ML.OnnxRuntime.NativeMethods",
+            new DllNotFoundException("Unable to load DLL 'onnxruntime'"));
+        var (controller, _, _) = Ready(services);
+
+        await controller.StartAsync();
+
+        Assert.True(controller.IsRunning);
+        Assert.Equal(TranslatorStatus.EngineFailed, controller.TranslatorStatus);
+        controller.Dispose();
+    }
+
+    /// Motor ısınırken açılamadı: uyarı hemen çıkar; çevrimiçi motor seçilince kalkar ve açılamayan motor yedek olmaz.
+    [Fact]
+    public async Task FreeEngineFailureShowsWarningUntilAnOnlineEngineIsChosen()
+    {
+        var services = new FakeServices();
+        var (controller, _, _) = Ready(services);
+        await controller.StartAsync();
+        Assert.Equal(TranslatorStatus.Ready, controller.TranslatorStatus);
+
+        services.Translation.Fail();
+        Assert.Equal(TranslatorStatus.EngineFailed, controller.TranslatorStatus);
+
+        await controller.SetDeepLKeyAsync("key:fx");
+        Assert.Equal(TranslatorStatus.Ready, controller.TranslatorStatus);
+        var (_, fallback) = Assert.Single(services.OnlineTranslators);
+        Assert.Null(fallback);
+
+        controller.RemoveDeepLKey();
+        Assert.Equal(TranslatorStatus.EngineFailed, controller.TranslatorStatus);
+        controller.Dispose();
+    }
+
     /// Yapay zekâ anahtarı yalnız kabul edilirse saklanır; seçilen model ve anahtar çevirmene gider.
     [Fact]
     public async Task AiKeyIsSavedOnlyWhenAcceptedAndSelectsTheEngine()
@@ -762,6 +967,51 @@ public class AppControllerRunTests
         controller.RemoveKey(TranslationEngine.Claude);
         Assert.False(controller.HasKey(TranslationEngine.Claude));
         Assert.Equal(TranslationEngine.Free, controller.Settings.Engine);
+        controller.Dispose();
+    }
+
+    /// Yerel model anahtarsız hazırdır; "Bağlantıyı dene" ayardaki adres ve modelle gider, yazılan anahtarı yalnız sunucu
+    /// kabul ederse saklar; çevirmene sunucu ve anahtar gider; anahtar kaldırılınca yerel model seçili kalır.
+    [Fact]
+    public async Task LocalModelNeedsNoKey()
+    {
+        var services = new FakeServices();
+        var (controller, _, _) = Ready(services);
+        controller.Settings = controller.Settings.WithEngine(TranslationEngine.Local);
+        Assert.True(controller.IsReady(TranslationEngine.Local));
+        Assert.True(controller.OnlineTranslationActive);
+        Assert.False(controller.HasKey(TranslationEngine.Local));
+
+        controller.Settings = controller.Settings with { LocalAiBaseUrl = LocalAiServer.LmStudioUrl, LocalAiModel = " qwen2.5-7b-instruct " };
+        Assert.Equal(OnlineKeyState.Valid, (await controller.TestLocalAiAsync()).State);
+        var (server, key) = Assert.Single(services.LocalTests);
+        Assert.Equal("http://localhost:1234/v1/chat/completions", server.ChatUrl.AbsoluteUri);
+        Assert.Equal("qwen2.5-7b-instruct", server.Model);
+        Assert.Equal("", key);
+        Assert.False(controller.HasKey(TranslationEngine.Local));
+
+        services.AiTest = new AiTestResult(OnlineKeyState.Invalid);
+        await controller.TestLocalAiAsync("wrong");
+        Assert.False(controller.HasKey(TranslationEngine.Local));
+        services.AiTest = new AiTestResult(OnlineKeyState.Valid, "KRATOS: Şimdi gidiyoruz.");
+        await controller.TestLocalAiAsync(" lm-key ");
+        Assert.True(controller.HasKey(TranslationEngine.Local));
+        Assert.Equal(TranslationEngine.Local, controller.Settings.Engine);
+
+        await controller.StartAsync();
+        var made = Assert.Single(services.LocalTranslators);
+        Assert.Equal("local:localhost:1234/qwen2.5-7b-instruct", made.Server.EngineId);
+        Assert.Equal("lm-key", made.Key);
+        Assert.Empty(services.AiTranslators);
+
+        controller.RemoveKey(TranslationEngine.Local);
+        Assert.False(controller.HasKey(TranslationEngine.Local));
+        Assert.Equal(TranslationEngine.Local, controller.Settings.Engine);
+
+        // Geçersiz adreste yerel model hazır sayılmaz; çeviri ücretsiz motorla sürer.
+        controller.Settings = controller.Settings with { LocalAiBaseUrl = "ftp://nowhere" };
+        Assert.False(controller.OnlineTranslationActive);
+        Assert.Equal(OnlineKeyState.Unreachable, (await controller.TestLocalAiAsync()).State);
         controller.Dispose();
     }
 
@@ -1121,6 +1371,26 @@ public class TvAppInstallTests
         var state = new TvAppState(TvAppKind.Failed, Error: DevModeError.InstallFailed, Reason: "Invalid package");
         var text = TvAppMessages.Problem(state, TvBrand.Lg, Localizer.ForLanguage("en"), "x.log");
         Assert.EndsWith("TV says: Invalid package", text);
+    }
+
+    /// Samsung kısa basışta tam kapanmaz: "yeniden başlatın" diyen hatada güç tuşunun basılı tutulacağı yazar.
+    /// Kurulum sırasında bağlantı koparsa HDMI-CEC (Anynet+) ve otomatik kaynak değiştirme anlatılır.
+    [Fact]
+    public void SamsungFailureExplainsRestartAndSourceSwitching()
+    {
+        var text = Localizer.ForLanguage("tr");
+        var unreachable = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable), TvBrand.Samsung, text, "x.log");
+        Assert.Contains("2 saniye", unreachable);
+        Assert.DoesNotContain("Anynet+", unreachable);
+        var dropped = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.ConnectionLost), TvBrand.Samsung, text, "x.log");
+        Assert.Contains("Anynet+ (HDMI-CEC)", dropped);
+        Assert.Contains("Otomatik Kaynak Değiştirme", dropped);
+        Assert.EndsWith("x.log", dropped);
+        Assert.NotEqual(TvAppMessages.SourceSwitchTip, text[TvAppMessages.SourceSwitchTip]);
+        Assert.NotEqual(TvAppMessages.RestartTip, text[TvAppMessages.RestartTip]);
+        // LG'de Samsung'a özgü ipucu çıkmaz.
+        var lg = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable), TvBrand.Lg, text, "x.log");
+        Assert.DoesNotContain("2 saniye", lg);
     }
 
     [Fact]

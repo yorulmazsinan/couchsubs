@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "CouchSubsCore",
-    platforms: [.macOS(.v26), .iOS(.v26)],
+    platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
         .library(name: "CouchSubsCore", targets: ["CouchSubsCore"]),
     ],

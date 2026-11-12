@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// iPhone/iPad uygulamasının ayarları. Gerçek değerler Secrets.xcconfig'te (gitignore'da; örnek: Secrets.xcconfig.example).
+// Boş kalan her değer ilgili özelliği kapatır; uygulama yine derlenir ve çalışır.
+
+// Paket sunucusu (server/packs, Cloudflare Worker). "//" xcconfig'te yorum olduğu için https:/$()/... yazılır.
+PACKS_API_BASE_URL =
+// Meta (Facebook) uygulama kimliği ve istemci jetonu. Boşsa Meta SDK kurulmaz.
+FACEBOOK_APP_ID =
+FACEBOOK_CLIENT_TOKEN =
+// AdMob uygulama kimliği. Varsayılan Google'ın deneme kimliğidir; reklam zaten Remote Config ile kapalı.
+GAD_APPLICATION_ID = ca-app-pub-3940256099942544~1458002511
+
+#include? "Secrets.xcconfig"

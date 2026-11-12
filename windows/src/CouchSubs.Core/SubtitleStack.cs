@@ -44,12 +44,17 @@ public sealed class SubtitleStack
     public bool IsEmpty(double now) => Lines(now).Count == 0;
 
     /// <summary>Yeni altyazı. <paramref name="durationMs"/>: bilgisayarın bildirdiği süre (0 ya da eksi ise yazının uzunluğundan hesaplanır).</summary>
-    public void Show(string text, int durationMs, bool paragraphs, double now)
+    /// <param name="replaces">Bilgisayar bu satırı öncekinin uzamış ya da düzelmiş okuması saydı; önceki üste çıkmaz, bunun yerine geçer (üstteki daha eski satırlar kalır).</param>
+    public void Show(string text, int durationMs, bool paragraphs, double now, bool replaces = false)
     {
         Prune(now);
         // Önceki satır kısa göründüyse yeni satırın üstünde kalır. Aynı cümlenin başka bir okunuşu ikinci çeviri gibi
         // durmasın diye üste çıkmaz; görev paneli gibi çok satırlı yazılar da üst üste binmez.
-        if (current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text))
+        if (replaces && current is not null && !paragraphs)
+        {
+            // Üstteki satırlar olduğu gibi kalır.
+        }
+        else if (current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text))
         {
             PushPrevious(shown.Text, now);
         }

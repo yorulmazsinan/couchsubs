@@ -21,6 +21,28 @@ final class SubtitleStabilizerTests: XCTestCase {
         }
     }
 
+    /// Noktayla biten çöp okuma (altyazılar geçişte üst üste solarken) ilk karede çevrilmez; ardından gelen düzgün
+    /// okuma çevrilir.
+    func testGarbledSentenceIsNotSentOnFirstFrame() {
+        var s = SubtitleStabilizer()
+        XCTAssertEqual(s.feed("Gtt solkolfege."), .none)
+        XCTAssertEqual(s.feed("Go to college."), .translate("Go to college."))
+    }
+
+    /// Altyazılar geçişte üst üste solarken birkaç kare aynı çöp okunabiliyor (GTA V, #26): geçiş süresince çevrilmez,
+    /// gerçekten öyle duran yazı ise sonunda çevrilir.
+    func testGarbledLineIsSentOnlyAfterStayingLongerThanACrossfade() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        let garbled = "- Nat) but, you knpw. shit, I m"
+        for _ in 0..<5 {
+            XCTAssertEqual(s.feed(garbled), .none)
+            clock.now += 100
+        }
+        clock.now += SubtitleStabilizer.garbledStableMs
+        XCTAssertEqual(s.feed(garbled), .translate(garbled))
+    }
+
     func testOcrNoiseDoesNotReemit() {
         var s = SubtitleStabilizer()
         _ = s.feed("The gate will not hold"); _ = s.feed("The gate will not hold")
@@ -36,6 +58,28 @@ final class SubtitleStabilizerTests: XCTestCase {
         XCTAssertEqual(s.feed("Across the deep waters2aljd O went, Hoping a boat would carry him home."), .none)
         XCTAssertEqual(s.feed("Across the deep waters2aljd O went, Hoping a boat would carry him home."), .none)
         XCTAssertEqual(s.feed("Across the deep waters, he went."), .translate("Across the deep waters, he went."))
+    }
+
+    /// Açık zeminde (GTA V, #26) aynı cümle her karede bir iki sözcüğü eksik ya da başka okunuyordu; her okuma ayrı
+    /// çevrilip TV'de üç çeviri üst üste duruyordu. Daha kötü okuma yeni satır sayılmaz, eskisiyle gidip gelmesi de.
+    func testWorseRereadOfSentLineIsNotTranslatedAgain() {
+        var s = SubtitleStabilizer()
+        let full = "Shit, I just came by to see if there's somethin' I can help you with."
+        let worse = "Shit, I came by to see if there somethinl I can help ya."
+        XCTAssertEqual(s.feed(full), .translate(full))
+        XCTAssertEqual(s.feed(worse), .none)
+        XCTAssertEqual(s.feed(full), .none)
+        XCTAssertEqual(s.feed(worse), .none)
+    }
+
+    /// Önce eksik okunan cümlenin daha çok sözcüklü okuması gelirse yeniden çevrilir (TV eskisinin yerine koyar).
+    func testBetterRereadOfSentLineIsTranslated() {
+        var s = SubtitleStabilizer()
+        let full = "Shit, I just came by to see if there's somethin' I can help you with."
+        let worse = "Shit, I came by to see if there somethinl I can help ya."
+        XCTAssertEqual(s.feed(worse), .translate(worse))
+        XCTAssertEqual(s.feed(full), .translate(full))
+        XCTAssertEqual(s.feed(worse), .none)
     }
 
     func testFlickeringHudDoesNotSpam() {

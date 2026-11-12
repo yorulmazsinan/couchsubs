@@ -174,6 +174,81 @@ public class MarianTranslatorTests
         Assert.Equal(TranslatorStatus.NeedsDownload, error.Status);
     }
 
+    /// <summary>Windows'ta onnxruntime.dll yüklenemeyince SessionOptions'ın tür başlatıcısı böyle düşer (hata.log, beta.27).</summary>
+    private static Exception OnnxLoadFailure() =>
+        new TypeInitializationException("Microsoft.ML.OnnxRuntime.NativeMethods",
+            new DllNotFoundException("Unable to load DLL 'onnxruntime' or one of its dependencies (0x8007007E)"));
+
+    [Fact]
+    public async Task EngineThatCannotLoadReportsEngineFailedOnce()
+    {
+        var attempts = 0;
+        var translator = new MarianTranslator(() => { attempts++; throw OnnxLoadFailure(); }, () => true);
+        var reported = new List<Exception>();
+        translator.EngineFailed += reported.Add;
+
+        var error = await Assert.ThrowsAsync<TranslatorException>(() => translator.TranslateAsync("Wait!"));
+        Assert.Equal(TranslatorStatus.EngineFailed, error.Status);
+        Assert.IsType<TypeInitializationException>(error.InnerException);
+        Assert.Equal(TranslatorStatus.EngineFailed, translator.Status);
+
+        // Sonraki satırlar motoru yeniden açmaya çalışmaz, aynı durumu söyler; bildirim bir kez gelir.
+        var again = await Assert.ThrowsAsync<TranslatorException>(() => translator.TranslateAsync("Run, boy!"));
+        Assert.Equal(TranslatorStatus.EngineFailed, again.Status);
+        Assert.Equal(1, attempts);
+        Assert.IsType<TypeInitializationException>(Assert.Single(reported));
+    }
+
+    /// Arka planda başlatılıp beklenmeyen ısınma görevi hata bırakmamalı (UnobservedTaskException olarak hata.log'a düşüyordu).
+    [Fact]
+    public async Task WarmUpDoesNotFaultWhenEngineCannotLoad()
+    {
+        var translator = new MarianTranslator(() => throw OnnxLoadFailure(), () => true);
+        var reported = 0;
+        translator.EngineFailed += _ => reported++;
+
+        var warmUp = translator.WarmUpAsync();
+        await warmUp;
+
+        Assert.True(warmUp.IsCompletedSuccessfully);
+        Assert.Equal(1, reported);
+        Assert.Equal(TranslatorStatus.EngineFailed, translator.Status);
+    }
+
+    [Fact]
+    public async Task WarmUpDoesNotFaultWhenModelMissing()
+    {
+        var translator = new MarianTranslator(() => new FakeEngine(), () => false);
+        var reported = 0;
+        translator.EngineFailed += _ => reported++;
+
+        await translator.WarmUpAsync();
+
+        Assert.Equal(0, reported);
+        Assert.Equal(TranslatorStatus.NeedsDownload, translator.Status);
+    }
+
+    /// Önbellekteki satırlar motor açılamasa da gösterilir.
+    [Fact]
+    public async Task CachedLinesStillTranslateWhenEngineCannotLoad()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "couchsubs-marian-" + Guid.NewGuid().ToString("N"), "cache.jsonl");
+        try
+        {
+            var engine = new FakeEngine();
+            await new MarianTranslator(() => engine, () => true, new TranslationCache(file)).TranslateAsync("We go now.");
+
+            var broken = new MarianTranslator(() => throw OnnxLoadFailure(), () => true, new TranslationCache(file));
+            Assert.Equal("WE GO NOW.", await broken.TranslateAsync("We go now."));
+            var error = await Assert.ThrowsAsync<TranslatorException>(() => broken.TranslateAsync("Stay close."));
+            Assert.Equal(TranslatorStatus.EngineFailed, error.Status);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(file)!, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task SerializesConcurrentCalls()
     {

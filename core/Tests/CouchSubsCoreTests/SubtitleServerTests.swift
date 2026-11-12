@@ -34,12 +34,15 @@ final class SubtitleServerTests: XCTestCase {
 
         try await waitUntil { server.connectedClients == 1 }
         server.sendSubtitle("Merhaba", durationMs: 4000, box: TextBox(left: 0.25, top: 0.8, right: 0.75, bottom: 0.874_99))
+        // Aynı cümlenin uzamış okuması: TV öncekinin üstüne yığmaz, yerine koyar.
+        server.sendSubtitle("Merhaba dostum", durationMs: 4000, replaces: true)
         server.clear()
 
         let lines = try await readLines(bytes, until: "event: clear")
         XCTAssertTrue(lines.contains("event: subtitle"))
         XCTAssertTrue(lines.contains { $0.hasPrefix("data:") && $0.contains("\"text\":\"Merhaba\"") && $0.contains("\"duration\":4000")
-            && $0.contains("\"box\":{\"bottom\":0.875,\"left\":0.25,\"right\":0.75,\"top\":0.8}") })
+            && $0.contains("\"box\":{\"bottom\":0.875,\"left\":0.25,\"right\":0.75,\"top\":0.8}") && !$0.contains("replace") })
+        XCTAssertTrue(lines.contains { $0.hasPrefix("data:") && $0.contains("\"text\":\"Merhaba dostum\"") && $0.contains("\"replace\":true") })
     }
 
     /// TV yarı açık bağlantıyı adlı "ping" olayının gelmemesinden anlar; yorum satırını EventSource görmez.

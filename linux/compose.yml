@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# CouchSubs Linux sunucusu. Depo kökünde: ./linux/build.sh && docker compose -f linux/compose.yml up -d
+# Panel: http://<sunucu adresi>:8788
+services:
+  couchsubs:
+    image: couchsubs-linux
+    build:
+      context: ..
+      dockerfile: linux/Dockerfile
+    # PS5 araması (UDP yayını), TV araması (SSDP) ve Remote Play akışı için ev ağına doğrudan bağlı olmalı.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Sunucunun hata iletilerinin dili (tr ya da en); panelin dili tarayıcıyı izler.
+      COUCHSUBS_LANG: tr
+    volumes:
+      # Hesap kimliği, PS5 ve TV anahtarları, çeviri modeli (~530 MB), günlükler.
+      - couchsubs-data:/data
+
+volumes:
+  couchsubs-data:

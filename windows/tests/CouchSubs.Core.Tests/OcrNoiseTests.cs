@@ -81,6 +81,17 @@ public class ReadingChoiceTests
         Assert.True(OcrNoise.Score("T hats the[lil Should be quiet now.") < OcrNoise.Score("That should be quiet now."));
     }
 
+    /// Geçişte üst üste solan iki altyazının karışık okuması çöp sayılır; olağan cümleler, kısaltmalar ve "Hmm" sayılmaz.
+    [Theory]
+    [InlineData("Gtt solkolfege.", true)]
+    [InlineData("- CESAREiVJütt'h!", true)]
+    [InlineData("Wrrk thng.", true)]
+    [InlineData("Hold the gate.", false)]
+    [InlineData("The FBI and the NPC agents.", false)]
+    [InlineData("Hmm, I don't know about that, boy.", false)]
+    [InlineData("Go to college.", false)]
+    public void GarbledReadingsAreRecognised(string text, bool garbled) => Assert.Equal(garbled, OcrNoise.LooksGarbled(text));
+
     /// Koyu kenarlı beyaz yazı siyaha, parlak zemin ve kenar beyaza döner.
     [Fact]
     public void WhiteTextOnlyKeepsOutlinedWhiteAndDropsBrightBackground()

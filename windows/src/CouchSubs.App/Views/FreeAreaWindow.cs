@@ -98,7 +98,7 @@ public sealed class FreeAreaWindow : Window
             Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(0xB3, 0, 0, 0)),
             Padding = new Thickness(16, 8, 16, 8),
-            FontSize = 16,
+            FontSize = 15,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 12, 0, 0),

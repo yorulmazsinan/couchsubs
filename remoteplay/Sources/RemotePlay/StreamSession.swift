@@ -82,16 +82,50 @@ public enum SessionState: Equatable, Sendable {
 
 /// Tek bir libchiaki oturumunun sahibi. Geri çağrılar bu kutuya gelir; kutu, oturum kapatılıp
 /// iş parçacığı beklenene (join) kadar yaşar, böylece geri çağrı serbest bırakılmış belleğe düşmez.
-private final class ChiakiSessionBox {
+///
+/// Oturumun günlüğü de kutunundur: libchiaki `ChiakiLog`'un yalnız adresini tutar ve iş parçacığı kapanırken bile
+/// günlüğe yazar. Günlük eskiden `StreamSession`'daydı; "Çeviriyi durdur"da `StreamSession` hemen bırakılıyor, oturum
+/// ise arka planda kapatılıyordu. Kapanan iş parçacığı serbest kalmış günlüğe yazınca uygulama çöküyordu
+/// (EXC_BAD_ACCESS, chiaki_log ← chiaki_stream_connection_run; GitHub #21).
+final class ChiakiSessionBox {
     let pointer = UnsafeMutablePointer<ChiakiSession>.allocate(capacity: 1)
+    let logger = ChiakiLogger()
     let generation: Int
     weak var owner: StreamSession?
     private var torn = false
     private let lock = NSLock()
 
-    init(generation: Int, owner: StreamSession) {
+    init(generation: Int, owner: StreamSession?) {
         self.generation = generation
         self.owner = owner
+    }
+
+    /// `chiaki_session_init`; başarısızsa kutu kullanılmamış sayılır (kapatılacak iş parçacığı yok).
+    func initialize(console: RegisteredConsole, accountId: Data) -> ChiakiErrorCode {
+        var info = ChiakiConnectInfo()
+        info.ps5 = true
+        copy(console.registKey, into: &info.regist_key)
+        copy(console.morning, into: &info.morning)
+        chiaki_connect_video_profile_preset(&info.video_profile, CHIAKI_VIDEO_RESOLUTION_PRESET_1080p, CHIAKI_VIDEO_FPS_PRESET_30)
+        info.video_profile.codec = CHIAKI_CODEC_H264
+        info.video_profile_auto_downgrade = true
+        info.enable_keyboard = false
+        info.enable_dualsense = false
+        info.audio_video_disabled = CHIAKI_AUDIO_DISABLED
+        info.auto_regist = false
+        info.holepunch_session = nil
+        info.rudp_sock = nil
+        copy(accountId, into: &info.psn_account_id)
+        info.packet_loss_max = 0.05
+        info.enable_idr_on_fec_failure = true
+
+        // libchiaki adresi oturum açılırken kopyalar; geçici C dizgesi yeterli.
+        let error = console.host.withCString { host -> ChiakiErrorCode in
+            info.host = host
+            return chiaki_session_init(pointer, &info, logger.pointer)
+        }
+        if !error.isSuccess { markUnused() }
+        return error
     }
 
     /// Oturumu durdurur ve iş parçacığını bekler. libchiaki iş parçacığından çağrılmamalı.
@@ -135,7 +169,6 @@ public final class StreamSession: @unchecked Sendable {
     private let accountId: Data
     private let queue = DispatchQueue(label: "couchsubs.stream-session")
     private let decodeQueue = DispatchQueue(label: "couchsubs.decode")
-    private let logger = ChiakiLogger()
     private var decoder = H264FrameDecoder()
     private var throttle = FrameThrottle(minInterval: 1.0 / 20)
     private var policy = ReconnectPolicy()
@@ -266,28 +299,7 @@ public final class StreamSession: @unchecked Sendable {
         decodeQueue.async { [weak self] in self?.decoder = H264FrameDecoder() }
 
         let box = ChiakiSessionBox(generation: current, owner: self)
-        var info = ChiakiConnectInfo()
-        info.ps5 = true
-        copy(console.registKey, into: &info.regist_key)
-        copy(console.morning, into: &info.morning)
-        chiaki_connect_video_profile_preset(&info.video_profile, CHIAKI_VIDEO_RESOLUTION_PRESET_1080p, CHIAKI_VIDEO_FPS_PRESET_30)
-        info.video_profile.codec = CHIAKI_CODEC_H264
-        info.video_profile_auto_downgrade = true
-        info.enable_keyboard = false
-        info.enable_dualsense = false
-        info.audio_video_disabled = CHIAKI_AUDIO_DISABLED
-        info.auto_regist = false
-        info.holepunch_session = nil
-        info.rudp_sock = nil
-        copy(accountId, into: &info.psn_account_id)
-        info.packet_loss_max = 0.05
-        info.enable_idr_on_fec_failure = true
-
-        // libchiaki adresi oturum açılırken kopyalar; geçici C dizgesi yeterli.
-        let error = console.host.withCString { host -> ChiakiErrorCode in
-            info.host = host
-            return chiaki_session_init(box.pointer, &info, logger.pointer)
-        }
+        let error = box.initialize(console: console, accountId: accountId)
         guard error.isSuccess else {
             return scheduleReconnect(current, reason: .other(ChiakiError(code: error).description), initialized: false, box: box)
         }

@@ -7,8 +7,21 @@ import Foundation
 /// gönderir. Uygulama açılışta `enable()` çağırır; çağrılmazsa (testler) hiçbir şey yazılmaz. Satırlar libchiaki'nin
 /// iş parçacığını bekletmeden arka planda yazılır; dosya 1 MB'yi geçince eski yarısı silinir.
 public enum RemotePlayLog {
-    /// Kullanıcıya hata iletisinde gösterilen yol.
-    public static let displayPath = "~/Library/Logs/CouchSubs/remoteplay.log"
+    /// Kullanıcıya hata iletisinde gösterilen yol. Mac App Store sürümü sandbox'ta çalışır; günlük o zaman
+    /// ~/Library/Containers/… altındadır ve ileti o yolu gösterir.
+    public static var displayPath: String { userPath(defaultFile) }
+
+    /// Dosyanın gerçek ev klasörüne göre `~/…` yolu. Sandbox'ta NSHomeDirectory uygulamanın kapsayıcısını verir;
+    /// kullanıcının Finder'da bulacağı yol için hesabın ev klasörü (getpwuid) kullanılır.
+    public static func userPath(_ file: URL) -> String {
+        #if os(macOS)
+        if let entry = getpwuid(getuid()), let dir = entry.pointee.pw_dir {
+            let home = String(cString: dir)
+            if file.path.hasPrefix(home + "/") { return "~" + file.path.dropFirst(home.count) }
+        }
+        #endif
+        return file.path
+    }
 
     public static var defaultFile: URL {
         FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]

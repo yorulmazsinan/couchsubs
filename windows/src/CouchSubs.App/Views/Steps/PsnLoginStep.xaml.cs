@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using CouchSubs.Core;
 using CouchSubs.Shell;
 
@@ -59,5 +60,34 @@ public partial class PsnLoginStep : UserControl
         }
         SignIn.IsEnabled = true;
         Refresh();
+    }
+
+    private void OnShowManual(object sender, RoutedEventArgs e)
+    {
+        ShowManual.Visibility = Visibility.Collapsed;
+        Manual.Visibility = Visibility.Visible;
+        ManualId.Focus();
+    }
+
+    /// <summary>Kimlik alanında Enter kaydeder; adımın "Devam" düğmesine gitmez.</summary>
+    private void OnManualKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return)) return;
+        e.Handled = true;
+        OnSaveManual(sender, e);
+    }
+
+    private void OnSaveManual(object sender, RoutedEventArgs e)
+    {
+        if (Controller.UseManualAccountId(ManualId.Text))
+        {
+            ManualError.Text = "";
+            Error.Text = "";
+            Refresh();
+        }
+        else
+        {
+            ManualError.Text = Localizer.Current["This is not a valid account ID. It is 12 characters in base64, e.g. AbCdEfGhIjk=."];
+        }
     }
 }

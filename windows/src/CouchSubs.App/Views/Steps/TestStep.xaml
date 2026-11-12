@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout x:Name="Layout" Glyph="{x:Static c:Glyphs.Seal}" Title="{t:T 'Let\'s test it'}"
+    <c:StepLayout x:Name="Layout" Title="{t:T 'Let\'s test it'}"
                   Message="{t:T 'CouchSubs will send a sample subtitle to your TV. It should appear at the bottom of the screen, on top of the game.'}">
         <StackPanel>
             <StackPanel Orientation="Horizontal">

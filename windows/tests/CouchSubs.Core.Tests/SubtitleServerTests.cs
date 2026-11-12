@@ -43,13 +43,16 @@ public class SubtitleServerTests
 
         await WaitUntil(() => server.ConnectedClients == 1);
         server.SendSubtitle("Merhaba", 4000, new TextBox(0.25, 0.8, 0.75, 0.87499));
+        // Aynı cümlenin uzamış okuması: TV öncekinin üstüne yığmaz, yerine koyar.
+        server.SendSubtitle("Merhaba dostum", 4000, replaces: true);
         server.Clear();
 
         using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
         var lines = await ReadLines(reader, "event: clear");
         Assert.Contains("event: subtitle", lines);
         Assert.Contains(lines, l => l.StartsWith("data:") && l.Contains("\"text\":\"Merhaba\"") && l.Contains("\"duration\":4000")
-            && l.Contains("\"box\":{\"bottom\":0.875,\"left\":0.25,\"right\":0.75,\"top\":0.8}"));
+            && l.Contains("\"box\":{\"bottom\":0.875,\"left\":0.25,\"right\":0.75,\"top\":0.8}") && !l.Contains("replace"));
+        Assert.Contains(lines, l => l.StartsWith("data:") && l.Contains("\"text\":\"Merhaba dostum\"") && l.Contains("\"replace\":true"));
     }
 
     /// TV yarı açık bağlantıyı adlı "ping" olayının gelmemesinden anlar; yorum satırını EventSource görmez.

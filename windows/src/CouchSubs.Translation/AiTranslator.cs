@@ -59,9 +59,12 @@ public static class AiRequest
         return string.Join("\n\n", parts);
     }
 
-    /// <summary>Hizmete giden HTTP isteği.</summary>
+    /// <summary>Yerel modelin sıcaklığı: çeviri tutarlı olsun, yine de doğal kalsın.</summary>
+    public const double LocalTemperature = 0.2;
+
+    /// <summary>Hizmete giden HTTP isteği. <paramref name="server"/>: yerel modelin sunucusu (verilmezse Ollama'nın varsayılan adresi).</summary>
     public static HttpRequestMessage Build(AiProvider provider, string key, AiModel model, IReadOnlyList<string> sentences,
-                                           IReadOnlyList<AiContextLine> context, string? game = null)
+                                           IReadOnlyList<AiContextLine> context, string? game = null, LocalAiServer? server = null)
     {
         key = key.Trim();
         var user = UserMessage(sentences, context, game);
@@ -103,6 +106,24 @@ public static class AiRequest
                 };
                 if (model.Effort is { } effort) body["reasoning_effort"] = effort;
                 break;
+            case AiProvider.Local:
+                // Ollama ve LM Studio'nun OpenAI uyumlu Chat Completions'ı: POST {adres}/chat/completions. Yalnız iki
+                // sunucunun da tanıdığı alanlar gider ("developer" rolü, reasoning_effort, max_completion_tokens gitmez).
+                // Anahtar isteğe bağlıdır; boşsa Authorization başlığı hiç eklenmez.
+                var local = server ?? LocalAiServer.Create(LocalAiServer.OllamaUrl, model.Id)!;
+                request = new HttpRequestMessage(HttpMethod.Post, local.ChatUrl);
+                if (key.Length > 0) request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+                body = new JsonObject
+                {
+                    ["model"] = model.Id,
+                    ["messages"] = new JsonArray(
+                        new JsonObject { ["role"] = "system", ["content"] = SystemPrompt },
+                        new JsonObject { ["role"] = "user", ["content"] = user }),
+                    ["temperature"] = LocalTemperature,
+                    ["max_tokens"] = MaxOutputTokens,
+                    ["stream"] = false,
+                };
+                break;
             default:
                 // https://docs.anthropic.com/en/api/messages (platform.claude.com/docs/en/api/messages): POST /v1/messages,
                 // "x-api-key" ve "anthropic-version". Yeni modellerde temperature gönderilmez; effort ve düşünme listedeki
@@ -143,7 +164,7 @@ public static class AiRequest
                         .Where(p => p?["thought"]?.GetValueKind() is not JsonValueKind.True)
                         .Select(p => p?["text"]?.GetValue<string>() ?? ""));
                     break;
-                case AiProvider.OpenAi:
+                case AiProvider.OpenAi or AiProvider.Local:
                     text = root?["choices"]?.AsArray().FirstOrDefault()?["message"]?["content"]?.GetValue<string>();
                     break;
                 default:
@@ -166,6 +187,9 @@ public static class AiRequest
     public static string[] Translations(string text, int count)
     {
         var trimmed = text.Trim();
+        // Düşünen yerel modeller (ör. Qwen3, DeepSeek-R1) yanıtın başına <think>…</think> koyar; yalnız sonrası alınır.
+        var thought = trimmed.LastIndexOf("</think>", StringComparison.Ordinal);
+        if (thought >= 0) trimmed = trimmed[(thought + "</think>".Length)..].Trim();
         // ```json … ``` çitini at.
         if (trimmed.StartsWith("```", StringComparison.Ordinal))
             trimmed = string.Join("\n", trimmed.Split('\n').Skip(1).Where(l => !l.StartsWith("```", StringComparison.Ordinal))).Trim();
@@ -276,8 +300,24 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
     /// <summary>Denemede çevrilen örnek satır.</summary>
     public const string Sample = "KRATOS: We go now. Stay close, boy.";
 
+    /// <summary>Bulut hizmetinde beklenen en uzun süre.</summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Yerel modelde beklenen en uzun süre: bilgisayardaki model buluttan yavaştır ve bir süre boşta kalınca belleğe
+    /// yeniden yüklenir. Yine de sınırlıdır: çeviriler sırayla gider, bir satır bütün sırayı bekletmesin; ekrandan çoktan
+    /// kalkmış satırın geç gelen çevirisini hat zaten göstermez.
+    /// </summary>
+    public static readonly TimeSpan LocalTimeout = TimeSpan.FromSeconds(15);
+    /// <summary>"Bağlantıyı dene"de yerel model için beklenen süre: ilk istek modeli belleğe yükler, uzun sürebilir.</summary>
+    public static readonly TimeSpan LocalTestTimeout = TimeSpan.FromSeconds(90);
+
     // Kısa zaman aşımı: altyazı birkaç saniye ekranda kalır, geç gelen çeviri işe yaramaz.
-    private static readonly Lazy<HttpClient> SharedClient = new(() => new HttpClient { Timeout = TimeSpan.FromSeconds(5) });
+    private static readonly Lazy<HttpClient> SharedClient = new(() => new HttpClient { Timeout = AiTranslator.Timeout });
+    private static readonly Lazy<HttpClient> LocalClient = new(() => new HttpClient { Timeout = LocalTimeout });
+    private static readonly Lazy<HttpClient> LocalTestClient = new(() => new HttpClient { Timeout = LocalTestTimeout });
+
+    /// <summary>Hizmete uygun zaman aşımıyla paylaşılan istemci.</summary>
+    public static HttpClient ClientFor(AiProvider provider) => provider.IsLocal() ? LocalClient.Value : SharedClient.Value;
 
     private readonly string _key;
     private readonly ITextTranslator? _fallback;
@@ -296,20 +336,25 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
     /// Dakikalık istek hakkı; null ise modelin uygulama genelindeki ortak hakkı (Google sınırı proje ve model başına sayar;
     /// çeviri hattı yeniden kurulsa da hak sıfırlanmaz). Modelin sınırı yoksa hak da yoktur.
     /// </param>
+    /// <param name="server">Yerel modelin sunucusu (yalnız <see cref="AiProvider.Local"/>; verilmezse Ollama'nın varsayılan adresi).</param>
+    /// <param name="http">Verilmezse hizmete uygun zaman aşımıyla paylaşılan istemci (yerel model daha uzun bekler).</param>
     public AiTranslator(AiProvider provider, string key, string? model, ITextTranslator? fallback, HttpClient? http = null,
-                        TranslationCache? cache = null, RequestBudget? budget = null)
+                        TranslationCache? cache = null, RequestBudget? budget = null, LocalAiServer? server = null)
     {
         Provider = provider;
         Model = provider.Model(model);
+        Server = provider.IsLocal() ? server ?? LocalAiServer.Create(LocalAiServer.OllamaUrl, Model.Id) : null;
         _key = key.Trim();
         _fallback = fallback;
-        _http = http ?? SharedClient.Value;
+        _http = http ?? ClientFor(provider);
         _cache = cache ?? new TranslationCache();
         _budget = budget ?? RequestBudget.Shared(provider, Model);
     }
 
     public AiProvider Provider { get; }
     public AiModel Model { get; }
+    /// <summary>Yerel modelin sunucusu; bulut hizmetlerinde null.</summary>
+    public LocalAiServer? Server { get; }
 
     /// <summary>Son hata; çeviri düzgün gidiyorsa null.</summary>
     public OnlineKeyState? LastError => _failure;
@@ -424,7 +469,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
 
     private async Task<string[]> RequestAsync(List<string> sentences, List<AiContextLine> context, CancellationToken cancellationToken)
     {
-        using var request = AiRequest.Build(Provider, _key, Model, sentences, context);
+        using var request = AiRequest.Build(Provider, _key, Model, sentences, context, server: Server);
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
@@ -435,14 +480,19 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
         return AiRequest.Translations(AiRequest.Text(Provider, body), sentences.Count);
     }
 
-    /// <summary>Ayarlardaki "Dene": örnek satırı çevirir; çeviri ya da hatanın türü döner.</summary>
+    /// <summary>
+    /// Ayarlardaki "Dene" ve "Bağlantıyı dene": örnek satırı çevirir; çeviri ya da hatanın türü döner. Yerel modelde
+    /// anahtar isteğe bağlıdır ve model belleğe yüklenirken uzun beklenir.
+    /// </summary>
     public static async Task<AiTestResult> TestAsync(AiProvider provider, string key, string? model, HttpClient? http = null,
-                                                     CancellationToken cancellationToken = default)
+                                                     CancellationToken cancellationToken = default, LocalAiServer? server = null)
     {
         key = key.Trim();
-        if (key.Length == 0) return new(OnlineKeyState.Invalid);
+        if (key.Length == 0 && !provider.IsLocal()) return new(OnlineKeyState.Invalid);
+        http ??= provider.IsLocal() ? LocalTestClient.Value : SharedClient.Value;
         // Deneme tek istektir; çeviri hattının dakikalık hakkından yemez.
-        var translator = new AiTranslator(provider, key, model, new FailingTranslator(), http, budget: new RequestBudget(int.MaxValue));
+        var translator = new AiTranslator(provider, key, model, new FailingTranslator(), http, budget: new RequestBudget(int.MaxValue),
+                                          server: server);
         try
         {
             return new(OnlineKeyState.Valid, await translator.TranslateAsync(Sample, cancellationToken).ConfigureAwait(false));

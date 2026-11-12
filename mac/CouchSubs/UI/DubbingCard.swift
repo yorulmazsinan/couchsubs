@@ -5,10 +5,9 @@ import SwiftUI
 
 /// Ayarlardaki Türkçe dublaj bölümü: açma, ses modelini indirme, çıkış, karakter sesleri.
 struct DubbingCard: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        @Bindable var model = model
         Card(title: "Turkish dubbing") {
             Toggle("Voice the translation in Turkish", isOn: $model.settings.dubbing.enabled)
             HintText(text: "In the game's audio settings, turn the dialogue (voice) volume down; keep music and effects. If the game can show speaker names in subtitles, turn them on: every character then speaks with its own voice.")
@@ -58,7 +57,7 @@ struct DubbingCard: View {
 }
 
 private struct VoiceRow: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     let title: Text
     @Binding var voice: DubbingVoice
 

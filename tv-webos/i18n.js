@@ -30,7 +30,10 @@
       positionPreview: 'Altyazı burada görünecek',
       demoButton: 'Demoyu izle',
       demoBadge: 'DEMO',
-      demoHint: 'Örnek: oyunun İngilizce altyazısı Türkçe olarak burada görünür. Çıkmak için Geri.'
+      demoHint: 'Örnek: oyunun İngilizce altyazısı Türkçe olarak burada görünür. Çıkmak için Geri.',
+      sourceSwitchTitle: 'TV kendiliğinden HDMI\'ya geçti.',
+      sourceSwitchHint: 'Ayarlar › Tüm Ayarlar › Bağlantı › Harici Cihaz Yöneticisi\'nde Anynet+ (HDMI-CEC) ve Otomatik Kaynak Değiştirme\'yi kapatın.',
+      sourceSwitchClose: 'Kapatmak için Tamam ya da Geri.'
     },
     en: {
       waiting: 'Open the CouchSubs app on your computer.',
@@ -58,7 +61,10 @@
       positionPreview: 'Subtitles will appear here',
       demoButton: 'Watch the demo',
       demoBadge: 'DEMO',
-      demoHint: 'Example: the game\'s English subtitles appear here in Turkish. Press Back to exit.'
+      demoHint: 'Example: the game\'s English subtitles appear here in Turkish. Press Back to exit.',
+      sourceSwitchTitle: 'The TV switched to HDMI by itself.',
+      sourceSwitchHint: 'Turn off Anynet+ (HDMI-CEC) and Auto Source Switching in Settings › All Settings › Connection › External Device Manager.',
+      sourceSwitchClose: 'Press OK or Back to close.'
     }
   };
 

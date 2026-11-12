@@ -3,41 +3,61 @@
 import Foundation
 
 /// Kullanıcının kendi anahtarıyla çalışan yapay zekâ çeviri hizmetleri (Windows'taki CouchSubs.Core/AiProvider.cs ile aynı).
+/// `local`: kullanıcının bilgisayarında çalışan model (Ollama, LM Studio); OpenAI uyumlu Chat Completions adresine gider,
+/// anahtar isteğe bağlıdır, model adını kullanıcı yazar.
 public enum AIProvider: String, Codable, CaseIterable, Sendable {
     case gemini
     case openAI = "openai"
     case claude
+    case local
+
+    /// Bulut hizmetleri: model listesi `ai-models.json`'dan gelir, anahtar gerekir.
+    public static var cloud: [AIProvider] { allCases.filter { !$0.isLocal } }
+
+    /// Kullanıcının bilgisayarındaki model (Ollama, LM Studio).
+    public var isLocal: Bool { self == .local }
 
     /// Seçilebilen modeller; ilki varsayılandır (hızlı ve ucuz). Liste Windows ile ortak `ai-models.json` dosyasından gelir.
+    /// Yerel modelde liste yoktur; model adını kullanıcı yazar.
     public var models: [AIModel] { AIModel.catalog[rawValue] ?? [] }
 
     /// Hızlı ve ucuz varsayılan model.
-    public var defaultModel: AIModel { models[0] }
+    public var defaultModel: AIModel {
+        isLocal ? AIModel(id: LocalAIServer.defaultModel, label: LocalAIServer.defaultModel) : models[0]
+    }
 
-    /// Marka adı; çevrilmez.
+    /// Marka adı; çevrilmez. Yerel modelin arayüzdeki adı uygulamada çevrilir.
     public var displayName: String {
         switch self {
         case .gemini: "Gemini"
         case .openAI: "OpenAI"
         case .claude: "Claude"
+        case .local: "Local model"
         }
     }
 
-    /// Anahtarın alındığı resmî sayfa.
+    /// Anahtarın alındığı resmî sayfa (yerel modelde Ollama'nın indirme sayfası).
     public var keyPage: URL {
         switch self {
         case .gemini: URL(string: "https://aistudio.google.com/apikey")!
         case .openAI: URL(string: "https://platform.openai.com/api-keys")!
         case .claude: URL(string: "https://platform.claude.com/settings/keys")!
+        case .local: URL(string: "https://ollama.com/download")!
         }
     }
 
-    /// Kalıcı önbellek dosyasındaki motor adı: model değişince eski modelin çevirileri karışmaz.
+    /// Kalıcı önbellek dosyasındaki motor adı: model değişince eski modelin çevirileri karışmaz. Yerel modelde sunucu
+    /// adresi de girer (bkz. `LocalAIServer.engineID`).
     public func engineID(model: String) -> String { "\(rawValue):\(model)" }
 
-    /// Kayıtlı model listede yoksa (eski ayar ya da listeden çıkarılan model) varsayılan model.
+    /// Kayıtlı model listede yoksa (eski ayar ya da listeden çıkarılan model) varsayılan model. Yerel modelde kullanıcının
+    /// yazdığı ad olduğu gibi kullanılır (boşsa varsayılan).
     public func model(_ id: String?) -> AIModel {
-        models.first { $0.id == id } ?? defaultModel
+        if isLocal {
+            let name = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? defaultModel : AIModel(id: name, label: name)
+        }
+        return models.first { $0.id == id } ?? defaultModel
     }
 
     /// Ücretsiz anahtarla kullanılabilen bir modeli var mı (bugün yalnız Gemini).
@@ -100,6 +120,78 @@ public struct AIModel: Codable, Equatable, Sendable {
             result[key] = models
         }
         return result
+    }
+}
+
+/// Kullanıcının bilgisayarındaki (ya da ağındaki) OpenAI uyumlu model sunucusu: Ollama, LM Studio (Windows'taki
+/// `LocalAiServer` ile aynı). Adres "http://localhost:11434/v1" gibi `/v1` ile biten temel adrestir.
+public struct LocalAIServer: Equatable, Sendable {
+    /// Ollama'nın OpenAI uyumlu adresi (docs.ollama.com/api/openai-compatibility).
+    public static let ollamaURL = "http://localhost:11434/v1"
+    /// LM Studio'nun yerel sunucusu (lmstudio.ai/docs/app/api/endpoints/openai).
+    public static let lmStudioURL = "http://localhost:1234/v1"
+    /// Türkçeyi iyi bilen, sıradan bir bilgisayarda çalışan model.
+    public static let defaultModel = "qwen2.5:7b"
+
+    /// Sondaki "/" atılmış temel adres.
+    public let baseURL: URL
+    public let model: String
+
+    /// Adres ya da model geçersizse nil. "localhost:11434" gibi şemasız adrese "http://" eklenir; yolsuz adrese "/v1"
+    /// eklenir; sona yapıştırılmış "/chat/completions" atılır.
+    public init?(baseURL: String, model: String) {
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, let url = Self.normalize(baseURL) else { return nil }
+        self.baseURL = url
+        self.model = model
+    }
+
+    /// Kullanıcının yazdığı adresin düzeltilmiş hali; geçersizse nil.
+    public static func normalize(_ text: String) -> URL? {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains(" ") else { return nil }
+        if !text.contains("://") { text = "http://" + text }
+        while text.hasSuffix("/") { text.removeLast() }
+        if text.lowercased().hasSuffix("/chat/completions") { text.removeLast("/chat/completions".count) }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard var components = URLComponents(string: text),
+              let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = components.host, !host.isEmpty else { return nil }
+        if components.path.isEmpty { components.path = "/v1" }
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    /// İsteğin gittiği adres.
+    public var chatURL: URL { baseURL.appendingPathComponent("chat/completions") }
+
+    /// Kullanıcıya gösterilen kısa adres: "http://localhost:11434".
+    public var address: String {
+        var components = URLComponents()
+        components.scheme = baseURL.scheme
+        components.host = baseURL.host
+        components.port = baseURL.port
+        return components.string ?? baseURL.absoluteString
+    }
+
+    /// Sunucunun türü; adresin kapısından tahmin edilir (hata iletisinde doğru yönerge için).
+    public enum Kind: Equatable, Sendable { case ollama, lmStudio, other }
+
+    public var kind: Kind {
+        switch baseURL.port {
+        case 11434: .ollama
+        case 1234: .lmStudio
+        default: .other
+        }
+    }
+
+    /// Önbellekteki motor adı: sunucu (makine ve kapı) ve model girer; farklı yerel modellerin çevirileri karışmaz.
+    /// Ör. "local:localhost:11434/qwen2.5:7b".
+    public var engineID: String {
+        let host = baseURL.host?.lowercased() ?? ""
+        let port = baseURL.port.map { ":\($0)" } ?? ""
+        return "\(AIProvider.local.rawValue):\(host)\(port)/\(model)"
     }
 }
 
@@ -178,9 +270,12 @@ public enum AIRequest {
         return parts.joined(separator: "\n\n")
     }
 
-    /// Hizmete giden HTTP isteği.
+    /// Yerel modelin sıcaklığı: çeviri tutarlı olsun, yine de doğal kalsın.
+    public static let localTemperature = 0.2
+
+    /// Hizmete giden HTTP isteği. `server`: yerel modelin sunucusu (verilmezse Ollama'nın varsayılan adresi).
     public static func make(provider: AIProvider, key: String, model: AIModel, sentences: [String],
-                            context: [AIContextLine], game: String? = nil) -> URLRequest {
+                            context: [AIContextLine], game: String? = nil, server: LocalAIServer? = nil) -> URLRequest {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = userMessage(sentences: sentences, context: context, game: game)
         var request: URLRequest
@@ -226,6 +321,20 @@ public enum AIRequest {
             ]
             if let effort = model.effort { body["output_config"] = ["effort": effort] }
             if let thinking = model.thinking { body["thinking"] = ["type": thinking] }
+        case .local:
+            // Ollama ve LM Studio'nun OpenAI uyumlu Chat Completions'ı: POST {adres}/chat/completions. Yalnız iki
+            // sunucunun da tanıdığı alanlar gider ("developer" rolü, reasoning_effort, max_completion_tokens gitmez).
+            // Anahtar isteğe bağlıdır; boşsa Authorization başlığı hiç eklenmez.
+            let server = server ?? LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: model.id)!
+            request = URLRequest(url: server.chatURL)
+            if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+            body = [
+                "model": model.id,
+                "messages": [["role": "system", "content": systemPrompt], ["role": "user", "content": user]],
+                "temperature": localTemperature,
+                "max_tokens": maxOutputTokens,
+                "stream": false,
+            ]
         }
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -243,7 +352,7 @@ public enum AIRequest {
             let candidate = (root["candidates"] as? [[String: Any]])?.first
             let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
             text = parts.filter { ($0["thought"] as? Bool) != true }.compactMap { $0["text"] as? String }.joined()
-        case .openAI:
+        case .openAI, .local:
             let message = ((root["choices"] as? [[String: Any]])?.first?["message"]) as? [String: Any]
             text = message?["content"] as? String
         case .claude:
@@ -257,6 +366,10 @@ public enum AIRequest {
     /// Yanıttaki JSON dizisi; tek cümlede model diziyi unutup düz metin dönerse o metin alınır.
     public static func translations(from text: String, count: Int) throws -> [String] {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Düşünen yerel modeller (ör. Qwen3, DeepSeek-R1) yanıtın başına <think>…</think> koyar; yalnız sonrası alınır.
+        if let end = trimmed.range(of: "</think>", options: .backwards) {
+            trimmed = String(trimmed[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         // ```json … ``` çitini at.
         if trimmed.hasPrefix("```") {
             trimmed = trimmed.split(separator: "\n", omittingEmptySubsequences: false).dropFirst()
@@ -328,6 +441,8 @@ public final class AITranslationCore: @unchecked Sendable {
 
     public let provider: AIProvider
     public let model: AIModel
+    /// Yerel modelin sunucusu; bulut hizmetlerinde nil.
+    public let server: LocalAIServer?
     private let key: String
     private let session: URLSession
     private let cache: TranslationCache
@@ -350,22 +465,39 @@ public final class AITranslationCore: @unchecked Sendable {
     /// `model`: kayıtlı model kimliği; listede yoksa varsayılan model.
     /// `budget`: dakikalık istek hakkı; nil ise modelin uygulama genelindeki ortak hakkı (Google sınırı proje ve model başına
     /// sayar; çeviri hattı yeniden kurulsa da hak sıfırlanmaz). Modelin sınırı yoksa hak da yoktur.
-    public init(provider: AIProvider, key: String, model: String? = nil, session: URLSession = AITranslationCore.makeSession(),
+    /// `server`: yerel modelin sunucusu (yalnız `.local`; verilmezse Ollama'nın varsayılan adresi).
+    /// `session`: verilmezse hizmete uygun zaman aşımıyla kurulur (yerel model daha uzun bekler).
+    public init(provider: AIProvider, key: String, model: String? = nil, server: LocalAIServer? = nil, session: URLSession? = nil,
                 cache: TranslationCache = TranslationCache(), budget: RequestBudget? = nil) {
         self.provider = provider
         self.key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolved = provider.model(model)
         self.model = resolved
-        self.session = session
+        self.server = provider.isLocal ? server ?? LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: resolved.id) : nil
+        self.session = session ?? Self.makeSession(provider: provider)
         self.cache = cache
         self.budget = budget ?? RequestBudget.shared(provider: provider, model: resolved)
     }
 
+    /// Bulut hizmetinde beklenen en uzun süre.
+    public static let timeout: TimeInterval = 5
+    /// Yerel modelde beklenen en uzun süre: bilgisayardaki model buluttan yavaştır ve bir süre boşta kalınca belleğe
+    /// yeniden yüklenir. Yine de sınırlıdır: çeviriler sırayla gider, bir satır bütün sırayı bekletmesin; ekrandan çoktan
+    /// kalkmış satırın geç gelen çevirisini hat zaten göstermez.
+    public static let localTimeout: TimeInterval = 15
+    /// "Bağlantıyı dene"de yerel model için beklenen süre: ilk istek modeli belleğe yükler, uzun sürebilir.
+    public static let localTestTimeout: TimeInterval = 90
+
     /// Kısa zaman aşımı: altyazı birkaç saniye ekranda kalır, geç gelen çeviri işe yaramaz.
-    public static func makeSession() -> URLSession {
+    public static func makeSession(timeout: TimeInterval = AITranslationCore.timeout) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForRequest = timeout
         return URLSession(configuration: configuration)
+    }
+
+    /// Hizmete uygun zaman aşımıyla oturum.
+    public static func makeSession(provider: AIProvider) -> URLSession {
+        makeSession(timeout: provider.isLocal ? localTimeout : timeout)
     }
 
     public func translate(_ text: String, fallback: (String) async throws -> String) async throws -> String {
@@ -451,7 +583,8 @@ public final class AITranslationCore: @unchecked Sendable {
     }
 
     private func request(_ sentences: [String], context: [AIContextLine]) async throws -> [String] {
-        try await Self.send(AIRequest.make(provider: provider, key: key, model: model, sentences: sentences, context: context),
+        try await Self.send(AIRequest.make(provider: provider, key: key, model: model, sentences: sentences, context: context,
+                                           server: server),
                             provider: provider, count: sentences.count, session: session)
     }
 
@@ -475,13 +608,15 @@ public final class AITranslationCore: @unchecked Sendable {
         return try AIRequest.translations(from: AIRequest.text(provider: provider, from: data), count: count)
     }
 
-    /// Ayarlardaki "Dene": örnek bir satırı çevirir; çeviri ya da hatanın türü döner.
-    public static func test(provider: AIProvider, key: String, model: String?, sample: String = AITranslationCore.sample,
-                            session: URLSession = makeSession()) async -> Result<String, AIFailure> {
+    /// Ayarlardaki "Dene" ve "Bağlantıyı dene": örnek bir satırı çevirir; çeviri ya da hatanın türü döner. Yerel modelde
+    /// anahtar isteğe bağlıdır ve model belleğe yüklenirken uzun beklenir.
+    public static func test(provider: AIProvider, key: String, model: String?, server: LocalAIServer? = nil,
+                            sample: String = AITranslationCore.sample, session: URLSession? = nil) async -> Result<String, AIFailure> {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return .failure(.invalidKey) }
+        guard !key.isEmpty || provider.isLocal else { return .failure(.invalidKey) }
+        let session = session ?? makeSession(timeout: provider.isLocal ? localTestTimeout : timeout)
         // Deneme tek istektir; çeviri hattının dakikalık hakkından yemez.
-        let translator = AITranslationCore(provider: provider, key: key, model: model, session: session,
+        let translator = AITranslationCore(provider: provider, key: key, model: model, server: server, session: session,
                                            budget: RequestBudget(perMinute: .max))
         do {
             let result = try await translator.translate(sample) { _ in

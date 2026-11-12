@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- CouchSubs logosu: arkalığı ekran gibi duran, üstünde iki altyazı satırı olan bir kanepe. -->
+  <defs>
+    <linearGradient id="zemin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B2D33"/>
+      <stop offset="1" stop-color="#141518"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#zemin)"/>
+  <g transform="translate(0 -10)">
+    <rect x="282" y="300" width="460" height="320" rx="52" fill="#43464F"/>
+    <g fill="#F5B83D">
+      <rect x="367" y="372" width="290" height="50" rx="25"/>
+      <rect x="414" y="446" width="196" height="50" rx="25"/>
+    </g>
+    <g fill="#F3EEE4">
+      <rect x="262" y="700" width="40" height="44" rx="12"/>
+      <rect x="722" y="700" width="40" height="44" rx="12"/>
+      <rect x="202" y="456" width="112" height="254" rx="56"/>
+      <rect x="710" y="456" width="112" height="254" rx="56"/>
+      <rect x="202" y="584" width="620" height="126" rx="56"/>
+    </g>
+  </g>
+</svg>

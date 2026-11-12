@@ -57,6 +57,30 @@ public class DesignTokensTests
         AssertContrast("accentText", "accentSoft", 4.5);
     }
 
+    /// <summary>Bento renkleri: Pro moru, tonlu zeminler ve yüzey-2 üstündeki yazılar.</summary>
+    [Fact]
+    public void BentoColorsAreReadable()
+    {
+        foreach (var background in new[] { "background", "surface", "proSoft" }) AssertContrast("pro", background, 4.5);
+        AssertContrast("danger", "dangerSoft", 4.5);
+        AssertContrast("success", "successSoft", 4.5);
+        AssertContrast("textPrimary", "surface2", 7);
+        AssertContrast("textSecondary", "surface2", 4.5);
+    }
+
+    /// <summary>Onaylı sadeleştirme: tek köşe ölçeği (16/12/8/6 ve hap), tek yazı ölçeği (13/15/17/22/28),
+    /// kalınlık en çok yarı kalın; parıltı tokenı yok.</summary>
+    [Fact]
+    public void ScalesAreTheApprovedOnes()
+    {
+        Assert.Equal(new SortedSet<double> { 6, 8, 12, 16, 999 }, new SortedSet<double>(tokens.Radius.Values));
+        Assert.All(tokens.Font.Values, font => Assert.Contains(font.Size, new[] { 13.0, 15, 17, 22, 28 }));
+        Assert.All(tokens.Font.Values, font => Assert.Contains(font.Weight, new[] { "regular", "medium", "semibold" }));
+        using var stream = typeof(DesignTokens).Assembly.GetManifestResourceStream("tokens.json")!;
+        using var json = System.Text.Json.JsonDocument.Parse(stream);
+        Assert.False(json.RootElement.TryGetProperty("glow", out _));
+    }
+
     [Fact]
     public void ButtonTextIsReadable()
     {

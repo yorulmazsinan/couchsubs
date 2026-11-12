@@ -68,6 +68,17 @@ final class SubtitleStackTests: XCTestCase {
         XCTAssertEqual(texts(stack, at: 0.5), ["Kapı daha fazla açılmıyor."])
     }
 
+    /// Bilgisayar "yerine koy" dediyse (aynı cümlenin uzamış okuması) önceki çeviri üste çıkmaz; Türkçeleri birbirini
+    /// içermese de. Üstteki daha eski satır yerinde kalır.
+    func testRevisedLineReplacesInsteadOfStacking() {
+        var stack = SubtitleStack()
+        stack.show("Birinci", durationMs: 8000, now: 0)
+        stack.show("Vaktimiz yok", durationMs: 8000, now: 0.5)
+        stack.show("Bunun için vaktimiz yok, evlat.", durationMs: 8000, replaces: true, now: 0.8)
+        XCTAssertEqual(texts(stack, at: 0.8), ["Birinci", "Bunun için vaktimiz yok, evlat."])
+        XCTAssertEqual(stack.lines(at: 0.8).map(\.role), [.previous, .current])
+    }
+
     func testParagraphsNeverStack() {
         var stack = SubtitleStack()
         stack.show("Birinci", durationMs: 8000, now: 0)

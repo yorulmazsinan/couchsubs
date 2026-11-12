@@ -19,6 +19,10 @@ namespace CouchSubs.App.Services;
 /// </summary>
 public static class ScreenRenderer
 {
+    /// <summary>Uygulama penceresinin boyu (tokens.json › size.windowWidth / windowHeight).</summary>
+    private static int Width => (int)DesignTokens.Shared.Size["windowWidth"];
+    private static int Height => (int)DesignTokens.Shared.Size["windowHeight"];
+
     public static void Run(Application app, string folder)
     {
         Directory.CreateDirectory(folder);
@@ -38,12 +42,12 @@ public static class ScreenRenderer
             foreach (var step in Enum.GetValues<OnboardingStep>().Where(s => s != OnboardingStep.Done))
             {
                 var controller = Demo(step);
-                Save(() => new OnboardingView(controller), 640, 720, Path.Combine(folder, $"adim-{(int)step + 1}-{step}-{suffix}.png"));
+                Save(() => new OnboardingView(controller), Width, Height, Path.Combine(folder, $"adim-{(int)step + 1}-{step}-{suffix}.png"));
             }
-            Save(() => new MainView(Demo(OnboardingStep.Done)), 640, 720, Path.Combine(folder, $"ana-{suffix}.png"));
+            Save(() => new MainView(Demo(OnboardingStep.Done)), Width, Height, Path.Combine(folder, $"ana-{suffix}.png"));
             // Uygulamanın gerçek penceresi: XAML'ı (simge dahil) açılıştaki gibi yüklenir.
-            Save(() => Detach(new ShellWindow(Demo(OnboardingStep.Done))), 640, 720, Path.Combine(folder, $"pencere-{suffix}.png"));
-            Save(() => Detach(new SettingsWindow(Demo(OnboardingStep.Done))), 600, 720, Path.Combine(folder, $"ayarlar-{suffix}.png"));
+            Save(() => Detach(new ShellWindow(Demo(OnboardingStep.Done))), Width, Height, Path.Combine(folder, $"pencere-{suffix}.png"));
+            Save(() => Detach(new SettingsWindow(Demo(OnboardingStep.Done))), 1000, Height, Path.Combine(folder, $"ayarlar-{suffix}.png"));
             Save(() => Detach(new AboutWindow()), 460, 640, Path.Combine(folder, $"hakkinda-{suffix}.png"));
         }
         app.Shutdown();
@@ -81,7 +85,7 @@ public static class ScreenRenderer
     {
         // Görüntüye pencere zemini de girsin (içerik saydam zemin üzerinde çizilir).
         var root = new System.Windows.Controls.Border { Child = view };
-        root.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "backgroundBrush");
+        root.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "windowBackgroundBrush");
         root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "textPrimaryBrush");
         var window = new Window
         {

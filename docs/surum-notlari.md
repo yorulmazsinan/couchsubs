@@ -4,8 +4,21 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Oyun paketleri artık çok daha fazla satırı yakalıyor:** Ekrandan okunurken harfleri bozulan satırlar ("båétards", "Uötil" gibi), oyunun parça parça gösterdiği uzun cümleler, bozuk okunan konuşmacı adları ("-GAETANO:") ve Türkçesi İngilizcesiyle aynı olan satırlar (isimler, İtalyanca sözler) de artık hazır çeviriden anında geliyor. Mafia'da oyuncuların paketten kaçan 965 gerçek satırının yarısından fazlası (%10 → %54) artık paketten bulunuyor; yanlış eşleşme 3.000 denemede 1.
-- **Paket çevirileri gözden geçirildi:** Altı paketin hepsi denetlendi, yaklaşık 2.600 satır düzeltildi. GTA V'te bazı görevlerde Türkçe satırların bir satır kayması ve eski çeviriden gelen yanlış eşleşmeler giderildi; yumuşatılmış küfürler aslına uygun hâle getirildi. RDR2'de anlamsız parçalar çıkarıldı, Death Stranding 2'de terimler (BT, Yönetici) ve AC Shadows'ta nadirlik adları tek düzene oturdu.
+- **Yerel yapay zekâ ile çeviri (Ollama, LM Studio):** Ayarlar › Çeviri'de yeni **Yerel model** motoru. Çeviriyi kendi bilgisayarınızda çalışan bir model (ör. `ollama pull qwen2.5:7b`) yapar; anahtar, kota ve ücret yoktur, altyazı metni bilgisayardan çıkmaz. Sunucu adresi ve model adı yazılır, **Bağlantıyı dene** sunucunun açık ve modelin indirilmiş olduğunu denetler. Model yanıt vermezse o satır ücretsiz çeviriyle gelir. Nasıl kurulacağı README'de. İsteyenlere teşekkürler (GitHub #27).
+- **Sadeleştirilmiş görünüm (Mac, Windows, iPhone):** Parıltılar, degradeler ve zemindeki ışıklar kalktı; köşeler ve yazı boyları tek ölçekte, sarı yalnız ana düğmede, seçili şeyde ve canlı Türkçe satırda. Mac'te dar pencerede ana ekranın iki sütunu artık üst üste binmiyor (sığmazsa alt alta diziliyor).
+- **Linux sunucusu (Docker):** CouchSubs artık evdeki bir Ubuntu sunucusunda ekransız çalışabiliyor; kurulum ve denetim aynı ağdaki telefondan ya da bilgisayardan açılan tarayıcı paneliyle yapılıyor. Ayrıntılar `linux/README.md`'de. Katkı: [Ceyhun Yılmaz](https://github.com/xZireaeel).
+- **2017–2018 Samsung TV'ler (deneysel):** CouchSubs TV uygulaması artık Tizen 3.0 ve 4.0'lı Samsung TV'lere de kuruluyor (ör. 2017 MU serisi); önceden yalnız 2019 ve sonrası kabul ediliyordu. Bu TV'lerde CouchSubs kurmadan önce TV'ye özel cihaz profilini de gönderiyor. Bir kullanıcı uygulamayı UE43MU7000U'da elle kurup GTA V ve Mafia'da çeviriyi çalıştırdı; CouchSubs'ın kendi kurulumu bu TV'lerde henüz denenmedi, sonucu bildirirseniz çok yardımcı olur. Bulup bildiren: Kugul.
+- **TV uygulaması 0.9.15: TV kendiliğinden HDMI'ya geçince ipucu.** Samsung TV, Anynet+ (HDMI-CEC) ya da Otomatik Kaynak Değiştirme yüzünden CouchSubs açıldıktan hemen sonra (ya da kısa sürede birkaç kez) kendi HDMI girişine geçerse TV uygulaması yeniden açıldığında ne yapılacağını gösteriyor: Ayarlar › Tüm Ayarlar › Bağlantı › Harici Cihaz Yöneticisi'nde Anynet+ (HDMI-CEC) ve Otomatik Kaynak Değiştirme'yi kapatın. TV'deki uygulama kendiliğinden güncellenir.
+- **Mac uygulaması artık eski Mac'lerde de çalışıyor:** macOS 13 Ventura ve sonrası, Apple Silicon ve Intel işlemcili Mac'ler (önceden yalnız macOS 26 ve Apple Silicon). Apple'ın ücretsiz çevirisi macOS 26 istediği için daha eski macOS'ta oyun paketleri, Gemini (ücretsiz anahtar), DeepL ya da yapay zekâ çevirisi kullanılır; uygulama bunu ana ekranda söyler.
+- **PS5 eşleşmesi artık açıkça gösteriliyor (Mac ve Windows):** Eşleşme başarılı olduğu hâlde fark edilmiyordu (tek işaret ekranın üstünde, kaydırınca görünmeyen yeşil PS5 adıydı) ve kullanıcılar tekrar tekrar Bağlan'a basıyordu. Artık Bağlan'ın hemen altında "PS5 eşleşti: … Devam'a basın." yazıyor, kod alanı temizleniyor, Bağlan yeni kod yazılana kadar kapalı kalıyor ve bir saniye sonra sonraki adıma kendiliğinden geçiliyor. Sony'nin giriş sayfası açılmayanlar (bazı internet sağlayıcıları engelliyor) PSN adımında "Hesap kimliğini elle gir" ile hesap kimliğini (base64, 12 karakter) yazabiliyor.
+
+**beta.31'de gelenler:** Mac'te Samsung TV kurulumundaki "EphemeralKeySet" hatasının düzeltilmesi (Kadir Eker), Mac'te "Çeviriyi durdur"da çökmenin giderilmesi, TV uygulaması 0.9.14 (seslendirme açıkken oyun ekranı kararmıyor; Kadir Eker), aynı cümlenin TV'de üst üste yığılmaması ve hızlı konuşmada satırların kaybolmaması.
+
+**beta.30'da gelenler:** Elden Ring + Shadow of the Erdtree paketi, Windows'ta sayı tuş takımı olmayan klavyeler için Ctrl+Shift+rakam kısayolları, Samsung TV ipuçları (Anynet+ ve güç tuşu), TV uygulaması 0.9.13 (dublaj kapatılınca oyunun sesi geri geliyor), yarım kalan TV kurulumunun bitmiş sayılmaması.
+
+**beta.29'da gelenler:** yeni görünüm (Mac ve Windows'ta iki sütunlu ana ekran, tek pencerede bölümlü Ayarlar), Windows'ta bazı bilgisayarlarda hiç çalışmayan ücretsiz çevirinin düzeltilmesi, GTA V ve RDR2 paketlerinin baştan sona gözden geçirilmesi (yaklaşık 26 bin satır düzeltildi), TV uygulaması 0.9.12.
+
+**beta.28'de gelenler:** oyun paketlerinin ekrandan bozuk okunan ve parça parça gösterilen satırları da yakalaması (Mafia'da kaçan satırların yarısından fazlası artık paketten), altı paketin kalite denetimi (yaklaşık 2.600 satır düzeltildi).
 
 **beta.27'de gelenler:** GTA V, Red Dead Redemption 2, Assassin's Creed Shadows, Death Stranding 2 ve Call of Duty: Modern Warfare (2019) paketleri; Android TV'de siyah ekran için katman modu (TV uygulaması 0.9.11); Windows'ta "Çeviriyi başlat"ta kapanma düzeltmesi; daha açık PS5 durumu; Samsung TV kurulumu düzeltmeleri (sebepli hata mesajları, eski TV uygulamasının kendiliğinden güncellenmesi).
 
@@ -43,7 +56,7 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 | Dosya | Ne için |
 |---|---|
-| `CouchSubs-macos.dmg` | Mac kurulumu (Apple Silicon, macOS 26+) |
+| `CouchSubs-macos.dmg` | Mac kurulumu (macOS 13+, Apple Silicon ve Intel) |
 | `CouchSubs-windows-Setup.exe` | Windows 10 (2004) / 11 kurulumu, 64 bit |
 | `CouchSubs-macos.zip`, `CouchSubs-windows-x64.zip` | Kurulumsuz kullanmak isteyenler için |
 | `com.couchsubs.tv_…_all.ipk` | LG TV uygulaması, elle kurmak isteyenler için |

@@ -21,6 +21,10 @@ public struct SubtitleStabilizer {
     public static let restoreWithinMs = 1500
     /// Çevirisi başarısız olan satır en erken bu kadar sonra yeniden denenir.
     public static let retryAfterMs = 1000
+    /// Çöp gibi okunan satır (`OcrNoise.looksGarbled`) ancak bu kadar süre aynı okununca gider. Altyazılar geçişte üst
+    /// üste solarken yazı tanıma iki satırı karıştırıp birkaç kare aynı çöpü okuyabiliyordu ("- Nat) but, you knpw.
+    /// shit, I m", GTA V, #26); süslü ama gerçekten öyle duran yazı yine çevrilir.
+    public static let garbledStableMs = 700
     private static let historySize = 5
 
     /// Uygulamanın saati: açılıştan bu yana geçen milisaniye.
@@ -33,6 +37,7 @@ public struct SubtitleStabilizer {
 
     private var candidate = ""
     private var candidateCount = 0
+    private var candidateSince = 0
     /// Ekrandaki (gönderilmiş) satır: sadeleştirilmiş satırlar alt alta, ve ilk okunduğu hali.
     private var sent = ""
     private var sentRaw = ""
@@ -73,12 +78,19 @@ public struct SubtitleStabilizer {
         } else {
             candidate = text
             candidateCount = 1
+            candidateSince = time
         }
         // Daktilo efektinde metin büyürken aday değişir; tamamlanıp kararlı olunca gider.
-        // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider.
-        let ready = candidateCount >= stableFrames || Self.endsSentence(rawText)
+        // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider. Çöp gibi okunan satır
+        // (altyazılar geçişte üst üste solarken karışan okuma) beklemeden gitmez; geçiş süresinden uzun kararlıysa gider.
+        let ready = OcrNoise.looksGarbled(rawText)
+            ? candidateCount >= stableFrames && time - candidateSince >= Self.garbledStableMs
+            : candidateCount >= stableFrames || Self.endsSentence(rawText)
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
         guard ready, !Self.isSame(text, sent) else { return .none }
+        // Aynı cümlenin bir iki sözcüğü başka okunmuş, daha iyi olmayan okuması da yeni satır değildir; çevrilseydi TV'de
+        // aynı cümlenin iki üç çevirisi üst üste dururdu. Daha çok sözcük okuyan okuma yeniden çevrilir (TV yerine koyar).
+        if !sentRaw.isEmpty, TextMatch.isWorseReread(rawText, of: sentRaw) { return .none }
 
         // Az önce kalkan satır geri geldiyse okuma birkaç kare kaçmıştır: çevirisi yeniden gösterilir, yeniden çevrilmez.
         if let index = history.lastIndex(where: { time - $0.leftAt <= Self.restoreWithinMs && Self.isSame(text, $0.rows) }) {

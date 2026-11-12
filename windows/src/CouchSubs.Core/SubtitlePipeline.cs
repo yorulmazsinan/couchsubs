@@ -9,23 +9,32 @@ namespace CouchSubs.Core;
 public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator translator, ISubtitleSender sender,
     ReadScheduler? scheduler = null, Func<long>? clock = null)
 {
-    /// <summary>Satır ekrandan bundan uzun süre önce kalktıysa geç gelen çevirisi gösterilmez (sonraki sahnenin üstüne düşmesin).</summary>
-    public const int LateResultMs = 1000;
+    /// <summary>
+    /// Satır ekrandan bundan uzun süre önce kalktıysa geç gelen çevirisi gösterilmez (sonraki sahnenin üstüne düşmesin).
+    /// Yavaş çeviride (ücretsiz motor, zayıf işlemci) art arda gelen satırların çevirisi satır kalktıktan bir iki saniye
+    /// sonra gelir; sınır 1 sn iken üç satırlık konuşmanın yalnız ilki görünüyordu.
+    /// </summary>
+    public const int LateResultMs = 2500;
+    /// <summary>Çeviri sürerken sırada en çok bu kadar satır bekler; daha eskisi atlanır (kuyruk konuşma hızıyla büyümesin).</summary>
+    public const int MaxWaiting = 2;
     private const int RememberedPairs = 8;
 
     private readonly object gate = new();
     private readonly Func<long> now = clock ?? DefaultClock;
     /// <summary>Varsayılanı her kareyi okur; uygulama gereksiz okumaları atlayan planı verir.</summary>
     private readonly ReadScheduler schedule = scheduler ?? ReadScheduler.Always();
-    private readonly SubtitleStabilizer stabilizer = new(clock: clock ?? DefaultClock);
+    private readonly SubtitleStabilizer stabilizer = new(clock: clock ?? DefaultClock, cleanFastPathOnly: translator.Prefetches);
+    /// <summary>En son önceden çevirisi başlatılan okuma; aynı metin her karede yeniden istenmez.</summary>
+    private string lastPrefetched = "";
     /// <summary>
-    /// Her çeviri isteği sıra numarası alır. Aynı anda yalnız bir çeviri sürer, bir tane de sırada bekler (en yenisi):
-    /// hızlı konuşmada araya giren satırlar atlanır, kuyruk konuşma hızıyla büyümez.
+    /// Her çeviri isteği sıra numarası alır. Aynı anda yalnız bir çeviri sürer, en çok <see cref="MaxWaiting"/> satır sırada
+    /// bekler: hızlı konuşmada satırlar sırayla çevrilir, kuyruk konuşma hızıyla büyümez. Bekleyen satırın uzamış ya da
+    /// düzelmiş okuması gelirse eskisi sıradan çıkar.
     /// </summary>
     private int lastRequested;
     private int lastShown;
     private Request? inFlight;
-    private Request? pending;
+    private readonly List<Request> waiting = [];
     private CancellationTokenSource? inFlightCancel;
     private Task pump = Task.CompletedTask;
     /// <summary>Şu an oyun ekranında duran satırın numarası (bölge boşalınca null).</summary>
@@ -47,7 +56,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         public int Session { get; } = session;
         /// <summary>Satırın ekrandan kalktığı an (hâlâ ekrandaysa null).</summary>
         public long? LeftAt { get; set; }
+        /// <summary>Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez.</summary>
+        public bool Superseded { get; set; }
     }
+
+    /// <summary>Süren ve sırada bekleyen istekler.</summary>
+    private IEnumerable<Request> Requests => inFlight is null ? waiting : waiting.Prepend(inFlight);
 
     public (string Source, string Translation)? LastPair { get; private set; }
     /// <summary>Son gösterilen çevirinin oyundaki altyazısının karedeki yeri.</summary>
@@ -109,6 +123,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             var action = stabilizer.Feed(reading.Text);
             var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
+            // Satır henüz doğrulanmadı: çevirisi şimdiden başlasın, doğrulanınca beklemeden gösterilsin.
+            if (action.Kind == StabilizerKind.None && translator.Prefetches && reading.Text.Trim() is { Length: >= 6 } early && early != lastPrefetched)
+            {
+                lastPrefetched = early;
+                translator.Prefetch(early);
+            }
             switch (action.Kind)
             {
                 case StabilizerKind.Clear:
@@ -134,8 +154,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     {
         if (lineOnScreen is not { } number) return;
         var time = now();
-        foreach (var request in new[] { inFlight, pending })
-            if (request is not null && request.Number == number) request.LeftAt ??= time;
+        foreach (var request in Requests)
+            if (request.Number == number) request.LeftAt ??= time;
         lineOnScreen = null;
     }
 
@@ -146,23 +166,35 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         lineOnScreen = request.Number;
         if (PackLookup?.Invoke(source) is { } packed) return ShowPacked(request, packed);
         var missed = PackMissed;
-        // Çeviri sürüyorsa yeni satır sıraya girer; sıradaki eski satır atlanır (artık ekranda değil).
-        if (inFlight is not null)
-        {
-            pending = request;
-        }
-        else
+        if (inFlight is not { } current)
         {
             inFlight = request;
             pump = Pump(request);
         }
+        else
+        {
+            // Aynı cümlenin eski okuması sırada bekliyorsa çıkar; sıra dolduysa en eski bekleyen atlanır.
+            waiting.RemoveAll(w => TextMatch.IsRevision(source, w.Source));
+            waiting.Add(request);
+            if (waiting.Count > MaxWaiting) waiting.RemoveRange(0, waiting.Count - MaxWaiting);
+            // Süren çeviri bu cümlenin yarım okumasınınsa (daktilo efekti) beklenmez: bırakılır, tamamı hemen çevrilir.
+            // İptal en sonda: sıra iptalle aynı iş parçacığında ilerleyebilir, yeni satır o zaman sırada olmalı.
+            if (!current.Superseded && current.Session == session && TextMatch.IsGrowth(source, current.Source))
+            {
+                current.Superseded = true;
+                inFlightCancel?.Cancel();
+            }
+        }
         return missed is null ? null : () => missed(source);
     }
+
+    /// <summary>Satır az önce gösterilenin uzamış ya da düzelmiş okuması mı (TV yerine koyar, üstüne yığmaz).</summary>
+    private bool RevisesShown(string source) => LastPair is { } shown && TextMatch.IsRevision(source, shown.Source);
 
     /// <summary>Paketteki Türkçe hemen gösterilir; süren çevirinin sonucu (eski satır) artık gösterilmez.</summary>
     private Action? ShowPacked(Request request, PackMatch packed)
     {
-        pending = null;
+        waiting.Clear();
         PackHits++;
         var source = request.Source;
         var translated = packed.Text;
@@ -170,7 +202,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         Remember(request.Number, source, shouldSend ? translated : null);
         if (!shouldSend) return null;
         lastShown = request.Number;
-        sender.SendSubtitle(translated, 15000, request.Box);
+        sender.SendSubtitle(translated, 15000, request.Box, replaces: RevisesShown(source));
         LastPair = (source, translated);
         LastBox = request.Box;
         LastOrigin = "paket";
@@ -192,15 +224,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             var (number, _, translation) = pairs[index];
             lineOnScreen = number;
             if (translation is null) return null;
-            sender.SendSubtitle(translation, 15000, box);
+            sender.SendSubtitle(translation, 15000, box, replaces: RevisesShown(source));
             LastPair = (source, translation);
             LastBox = box;
             return null;
         }
         // Çevirisi henüz gelmediyse istek sürüyordur; satır yeniden ekranda sayılır.
-        foreach (var request in new[] { inFlight, pending })
+        foreach (var request in Requests)
         {
-            if (request is null || request.Source != source || request.Session != session) continue;
+            if (request.Source != source || request.Session != session || request.Superseded) continue;
             request.LeftAt = null;
             lineOnScreen = request.Number;
             return null;
@@ -224,10 +256,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             {
                 inFlightCancel = null;
                 cancel.Dispose();
-                var next = pending;
-                pending = null;
                 // Ekrandan çoktan kalkmış satır çevrilmez; çevirisi zaten gösterilmeyecekti.
-                if (next is not null && (next.Session != session || next.LeftAt is { } left && now() - left > LateResultMs)) next = null;
+                var time = now();
+                waiting.RemoveAll(w => w.Session != session || w.LeftAt is { } left && time - left > LateResultMs);
+                var next = waiting.Count > 0 ? waiting[0] : null;
+                if (next is not null) waiting.RemoveAt(0);
                 inFlight = next;
                 if (next is null) return;
                 request = next;
@@ -262,7 +295,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             lock (gate)
             {
-                if (request.Session != session) return;
+                // Yerine uzamış okuması gelen satırın bırakılan çevirisi hata sayılmaz.
+                if (request.Session != session || request.Superseded) return;
                 // Model eksikse ya da geçici bir hata olduysa satır ekranda kaldıkça (saniyede en çok bir kez) yeniden denenir.
                 LastError = (error as TranslatorException)?.Status;
                 if (request.Number == lineOnScreen) stabilizer.ForgetSent();
@@ -283,13 +317,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             if (request.Session != session) return;
             var shouldSend = stabilizer.ShouldSend(source, translated);
             Remember(request.Number, source, shouldSend ? translated : null);
-            if (request.Number <= lastShown || !shouldSend) return;
+            if (request.Number <= lastShown || !shouldSend || request.Superseded) return;
             var onScreen = request.Number == lineOnScreen;
             // Satır ekrandan çoktan kalktıysa çevirisi sonraki sahnenin üstüne düşmesin.
             if (!onScreen && request.LeftAt is { } left && now() - left > LateResultMs) return;
             lastShown = request.Number;
             // Satır hâlâ ekrandaysa kalkınca silinir; kalktıysa okunacak kadar gösterilir.
-            sender.SendSubtitle(translated, onScreen ? 15000 : ReadingTime(translated), request.Box);
+            sender.SendSubtitle(translated, onScreen ? 15000 : ReadingTime(translated), request.Box, replaces: RevisesShown(source));
             LastPair = (source, translated);
             LastBox = request.Box;
             LastOrigin = "motor";
@@ -312,7 +346,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             session++;
             lineOnScreen = null;
-            pending = null;
+            waiting.Clear();
             inFlightCancel?.Cancel();
             pairs.Clear();
             lastReading = Reading.Empty;

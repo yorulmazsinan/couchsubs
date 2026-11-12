@@ -96,11 +96,30 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // Listede olmayan model varsayılana döndüyse ayar hemen kaydedilir.
         if (settings != loaded) settingsStore.Save(settings);
         var paired = tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
-        var ready = accountId is not null && console is not null && (paired || store.Load<bool>(StoreKeys.SetupComplete));
-        step = ready ? OnboardingStep.Done : OnboardingStep.Welcome;
+        var ready = SetupIsComplete(store, accountId is not null && console is not null, paired);
+        // Yarım kalan kurulum (ör. TV uygulaması kurulurken kapatıldı) PS5 kayıtlıysa TV adımından sürer.
+        step = ready ? OnboardingStep.Done : accountId is not null && console is not null ? OnboardingStep.Tv : OnboardingStep.Welcome;
         AttachServer();
         StartPacksAndPool();
+        services.Translation.EngineFailure += OnEngineFailure;
     }
+
+    /// <summary>
+    /// Kurulum bitmiş mi. "Bitti" yalnız sihirbazın sonuna gelinince kaydedilir (TV adımı başarıyla geçildi ya da
+    /// "TV'm yok" seçildi). Sihirbaz başlarken false yazılır: Samsung'da TV eşleşip uygulama kurulurken CouchSubs
+    /// kapatılırsa eşleşme kayıtlı olsa da kurulum bitmiş sayılmaz. Hiç kayıt yoksa (beta.25'ten önce kurulmuş)
+    /// eskisi gibi eşleşmiş TV yeter ve "bitti" kaydedilir.
+    /// </summary>
+    internal static bool SetupIsComplete(IAppStore store, bool consoleReady, bool paired)
+    {
+        var saved = store.Load<bool?>(StoreKeys.SetupComplete);
+        var ready = consoleReady && (saved ?? paired);
+        if (saved is null) store.Save(StoreKeys.SetupComplete, ready);
+        return ready;
+    }
+
+    /// <summary>Ücretsiz çeviri motoru açılamadı (arka planda, ısınma sırasında da olabilir): ana ekran uyarısı çıksın.</summary>
+    private void OnEngineFailure() => post(RefreshTranslatorStatus);
 
     /// <summary>Sunucunun TV sayısını, altyazı yerini ve bilgisayar ekranına giden olayları bağlar (sunucu yeniden kurulunca da).</summary>
     private void AttachServer()
@@ -189,7 +208,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.SharePool != value.SharePool) services.Pool?.SetEnabled(value.SharePool);
             var translationChanged = old.OnlineTranslation != value.OnlineTranslation || old.OnlineEngine != value.OnlineEngine
                                      || old.GeminiModel != value.GeminiModel || old.OpenAiModel != value.OpenAiModel
-                                     || old.ClaudeModel != value.ClaudeModel;
+                                     || old.ClaudeModel != value.ClaudeModel
+                                     || old.LocalAiBaseUrl != value.LocalAiBaseUrl || old.LocalAiModel != value.LocalAiModel;
             if (translationChanged && !isRunning) RefreshTranslatorStatus();
             if (isRunning && (old.SourceLanguage != value.SourceLanguage || old.TargetLanguage != value.TargetLanguage || translationChanged))
             {
@@ -286,7 +306,53 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         ClearFirewallPrompt();
         console = registered;
         store.Save(StoreKeys.Console, registered);
-        Changed(nameof(Console), nameof(CanAdvance), nameof(Ps5StatusText));
+        // Günlükte eşleşmenin kaydedildiği de görünsün (kullanıcılar başarıyı fark etmeyip yeniden bağlanıyordu).
+        RemotePlayLog.Note($"PS5 kaydı kaydedildi ({registered.Host}): {registered.Name}");
+        Changed(nameof(Console), nameof(CanAdvance), nameof(Ps5StatusText), nameof(PairedText));
+    }
+
+    /// <summary>PS5 adımında, eşleşme bitince Bağlan düğmesinin altında gösterilen başarı iletisi; eşleşme yoksa boş.</summary>
+    public string PairedText => console is null
+        ? ""
+        : text.Format("PS5 paired: %@ (%@). Press Continue.", string.IsNullOrEmpty(console.Name) ? "PS5" : console.Name, console.Host);
+
+    /// <summary>
+    /// Eşleşmeden kısa süre sonra kendiliğinden sonraki adıma geçilir. Kullanıcı bu arada Geri'ye bastıysa ya da
+    /// adım değiştiyse hiçbir şey yapılmaz (yalnız PS5 adımından ilerler).
+    /// </summary>
+    public void ContinueAfterPairing()
+    {
+        if (step == OnboardingStep.Console && console is not null) Advance();
+    }
+
+    /// <summary>
+    /// "Hesap kimliğini elle gir": Sony girişi açılamayan kullanıcılar (ör. servis sağlayıcı engelliyor) PSN hesap
+    /// kimliğini base64 olarak (8 bayt, 12 karakter) yazar. Web girişiyle aynı biçimde saklanır. Geçersizse false.
+    /// </summary>
+    public bool UseManualAccountId(string value)
+    {
+        if (ParseAccountId(value) is not { } id) return false;
+        RemotePlayLog.Note("PSN hesap kimliği elle girildi");
+        accountId = id;
+        store.Save(StoreKeys.AccountId, id);
+        Changed(nameof(HasAccount), nameof(CanAdvance));
+        return true;
+    }
+
+    /// <summary>Base64 PSN hesap kimliği: boşluklar atılır, çözülen değer tam 8 bayt olmalı (12 karakter).</summary>
+    public static byte[]? ParseAccountId(string? value)
+    {
+        var trimmed = string.Concat((value ?? "").Where(c => !char.IsWhiteSpace(c)));
+        if (trimmed.Length != 12) return null;
+        try
+        {
+            var bytes = Convert.FromBase64String(trimmed);
+            return bytes.Length == 8 ? bytes : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Kullanıcıya gösterilen hata; destek bildirimleri teşhis edilebilsin diye PS5'in kodu da yazılır.</summary>
@@ -773,7 +839,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (toTv)
             {
                 server.SendStyle(settings.Style);
-                server.SendSubtitle(result.Translation, milliseconds, result.Box, result.Structured);
+                server.SendSubtitle(result.Translation, milliseconds, result.Box, paragraphs: result.Structured);
             }
             post(() =>
             {
@@ -1056,6 +1122,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        services.Translation.EngineFailure -= OnEngineFailure;
         Stop();
         server.Dispose();
         poolTimer?.Dispose();
@@ -1131,13 +1198,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private ITextTranslator MakeTranslator()
     {
         var local = MakeLocalTranslator();
-        var fallback = local is UnavailableTranslator ? null : local;
+        // Açılamayan ücretsiz motor yedek olamaz; çevrimiçi motor çeviremeyince satır yeniden denenir.
+        var fallback = local is UnavailableTranslator || services.Translation.EngineFailed ? null : local;
         var engine = settings.OnlineEngine;
-        if (!OnlineTranslationActive || engine.StoreKey() is not { } storeKey || store.Load<string>(storeKey) is not { Length: > 0 } key)
-            return local;
-        var online = engine.Provider() is { } provider
-            ? services.MakeAiTranslator(provider, key, provider.Model(settings.ModelFor(provider)).Id, fallback)
-            : services.MakeOnlineTranslator(key, fallback);
+        if (!OnlineTranslationActive || engine.StoreKey() is not { } storeKey) return local;
+        ITextTranslator? online;
+        if (engine == TranslationEngine.Local && settings.LocalAiServer is { } server)
+        {
+            // Yerel modelin anahtarı isteğe bağlıdır; önbellekte sunucu ve model ayrı tutulur.
+            online = services.MakeLocalAiTranslator(server, store.Load<string>(storeKey) ?? "", fallback);
+        }
+        else
+        {
+            if (store.Load<string>(storeKey) is not { Length: > 0 } key) return local;
+            online = engine.Provider() is { } provider
+                ? services.MakeAiTranslator(provider, key, provider.Model(settings.ModelFor(provider)).Id, fallback)
+                : services.MakeOnlineTranslator(key, fallback);
+        }
         if (online is null) return local;
         // Hizmet çeviremeyince ana ekranda uyarı çıkar; düzelince kalkar.
         if (online is IOnlineTranslator reporting) reporting.FailureChanged += state => post(() => OnlineIssue = state);
@@ -1149,12 +1226,32 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var translation = services.Translation;
         var (source, target) = (settings.SourceLanguage, settings.TargetLanguage);
         if (!translation.IsSupported(source, target)) return new UnavailableTranslator(TranslatorStatus.Unsupported);
-        return translation.IsInstalled(source, target) ? translation.Create(source, target) : new UnavailableTranslator(TranslatorStatus.NeedsDownload);
+        if (!translation.IsInstalled(source, target)) return new UnavailableTranslator(TranslatorStatus.NeedsDownload);
+        if (translation.EngineFailed) return new UnavailableTranslator(TranslatorStatus.EngineFailed);
+        try
+        {
+            return translation.Create(source, target);
+        }
+        catch (Exception error)
+        {
+            // Çeviriyi başlatma, motor açılamadı diye yarıda kalmasın: oyun paketleri ve çevrimiçi motorlar çalışır,
+            // ana ekranda uyarı çıkar.
+            RemotePlayLog.Note($"Ücretsiz çeviri motoru açılamadı: {error.GetType().Name}: {error.Message}");
+            if (!OnlineTranslationActive) post(() => TranslatorStatus = TranslatorStatus.EngineFailed);
+            return new UnavailableTranslator(TranslatorStatus.EngineFailed);
+        }
     }
 
-    /// <summary>Çevrimiçi çeviri yalnız İngilizce→Türkçe için ve seçili motorun anahtarı kayıtlıysa açılır.</summary>
+    /// <summary>Çevrimiçi çeviri yalnız İngilizce→Türkçe için ve seçili motor hazırsa açılır.</summary>
     public bool OnlineTranslationActive =>
-        settings.OnlineTranslation && settings.SourceLanguage == "en" && settings.TargetLanguage == "tr" && HasKey(settings.OnlineEngine);
+        settings.OnlineTranslation && settings.SourceLanguage == "en" && settings.TargetLanguage == "tr" && IsReady(settings.OnlineEngine);
+
+    /// <summary>
+    /// Motor kullanılabilir mi: bulut motorlarında anahtar kayıtlıdır; yerel modelde anahtar gerekmez, adres ve model adı
+    /// geçerli olmalıdır. Sunucu kapalıysa satırlar ücretsiz çeviriyle gelir ve ana ekranda uyarı çıkar.
+    /// </summary>
+    public bool IsReady(TranslationEngine engine) =>
+        engine == TranslationEngine.Local ? settings.LocalAiServer is not null : HasKey(engine);
 
     /// <summary>Bu motorun anahtarı kayıtlı mı (anahtarın kendisi arayüze hiç dönmez).</summary>
     public bool HasKey(TranslationEngine engine) => engine.StoreKey() is { } storeKey && store.Load<string>(storeKey) is { Length: > 0 };
@@ -1197,10 +1294,32 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             ? services.TestAiKeyAsync(provider, key, provider.Model(settings.ModelFor(provider)).Id)
             : Task.FromResult(new AiTestResult(OnlineKeyState.Invalid));
 
+    /// <summary>
+    /// Ayarlardaki "Bağlantıyı dene": yerel model sunucusuna örnek satırı gönderir. <paramref name="typed"/> yazıldıysa o,
+    /// yoksa kayıtlı anahtar kullanılır; yazılan anahtar sunucu kabul ettiyse şifreli depoya yazılır. Adres geçersizse
+    /// sunucuya ulaşılamadı sayılır.
+    /// </summary>
+    public async Task<AiTestResult> TestLocalAiAsync(string typed = "")
+    {
+        if (settings.LocalAiServer is not { } server) return new AiTestResult(OnlineKeyState.Unreachable);
+        typed = typed.Trim();
+        var key = typed.Length > 0 ? typed : store.Load<string>(StoreKeys.LocalAiKey) ?? "";
+        var result = await services.TestLocalAiAsync(server, key);
+        if (typed.Length > 0 && result.State is OnlineKeyState.Valid or OnlineKeyState.QuotaExceeded or OnlineKeyState.ModelRejected)
+            SaveKey(TranslationEngine.Local, typed);
+        return result;
+    }
+
     public void RemoveKey(TranslationEngine engine)
     {
         if (engine.StoreKey() is not { } storeKey) return;
         store.Remove(storeKey);
+        if (engine == TranslationEngine.Local)
+        {
+            // Yerel modelin anahtarı isteğe bağlıdır: anahtarsız çeviri sürer, hat anahtarsız yeniden kurulur.
+            if (settings.Engine == engine && isRunning) MakePipeline();
+            return;
+        }
         Changed(nameof(HasDeepLKey), nameof(UsesFreeGemini));
         if (settings.Engine == engine) Settings = settings.WithEngine(TranslationEngine.Free);
         RefreshTranslatorStatus();
@@ -1223,8 +1342,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var translation = services.Translation;
         TranslatorStatus = OnlineTranslationActive ? TranslatorStatus.Ready
             : !translation.IsSupported(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Unsupported
-            : translation.IsInstalled(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.Ready
-            : TranslatorStatus.NeedsDownload;
+            : !translation.IsInstalled(settings.SourceLanguage, settings.TargetLanguage) ? TranslatorStatus.NeedsDownload
+            : translation.EngineFailed ? TranslatorStatus.EngineFailed
+            : TranslatorStatus.Ready;
     }
 
     /// <summary>PS5'in adresi değişti: sonraki açılışlar yeni adresle başlasın.</summary>

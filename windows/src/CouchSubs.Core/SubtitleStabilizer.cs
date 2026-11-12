@@ -19,8 +19,14 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
 /// Kararlar okuma hızına değil saate bağlıdır (<paramref name="clock"/>: milisaniye; testlerde sahtesi verilir).
 /// </summary>
+/// <param name="cleanFastPathOnly">
+/// Noktalamayla biten satır ilk karede gönderilir. Açıksa bu yalnız temiz okumada olur (<see cref="LooksClean"/>):
+/// altyazı belirirken okunan bozuk kare ("f fe &amp; ie want it.") <paramref name="stableFrames"/> kare doğrulanmayı
+/// bekler. Satır ilk okunan hâliyle gönderilir (çeviri ilk karede önceden başlatıldıysa aynı metin olsun diye).
+/// Temiz satırın da beklemesi kısa görünen satırları hiç göstermiyordu.
+/// </param>
 public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrames = 2,
-    int clearAfterMs = SubtitleStabilizer.ClearAfterMs, Func<long>? clock = null)
+    int clearAfterMs = SubtitleStabilizer.ClearAfterMs, Func<long>? clock = null, bool cleanFastPathOnly = false)
 {
     /// <summary>Bölge bu kadar boş kalırsa altyazı kalkmış sayılır; parlak arka planda kaçan birkaç okuma silmez.</summary>
     public const int ClearAfterMs = 800;
@@ -28,11 +34,45 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     public const int RestoreWithinMs = 1500;
     /// <summary>Çevirisi başarısız olan satır en erken bu kadar sonra yeniden denenir.</summary>
     public const int RetryAfterMs = 1000;
+    /// <summary>
+    /// Çöp gibi okunan satır (<see cref="OcrNoise.LooksGarbled"/>) ancak bu kadar süre aynı okununca gider. Altyazılar
+    /// geçişte üst üste solarken yazı tanıma iki satırı karıştırıp birkaç kare aynı çöpü okuyabiliyordu ("- Nat) but, you
+    /// knpw. shit, I m", GTA V, #26); süslü ama gerçekten öyle duran yazı yine çevrilir.
+    /// </summary>
+    public const int GarbledStableMs = 700;
     private const int HistorySize = 5;
 
     private readonly Func<long> now = clock ?? (() => Environment.TickCount64);
+
+    /// <summary>İngilizcede tek başına geçen kısa sözcükler; bunların dışındaki 1–2 harflik parçalar OCR çöpüdür.</summary>
+    private static readonly HashSet<string> ShortWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "i", "o", "an", "am", "as", "at", "be", "by", "do", "go", "ha", "he", "hi", "if", "in", "is", "it", "me", "mr",
+        "ms", "mrs", "dr", "st", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "tv", "uh", "um", "up", "us", "we", "ya", "ye",
+    };
+
+    /// <summary>
+    /// Okumada çöp parça yok mu: her parça (noktalama ayıklanınca) harf, rakam, kesme ve tireden oluşur; 1–2 harflik
+    /// parçalar bilinen kısa sözcüklerdir. Yanlış "kirli" sayılan satır yalnız bir kare gecikir.
+    /// </summary>
+    public static bool LooksClean(string raw)
+    {
+        var tokens = raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0) return false;
+        foreach (var token in tokens)
+        {
+            var word = token.Trim('.', ',', '!', '?', '…', ':', ';', '"', '\'', '“', '”', '‘', '’', '(', ')');
+            if (word.Length == 0) return false;
+            if (!word.All(c => char.IsLetterOrDigit(c) || c is '\'' or '’' or '-')) return false;
+            if (word.Length <= 2 && word.All(char.IsLetter) && !ShortWords.Contains(word)) return false;
+        }
+        return true;
+    }
+
     private string candidate = "";
+    private string candidateRaw = "";
     private int candidateCount;
+    private long candidateSince;
     /// <summary>Ekrandaki (gönderilmiş) satır: sadeleştirilmiş satırlar alt alta, ve ilk okunduğu hali.</summary>
     private string sent = "";
     private string sentRaw = "";
@@ -69,13 +109,22 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         else
         {
             candidate = text;
+            candidateRaw = rawText.Trim();
             candidateCount = 1;
+            candidateSince = time;
         }
         // Daktilo efektinde metin büyürken aday değişir; tamamlanıp kararlı olunca gider.
-        // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider.
-        var ready = candidateCount >= stableFrames || EndsSentence(rawText);
+        // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider. Çöp gibi okunan satır
+        // (altyazılar geçişte üst üste solarken karışan okuma) beklemeden gitmez; geçiş süresinden uzun kararlıysa gider.
+        // cleanFastPathOnly (Linux, Tesseract): noktalamayla bitse bile çöp parçalı okuma ilk karede gitmez.
+        var ready = OcrNoise.LooksGarbled(rawText)
+            ? candidateCount >= stableFrames && time - candidateSince >= GarbledStableMs
+            : candidateCount >= stableFrames || (EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
         if (!ready || IsSame(text, sent)) return StabilizerAction.None;
+        // Aynı cümlenin bir iki sözcüğü başka okunmuş, daha iyi olmayan okuması da yeni satır değildir; çevrilseydi TV'de
+        // aynı cümlenin iki üç çevirisi üst üste dururdu. Daha çok sözcük okuyan okuma yeniden çevrilir (TV yerine koyar).
+        if (sentRaw.Length > 0 && TextMatch.IsWorseReread(rawText, sentRaw)) return StabilizerAction.None;
 
         // Az önce kalkan satır geri geldiyse okuma birkaç kare kaçmıştır: çevirisi yeniden gösterilir, yeniden çevrilmez.
         var index = history.FindLastIndex(h => time - h.LeftAt <= RestoreWithinMs && IsSame(text, h.Rows));
@@ -92,7 +141,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
 
         LeaveScreen(time);
         forgotten = "";
-        sentRaw = rawText.Trim();
+        sentRaw = cleanFastPathOnly ? candidateRaw : rawText.Trim();
         sent = TextMatch.NormalizeRows(sentRaw);
         return StabilizerAction.Translate(sentRaw);
     }

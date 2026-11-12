@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.People}" Title="{t:T 'A second PSN account'}"
+    <c:StepLayout Title="{t:T 'A second PSN account'}"
                   Message="{t:T 'CouchSubs watches the game through Remote Play. If it used your own account, the PS5 would turn off your controller. With a second account you keep playing undisturbed.'}">
         <StackPanel>
             <c:NumberedRow Number="1" Text="{t:T 'Create a free account at playstation.com with a different email address.'}" />

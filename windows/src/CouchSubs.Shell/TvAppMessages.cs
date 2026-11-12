@@ -8,6 +8,14 @@ namespace CouchSubs.Shell;
 /// <summary>TV uygulaması kurulamayınca gösterilen metin: ne yapılacağı, ayrıntı ve (Samsung'da) gönderilecek günlük.</summary>
 public static class TvAppMessages
 {
+    /// <summary>Samsung'u tam yeniden başlatma: güç tuşu yaklaşık 2 saniye basılı tutulur.</summary>
+    public const string RestartTip =
+        "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.";
+
+    /// <summary>TV uygulaması açıkken Samsung kendi kendine başka kaynağa geçiyorsa (HDMI-CEC).</summary>
+    public const string SourceSwitchTip =
+        "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.";
+
     /// <param name="samsungLog">Samsung kurulum günlüğünün yolu; Samsung hatalarında metnin sonunda yazar.</param>
     public static string Problem(TvAppState state, TvBrand brand, Localizer text, string samsungLog)
     {
@@ -19,6 +27,12 @@ public static class TvAppMessages
         if (!samsung) return result;
         if (error is DevModeError.InstallFailed or DevModeError.CertificateRejected)
             result += "\n\n" + text["If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again."];
+        // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
+        if (error is DevModeError.Unreachable or DevModeError.InstallFailed or DevModeError.CertificateRejected)
+            result += "\n\n" + text[RestartTip];
+        // TV kurulum sırasında HDMI-CEC yüzünden başka kaynağa geçerse bağlantı kopar.
+        if (error is DevModeError.ConnectionLost)
+            result += "\n\n" + text[SourceSwitchTip];
         return result + "\n\n" + text.Format("If this keeps happening, send us this file: %@", samsungLog);
     }
 
@@ -52,7 +66,7 @@ public static class TvAppMessages
             "The TV did not accept this computer. In the TV's Developer Mode window, check that Host PC IP is this computer's address, then restart the TV.",
         DevModeError.Unreachable => "The TV did not respond. Make sure it is on and on the same network.",
         DevModeError.ToolMissing => "Windows' OpenSSH Client is missing. Add it in Settings › System › Optional features and try again.",
-        DevModeError.TooOld => "This Samsung TV is too old for the CouchSubs TV app (2019 models and later are supported).",
+        DevModeError.TooOld => "This Samsung TV is too old for the CouchSubs TV app (2017 models and later are supported).",
         DevModeError.SignInFailed => "Samsung sign-in did not complete. Try again and finish signing in on the page that opens.",
         DevModeError.CertificateFailed => "Samsung did not issue the signing certificate. Try again in a few minutes.",
         DevModeError.NotApproved => "Debugging was not allowed on the TV. Try again and choose Allow on the TV.",

@@ -5,7 +5,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Characters}" Title="{t:T 'Better translation (free)'}"
+    <c:StepLayout Title="{t:T 'Better translation (free)'}"
                   Message="{t:T 'The free translation works without the internet but often sounds stiff. Google\'s Gemini translates much more naturally, and a free Google key is enough.'}">
         <StackPanel>
             <TextBlock x:Name="Ready" Text="{t:T 'Gemini is ready. Subtitles will be translated with Gemini.'}" Style="{StaticResource DoneText}"

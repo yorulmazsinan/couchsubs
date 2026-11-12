@@ -138,6 +138,48 @@ public class SamsungTests
         Assert.Contains("index.html", names);
     }
 
+    /// <summary>
+    /// İkinci ve sonraki kurulumun yolu: kayıtlı profil okunur, günlüğe yazılır, geçerliliğine bakılır ve paket onunla
+    /// imzalanır. macOS EphemeralKeySet'i desteklemez (PlatformNotSupportedException); bu yolda o bayrakla yükleme
+    /// kalırsa Mac'te her Samsung güncellemesi "This platform does not support loading with EphemeralKeySet" diye
+    /// durur. Test macOS'ta çalıştırılınca eski kodda bu hatayla düşer.
+    /// </summary>
+    [Fact]
+    public async Task SavedProfileIsReadAndUsedForSigningOnThisPlatform()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            using var key = RSA.Create(2048);
+            const string password = "0123456789ABCDEF";
+            await File.WriteAllBytesAsync(Path.Combine(dir, "author.p12"), SamsungCertificates.Pkcs12(SelfSigned(key, "CN=Yazar"), key, password));
+            await File.WriteAllBytesAsync(Path.Combine(dir, "distributor.p12"), SamsungCertificates.Pkcs12(SelfSigned(key, "CN=Dagitici"), key, password));
+            await File.WriteAllTextAsync(Path.Combine(dir, "password.txt"), password);
+            await File.WriteAllTextAsync(Path.Combine(dir, "duid.txt"), "CJCHTFRXVXQDQ");
+
+            var profile = SigningProfile.In(dir);
+            if (OperatingSystem.IsMacOS()) Assert.NotEqual(X509KeyStorageFlags.EphemeralKeySet, SigningProfile.LoadFlags);
+            Assert.StartsWith("geçerli", profile.Describe(DateTime.UtcNow, "CJCHTFRXVXQDQ"));
+            Assert.True(profile.IsValid(DateTime.UtcNow));
+            Assert.True(profile.IsFor("CJCHTFRXVXQDQ"));
+
+            var wgt = Path.Combine(dir, "app.wgt");
+            using (var zip = ZipFile.Open(wgt, ZipArchiveMode.Create))
+            {
+                await using var entry = zip.CreateEntry("config.xml").Open();
+                await entry.WriteAsync("<widget/>"u8.ToArray());
+            }
+            await TizenWgtSigner.ReSignWgtWithCertsInPlace(wgt, profile.AuthorP12, profile.DistributorP12, profile.Password);
+            using var signed = ZipFile.OpenRead(wgt);
+            Assert.NotNull(signed.GetEntry("author-signature.xml"));
+            Assert.NotNull(signed.GetEntry("signature1.xml"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     [Fact]
     public void ProfileWithoutFilesIsNotUsable()
     {

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- SPDX-License-Identifier: AGPL-3.0-only -->
+  <!-- Linux sunucusu: ekransız çalışır, kurulum ve denetim tarayıcıdan açılan panelle yapılır. Windows uygulamasının
+       arayüz dışındaki bütün katmanlarını (Core, RemotePlay, Translation, Shell, TvInstall) olduğu gibi kullanır. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>couchsubs</AssemblyName>
+    <RootNamespace>CouchSubs.Linux</RootNamespace>
+    <Version>0.1.0</Version>
+    <Company>Enmera</Company>
+    <Product>CouchSubs</Product>
+    <Copyright>AGPL-3.0. Uses chiaki-ng (AGPL-3.0).</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Panel\index.html" LogicalName="panel.html" />
+    <EmbeddedResource Include="..\..\design\logo.svg" LogicalName="logo.svg" />
+  </ItemGroup>
+
+  <!-- TV uygulaması paketleri (scripts/package-tv.sh ve diğerleri üretir); geliştirici modu açık TV'ye kurulur. -->
+  <ItemGroup>
+    <Content Include="..\..\dist\tv-app\*.ipk;..\..\dist\tv-app\*.wgt;..\..\dist\tv-app\*.apk" Link="tv-app\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\windows\src\CouchSubs.Core\CouchSubs.Core.csproj" />
+    <ProjectReference Include="..\..\windows\src\CouchSubs.Translation\CouchSubs.Translation.csproj" />
+    <ProjectReference Include="..\..\windows\src\CouchSubs.RemotePlay\CouchSubs.RemotePlay.csproj" />
+    <ProjectReference Include="..\..\windows\src\CouchSubs.Shell\CouchSubs.Shell.csproj" />
+    <ProjectReference Include="..\..\windows\src\CouchSubs.TvInstall\CouchSubs.TvInstall.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CouchSubs.Linux.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="13.8.0" />
+  </ItemGroup>
+
+</Project>

@@ -6,245 +6,320 @@
         xmlns:s="clr-namespace:CouchSubs.App.Views.Steps"
         xmlns:t="clr-namespace:CouchSubs.App.Theme"
         xmlns:local="clr-namespace:CouchSubs.App.Views"
-        Title="{t:T 'Settings'}" Width="780" Height="880" MinWidth="560" MinHeight="480" ResizeMode="CanResize" ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner" Background="{DynamicResource backgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
-    <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="{t:T 'Settings'}" Style="{StaticResource TitleText}" Margin="32,24,32,12" />
-        <Border DockPanel.Dock="Bottom" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,1,0,0" Padding="32,16">
-            <Button Content="{t:T 'Done'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Click="OnDone" />
-        </Border>
-        <ScrollViewer VerticalScrollBarVisibility="Visible">
-            <StackPanel Margin="32,0,32,24">
-                <local:SubtitleOutputCard x:Name="OutputCard" Detailed="True" Margin="0,0,0,16" />
-                <!-- Görünüm ayarları bilgisayar ekranındaki pencereye de uygulanır. -->
-                <c:Card x:Name="StyleCard" Title="{t:T 'On the TV'}">
-                    <StackPanel>
-                        <TextBlock Text="{t:T 'Text size'}" Margin="0,0,0,8" />
-                        <Grid Margin="0,0,0,16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="40" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{t:T 'Small'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                            <!-- Sürüklerken TV'de örnek altyazı görünür; boyut doğrudan ekranda ayarlanır. -->
-                            <Slider x:Name="TextSize" Grid.Column="1" Minimum="16" Maximum="90" SmallChange="1" LargeChange="4" TickFrequency="1"
-                                    IsSnapToTickEnabled="True" Margin="12,0" IsMoveToPointEnabled="True"
-                                    ValueChanged="OnTextSize" PreviewMouseDown="OnPositionStart" />
-                            <TextBlock Grid.Column="2" Text="{t:T 'Large'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                            <TextBlock x:Name="TextSizeValue" Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                        </Grid>
-                        <TextBlock Text="{t:T 'Placement'}" Margin="0,0,0,8" />
-                        <ComboBox x:Name="Placement" SelectionChanged="OnPlacement" Margin="0,0,0,8">
-                            <ComboBoxItem Content="{t:T 'Over the English subtitle'}" Tag="Cover" />
-                            <ComboBoxItem Content="{t:T 'Above the English subtitle'}" Tag="Above" />
-                            <ComboBoxItem Content="{t:T 'Below the English subtitle'}" Tag="Below" />
-                            <ComboBoxItem Content="{t:T 'Fixed position'}" Tag="Fixed" />
-                        </ComboBox>
-                        <TextBlock x:Name="FollowsHint" Style="{StaticResource HintText}" Margin="0,0,0,16"
-                                   Text="{t:T 'The translation follows where the game shows its own subtitle.'}" />
-                        <StackPanel x:Name="FixedPanel">
-                        <TextBlock Text="{t:T 'Position on screen'}" Margin="0,0,0,8" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{t:T 'Bottom'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                            <!-- Sürüklerken TV'de örnek altyazı görünür; böylece yer doğrudan ekranda ayarlanır. -->
-                            <Slider x:Name="Position" Grid.Column="1" Minimum="0" Maximum="85" Margin="12,0" IsMoveToPointEnabled="True"
-                                    ValueChanged="OnPosition" PreviewMouseDown="OnPositionStart" />
-                            <TextBlock Grid.Column="2" Text="{t:T 'Top'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                        </Grid>
-                        <TextBlock Style="{StaticResource HintText}" Margin="0,12,0,16"
-                                   Text="{t:T 'In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.'}" />
-                        </StackPanel>
-                        <TextBlock Text="{t:T 'Background'}" Margin="0,0,0,8" />
-                        <Grid Margin="0,0,0,16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{t:T 'None'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                            <Slider x:Name="BackgroundOpacity" Grid.Column="1" Minimum="0" Maximum="100" Margin="12,0" IsMoveToPointEnabled="True"
-                                    ValueChanged="OnBackground" PreviewMouseDown="OnPositionStart" />
-                            <TextBlock Grid.Column="2" Text="{t:T 'Solid'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
-                        </Grid>
-                        <CheckBox x:Name="Bold" Content="{t:T 'Bold text'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,16"
-                                  Checked="OnBold" Unchecked="OnBold" />
-                        <TextBlock Text="{t:T 'Text color'}" Margin="0,0,0,8" />
-                        <ComboBox x:Name="TextColor" SelectionChanged="OnTextColor" Margin="0,0,0,16">
-                            <ComboBoxItem Content="{t:T 'White'}" Tag="White" />
-                            <ComboBoxItem Content="{t:T 'Yellow'}" Tag="Yellow" />
-                        </ComboBox>
-                        <!-- Yalnız Android TV: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor. -->
-                        <StackPanel x:Name="DisplayModePanel" Visibility="Collapsed">
-                            <TextBlock Text="{t:T 'Picture mode'}" Margin="0,0,0,8" />
-                            <ComboBox x:Name="DisplayMode" SelectionChanged="OnDisplayMode" Margin="0,0,0,8">
-                                <ComboBoxItem Content="{t:T 'Inside the app'}" Tag="InApp" />
-                                <ComboBoxItem Content="{t:T 'Overlay (for a black screen)'}" Tag="Overlay" />
+        Title="{t:T 'Settings'}" Width="1000" Height="720" MinWidth="860" MinHeight="560" ResizeMode="CanResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" Background="{DynamicResource windowBackgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
+    <!-- Kenar çubuğunda bölümler, sağda seçili bölüm (Mac'teki Ayarlar ile aynı düzen). -->
+    <Grid Margin="{DynamicResource pad.screen}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TabControl x:Name="Sections" Style="{StaticResource SidebarTabs}" Tag="{t:T 'Settings'}">
+            <TabItem Header="{t:T 'Subtitle appearance'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Subtitle appearance'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <local:SubtitleOutputCard x:Name="OutputCard" Detailed="True" Margin="0,0,0,16" />
+                    <!-- Görünüm ayarları bilgisayar ekranındaki pencereye de uygulanır. -->
+                    <c:Card x:Name="StyleCard" Title="{t:T 'On the TV'}">
+                        <StackPanel>
+                            <TextBlock Text="{t:T 'Text size'}" Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{t:T 'Small'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                                <!-- Sürüklerken TV'de örnek altyazı görünür; boyut doğrudan ekranda ayarlanır. -->
+                                <Slider x:Name="TextSize" Grid.Column="1" Minimum="16" Maximum="90" SmallChange="1" LargeChange="4" TickFrequency="1"
+                                        IsSnapToTickEnabled="True" Margin="12,0" IsMoveToPointEnabled="True"
+                                        ValueChanged="OnTextSize" PreviewMouseDown="OnPositionStart" />
+                                <TextBlock Grid.Column="2" Text="{t:T 'Large'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="TextSizeValue" Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="{t:T 'Placement'}" Margin="0,0,0,8" />
+                            <ComboBox x:Name="Placement" SelectionChanged="OnPlacement" Margin="0,0,0,8">
+                                <ComboBoxItem Content="{t:T 'Over the English subtitle'}" Tag="Cover" />
+                                <ComboBoxItem Content="{t:T 'Above the English subtitle'}" Tag="Above" />
+                                <ComboBoxItem Content="{t:T 'Below the English subtitle'}" Tag="Below" />
+                                <ComboBoxItem Content="{t:T 'Fixed position'}" Tag="Fixed" />
                             </ComboBox>
-                            <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,16"
-                                       Text="{t:T 'If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If the picture never arrives, the TV app switches to Overlay by itself.'}" />
-                        </StackPanel>
-                        <Button Content="{t:T 'Send test subtitle'}" Click="OnTest" />
-                    </StackPanel>
-                </c:Card>
-
-                <local:DubbingCard x:Name="Dubbing" Margin="0,16,0,0" />
-
-                <c:Card x:Name="LanguageCard" Title="{t:T 'Language'}" Margin="0,16,0,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{t:T 'Game language'}" VerticalAlignment="Center" Margin="0,0,16,0" />
-                        <ComboBox x:Name="GameLanguage" SelectionChanged="OnLanguage" />
-                    </StackPanel>
-                </c:Card>
-
-                <!-- Çeviri motoru: ücretsiz cihaz üstü model ya da kullanıcının kendi anahtarıyla DeepL, Gemini, OpenAI, Claude (Mac ile aynı düzen) -->
-                <c:Card Title="{t:T 'Translation'}" Margin="0,16,0,0">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <TextBlock Text="{t:T 'Translation engine'}" VerticalAlignment="Center" Margin="0,0,16,0" />
-                            <ComboBox x:Name="Engine" SelectionChanged="OnEngine" MinWidth="240">
-                                <ComboBoxItem Content="{t:T 'Free (on this computer)'}" Tag="Free" />
-                                <ComboBoxItem Content="DeepL" Tag="DeepL" />
-                                <ComboBoxItem Content="Google Gemini" Tag="Gemini" />
-                                <ComboBoxItem Content="OpenAI" Tag="OpenAi" />
-                                <ComboBoxItem Content="Anthropic Claude" Tag="Claude" />
+                            <TextBlock x:Name="FollowsHint" Style="{StaticResource HintText}" Margin="0,0,0,16"
+                                       Text="{t:T 'The translation follows where the game shows its own subtitle.'}" />
+                            <StackPanel x:Name="FixedPanel">
+                            <TextBlock Text="{t:T 'Position on screen'}" Margin="0,0,0,8" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{t:T 'Bottom'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                                <!-- Sürüklerken TV'de örnek altyazı görünür; böylece yer doğrudan ekranda ayarlanır. -->
+                                <Slider x:Name="Position" Grid.Column="1" Minimum="0" Maximum="85" Margin="12,0" IsMoveToPointEnabled="True"
+                                        ValueChanged="OnPosition" PreviewMouseDown="OnPositionStart" />
+                                <TextBlock Grid.Column="2" Text="{t:T 'Top'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource HintText}" Margin="0,12,0,16"
+                                       Text="{t:T 'In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.'}" />
+                            </StackPanel>
+                            <TextBlock Text="{t:T 'Background'}" Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{t:T 'None'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                                <Slider x:Name="BackgroundOpacity" Grid.Column="1" Minimum="0" Maximum="100" Margin="12,0" IsMoveToPointEnabled="True"
+                                        ValueChanged="OnBackground" PreviewMouseDown="OnPositionStart" />
+                                <TextBlock Grid.Column="2" Text="{t:T 'Solid'}" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                            </Grid>
+                            <CheckBox x:Name="Bold" Content="{t:T 'Bold text'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,16"
+                                      Checked="OnBold" Unchecked="OnBold" />
+                            <TextBlock Text="{t:T 'Text color'}" Margin="0,0,0,8" />
+                            <ComboBox x:Name="TextColor" SelectionChanged="OnTextColor" Margin="0,0,0,16">
+                                <ComboBoxItem Content="{t:T 'White'}" Tag="White" />
+                                <ComboBoxItem Content="{t:T 'Yellow'}" Tag="Yellow" />
                             </ComboBox>
-                        </StackPanel>
-                        <TextBlock x:Name="EngineHint" Style="{StaticResource HintText}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="EnglishOnlyHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"
-                                   Text="{t:T 'Online engines translate English games only. For other game languages the free translation is used.'}" />
-                        <!-- Ücretsiz çeviri zayıf kalıyor; ücretsiz Gemini anahtarı en kolay iyileştirme (Mac ile aynı). -->
-                        <DockPanel x:Name="FreeGeminiOffer" Margin="0,12,0,0">
-                            <Button DockPanel.Dock="Right" Content="{t:T 'Get a free key'}" Margin="12,0,0,0" Click="OnFreeGemini" />
-                            <TextBlock Text="{t:T 'For better translation, get a free Gemini key.'}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                        </DockPanel>
-                        <StackPanel x:Name="FreeGeminiNotes" Visibility="Collapsed">
-                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                       Text="{t:T 'Subtitle text is sent to Google. With a free key, Google may use it to improve its products, and people at Google may read it. Only the game\'s subtitles are sent.'}" />
-                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                       Text="{t:T 'The free key has a per-minute limit. When it is reached, that line is translated by the free translation.'}" />
-                        </StackPanel>
-                        <StackPanel x:Name="KeyPanel" Margin="0,12,0,0">
-                            <!-- Model adı yazılamaz; yalnız ortak listedeki modeller seçilir. -->
-                            <StackPanel x:Name="ModelPanel" Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="{t:T 'Model'}" VerticalAlignment="Center" Margin="0,0,16,0" />
-                                <ComboBox x:Name="ModelChoice" MinWidth="240" SelectionChanged="OnModel" />
+                            <!-- Yalnız Android TV: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor. -->
+                            <StackPanel x:Name="DisplayModePanel" Visibility="Collapsed">
+                                <TextBlock Text="{t:T 'Picture mode'}" Margin="0,0,0,8" />
+                                <ComboBox x:Name="DisplayMode" SelectionChanged="OnDisplayMode" Margin="0,0,0,8">
+                                    <ComboBoxItem Content="{t:T 'Inside the app'}" Tag="InApp" />
+                                    <ComboBoxItem Content="{t:T 'Overlay (for a black screen)'}" Tag="Overlay" />
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,16"
+                                           Text="{t:T 'If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If the picture never arrives, the TV app switches to Overlay by itself.'}" />
                             </StackPanel>
-                            <StackPanel x:Name="NewKey">
-                                <StackPanel Orientation="Horizontal">
-                                    <PasswordBox x:Name="KeyBox" Width="320" VerticalContentAlignment="Center" />
-                                    <Button x:Name="KeySave" Content="{t:T 'Save and test'}" Margin="12,0,0,0" Click="OnKeySave" />
-                                </StackPanel>
-                                <TextBlock x:Name="NoKeyHint" Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                           Text="{t:T 'Add your key to start. Until then the free translation is used.'}" />
-                                <TextBlock Margin="0,8,0,0">
-                                    <Hyperlink x:Name="KeyLink" RequestNavigate="OnLink"><Run x:Name="KeyLinkText" /></Hyperlink>
-                                </TextBlock>
+                            <Button Content="{t:T 'Send test subtitle'}" Click="OnTest" />
+                        </StackPanel>
+                    </c:Card>
+                    <local:DubbingCard x:Name="Dubbing" Margin="0,16,0,0" />
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'Translation'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Translation'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="{t:T 'Translation engine'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <ComboBox x:Name="Engine" SelectionChanged="OnEngine" MinWidth="240">
+                                    <ComboBoxItem Content="{t:T 'Free (on this computer)'}" Tag="Free" />
+                                    <ComboBoxItem Content="DeepL" Tag="DeepL" />
+                                    <ComboBoxItem Content="Google Gemini" Tag="Gemini" />
+                                    <ComboBoxItem Content="OpenAI" Tag="OpenAi" />
+                                    <ComboBoxItem Content="Anthropic Claude" Tag="Claude" />
+                                    <ComboBoxItem Content="{t:T 'Local model (Ollama, LM Studio)'}" Tag="Local" />
+                                </ComboBox>
                             </StackPanel>
-                            <DockPanel x:Name="SavedKey" LastChildFill="False">
-                                <TextBlock Text="{t:T 'Key saved'}" Style="{StaticResource DoneText}" VerticalAlignment="Center" />
-                                <Button DockPanel.Dock="Right" Content="{t:T 'Remove key'}" Margin="8,0,0,0" Click="OnKeyRemove" />
-                                <Button x:Name="KeyTest" DockPanel.Dock="Right" Content="{t:T 'Test'}" Click="OnKeyTest" />
+                            <TextBlock x:Name="EngineHint" Style="{StaticResource HintText}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="EnglishOnlyHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"
+                                       Text="{t:T 'Online engines translate English games only. For other game languages the free translation is used.'}" />
+                            <!-- Ücretsiz çeviri zayıf kalıyor; ücretsiz Gemini anahtarı en kolay iyileştirme (Mac ile aynı). -->
+                            <DockPanel x:Name="FreeGeminiOffer" Margin="0,12,0,0">
+                                <Button DockPanel.Dock="Right" Content="{t:T 'Get a free key'}" Margin="12,0,0,0" Click="OnFreeGemini" />
+                                <TextBlock Text="{t:T 'For better translation, get a free Gemini key.'}" TextWrapping="Wrap" VerticalAlignment="Center" />
                             </DockPanel>
-                            <TextBlock x:Name="KeyStatus" Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-                            <TextBlock x:Name="KeyError" Style="{StaticResource ErrorText}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-                        </StackPanel>
-                        <!-- Oyun paketleri (hazır Türkçe çeviriler) ve ortak havuz (Mac ile aynı düzen) -->
-                        <Separator Margin="0,16,0,16" />
-                        <TextBlock Text="{t:T 'Game packs'}" Style="{StaticResource HeadlineText}" Margin="0,0,0,12" />
-                        <CheckBox x:Name="GamePacks" Content="{t:T 'Use game packs'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,8"
-                                  Checked="OnGamePacks" Unchecked="OnGamePacks" />
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'Ready-made Turkish translations for some games. A line found in a pack appears at once, without the translation engine.'}" />
-                        <ItemsControl x:Name="PackList" Margin="0,8,0,0" />
-                        <Separator Margin="0,16,0,16" />
-                        <CheckBox x:Name="SharePool" Content="{t:T 'Send the English subtitles read to the shared pool'}" Foreground="{DynamicResource textPrimaryBrush}"
-                                  Margin="0,0,0,8" Checked="OnSharePool" Unchecked="OnSharePool" />
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'Only the game\'s English text is sent, anonymously. It is used to make better Turkish translations for everyone.'}" />
-                    </StackPanel>
-                </c:Card>
-
-                <c:Card Title="{t:T 'Subtitle area'}" Margin="0,16,0,0">
-                    <StackPanel>
-                        <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton Content="{t:T 'Subtitles'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="0" IsChecked="True" />
-                                <RadioButton Content="{t:T 'Area 1 (Num 1)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
-                                <RadioButton Content="{t:T 'Area 2 (Num 2)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
-                                <RadioButton Content="{t:T 'Area 3 (Num 3)'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
+                            <StackPanel x:Name="FreeGeminiNotes" Visibility="Collapsed">
+                                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="{t:T 'Subtitle text is sent to Google. With a free key, Google may use it to improve its products, and people at Google may read it. Only the game\'s subtitles are sent.'}" />
+                                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="{t:T 'The free key has a per-minute limit. When it is reached, that line is translated by the free translation.'}" />
                             </StackPanel>
+                            <StackPanel x:Name="KeyPanel" Margin="0,12,0,0">
+                                <!-- Model adı yazılamaz; yalnız ortak listedeki modeller seçilir. -->
+                                <StackPanel x:Name="ModelPanel" Orientation="Horizontal" Margin="0,0,0,12">
+                                    <TextBlock Text="{t:T 'Model'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                    <ComboBox x:Name="ModelChoice" MinWidth="240" SelectionChanged="OnModel" />
+                                </StackPanel>
+                                <!-- Yerel model (Ollama, LM Studio): adres ve model adı alandan çıkınca kaydedilir (Mac ile aynı). -->
+                                <StackPanel x:Name="LocalPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Text="{t:T 'Server address'}" VerticalAlignment="Center" Margin="0,0,16,8" />
+                                        <TextBox x:Name="LocalAddress" Grid.Column="1" Margin="0,0,0,8" VerticalContentAlignment="Center"
+                                                 LostFocus="OnLocalChanged" KeyDown="OnLocalKey" />
+                                        <TextBlock Grid.Row="1" Text="{t:T 'Model name'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                        <TextBox x:Name="LocalModel" Grid.Row="1" Grid.Column="1" VerticalContentAlignment="Center"
+                                                 LostFocus="OnLocalChanged" KeyDown="OnLocalKey" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Content="{t:T 'Use Ollama'}" Click="OnUseOllama" />
+                                        <Button Content="{t:T 'Use LM Studio'}" Margin="8,0,0,0" Click="OnUseLmStudio" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="LocalAddressError" Style="{StaticResource ErrorText}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Text="{t:T 'Type the model name as the server shows it. In Ollama, download it first: ollama pull qwen2.5:7b (downloaded models: ollama list). In LM Studio, load the model and start the local server.'}" />
+                                    <TextBlock x:Name="LocalKeyLabel" Text="{t:T 'API key (optional)'}" Margin="0,12,0,0" />
+                                </StackPanel>
+                                <StackPanel x:Name="NewKey">
+                                    <StackPanel Orientation="Horizontal">
+                                        <PasswordBox x:Name="KeyBox" Width="320" VerticalContentAlignment="Center" />
+                                        <Button x:Name="KeySave" Content="{t:T 'Save and test'}" Margin="12,0,0,0" Click="OnKeySave" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="NoKeyHint" Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Text="{t:T 'Add your key to start. Until then the free translation is used.'}" />
+                                    <TextBlock Margin="0,8,0,0">
+                                        <Hyperlink x:Name="KeyLink" RequestNavigate="OnLink"><Run x:Name="KeyLinkText" /></Hyperlink>
+                                    </TextBlock>
+                                </StackPanel>
+                                <DockPanel x:Name="SavedKey" LastChildFill="False">
+                                    <TextBlock Text="{t:T 'Key saved'}" Style="{StaticResource DoneText}" VerticalAlignment="Center" />
+                                    <Button DockPanel.Dock="Right" Content="{t:T 'Remove key'}" Margin="8,0,0,0" Click="OnKeyRemove" />
+                                    <Button x:Name="KeyTest" DockPanel.Dock="Right" Content="{t:T 'Test'}" Click="OnKeyTest" />
+                                </DockPanel>
+                                <TextBlock x:Name="KeyStatus" Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                                <TextBlock x:Name="KeyError" Style="{StaticResource ErrorText}" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                            </StackPanel>
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'Game packs'}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="{t:T 'Game packs'}" Style="{StaticResource DisplayText}" />
+                        <Border x:Name="PacksPill" Style="{StaticResource Pill}" HorizontalAlignment="Right" Visibility="Collapsed">
+                            <TextBlock x:Name="PacksPillText" VerticalAlignment="Center" />
                         </Border>
-                        <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
-                                  Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
-                        <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
-                            <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
-                            <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
+                    </Grid>
+                    <TextBlock Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                               Text="{t:T 'Ready-made Turkish translations for some games. A line found in a pack appears at once, without the translation engine.'}" />
+                    <ItemsControl x:Name="PackList" Margin="-8,0,-8,8" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" VerticalAlignment="Top" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <!-- Oyun paketleri ve ortak havuz anahtarları: liste karosunda satırlar, araları ince ayraç. -->
+                    <c:Card Padding="20,4">
+                        <StackPanel>
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="GamePacks" DockPanel.Dock="Right" Margin="16,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Use game packs'}" Checked="OnGamePacks" Unchecked="OnGamePacks" />
+                                <TextBlock Text="{t:T 'Use game packs'}" Style="{StaticResource HeadlineText}" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <Separator Margin="0" />
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="SharePool" DockPanel.Dock="Right" Margin="16,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Send the English subtitles read to the shared pool'}" Checked="OnSharePool" Unchecked="OnSharePool" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{t:T 'Send the English subtitles read to the shared pool'}" Style="{StaticResource HeadlineText}" />
+                                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="{t:T 'Only the game\'s English text is sent, anonymously. It is used to make better Turkish translations for everyone.'}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'Language'}" Visibility="{Binding Visibility, ElementName=LanguageCard}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Language'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card x:Name="LanguageCard">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{t:T 'Game language'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <ComboBox x:Name="GameLanguage" SelectionChanged="OnLanguage" />
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'Subtitle area'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Subtitle area'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card>
+                        <StackPanel>
+                            <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
-                                    <RadioButton x:Name="ExtraTv" Content="{t:T 'On the TV'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Tv" />
-                                    <RadioButton x:Name="ExtraPc" Content="{t:T 'On the PC'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Pc" />
-                                    <RadioButton x:Name="ExtraBoth" Content="{t:T 'On both'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Both" />
+                                    <RadioButton Content="{t:T 'Subtitles'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="0" IsChecked="True" />
+                                    <RadioButton Content="{t:T 'Area 1'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="1" />
+                                    <RadioButton Content="{t:T 'Area 2'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="2" />
+                                    <RadioButton Content="{t:T 'Area 3'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
-                        <c:RegionPicker x:Name="Region" RegionChanged="OnRegion" />
-                        <Button Content="{t:T 'Refresh picture (Num 8)'}" Click="OnRefresh" HorizontalAlignment="Left" Margin="0,12,0,0" />
-                        <TextBlock x:Name="AreaHint" Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
-                </c:Card>
-
-                <c:Card Title="{t:T 'Translate the screen (Num 9)'}" Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                               Text="{t:T 'Press Num 9 while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.'}" />
-                </c:Card>
-
-                <c:Card Title="{t:T 'OBS overlay'}" Margin="0,16,0,0">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="{t:T 'Streaming with a capture card? In OBS add a Browser source with this address (width 1920, height 1080). The Turkish subtitles appear over the game on your screen and on the stream.'}" />
-                        <DockPanel>
-                            <Button x:Name="ObsCopy" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="12,0,0,0" Click="OnObsCopy" />
-                            <TextBox x:Name="ObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
-                        </DockPanel>
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
-                                   Text="{t:T 'If OBS runs on another computer, use the network address of this PC instead of localhost. The overlay only shows subtitles while the translation is running.'}" />
-                    </StackPanel>
-                </c:Card>
-
-                <c:Card Title="{t:T 'Free area (Num 5)'}" Margin="0,16,0,0">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                   Text="{t:T 'Press Num 5 while playing: the picture freezes on the PC, drag over any part of it to translate that part once. Esc closes.'}" />
-                        <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
-                        <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="FreeTv" Content="{t:T 'On the TV'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Tv" />
-                                <RadioButton x:Name="FreePc" Content="{t:T 'On the PC'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Pc" />
-                                <RadioButton x:Name="FreeBoth" Content="{t:T 'On both'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Both" />
+                            <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
+                                      Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
+                            <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
+                                <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
+                                <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="ExtraTv" Content="{t:T 'On the TV'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Tv" />
+                                        <RadioButton x:Name="ExtraPc" Content="{t:T 'On the PC'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Pc" />
+                                        <RadioButton x:Name="ExtraBoth" Content="{t:T 'On both'}" GroupName="extraTarget" Style="{StaticResource SegmentButton}" Checked="OnExtraTarget" Tag="Both" />
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
-                        </Border>
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="{t:T 'Num 0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
+                            <c:RegionPicker x:Name="Region" RegionChanged="OnRegion" />
+                            <Button Content="{t:T 'Refresh picture (Num 8 or Ctrl+Shift+8)'}" Click="OnRefresh" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            <TextBlock x:Name="AreaHint" Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </c:Card>
+                    <c:Card Title="{t:T 'Translate the screen (Num 9 or Ctrl+Shift+9)'}" Margin="0,16,0,0">
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'The Num shortcuts work only while translating, so the number keys stay free in other apps. Keep Num Lock on.'}" />
-                    </StackPanel>
-                </c:Card>
-
-                <s:TvAppCard Margin="0,16,0,0" />
-
-                <c:Card Margin="0,16,0,0">
-                    <Grid>
-                        <Button Content="{t:T 'About CouchSubs'}" Click="OnAbout" />
-                        <Button Content="{t:T 'Set up again…'}" HorizontalAlignment="Right" Foreground="{DynamicResource dangerBrush}" Click="OnReset" />
-                    </Grid>
-                </c:Card>
-            </StackPanel>
-        </ScrollViewer>
-    </DockPanel>
+                                   Text="{t:T 'Press Num 9 or Ctrl+Shift+9 while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.'}" />
+                    </c:Card>
+                    <c:Card Title="{t:T 'Free area (Num 5 or Ctrl+Shift+5)'}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                                       Text="{t:T 'Press Num 5 or Ctrl+Shift+5 while playing: the picture freezes on the PC, drag over any part of it to translate that part once. Esc closes.'}" />
+                            <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
+                            <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="FreeTv" Content="{t:T 'On the TV'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Tv" />
+                                    <RadioButton x:Name="FreePc" Content="{t:T 'On the PC'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Pc" />
+                                    <RadioButton x:Name="FreeBoth" Content="{t:T 'On both'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Both" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Text="{t:T 'Num 0 or Ctrl+Shift+0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
+                                       Text="{t:T 'The shortcuts work only while translating, so the number keys stay free in other apps. Keep Num Lock on for the Num keys. No numeric keypad? Hold Ctrl+Shift and press the number keys above the letters.'}" />
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'OBS overlay'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'OBS overlay'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                                       Text="{t:T 'Streaming with a capture card? In OBS add a Browser source with this address (width 1920, height 1080). The Turkish subtitles appear over the game on your screen and on the stream.'}" />
+                            <DockPanel>
+                                <Button x:Name="ObsCopy" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="12,0,0,0" Click="OnObsCopy" />
+                                <TextBox x:Name="ObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'If OBS runs on another computer, use the network address of this PC instead of localhost. The overlay only shows subtitles while the translation is running.'}" />
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="{t:T 'About CouchSubs'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'About CouchSubs'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <s:TvAppCard Margin="0,0,0,16" />
+                    <c:Card>
+                        <Grid>
+                            <Button Content="{t:T 'About CouchSubs'}" Click="OnAbout" />
+                            <Button Content="{t:T 'Set up again…'}" HorizontalAlignment="Right" Foreground="{DynamicResource dangerBrush}" Click="OnReset" />
+                        </Grid>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+        <Button Grid.Row="1" Content="{t:T 'Done'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right" Margin="0,16,0,0"
+                MinWidth="120" IsDefault="True" IsCancel="True" Click="OnDone" />
+    </Grid>
 </Window>

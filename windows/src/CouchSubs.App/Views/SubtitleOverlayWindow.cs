@@ -128,7 +128,7 @@ public sealed partial class SubtitleOverlayWindow : Window
 
     private void OnEvent(SubtitleEvent e) => Guard("altyazı", () =>
     {
-        if (e.Kind == SubtitleEventKind.Subtitle) stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now);
+        if (e.Kind == SubtitleEventKind.Subtitle) stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
         else stack.Clear(Now);
         Refresh();
     });

@@ -4,13 +4,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Person}" Title="{t:T 'Sign in with the second account'}"
+    <c:StepLayout Title="{t:T 'Sign in with the second account'}"
                   Message="{t:T 'Sign in to PlayStation Network with the second account you just created. Your password goes directly to Sony; CouchSubs only keeps the account ID.'}">
         <StackPanel>
             <TextBlock Text="{t:T 'Signed in'}" Style="{StaticResource DoneText}" Margin="0,0,0,12"
                        Visibility="{Binding HasAccount, Converter={StaticResource VisibleIf}}" />
             <Button x:Name="SignIn" Click="OnSignIn" />
             <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,12,0,0" />
+            <!-- Sony girişi açılmıyorsa (ör. servis sağlayıcı engelliyor) hesap kimliği elle yazılır. -->
+            <Button x:Name="ShowManual" Content="{t:T 'Enter account ID manually'}" Style="{StaticResource SecondaryButton}"
+                    HorizontalAlignment="Left" Margin="0,20,0,0" Click="OnShowManual" />
+            <StackPanel x:Name="Manual" Margin="0,20,0,0" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,6"
+                           Text="{t:T 'If Sony\'s sign-in page does not open (some internet providers block it), enter the second account\'s PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).'}" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="ManualId" Width="240" MaxLength="24" PreviewKeyDown="OnManualKeyDown" />
+                    <Button Content="{t:T 'Save'}" Style="{StaticResource PrimaryButton}" Margin="12,0,0,0" Click="OnSaveManual" />
+                </StackPanel>
+                <TextBlock x:Name="ManualError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </StackPanel>
         </StackPanel>
     </c:StepLayout>
 </UserControl>

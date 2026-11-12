@@ -14,6 +14,7 @@ public partial class DubbingCard : UserControl
 {
     private AppController? controller;
     private bool loading;
+    private bool subscribed;
 
     public DubbingCard()
     {
@@ -21,18 +22,28 @@ public partial class DubbingCard : UserControl
         // Kesme işaretli metinler XAML biçimlendirme uzantısına yazılamıyor.
         SetupHint.Text = Localizer.Current["In the game's audio settings, turn the dialogue (voice) volume down; keep music and effects. If the game can show speaker names in subtitles, turn them on: every character then speaks with its own voice."];
         Credits.Text = Localizer.Current["Voices: Pocket TTS Turkish (wite-tech, CC BY 4.0) with Kyutai's pocket-tts. The voices are synthetic, not real people."];
+        // Ayarlardaki bölümler değişince kart görsel ağaçtan çıkıp yeniden girer; abonelik buna göre açılıp kapanır.
+        Loaded += (_, _) => Subscribe();
         Unloaded += (_, _) =>
         {
-            if (controller is not null) controller.PropertyChanged -= OnChanged;
+            if (controller is not null && subscribed) controller.PropertyChanged -= OnChanged;
+            subscribed = false;
         };
+    }
+
+    private void Subscribe()
+    {
+        if (controller is null || subscribed) return;
+        controller.PropertyChanged += OnChanged;
+        subscribed = true;
+        Refresh();
     }
 
     internal void Attach(AppController attached)
     {
         controller = attached;
         Visibility = attached.DubbingAvailable ? Visibility.Visible : Visibility.Collapsed;
-        attached.PropertyChanged += OnChanged;
-        Refresh();
+        Subscribe();
     }
 
     private static string Label(DubbingVoice voice) => Localizer.Current[voice switch

@@ -79,7 +79,8 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
 
 /// Sunucudan geçen ve bilgisayar ekranındaki altyazı penceresinin de gösterdiği olay.
 public enum SubtitleEvent: Equatable, Sendable {
-    case subtitle(text: String, durationMs: Int, paragraphs: Bool)
+    /// `replaces`: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.
+    case subtitle(text: String, durationMs: Int, paragraphs: Bool, replaces: Bool = false)
     case clear
 }
 
@@ -188,12 +189,15 @@ public final class SubtitleServer: @unchecked Sendable {
     }
 
     /// `box`: oyundaki İngilizce altyazının ekrandaki yeri (kenarlara oranla); TV çeviriyi buna göre yerleştirir.
-    public func sendSubtitle(_ text: String, durationMs: Int = 15000, box: TextBox? = nil) {
+    /// `replaces`: çeviri, az önce gösterilen satırın uzamış ya da düzelmiş bir okumasından gelir (`TextMatch.isRevision`);
+    /// TV onu öncekinin üstüne yığmaz, yerine koyar (`replace` alanı; eski TV uygulamaları yok sayar).
+    public func sendSubtitle(_ text: String, durationMs: Int = 15000, box: TextBox? = nil, replaces: Bool = false) {
         let at = Int(Date().timeIntervalSince1970 * 1000)
         var json: [String: Any] = ["text": text, "duration": durationMs, "at": at]
         if let box { json["box"] = Self.json(box) }
+        if replaces { json["replace"] = true }
         broadcast(event: "subtitle", json: json)
-        onEvent?(.subtitle(text: text, durationMs: durationMs, paragraphs: false))
+        onEvent?(.subtitle(text: text, durationMs: durationMs, paragraphs: false, replaces: replaces))
     }
 
     /// Dört basamağa yuvarlanır; Decimal, JSON'da 0.80000000000000004 yerine 0.8 yazılsın diye.

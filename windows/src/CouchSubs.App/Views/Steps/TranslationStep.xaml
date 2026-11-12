@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Download}" Title="{t:T 'Download the translation model'}"
+    <c:StepLayout Title="{t:T 'Download the translation model'}"
                   Message="{t:T 'CouchSubs translates on this computer, without the internet. The English–Turkish model (about 530 MB) is downloaded once and kept on this computer.'}">
         <StackPanel>
             <StackPanel Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}}">

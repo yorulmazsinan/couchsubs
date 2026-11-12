@@ -72,7 +72,8 @@ public class AiTranslatorTests
                     },
                 }),
             },
-            "api.openai.com" => new JsonObject
+            // Yerel model sunucuları (Ollama, LM Studio) OpenAI biçimiyle yanıt verir.
+            "api.openai.com" or "localhost" or "127.0.0.1" or "192.168.1.20" => new JsonObject
             {
                 ["choices"] = new JsonArray(new JsonObject
                 {
@@ -205,7 +206,11 @@ public class AiTranslatorTests
         var file = Path.Combine(RepoRoot(), "core", "Sources", "CouchSubsCore", "Resources", "ai-models.json");
         var parsed = AiModel.Parse(File.ReadAllText(file));
         Assert.Equal(["claude", "gemini", "openai"], parsed.Keys.Order());
-        foreach (var provider in Enum.GetValues<AiProvider>())
+        Assert.Equal(parsed.Keys.Order(), AiProviders.Cloud.Select(p => p.Id()).Order());
+        // Yerel modelin listesi yoktur; model adını kullanıcı yazar.
+        Assert.Empty(AiProvider.Local.Models());
+        Assert.Equal("qwen2.5:7b", AiProvider.Local.DefaultModel().Id);
+        foreach (var provider in AiProviders.Cloud)
         {
             Assert.Equal(parsed[provider.Id()], provider.Models());
             Assert.True(provider.Models().Count >= 2);
@@ -221,6 +226,142 @@ public class AiTranslatorTests
 
     private static string RepoRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, "..", "..", ".."));
+
+    // --- Yerel model (Ollama, LM Studio) ---
+
+    private static AiTranslator MakeLocal(FakeAi fake, string baseUrl = LocalAiServer.OllamaUrl, string model = "qwen2.5:7b", string key = "",
+                                          ITextTranslator? local = null) =>
+        new(AiProvider.Local, key, model, local ?? new FakeLocal(), new HttpClient(fake), budget: new RequestBudget(1000),
+            server: LocalAiServer.Create(baseUrl, model));
+
+    /// <summary>OpenAI uyumlu en sade istek: system + user, temperature, max_tokens, stream false; bulut hizmetine özel alan gitmez.</summary>
+    [Fact]
+    public async Task LocalRequest()
+    {
+        var fake = new FakeAi();
+        Assert.Equal("KRATOS: [tr] We go now.", await MakeLocal(fake).TranslateAsync("KRATOS: We go now."));
+        var (request, body) = fake.Requests[0];
+        Assert.Equal("http://localhost:11434/v1/chat/completions", request.RequestUri!.AbsoluteUri);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
+        // Anahtar boşsa Authorization başlığı hiç gitmez.
+        Assert.Null(request.Headers.Authorization);
+        var json = JsonNode.Parse(body)!.AsObject();
+        Assert.Equal(["max_tokens", "messages", "model", "stream", "temperature"], json.Select(p => p.Key).Order());
+        Assert.Equal("qwen2.5:7b", json["model"]!.GetValue<string>());
+        Assert.Equal(AiRequest.LocalTemperature, json["temperature"]!.GetValue<double>());
+        Assert.Equal(AiRequest.MaxOutputTokens, json["max_tokens"]!.GetValue<int>());
+        Assert.False(json["stream"]!.GetValue<bool>());
+        var messages = json["messages"]!.AsArray();
+        Assert.Equal(["system", "user"], messages.Select(m => m!["role"]!.GetValue<string>()));
+        Assert.Equal(AiRequest.SystemPrompt, messages[0]!["content"]!.GetValue<string>());
+        Assert.EndsWith("[\"We go now.\"]", User(fake, 0));
+    }
+
+    /// <summary>LM Studio adresi ve isteğe bağlı anahtar (yalnız doluysa Bearer olarak gider).</summary>
+    [Fact]
+    public async Task LocalRequestWithKeyAndLmStudio()
+    {
+        var fake = new FakeAi();
+        await MakeLocal(fake, LocalAiServer.LmStudioUrl, "qwen2.5-7b-instruct", " lm-key ").TranslateAsync("Run!");
+        var (request, body) = fake.Requests[0];
+        Assert.Equal("http://localhost:1234/v1/chat/completions", request.RequestUri!.AbsoluteUri);
+        Assert.Equal("Bearer lm-key", Assert.Single(request.Headers.GetValues("Authorization")));
+        Assert.Equal("qwen2.5-7b-instruct", JsonNode.Parse(body)!["model"]!.GetValue<string>());
+    }
+
+    /// <summary>Kullanıcının yazdığı adres düzeltilir: şema, "/v1", sondaki "/" ve yapıştırılmış "/chat/completions".</summary>
+    [Theory]
+    [InlineData("http://localhost:11434/v1", "http://localhost:11434/v1")]
+    [InlineData("  http://localhost:11434/v1/  ", "http://localhost:11434/v1")]
+    [InlineData("localhost:11434", "http://localhost:11434/v1")]
+    [InlineData("http://127.0.0.1:1234", "http://127.0.0.1:1234/v1")]
+    [InlineData("http://localhost:1234/v1/chat/completions", "http://localhost:1234/v1")]
+    [InlineData("https://ai.example.com/openai/v1", "https://ai.example.com/openai/v1")]
+    [InlineData("", null)]
+    [InlineData("ftp://localhost:11434", null)]
+    [InlineData("http://", null)]
+    [InlineData("local host", null)]
+    public void LocalServerAddress(string text, string? expected) =>
+        Assert.Equal(expected, LocalAiServer.Normalize(text)?.AbsoluteUri);
+
+    [Fact]
+    public void LocalServerDetails()
+    {
+        Assert.Null(LocalAiServer.Create(LocalAiServer.OllamaUrl, "  "));
+        var server = LocalAiServer.Create("localhost:11434", " qwen2.5:7b ")!;
+        Assert.Equal("qwen2.5:7b", server.Model);
+        Assert.Equal("http://localhost:11434", server.Address);
+        Assert.Equal(LocalAiServerKind.Ollama, server.Kind);
+        Assert.Equal(LocalAiServerKind.LmStudio, LocalAiServer.Create(LocalAiServer.LmStudioUrl, "m")!.Kind);
+        Assert.Equal(LocalAiServerKind.Other, LocalAiServer.Create("http://192.168.1.20:8080/v1", "m")!.Kind);
+        // Yazılan model adı listeye bakılmadan kullanılır; boşsa varsayılan.
+        Assert.Equal("llama3.1:8b", AiProvider.Local.Model("llama3.1:8b").Id);
+        Assert.Equal("qwen2.5:7b", AiProvider.Local.Model(" ").Id);
+        Assert.Null(RequestBudget.Shared(AiProvider.Local, AiProvider.Local.DefaultModel()));
+    }
+
+    /// <summary>Önbellekteki motor adında sunucu ve model vardır; farklı yerel modellerin çevirileri karışmaz (Mac ile aynı ad).</summary>
+    [Fact]
+    public void LocalEngineIdIncludesServerAndModel()
+    {
+        var ollama = LocalAiServer.Create(LocalAiServer.OllamaUrl, "qwen2.5:7b")!;
+        Assert.Equal("local:localhost:11434/qwen2.5:7b", ollama.EngineId);
+        Assert.Equal(ollama.EngineId, LocalAiServer.Create("http://LOCALHOST:11434/v1/", "qwen2.5:7b")!.EngineId);
+        Assert.NotEqual(ollama.EngineId, LocalAiServer.Create(LocalAiServer.OllamaUrl, "qwen2.5:14b")!.EngineId);
+        Assert.NotEqual(ollama.EngineId, LocalAiServer.Create(LocalAiServer.LmStudioUrl, "qwen2.5:7b")!.EngineId);
+        Assert.NotEqual(ollama.EngineId, LocalAiServer.Create("http://192.168.1.20:11434/v1", "qwen2.5:7b")!.EngineId);
+        // Bulut hizmetlerinin adları değişmez.
+        Assert.DoesNotContain(ollama.EngineId, AiProviders.Cloud.Select(p => p.EngineId(p.DefaultModel().Id)));
+    }
+
+    /// <summary>Düşünen yerel modeller yanıtın başına &lt;think&gt;…&lt;/think&gt; koyar; yalnız sonrası okunur.</summary>
+    [Fact]
+    public async Task LocalThinkingIsSkipped()
+    {
+        var fake = new FakeAi((request, _) => Wrap(request, "<think>\nThe user wants [\"x\"] translated…\n</think>\n\n[\"Koş!\"]"));
+        Assert.Equal("Koş!", await MakeLocal(fake).TranslateAsync("Run!"));
+        Assert.Equal(["Gidelim."], AiRequest.Translations("<think>…</think>Gidelim.", 1));
+    }
+
+    /// <summary>Sunucu kapalıysa ya da model indirilmemişse o satır ücretsiz çeviriyle gelir, durum bildirilir.</summary>
+    [Fact]
+    public async Task LocalFailuresFallBack()
+    {
+        var down = MakeLocal(new FakeAi((_, _) => throw new HttpRequestException("Connection refused")));
+        Assert.Equal("yerel: Run!", await down.TranslateAsync("Run!"));
+        Assert.Equal(OnlineKeyState.Unreachable, down.LastError);
+
+        // Ollama'nın indirilmemiş model yanıtı.
+        var missing = MakeLocal(new FakeAi((_, _) => Json("""{"error":{"message":"model \"qwen2.5:7b\" not found, try pulling it first","type":"api_error"}}""", HttpStatusCode.NotFound)));
+        Assert.Equal("yerel: Run!", await missing.TranslateAsync("Run!"));
+        Assert.Equal(OnlineKeyState.ModelRejected, missing.LastError);
+    }
+
+    /// <summary>"Bağlantıyı dene": anahtarsız çalışır; sunucunun hatası olduğu gibi döner.</summary>
+    [Fact]
+    public async Task LocalTestWorksWithoutKey()
+    {
+        var fake = new FakeAi();
+        var server = LocalAiServer.Create(LocalAiServer.OllamaUrl, "qwen2.5:7b");
+        var result = await AiTranslator.TestAsync(AiProvider.Local, "", "qwen2.5:7b", new HttpClient(fake), server: server);
+        Assert.Equal(new AiTestResult(OnlineKeyState.Valid, "KRATOS: [tr] We go now. [tr] Stay close, boy."), result);
+        Assert.Null(fake.Requests[0].Request.Headers.Authorization);
+
+        var down = new FakeAi((_, _) => throw new TaskCanceledException("timeout"));
+        Assert.Equal(OnlineKeyState.Unreachable,
+                     (await AiTranslator.TestAsync(AiProvider.Local, "", "qwen2.5:7b", new HttpClient(down), server: server)).State);
+    }
+
+    /// <summary>Yerel modelde buluttan uzun beklenir; deneme modeli belleğe yükleyeceği için daha da uzun.</summary>
+    [Fact]
+    public void LocalTimeouts()
+    {
+        Assert.Equal(AiTranslator.Timeout, AiTranslator.ClientFor(AiProvider.Gemini).Timeout);
+        Assert.Equal(AiTranslator.LocalTimeout, AiTranslator.ClientFor(AiProvider.Local).Timeout);
+        Assert.True(AiTranslator.LocalTimeout > AiTranslator.Timeout);
+        Assert.True(AiTranslator.LocalTestTimeout > AiTranslator.LocalTimeout);
+    }
 
     /// <summary>Son gösterilen 3 satır ve çevirileri bağlam olarak gider; satırın kendisi ve tekrar okunan satır girmez.</summary>
     [Fact]

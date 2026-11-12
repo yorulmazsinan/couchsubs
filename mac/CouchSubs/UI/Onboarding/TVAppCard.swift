@@ -6,7 +6,7 @@ import SwiftUI
 
 /// TV uygulamasını geliştirici moduyla kurma adımları (LG, Samsung, Android TV). Yapılacak bir şey yoksa görünmez.
 struct TVAppCard: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @State private var passphrase = ""
 
     private var brand: TVBrand { model.tv?.brand ?? .lg }
@@ -32,6 +32,8 @@ struct TVAppCard: View {
                         } else {
                             HintText(text: "CouchSubs extends Developer Mode by itself each time you use it.")
                         }
+                    } else if brand == .samsung {
+                        HintText(text: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
                     }
                 }
             case .devModeOff:
@@ -96,8 +98,9 @@ struct TVAppCard: View {
                 HintText(text: "1. On the TV, open Apps and scroll to the very bottom of the page.")
                 HintText(text: "2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.")
                 HintText(text: "3. Turn Developer mode On, type this computer's address as Host PC IP: \(model.computerAddress ?? "?") and press OK.")
-                HintText(text: "4. Restart the TV. This screen continues by itself.")
+                HintText(text: "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself.")
                 HintText(text: "Later you sign in once with a free Samsung account; Samsung needs it to sign the app for your TV.")
+                HintText(text: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
             }
         case .androidTV:
             Card(title: "CouchSubs TV app") {
@@ -139,9 +142,22 @@ struct TVAppCard: View {
             let label = samsung ? String(localized: "Details:") : String(localized: "TV says:")
             text += "\n\n" + label + " " + reason
         }
+        // Mac App Store sürümü sandbox'ta kurar (ssh, ssh-keygen ve yardımcı sandbox'ı miras alır). Sandbox bir adımı
+        // engellerse kullanıcı çıkışsız kalmasın: TV uygulaması bir kez GitHub (DMG) sürümüyle kurulur, sonrası yeter.
+        if Distribution.isAppStore, error == .installFailed {
+            text += "\n\n" + String(localized: "If the Mac App Store version cannot install the TV app, install it once with the GitHub (DMG) version of CouchSubs. After that, this version is enough.")
+        }
         guard samsung else { return text }
         if error == .installFailed || error == .certificateRejected {
             text += "\n\n" + String(localized: "If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again.")
+        }
+        // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
+        if error == .unreachable || error == .installFailed || error == .certificateRejected {
+            text += "\n\n" + String(localized: "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.")
+        }
+        // TV kurulum sırasında HDMI-CEC yüzünden başka kaynağa geçerse bağlantı kopar.
+        if error == .connectionLost {
+            text += "\n\n" + String(localized: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
         }
         let send = String(format: String(localized: "If this keeps happening, send us this file: %@"), TVInstallLog.displayPath)
         return text + "\n\n" + send
@@ -160,7 +176,7 @@ struct TVAppCard: View {
             String(localized: "The TV app could not be installed. Try again; if it fails again, send us the reason below.")
         case .installFailed: String(localized: "The TV app could not be installed. Try again.")
         case .notEnoughSpace: String(localized: "The TV is out of free space. Remove an app you do not use from the TV and try again.")
-        case .tooOld: String(localized: "This Samsung TV is too old for the CouchSubs TV app (2019 models and later are supported).")
+        case .tooOld: String(localized: "This Samsung TV is too old for the CouchSubs TV app (2017 models and later are supported).")
         case .signInFailed: String(localized: "Samsung sign-in did not complete. Try again and finish signing in on the page that opens.")
         case .certificateFailed: String(localized: "Samsung did not issue the signing certificate. Try again in a few minutes.")
         case .notApproved: String(localized: "Debugging was not allowed on the TV. Try again and choose Allow on the TV.")

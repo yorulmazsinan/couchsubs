@@ -144,7 +144,7 @@ public class GamePackTests
         watch.Stop();
         var memory = GC.GetTotalMemory(true) - before;
         Console.WriteLine($"paket yükleme: {watch.ElapsedMilliseconds} ms, bellek: {memory / 1024} KB, {all.Packs.Sum(p => p.Entries)} satır");
-        Assert.Equal(["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"], ids);
+        Assert.Equal(["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "elden-ring", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"], ids);
         Assert.All(all.Packs, pack => Assert.True(pack.BuiltIn));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10));
         GC.KeepAlive(all);
@@ -171,6 +171,9 @@ public class GamePackTests
     // "Can't see where I'm going.", "I'm not afraid to fight you.", "Burn the tobacco fields"
     [InlineData("red-dead-redemption-2.json.gz", "red-dead-redemption-2", "Red Dead Redemption 2", 150_000,
         new[] { "7fab2b68b3726a28", "3484a8ef3d8c7fc7", "bc0c9435160e8723" })]
+    // "The Tarnished will soon return.", "Let it be Margit the Fell!", "Roundtable Hold"
+    [InlineData("elden-ring.json.gz", "elden-ring", "Elden Ring + Shadow of the Erdtree", 37000,
+        new[] { "fd7b2bef9d7e5fe1", "d9e5d9f200bbd946", "d5017888c04251a9" })]
     public void EachEmbeddedPackHasItsLines(string file, string id, string title, int minimum, string[] keys)
     {
         var (name, data) = EmbeddedOnly(file).Single();
@@ -205,11 +208,12 @@ public class GamePackTests
         Assert.Equal(library.Find("All this will be behind us soon. Until then don’t let any of these bastards get to you, alright?"), library.Nearest(garbled));
     }
 
-    /// <summary>Assassin's Creed Shadows, Death Stranding 2 ve Modern Warfare (2019) paketleri de uygulamaya gömülüdür.</summary>
+    /// <summary>Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019) ve Elden Ring paketleri de uygulamaya gömülüdür.</summary>
     [Theory]
     [InlineData("assassins-creed-shadows", "Assassin's Creed Shadows", 39000)]
     [InlineData("death-stranding-2", "Death Stranding 2: On the Beach", 23000)]
     [InlineData("call-of-duty-modern-warfare-2019", "Call of Duty: Modern Warfare (2019)", 50000)]
+    [InlineData("elden-ring", "Elden Ring + Shadow of the Erdtree", 37000)]
     public void MoreEmbeddedPacksLoad(string id, string title, int minimum)
     {
         var library = new GamePackLibrary(GamePackLibrary.EmbeddedPacks, null);
@@ -230,5 +234,7 @@ public class GamePackTests
         Assert.Equal(gnats, library.Find("They are everywhere, you know, like gnats! [laughs] Whatever it is, you will find it. I can always count on my Naoe."));
         Assert.Equal("Terminal Fort Knot tehlikede. Bir boşluk patlaması hepsini öldürür!", library.Find("Terminal Fort Knot is in danger. A voidout would kill them all!"));
         Assert.Equal("Konumuma hava ikmali talep ediyorum!", library.Find("Requesting air drop on my position!"));
+        Assert.Equal("Lekeli yakında geri dönecek.", library.Find("The Tarnished will soon return."));
+        Assert.Equal("Margit, Uğursuz Alâmet", library.Find("Margit, the Fell Omen"));
     }
 }

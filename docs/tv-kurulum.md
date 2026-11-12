@@ -8,6 +8,7 @@ kendisi bekler; bu sayfa aynı adımların ayrıntılı hâlidir. Önce TV'nizin
 |---|---|---|
 | **LG** (webOS 4 ve üstü) | Gerçek TV'de denendi. CouchSubs TV uygulamasını kendisi kurar | [LG](#lg-tv) |
 | **Samsung** (Tizen, 2019 ve sonrası) | Gerçek TV'de denendi (75" Neo QLED). CouchSubs kendisi kurar, bir kez Samsung girişi ister | [Samsung](#samsung-tv) |
+| **Samsung** (Tizen 3.0–4.0, 2017–2018) | Deneysel: bir kullanıcı UE43MU7000U'da (2017) elle kurup çalıştırdı; CouchSubs'ın kendi kurulumu bu TV'lerde henüz denenmedi | [Samsung](#20172018-samsung-tvler-deneysel) |
 | **Android TV / Google TV** (Vestel, Arçelik, Beko, Grundig, Philips ve diğerleri) | Gerçek TV'de denendi. CouchSubs ağ üzerinden kendisi kurar | [Android TV](#android-tv--google-tv) |
 | **Vestel, Arçelik, Beko, Grundig'in Linux modelleri, Philips Saphi ve Titan OS** | Desteklenmiyor: bu TV'lere uygulama kurmanın bir yolunu bulamadık | |
 
@@ -76,7 +77,8 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
    Bazı yeni modellerde (ör. 2025 QN90F) bu, **Uygulamalar › Uygulama Ayarları** ekranında çalışır.
 3. **Developer mode**'u **On** yapın.
 4. **Host PC IP** alanına bilgisayarınızın adresini yazıp **OK**'e basın. Adresi CouchSubs TV adımında gösterir.
-5. TV'yi yeniden başlatın. Uygulamalar ekranında **Develop Mode** yazısı görünür.
+5. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun, sonra açın. Kısa
+   basınca Samsung TV yalnız bekleme moduna geçer, tam kapanmaz. Uygulamalar ekranında **Develop Mode** yazısı görünür.
 
 ### 2. CouchSubs kursun
 
@@ -94,12 +96,36 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
   başlatın. Sonra CouchSubs'ta sağ üstteki dişliye (Ayarlar) basın, **CouchSubs TV uygulaması** kutusunda **Yeniden
   dene**'ye basın. Yarım kalan kurulumların çoğu böyle düzeliyor. Yine olmazsa kutuda TV'nin verdiği sebep yazar;
   onu [Issues](https://github.com/yorulmazsinan/couchsubs/issues) sayfasına yazın.
+- **TV sürekli HDMI 1'e ya da başka bir kaynağa geçiyorsa** (CouchSubs TV uygulaması açıkken ya da kurulurken):
+  **Ayarlar › Tüm Ayarlar › Bağlantı › Harici Cihaz Yöneticisi** altında **Anynet+ (HDMI-CEC)** ve **Otomatik Kaynak
+  Değiştirme**'yi kapatın.
+- **Kurulum sürerken CouchSubs'ı kapattıysanız:** kurulum bitmiş sayılmaz; CouchSubs yeniden açılınca TV adımından
+  devam eder ve TV uygulamasını kurmayı sürdürür.
 - **TV'de sürekli "İzin ver" penceresi çıkıyorsa:** kumandayla bir kez **İzin ver**'i seçin. Pencere, TV uygulaması
   henüz kurulmamışken CouchSubs onu açmaya çalıştıkça çıkar; uygulama kurulunca kesilir. Ayarlarda
   **Bağlantı › Harici Cihaz Yöneticisi › Cihaz Bağlantı Yöneticisi** altında bilgisayarı **İzin Ver** yapabilirsiniz
   (menü adı modele göre "Aygıt" ya da "Cihaz" olabilir; ayarlarda **Cihaz** diye arayın).
 - **Kurulduğunu nasıl anlarım:** TV'de CouchSubs açıkken **Tamam**'a basınca panelde **HDMI** (PS5'in girişi,
   "oynatılıyor"), **Uygulama** (bilgisayarın adresi) ve **Bağlantı: bağlı** görünür. Paneli kapatmak için yine **Tamam**.
+
+### 2017–2018 Samsung TV'ler (deneysel)
+
+Tizen 3.0 (2017, ör. MU serisi) ve Tizen 4.0 (2018, ör. NU serisi) TV'lerde de kurulum aynı adımlarla denenir. Bu
+TV'lerde CouchSubs, kurmadan önce TV'ye özel cihaz profilini de gönderir (Tizen Studio'daki "Permit to install
+applications" adımı). Bir kullanıcı TV uygulamasını UE43MU7000U'da (Tizen 3.0) Tizen Studio ve Apps2Samsung ile elle
+kurdu; çeviri ve HDMI görüntüsü GTA V ve Mafia'da çalıştı. CouchSubs'ın otomatik kurulumu bu TV'lerde henüz
+denenmedi; sonucu [Issues](https://github.com/yorulmazsinan/couchsubs/issues) sayfasına TV modelinizle yazarsanız
+desteği netleştiririz.
+
+- İlk açılışta **bağlantı hatası** görünürse TV'yi güç tuşunu basılı tutarak yeniden başlatın; o kullanıcıda böyle düzeldi.
+- 2016 ve önceki Samsung TV'ler (Tizen 2.x, Orsay) desteklenmez; Tizen 2.x'te CouchSubs bunu kurulumda söyler.
+
+### TV kendiliğinden HDMI'ya geçiyorsa
+
+TV uygulaması açıldıktan hemen sonra (ya da kısa sürede birkaç kez) arka plana düşerse, yeniden göründüğünde ya da bir
+sonraki açılışında sağ üstte "TV kendiliğinden HDMI'ya geçti" ipucunu gösterir: **Ayarlar › Tüm Ayarlar › Bağlantı ›
+Harici Cihaz Yöneticisi**'nde **Anynet+ (HDMI-CEC)** ve **Otomatik Kaynak Değiştirme**'yi kapatın. İpucu **Tamam** ya
+da **Geri** ile kapanır. Ana ekrana açılıştan hemen sonra kendiniz döndüyseniz de bir kez görünebilir; zararsızdır.
 
 ### Elle kurulum
 

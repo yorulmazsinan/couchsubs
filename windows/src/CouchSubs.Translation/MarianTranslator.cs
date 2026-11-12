@@ -33,7 +33,15 @@ public sealed class MarianTranslator : ITextTranslator, IDisposable
     // Model tek seferde bir cümle çevirir: paralel çalıştırmak çekirdekleri paylaştırıp her satırı yavaşlatır.
     private readonly SemaphoreSlim _gate = new(1, 1);
     private ISentenceEngine? _engine;
+    /// <summary>Motor bir kez açılamadıysa nedeni; yeniden denenmez (yerel DLL süreç içinde sonradan yüklenmez).</summary>
+    private Exception? _engineFailure;
     private bool _disposed;
+
+    /// <summary>
+    /// Motor açılamadı (ör. onnxruntime.dll ya da bağımlılığı yüklenemedi). Bir kez, arka plan iş parçacığından çağrılır;
+    /// uygulama günlüğe yazar ve kullanıcıya gösterir. Çeviriler bundan sonra <see cref="TranslatorStatus.EngineFailed"/> fırlatır.
+    /// </summary>
+    public event Action<Exception>? EngineFailed;
 
     /// <param name="cache">Kalıcı önbellek; verilmezse yalnız bellekte tutulur.</param>
     /// <param name="glossary">Terim sözlüğü; verilmezse genel sözlük ve %LOCALAPPDATA%\CouchSubs\glossary\*.json.</param>
@@ -52,16 +60,30 @@ public sealed class MarianTranslator : ITextTranslator, IDisposable
         _recent = new RecentLines(clock);
     }
 
-    public TranslatorStatus Status => _engine is not null || _isInstalled() ? TranslatorStatus.Ready : TranslatorStatus.NeedsDownload;
+    public TranslatorStatus Status =>
+        Volatile.Read(ref _engineFailure) is not null ? TranslatorStatus.EngineFailed
+        : _engine is not null || _isInstalled() ? TranslatorStatus.Ready
+        : TranslatorStatus.NeedsDownload;
 
     /// <summary>Çeviri için gereken dosyalar yerinde mi (ModelStore yalnızca doğrulanmış dosyayı asıl adına taşır).</summary>
     public static bool IsInstalledIn(string modelDirectory) =>
         OnnxMarianEngine.RequiredFiles.All(name => File.Exists(Path.Combine(modelDirectory, name)));
 
-    /// <summary>Modeli önceden yükler ve bir kez çalıştırır; ilk altyazı beklemesin.</summary>
+    /// <summary>
+    /// Modeli önceden yükler ve bir kez çalıştırır; ilk altyazı beklemesin. Arka planda başlatılıp beklenmediği için
+    /// hata fırlatmaz (gözlenmemiş görev hatası bırakmaz): motor açılamadıysa <see cref="EngineFailed"/> bildirir,
+    /// çeviriler de durumu <see cref="TranslatorException"/> ile söyler.
+    /// </summary>
     public async Task WarmUpAsync(CancellationToken cancellationToken = default)
     {
-        await TranslateSentenceAsync("Hello.", null, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await TranslateSentenceAsync("Hello.", null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Motor açılamadıysa EngineFailed zaten çağrıldı; model eksikse ya da çeviri hata verdiyse ilk altyazı söyler.
+        }
     }
 
     public async Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
@@ -135,10 +157,23 @@ public sealed class MarianTranslator : ITextTranslator, IDisposable
         }
     }
 
+    /// <summary>Yalnız <see cref="_gate"/> tutulurken çağrılır.</summary>
     private ISentenceEngine CreateEngine()
     {
+        if (_engineFailure is { } failed) throw new TranslatorException(TranslatorStatus.EngineFailed, failed);
         if (!_isInstalled()) throw new TranslatorException(TranslatorStatus.NeedsDownload);
-        return _engineFactory();
+        try
+        {
+            return _engineFactory();
+        }
+        catch (Exception error) when (error is not (OperationCanceledException or TranslatorException))
+        {
+            // ONNX Runtime'ın yerel DLL'i yüklenemeyince TypeInitializationException (içinde DllNotFoundException) gelir;
+            // .NET bu hatayı süreç boyunca saklar, yeniden denemek işe yaramaz.
+            Volatile.Write(ref _engineFailure, error);
+            EngineFailed?.Invoke(error);
+            throw new TranslatorException(TranslatorStatus.EngineFailed, error);
+        }
     }
 
     public void Dispose()

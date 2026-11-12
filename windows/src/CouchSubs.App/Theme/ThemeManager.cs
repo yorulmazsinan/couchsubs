@@ -44,6 +44,8 @@ public static class ThemeManager
         }
         foreach (var (name, value) in Tokens.Radius) resources[$"radius.{name}"] = new CornerRadius(value);
         foreach (var (name, value) in Tokens.Size) resources[$"size.{name}"] = value;
+        // Pencere zemini düz renktir (hale, ışık ve degrade yok; docs/TASARIM.md).
+        resources["windowBackgroundBrush"] = resources["backgroundBrush"];
     }
 
     /// <summary>Tema değişince kaynakları yeniler.</summary>

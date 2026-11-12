@@ -8,26 +8,24 @@
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
     <c:Card>
         <StackPanel>
-            <Grid>
-                <TextBlock Text="{t:T 'Show subtitles on'}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Right">
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="OutputTv" Content="TV" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
-                        <RadioButton x:Name="OutputComputer" Content="{t:T 'Computer screen'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
-                        <RadioButton x:Name="OutputBoth" Content="{t:T 'Both'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Both" />
-                    </StackPanel>
-                </Border>
-            </Grid>
+            <TextBlock Text="{t:T 'Show subtitles on'}" Style="{StaticResource CaptionText}" Margin="0,0,0,8" />
+            <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Stretch">
+                <UniformGrid Rows="1">
+                    <RadioButton x:Name="OutputTv" Content="TV" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
+                    <RadioButton x:Name="OutputComputer" Content="{t:T 'Computer screen'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
+                    <RadioButton x:Name="OutputBoth" Content="{t:T 'Both'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Both" />
+                </UniformGrid>
+            </Border>
             <StackPanel x:Name="ComputerPanel" Margin="0,12,0,0">
                 <TextBlock x:Name="WindowHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
                            Text="{t:T 'Subtitles appear in a window on this computer, over the game or PS Remote Play.'}" />
-                <Grid>
+                <WrapPanel>
                     <CheckBox x:Name="ClickThrough" Content="{t:T 'Clicks pass through'}" Foreground="{DynamicResource textPrimaryBrush}"
-                              VerticalAlignment="Center" Checked="OnClickThrough" Unchecked="OnClickThrough" />
-                    <Button x:Name="Adjust" Content="{t:T 'Adjust the subtitle window'}" HorizontalAlignment="Right" Click="OnAdjust" />
-                </Grid>
-                <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           Text="{t:T 'When on, clicks go through to the window below. Press Num 7 to turn it off.'}" />
+                              VerticalAlignment="Center" Margin="0,0,16,8" Checked="OnClickThrough" Unchecked="OnClickThrough" />
+                    <Button x:Name="Adjust" Content="{t:T 'Adjust the subtitle window'}" Padding="16,0" Margin="0,0,0,8" Click="OnAdjust" />
+                </WrapPanel>
+                <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,0"
+                           Text="{t:T 'When on, clicks go through to the window below. Press Num 7 or Ctrl+Shift+7 to turn it off.'}" />
             </StackPanel>
         </StackPanel>
     </c:Card>

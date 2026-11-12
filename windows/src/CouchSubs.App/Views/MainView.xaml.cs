@@ -33,6 +33,7 @@ public partial class MainView : UserControl
             connectionWatch.Stop();
         };
         Refresh();
+        ShowTiles();
         ShowUpdate();
         _ = controller.CheckForUpdateAsync();
     }
@@ -42,6 +43,8 @@ public partial class MainView : UserControl
         if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.TranslatorStatus) or nameof(AppController.ModelInstalled)
             or nameof(AppController.OnlineIssue) or nameof(AppController.CanStart) or nameof(AppController.IsStarting))
             Refresh();
+        if (e.PropertyName is nameof(AppController.Settings) or nameof(AppController.InstalledPacks))
+            ShowTiles();
         if (e.PropertyName is nameof(AppController.UpdateVersion) or nameof(AppController.Updating)
             or nameof(AppController.UpdateProgress) or nameof(AppController.UpdateError))
             ShowUpdate();
@@ -60,6 +63,21 @@ public partial class MainView : UserControl
         UpdateErrorText.Visibility = controller.UpdateError is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    /// <summary>
+    /// Çeviri karosunda seçili motor; paket karosu yalnız paketler açık, çeviri İngilizce→Türkçe ve kurulu paket varken
+    /// görünür (paketler yalnız o dil çiftinde kullanılır).
+    /// </summary>
+    private void ShowTiles()
+    {
+        var text = Localizer.Current;
+        var settings = controller.Settings;
+        EngineText.Text = settings.Engine == TranslationEngine.Free ? text["Free"] : settings.Engine.DisplayName();
+        var packs = controller.InstalledPacks.Count;
+        var active = settings.GamePacks && settings.SourceLanguage == "en" && settings.TargetLanguage == "tr" && packs > 0;
+        PackTile.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        PackText.Text = text.Format("Game packs are on · %lld games translated in advance", packs);
+    }
+
     private async void OnUpdate(object sender, RoutedEventArgs e) => await controller.InstallUpdateAsync();
 
     private void Refresh()
@@ -71,6 +89,7 @@ public partial class MainView : UserControl
         // Altyazının gideceği bir yer yoksa (TV seçili ama bağlı değil) çeviri başlatılamaz.
         Toggle.IsEnabled = !controller.IsStarting && (running || controller.CanStart);
         ModelCard.Visibility = controller.ModelInstalled ? Visibility.Collapsed : Visibility.Visible;
+        EngineCard.Visibility = controller.TranslatorStatus == TranslatorStatus.EngineFailed ? Visibility.Visible : Visibility.Collapsed;
         // Çevrimiçi motor çeviremiyor; satırlar bu arada cihaz üstü modelle geliyor.
         var issue = running ? controller.OnlineIssue : null;
         OnlineCard.Visibility = issue is null ? Visibility.Collapsed : Visibility.Visible;
@@ -78,7 +97,7 @@ public partial class MainView : UserControl
         {
             var engine = controller.Settings.OnlineEngine;
             OnlineTitle.Text = Localizer.Current.Format("%@ is not translating right now", engine.DisplayName());
-            OnlineReason.Text = state.Describe(engine, Localizer.Current) + " " + Localizer.Current["Meanwhile the free translation is used."];
+            OnlineReason.Text = state.Describe(engine, Localizer.Current, controller.Settings.LocalAiServer) + " " + Localizer.Current["Meanwhile the free translation is used."];
         }
     }
 

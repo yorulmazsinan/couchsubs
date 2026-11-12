@@ -5,7 +5,7 @@
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:s="clr-namespace:CouchSubs.App.Views.Steps"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Tv}" Title="{t:T 'Connect your TV'}"
+    <c:StepLayout Title="{t:T 'Connect your TV'}"
                   Message="{t:T 'Turn on the TV. When you press Connect, the TV asks for permission once — accept it with the remote. If the CouchSubs TV app is missing, this screen helps you install it.'}">
         <StackPanel>
             <TextBlock x:Name="Done" Style="{StaticResource DoneText}" Margin="0,0,0,16" />

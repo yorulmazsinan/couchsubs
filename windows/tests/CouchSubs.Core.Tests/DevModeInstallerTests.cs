@@ -34,6 +34,23 @@ public class DevModeInstallerTests
     private static bool IsInstall(string line) => line.Contains("appInstallService");
 
     [Fact]
+    public async Task KeyFileIsOnlyReadableByTheOwner()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"couchsubs-test-{Guid.NewGuid():N}");
+        try
+        {
+            await DevModeInstaller.WritePrivateAsync(file, [1, 2, 3]);
+            Assert.Equal([1, 2, 3], await File.ReadAllBytesAsync(file));
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(file));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void VersionIsReadFromThePackageName()
     {
         Assert.Equal("0.6.1", DevModeInstaller.VersionOfPackage("com.couchsubs.tv_0.6.1_all.ipk"));

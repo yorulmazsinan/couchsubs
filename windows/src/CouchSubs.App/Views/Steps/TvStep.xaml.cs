@@ -17,6 +17,8 @@ public partial class TvStep : UserControl
         Loaded += async (_, _) =>
         {
             ShowDone();
+            // Kurulum yarıda kaldıysa (ör. TV uygulaması kurulurken kapatıldı) eşleşmiş TV'deki uygulamaya yeniden bakılır.
+            if (Controller.HasTv && Controller.TvApp.Kind == TvAppKind.Unknown) _ = Controller.RefreshTvAppAsync();
             await SearchAsync();
         };
     }

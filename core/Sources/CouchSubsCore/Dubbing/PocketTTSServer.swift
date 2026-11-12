@@ -2,6 +2,9 @@
 
 import Foundation
 
+// Ses motoru ayrı bir program olarak çalışır; iOS'ta başka program başlatılamadığı için yalnız macOS.
+#if os(macOS)
+
 /// Kyutai'nin pocket-tts programını (MIT) yerel sunucu olarak çalıştırır: model bir kez yüklenir, her cümle
 /// `POST /tts` ile seslendirilir. Sunucu yalnız bu bilgisayardan (127.0.0.1) erişilebilir.
 public actor PocketTTSServer {
@@ -158,3 +161,4 @@ private final class LockedProcess: @unchecked Sendable {
         }
     }
 }
+#endif

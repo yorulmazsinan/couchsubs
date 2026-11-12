@@ -2,32 +2,13 @@
 
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using CouchSubs.Shell;
 
 namespace CouchSubs.App.Services;
 
-/// <summary>Genel kısayolların yaptığı iş.</summary>
-public enum HotkeyAction
-{
-    /// <summary>Num 1: 1. ek bölgeyi bir kez çevir.</summary>
-    ExtraRegion1,
-    /// <summary>Num 2: 2. ek bölgeyi bir kez çevir.</summary>
-    ExtraRegion2,
-    /// <summary>Num 3: 3. ek bölgeyi bir kez çevir.</summary>
-    ExtraRegion3,
-    /// <summary>Num 5: görüntüyü dondurup serbest alan seçtir.</summary>
-    FreeArea,
-    /// <summary>Num 8: ayar ekranındaki görüntüyü oyunun şu anki görüntüsüyle yenile.</summary>
-    Snapshot,
-    /// <summary>Num 0: canlı altyazı çevirisini duraklat / sürdür.</summary>
-    PauseSubtitles,
-    /// <summary>Num 9: ekranın tamamını bir kez çevir; yeniden basınca çeviriler kalkar.</summary>
-    Screen,
-    /// <summary>Num 7: bilgisayar ekranındaki altyazı penceresinde "Tıklamalar geçsin"i aç / kapat.</summary>
-    ClickThrough,
-}
-
 /// <summary>
-/// Genel kısayollar (Num 0, 1, 2, 3, 5, 7, 8, 9): kullanıcı kumandayla oynarken bilgisayardaki pencere arka planda olsa da çalışır.
+/// Genel kısayollar (Num 0, 1, 2, 3, 5, 7, 8, 9 ve aynı işler için Ctrl+Shift+rakam, bkz. <see cref="HotkeyTable"/>):
+/// kullanıcı kumandayla oynarken bilgisayardaki pencere arka planda olsa da çalışır.
 /// Kısayollar yalnız <see cref="Enabled"/> iken tutulur; böylece çeviri kapalıyken sayı tuşları diğer uygulamalarda
 /// (Excel gibi) normal çalışır. Tuş başka bir uygulamada kullanılıyorsa sessizce atlanır.
 /// </summary>
@@ -37,18 +18,7 @@ public sealed partial class GlobalHotkeys : IDisposable
     private const uint ModNoRepeat = 0x4000;
     private const int FirstId = 0x4353;
 
-    /// <summary>Num 0, 1, 2, 3, 5, 7, 8, 9 (NumLock açıkken).</summary>
-    private static readonly (HotkeyAction Action, uint VirtualKey)[] Keys =
-    [
-        (HotkeyAction.ExtraRegion1, 0x61),
-        (HotkeyAction.ExtraRegion2, 0x62),
-        (HotkeyAction.ExtraRegion3, 0x63),
-        (HotkeyAction.FreeArea, 0x65),
-        (HotkeyAction.Snapshot, 0x68),
-        (HotkeyAction.PauseSubtitles, 0x60),
-        (HotkeyAction.Screen, 0x69),
-        (HotkeyAction.ClickThrough, 0x67),
-    ];
+    private static readonly IReadOnlyList<HotkeyBinding> Keys = HotkeyTable.Bindings;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -63,6 +33,8 @@ public sealed partial class GlobalHotkeys : IDisposable
     private readonly Action<HotkeyAction> pressed;
     private readonly List<int> registered = [];
     private bool enabled;
+    /// <summary>Alınamayan Ctrl+Shift kısayolları bir kez günlüğe yazıldı (her çeviri başlangıcında yinelenmesin).</summary>
+    private bool comboFailureLogged;
 
     /// <param name="window">Pencerenin tutamağı (HWND).</param>
     /// <param name="pressed">Kısayola basılınca çağrılır.</param>
@@ -89,10 +61,19 @@ public sealed partial class GlobalHotkeys : IDisposable
 
     private void Register()
     {
-        for (var index = 0; index < Keys.Length; index++)
+        var failed = new List<string>();
+        for (var index = 0; index < Keys.Count; index++)
         {
             var id = FirstId + index;
-            if (RegisterHotKey(window, id, ModNoRepeat, Keys[index].VirtualKey)) registered.Add(id);
+            var key = Keys[index];
+            if (RegisterHotKey(window, id, ModNoRepeat | (uint)key.Modifiers, key.VirtualKey)) registered.Add(id);
+            else if (key.Modifiers != HotkeyModifiers.None) failed.Add(key.Label);
+        }
+        // Ctrl+Shift+rakamı başka bir uygulama (ör. Windows'un dil kısayolu) tutuyorsa Num tuşları yine çalışır.
+        if (failed.Count > 0 && !comboFailureLogged)
+        {
+            comboFailureLogged = true;
+            StartupGuard.Log($"Kısayol alınamadı, başka bir uygulama kullanıyor: {string.Join(", ", failed)} (Num tuşları çalışır)", null);
         }
     }
 

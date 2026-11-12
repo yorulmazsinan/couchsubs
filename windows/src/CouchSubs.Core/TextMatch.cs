@@ -72,6 +72,75 @@ public static class TextMatch
         return (double)shared / longer >= 0.75;
     }
 
+    /// <summary>
+    /// Yeni satır, az önce gösterilen satırın uzamış ya da düzelmiş okuması mı: daktilo efektinde büyüyen cümle
+    /// ("We do not have" → "We do not have time."), belirirken yarım okunan satır, bir iki sözcüğü başka okunan aynı
+    /// cümle. TV böyle bir çeviriyi öncekinin üstüne yığmaz, yerine koyar; yoksa aynı cümlenin iki üç çevirisi üst üste
+    /// duruyordu. Ham metinler verilir (Mac: TextMatch.isRevision).
+    /// </summary>
+    public static bool IsRevision(string newText, string oldText)
+    {
+        var x = Normalize(newText);
+        var y = Normalize(oldText);
+        if (x.Length == 0 || y.Length == 0) return false;
+        if (IsGrowth(newText, oldText) || IsGrowth(oldText, newText)) return true;
+        if (IsSimilar(x, y, 0.8)) return true;
+        var a = CleanWords(x);
+        var b = CleanWords(y);
+        int shorter = Math.Min(a.Count, b.Count), longer = Math.Max(a.Count, b.Count);
+        if (shorter < 5) return false;
+        if (Similarity(a, b) >= 0.65) return true;
+        var shared = 0;
+        foreach (var word in a)
+            if (b.Remove(word)) shared++;
+        return (double)shared / longer >= 0.7;
+    }
+
+    /// <summary>
+    /// Okuma, gönderilmiş satırın aynı cümleyi bozuk okuyan ve ondan daha iyi olmayan bir yeniden okuması mı. Açık zeminde
+    /// ya da süslü yazıda yazı tanıma her karede bir iki sözcüğü başka okur ("somethin'" / "somethinl") ya da araya bir
+    /// sözcük ekler/düşürür; benzerlik <see cref="IsSameSubtitle"/>'ın sınırının altında kalınca her okuma ayrı çevriliyor,
+    /// TV'de aynı cümlenin üç çevirisi üst üste duruyordu (GTA V, #26). Sözcük sırasıyla karşılaştırılır (en çok üç
+    /// sözcükte bir fark) ya da karakterce çok benzer; uzayan ve baştan/sondan kısalan metin <see cref="IsSameSubtitle"/>'a
+    /// kalır. Daha çok sözcük okuyan (puanı belirgin yüksek) okuma kötü sayılmaz, yeniden çevrilir (Mac: TextMatch.isWorseReread).
+    /// </summary>
+    public static bool IsWorseReread(string reread, string sent)
+    {
+        var a = Normalize(reread);
+        var b = Normalize(sent);
+        var x = CleanWords(a);
+        var y = CleanWords(b);
+        if (x.Count < 5 || y.Count == 0 || IsGrowth(reread, sent) || IsGrowth(sent, reread)) return false;
+        var reads = Similarity(x, y) >= 0.65 || IsSimilar(a, b, 0.75);
+        return reads && OcrNoise.Score(reread) < OcrNoise.Score(sent) + 4;
+    }
+
+    /// <summary>Levenshtein oranı (sözcük dizileri için).</summary>
+    private static double Similarity(List<string> x, List<string> y)
+    {
+        if (x.Count == 0 || y.Count == 0) return x.Count == 0 && y.Count == 0 ? 1 : 0;
+        var previous = new int[y.Count + 1];
+        var row = new int[y.Count + 1];
+        for (var j = 0; j <= y.Count; j++) previous[j] = j;
+        for (var i = 1; i <= x.Count; i++)
+        {
+            row[0] = i;
+            for (var j = 1; j <= y.Count; j++)
+                row[j] = Math.Min(Math.Min(previous[j] + 1, row[j - 1] + 1), previous[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1));
+            (previous, row) = (row, previous);
+        }
+        return 1 - (double)previous[y.Count] / Math.Max(x.Count, y.Count);
+    }
+
+    /// <summary><paramref name="newText"/>, <paramref name="oldText"/>'in sonuna sözcük eklenmiş hali mi (daktilo efekti; satırın başı okunmamışsa başına eklenmiş hali).</summary>
+    public static bool IsGrowth(string newText, string oldText)
+    {
+        var x = Normalize(newText).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var y = Normalize(oldText).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (y.Count == 0 || x.Count <= y.Count) return false;
+        return StartsWith(x, y) || (y.Count >= 2 && EndsWith(x, y));
+    }
+
     private static bool StartsWith(List<string> words, List<string> part) => words.Take(part.Count).SequenceEqual(part);
 
     private static bool EndsWith(List<string> words, List<string> part) => words.Skip(words.Count - part.Count).SequenceEqual(part);

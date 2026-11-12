@@ -55,6 +55,23 @@ final class OcrNoiseTests: XCTestCase {
         }
     }
 
+    /// Aynı karenin (ya da aynı cümlenin) iki okumasından sözcüğe daha çok benzeyeni seçmek için (Windows: OcrNoiseTests).
+    func testCleanReadingScoresHigherThanGarbled() {
+        XCTAssertGreaterThan(OcrNoise.score("CESARE: Wait for me!"), OcrNoise.score("- CESAREiVJütt'h!"))
+        XCTAssertGreaterThan(OcrNoise.score("We go to McDonald's now."), 0)
+        XCTAssertLessThan(OcrNoise.score("T hats the[lil Should be quiet now."), OcrNoise.score("That should be quiet now."))
+    }
+
+    /// Geçişte üst üste solan iki altyazının karışık okuması çöp sayılır; olağan cümleler, kısaltmalar ve "Hmm" sayılmaz.
+    func testGarbledReadingsAreRecognised() {
+        for text in ["Gtt solkolfege.", "- CESAREiVJütt'h!", "Wrrk thng."] {
+            XCTAssertTrue(OcrNoise.looksGarbled(text), text)
+        }
+        for text in ["Hold the gate.", "The FBI and the NPC agents.", "Hmm, I don't know about that, boy.", "Go to college."] {
+            XCTAssertFalse(OcrNoise.looksGarbled(text), text)
+        }
+    }
+
     func testReadingDropsLinesThatWereOnlyNoise() {
         let reading = Reading(lines: [TextLine("We go now."), TextLine("ou$3e 2aljd")]).withoutOcrNoise()
         XCTAssertEqual(reading.text, "We go now.")

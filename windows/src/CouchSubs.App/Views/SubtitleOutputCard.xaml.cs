@@ -12,14 +12,26 @@ public partial class SubtitleOutputCard : UserControl
 {
     private AppController? controller;
     private bool loading;
+    private bool subscribed;
 
     public SubtitleOutputCard()
     {
         InitializeComponent();
+        // Ayarlardaki bölümler değişince kart görsel ağaçtan çıkıp yeniden girer; abonelik buna göre açılıp kapanır.
+        Loaded += (_, _) => Subscribe();
         Unloaded += (_, _) =>
         {
-            if (controller is not null) controller.PropertyChanged -= OnChanged;
+            if (controller is not null && subscribed) controller.PropertyChanged -= OnChanged;
+            subscribed = false;
         };
+    }
+
+    private void Subscribe()
+    {
+        if (controller is null || subscribed) return;
+        controller.PropertyChanged += OnChanged;
+        subscribed = true;
+        Refresh();
     }
 
     /// <summary>Ayarlarda açıklamalar da gösterilir; ana ekranda kart kısa kalır.</summary>
@@ -28,8 +40,7 @@ public partial class SubtitleOutputCard : UserControl
     internal void Attach(AppController attached)
     {
         controller = attached;
-        attached.PropertyChanged += OnChanged;
-        Refresh();
+        Subscribe();
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)

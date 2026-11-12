@@ -4,7 +4,7 @@ import CouchSubsCore
 import SwiftUI
 
 struct TVStep: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @State private var tvs: [LGTV] = []
     @State private var searching = false
     @State private var working = false
@@ -13,7 +13,7 @@ struct TVStep: View {
     @State private var pairingBrand: TVBrand?
 
     var body: some View {
-        StepLayout(symbol: "tv.fill", title: "Connect your TV",
+        StepLayout(title: "Connect your TV",
                    message: "Turn on the TV. When you press Connect, the TV asks for permission once — accept it with the remote. If the CouchSubs TV app is missing, this screen helps you install it.") {
             VStack(alignment: .leading, spacing: Theme.space("l")) {
                 if let tv = model.tv {
@@ -78,7 +78,11 @@ struct TVStep: View {
                 }
             }
         }
-        .task { await search() }
+        .task {
+            // Kurulum yarıda kaldıysa (ör. TV uygulaması kurulurken kapatıldı) eşleşmiş TV'deki uygulamaya yeniden bakılır.
+            if model.hasTV, model.tvApp == .unknown { Task { await model.refreshTVApp() } }
+            await search()
+        }
     }
 
     private func search() async {

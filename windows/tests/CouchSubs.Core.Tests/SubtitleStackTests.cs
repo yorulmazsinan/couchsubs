@@ -84,6 +84,18 @@ public class SubtitleStackTests
         Assert.Equal(["Kapı daha fazla açılmıyor."], Texts(stack, 0.5));
     }
 
+    /// Bilgisayar "yerine koy" dediyse (aynı cümlenin uzamış okuması) önceki çeviri üste çıkmaz; Türkçeleri birbirini
+    /// içermese de. Üstteki daha eski satır yerinde kalır.
+    [Fact]
+    public void RevisedLineReplacesInsteadOfStacking()
+    {
+        var stack = new SubtitleStack();
+        stack.Show("Birinci", 8000, false, 0);
+        stack.Show("Vaktimiz yok", 8000, false, 0.5);
+        stack.Show("Bunun için vaktimiz yok, evlat.", 8000, false, 0.8, replaces: true);
+        Assert.Equal(["Birinci", "Bunun için vaktimiz yok, evlat."], Texts(stack, 0.8));
+    }
+
     [Fact]
     public void ParagraphsNeverStack()
     {

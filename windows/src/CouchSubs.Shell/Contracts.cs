@@ -23,6 +23,8 @@ public static class StoreKeys
     public const string GeminiKey = "geminiKey";
     public const string OpenAiKey = "openAIKey";
     public const string ClaudeKey = "claudeKey";
+    /// <summary>Yerel model sunucusunun (Ollama, LM Studio) isteğe bağlı anahtarı.</summary>
+    public const string LocalAiKey = "localAIKey";
     /// <summary>Kurulum sihirbazı bitti. TV'siz kurulumda (altyazı bilgisayar ekranında) ana ekranı bu açar.</summary>
     public const string SetupComplete = "setupComplete";
 }
@@ -41,11 +43,12 @@ public static class SubtitleOutputs
 public sealed record OverlayBounds(double Left, double Top, double Width);
 
 /// <summary>
-/// Ayarlardaki çeviri motoru seçimi. Ücretsiz olan cihaz üstü modeldir; diğerleri kullanıcının kendi anahtarıyla çalışır
-/// (Mac'teki TranslationEngine ile aynı).
+/// Ayarlardaki çeviri motoru seçimi. Ücretsiz olan cihaz üstü modeldir; bulut motorları kullanıcının kendi anahtarıyla
+/// çalışır; yerel model (Ollama, LM Studio) kullanıcının bilgisayarında çalışır, anahtarı isteğe bağlıdır (Mac'teki
+/// TranslationEngine ile aynı).
 /// </summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<TranslationEngine>))]
-public enum TranslationEngine { Free, DeepL, Gemini, OpenAi, Claude }
+public enum TranslationEngine { Free, DeepL, Gemini, OpenAi, Claude, Local }
 
 public static class TranslationEngines
 {
@@ -54,6 +57,7 @@ public static class TranslationEngines
         TranslationEngine.Gemini => AiProvider.Gemini,
         TranslationEngine.OpenAi => AiProvider.OpenAi,
         TranslationEngine.Claude => AiProvider.Claude,
+        TranslationEngine.Local => AiProvider.Local,
         _ => null,
     };
 
@@ -61,15 +65,21 @@ public static class TranslationEngines
     {
         AiProvider.Gemini => TranslationEngine.Gemini,
         AiProvider.OpenAi => TranslationEngine.OpenAi,
+        AiProvider.Local => TranslationEngine.Local,
         _ => TranslationEngine.Claude,
     };
 
-    /// <summary>Hizmetin adı (marka adı; çevrilmez).</summary>
-    public static string DisplayName(this TranslationEngine engine) => engine.Provider()?.DisplayName() ?? "DeepL";
+    /// <summary>Hizmetin adı (marka adı; çevrilmez). Yerel modelin adı çevrilir.</summary>
+    public static string DisplayName(this TranslationEngine engine) =>
+        engine == TranslationEngine.Local ? Localizer.Current["Local model"] : engine.Provider()?.DisplayName() ?? "DeepL";
 
-    /// <summary>Çevrimiçi motor hatasının kullanıcıya söylenişi (ayarlar ve ana ekran aynı metni kullanır; Mac ile aynı).</summary>
-    public static string Describe(this OnlineKeyState state, TranslationEngine engine, Localizer text)
+    /// <summary>
+    /// Çevrimiçi motor hatasının kullanıcıya söylenişi (ayarlar ve ana ekran aynı metni kullanır; Mac ile aynı). Yerel
+    /// modelde <paramref name="server"/> sunucunun adresini ve modeli iletiye koyar.
+    /// </summary>
+    public static string Describe(this OnlineKeyState state, TranslationEngine engine, Localizer text, LocalAiServer? server = null)
     {
+        if (engine == TranslationEngine.Local) return state.DescribeLocal(server, text);
         var name = engine.DisplayName();
         return state switch
         {
@@ -81,6 +91,27 @@ public static class TranslationEngines
         };
     }
 
+    /// <summary>Yerel model sunucusunun (Ollama, LM Studio) hatası; sunucunun türüne göre ne yapılacağı söylenir (Mac ile aynı).</summary>
+    public static string DescribeLocal(this OnlineKeyState state, LocalAiServer? server, Localizer text)
+    {
+        server ??= LocalAiServer.Create(LocalAiServer.OllamaUrl, LocalAiServer.DefaultModel)!;
+        return state switch
+        {
+            OnlineKeyState.Valid => text["It works."],
+            OnlineKeyState.Invalid => text["The local model server did not accept the API key. Check the key, or remove it if the server does not need one."],
+            OnlineKeyState.QuotaExceeded => text["The local model server is busy. Try again in a moment."],
+            OnlineKeyState.ModelRejected when server.Kind == LocalAiServerKind.LmStudio =>
+                text.Format("LM Studio does not have the model %@. Download and load it in LM Studio, or check the model name.", server.Model),
+            OnlineKeyState.ModelRejected => text.Format("The model %1$@ is not on the local server. Download it: ollama pull %1$@", server.Model),
+            _ => server.Kind switch
+            {
+                LocalAiServerKind.Ollama => text.Format("Ollama is not running: %1$@ could not be reached, or the model did not answer in time. Open Ollama and download the model: ollama pull %2$@", server.Address, server.Model),
+                LocalAiServerKind.LmStudio => text.Format("LM Studio is not running: %@ could not be reached, or the model did not answer in time. Open LM Studio, load the model and start the local server.", server.Address),
+                _ => text.Format("The local model server at %@ could not be reached, or the model did not answer in time. Check the address and that the server is running.", server.Address),
+            },
+        };
+    }
+
     /// <summary>Şifreli depodaki anahtar adı; ücretsiz motorda null.</summary>
     public static string? StoreKey(this TranslationEngine engine) => engine switch
     {
@@ -88,6 +119,7 @@ public static class TranslationEngines
         TranslationEngine.Gemini => StoreKeys.GeminiKey,
         TranslationEngine.OpenAi => StoreKeys.OpenAiKey,
         TranslationEngine.Claude => StoreKeys.ClaudeKey,
+        TranslationEngine.Local => StoreKeys.LocalAiKey,
         _ => null,
     };
 }
@@ -123,6 +155,12 @@ public sealed record UserSettings
     public string GeminiModel { get; init; } = AiProvider.Gemini.DefaultModel().Id;
     public string OpenAiModel { get; init; } = AiProvider.OpenAi.DefaultModel().Id;
     public string ClaudeModel { get; init; } = AiProvider.Claude.DefaultModel().Id;
+    /// <summary>
+    /// Yerel model sunucusunun adresi (Ollama: http://localhost:11434/v1, LM Studio: http://localhost:1234/v1) ve
+    /// kullanıcının yazdığı model adı.
+    /// </summary>
+    public string LocalAiBaseUrl { get; init; } = LocalAiServer.OllamaUrl;
+    public string LocalAiModel { get; init; } = LocalAiServer.DefaultModel;
     /// <summary>Altyazı TV'de mi, bilgisayar ekranındaki pencerede mi, ikisinde de mi. Eski kayıtlar TV ile açılır.</summary>
     public SubtitleOutput Output { get; init; } = SubtitleOutput.Tv;
     /// <summary>Bilgisayar ekranındaki altyazı penceresi tıklamaları alttaki pencereye (oyun, PS Remote Play) geçirir.</summary>
@@ -147,6 +185,7 @@ public sealed record UserSettings
     {
         AiProvider.Gemini => GeminiModel,
         AiProvider.OpenAi => OpenAiModel,
+        AiProvider.Local => LocalAiModel,
         _ => ClaudeModel,
     };
 
@@ -154,8 +193,13 @@ public sealed record UserSettings
     {
         AiProvider.Gemini => this with { GeminiModel = id },
         AiProvider.OpenAi => this with { OpenAiModel = id },
+        AiProvider.Local => this with { LocalAiModel = id },
         _ => this with { ClaudeModel = id },
     };
+
+    /// <summary>Yerel model sunucusu; adres geçersizse null.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public LocalAiServer? LocalAiServer => CouchSubs.Core.LocalAiServer.Create(LocalAiBaseUrl, AiProvider.Local.Model(LocalAiModel).Id);
 
     /// <summary>Listede olmayan kayıtlı modeller (eski ayar ya da listeden çıkarılan model) varsayılana döner.</summary>
     public UserSettings WithCuratedModels() => Enum.GetValues<AiProvider>()
@@ -226,6 +270,12 @@ public interface ITranslationModel
     bool IsInstalled(string source, string target);
     Task DownloadAsync(string source, string target, IProgress<double> progress, CancellationToken cancellationToken);
     ITextTranslator Create(string source, string target);
+
+    /// <summary>Model kurulu ama çeviri motoru bu bilgisayarda açılamadı (ör. ONNX Runtime yüklenemedi).</summary>
+    bool EngineFailed => false;
+
+    /// <summary><see cref="EngineFailed"/> true olunca bir kez, herhangi bir iş parçacığından çağrılır.</summary>
+    event Action? EngineFailure { add { } remove { } }
 }
 
 /// <summary>Dış dünyayla (PS5, PSN, TV, OCR, çeviri) konuşan her şey; testlerde sahtesi kullanılır.</summary>
@@ -274,6 +324,10 @@ public interface IAppServices
     ITextTranslator? MakeAiTranslator(AiProvider provider, string key, string model, ITextTranslator? fallback) => null;
     /// <summary>Yapay zekâ anahtarını örnek bir satırı çevirerek dener.</summary>
     Task<AiTestResult> TestAiKeyAsync(AiProvider provider, string key, string model) => Task.FromResult(new AiTestResult(OnlineKeyState.Unreachable));
+    /// <summary>Yerel model (Ollama, LM Studio) çevirmeni; anahtar boş olabilir. Bu derlemede yoksa null.</summary>
+    ITextTranslator? MakeLocalAiTranslator(LocalAiServer server, string key, ITextTranslator? fallback) => null;
+    /// <summary>Yerel model sunucusunu örnek bir satırı çevirerek dener ("Bağlantıyı dene").</summary>
+    Task<AiTestResult> TestLocalAiAsync(LocalAiServer server, string key) => Task.FromResult(new AiTestResult(OnlineKeyState.Unreachable));
     /// <summary>Türkçe dublaj modeli; bu derlemede yoksa null.</summary>
     IDubbingModel? Dubbing => null;
     /// <summary>Hızlı dublaj: sistemin kendi Türkçe sesi (Windows'ta Microsoft Tolga); yoksa null.</summary>

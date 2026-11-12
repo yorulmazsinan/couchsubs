@@ -68,8 +68,8 @@ public class ComputerScreenTests
         var store = StoreWithoutTv();
         var settings = new MemorySettings();
         var controller = Make(store: store, settings: settings);
-        Assert.Equal(OnboardingStep.Welcome, controller.Step);
-        controller.Step = OnboardingStep.Tv;
+        // PS5 kayıtlı ama kurulum bitmemiş: sihirbaz TV adımından sürer.
+        Assert.Equal(OnboardingStep.Tv, controller.Step);
         controller.UseComputerScreen();
         controller.Advance(); // çeviri modeli -> deneme
         controller.Advance(); // deneme -> daha iyi çeviri (isteğe bağlı)

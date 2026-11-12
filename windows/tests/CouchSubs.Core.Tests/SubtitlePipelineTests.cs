@@ -52,7 +52,8 @@ internal sealed class GatedTranslator : ITextTranslator
             Requested.Add(text);
             if (!isOpen) { done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); waiting.Add((text, done)); }
         }
-        if (done is not null) await done.Task;
+        // Gerçek motor gibi iptale uyar (bırakılan çeviri beklemede kalmaz).
+        if (done is not null) await done.Task.WaitAsync(cancellationToken);
         return "TR: " + text;
     }
 
@@ -81,10 +82,11 @@ internal sealed class FakeSender : ISubtitleSender
     public List<string> Sent { get; } = [];
     public List<int> Durations { get; } = [];
     public List<TextBox?> Boxes { get; } = [];
+    public List<bool> Replaces { get; } = [];
     public int Clears { get; private set; }
-    public void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null)
+    public void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null, bool paragraphs = false, bool replaces = false)
     {
-        lock (Sent) { Sent.Add(text); Durations.Add(durationMs); Boxes.Add(box); }
+        lock (Sent) { Sent.Add(text); Durations.Add(durationMs); Boxes.Add(box); Replaces.Add(replaces); }
     }
     public void Clear() => Clears++;
 }
@@ -306,10 +308,10 @@ public class SubtitlePipelineTests
         Assert.Equal(["TR: Hold the gate.", "TR: Run!"], sender.Sent);
     }
 
-    /// Hızlı konuşmada çeviri sürerken gelen satırlardan yalnız en yenisi sırada bekler: araya girenler çevrilmez,
-    /// gösterilenler sırayla gelir.
+    /// Hızlı konuşmada çeviri sürerken gelen satırlar sırayla çevrilir ve gösterilir; araya giren satır kaybolmaz
+    /// (eskiden yalnız en yenisi bekliyordu: üç satırlık konuşmanın ortası hiç çevrilmiyordu).
     [Fact]
-    public async Task FastLinesOnlyTranslateTheNewestPending()
+    public async Task FastLinesAreAllTranslatedInOrder()
     {
         var sender = new FakeSender();
         var clock = new TestClock();
@@ -317,10 +319,75 @@ public class SubtitlePipelineTests
         var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!", "Get down!"), translator, sender, clock: clock.Read);
         await Run(pipeline, 3, waitEach: false, clock: clock);
         await translator.Release("Hold the gate.");
+        await translator.Release("Run!");
         await translator.Release("Get down!");
         await pipeline.WaitForTranslationsAsync();
-        Assert.Equal(["Hold the gate.", "Get down!"], translator.Requested);
-        Assert.Equal(["TR: Hold the gate.", "TR: Get down!"], sender.Sent);
+        Assert.Equal(["Hold the gate.", "Run!", "Get down!"], translator.Requested);
+        Assert.Equal(["TR: Hold the gate.", "TR: Run!", "TR: Get down!"], sender.Sent);
+    }
+
+    /// Sıra dolunca en eski bekleyen satır atlanır; kuyruk konuşma hızıyla büyümez.
+    [Fact]
+    public async Task OldestWaitingLineIsSkippedWhenTheQueueIsFull()
+    {
+        var clock = new TestClock();
+        var translator = new GatedTranslator();
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!", "Get down!", "Now!"), translator, new FakeSender(),
+            clock: clock.Read);
+        await Run(pipeline, 4, waitEach: false, clock: clock);
+        translator.Open();
+        await pipeline.WaitForTranslationsAsync();
+        Assert.Equal(["Hold the gate.", "Get down!", "Now!"], translator.Requested);
+    }
+
+    /// Yavaş çeviride (ücretsiz motor) art arda üç satırın çevirisi satırlar kalktıktan iki saniye sonra gelse de
+    /// üçü de gösterilir; eskiden yalnız ilki görünüyordu.
+    [Fact]
+    public async Task SlowTranslationsOfQuickLinesAreStillShown()
+    {
+        var sender = new FakeSender();
+        var clock = new TestClock();
+        var translator = new GatedTranslator();
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!", "Get down!"), translator, sender, clock: clock.Read);
+        await Run(pipeline, 3, waitEach: false, clock: clock);
+        clock.Now += 2000;
+        await translator.Release("Hold the gate.");
+        await translator.Release("Run!");
+        await translator.Release("Get down!");
+        await pipeline.WaitForTranslationsAsync();
+        Assert.Equal(["TR: Hold the gate.", "TR: Run!", "TR: Get down!"], sender.Sent);
+        Assert.Equal([SubtitlePipeline.ReadingTime("TR: Hold the gate."), SubtitlePipeline.ReadingTime("TR: Run!"), 15000], sender.Durations);
+    }
+
+    /// Daktilo efekti: yarım okunan cümlenin çevirisi sürerken tamamı gelirse yarımın çevirisi bırakılır, gösterilmez.
+    [Fact]
+    public async Task GrowingLineSupersedesItsPartialTranslation()
+    {
+        var sender = new FakeSender();
+        var clock = new TestClock();
+        var translator = new GatedTranslator();
+        var pipeline = new SubtitlePipeline(new FakeReader(Lines(("Run to", 2), ("Run to the boat!", 2))),
+            translator, sender, clock: clock.Read);
+        await Run(pipeline, 4, waitEach: false, clock: clock);
+        await translator.Release("Run to the boat!");
+        await pipeline.WaitForTranslationsAsync();
+        Assert.Equal(["Run to", "Run to the boat!"], translator.Requested);
+        Assert.Equal(["TR: Run to the boat!"], sender.Sent);
+    }
+
+    /// Yarım satırın çevirisi gösterildikten sonra tamamı gelirse TV'ye "yerine koy" denir: aynı cümlenin iki çevirisi
+    /// üst üste yığılmaz. Başka bir cümle yığılabilir.
+    [Fact]
+    public async Task RevisedLineReplacesTheShownTranslation()
+    {
+        var sender = new FakeSender();
+        var clock = new TestClock();
+        var pipeline = new SubtitlePipeline(
+            new FakeReader(Lines(("Run to", 2), ("Run to the boat!", 2), ("Get down now!", 2))),
+            new FakeTranslator(), sender, clock: clock.Read);
+        await Run(pipeline, 6, clock: clock);
+        Assert.Equal(["TR: Run to", "TR: Run to the boat!", "TR: Get down now!"], sender.Sent);
+        Assert.Equal([false, true, false], sender.Replaces);
     }
 
     /// Yeni satır gelmiş, eskisinin çevirisi bir saniyeden geç gelmişse gösterilmez; yeni satırınki gösterilir.

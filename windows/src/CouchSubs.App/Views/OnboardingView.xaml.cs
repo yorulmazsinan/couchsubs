@@ -3,6 +3,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using CouchSubs.App.Controls;
 using CouchSubs.App.Views.Steps;
 using CouchSubs.Core;
 using CouchSubs.Shell;
@@ -58,9 +60,60 @@ public partial class OnboardingView : UserControl
         };
         Counter.Text = Localizer.Current.Format("Step %lld of %lld", controller.StepNumber, AppController.StepCount);
         Progress.Value = (double)controller.StepNumber / AppController.StepCount;
+        ShowSteps();
         BackButton.Visibility = controller.Step == OnboardingStep.Welcome ? Visibility.Hidden : Visibility.Visible;
         ContinueButton.Visibility = controller.Step == OnboardingStep.Test ? Visibility.Hidden : Visibility.Visible;
         ShowContinue();
+    }
+
+    /// <summary>Adımların adları: her adımın kendi başlığı.</summary>
+    private static string StepTitle(OnboardingStep step) => step switch
+    {
+        OnboardingStep.Welcome => "Welcome to CouchSubs",
+        OnboardingStep.SecondAccount => "A second PSN account",
+        OnboardingStep.PsnLogin => "Sign in with the second account",
+        OnboardingStep.Console => "Connect your PS5",
+        OnboardingStep.Tv => "Connect your TV",
+        OnboardingStep.Translation => "Download the translation model",
+        OnboardingStep.Test => "Let's test it",
+        _ => "Better translation (free)",
+    };
+
+    /// <summary>Soldaki adım listesi: tamamlananlar yeşil ✓, şimdiki sarı daire ve nötr zemin, sıradakiler numaralı ve soluk.</summary>
+    private void ShowSteps()
+    {
+        StepList.Children.Clear();
+        var current = (int)controller.Step;
+        foreach (var step in Enum.GetValues<OnboardingStep>().Where(s => s != OnboardingStep.Done))
+        {
+            var index = (int)step;
+            var (done, now) = (index < current, index == current);
+            var mark = new TextBlock
+            {
+                Text = done ? Glyphs.Check : (index + 1).ToString(), FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.NoWrap,
+            };
+            if (done) mark.Style = (Style)FindResource("GlyphText");
+            mark.SetResourceReference(TextBlock.FontSizeProperty, "captionFontSize");
+            mark.SetResourceReference(TextBlock.ForegroundProperty, done || now ? "onAccentBrush" : "textSecondaryBrush");
+            var dot = new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(14), Child = mark, VerticalAlignment = VerticalAlignment.Center };
+            dot.SetResourceReference(Border.BackgroundProperty, done ? "successBrush" : now ? "accentBrush" : "borderBrush");
+            var label = new TextBlock { Text = Localizer.Current[StepTitle(step)], Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            label.SetResourceReference(TextBlock.ForegroundProperty, done || now ? "textPrimaryBrush" : "textSecondaryBrush");
+            if (now) label.FontWeight = FontWeights.SemiBold;
+            var content = new DockPanel();
+            DockPanel.SetDock(dot, Dock.Left);
+            content.Children.Add(dot);
+            content.Children.Add(label);
+            var row = new Border
+            {
+                Child = content, Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 0, 0, 4), MinHeight = 44,
+            };
+            row.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
+            if (now) row.SetResourceReference(Border.BackgroundProperty, "surface2Brush");
+            System.Windows.Automation.AutomationProperties.SetName(row, $"{index + 1}. {label.Text}");
+            StepList.Children.Add(row);
+        }
     }
 
     private void OnBack(object sender, RoutedEventArgs e) => controller.Back();

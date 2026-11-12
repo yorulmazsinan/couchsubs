@@ -70,6 +70,39 @@ final class TextMatchTests: XCTestCase {
     func testEmptyIsNeverSimilarToText() {
         XCTAssertFalse(TextMatch.isSimilar("", "abc"))
     }
+
+    /// Uzayan, yarım ya da bir iki sözcüğü başka okunan aynı cümle: TV'de öncekinin yerine geçer (Windows: TextMatchTests).
+    func testRevisionsOfTheSameSentence() {
+        let pairs = [
+            ("We do not have time for this.", "We do not have"),
+            ("We do not have", "We do not have time for this."),
+            ("have time for this, boy.", "We do not have time for this, boy."),
+            ("The gate will not hold!", "The gale will not hold"),
+            ("Across the deep waters he went, hoping a boat would carry him home.",
+             "Across the deep waters O went, Hoping a boal would carry him home"),
+        ]
+        for (new, old) in pairs { XCTAssertTrue(TextMatch.isRevision(new, of: old), "\(new) / \(old)") }
+    }
+
+    func testDifferentSentencesAreNotRevisions() {
+        let pairs = [
+            ("Run to the boat!", "We do not have time for this."),
+            ("Where is the ship?", "Where is the boy?"),
+            ("No.", "Yes."),
+            ("I told you to stay with your mother.", "You should not be here."),
+        ]
+        for (new, old) in pairs { XCTAssertFalse(TextMatch.isRevision(new, of: old), "\(new) / \(old)") }
+    }
+
+    func testGrowthOnlyCountsAddedWords() {
+        XCTAssertTrue(TextMatch.isGrowth("We do not have time.", of: "We do not"))
+        XCTAssertFalse(TextMatch.isGrowth("We do not", of: "We do not have time."))
+        XCTAssertFalse(TextMatch.isGrowth("We do not have time.", of: "We do not have time."))
+        XCTAssertTrue(TextMatch.isGrowth("Then we go home.", of: "Then"))
+        // Başı okunmamış satır: sondaki tek sözcük yetmez, iki sözcük yeter.
+        XCTAssertFalse(TextMatch.isGrowth("Then we go home.", of: "home"))
+        XCTAssertTrue(TextMatch.isGrowth("Then we go home.", of: "go home"))
+    }
 }
 
 final class CenteredBoxTests: XCTestCase {

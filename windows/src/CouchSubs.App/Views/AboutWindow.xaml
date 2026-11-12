@@ -4,7 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:t="clr-namespace:CouchSubs.App.Theme"
         Title="{t:T 'About CouchSubs'}" Width="460" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner" Background="{DynamicResource backgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
+        WindowStartupLocation="CenterOwner" Background="{DynamicResource windowBackgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
     <StackPanel Margin="32">
         <Grid Width="88" Height="88">
                         <Image Source="/Assets/logo.png" RenderOptions.BitmapScalingMode="HighQuality" />

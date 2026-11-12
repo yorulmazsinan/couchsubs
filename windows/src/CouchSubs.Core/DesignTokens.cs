@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace CouchSubs.Core;
 
 /// <summary>
-/// design/tokens.json: renkler, yazı boyutları, boşluklar. Mac uygulaması da aynı dosyayı kullanır;
+/// design/tokens.json: renkler, yazı boyutları, boşluklar, köşeler (parıltı yok). Mac uygulaması da aynı dosyayı kullanır;
 /// bir değeri değiştirmek için yalnız o dosya düzenlenir.
 /// </summary>
 public sealed class DesignTokens

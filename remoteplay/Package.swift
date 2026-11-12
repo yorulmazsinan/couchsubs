@@ -5,12 +5,13 @@ import PackageDescription
 
 let package = Package(
     name: "RemotePlay",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
         .library(name: "RemotePlay", targets: ["RemotePlay"]),
     ],
     targets: [
-        // scripts/build-chiaki-macos.sh ile üretilir (chiaki-ng libchiaki + statik bağımlılıklar).
+        // scripts/build-chiaki-macos.sh (macOS dilimi) ve scripts/build-chiaki-ios.sh (iPhone/iPad dilimleri) ile üretilir
+        // (chiaki-ng libchiaki + statik bağımlılıklar).
         .binaryTarget(name: "CChiaki", path: "../third-party/build/CChiaki.xcframework"),
         .target(
             name: "RemotePlay",
@@ -18,7 +19,8 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [
                 .linkedLibrary("z"),
-                .linkedFramework("CoreServices"),
+                // libchiaki CoreServices'i yalnız macOS'ta kullanır (takion.c, TARGET_OS_OSX).
+                .linkedFramework("CoreServices", .when(platforms: [.macOS])),
                 .linkedFramework("CoreFoundation"),
                 .linkedFramework("Security"),
                 .linkedFramework("SystemConfiguration"),

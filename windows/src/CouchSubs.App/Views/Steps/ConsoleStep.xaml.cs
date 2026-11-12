@@ -61,12 +61,21 @@ public partial class ConsoleStep : UserControl
     {
         if (e.Key is not (Key.Enter or Key.Return)) return;
         e.Handled = true;
-        if (!working) OnConnect(sender, e);
+        if (!working && Connect.IsEnabled) OnConnect(sender, e);
     }
 
     private bool working;
 
-    /// <summary>Düğme yalnız çalışırken kapalı; eksik kod ya da adres tıklanınca açıkça söylenir, hiçbir sonuç sessiz kalmaz.</summary>
+    /// <summary>Eşleşme sonrası Bağlan kapalı kalır; yeni kod yazılınca yeniden açılır.</summary>
+    private void OnPinChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!working && Pin.Text.Length > 0) Connect.IsEnabled = true;
+    }
+
+    /// <summary>
+    /// Düğme çalışırken ve eşleşmeden sonra (kod değişene dek) kapalı; eksik kod ya da adres tıklanınca açıkça söylenir,
+    /// hiçbir sonuç sessiz kalmaz. Eşleşince düğmenin altında yeşil ileti çıkar ve ~1 sn sonra sonraki adıma geçilir.
+    /// </summary>
     private async void OnConnect(object sender, RoutedEventArgs e)
     {
         if (working) return;
@@ -74,10 +83,13 @@ public partial class ConsoleStep : UserControl
         Connect.IsEnabled = false;
         Working.Visibility = Visibility.Visible;
         Error.Text = "";
+        Paired.Visibility = Visibility.Collapsed;
+        var paired = false;
         try
         {
             await Controller.RegisterAsync(Host, Pin.Text);
             ShowDone();
+            paired = true;
         }
         catch (AppException error)
         {
@@ -93,9 +105,25 @@ public partial class ConsoleStep : UserControl
         {
             working = false;
             Working.Visibility = Visibility.Collapsed;
-            Connect.IsEnabled = true;
+            Connect.IsEnabled = !paired;
             ShowLog.Visibility = Error.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
+        if (paired) await ShowPairedAsync();
+    }
+
+    /// <summary>Başarı iletisi görünür kılınır (kaydırılmış olsa da), kod alanı temizlenir, kısa süre sonra sonraki adım açılır.</summary>
+    private async Task ShowPairedAsync()
+    {
+        Paired.Text = $"✓ {Controller.PairedText}";
+        Paired.Visibility = Visibility.Visible;
+        Pin.Text = "";
+        // Kod silinince TextChanged düğmeyi açmaz (boş kod); yine de açıkça kapalı tutulur.
+        Connect.IsEnabled = false;
+        Paired.UpdateLayout();
+        Paired.BringIntoView();
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        // Adım bu arada kapandıysa (Geri) denetleyici zaten ilerlemez; yalnız PS5 adımındayken geçer.
+        if (IsLoaded) Controller.ContinueAfterPairing();
     }
 
     private void OnShowLog(object sender, RoutedEventArgs e)

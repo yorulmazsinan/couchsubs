@@ -54,7 +54,8 @@ jobs:
 
       - name: Araçlar
         run: |
-          brew install cmake ninja pkg-config protobuf openssl@3 json-c xcodegen
+          # OpenSSL ve json-c uygulama için kaynaktan derlenir (build-chiaki-macos.sh); openssl@3 yalnız Sparkle imzası için.
+          brew install cmake ninja pkg-config protobuf openssl@3 xcodegen
           npm install -g @webos-tools/cli
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version

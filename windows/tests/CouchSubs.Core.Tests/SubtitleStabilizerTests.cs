@@ -28,6 +28,67 @@ public class SubtitleStabilizerTests
         Assert.Equal(StabilizerAction.Translate("We should keep moving."), s.Feed("We should keep moving."));
     }
 
+    /// Noktayla biten çöp okuma (altyazılar geçişte üst üste solarken) ilk karede çevrilmez; ardından gelen düzgün okuma çevrilir.
+    [Fact]
+    public void GarbledSentenceIsNotSentOnFirstFrame()
+    {
+        var s = new SubtitleStabilizer();
+        Assert.Equal(StabilizerAction.None, s.Feed("Gtt solkolfege."));
+        Assert.Equal(StabilizerAction.Translate("Go to college."), s.Feed("Go to college."));
+    }
+
+    /// Altyazılar geçişte üst üste solarken birkaç kare aynı çöp okunabiliyor (GTA V, #26): geçiş süresince çevrilmez,
+    /// gerçekten öyle duran yazı ise sonunda çevrilir.
+    [Fact]
+    public void GarbledLineIsSentOnlyAfterStayingLongerThanACrossfade()
+    {
+        var clock = new TestClock();
+        var s = new SubtitleStabilizer(clock: clock.Read);
+        const string garbled = "- Nat) but, you knpw. shit, I m";
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.Equal(StabilizerAction.None, s.Feed(garbled));
+            clock.Now += 100;
+        }
+        clock.Now += SubtitleStabilizer.GarbledStableMs;
+        Assert.Equal(StabilizerAction.Translate(garbled), s.Feed(garbled));
+    }
+
+    /// Daktilo efektinde yarım satır gönderildikten sonra tamamı gelirse o da çevrilir.
+    [Fact]
+    public void CompletedLineAfterSentPartIsTranslated()
+    {
+        var s = new SubtitleStabilizer();
+        Assert.Equal(StabilizerAction.None, s.Feed("We do not have"));
+        Assert.Equal(StabilizerAction.Translate("We do not have"), s.Feed("We do not have"));
+        Assert.Equal(StabilizerAction.Translate("We do not have time for this."), s.Feed("We do not have time for this."));
+    }
+
+    private const string Full = "Shit, I just came by to see if there's somethin' I can help you with.";
+    private const string Worse = "Shit, I came by to see if there somethinl I can help ya.";
+
+    /// Açık zeminde (GTA V, #26) aynı cümle her karede bir iki sözcüğü eksik ya da başka okunuyordu; her okuma ayrı
+    /// çevrilip TV'de üç çeviri üst üste duruyordu. Daha kötü okuma yeni satır sayılmaz, eskisiyle gidip gelmesi de.
+    [Fact]
+    public void WorseRereadOfSentLineIsNotTranslatedAgain()
+    {
+        var s = new SubtitleStabilizer();
+        Assert.Equal(StabilizerAction.Translate(Full), s.Feed(Full));
+        Assert.Equal(StabilizerAction.None, s.Feed(Worse));
+        Assert.Equal(StabilizerAction.None, s.Feed(Full));
+        Assert.Equal(StabilizerAction.None, s.Feed(Worse));
+    }
+
+    /// Önce eksik okunan cümlenin daha çok sözcüklü okuması gelirse yeniden çevrilir (TV eskisinin yerine koyar).
+    [Fact]
+    public void BetterRereadOfSentLineIsTranslated()
+    {
+        var s = new SubtitleStabilizer();
+        Assert.Equal(StabilizerAction.Translate(Worse), s.Feed(Worse));
+        Assert.Equal(StabilizerAction.Translate(Full), s.Feed(Full));
+        Assert.Equal(StabilizerAction.None, s.Feed(Worse));
+    }
+
     /// Cümle bitmişse beklemeye gerek yok; hızlı konuşmada her kare önemli.
     [Theory]
     [InlineData("We do not have time.")]
@@ -162,6 +223,43 @@ public class SubtitleStabilizerTests
         clock.Now += 50;
         Assert.Equal(StabilizerAction.Translate(second), s.Feed(second));
     }
+
+    /// Önceden çeviren çevirmenle: bozuk ilk kare tek başına gönderilmez; doğrulanan satır ilk okunan hâliyle gider
+    /// (çevirisi o metinle başlatılmıştı).
+    [Fact]
+    public void GarbledFirstReadingIsConfirmedThenSentAsFirstRead()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.None, s.Feed("xa Oh, I know exactly who gave you your orders."));
+        Assert.Equal(StabilizerAction.Translate("xa Oh, I know exactly who gave you your orders."), s.Feed("Oh, I know exactly who gave you your orders."));
+        Assert.Equal(StabilizerAction.None, s.Feed("Oh, I know exactly who gave you your orders."));
+    }
+
+    [Fact]
+    public void SingleGarbledFrameIsNeverSentButCleanLineGoesAtOnce()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.None, s.Feed("f fe & ie want it."));
+        Assert.Equal(StabilizerAction.Translate("In fact, sir, now you can do me a favor..."), s.Feed("In fact, sir, now you can do me a favor..."));
+    }
+
+    /// Bir kez görünüp kalkan kısa satır da gösterilmeli (yalnız iki kare doğrulaması bunu hiç göstermiyordu).
+    [Fact]
+    public void CleanLineSeenOnceIsSent()
+    {
+        var s = new SubtitleStabilizer(cleanFastPathOnly: true);
+        Assert.Equal(StabilizerAction.Translate("you boys... how'd you boys like a couple of bucks?"), s.Feed("you boys... how'd you boys like a couple of bucks?"));
+    }
+
+    [Theory]
+    [InlineData("Peter: I did it.", true)]
+    [InlineData("Spider-Man: First cover!", true)]
+    [InlineData("Head over to the tavern run by Mr. Gray...", true)]
+    [InlineData("f fe & ie want it.", false)]
+    [InlineData("A _ there's an extra ten bucks if you do.", false)]
+    [InlineData("4 Pr and give the stuff out for free.", false)]
+    [InlineData("Spider-Man **: can't believe you have this!", false)]
+    public void CleanReadingsAreRecognised(string raw, bool clean) => Assert.Equal(clean, SubtitleStabilizer.LooksClean(raw));
 
     [Fact]
     public void AlreadyTranslatedIsSkipped()

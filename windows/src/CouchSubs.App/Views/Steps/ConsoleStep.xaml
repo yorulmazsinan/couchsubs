@@ -5,7 +5,7 @@
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:v="clr-namespace:CouchSubs.App.Views">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Controller}" Title="{t:T 'Connect your PS5'}"
+    <c:StepLayout Title="{t:T 'Connect your PS5'}"
                   Message="{t:T 'Turn on the PS5. As the second user, open Settings › System › Remote Play › Pair Device and enter the 8-digit code shown there.'}">
         <StackPanel>
             <TextBlock x:Name="Done" Style="{StaticResource DoneText}" Margin="0,0,0,16" />
@@ -24,11 +24,13 @@
             <TextBlock Text="{t:T '8-digit code'}" Style="{StaticResource HintText}" Margin="0,20,0,6" />
             <!-- Enter bağlanır (eskiden kapalı "Devam"a gidip hiçbir şey yapmıyordu); boşluk ve tire için uzunluk payı var. -->
             <TextBox x:Name="Pin" Width="240" HorizontalAlignment="Left" FontSize="{DynamicResource codeFontSize}" FontWeight="SemiBold"
-                     MinHeight="52" MaxLength="16" PreviewKeyDown="OnFieldKeyDown" />
+                     MinHeight="52" MaxLength="16" PreviewKeyDown="OnFieldKeyDown" TextChanged="OnPinChanged" />
             <Button x:Name="Connect" Content="{t:T 'Connect'}" Style="{StaticResource PrimaryButton}" Margin="0,16,0,0"
                     Click="OnConnect" />
             <TextBlock x:Name="Working" Style="{StaticResource HintText}" Margin="0,12,0,0" Visibility="Collapsed"
                        Text="{t:T 'Connecting to the PS5… This can take up to 30 seconds.'}" />
+            <!-- Eşleşme başarılı: düğmenin hemen altında yeşil ileti (üstteki ad kaydırınca görünmüyordu). -->
+            <TextBlock x:Name="Paired" Style="{StaticResource DoneText}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed" />
             <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,12,0,0" />
             <!-- Eşleştirme olmazsa gönderilecek remoteplay.log Dosya Gezgini'nde seçili açılır. -->
             <Button x:Name="ShowLog" Content="{t:T 'Show log file'}" HorizontalAlignment="Left" Margin="0,8,0,0"

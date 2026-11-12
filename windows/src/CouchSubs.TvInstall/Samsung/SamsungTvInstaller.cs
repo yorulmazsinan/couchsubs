@@ -15,7 +15,7 @@ public enum SamsungInstallError
     Unreachable,
     LoginFailed,
     CertificateFailed,
-    /// <summary>TV, Tizen 5.0'dan (2019) eski.</summary>
+    /// <summary>TV, Tizen 3.0'dan (2017) eski.</summary>
     TooOld,
     InstallFailed,
     /// <summary>TV'de yer yok ([116]).</summary>
@@ -59,6 +59,26 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     public const int SdbPort = 26101;
     public const string AppId = "CouchSubsT.CouchSubs";
     internal const string PackageId = "CouchSubsT";
+
+    /// <summary>
+    /// Desteklenen en eski Tizen: 3.0 (2017 modelleri, ör. UE43MU7000U). Sayfa ES5 ile yazıldığından Tizen 3.0'ın
+    /// tarayıcısında (Chromium 47) çalışır. Tizen 2.x (2015–2016) hiç denenmedi, kurulum yolu da farklıdır
+    /// (Apps2Samsung profili /home/developer'a gönderir); reddedilir.
+    /// </summary>
+    internal const string MinimumTizen = "3.0";
+
+    /// <summary>
+    /// Bu sürüme kadar (dahil) TV, kurulumdan önce dağıtıcı sertifikasının cihaz profilini (device-profile.xml) ister;
+    /// yenilerde izin imzanın içindedir. Eşik ve hedef klasör Apps2Samsung'un TizenPermitInstall'ından (MIT).
+    /// </summary>
+    internal const string DeviceProfileUpTo = "4.0";
+
+    /// <summary>TV'nin bildirdiği Tizen sürümü desteklenmiyor mu? Sürüm okunamadıysa (boş) kurulum denenir.</summary>
+    internal static bool IsTooOld(string platform) => platform.Length > 0 && Versions.IsNewer(MinimumTizen, platform);
+
+    /// <summary>Tizen 3.0–4.0 (2017–2018): kurulumdan önce cihaz profili TV'ye gönderilmeli.</summary>
+    internal static bool NeedsDeviceProfile(string platform) =>
+        platform.Length > 0 && !IsTooOld(platform) && !Versions.IsNewer(platform, DeviceProfileUpTo);
 
     /// <summary>Sertifika yoksa Samsung girişini başlatır; yoksa null döner ve kurulum giriş adımında durur.</summary>
     public Func<CancellationToken, Task<SamsungAccount>>? SignIn { get; init; }
@@ -143,8 +163,10 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         var platform = capabilities.GetValueOrDefault("platform_version", "").Trim();
         var toolPath = capabilities.GetValueOrDefault("sdk_toolpath")?.Trim() is { Length: > 0 } path ? path : "/opt/usr/apps/tmp";
         Log.Write($"TV: Tizen {(platform.Length > 0 ? platform : "?")}, sdk_toolpath {toolPath}");
-        if (platform.Length > 0 && Versions.IsNewer("5.0", platform))
+        if (IsTooOld(platform))
             throw new SamsungInstallException(SamsungInstallError.TooOld, $"Tizen {platform}");
+        if (platform.Length > 0 && Versions.IsNewer("5.0", platform))
+            Log.Write($"Tizen {platform}: 2017–2018 TV'si, destek deneysel.");
 
         var onTv = await ReadInstalledVersionAsync(device, cancellationToken);
         if (version is not null && onTv is not null && !Versions.IsNewer(version, onTv)) return (onTv, false);
@@ -166,6 +188,8 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
             profile = await certificates.CreateAsync(duid, account, directory, cancellationToken);
             Log.Write($"Yeni sertifika: {profile.Describe(DateTime.UtcNow, duid)}");
         }
+
+        if (NeedsDeviceProfile(platform)) await PushDeviceProfileAsync(device, profile, toolPath, cancellationToken);
 
         Progress?.Invoke("signing");
         DeleteLeftovers(Path.GetTempPath());
@@ -300,6 +324,33 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         catch (Exception error) when (error is not OperationCanceledException)
         {
             Log.Write($"Uygulama açılamadı (kurulum yine tamam): {error.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Tizen 3.0–4.0: Tizen Studio'daki "Permit to install applications" adımı. Sertifika alınırken saklanan cihaz
+    /// profili TV'nin <c>sdk_toolpath</c> klasörüne gönderilir; TV, imzayı bu profildeki DUID listesine göre kabul eder.
+    /// Profil yoksa ya da gönderilemezse kurulum yine denenir: TV reddederse sebebi kurulum çıktısında görünür.
+    /// </summary>
+    private async Task PushDeviceProfileAsync(SdbTcpDevice device, SigningProfile profile, string toolPath,
+        CancellationToken cancellationToken)
+    {
+        var local = Path.Combine(profile.Directory, "device-profile.xml");
+        if (!File.Exists(local))
+        {
+            Log.Write("Cihaz profili (device-profile.xml) yok; gönderilmeden kuruluyor.");
+            return;
+        }
+        var remote = $"{toolPath}/device-profile.xml";
+        try
+        {
+            await using var file = File.OpenRead(local);
+            await device.PushAsync(file, remote, ct: cancellationToken);
+            Log.Write($"Cihaz profili gönderildi: {remote}");
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            Log.Write($"Cihaz profili gönderilemedi ({remote}): {error.Message}");
         }
     }
 

@@ -30,7 +30,7 @@ private final class CountingTranslator: TextTranslator {
 
 private final class RecordingSender: SubtitleSending {
     var sent: [String] = []
-    func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?) { sent.append(text) }
+    func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool) { sent.append(text) }
     func clear() {}
 }
 

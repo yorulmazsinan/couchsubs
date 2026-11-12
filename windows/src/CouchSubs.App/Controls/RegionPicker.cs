@@ -56,7 +56,8 @@ public sealed class RegionPicker : UserControl
         preview.LostMouseCapture += (_, _) => drag = Drag.None;
 
         var panel = new StackPanel();
-        var border = new Border { CornerRadius = new CornerRadius(10), Child = preview, ClipToBounds = true };
+        var border = new Border { Child = preview, ClipToBounds = true };
+        border.SetResourceReference(Border.CornerRadiusProperty, "radius.inner");
         border.SetResourceReference(Border.BackgroundProperty, "backgroundBrush");
         panel.Children.Add(border);
 

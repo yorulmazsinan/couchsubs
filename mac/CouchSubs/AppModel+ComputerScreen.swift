@@ -19,8 +19,8 @@ extension AppModel {
         guard settings.output.showsOnComputer else { return }
         let now = overlayClock()
         switch event {
-        case .subtitle(let text, let durationMs, let paragraphs):
-            overlayStack.show(text, durationMs: durationMs, paragraphs: paragraphs, now: now)
+        case .subtitle(let text, let durationMs, let paragraphs, let replaces):
+            overlayStack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         case .clear:
             overlayStack.clear(now: now)
         }

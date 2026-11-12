@@ -73,6 +73,88 @@ final class StreamSessionLifecycleTests: XCTestCase {
         // Bekleyen yeniden deneme bloğu çalışacağı zamanı geçir; süreç hâlâ ayaktaysa çökme yok.
         Thread.sleep(forTimeInterval: 3)
     }
+
+    /// GitHub #21: oturum iş parçacığı çalışırken sahibi (`StreamSession`) bırakılıp oturum arka planda kapatılınca
+    /// kapanan iş parçacığı günlüğe yazar. Günlük kutuyla birlikte yaşamalı; yoksa serbest kalmış belleğe yazılır.
+    /// İş parçacığı 9295 portunda bağlanıp yanıt bekleyen sessiz bir dinleyiciyle canlı tutulur. Bozuk sürümü
+    /// kesin yakalamak için `MallocScribble=1` ile çalıştırılabilir (serbest bellek 0x55 ile dolar).
+    func testSessionThreadLogsIntoLiveLoggerWhileTornDownAfterOwnerIsGone() throws {
+        let listener: SilentListener
+        do { listener = try SilentListener(port: 9295) } catch { throw XCTSkip("9295 portu kullanılamıyor: \(error)") }
+        defer { listener.close() }
+
+        weak var weakLogger: ChiakiLogger?
+        var box: ChiakiSessionBox? = ChiakiSessionBox(generation: 1, owner: nil)
+        weakLogger = box?.logger
+        let console = RegisteredConsole(host: "127.0.0.1", name: "test", registKey: Data(repeating: 0x31, count: 16),
+                                        morning: Data(repeating: 1, count: 16))
+        XCTAssertTrue(box!.initialize(console: console, accountId: Data(repeating: 1, count: 8)).isSuccess)
+        XCTAssertTrue(chiaki_session_start(box!.pointer).isSuccess)
+        XCTAssertTrue(listener.waitForConnection(timeout: 10), "oturum iş parçacığı PS5'e bağlanmayı denemedi")
+
+        // Sahibi gitmiş, oturum hâlâ açık: StreamSession'ın deinit'i gibi kapatma arka planda.
+        let closed = expectation(description: "oturum kapandı")
+        let pending = box!
+        box = nil
+        DispatchQueue.global().async {
+            pending.tearDown()
+            closed.fulfill()
+        }
+        wait(for: [closed], timeout: 15)
+        XCTAssertNotNil(weakLogger, "günlük, kutu yaşarken bırakılmamalı")
+        _ = pending
+    }
+}
+
+/// Bağlantıyı kabul edip hiçbir şey yanıtlamayan TCP dinleyicisi (yalnız 127.0.0.1).
+private final class SilentListener {
+    private let socketFD: Int32
+    private var accepted: [Int32] = []
+    private let lock = NSLock()
+    private let connected = DispatchSemaphore(value: 0)
+
+    init(port: UInt16) throws {
+        socketFD = socket(AF_INET, SOCK_STREAM, 0)
+        guard socketFD >= 0 else { throw POSIXError(.EIO) }
+        var yes: Int32 = 1
+        setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(socketFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard bound == 0, listen(socketFD, 4) == 0 else {
+            Darwin.close(socketFD)
+            throw POSIXError(.EADDRINUSE)
+        }
+        let fd = socketFD
+        Thread.detachNewThread { [weak self] in
+            while true {
+                let client = accept(fd, nil, nil)
+                guard client >= 0, let self else { return }
+                self.lock.lock()
+                self.accepted.append(client)
+                self.lock.unlock()
+                self.connected.signal()
+            }
+        }
+    }
+
+    func waitForConnection(timeout: TimeInterval) -> Bool {
+        connected.wait(timeout: .now() + timeout) == .success
+    }
+
+    func close() {
+        lock.lock()
+        accepted.forEach { Darwin.close($0) }
+        accepted.removeAll()
+        lock.unlock()
+        shutdown(socketFD, SHUT_RDWR)
+        Darwin.close(socketFD)
+    }
 }
 
 final class DisconnectReasonTests: XCTestCase {

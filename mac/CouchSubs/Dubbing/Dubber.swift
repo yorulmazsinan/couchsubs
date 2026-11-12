@@ -4,30 +4,6 @@ import AVFoundation
 import CouchSubsCore
 import Foundation
 
-/// Dublajın nereden çalınacağı.
-enum DubbingOutput: String, Codable, CaseIterable, Sendable {
-    /// TV uygulaması çalar; ses oyunun sesiyle aynı hoparlörden gelir.
-    case tv
-    /// Mac'in hoparlörü ya da kulaklığı.
-    case computer
-}
-
-struct DubbingSettings: Codable, Equatable {
-    var enabled = false
-    var output = DubbingOutput.tv
-    var cast = VoiceCast()
-
-    init() {}
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        let defaults = DubbingSettings()
-        enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
-        output = (try? values.decodeIfPresent(DubbingOutput.self, forKey: .output)) ?? defaults.output
-        cast = (try? values.decodeIfPresent(VoiceCast.self, forKey: .cast)) ?? defaults.cast
-    }
-}
-
 /// Çevrilen cümleleri sırayla seslendirir. Bir cümle çalarken sonraki hazırlanır; oyun konuşması hızlıysa geride kalan
 /// eski cümleler atlanır ki ses altyazının çok gerisinde kalmasın.
 @MainActor

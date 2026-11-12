@@ -4,7 +4,7 @@ import SwiftUI
 
 struct WelcomeStep: View {
     var body: some View {
-        StepLayout(symbol: "captions.bubble.fill", title: "Welcome to CouchSubs",
+        StepLayout(title: "Welcome to CouchSubs",
                    message: "CouchSubs reads the English subtitles of your PS5 games and shows a Turkish translation on your TV, on top of the game. You keep playing on the TV with your own controller.") {
             Card(title: "You will need:") {
                 Label("A PS5 on the same Wi-Fi network as this Mac", systemImage: "gamecontroller")

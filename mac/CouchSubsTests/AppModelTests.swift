@@ -40,6 +40,12 @@ final class FakeServices: AppServices {
         aiTests.append((provider, key, model))
         return aiResult
     }
+    /// "Bağlantıyı dene"nin sonucu; yerel sunucuya gidilmez.
+    var localTests: [(server: LocalAIServer, key: String)] = []
+    func testLocalAI(server: LocalAIServer, key: String) async -> Result<String, AIFailure> {
+        localTests.append((server, key))
+        return aiResult
+    }
 
     func discoverConsoles() async -> [ConsoleInfo] { consoles }
     var loginError: Error?
@@ -160,6 +166,60 @@ final class AppModelTests: XCTestCase {
         store.save(LGTV(name: "LG TV", host: "192.168.1.153"), for: StoreKey.tv)
         store.save("tv-key", for: StoreKey.tvKey)
         XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: .isolated()).step, .done)
+        XCTAssertEqual(store.load(Bool.self, for: StoreKey.setupComplete), true, "Eski kurulum bir kez 'bitti' diye kaydedilir")
+    }
+
+    /// Sihirbazda PS5'e kadar gelinmiş bir kurulum (hesap ve konsol kayıtlı).
+    private func wizardUpToTV(_ store: MemoryStore, _ defaults: UserDefaults) -> AppModel {
+        let model = AppModel(services: FakeServices(), store: store, defaults: defaults)
+        XCTAssertEqual(model.step, .welcome)
+        let accountId = Data(repeating: 1, count: 8)
+        model.accountId = accountId
+        model.console = console
+        store.save(accountId, for: StoreKey.accountId)
+        store.save(console, for: StoreKey.console)
+        model.step = .tv
+        return model
+    }
+
+    /// Samsung: TV eşleşti, uygulama kurulurken CouchSubs kapatıldı. Yeniden açılınca kurulum bitmiş sayılmaz, TV
+    /// adımından sürer.
+    func testInterruptedTVInstallIsNotComplete() async throws {
+        let store = MemoryStore()
+        let defaults = UserDefaults.isolated()
+        let model = wizardUpToTV(store, defaults)
+        try await model.pair(LGTV(name: "Samsung", host: "192.168.1.20", brand: .samsung))
+        XCTAssertTrue(model.hasTV)
+        let reopened = AppModel(services: FakeServices(), store: store, defaults: defaults)
+        XCTAssertEqual(reopened.step, .tv)
+        XCTAssertTrue(reopened.hasTV, "Eşleşme kaybolmaz; TV adımında uygulama kurulumu sürer")
+        XCTAssertNotEqual(store.load(Bool.self, for: StoreKey.setupComplete), true)
+    }
+
+    func testFinishedTVSetupIsComplete() async throws {
+        let store = MemoryStore()
+        let defaults = UserDefaults.isolated()
+        let model = wizardUpToTV(store, defaults)
+        try await model.pair(LGTV(name: "Samsung", host: "192.168.1.20", brand: .samsung))
+        model.advance()
+        model.advance()
+        model.advance()
+        XCTAssertEqual(model.step, .done)
+        XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: defaults).step, .done)
+    }
+
+    /// "TV'm yok, bilgisayar ekranında göster" de kurulumu bitirir.
+    func testComputerScreenChoiceCompletesSetup() {
+        let store = MemoryStore()
+        let defaults = UserDefaults.isolated()
+        let model = wizardUpToTV(store, defaults)
+        model.useComputerScreen()
+        // Yarıda kapatılırsa yine TV adımından sürer.
+        XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: defaults).step, .tv)
+        model.advance()
+        model.advance()
+        XCTAssertEqual(model.step, .done)
+        XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: defaults).step, .done)
     }
 
     func testPsnStepNeedsAccountId() {
@@ -179,6 +239,78 @@ final class AppModelTests: XCTestCase {
         try await model.register(host: "192.168.1.253", pin: "12345678")
         XCTAssertTrue(model.canAdvance)
         XCTAssertEqual(services.registered?.host, "192.168.1.253")
+    }
+
+    /// Eşleşmenin kaydedildiği günlüğe yazılır (kullanıcılar başarıyı fark etmeyip tekrar bağlanıyordu).
+    func testPairingSaveIsLogged() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("couchsubs-log-\(UUID())")
+        let file = folder.appendingPathComponent("remoteplay.log")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = MemoryStore()
+        let model = AppModel(services: FakeServices(), store: store, defaults: .isolated())
+        model.accountId = Data(repeating: 1, count: 8)
+        RemotePlayLog.enable(file: file)
+        defer { RemotePlayLog.disable() }
+        try await model.register(host: "192.168.1.253", pin: "12345678")
+        RemotePlayLog.flush()
+        XCTAssertNotNil(store.load(RegisteredConsole.self, for: StoreKey.console))
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(text.contains("PS5 kaydı kaydedildi (192.168.1.253): PS5-789"), text)
+    }
+
+    /// Eşleşince sonraki adıma kendiliğinden geçilir; kullanıcı bu arada Geri'ye bastıysa ilerlenmez.
+    func testContinueAfterPairingAdvancesOnlyFromConsoleStep() async throws {
+        let model = AppModel(services: FakeServices(), store: MemoryStore(), defaults: .isolated())
+        model.accountId = Data(repeating: 1, count: 8)
+        model.step = .console
+        model.continueAfterPairing()
+        XCTAssertEqual(model.step, .console)
+        try await model.register(host: "192.168.1.253", pin: "12345678")
+        model.back()
+        model.continueAfterPairing()
+        XCTAssertEqual(model.step, .psnLogin)
+        model.step = .console
+        model.continueAfterPairing()
+        XCTAssertEqual(model.step, .tv)
+    }
+
+    /// Sony girişi engellenen kullanıcı hesap kimliğini base64 olarak elle yazar; web girişiyle aynı biçimde saklanır.
+    func testManualAccountIdIsStoredLikeWebLogin() {
+        let store = MemoryStore()
+        let model = AppModel(services: FakeServices(), store: store, defaults: .isolated())
+        model.step = .psnLogin
+        let id = Data([1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertTrue(model.useManualAccountId("  \(id.base64EncodedString()) "))
+        XCTAssertEqual(model.accountId, id)
+        XCTAssertTrue(model.canAdvance)
+        XCTAssertEqual(store.load(Data.self, for: StoreKey.accountId), id)
+    }
+
+    func testInvalidManualAccountIdIsRejected() {
+        for value in ["", "AQIDBAUGBw==", "AQIDBAUGBwgJ", "AQIDBAUGBw!=", "1234567890"] {
+            let store = MemoryStore()
+            let model = AppModel(services: FakeServices(), store: store, defaults: .isolated())
+            XCTAssertFalse(model.useManualAccountId(value), value)
+            XCTAssertNil(model.accountId, value)
+            XCTAssertNil(store.load(Data.self, for: StoreKey.accountId), value)
+        }
+    }
+
+    /// Yeni metinler Türkçesiyle ortak metin dosyasında (Windows da aynı dosyayı okur).
+    func testPairingStringsAreTranslated() throws {
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("CouchSubs/Resources/Localizable.xcstrings")
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        let strings = root?["strings"] as? [String: Any] ?? [:]
+        let expected = [
+            "PS5 paired: %@ (%@). Press Continue.": "PS5 eşleşti: %@ (%@). Devam'a basın.",
+            "Enter account ID manually": "Hesap kimliğini elle gir",
+        ]
+        for (key, value) in expected {
+            let entry = strings[key] as? [String: Any]
+            let tr = ((entry?["localizations"] as? [String: Any])?["tr"] as? [String: Any])?["stringUnit"] as? [String: Any]
+            XCTAssertEqual(tr?["value"] as? String, value, key)
+        }
     }
 
     /// PS5 hesabı tanımazsa kullanıcıya kodu hangi kullanıcıdan alacağı söylenmeli.
@@ -370,6 +502,47 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.usesFreeGemini)
         model.advance()
         XCTAssertEqual(model.step, .done)
+    }
+
+    /// Yerel model anahtarsız hazırdır; "Bağlantıyı dene" ayardaki adres ve modelle gider, yazılan anahtarı yalnız sunucu
+    /// kabul ederse saklar; anahtar kaldırılınca yerel model seçili kalır.
+    func testLocalModelNeedsNoKey() async {
+        let services = FakeServices()
+        let store = MemoryStore()
+        let model = AppModel(services: services, store: store, defaults: .isolated())
+        model.settings.translationEngine = .local
+        XCTAssertTrue(model.isReady(.local))
+        XCTAssertTrue(model.onlineTranslationActive)
+        XCTAssertFalse(model.hasKey(.local))
+
+        model.settings.localAIBaseURL = LocalAIServer.lmStudioURL
+        model.settings.localAIModel = " qwen2.5-7b-instruct "
+        let result = await model.testLocalAI()
+        XCTAssertEqual(result, .success("KRATOS: Gidiyoruz."))
+        XCTAssertEqual(services.localTests.first?.server.chatURL.absoluteString, "http://localhost:1234/v1/chat/completions")
+        XCTAssertEqual(services.localTests.first?.server.model, "qwen2.5-7b-instruct")
+        XCTAssertEqual(services.localTests.first?.key, "")
+        XCTAssertNil(store.load(String.self, for: StoreKey.localAIKey))
+
+        services.aiResult = .failure(.invalidKey)
+        _ = await model.testLocalAI(key: "wrong")
+        XCTAssertFalse(model.hasKey(.local))
+        services.aiResult = .success("KRATOS: Gidiyoruz.")
+        _ = await model.testLocalAI(key: " lm-key ")
+        XCTAssertEqual(store.load(String.self, for: StoreKey.localAIKey), "lm-key")
+        XCTAssertEqual(model.settings.translationEngine, .local)
+        _ = await model.testLocalAI()
+        XCTAssertEqual(services.localTests.last?.key, "lm-key")
+
+        model.removeKey(.local)
+        XCTAssertFalse(model.hasKey(.local))
+        XCTAssertEqual(model.settings.translationEngine, .local)
+
+        // Geçersiz adreste yerel model hazır sayılmaz; çeviri ücretsiz motorla sürer.
+        model.settings.localAIBaseURL = "ftp://nowhere"
+        XCTAssertFalse(model.onlineTranslationActive)
+        let invalid = await model.testLocalAI()
+        XCTAssertEqual(invalid, .failure(.unreachable))
     }
 
     /// Yanlış anahtar kaydedilmez, motor değişmez; dakikalık sınıra takılan anahtar geçerlidir ve kaydedilir.
@@ -634,6 +807,20 @@ final class TVAppInstallTests: XCTestCase {
         // Boş alan yalnız TV öyle dediğinde suçlanır.
         XCTAssertFalse(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").contains("free space"))
         XCTAssertTrue(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").hasSuffix("Invalid package"))
+    }
+
+    /// Samsung kısa basışta tam kapanmaz: "yeniden başlatın" diyen hatada güç tuşunun basılı tutulacağı yazar. Kurulum
+    /// sırasında bağlantı koparsa HDMI-CEC (Anynet+) ve otomatik kaynak değiştirme anlatılır.
+    func testSamsungFailureExplainsRestartAndSourceSwitching() {
+        // Bilgisayarın diline göre İngilizce ya da Türkçe gelir; ipucu metni de aynı dilde aranır.
+        let restart = String(localized: "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.")
+        let unreachable = TVAppCard.message(for: .unreachable, brand: .samsung, reason: nil)
+        XCTAssertTrue(unreachable.contains(restart))
+        XCTAssertFalse(unreachable.contains("Anynet+"))
+        let dropped = TVAppCard.message(for: .connectionLost, brand: .samsung, reason: nil)
+        XCTAssertTrue(dropped.contains("Anynet+ (HDMI-CEC)"))
+        XCTAssertFalse(dropped.contains(restart))
+        XCTAssertFalse(TVAppCard.message(for: .unreachable, brand: .lg, reason: nil).contains(restart))
     }
 
     func testOlderAppIsUpdatedWithoutAsking() async throws {

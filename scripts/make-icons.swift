@@ -71,6 +71,28 @@ icoImages.forEach { ico += $0 }
 try! ico.write(to: URL(fileURLWithPath: "\(windowsAssets)/CouchSubs.ico"))
 try! png(logo, size: 512, crop: true).write(to: URL(fileURLWithPath: "\(windowsAssets)/logo.png"))
 
+// iPhone/iPad: App Store simgesi saydamlık (alfa kanalı) içeremez ve köşeleri iOS yuvarlar. macOS ızgarasının kenar
+// boşluğu kırpılır, köşeler logonun zemin geçişiyle doldurulur; PNG alfa kanalsız yazılır.
+func opaqueIcon(_ svg: NSImage, size: Int, to path: String) {
+    let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    // design/logo.svg'deki "zemin" geçişi: üstte #2B2D33, altta #141518.
+    let colors = [CGColor(srgbRed: 0x2B / 255, green: 0x2D / 255, blue: 0x33 / 255, alpha: 1),
+                  CGColor(srgbRed: 0x14 / 255, green: 0x15 / 255, blue: 0x18 / 255, alpha: 1)] as CFArray
+    let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: colors, locations: [0, 1])!
+    context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: size), end: .zero, options: [])
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    let scale = Double(size) * 1024 / 824
+    let offset = -Double(size) * 100 / 824
+    svg.draw(in: NSRect(x: offset, y: offset, width: scale, height: scale))
+    NSGraphicsContext.restoreGraphicsState()
+    let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+    precondition(CGImageDestinationFinalize(destination), "\(path) yazılamadı")
+}
+opaqueIcon(logo, size: 1024, to: "couchsubs-ios/CouchSubs/Assets.xcassets/AppIcon.appiconset/icon-1024.png")
+
 // Belgeler ve mağaza görselleri için büyük kopya.
 render(logo, size: 1024, to: "design/logo-1024.png")
 print("Simgeler üretildi.")

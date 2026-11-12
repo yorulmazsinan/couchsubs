@@ -1,8 +1,9 @@
 name: CouchSubs
 options:
   bundleIdPrefix: com.couchsubs
+  # En eski desteklenen macOS; scripts/build-chiaki-macos.sh (MIN) ve package-mac.sh denetimiyle aynı.
   deploymentTarget:
-    macOS: "26.0"
+    macOS: "13.0"
   developmentLanguage: en
 settings:
   base:
@@ -12,9 +13,13 @@ settings:
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_IDENTITY: "-"
     ENABLE_HARDENED_RUNTIME: YES
-    # libchiaki ve bağımlılıkları yalnız Apple Silicon için derleniyor.
-    ARCHS: arm64
+    # Evrensel uygulama: Apple Silicon ve Intel. libchiaki ve bağımlılıkları iki mimari için derlenir
+    # (build-chiaki-macos.sh); Debug yalnız bu Mac'in mimarisini derler.
+    ARCHS: "arm64 x86_64"
     ONLY_ACTIVE_ARCH: NO
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
 packages:
   CouchSubsCore:
     path: ../core
@@ -78,6 +83,88 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.couchsubs.mac
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  # Mac App Store sürümü: aynı kaynaklar, iPhone/iPad uygulamasıyla aynı kimlik (com.couchsubs.ios, tek App Store
+  # kaydı, ortak satın alma), App Sandbox açık, Sparkle yok (güncellemeyi App Store yapar). Kodda APP_STORE bayrağıyla
+  # ayrılır (bkz. docs/app-store.md). GitHub/DMG sürümü (CouchSubs hedefi, com.couchsubs.mac) değişmez.
+  CouchSubsAppStore:
+    type: application
+    platform: macOS
+    sources:
+      - path: CouchSubs
+        excludes:
+          - Info.plist
+          - CouchSubs.entitlements
+      - path: AppStore
+        buildPhase: none
+      - path: ../design/tokens.json
+        buildPhase: resources
+      # TV uygulaması paketleri: TV kurulumu sandbox'ta da çalışıyor (ssh, ssh-keygen ve yardımcı uygulamanın
+      # sandbox'ını miras alır; CouchSubsAppStoreTests/SandboxTests sınar).
+      - path: ../dist/tv-app
+        type: folder
+        optional: true
+        buildPhase: resources
+      # Samsung ve Android TV kurulum yardımcısı ile dublaj ses motoru; sandbox'ta uygulamanın yetkilerini miras alır
+      # (aşağıdaki imza betiği AppStore/Helper.entitlements ile imzalar).
+      - path: ../dist/tv-helper/couchsubs-tv-helper
+        optional: true
+        buildPhase:
+          copyFiles:
+            destination: executables
+      - path: ../dist/tts/pocket-tts
+        optional: true
+        buildPhase:
+          copyFiles:
+            destination: executables
+    dependencies:
+      - package: CouchSubsCore
+      - package: RemotePlay
+    postBuildScripts:
+      # Gömülü programlar uygulamanın sandbox'ını miras almadan açılamaz (App Store da bunu ister): yalnız
+      # app-sandbox + inherit yetkisiyle imzalanırlar. Uygulamanın kendi imzası Xcode'un son adımında atılır.
+      - name: Yardımcıları sandbox için imzala
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          for exe in couchsubs-tv-helper pocket-tts; do
+            f="${TARGET_BUILD_DIR}/${EXECUTABLE_FOLDER_PATH}/$exe"
+            [ -f "$f" ] || continue
+            codesign --force --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" \
+              --entitlements "${PROJECT_DIR}/AppStore/Helper.entitlements" "$f"
+          done
+    info:
+      path: AppStore/Info.plist
+      properties:
+        CFBundleDisplayName: CouchSubs
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        NSLocalNetworkUsageDescription: CouchSubs finds your PS5 and TV on the local network to send translated subtitles.
+        NSHumanReadableCopyright: AGPL-3.0. Uses chiaki-ng (AGPL-3.0).
+    entitlements:
+      path: AppStore/CouchSubs.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        # PS5 (Remote Play, PSN girişi), TV (SSAP, Samsung, SSDP), çeviri hizmetleri, paketler ve dublaj modeli.
+        com.apple.security.network.client: true
+        # Altyazı sunucusu (8787: TV uygulaması ve OBS), Remote Play'in UDP portları, Samsung girişinin dönüşü.
+        com.apple.security.network.server: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.couchsubs.ios
+        # Uygulamanın adı (CouchSubs.app) ve modülü DMG sürümüyle aynı; Debug'da adı ayrı ki ikisi aynı klasörde
+        # birbirinin üstüne yazılmasın.
+        PRODUCT_NAME: CouchSubs
+        PRODUCT_MODULE_NAME: CouchSubs
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) APP_STORE
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEVELOPMENT_TEAM: 79N3CT6T46
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Debug:
+          PRODUCT_NAME: CouchSubsAppStore
   CouchSubsTests:
     type: bundle.unit-test
     platform: macOS
@@ -91,7 +178,32 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CouchSubs.app/Contents/MacOS/CouchSubs"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  # Mac App Store sürümünün sandbox'ta neyin çalışıp neyin çalışmadığını sınar (uygulamanın içinde, sandbox'lı).
+  CouchSubsAppStoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - CouchSubsAppStoreTests
+    dependencies:
+      - target: CouchSubsAppStore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.couchsubs.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        DEVELOPMENT_TEAM: 79N3CT6T46
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CouchSubsAppStore.app/Contents/MacOS/CouchSubsAppStore"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
+  CouchSubsAppStore:
+    build:
+      targets:
+        CouchSubsAppStore: all
+        CouchSubsAppStoreTests: [test]
+    test:
+      targets:
+        - CouchSubsAppStoreTests
+    archive:
+      config: Release
   CouchSubs:
     build:
       targets:

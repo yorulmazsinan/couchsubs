@@ -113,7 +113,7 @@ final class GamePackTests: XCTestCase {
         let ids = all.packs.map(\.id)
         let elapsed = Date().timeIntervalSince(start)
         print("paket yükleme: \(Int(elapsed * 1000)) ms, \(all.packs.reduce(0) { $0 + $1.entries }) satır")
-        XCTAssertEqual(ids, ["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"])
+        XCTAssertEqual(ids, ["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "elden-ring", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"])
         XCTAssertTrue(all.packs.allSatisfy(\.builtIn))
         // Biçim 2 (parçalar ve imzalar) yüklemeyi Release'te ~%30 uzatıyor; Debug derlemede ve yüklü makinede daha yavaş.
         XCTAssertLessThan(elapsed, 30)
@@ -145,6 +145,9 @@ final class GamePackTests: XCTestCase {
             // "Can't see where I'm going.", "I'm not afraid to fight you.", "Burn the tobacco fields"
             ("red-dead-redemption-2.json.gz", "red-dead-redemption-2", "Red Dead Redemption 2", 150_000,
              ["7fab2b68b3726a28", "3484a8ef3d8c7fc7", "bc0c9435160e8723"]),
+            // "The Tarnished will soon return.", "Let it be Margit the Fell!", "Roundtable Hold"
+            ("elden-ring.json.gz", "elden-ring", "Elden Ring + Shadow of the Erdtree", 37000,
+             ["fd7b2bef9d7e5fe1", "d9e5d9f200bbd946", "d5017888c04251a9"]),
         ]
         let directory = try XCTUnwrap(GamePackLibrary.bundledDirectory)
         for pack in expected {
@@ -161,13 +164,14 @@ final class GamePackTests: XCTestCase {
         }
     }
 
-    /// Assassin's Creed Shadows, Death Stranding 2 ve Modern Warfare (2019) paketleri de uygulamayla gelir.
+    /// Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019) ve Elden Ring paketleri de uygulamayla gelir.
     func testMoreBundledPacksLoad() {
         let library = GamePackLibrary(bundled: GamePackLibrary.bundledDirectory, user: nil)
         let expected: [(id: String, title: String, minimum: Int)] = [
             ("assassins-creed-shadows", "Assassin's Creed Shadows", 39000),
             ("death-stranding-2", "Death Stranding 2: On the Beach", 23000),
             ("call-of-duty-modern-warfare-2019", "Call of Duty: Modern Warfare (2019)", 50000),
+            ("elden-ring", "Elden Ring + Shadow of the Erdtree", 37000),
         ]
         for game in expected {
             let pack = library.packs.first { $0.id == game.id }
@@ -183,6 +187,8 @@ final class GamePackTests: XCTestCase {
         XCTAssertEqual(library.match("Terminal Fort Knot is in danger. A voidout would kill them all!")?.text,
                        "Terminal Fort Knot tehlikede. Bir boşluk patlaması hepsini öldürür!")
         XCTAssertEqual(library.match("Requesting air drop on my position!")?.text, "Konumuma hava ikmali talep ediyorum!")
+        XCTAssertEqual(library.match("The Tarnished will soon return.")?.text, "Lekeli yakında geri dönecek.")
+        XCTAssertEqual(library.match("Margit, the Fell Omen")?.text, "Margit, Uğursuz Alâmet")
     }
 }
 

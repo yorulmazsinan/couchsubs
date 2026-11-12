@@ -7,14 +7,14 @@ import SwiftUI
 /// "Kaydet ve dene" ayarlardaki denemeyi çalıştırır; anahtar kabul edilince Gemini seçilir. Alttaki düğme anahtar yokken
 /// "Şimdilik geç", varken "Devam" olur.
 struct BetterTranslationStep: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @Environment(\.openURL) private var openURL
     @State private var key = ""
     @State private var checking = false
     @State private var result: Result<String, AIFailure>?
 
     var body: some View {
-        StepLayout(symbol: "character.bubble.fill", title: "Better translation (free)", message: FreeGemini.pitch) {
+        StepLayout(title: "Better translation (free)", message: FreeGemini.pitch) {
             VStack(alignment: .leading, spacing: Theme.space("l")) {
                 if model.usesFreeGemini {
                     DoneLabel(text: String(localized: "Gemini is ready. Subtitles will be translated with Gemini."))

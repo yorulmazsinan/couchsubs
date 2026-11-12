@@ -94,6 +94,10 @@
   window.COUCHSUBS_PLATFORM = {
     backKey: 4,
 
+    // Dublaj <audio> ile çalınır (LG ve Samsung'da Web Audio): HDMI'yi TvView gösterdiği için karışmaz, yukarıdaki
+    // sarmalayıcı da sesi arka planda susturabilir.
+    speechElement: true,
+
     init: function () {
       // Android TV'nin güvenli alanı (yanlarda 48dp, üstte 27dp: 1080p'de 96 ve 54 piksel): panel ve demo notu kenara
       // taşan (overscan) TV'lerde kesilmesin (TV-OV).

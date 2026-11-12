@@ -5,7 +5,7 @@ import SwiftUI
 import WebKit
 
 struct PSNLoginStep: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @State private var showLogin = false
     @State private var working = false
     @State private var error: String?
@@ -13,9 +13,12 @@ struct PSNLoginStep: View {
     @State private var redirected = false
     /// Giriş sayfasının son sorunu (açılamadı, Sony'nin HTTP hatası).
     @State private var pageProblem: String?
+    @State private var showManual = false
+    @State private var manualId = ""
+    @State private var manualError: String?
 
     var body: some View {
-        StepLayout(symbol: "person.crop.circle.badge.checkmark", title: "Sign in with the second account",
+        StepLayout(title: "Sign in with the second account",
                    message: "Sign in to PlayStation Network with the second account you just created. Your password goes directly to Sony; CouchSubs only keeps the account ID.") {
             VStack(alignment: .leading, spacing: Theme.space("m")) {
                 if model.accountId != nil {
@@ -30,10 +33,39 @@ struct PSNLoginStep: View {
                 .disabled(working)
                 if working { ProgressView().controlSize(.small) }
                 ErrorText(error: error).textSelection(.enabled)
+                manualEntry.padding(.top, Theme.space("s"))
             }
         }
         .sheet(isPresented: $showLogin, onDismiss: sheetClosed) {
             PSNLoginSheet(onRedirect: received, onProblem: { pageProblem = $0 })
+        }
+    }
+
+    /// Sony girişi açılmıyorsa (ör. servis sağlayıcı engelliyor) hesap kimliği elle yazılır.
+    @ViewBuilder private var manualEntry: some View {
+        if showManual {
+            VStack(alignment: .leading, spacing: Theme.space("s")) {
+                HintText(text: "If Sony's sign-in page does not open (some internet providers block it), enter the second account's PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).")
+                HStack(spacing: Theme.space("m")) {
+                    TextField("", text: $manualId)
+                        .textFieldStyle(CSTextFieldStyle())
+                        .frame(maxWidth: 240)
+                        .onSubmit(saveManual)
+                    Button("Save", action: saveManual).buttonStyle(.primary)
+                }
+                ErrorText(error: manualError)
+            }
+        } else {
+            Button("Enter account ID manually") { showManual = true }.buttonStyle(.secondary)
+        }
+    }
+
+    private func saveManual() {
+        if model.useManualAccountId(manualId) {
+            manualError = nil
+            error = nil
+        } else {
+            manualError = String(localized: "This is not a valid account ID. It is 12 characters in base64, e.g. AbCdEfGhIjk=.")
         }
     }
 
@@ -75,76 +107,5 @@ struct PSNLoginSheet: View {
             LoginWebView(onRedirect: onRedirect, onProblem: onProblem)
         }
         .frame(width: 520, height: 680)
-    }
-}
-
-struct LoginWebView: NSViewRepresentable {
-    let onRedirect: (URL) -> Void
-    let onProblem: (String?) -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(onRedirect: onRedirect, onProblem: onProblem) }
-
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = context.coordinator
-        view.load(URLRequest(url: PSNAccount.authorizeURL))
-        return view
-    }
-
-    func updateNSView(_ view: WKWebView, context: Context) {}
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        let onRedirect: (URL) -> Void
-        let onProblem: (String?) -> Void
-        private var redirected = false
-
-        init(onRedirect: @escaping (URL) -> Void, onProblem: @escaping (String?) -> Void) {
-            self.onRedirect = onRedirect
-            self.onProblem = onProblem
-        }
-
-        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
-            // Kodlu ya da Sony'nin hatasını taşıyan her yönlendirme yakalanır; eskiden hatalı yönlendirme boş sayfada kalıyordu.
-            if let url = action.request.url, !redirected,
-               PSNAccount.code(fromRedirect: url) != nil || PSNAccount.error(fromRedirect: url) != nil {
-                redirected = true
-                onRedirect(url)
-                return .cancel
-            }
-            return .allow
-        }
-
-        func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse) async -> WKNavigationResponsePolicy {
-            if response.isForMainFrame, let http = response.response as? HTTPURLResponse {
-                if http.statusCode >= 400 {
-                    RemotePlayLog.write("PSN giriş sayfası: HTTP \(http.statusCode)")
-                    onProblem("HTTP \(http.statusCode)")
-                } else {
-                    onProblem(nil)
-                }
-            }
-            return .allow
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            report(error)
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            report(error)
-        }
-
-        private func report(_ error: Error) {
-            // Yönlendirmeyi kendimiz iptal ediyoruz; o bir sorun değildir.
-            let nsError = error as NSError
-            let canceled = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
-            // WebKitErrorFrameLoadInterruptedByPolicyChange: yönlendirmeyi iptal etmemiz.
-            let interrupted = nsError.domain == "WebKitErrorDomain" && nsError.code == 102
-            if redirected || canceled || interrupted { return }
-            RemotePlayLog.write("PSN giriş sayfası açılamadı: \(nsError.domain) \(nsError.code) \(nsError.localizedDescription)")
-            onProblem(nsError.localizedDescription)
-        }
     }
 }

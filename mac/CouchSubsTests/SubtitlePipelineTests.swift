@@ -71,8 +71,11 @@ private final class FakeSender: SubtitleSending {
     var sent: [String] = []
     var durations: [Int] = []
     var boxes: [TextBox?] = []
+    var replaces: [Bool] = []
     var clears = 0
-    func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?) { sent.append(text); durations.append(durationMs); boxes.append(box) }
+    func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool) {
+        sent.append(text); durations.append(durationMs); boxes.append(box); self.replaces.append(replaces)
+    }
     func clear() { clears += 1 }
 }
 
@@ -306,9 +309,9 @@ final class SubtitlePipelineTests: XCTestCase {
         XCTAssertEqual(sender.sent, ["TR: Hold the gate.", "TR: Run!"])
     }
 
-    /// Hızlı konuşmada çeviri sürerken gelen satırlardan yalnız en yenisi sırada bekler: araya girenler çevrilmez,
-    /// gösterilenler sırayla gelir.
-    func testFastLinesOnlyTranslateTheNewestPending() async {
+    /// Hızlı konuşmada çeviri sürerken gelen satırlar sırayla çevrilir ve gösterilir; araya giren satır kaybolmaz
+    /// (eskiden yalnız en yenisi bekliyordu: üç satırlık konuşmanın ortası hiç çevrilmiyordu).
+    func testFastLinesAreAllTranslatedInOrder() async {
         let sender = FakeSender()
         let clock = PipelineClock()
         let translator = GatedTranslator()
@@ -316,10 +319,71 @@ final class SubtitlePipelineTests: XCTestCase {
                                         clock: clock.read)
         await run(pipeline, 3, wait: false, clock: clock)
         await translator.release("Hold the gate.")
+        await translator.release("Run!")
         await translator.release("Get down!")
         await pipeline.waitForTranslations()
-        XCTAssertEqual(translator.requested, ["Hold the gate.", "Get down!"])
-        XCTAssertEqual(sender.sent, ["TR: Hold the gate.", "TR: Get down!"])
+        XCTAssertEqual(translator.requested, ["Hold the gate.", "Run!", "Get down!"])
+        XCTAssertEqual(sender.sent, ["TR: Hold the gate.", "TR: Run!", "TR: Get down!"])
+    }
+
+    /// Sıra dolunca en eski bekleyen satır atlanır; kuyruk konuşma hızıyla büyümez.
+    func testOldestWaitingLineIsSkippedWhenTheQueueIsFull() async {
+        let clock = PipelineClock()
+        let translator = GatedTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(["Hold the gate.", "Run!", "Get down!", "Now!"]), translator: translator,
+                                        server: FakeSender(), clock: clock.read)
+        await run(pipeline, 4, wait: false, clock: clock)
+        await translator.release("Hold the gate.")
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(translator.requested, ["Hold the gate.", "Get down!", "Now!"])
+    }
+
+    /// Yavaş çeviride (ücretsiz motor) art arda üç satırın çevirisi satırlar kalktıktan iki saniye sonra gelse de
+    /// üçü de gösterilir; eskiden yalnız ilki görünüyordu.
+    func testSlowTranslationsOfQuickLinesAreStillShown() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = GatedTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(["Hold the gate.", "Run!", "Get down!"]), translator: translator, server: sender,
+                                        clock: clock.read)
+        await run(pipeline, 3, wait: false, clock: clock)
+        clock.now += 2000
+        await translator.release("Hold the gate.")
+        await translator.release("Run!")
+        await translator.release("Get down!")
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, ["TR: Hold the gate.", "TR: Run!", "TR: Get down!"])
+        XCTAssertEqual(sender.durations, [SubtitlePipeline.readingTime(for: "TR: Hold the gate."),
+                                          SubtitlePipeline.readingTime(for: "TR: Run!"), 15000])
+    }
+
+    /// Daktilo efekti: yarım okunan cümlenin çevirisi sürerken tamamı gelirse yarımın çevirisi gösterilmez.
+    func testGrowingLineSupersedesItsPartialTranslation() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = GatedTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines(("Run to", 2), ("Run to the boat!", 2))),
+                                        translator: translator, server: sender, clock: clock.read)
+        await run(pipeline, 4, wait: false, clock: clock)
+        await translator.release("Run to")
+        await translator.release("Run to the boat!")
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(translator.requested, ["Run to", "Run to the boat!"])
+        XCTAssertEqual(sender.sent, ["TR: Run to the boat!"])
+    }
+
+    /// Yarım satırın çevirisi gösterildikten sonra tamamı gelirse TV'ye "yerine koy" denir: aynı cümlenin iki çevirisi
+    /// üst üste yığılmaz. Başka bir cümle yığılabilir.
+    func testRevisedLineReplacesTheShownTranslation() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let pipeline = SubtitlePipeline(
+            reader: FakeReader(lines(("Run to", 2), ("Run to the boat!", 2), ("Get down now!", 2))),
+            translator: FakeTranslator(), server: sender, clock: clock.read)
+        await run(pipeline, 6, clock: clock)
+        XCTAssertEqual(sender.sent, ["TR: Run to", "TR: Run to the boat!", "TR: Get down now!"])
+        XCTAssertEqual(sender.replaces, [false, true, false])
     }
 
     /// Yeni satır gelmiş, eskisinin çevirisi bir saniyeden geç gelmişse gösterilmez; yeni satırınki gösterilir.

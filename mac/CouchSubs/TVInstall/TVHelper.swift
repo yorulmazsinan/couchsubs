@@ -2,6 +2,7 @@
 
 import CouchSubsCore
 import Foundation
+import RemotePlay
 
 /// Samsung ve Android TV kurulumunu yapan gömülü yardımcıdan gelen olay.
 enum TVInstallEvent: Equatable, Sendable {
@@ -16,8 +17,8 @@ enum TVInstallEvent: Equatable, Sendable {
 /// Samsung kurulumunun her adımını yardımcı yazar; yardımcı açılamaz ya da sonuç vermeden kapanırsa uygulama da buraya
 /// yazar. Kurulum olmazsa kullanıcı bu dosyayı gönderir.
 enum TVInstallLog {
-    /// Kullanıcıya hata iletisinde gösterilen yol.
-    static let displayPath = "~/Library/Logs/CouchSubs/tvinstall.log"
+    /// Kullanıcıya hata iletisinde gösterilen yol (sandbox'ta kapsayıcının içindeki yol).
+    static var displayPath: String { RemotePlayLog.userPath(file) }
 
     static var file: URL {
         FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]

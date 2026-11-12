@@ -2,7 +2,7 @@
 
 import AppKit
 import CouchSubsCore
-import Observation
+import Combine
 import SwiftUI
 
 /// Bilgisayar ekranındaki altyazı penceresi: kenarsız, her pencerenin (tam ekran uygulamalar dahil) üstünde, saydam
@@ -16,6 +16,16 @@ final class SubtitleOverlayController {
     private let geometry = OverlayGeometry()
     private var moveStart: (mouse: NSPoint, frame: NSRect)?
     private var screenObserver: NSObjectProtocol?
+    private var modelChanges: AnyCancellable?
+    /// Pencereyi etkileyen son durum; model her değiştiğinde (ör. yeni satır) pencere boşuna yeniden ölçülmesin.
+    private var shown: Shown?
+
+    private struct Shown: Equatable {
+        let visible: Bool
+        let ignoresMouse: Bool
+        let adjusting: Bool
+        let fontSize: Int
+    }
 
     static let autosaveName = "CouchSubsSubtitleWindow"
     static let minWidth: CGFloat = 320
@@ -23,13 +33,11 @@ final class SubtitleOverlayController {
     func attach(_ model: AppModel) {
         guard self.model == nil else { return }
         self.model = model
-        observe()
-    }
-
-    /// Modeldeki görünürlük, tıklama ve yazı boyu değişince pencere güncellenir.
-    private func observe() {
-        withObservationTracking { update() } onChange: { [weak self] in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.observe() } }
+        update()
+        // Modeldeki görünürlük, tıklama ve yazı boyu değişince pencere güncellenir. objectWillChange değişiklikten önce
+        // gelir; güncelleme bir sonraki turda yeni değerlerle yapılır.
+        modelChanges = model.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.update() } }
         }
     }
 
@@ -38,6 +46,9 @@ final class SubtitleOverlayController {
         let visible = model.overlayVisible
         let ignoresMouse = model.overlayIgnoresMouse
         let fontSize = model.settings.style.fontSize
+        let state = Shown(visible: visible, ignoresMouse: ignoresMouse, adjusting: model.overlayAdjusting, fontSize: fontSize)
+        guard state != shown else { return }
+        shown = state
         guard visible else {
             panel?.orderOut(nil)
             return
@@ -66,7 +77,7 @@ final class SubtitleOverlayController {
             move: { [weak self] in self?.move() },
             resize: { [weak self] edge in self?.resize(edge) },
             endMove: { [weak self] in self?.moveStart = nil }))
-            .environment(model)
+            .environmentObject(model)
         let host = FirstMouseHostingView(rootView: content)
         // Pencerenin boyunu içerik değil kullanıcı (ve yazı boyu) belirler.
         host.sizingOptions = []
@@ -145,9 +156,8 @@ final class SubtitleOverlayController {
 
 /// Yazı ölçeği (pencerenin bulunduğu ekrana göre).
 @MainActor
-@Observable
-final class OverlayGeometry {
-    var scale: CGFloat = 1
+final class OverlayGeometry: ObservableObject {
+    @Published var scale: CGFloat = 1
 }
 
 struct OverlayActions {
@@ -171,8 +181,8 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
 
 /// Pencerenin içeriği: TV'deki altyazı kutusunun aynısı (yazı boyu, renk, zemin, soluk üst satırlar).
 struct SubtitleOverlayView: View {
-    @Environment(AppModel.self) private var model
-    let geometry: OverlayGeometry
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject var geometry: OverlayGeometry
     let actions: OverlayActions
 
     private var scale: CGFloat { geometry.scale }

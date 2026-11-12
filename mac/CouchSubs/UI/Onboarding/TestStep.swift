@@ -3,14 +3,14 @@
 import SwiftUI
 
 struct TestStep: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @State private var sent = false
 
     /// TV seçilmediyse ("TV'm yok") örnek altyazı bu bilgisayarın ekranında görünür.
     private var onComputer: Bool { model.settings.output == .computer }
 
     var body: some View {
-        StepLayout(symbol: "checkmark.seal.fill", title: "Let's test it",
+        StepLayout(title: "Let's test it",
                    message: onComputer ? "CouchSubs will show a sample subtitle on this computer's screen, at the bottom."
                        : "CouchSubs will send a sample subtitle to your TV. It should appear at the bottom of the screen, on top of the game.") {
             VStack(alignment: .leading, spacing: Theme.space("l")) {

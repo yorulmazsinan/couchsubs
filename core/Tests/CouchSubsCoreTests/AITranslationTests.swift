@@ -73,7 +73,8 @@ private final class FakeAI: URLProtocol {
         switch url.host {
         case "generativelanguage.googleapis.com":
             ["candidates": [["content": ["role": "model", "parts": [["text": "thinking…", "thought": true], ["text": text]]]]]]
-        case "api.openai.com":
+        // Yerel model sunucuları (Ollama, LM Studio) OpenAI biçimiyle yanıt verir.
+        case "api.openai.com", "localhost", "127.0.0.1", "192.168.1.20":
             ["choices": [["index": 0, "message": ["role": "assistant", "content": text], "finish_reason": "stop"]]]
         default:
             ["content": [["type": "thinking", "thinking": "…"], ["type": "text", "text": text]], "stop_reason": "end_turn"]
@@ -191,7 +192,7 @@ final class AITranslationTests: XCTestCase {
 
     /// Liste Windows ile ortak dosyadan okunur; her hizmette önerilen hızlı model ilk sıradadır.
     func testCatalogIsTheSharedFile() throws {
-        for provider in AIProvider.allCases {
+        for provider in AIProvider.cloud {
             XCTAssertGreaterThanOrEqual(provider.models.count, 2, provider.rawValue)
             XCTAssertEqual(provider.defaultModel.label, "Fast and cheap (recommended)")
             XCTAssertEqual(Set(provider.models.map(\.id)).count, provider.models.count)
@@ -204,7 +205,132 @@ final class AITranslationTests: XCTestCase {
             .appendingPathComponent("Sources/CouchSubsCore/Resources/ai-models.json")
         let parsed = AIModel.parse(try Data(contentsOf: file))
         XCTAssertEqual(parsed, AIModel.catalog)
-        XCTAssertEqual(Set(parsed.keys), Set(AIProvider.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(parsed.keys), Set(AIProvider.cloud.map(\.rawValue)))
+        // Yerel modelin listesi yoktur; model adını kullanıcı yazar.
+        XCTAssertTrue(AIProvider.local.models.isEmpty)
+        XCTAssertEqual(AIProvider.local.defaultModel.id, "qwen2.5:7b")
+    }
+
+    // MARK: - Yerel model (Ollama, LM Studio)
+
+    private func makeLocal(_ baseURL: String = LocalAIServer.ollamaURL, model: String = "qwen2.5:7b", key: String = "",
+                           cache: TranslationCache = TranslationCache()) -> AITranslationCore {
+        AITranslationCore(provider: .local, key: key, model: model, server: LocalAIServer(baseURL: baseURL, model: model),
+                          session: FakeAI.session(), cache: cache, budget: RequestBudget(perMinute: 1000))
+    }
+
+    /// OpenAI uyumlu en sade istek: system + user, temperature, max_tokens, stream false; bulut hizmetine özel alan gitmez.
+    func testLocalRequest() async throws {
+        let result = try await makeLocal().translate("KRATOS: We go now.", fallback: local)
+        XCTAssertEqual(result, "KRATOS: [tr] We go now.")
+        let (request, body) = FakeAI.requests[0]
+        XCTAssertEqual(request.url?.absoluteString, "http://localhost:11434/v1/chat/completions")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        // Anahtar boşsa Authorization başlığı hiç gitmez.
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(body["model"] as? String, "qwen2.5:7b")
+        XCTAssertEqual(body["temperature"] as? Double, AIRequest.localTemperature)
+        XCTAssertEqual(body["max_tokens"] as? Int, AIRequest.maxOutputTokens)
+        XCTAssertEqual(body["stream"] as? Bool, false)
+        XCTAssertEqual(Set(body.keys), ["model", "messages", "temperature", "max_tokens", "stream"])
+        let messages = body["messages"] as? [[String: Any]] ?? []
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["system", "user"])
+        XCTAssertEqual(messages[0]["content"] as? String, AIRequest.systemPrompt)
+        XCTAssertTrue(user(0).hasSuffix("[\"We go now.\"]"))
+    }
+
+    /// LM Studio adresi ve isteğe bağlı anahtar (yalnız doluysa Bearer olarak gider).
+    func testLocalRequestWithKeyAndLMStudio() async throws {
+        _ = try await makeLocal(LocalAIServer.lmStudioURL, model: "qwen2.5-7b-instruct", key: " lm-key ").translate("Run!", fallback: local)
+        let (request, body) = FakeAI.requests[0]
+        XCTAssertEqual(request.url?.absoluteString, "http://localhost:1234/v1/chat/completions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer lm-key")
+        XCTAssertEqual(body["model"] as? String, "qwen2.5-7b-instruct")
+    }
+
+    /// Kullanıcının yazdığı adres düzeltilir: şema, "/v1", sondaki "/" ve yapıştırılmış "/chat/completions".
+    func testLocalServerAddress() {
+        let cases: [(String, String?)] = [
+            ("http://localhost:11434/v1", "http://localhost:11434/v1"),
+            ("  http://localhost:11434/v1/  ", "http://localhost:11434/v1"),
+            ("localhost:11434", "http://localhost:11434/v1"),
+            ("http://127.0.0.1:1234", "http://127.0.0.1:1234/v1"),
+            ("http://localhost:1234/v1/chat/completions", "http://localhost:1234/v1"),
+            ("https://ai.example.com/openai/v1", "https://ai.example.com/openai/v1"),
+            ("", nil), ("ftp://localhost:11434", nil), ("http://", nil), ("local host", nil),
+        ]
+        for (text, expected) in cases {
+            XCTAssertEqual(LocalAIServer.normalize(text)?.absoluteString, expected, text)
+        }
+        XCTAssertNil(LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "  "))
+        let server = LocalAIServer(baseURL: "localhost:11434", model: " qwen2.5:7b ")!
+        XCTAssertEqual(server.model, "qwen2.5:7b")
+        XCTAssertEqual(server.address, "http://localhost:11434")
+        XCTAssertEqual(server.kind, .ollama)
+        XCTAssertEqual(LocalAIServer(baseURL: LocalAIServer.lmStudioURL, model: "m")?.kind, .lmStudio)
+        XCTAssertEqual(LocalAIServer(baseURL: "http://192.168.1.20:8080/v1", model: "m")?.kind, .other)
+        // Yazılan model adı listeye bakılmadan kullanılır; boşsa varsayılan.
+        XCTAssertEqual(AIProvider.local.model("llama3.1:8b").id, "llama3.1:8b")
+        XCTAssertEqual(AIProvider.local.model(" ").id, "qwen2.5:7b")
+        XCTAssertNil(RequestBudget.shared(provider: .local, model: AIProvider.local.defaultModel))
+    }
+
+    /// Önbellekteki motor adında sunucu ve model vardır; farklı yerel modellerin çevirileri karışmaz.
+    func testLocalEngineIDIncludesServerAndModel() {
+        let ollama = LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "qwen2.5:7b")!
+        XCTAssertEqual(ollama.engineID, "local:localhost:11434/qwen2.5:7b")
+        XCTAssertEqual(LocalAIServer(baseURL: "http://LOCALHOST:11434/v1/", model: "qwen2.5:7b")!.engineID, ollama.engineID)
+        XCTAssertNotEqual(LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "qwen2.5:14b")!.engineID, ollama.engineID)
+        XCTAssertNotEqual(LocalAIServer(baseURL: LocalAIServer.lmStudioURL, model: "qwen2.5:7b")!.engineID, ollama.engineID)
+        XCTAssertNotEqual(LocalAIServer(baseURL: "http://192.168.1.20:11434/v1", model: "qwen2.5:7b")!.engineID, ollama.engineID)
+        // Bulut hizmetlerinin adları değişmez.
+        XCTAssertFalse(AIProvider.cloud.map { $0.engineID(model: $0.defaultModel.id) }.contains(ollama.engineID))
+    }
+
+    /// Düşünen yerel modeller yanıtın başına <think>…</think> koyar; yalnız sonrası okunur.
+    func testLocalThinkingIsSkipped() async throws {
+        FakeAI.replyText = "<think>\nThe user wants [\"x\"] translated…\n</think>\n\n[\"Koş!\"]"
+        let result = try await makeLocal().translate("Run!", fallback: local)
+        XCTAssertEqual(result, "Koş!")
+        XCTAssertEqual(try AIRequest.translations(from: "<think>…</think>Gidelim.", count: 1), ["Gidelim."])
+    }
+
+    /// Sunucu kapalıysa ya da model indirilmemişse o satır ücretsiz çeviriyle gelir, durum bildirilir.
+    func testLocalFailuresFallBack() async throws {
+        FakeAI.timeout = true
+        let down = makeLocal()
+        let first = try await down.translate("Run!", fallback: local)
+        XCTAssertEqual(first, "yerel: Run!")
+        XCTAssertEqual(down.lastFailure, .unreachable)
+
+        FakeAI.timeout = false
+        // Ollama'nın indirilmemiş model yanıtı.
+        FakeAI.failure = (404, #"{"error":{"message":"model \"qwen2.5:7b\" not found, try pulling it first","type":"api_error"}}"#)
+        let missing = makeLocal()
+        let second = try await missing.translate("Run!", fallback: local)
+        XCTAssertEqual(second, "yerel: Run!")
+        XCTAssertEqual(missing.lastFailure, .modelRejected)
+    }
+
+    /// "Bağlantıyı dene": anahtarsız çalışır; sunucunun hatası olduğu gibi döner.
+    func testLocalTestWorksWithoutKey() async {
+        let server = LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "qwen2.5:7b")
+        let result = await AITranslationCore.test(provider: .local, key: "", model: "qwen2.5:7b", server: server, session: FakeAI.session())
+        XCTAssertEqual(result, .success("KRATOS: [tr] We go now. [tr] Stay close, boy."))
+        XCTAssertNil(FakeAI.requests[0].request.value(forHTTPHeaderField: "Authorization"))
+
+        FakeAI.timeout = true
+        let down = await AITranslationCore.test(provider: .local, key: "", model: "qwen2.5:7b", server: server, session: FakeAI.session())
+        XCTAssertEqual(down, .failure(.unreachable))
+    }
+
+    /// Yerel modelde buluttan uzun beklenir; deneme modeli belleğe yükleyeceği için daha da uzun.
+    func testLocalTimeouts() {
+        XCTAssertEqual(AITranslationCore.makeSession(provider: .gemini).configuration.timeoutIntervalForRequest, AITranslationCore.timeout)
+        XCTAssertEqual(AITranslationCore.makeSession(provider: .local).configuration.timeoutIntervalForRequest, AITranslationCore.localTimeout)
+        XCTAssertGreaterThan(AITranslationCore.localTimeout, AITranslationCore.timeout)
+        XCTAssertGreaterThan(AITranslationCore.localTestTimeout, AITranslationCore.localTimeout)
     }
 
     /// Son gösterilen 3 satır ve çevirileri bağlam olarak gider; satırın kendisi ve tekrar okunan satır girmez.

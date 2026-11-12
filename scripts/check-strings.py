@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-# Mac uygulamasındaki ekran metinlerini bulur ve Localizable.xcstrings'te Türkçesi olup olmadığını kontrol eder.
+# Mac ve iPhone/iPad uygulamalarındaki ekran metinlerini bulur ve Localizable.xcstrings'te Türkçesi olup olmadığını kontrol eder.
 # Kullanım: python3 scripts/check-strings.py [--list]
 import json, pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "mac" / "CouchSubs"
+# iPhone/iPad uygulaması aynı katalogu kullanır (couchsubs-ios/project.yml).
+SOURCE_DIRS = [SOURCES, ROOT / "couchsubs-ios" / "CouchSubs"]
 CATALOG = SOURCES / "Resources" / "Localizable.xcstrings"
 
 # Yerelleştirilen çağrılar: Text("…"), Button("…"), Label("…"), String(localized: "…"), title:/message:/text: "…" vb.
@@ -18,7 +20,7 @@ PATTERNS = [
 
 def keys():
     found = set()
-    for path in SOURCES.rglob("*.swift"):
+    for path in (p for d in SOURCE_DIRS for p in d.rglob("*.swift")):
         source = path.read_text()
         for pattern in PATTERNS:
             for match in re.findall(pattern, source):

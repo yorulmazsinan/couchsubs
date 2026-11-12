@@ -76,11 +76,16 @@ public struct SubtitleStack: Equatable, Sendable {
     public func isEmpty(at now: TimeInterval) -> Bool { lines(at: now).isEmpty }
 
     /// Yeni altyazı. `durationMs`: bilgisayarın bildirdiği süre (0 ya da eksi ise yazının uzunluğundan hesaplanır).
-    public mutating func show(_ text: String, durationMs: Int, paragraphs: Bool = false, now: TimeInterval) {
+    /// `replaces`: bilgisayar bu satırı öncekinin uzamış ya da düzelmiş okuması saydı; önceki üste çıkmaz, bunun
+    /// yerine geçer (üstteki daha eski satırlar kalır).
+    public mutating func show(_ text: String, durationMs: Int, paragraphs: Bool = false, replaces: Bool = false,
+                              now: TimeInterval) {
         prune(now)
         // Önceki satır kısa göründüyse yeni satırın üstünde kalır. Aynı cümlenin başka bir okunuşu ikinci çeviri gibi
         // durmasın diye üste çıkmaz; görev paneli gibi çok satırlı yazılar da üst üste binmez.
-        if let shown = current, now - shown.shownAt < Self.stackWithin, !paragraphs, !shown.paragraphs,
+        if replaces, current != nil, !paragraphs {
+            // Üstteki satırlar olduğu gibi kalır.
+        } else if let shown = current, now - shown.shownAt < Self.stackWithin, !paragraphs, !shown.paragraphs,
            !Self.sameLine(shown.text, text) {
             pushPrevious(shown.text, now: now)
         } else {

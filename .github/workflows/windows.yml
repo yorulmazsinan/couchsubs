@@ -174,10 +174,61 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION=0.1.0-dev; fi
           dotnet publish windows/src/CouchSubs.App -c Release -r win-x64 --self-contained -o publish/CouchSubs -p:Version="$VERSION"
 
+      # Ücretsiz çeviri motoru (ONNX Runtime) Visual C++ çalışma zamanına bağlı: onnxruntime.dll VCRUNTIME140(_1).dll ve
+      # MSVCP140(_1).dll ister. Bunlar Windows'la gelmez; Visual C++ paketi kurulu olmayan bilgisayarda onnxruntime.dll
+      # yüklenemiyor, ücretsiz çeviri hiç çalışmıyordu (DllNotFoundException 0x8007007E). Microsoft'un belgelediği uygulama
+      # yanı dağıtımla Visual Studio'nun redist klasöründeki DLL'ler exe'nin yanına konur; .exe klasörü DLL aramasında
+      # System32'den önce gelir, Windows'taki eski bir msvcp140.dll de (ORT'yi çökertir) kullanılmaz. Kurulum dosyası ve zip
+      # ikisi de bu klasörden çıkar; kurulumda yönetici izni istenmez.
+      - name: Visual C++ çalışma zamanı (uygulamanın yanına)
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "Visual Studio C++ araçları bulunamadı" }
+          $crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\x64\Microsoft.VC14*.CRT" -Directory |
+            Where-Object { $_.Parent.Parent.Name -match '^\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Parent.Parent.Name } -Descending | Select-Object -First 1
+          if (-not $crt) { throw "Visual C++ redist klasörü (Microsoft.VC14x.CRT) bulunamadı" }
+          Write-Host "Kaynak: $($crt.FullName)"
+          Copy-Item "$($crt.FullName)\*.dll" publish/CouchSubs/
+          Get-ChildItem $crt.FullName -Filter *.dll | ForEach-Object { "{0,-28} {1}" -f $_.Name, $_.VersionInfo.FileVersion }
+
       # Türkçe dublajın ses motoru (Kyutai pocket-tts, MIT): sabit sürüm, özeti denetlenir.
       - name: Dublaj ses motoru
         shell: bash
         run: ./scripts/fetch-pocket-tts.sh windows publish/CouchSubs/tts
+
+      # Kurulum dosyası ve zip bu klasörden çıkar: ONNX Runtime DLL'leri ve her yerel DLL/exe'nin istediği Visual C++
+      # DLL'leri yanında değilse derleme durur. Bağımlılıklar dumpbin ile dosyaların kendi içe aktarma tablosundan okunur.
+      - name: ONNX Runtime ve Visual C++ DLL'leri yayın klasöründe mi
+        shell: pwsh
+        run: |
+          $dir = Resolve-Path publish/CouchSubs
+          foreach ($f in "onnxruntime.dll", "onnxruntime_providers_shared.dll", "Microsoft.ML.OnnxRuntime.dll",
+                         "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll") {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "$f yayın klasöründe yok" }
+          }
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -Last 1
+          if (-not $dumpbin) { throw "dumpbin bulunamadı" }
+          $vcRuntime = '^(vcruntime|msvcp|concrt|vccorlib|vcomp)\d+.*\.dll$'
+          $deps = { param($file) & $dumpbin.FullName /nologo /dependents $file | ForEach-Object { $_.Trim() } | Where-Object { $_ -match $vcRuntime } }
+          # Okuma bozulursa denetim boşa geçmesin: onnxruntime.dll'in bilinen bağımlılıkları görünmeli.
+          $ort = @(& $deps (Join-Path $dir onnxruntime.dll))
+          Write-Host "onnxruntime.dll Visual C++ bağımlılıkları: $($ort -join ', ')"
+          if ($ort -notcontains "VCRUNTIME140.dll" -or $ort -notcontains "MSVCP140.dll") { throw "onnxruntime.dll bağımlılıkları okunamadı" }
+          $missing = foreach ($bin in Get-ChildItem $dir -Recurse -Include *.dll, *.exe) {
+            foreach ($dep in & $deps $bin.FullName) {
+              if (-not (Test-Path (Join-Path $bin.DirectoryName $dep))) { "$($bin.FullName.Substring($dir.Path.Length + 1)) -> $dep" }
+            }
+          }
+          if ($missing) { $missing; throw "Visual C++ DLL'leri eksik" }
+          # ORT 1.19 ve sonrası eski msvcp140.dll ile std::mutex'te çöküyor; Microsoft 14.40 ve üstünü istiyor.
+          $v = (Get-Item (Join-Path $dir msvcp140.dll)).VersionInfo
+          if ([version]::new($v.FileMajorPart, $v.FileMinorPart) -lt [version]"14.40") { throw "msvcp140.dll eski: $($v.FileVersion)" }
+          Write-Host "Tamam: msvcp140.dll $($v.FileVersion)"
 
       # Kurulum dosyası ve uygulama içi güncelleme paketleri (Velopack, MIT). Sürümde önceki sürüm indirilir; yalnız
       # değişen parçalar (delta) da üretilir. Her derlemede denenir ki paketleme hatası sürüm anında çıkmasın.

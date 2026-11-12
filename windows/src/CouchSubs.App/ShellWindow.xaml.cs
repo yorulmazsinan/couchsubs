@@ -24,7 +24,7 @@ public partial class ShellWindow : Window
         controller.PropertyChanged += OnChanged;
         // Bilgisayar uykudan uyanınca bağlantılar hemen yenilenir.
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        // Num 0, 1, 2, 3, 5, 7, 8, 9 kısayolları yalnız çeviri sürerken tutulur.
+        // Num 0, 1, 2, 3, 5, 7, 8, 9 ve Ctrl+Shift+rakam kısayolları yalnız çeviri sürerken tutulur.
         SourceInitialized += (_, _) =>
         {
             hotkeys = new GlobalHotkeys(new WindowInteropHelper(this).Handle, OnHotkey);

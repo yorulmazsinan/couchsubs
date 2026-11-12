@@ -43,6 +43,10 @@
   window.COUCHSUBS_PLATFORM = {
     backKey: 10009,
 
+    // Anynet+ (HDMI-CEC) ya da Otomatik Kaynak Değiştirme TV'yi kendiliğinden HDMI'ya geçirirse uygulama ipucu
+    // gösterir (app.js). Menü adları Samsung'unkiler; başka TV'lerde gösterilmez.
+    sourceSwitchTip: true,
+
     init: function () {
       // Renk ve sayı tuşları istenmezse TV kendisi kullanır.
       for (var i = 0; i < KEYS.length; i++) {

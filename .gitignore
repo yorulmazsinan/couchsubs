@@ -7,6 +7,10 @@ build/
 third-party/build/
 .build/
 mac/CouchSubs.xcodeproj/
+couchsubs-ios/CouchSubs.xcodeproj/
+# iPhone/iPad uygulamasının anahtarları ve Firebase ayar dosyası (bkz. docs/ios-plan.md)
+couchsubs-ios/Config/Secrets.xcconfig
+couchsubs-ios/Config/GoogleService-Info.plist
 
 # Claude Code kişisel ayarları
 .claude/settings.local.json

@@ -4,7 +4,7 @@ import RemotePlay
 import SwiftUI
 
 struct ConsoleStep: View {
-    @Environment(AppModel.self) private var model
+    @EnvironmentObject private var model: AppModel
     @State private var consoles: [ConsoleInfo] = []
     @State private var selected: String?
     @State private var manualHost = ""
@@ -12,11 +12,16 @@ struct ConsoleStep: View {
     @State private var searching = false
     @State private var working = false
     @State private var error: String?
+    /// Bu ekranda eşleşme az önce başarıyla bitti; kod değişene dek Bağlan kapalı, ileti düğmenin altında.
+    @State private var paired = false
+    @Environment(\.scrollOnboardingTo) private var scrollTo
+
+    private static let pairedAnchor = "paired"
 
     private var host: String { selected ?? manualHost.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
-        StepLayout(symbol: "gamecontroller.fill", title: "Connect your PS5",
+        StepLayout(title: "Connect your PS5",
                    message: "Turn on the PS5. As the second user, open Settings › System › Remote Play › Pair Device and enter the 8-digit code shown there.") {
             VStack(alignment: .leading, spacing: Theme.space("l")) {
                 if let console = model.console {
@@ -46,20 +51,30 @@ struct ConsoleStep: View {
                 VStack(alignment: .leading, spacing: Theme.space("s")) {
                     Text("8-digit code").font(.csCallout).foregroundStyle(Color.csSecondary)
                     // Kod yazılıp Return'e basılınca bağlanılır (eskiden Return, kapalı "Devam"a gidip hiçbir şey yapmıyordu).
-                    TextField("", text: $pin)
+                    // Yeni kod yazılınca Bağlan yeniden açılır (onChange macOS 13'te farklı olduğu için bağlamada).
+                    TextField("", text: Binding(get: { pin }, set: { value in
+                        pin = value
+                        if !value.isEmpty { paired = false }
+                    }))
                         .textFieldStyle(CSTextFieldStyle(font: .csCode, height: 52))
                         .frame(maxWidth: 240)
                         .onSubmit { Task { await register() } }
                 }
                 HStack(spacing: Theme.space("m")) {
-                    // Düğme yalnız çalışırken kapalı; eksik kod ya da adres tıklanınca açıkça söylenir.
+                    // Düğme çalışırken ve eşleşmeden sonra (kod değişene dek) kapalı; eksik kod ya da adres tıklanınca
+                    // açıkça söylenir.
                     Button("Connect") { Task { await register() } }
                         .buttonStyle(.primary)
-                        .disabled(working)
+                        .disabled(working || paired)
                     if working {
                         ProgressView().controlSize(.small)
                         HintText(text: "Connecting to the PS5… This can take up to 30 seconds.")
                     }
+                }
+                // Eşleşme başarılı: düğmenin hemen altında yeşil ileti (üstteki ad kaydırınca görünmüyordu).
+                if paired, let console = model.console {
+                    DoneLabel(text: String(localized: "PS5 paired: \(Self.displayName(of: console)) (\(console.host)). Press Continue."))
+                        .id(Self.pairedAnchor)
                 }
                 ErrorText(error: error).textSelection(.enabled)
                 if error != nil {
@@ -94,11 +109,26 @@ struct ConsoleStep: View {
         searching = false
     }
 
+    /// Eşleşince düğmenin altında yeşil ileti çıkar (kaydırılmış olsa da görünür), kod alanı temizlenir ve ~1 sn sonra
+    /// sonraki adıma geçilir. Hata davranışı aynı.
     private func register() async {
-        guard !working else { return }
+        guard !working, !paired else { return }
         working = true
         error = nil
-        do { try await model.register(host: host, pin: pin) } catch { self.error = error.localizedDescription }
+        do {
+            try await model.register(host: host, pin: pin)
+            paired = true
+            pin = ""
+        } catch {
+            self.error = error.localizedDescription
+        }
         working = false
+        guard paired else { return }
+        // İleti çizildikten sonra kaydırılır.
+        try? await Task.sleep(for: .milliseconds(50))
+        scrollTo(Self.pairedAnchor)
+        try? await Task.sleep(for: .seconds(1))
+        // Kullanıcı bu arada Geri'ye bastıysa model ilerlemez (yalnız PS5 adımından geçer).
+        model.continueAfterPairing()
     }
 }

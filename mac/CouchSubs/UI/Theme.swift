@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import AppKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
-/// design/tokens.json: renkler, yazı boyutları, boşluklar. Windows sürümü de aynı dosyayı kullanır;
+/// design/tokens.json: renkler, yazı boyutları, boşluklar, köşeler. Parıltı ve degrade yoktur (docs/TASARIM.md). Windows sürümü de aynı dosyayı kullanır;
 /// bir değeri değiştirmek için yalnız o dosya düzenlenir.
 struct DesignTokens: Decodable {
     struct ColorPair: Decodable {
@@ -53,11 +57,20 @@ enum Theme {
 
     static func color(_ name: String) -> Color {
         guard let pair = tokens.color[name] else { fatalError("Bilinmeyen renk: \(name)") }
+        #if os(macOS)
         return Color(nsColor: NSColor(name: NSColor.Name(name)) { appearance in
             let hex = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? pair.dark : pair.light
             let (r, g, b) = DesignTokens.rgb(hex) ?? (0, 0, 0)
             return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
         })
+        #else
+        // iPhone/iPad uygulaması da aynı tokens.json'u kullanır (bkz. couchsubs-ios/project.yml).
+        return Color(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? pair.dark : pair.light
+            let (r, g, b) = DesignTokens.rgb(hex) ?? (0, 0, 0)
+            return UIColor(red: r, green: g, blue: b, alpha: 1)
+        })
+        #endif
     }
 
     static func font(_ name: String) -> Font {
@@ -79,20 +92,29 @@ enum Theme {
 extension Color {
     static let csBackground = Theme.color("background")
     static let csSurface = Theme.color("surface")
+    static let csSurface2 = Theme.color("surface2")
+    static let csTileBorder = Theme.color("tileBorder")
     static let csBorder = Theme.color("border")
     static let csText = Theme.color("textPrimary")
     static let csSecondary = Theme.color("textSecondary")
     static let csAccent = Theme.color("accent")
+    static let csAccentHi = Theme.color("accentHi")
     static let csOnAccent = Theme.color("onAccent")
     static let csAccentText = Theme.color("accentText")
     static let csAccentSoft = Theme.color("accentSoft")
+    static let csPro = Theme.color("pro")
+    static let csProSoft = Theme.color("proSoft")
     static let csSuccess = Theme.color("success")
+    static let csSuccessSoft = Theme.color("successSoft")
     static let csWarning = Theme.color("warning")
     static let csDanger = Theme.color("danger")
+    static let csDangerSoft = Theme.color("dangerSoft")
+    static let csDangerBorder = Theme.color("dangerBorder")
     static let csOnDanger = Theme.color("onDanger")
 }
 
 extension Font {
+    /// Ekran başlığı (28, yarı kalın, harf aralığı 0); ekranda en çok bir.
     static let csDisplay = Theme.font("display")
     static let csTitle = Theme.font("title")
     static let csHeadline = Theme.font("headline")

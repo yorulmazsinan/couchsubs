@@ -48,6 +48,51 @@ public enum OcrNoise {
         return kept.joined(separator: " ")
     }
 
+    /// Bir okumanın ne kadar sözcük gibi göründüğü: düzgün sözcüklerin harfleri artı, çöp ve karışık büyük-küçük
+    /// harfli parçalar ("CESAREiVJütt'h") eksi sayılır (Windows: OcrNoise.Score).
+    public static func score(_ text: String) -> Int {
+        var score = 0
+        for token in text.split(whereSeparator: \.isWhitespace).map(String.init) {
+            let core = split(token).1
+            let letters = core.filter(\.isLetter).count
+            guard letters > 0 else { continue }
+            // Sözcük ortasındaki parantez ("the[lil") de okuma karışıklığıdır.
+            let clean = cleanCore(core) == core && normalCase(core) && !core.contains(where: { "[]()".contains($0) })
+            score += clean ? letters : -2 * letters
+        }
+        return score
+    }
+
+    /// Okuma çöp gibi mi: harflerinin altıda birinden çoğu bozuk sözcüklerde (karışık büyük-küçük harf, simge, ünlüsüz
+    /// "Gtt"). Altyazılar geçişte birbirinin üstüne solarken yazı tanıma iki satırı karıştırıp ("Gtt solkolfege.")
+    /// noktayla biten bir çöp okuyordu; nokta yüzünden ilk karede çevriliyor, TV'de anlamsız bir cümle beliriyordu.
+    public static func looksGarbled(_ text: String) -> Bool {
+        var good = 0, bad = 0
+        for token in text.split(whereSeparator: \.isWhitespace).map(String.init) {
+            let core = split(token).1
+            let letters = core.filter(\.isLetter)
+            guard !letters.isEmpty else { continue }
+            let clean = cleanCore(core) == core && normalCase(core) && !core.contains(where: { "[]()".contains($0) })
+                && !vowelless(letters)
+            if clean { good += letters.count } else { bad += letters.count }
+        }
+        return bad * 6 > good + bad
+    }
+
+    /// Üç ve daha çok harfli, ünlüsüz ve kısaltma olmayan (tümü büyük harf değil) sözcük: İngilizcede olmaz ("Gtt", "rnnk").
+    private static func vowelless(_ letters: String) -> Bool {
+        letters.count >= 3 && !letters.allSatisfy(\.isUppercase)
+            && !letters.lowercased().contains(where: { "aeiouyäöüıàáâèéêìíîòóôùúû".contains($0) })
+    }
+
+    /// "word", "WORD", "Word", "McDonald", "don't": büyük harf yalnız başta ya da baştan bir dizi.
+    private static func normalCase(_ core: String) -> Bool {
+        let letters = core.filter(\.isLetter)
+        if letters.allSatisfy(\.isUppercase) || letters.dropFirst().allSatisfy(\.isLowercase) { return true }
+        // Tek iç büyük harf ("McDonald", "iPhone") olağan; daha fazlası OCR karışıklığıdır.
+        return letters.dropFirst().filter(\.isUppercase).count == 1 && letters.filter(\.isLowercase).count >= 2
+    }
+
     /// "l", "|", "l'm", "|'ll" → "I", "I'm", "I'll" (nil: böyle bir okuma değil).
     private static func misreadI(_ core: String) -> String? {
         guard let first = core.first, first == "l" || first == "|" else { return nil }

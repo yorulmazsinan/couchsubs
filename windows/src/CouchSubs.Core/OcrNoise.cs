@@ -73,6 +73,29 @@ public static partial class OcrNoise
         return score;
     }
 
+    /// <summary>
+    /// Okuma çöp gibi mi: harflerinin altıda birinden çoğu bozuk sözcüklerde (karışık büyük-küçük harf, simge, ünlüsüz
+    /// "Gtt"). Altyazılar geçişte birbirinin üstüne solarken yazı tanıma iki satırı karıştırıp ("Gtt solkolfege.")
+    /// noktayla biten bir çöp okuyordu; nokta yüzünden ilk karede çevriliyor, TV'de anlamsız bir cümle beliriyordu (Mac ile aynı).
+    /// </summary>
+    public static bool LooksGarbled(string text)
+    {
+        int good = 0, bad = 0;
+        foreach (var token in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var core = Split(token).Core;
+            var letters = new string(core.Where(char.IsLetter).ToArray());
+            if (letters.Length == 0) continue;
+            var clean = CleanCore(core) == core && NormalCase(core) && core.IndexOfAny(['[', ']', '(', ')']) < 0 && !Vowelless(letters);
+            if (clean) good += letters.Length; else bad += letters.Length;
+        }
+        return bad * 6 > good + bad;
+    }
+
+    /// <summary>Üç ve daha çok harfli, ünlüsüz ve kısaltma olmayan (tümü büyük harf değil) sözcük: İngilizcede olmaz ("Gtt", "rnnk").</summary>
+    private static bool Vowelless(string letters) =>
+        letters.Length >= 3 && !letters.All(char.IsUpper) && letters.ToLowerInvariant().IndexOfAny("aeiouyäöüıàáâèéêìíîòóôùúû".ToCharArray()) < 0;
+
     /// <summary>"word", "WORD", "Word", "McDonald", "don't": büyük harf yalnız başta ya da baştan bir dizi.</summary>
     private static bool NormalCase(string core)
     {

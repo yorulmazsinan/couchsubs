@@ -85,6 +85,7 @@ public partial class TvAppCard : UserControl
             TvAppKind.UpToDate when brand == TvBrand.Lg => controller?.DevModeHoursLeft is { } hours
                 ? text["Developer Mode: %lld hours left. CouchSubs extends it by itself each time you use it."].Replace("%lld", hours.ToString())
                 : text["CouchSubs extends Developer Mode by itself each time you use it."],
+            TvAppKind.UpToDate when brand == TvBrand.Samsung => text[TvAppMessages.SourceSwitchTip],
             _ => "",
         };
         Detail.Visibility = Visible(Detail.Text.Length > 0);

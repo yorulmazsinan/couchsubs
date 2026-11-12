@@ -58,8 +58,8 @@ final class ComputerScreenTests: XCTestCase {
         let store = storeWithoutTV()
         let defaults = UserDefaults.isolated()
         let model = AppModel(services: FakeServices(), store: store, defaults: defaults)
-        XCTAssertEqual(model.step, .welcome)
-        model.step = .tv
+        // PS5 kayıtlı ama kurulum bitmemiş: sihirbaz TV adımından sürer.
+        XCTAssertEqual(model.step, .tv)
         model.useComputerScreen()
         // Deneme ve isteğe bağlı "Daha iyi çeviri" adımları (Windows'taki testle aynı).
         model.advance()

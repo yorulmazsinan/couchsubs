@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Glyph="{x:Static c:Glyphs.Captions}" Title="{t:T 'Welcome to CouchSubs'}"
+    <c:StepLayout Title="{t:T 'Welcome to CouchSubs'}"
                   Message="{t:T 'CouchSubs reads the English subtitles of your PS5 games and shows a Turkish translation on your TV, on top of the game. You keep playing on the TV with your own controller.'}">
         <c:Card Title="{t:T 'You will need:'}">
             <StackPanel>
