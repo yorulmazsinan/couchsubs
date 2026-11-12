@@ -10,25 +10,25 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -127,28 +126,29 @@ fun MainScreen(
             Heading(stringResource(R.string.main_ready), stringResource(R.string.main_ready_body))
             status.error?.let { NoteTile(it) }
             TwoColumns(
-                { SquareTile(Icons.Filled.PlayArrow, "PS5", settings.console?.name ?: stringResource(R.string.profile_not_paired), it,
-                    tint = Tokens.Color.success, corner = { if (settings.console != null) LiveDot() }, onClick = onPairing) },
-                { SquareTile(if (settings.target == SubtitleTarget.TV) Icons.Filled.Home else Icons.Filled.Phone, stringResource(R.string.main_target),
+                { StatusTile(Icons.Filled.PlayArrow, "PS5", settings.console?.name ?: stringResource(R.string.profile_not_paired), it,
+                    corner = { if (settings.console != null) StatusLabel(stringResource(R.string.main_paired)) }, onClick = onPairing) },
+                { StatusTile(if (settings.target == SubtitleTarget.TV) Icons.Filled.Home else Icons.Filled.Phone, stringResource(R.string.main_target),
                     if (settings.target == SubtitleTarget.TV) settings.tvName ?: stringResource(R.string.main_target_tv) else stringResource(R.string.main_target_phone),
-                    it.then(mark(TourStep.TARGET)), style = TileStyle.ACTIVE, onClick = onTarget) },
+                    it.then(mark(TourStep.TARGET)), onClick = onTarget) },
             )
             Box(mark(TourStep.PACKS)) {
-                Tile(Modifier.fillMaxWidth(), style = TileStyle.PRO, onClick = onPacks) {
+                Tile(Modifier.fillMaxWidth(), onClick = onPacks) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                        IconBadge(Icons.Filled.Star, Tokens.Color.pro)
-                        Column(Modifier.weight(1f)) {
+                        TileIcon(Icons.AutoMirrored.Filled.List, Tokens.Color.pro)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
                             Text(stringResource(R.string.main_packs_title), style = Tokens.Type.headline, color = Tokens.Color.text)
                             Text(stringResource(R.string.main_packs_games), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                         }
-                        Pill(stringResource(if (settings.packsEnabled) R.string.main_packs_on else R.string.main_packs_off), Tokens.Color.pro)
+                        Pill(stringResource(if (settings.packsEnabled) R.string.packs_free else R.string.main_packs_off))
+                        TileIcon(Icons.AutoMirrored.Filled.KeyboardArrowRight)
                     }
                 }
             }
             TwoColumns(
-                { SquareTile(Icons.Filled.Create, stringResource(R.string.main_engine), status.engineLabel.ifEmpty { engineName(context) }, it, onClick = onSettings) },
-                { SquareTile(Icons.Filled.DateRange, stringResource(R.string.main_last_session),
-                    if (settings.lastSessionMs > 0) durationText(context, settings.lastSessionMs) else "—", it, tint = Tokens.Color.secondary) },
+                { StatusTile(Icons.Filled.Create, stringResource(R.string.main_engine), status.engineLabel.ifEmpty { engineName(context) }, it, onClick = onSettings) },
+                { StatusTile(Icons.Filled.DateRange, stringResource(R.string.main_last_session),
+                    if (settings.lastSessionMs > 0) durationText(context, settings.lastSessionMs) else "—", it) },
             )
         }
         tour?.let { step ->
@@ -187,34 +187,38 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         SecondaryButton(stringResource(R.string.main_phone_view), onClick = onPhoneView)
         DestructiveButton(stringResource(R.string.stop), onClick = onStop)
     }) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.inline), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap), verticalAlignment = Alignment.CenterVertically) {
             val elapsed = ((now - status.startedAt).coerceAtLeast(0) / 1000)
-            Pill(stringResource(R.string.running_pill, "%d:%02d".format(elapsed / 60, elapsed % 60)), Tokens.Color.success)
-            status.packInUse?.let { Pill(stringResource(R.string.running_pack, it), Tokens.Color.pro) }
+            StatusLabel(stringResource(R.string.running_pill, "%d:%02d".format(elapsed / 60, elapsed % 60)), live = true)
+            Spacer(Modifier.weight(1f))
+            status.packInUse?.let { Pill(stringResource(R.string.running_pack, it), pro = true) }
         }
         Text(status.phase, style = Tokens.Type.caption, color = Tokens.Color.secondary)
         status.error?.let { NoteTile(it) }
         val current = status.recent.firstOrNull()
-        Tile(Modifier.fillMaxWidth(), style = TileStyle.ACTIVE) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LiveDot()
-                TileLabel(stringResource(R.string.running_now))
-                Spacer(Modifier.weight(1f))
-                if (current?.origin == "paket") Pill(stringResource(R.string.running_ready_translation), Tokens.Color.pro)
+        Tile(Modifier.fillMaxWidth()) {
+            TileLabel(stringResource(R.string.running_now))
+            // Son çeviri altyazı sarısında (içerik), altında özgün metin.
+            Text(current?.translation ?: stringResource(R.string.running_waiting), style = Tokens.Type.subtitleCurrent,
+                color = if (current != null) Tokens.Color.accentText else Tokens.Color.secondary)
+            current?.let {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+                    Text(it.source, style = Tokens.Type.caption, color = Tokens.Color.secondary, modifier = Modifier.weight(1f))
+                    if (it.origin == "paket") Text(stringResource(R.string.running_ready_translation), style = Tokens.Type.caption, color = Tokens.Color.pro)
+                }
             }
-            Text(current?.translation ?: stringResource(R.string.running_waiting), style = Tokens.Type.subtitleCurrent, color = Tokens.Color.text)
-            current?.let { Text(it.source, style = Tokens.Type.body, color = Tokens.Color.secondary) }
         }
         val previous = status.recent.drop(1).take(4)
-        if (previous.isNotEmpty()) RowList(previous.mapIndexed { index, pair ->
+        if (previous.isNotEmpty()) RowList(previous.map { pair ->
             {
-                Row(Modifier.alpha(if (index == 0) 1f else 0.6f).padding(vertical = Tokens.Space.inline), verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f)) {
-                        Text(pair.translation, style = Tokens.Type.headline, color = Tokens.Color.text)
+                Row(Modifier.padding(vertical = Tokens.Space.inline), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
+                        Text(pair.translation, style = Tokens.Type.line, color = Tokens.Color.secondary)
                         Text(pair.source, style = Tokens.Type.caption, color = Tokens.Color.secondary)
                     }
-                    if (pair.origin == "paket") Pill(stringResource(R.string.running_ready), Tokens.Color.pro)
-                    else Pill(status.engineLabel, Tokens.Color.secondary)
+                    if (pair.origin == "paket") Text(stringResource(R.string.running_ready), style = Tokens.Type.caption, color = Tokens.Color.pro)
+                    else Text(status.engineLabel, style = Tokens.Type.caption, color = Tokens.Color.secondary)
                 }
             }
         })
@@ -226,7 +230,7 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
             { Tile(it) {
                 TileLabel(stringResource(R.string.main_tvs_label))
                 Text(if (Services.settings.target == SubtitleTarget.TV) status.connectedTvs.toString() else stringResource(R.string.main_target_phone),
-                    style = Tokens.Type.title, color = if (status.connectedTvs > 0) Tokens.Color.success else Tokens.Color.text)
+                    style = Tokens.Type.title, color = Tokens.Color.text)
             } },
         )
     }
@@ -252,7 +256,7 @@ private fun TourOverlay(step: TourStep, target: Rect?, onSkip: () -> Unit, onNex
             .background(Tokens.Color.surface2, RoundedCornerShape(Tokens.Radius.tile)).padding(Tokens.Space.tile),
             verticalArrangement = Arrangement.spacedBy(Tokens.Space.inline)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill("${step.ordinal + 1} / ${TourStep.entries.size}")
+                Text("${step.ordinal + 1} / ${TourStep.entries.size}", style = Tokens.Type.caption, color = Tokens.Color.secondary)
                 Spacer(Modifier.weight(1f))
                 GhostButton(stringResource(R.string.skip), onClick = onSkip)
             }
@@ -263,7 +267,7 @@ private fun TourOverlay(step: TourStep, target: Rect?, onSkip: () -> Unit, onNex
     }
 }
 
-/** Oyun paketleri: Pro ise etkin (paket başına kapatılabilir), değilse kilitli tanıtım. */
+/** Oyun paketleri (ücretsiz): anahtarla toptan, karoya dokunarak paket başına açılıp kapatılır. */
 @Composable
 fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
     val context = LocalContext.current
@@ -276,7 +280,9 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
     val unlocked = packsOn
     val list = catalog.orEmpty()
     ScreenScaffold(top = {
-        TopBar(stringResource(R.string.packs_title), onBack = onBack) { Pill(stringResource(R.string.packs_free), Tokens.Color.pro) }
+        TopBar(stringResource(R.string.packs_title), onBack = onBack) {
+            Pill(if (list.isEmpty()) stringResource(R.string.packs_free) else stringResource(R.string.packs_free_count, list.size))
+        }
     }, bottom = {
         SecondaryButton(stringResource(R.string.packs_refresh)) { Services.refreshPacks(force = true) }
     }) {
@@ -286,18 +292,17 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
                 androidx.compose.material3.Switch(packsOn, { packsOn = it; settings.packsEnabled = it })
             }
         }))
-        if (catalog == null) Text(stringResource(R.string.paywall_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
+        if (catalog == null) Text(stringResource(R.string.packs_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
         else if (list.isEmpty()) NoteTile(stringResource(R.string.packs_none_yet), Tokens.Color.secondary)
         list.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                 row.forEach { entry ->
                     val (code, short) = packShort(entry.id, entry.title)
                     val on = entry.id !in disabled
                     val playing = packInUse != null && packInUse == entry.title
-                    SquareTile(null, "", short, Modifier.weight(1f), code = code, tint = Tokens.Color.pro,
+                    PackTile(code, short, linesText(context, entry.entries), Modifier.weight(1f).fillMaxHeight(),
                         style = if (playing) TileStyle.ACTIVE else TileStyle.NORMAL, dim = !unlocked || !on,
-                        corner = { if (playing) StatusPill(stringResource(R.string.packs_now), ok = true) else if (unlocked && !on) Pill(stringResource(R.string.packs_off), Tokens.Color.secondary) },
-                        note = linesText(context, entry.entries),
+                        corner = { if (playing) StatusLabel(stringResource(R.string.packs_now)) else if (unlocked && !on) Pill(stringResource(R.string.packs_off)) },
                         onClick = {
                             disabled = if (on) disabled + entry.id else disabled - entry.id
                             settings.disabledPacks = disabled
@@ -308,8 +313,8 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
         }
         Tile(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                IconBadge(Icons.Filled.Refresh, Tokens.Color.secondary)
-                Column {
+                TileIcon(Icons.Filled.Refresh)
+                Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
                     Text(stringResource(R.string.packs_next), style = Tokens.Type.headline, color = Tokens.Color.text)
                     Text(stringResource(R.string.packs_next_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                 }

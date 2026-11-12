@@ -121,32 +121,33 @@ fun WelcomeScreen(onDone: () -> Unit) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap, Alignment.Bottom)) {
                 when (page) {
                     0 -> {
-                        Tile(Modifier.fillMaxWidth(), style = TileStyle.ACTIVE) {
-                            Text(stringResource(R.string.welcome1_sample_tr), style = Tokens.Type.subtitleCurrent, color = Tokens.Color.text)
-                            Text(stringResource(R.string.welcome1_sample_en), style = Tokens.Type.body, color = Tokens.Color.secondary)
+                        Tile(Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.welcome1_sample_tr), style = Tokens.Type.subtitleCurrent, color = Tokens.Color.accentText)
+                            Text(stringResource(R.string.welcome1_sample_en), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                         }
                         Heading(stringResource(R.string.welcome1_title), stringResource(R.string.welcome1_body))
                     }
                     1 -> {
-                        Tile(Modifier.fillMaxWidth(), style = TileStyle.PRO) {
+                        Tile(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                                CodeBadge("GTA")
-                                Column {
+                                GameMonogram("GTA")
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
                                     Text("Grand Theft Auto V", style = Tokens.Type.headline, color = Tokens.Color.text)
                                     Text(stringResource(R.string.welcome2_gta), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                                 }
+                                Pill(stringResource(R.string.packs_free))
                             }
                         }
                         TwoColumns(
-                            { SquareTile(null, stringResource(R.string.welcome2_rdr_lines), "Red Dead 2", it, code = "RDR") },
-                            { SquareTile(null, stringResource(R.string.welcome2_maf_lines), "Mafia", it, code = "MAF") },
+                            { PackTile("RDR", "Red Dead 2", stringResource(R.string.welcome2_rdr_lines), it) },
+                            { PackTile("MAF", "Mafia", stringResource(R.string.welcome2_maf_lines), it) },
                         )
                         Heading(stringResource(R.string.welcome2_title), stringResource(R.string.welcome2_body))
                     }
                     else -> {
                         TwoColumns(
-                            { SquareTile(Icons.Filled.Home, stringResource(R.string.welcome3_tv_label), stringResource(R.string.welcome3_tv), it, style = TileStyle.ACTIVE) },
-                            { SquareTile(Icons.Filled.Phone, stringResource(R.string.welcome3_phone_label), stringResource(R.string.welcome3_phone), it) },
+                            { StatusTile(Icons.Filled.Home, stringResource(R.string.welcome3_tv_label), stringResource(R.string.welcome3_tv), it) },
+                            { StatusTile(Icons.Filled.Phone, stringResource(R.string.welcome3_phone_label), stringResource(R.string.welcome3_phone), it) },
                         )
                         Tile(Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.welcome3_wifi), style = Tokens.Type.headline, color = Tokens.Color.text)
@@ -179,13 +180,13 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
         }) {
             Heading(stringResource(R.string.psn_title), stringResource(R.string.psn_body), stringResource(R.string.setup_step, 1))
             TwoColumns(
-                { SquareTile(Icons.Filled.Person, stringResource(R.string.psn_free_note), stringResource(R.string.psn_free), it, tint = Tokens.Color.success) },
-                { SquareTile(Icons.Filled.PlayArrow, stringResource(R.string.psn_you_play_note), stringResource(R.string.psn_you_play), it) },
+                { StatusTile(Icons.Filled.Person, stringResource(R.string.psn_free_note), stringResource(R.string.psn_free), it) },
+                { StatusTile(Icons.Filled.PlayArrow, stringResource(R.string.psn_you_play_note), stringResource(R.string.psn_you_play), it) },
             )
             Tile(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                    IconBadge(Icons.Filled.Lock, Tokens.Color.accent)
-                    Column {
+                    TileIcon(Icons.Filled.Lock)
+                    Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
                         Text(stringResource(R.string.psn_password_safe), style = Tokens.Type.headline, color = Tokens.Color.text)
                         Text(stringResource(R.string.psn_password_safe_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                     }
@@ -226,7 +227,7 @@ fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = Tokens.Color.surface2,
         title = { Text(title, style = Tokens.Type.headline, color = Tokens.Color.text) },
         text = { Text(body, style = Tokens.Type.body, color = Tokens.Color.secondary) },
-        confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.ok), color = Tokens.Color.accent) } })
+        confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.ok), style = Tokens.Type.headline, color = Tokens.Color.accentText) } })
 }
 
 @Composable
@@ -272,8 +273,8 @@ fun PairScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
             else -> list.forEach { console ->
                 Tile(Modifier.fillMaxWidth(), style = if (host == console.host) TileStyle.ACTIVE else TileStyle.NORMAL, onClick = { host = console.host }) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                        IconBadge(Icons.Filled.Check, Tokens.Color.success)
-                        Column {
+                        TileIcon(Icons.Filled.Check, Tokens.Color.success)
+                        Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
                             Text(stringResource(R.string.pair_found, console.name), style = Tokens.Type.headline, color = Tokens.Color.text)
                             Text(stringResource(R.string.pair_same_wifi, console.host), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                         }
@@ -335,9 +336,10 @@ fun TargetScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
     }) {
         Heading(stringResource(R.string.target_title), stringResource(R.string.target_body), if (onBack == null) stringResource(R.string.setup_step, 3) else null)
         Tile(Modifier.fillMaxWidth(), style = if (target == SubtitleTarget.TV) TileStyle.ACTIVE else TileStyle.NORMAL, onClick = { target = SubtitleTarget.TV }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                IconBadge(Icons.Filled.Home, Tokens.Color.accent)
-                Text(stringResource(R.string.target_tv), style = Tokens.Type.headline, color = Tokens.Color.text)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.inline)) {
+                TileIcon(Icons.Filled.Home)
+                Text(stringResource(R.string.target_tv), style = Tokens.Type.headline, color = Tokens.Color.text, modifier = Modifier.weight(1f))
+                if (target == SubtitleTarget.TV) SelectedCheck()
             }
             when (val found = tvs) {
                 null -> Text(stringResource(R.string.target_searching), style = Tokens.Type.caption, color = Tokens.Color.secondary)
@@ -348,16 +350,17 @@ fun TargetScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
                             Text(tv.name, style = Tokens.Type.body, color = Tokens.Color.text)
                             Text(brandName(tv.brand), style = Tokens.Type.caption, color = Tokens.Color.secondary)
                         }
-                        StatusPill(stringResource(R.string.target_tv_on_network), ok = true)
+                        StatusLabel(stringResource(R.string.target_tv_on_network))
                     }
                 }
             }
             Text(stringResource(R.string.target_tv_body), style = Tokens.Type.caption, color = Tokens.Color.secondary)
         }
         TwoColumns(
-            { SquareTile(Icons.Filled.Phone, stringResource(R.string.target_phone_note), stringResource(R.string.target_phone), it,
-                style = if (target == SubtitleTarget.PHONE) TileStyle.ACTIVE else TileStyle.NORMAL, onClick = { target = SubtitleTarget.PHONE }) },
-            { SquareTile(Icons.Filled.Info, stringResource(R.string.target_unlisted_note), stringResource(R.string.target_unlisted), it, tint = Tokens.Color.secondary,
+            { StatusTile(Icons.Filled.Phone, stringResource(R.string.target_phone_note), stringResource(R.string.target_phone), it,
+                style = if (target == SubtitleTarget.PHONE) TileStyle.ACTIVE else TileStyle.NORMAL,
+                corner = { if (target == SubtitleTarget.PHONE) SelectedCheck() }, onClick = { target = SubtitleTarget.PHONE }) },
+            { StatusTile(Icons.Filled.Info, stringResource(R.string.target_unlisted_note), stringResource(R.string.target_unlisted), it,
                 onClick = { open(context, context.getString(R.string.url_tvs)) }) },
         )
     }

@@ -43,7 +43,7 @@ class PhoneSubtitleActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val settings = Services.settings
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val color = if (settings.textColor == SubtitleTextColor.YELLOW) Tokens.Color.accent else Tokens.Color.text
+        val color = if (settings.textColor == SubtitleTextColor.YELLOW) Tokens.Color.accentText else Tokens.Color.text
         val scale = settings.subtitleScale / 100f
         val streaming = getString(R.string.phase_streaming)
         setContent {
@@ -54,11 +54,11 @@ class PhoneSubtitleActivity : ComponentActivity() {
                     window.attributes = window.attributes.apply { screenBrightness = 0.35f }
                 }
                 Box(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(Tokens.Space.screen)) {
-                    Row(Modifier.fillMaxWidth().align(Alignment.TopCenter), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().align(Alignment.TopCenter), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                         val connected = status.running && status.phase == streaming
-                        val pack = status.packInUse?.let { stringResource(R.string.running_pack, it) }
-                        Pill(listOfNotNull(stringResource(if (connected) R.string.subtitle_connected else R.string.subtitle_waiting), pack).joinToString(" · "),
-                            if (connected) Tokens.Color.success else Tokens.Color.secondary)
+                        StatusLabel(stringResource(if (connected) R.string.subtitle_connected else R.string.subtitle_waiting), ok = connected, live = connected)
+                        status.packInUse?.let { Pill(stringResource(R.string.running_pack, it), pro = true) }
                         Spacer(Modifier.weight(1f))
                         IconAction(Icons.Filled.Close, stringResource(R.string.close)) { finish() }
                     }

@@ -1,7 +1,9 @@
 # CouchSubs Android (telefon ve tablet): fizibilite ve plan
 
 Durum: `couchsubs-android/` klasöründe, `feat/android-app` dalında. Ekranlar onaylanan mobil tasarımla (bento,
-TASARIM-MOBIL.md) yapıldı. Motor ve tesisat (Remote Play, yazı tanıma, paketler, çeviri, SSE sunucusu, ön plan hizmeti)
+TASARIM-MOBIL.md) yapıldı; 2026-11-12'de Mac, Windows ve iPhone'daki onaylı sade tasarıma geçti (`docs/TASARIM.md`,
+`design/tokens.json` v3: düz zemin, parıltı ve degrade yok, tek köşe ölçeği 16/12/8/6, beş yazı boyu, 24 yükseklikli
+etiketler, canlı nokta yalnız çeviri sürerken atar). Motor ve tesisat (Remote Play, yazı tanıma, paketler, çeviri, SSE sunucusu, ön plan hizmeti)
 masaüstüyle aynı kurallarla yazıldı. **Uygulama tamamen ücretsizdir; oyun paketleri dahil. Hesap ve giriş yoktur.**
 
 ## Ne yapıyor

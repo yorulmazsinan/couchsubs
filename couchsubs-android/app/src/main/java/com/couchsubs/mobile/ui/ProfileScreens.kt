@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -65,9 +66,9 @@ fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> U
     LaunchedEffect(Unit) { tvs = withContext(Dispatchers.IO) { runCatching { TvDiscovery.search() }.getOrDefault(emptyList()) } }
     ScreenScaffold(top = { TopBar(stringResource(R.string.profile), onBack = onBack) { SettingsAction(onSettings) } }) {
         TwoColumns(
-            { SquareTile(Icons.Filled.Home, "PS5", settings.console?.name ?: stringResource(R.string.profile_not_paired), it,
-                tint = Tokens.Color.success, onClick = onPairing) },
-            { SquareTile(Icons.Filled.Person, stringResource(R.string.profile_psn),
+            { StatusTile(Icons.Filled.Home, "PS5", settings.console?.name ?: stringResource(R.string.profile_not_paired), it,
+                corner = { if (settings.console != null) StatusLabel(stringResource(R.string.main_paired)) }, onClick = onPairing) },
+            { StatusTile(Icons.Filled.Person, stringResource(R.string.profile_psn),
                 stringResource(if (settings.accountId != null) R.string.profile_psn_linked_short else R.string.profile_psn_missing), it,
                 onClick = onPsn) },
         )
@@ -138,7 +139,7 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TileLabel(stringResource(R.string.settings_key_for, engineName(context)))
                     Spacer(Modifier.weight(1f))
-                    if (key.isNotBlank()) StatusPill(stringResource(R.string.settings_key_saved), ok = true)
+                    if (key.isNotBlank()) StatusLabel(stringResource(R.string.settings_key_saved))
                 }
                 Field(key, { key = it; settings.setApiKey(engine, it) }, stringResource(R.string.settings_key), secret = true)
             }
@@ -151,9 +152,11 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
                 Text("%${scale.toInt()}", style = Tokens.Type.headline, color = Tokens.Color.text)
             }
             Slider(scale, { scale = it; settings.subtitleScale = it.toInt() }, valueRange = 80f..160f, steps = 7,
-                colors = SliderDefaults.colors(thumbColor = Tokens.Color.accent, activeTrackColor = Tokens.Color.accent))
+                colors = SliderDefaults.colors(thumbColor = Tokens.Color.text, activeTrackColor = Tokens.Color.accent,
+                    inactiveTrackColor = Tokens.Color.borderStrong, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent))
+            // Önizleme altyazı içeriğidir: boyu ölçeğe göre değişir.
             Text(stringResource(R.string.settings_preview), style = Tokens.Type.subtitleCurrent.copy(fontSize = Tokens.Type.subtitleCurrent.fontSize * (scale / 100f)),
-                color = if (color == SubtitleTextColor.YELLOW) Tokens.Color.accent else Tokens.Color.text)
+                color = if (color == SubtitleTextColor.YELLOW) Tokens.Color.accentText else Tokens.Color.text)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                 TileLabel(stringResource(R.string.settings_color))
                 Spacer(Modifier.weight(1f))
@@ -167,7 +170,7 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
             RowItem(stringResource(R.string.settings_screen_on)) { Switch(screenOn, { screenOn = it; settings.keepScreenOn = it }) }
         }
         RowList(listOf(
-            { RowItem(stringResource(R.string.settings_packs), onClick = onPacks) { Pill(stringResource(if (settings.packsEnabled) R.string.main_packs_on else R.string.main_packs_off), Tokens.Color.pro) } },
+            { RowItem(stringResource(R.string.settings_packs), onClick = onPacks) { Pill(stringResource(if (settings.packsEnabled) R.string.main_packs_on else R.string.main_packs_off)) } },
             { RowItem(stringResource(R.string.settings_target), if (settings.target == SubtitleTarget.TV) settings.tvName ?: stringResource(R.string.main_target_tv)
                 else stringResource(R.string.main_target_phone), onClick = onTarget) },
             { RowItem(stringResource(R.string.settings_ps5), settings.console?.name ?: stringResource(R.string.profile_not_paired), onClick = onPairing) },
