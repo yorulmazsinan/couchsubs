@@ -7,11 +7,9 @@ import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * Firebase'e tek giriş noktası: Analytics, Crashlytics ve Remote Config (hesap yok; uygulama tamamen ücretsiz).
+ * Firebase'e tek giriş noktası: Analytics ve Crashlytics (hesap yok, reklam yok; uygulama tamamen ücretsiz).
  * app/google-services.json yoksa Firebase hiç açılmaz ([available] false): ölçüm ve çökme raporu sessizce atlanır.
  */
 object Backend {
@@ -29,19 +27,21 @@ object Backend {
         }
         if (!available) return
         analytics = FirebaseAnalytics.getInstance(context)
-        RemoteFlags.start()
     }
 
-    /** İzin değişince ölçüm ve çökme raporu açılır/kapanır (Consent Mode v2). */
-    fun applyConsent(flags: ConsentFlags) {
+    /**
+     * Profil › Kullanım verisi değişince ölçüm ve çökme raporu açılır/kapanır. Reklam depolama ve kişiselleştirme
+     * (Consent Mode v2) her zaman kapalıdır; reklam kimliği manifestte kapalıdır.
+     */
+    fun apply(flags: MeasurementFlags) {
         if (!available) return
         analytics?.setAnalyticsCollectionEnabled(flags.analyticsCollection)
         analytics?.setConsent(
             mapOf(
-                FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE to status(flags.analyticsStorage),
-                FirebaseAnalytics.ConsentType.AD_STORAGE to status(flags.adStorage),
-                FirebaseAnalytics.ConsentType.AD_USER_DATA to status(flags.adUserData),
-                FirebaseAnalytics.ConsentType.AD_PERSONALIZATION to status(flags.adPersonalization),
+                FirebaseAnalytics.ConsentType.ANALYTICS_STORAGE to status(flags.analyticsCollection),
+                FirebaseAnalytics.ConsentType.AD_STORAGE to status(false),
+                FirebaseAnalytics.ConsentType.AD_USER_DATA to status(false),
+                FirebaseAnalytics.ConsentType.AD_PERSONALIZATION to status(false),
             )
         )
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(flags.crashReports)
@@ -69,6 +69,7 @@ object Telemetry {
     const val ONBOARDING_DONE = "onboarding_done"
 
     fun event(name: String, vararg params: Pair<String, Any?>) {
+        Meta.mirror(name)
         val analytics = Backend.analyticsOrNull() ?: return
         analytics.logEvent(name, Bundle().apply {
             for ((key, value) in params) when (value) {
@@ -81,7 +82,6 @@ object Telemetry {
                 else -> putString(key, value.toString())
             }
         })
-        Ads.mirror(name)
     }
 
     fun screen(route: String) {
@@ -90,16 +90,5 @@ object Telemetry {
             putString(FirebaseAnalytics.Param.SCREEN_NAME, route)
             putString(FirebaseAnalytics.Param.SCREEN_CLASS, "Compose")
         })
-    }
-}
-
-/** Remote Config: "ads_enabled" (varsayılan false). */
-object RemoteFlags {
-    val adsEnabled = MutableStateFlow(false)
-
-    internal fun start() {
-        val config = FirebaseRemoteConfig.getInstance()
-        config.setDefaultsAsync(mapOf("ads_enabled" to false))
-        config.fetchAndActivate().addOnCompleteListener { adsEnabled.value = config.getBoolean("ads_enabled") }
     }
 }

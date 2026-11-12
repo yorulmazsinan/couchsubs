@@ -172,13 +172,10 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("subtitleScale", 100)
         set(value) = prefs.edit().putInt("subtitleScale", value.coerceIn(80, 160)).apply()
 
-    /** KVKK/GDPR izni (ilk açılışta sorulur). */
-    var consent: com.couchsubs.mobile.account.ConsentChoice
-        get() = com.couchsubs.mobile.account.ConsentChoice(
-            prefs.getBoolean("consent.decided", false), prefs.getBoolean("consent.analytics", false), prefs.getBoolean("consent.ads", false),
-        )
-        set(value) = prefs.edit().putBoolean("consent.decided", value.decided).putBoolean("consent.analytics", value.analytics)
-            .putBoolean("consent.ads", value.ads).apply()
+    /** Profil › Kullanım verisi: hata ve kullanım istatistikleri (Firebase, Meta olay adları). Varsayılan açık. */
+    var usageData: Boolean
+        get() = prefs.getBoolean("usageData", true)
+        set(value) = prefs.edit().putBoolean("usageData", value).apply()
 
     /** Tanıtım (3 sayfa) ve ana ekran turu (4 adım) bir kez gösterilir. */
     var welcomeSeen: Boolean

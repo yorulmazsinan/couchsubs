@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Reklam yok: Firebase ve Meta kütüphanelerinin eklediği reklam kimliği izni çıkarılır. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
     <application
         android:name=".CouchSubsApp"
@@ -20,14 +22,16 @@
         android:label="CouchSubs"
         android:theme="@style/Theme.CouchSubs"
         android:usesCleartextTraffic="true">
-        <!-- İzin verilene kadar hiçbir ölçüm toplanmaz (Services.setConsent → Backend.applyConsent). -->
+        <!-- Ölçüm açılışta Profil › Kullanım verisi'ne göre açılır (Services.applyMeasurement); reklam kimliği ve reklam
+             verisi hiç toplanmaz. -->
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
         <meta-data android:name="firebase_crashlytics_collection_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
         <meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false" />
         <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
         <meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
         <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
-        <!-- Meta: kimlikler secrets.properties'ten; otomatik başlatma ve kayıt izinle açılır (Ads.kt). -->
+        <!-- Meta: kimlikler secrets.properties'ten; otomatik başlatma kapalı, reklam kimliği hiç toplanmaz (Meta.kt). -->
         <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="fb${facebookAppId}" />
         <meta-data android:name="com.facebook.sdk.ClientToken" android:value="${facebookClientToken}" />
         <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false" />
@@ -37,15 +41,6 @@
             android:name="com.facebook.internal.FacebookInitProvider"
             android:authorities="${applicationId}.FacebookInitProvider"
             tools:node="remove" />
-        <!-- AdMob: kimlik yoksa Google'ın deneme kimliği; reklam Remote Config "ads_enabled" olmadan başlatılmaz. -->
-        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="${admobAppId}" />
-        <meta-data android:name="com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT" android:value="true" />
-        <meta-data android:name="com.google.android.gms.ads.flag.OPTIMIZE_INITIALIZATION" android:value="true" />
-        <!-- AdMob ve Firebase Analytics aynı Privacy Sandbox özelliğini bildiriyor; AdMob'unki kullanılır. -->
-        <property
-            android:name="android.adservices.AD_SERVICES_CONFIG"
-            android:resource="@xml/gma_ad_services_config"
-            tools:replace="android:resource" />
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

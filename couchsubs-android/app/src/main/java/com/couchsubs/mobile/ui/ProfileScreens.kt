@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.ConsentChoice
 import com.couchsubs.mobile.core.SubtitleTextColor
 import com.couchsubs.mobile.settings.EngineChoice
 import com.couchsubs.mobile.settings.SubtitleTarget
@@ -55,14 +54,14 @@ import com.couchsubs.mobile.tv.TvDiscovery
  * kullanım verisi ve gizlilik. Uygulamada hesap ya da giriş yoktur.
  */
 @Composable
-fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> Unit, onTarget: () -> Unit, onPsn: () -> Unit, onPrivacy: () -> Unit) {
+fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> Unit, onTarget: () -> Unit, onPsn: () -> Unit) {
     val context = LocalContext.current
     val settings = Services.settings
     var tvs by remember { mutableStateOf<List<FoundTv>?>(null) }
     var notifyDisconnect by remember { mutableStateOf(settings.notifyDisconnect) }
     var notifyPacks by remember { mutableStateOf(settings.notifyNewPacks) }
     var pool by remember { mutableStateOf(settings.sharePool) }
-    var usage by remember { mutableStateOf(settings.consent.analytics) }
+    var usage by remember { mutableStateOf(settings.usageData) }
     LaunchedEffect(Unit) { tvs = withContext(Dispatchers.IO) { runCatching { TvDiscovery.search() }.getOrDefault(emptyList()) } }
     ScreenScaffold(top = { TopBar(stringResource(R.string.profile), onBack = onBack) { SettingsAction(onSettings) } }) {
         TwoColumns(
@@ -91,9 +90,9 @@ fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> U
                 Switch(pool, { pool = it; settings.sharePool = it })
             } },
             { RowItem(stringResource(R.string.profile_usage), stringResource(R.string.profile_usage_note)) {
-                Switch(usage, { usage = it; Services.setConsent(ConsentChoice(true, it, settings.consent.ads)) })
+                Switch(usage, { usage = it; Services.setUsageData(it) })
             } },
-            { RowItem(stringResource(R.string.profile_privacy), onClick = onPrivacy) },
+            { RowItem(stringResource(R.string.profile_privacy), onClick = { open(context, context.getString(R.string.url_privacy)) }) },
             { RowItem(stringResource(R.string.profile_help), onClick = { open(context, context.getString(R.string.url_help)) }) },
         ))
         Text(stringResource(R.string.profile_no_account), style = Tokens.Type.caption, color = Tokens.Color.secondary)

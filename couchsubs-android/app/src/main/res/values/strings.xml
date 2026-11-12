@@ -29,16 +29,6 @@
     <string name="error_translation">Çeviri şu an yapılamıyor; yeniden deneniyor.</string>
     <string name="error_model">Ücretsiz çeviri modeli indirilemedi. İnternet bağlantını kontrol et.</string>
 
-    <string name="consent_title">Gizlilik tercihlerin</string>
-    <string name="consent_body">Altyazılar ve oyun görüntüsü telefonundan çıkmaz. Aşağıdakiler yalnız izin verirsen açılır; istediğin zaman Ayarlar\'dan değiştirebilirsin (KVKK, GDPR).</string>
-    <string name="consent_analytics">Uygulama ölçümü</string>
-    <string name="consent_analytics_body">Hangi ekranların kullanıldığı ve çökme raporları (Firebase). Uygulamayı düzeltmemize yardım eder.</string>
-    <string name="consent_ads">Reklam ölçümü</string>
-    <string name="consent_ads_body">Reklamlarımızın işe yarayıp yaramadığını ölçmek için kurulum bilgisi (Meta, Google). Reklam kimliği yalnız bununla kullanılır.</string>
-    <string name="consent_note">Uygulamada şu an reklam gösterilmiyor.</string>
-    <string name="consent_accept_all">Hepsine izin ver</string>
-    <string name="consent_save">Seçimimi kaydet</string>
-    <string name="consent_reject">Hiçbirine izin verme</string>
 
     <string name="welcome1_title">PS5 oyunları Türkçe altyazıyla</string>
     <string name="welcome1_body">Türkçe dili olmayan oyunlarda İngilizce altyazıyı telefonun okur ve Türkçeye çevirir. Sen her zamanki gibi oynarsın.</string>
@@ -105,6 +95,7 @@
     <string name="ok">Tamam</string>
     <string name="next_continue">Devam</string>
     <string name="setup_step">Kurulum · Adım %1$d/3</string>
+    <string name="url_privacy" translatable="false">https://github.com/yorulmazsinan/couchsubs/blob/main/PRIVACY.md</string>
     <string name="url_help" translatable="false">https://github.com/yorulmazsinan/couchsubs/issues</string>
     <string name="url_source" translatable="false">https://github.com/yorulmazsinan/couchsubs</string>
     <string name="url_tvs" translatable="false">https://github.com/yorulmazsinan/couchsubs#hangi-tvlerde-çalışır</string>

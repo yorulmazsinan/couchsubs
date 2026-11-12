@@ -58,7 +58,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.AdBanner
 import com.couchsubs.mobile.service.LiveStatus
 import com.couchsubs.mobile.settings.SubtitleTarget
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +119,6 @@ fun MainScreen(
     Box(Modifier.fillMaxSize()) {
         if (status.running) RunningScreen(status, topBar, onStop, onPhoneView)
         else ScreenScaffold(top = topBar, bottom = {
-            AdBanner()
             PrimaryButton(stringResource(R.string.start), modifier = mark(TourStep.START), onClick = onStart)
         }) {
             Heading(stringResource(R.string.main_ready), stringResource(R.string.main_ready_body))

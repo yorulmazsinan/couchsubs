@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.ConsentChoice
 import com.couchsubs.mobile.remoteplay.ConsoleDiscovery
 import com.couchsubs.mobile.remoteplay.ConsoleInfo
 import com.couchsubs.mobile.remoteplay.PsnAccount
@@ -68,35 +67,6 @@ import com.couchsubs.mobile.tv.TvDiscovery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/**
- * KVKK/GDPR: ölçüm ve reklam ölçümü ayrı ayrı sorulur; ikisi de kapalı başlar. [editing] true ise Profil › Veri ve
- * gizlilik'ten açılmıştır (geri düğmesi ve tek "Kaydet").
- */
-@Composable
-fun ConsentScreen(editing: Boolean = false, onDone: () -> Unit) {
-    val current = Services.settings.consent
-    var analytics by remember { mutableStateOf(current.decided && current.analytics) }
-    var ads by remember { mutableStateOf(current.decided && current.ads) }
-    fun save(a: Boolean, b: Boolean) {
-        Services.setConsent(ConsentChoice(decided = true, analytics = a, ads = b))
-        onDone()
-    }
-    ScreenScaffold(top = { TopBar(onBack = if (editing) onDone else null) }, bottom = {
-        if (!editing) GhostButton(stringResource(R.string.consent_reject)) { save(false, false) }
-        if (!editing) SecondaryButton(stringResource(R.string.consent_save)) { save(analytics, ads) }
-        PrimaryButton(stringResource(if (editing) R.string.save else R.string.consent_accept_all)) {
-            if (editing) save(analytics, ads) else save(true, true)
-        }
-    }) {
-        Heading(stringResource(R.string.consent_title), stringResource(R.string.consent_body))
-        RowList(listOf(
-            { RowItem(stringResource(R.string.consent_analytics), stringResource(R.string.consent_analytics_body)) { Switch(analytics, { analytics = it }) } },
-            { RowItem(stringResource(R.string.consent_ads), stringResource(R.string.consent_ads_body)) { Switch(ads, { ads = it }) } },
-        ))
-        Text(stringResource(R.string.consent_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-    }
-}
 
 /** Karşılama: üç sayfa, yatay kaydırma, nokta göstergesi; otomatik geçiş yok. */
 @Composable

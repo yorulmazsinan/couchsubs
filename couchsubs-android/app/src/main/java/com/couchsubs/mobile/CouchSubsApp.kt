@@ -4,11 +4,9 @@ package com.couchsubs.mobile
 import android.app.Application
 import android.content.Context
 import android.util.Log
-import com.couchsubs.mobile.account.Ads
 import com.couchsubs.mobile.account.Backend
-import com.couchsubs.mobile.account.ConsentChoice
-import com.couchsubs.mobile.account.ConsentPolicy
-import com.couchsubs.mobile.account.RemoteFlags
+import com.couchsubs.mobile.account.MeasurementPolicy
+import com.couchsubs.mobile.account.Meta
 import com.couchsubs.mobile.core.GamePackLibrary
 import com.couchsubs.mobile.packs.HttpPackServer
 import com.couchsubs.mobile.packs.PackStore
@@ -17,11 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Uygulama açılınca: Firebase (varsa), izinler ve paket yenilemesi. Hesap yok; uygulama ve paketler ücretsiz. */
+/** Uygulama açılınca: Firebase ve Meta (varsa) ve paket yenilemesi. Hesap ve reklam yok; uygulama ve paketler ücretsiz. */
 class CouchSubsApp : Application() {
     override fun onCreate() {
         super.onCreate()
@@ -39,28 +36,27 @@ object Services {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Paket listesi değişince (indirme) artar; ekranlar yeniden okur. */
     val packsVersion = MutableStateFlow(0)
-    private val consentState = MutableStateFlow(ConsentChoice())
 
     fun init(app: Application) {
         settings = AppSettings(app)
-        consentState.value = settings.consent
         Backend.init(app)
-        Ads.init(app)
+        Meta.init(app)
+        applyMeasurement()
         packStore = PackStore(File(app.filesDir, "packs-remote"), HttpPackServer(BuildConfig.PACKS_URL.trimEnd('/')))
-        scope.launch {
-            combine(consentState, RemoteFlags.adsEnabled) { choice, ads -> choice to ads }.collect { (choice, ads) ->
-                val flags = ConsentPolicy.flags(choice, ads, umpCanRequestAds = !ads || Ads.umpCanRequestAds(app))
-                Backend.applyConsent(flags)
-                Ads.apply(flags)
-            }
-        }
         // Açılışta (haftada bir) yeni ve güncellenen paketlere bakılır.
         refreshPacks(force = false)
     }
 
-    fun setConsent(choice: ConsentChoice) {
-        settings.consent = choice
-        consentState.value = choice
+    /** Profil › Kullanım verisi değişince ya da karşılama geçilince (iPhone'daki gibi). */
+    fun applyMeasurement() {
+        val flags = MeasurementPolicy.flags(settings.usageData, settings.welcomeSeen)
+        Backend.apply(flags)
+        Meta.apply(flags)
+    }
+
+    fun setUsageData(enabled: Boolean) {
+        settings.usageData = enabled
+        applyMeasurement()
     }
 
     fun refreshPacks(force: Boolean) {

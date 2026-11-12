@@ -99,18 +99,17 @@ TV tarafında değişiklik gerekmez: TV uygulaması ağı `:8787/hello` ile tara
 5. **AGPL**: kaynak zaten açık; uygulama içinde kaynak bağlantısı ve üçüncü taraf lisansları (chiaki-ng, OpenSSL, curl,
    ML Kit koşulları) gösterilmeli.
 
-## Ücretsiz model: ölçüm, izin ve paket güncelleme
+## Ücretsiz model: ölçüm ve paket güncelleme
 
-Uygulama ve oyun paketleri ücretsizdir; abonelik, satın alma ve hesap yoktur (masaüstü gibi). Ayarlar yalnız telefonda
+Uygulama ve oyun paketleri ücretsizdir; abonelik, satın alma, hesap ve reklam yoktur (masaüstü ve iPhone gibi). Ayarlar yalnız telefonda
 durur. Play Console hesabı Enmera adına **kuruluş** hesabıdır: 12 test kullanıcısı / 14 günlük kapalı test şartı yoktur;
 geliştirici adı "Enmera".
 
 | Parça | Nerede | Not |
 |---|---|---|
-| Firebase Analytics, Crashlytics, Remote Config | `account/Backend.kt` | `app/google-services.json` yoksa Firebase hiç açılmaz; derleme ve uygulama çalışır |
-| Meta App Events | `account/Ads.kt` | yalnız "Reklam ölçümü" izniyle; otomatik başlatma manifestte kapalı; kurulumun bitişi "kayıt tamam" olayı olarak gider (reklam dönüşümü) |
-| AdMob + UMP | `account/Ads.kt` | Remote Config `ads_enabled` (varsayılan false) açılmadan başlatılmaz, reklam gösterilmez |
-| İzin (KVKK/GDPR) | `ConsentScreen`, `account/Policies.kt` | ölçüm ve reklam ölçümü ayrı; karar verilene kadar hiçbir şey toplanmaz (Consent Mode v2) |
+| Firebase Analytics, Crashlytics | `account/Backend.kt` | `app/google-services.json` yoksa Firebase hiç açılmaz; derleme ve uygulama çalışır; reklam kimliği toplanmaz (`AD_ID` izni çıkarıldı) |
+| Meta App Events | `account/Meta.kt` | iPhone'la aynı: yalnız olay adları, reklam kimliği yok; otomatik olaylar karşılamadan sonra |
+| Kullanım verisi | `ProfileScreen`, `account/Policies.kt` | tek anahtar (varsayılan açık); kapalıyken Firebase ve Meta'ya hiçbir şey gitmez. Reklam (AdMob, UMP) ve izin ekranı yok |
 | Paketler | `core/GamePacks.kt`, `packs/PackStore.kt`, `server/packs` | uygulamayla gelir; yenileri ve güncellemeleri hesapsız iner, SHA-256 doğrulamalı, haftada bir |
 | Profil | `ProfileScreen` | hesapsız: PS5, TV'ler, ikinci PSN hesabı, bildirimler, ortak havuz, kullanım verisi, gizlilik |
 
@@ -120,12 +119,12 @@ taşır.
 
 ### Paketler mağaza derlemesinde de gömülü (karar)
 
-Altı paket gzip'le ~16 MB (APK içinde zip sıkıştırmasıyla benzer). **Her derlemede uygulamayla gelir**, sunucu yalnız
+Dokuz paket gzip'le ~27 MB (APK içinde zip sıkıştırmasıyla benzer). **Her derlemede uygulamayla gelir**, sunucu yalnız
 yeni oyunları ve düzeltmeleri verir; aynı kimlikte inen sürüm gömülünün yerine geçer. Gerekçe:
 
 - İlk açılışta (internetsiz, sunucu kapalı ya da henüz kurulmamışken) paketler hemen çalışır; tanıtımdaki "anında,
   internetsiz" sözü ilk günden doğru olur.
-- 16 MB, Play'in sınırlarının (AAB 200 MB, cihaz başı indirme) çok altında; ML Kit kütüphaneleri zaten ~27 MB.
+- 27 MB, Play'in sınırlarının (AAB 200 MB, cihaz başı indirme) çok altında; ML Kit kütüphaneleri zaten ~27 MB.
 - Paketler ücretsiz olduğu için sunucuda gizlenecek bir şey yok; sunucu düşerse kullanıcı yalnız güncellemeyi kaçırır.
 - Paket sayısı 100 MB'ı geçecek kadar büyürse Play Asset Delivery'ye (install-time / on-demand paket) geçilir.
 
@@ -135,15 +134,13 @@ IP başına saatte 60 indirme sınırı).
 ### Sahibin vermesi gerekenler
 
 1. **Firebase**: proje oluştur, Android uygulaması ekle (paket `com.couchsubs.mobile`), `google-services.json`'u
-   `couchsubs-android/app/` altına koy (depoya girmez). Remote Config'de `ads_enabled` (boolean, false). Crashlytics'i aç.
+   `couchsubs-android/app/` altına koy (depoya girmez). Crashlytics'i aç.
 2. **Cloudflare**: R2 kovası `couchsubs-packs`, paketleri ve `index.json`'u yükle, `wrangler deploy`; adres →
    `couchsubs-android/secrets.properties` `packs.url` (bkz. `server/packs/README.md`).
 3. **Meta**: uygulama kimliği ve istemci tokeni → `facebook.appId`, `facebook.clientToken`.
-4. **AdMob** (reklam açılacaksa): uygulama kimliği ve banner birimi → `admob.appId`, `admob.bannerId`; AEA/İngiltere için
-   AdMob'da GDPR mesajı (UMP).
-5. **Play Console**: uygulama imza anahtarı, veri güvenliği formu (Firebase Analytics/Crashlytics, Meta, AdMob, ortak
-   havuz; hesap yok), ön plan hizmeti (connectedDevice) beyanı.
-6. **Gizlilik metni**: `PRIVACY.md`'ye telefon bölümü (Firebase, Meta, AdMob, ortak havuz).
+4. **Play Console**: uygulama imza anahtarı, veri güvenliği formu (Firebase Analytics/Crashlytics, Meta, ortak havuz;
+   hesap ve reklam yok), ön plan hizmeti (connectedDevice) beyanı.
+5. **Gizlilik metni**: `PRIVACY.md`'ye Android telefon bölümü (Firebase, Meta, ortak havuz).
 
 ## Bilinen eksikler
 

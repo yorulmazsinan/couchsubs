@@ -5,7 +5,7 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
-// Firebase (Analytics, Crashlytics, Remote Config) yapılandırması app/google-services.json'dan gelir. Dosya depoda
+// Firebase (Analytics, Crashlytics) yapılandırması app/google-services.json'dan gelir. Dosya depoda
 // yoktur (.gitignore); yoksa eklentiler uygulanmaz, uygulama Firebase'siz derlenir ve çalışır (bkz. Backend.kt).
 def hasGoogleServices = file('google-services.json').exists()
 if (hasGoogleServices) {
@@ -18,9 +18,6 @@ def secrets = new Properties()
 def secretsFile = rootProject.file('secrets.properties')
 if (secretsFile.exists()) secretsFile.withInputStream { secrets.load(it) }
 def secret = { String name, String fallback = '' -> (secrets.getProperty(name) ?: System.getenv(name.toUpperCase().replace('.', '_')) ?: fallback).trim() }
-// Google'ın herkese açık AdMob deneme kimlikleri (gerçek kimlik yoksa; reklam varsayılan olarak kapalı).
-def admobTestApp = 'ca-app-pub-3940256099942544~3347511713'
-def admobTestBanner = 'ca-app-pub-3940256099942544/6300978111'
 
 // Depo kökü: oyun paketleri, model listesi ve chiaki-ng buradan okunur (masaüstüyle ortak).
 def repoRoot = rootProject.projectDir.parentFile
@@ -44,12 +41,10 @@ android {
         ndk { abiFilters(*abis) }
         buildConfigField 'String', 'PACKS_URL', "\"${secret('packs.url')}\""
         buildConfigField 'String', 'FACEBOOK_APP_ID', "\"${secret('facebook.appId')}\""
-        buildConfigField 'String', 'ADMOB_BANNER_ID', "\"${secret('admob.bannerId', admobTestBanner)}\""
         buildConfigField 'boolean', 'HAS_FIREBASE', "${hasGoogleServices}"
         manifestPlaceholders = [
             facebookAppId      : secret('facebook.appId'),
             facebookClientToken: secret('facebook.clientToken'),
-            admobAppId         : secret('admob.appId', admobTestApp),
         ]
         if (!skipNative) {
             externalNativeBuild {
@@ -99,7 +94,7 @@ android {
         buildConfig true
     }
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-assets')
-    // Paketler ücretsiz ve her derlemede uygulamayla gelir (~16 MB); sunucudan yalnız yenileri ve güncellemeleri iner.
+    // Paketler ücretsiz ve her derlemede uygulamayla gelir (dokuz paket ~27 MB); sunucudan yalnız yenileri ve güncellemeleri iner.
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
     testOptions { unitTests.returnDefaultValues = true }
     packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
@@ -149,11 +144,8 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-analytics'
     implementation 'com.google.firebase:firebase-crashlytics'
-    implementation 'com.google.firebase:firebase-config'
-    // Reklam ölçümü: Meta App Events (izinle) ve AdMob + UMP izin formu (reklam varsayılan olarak kapalı).
+    // Meta App Events (iPhone'la aynı): yalnız olay adları, reklam kimliği yok. Uygulamada reklam yok.
     implementation 'com.facebook.android:facebook-core:17.0.0'
-    implementation 'com.google.android.gms:play-services-ads:23.4.0'
-    implementation 'com.google.android.ump:user-messaging-platform:3.1.0'
 
     testImplementation 'junit:junit:4.13.2'
     // android.jar'daki org.json yalnız iskelettir; JVM testleri gerçeğini kullanır.

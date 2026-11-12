@@ -19,8 +19,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.couchsubs.mobile.Services
-import com.couchsubs.mobile.account.Ads
-import com.couchsubs.mobile.account.RemoteFlags
 import com.couchsubs.mobile.account.Telemetry
 import com.couchsubs.mobile.service.LiveState
 import com.couchsubs.mobile.service.TranslationService
@@ -28,7 +26,6 @@ import com.couchsubs.mobile.settings.SubtitleTarget
 
 /** Gezinme yolları (Compose Navigation). */
 object Routes {
-    const val CONSENT = "consent"
     const val WELCOME = "welcome"
     const val PSN = "psn"
     const val PAIR = "pair"
@@ -37,13 +34,11 @@ object Routes {
     const val PACKS = "packs"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
-    const val PRIVACY = "privacy"
 
     /** Kurulumun eksik ilk adımı; hepsi tamamsa ana ekran. */
     fun next(): String {
         val settings = Services.settings
         return when {
-            !settings.consent.decided -> CONSENT
             !settings.welcomeSeen -> WELCOME
             settings.accountId == null -> PSN
             settings.console == null -> PAIR
@@ -62,13 +57,10 @@ class MainActivity : ComponentActivity() {
             CouchSubsTheme {
                 val navigation = rememberNavController()
                 val status by LiveState.status.collectAsState()
-                val adsEnabled by RemoteFlags.adsEnabled.collectAsState()
                 LaunchedEffect(status.running) {
                     if (status.running && settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
-                // Reklam yalnız uzak ayarla açılırsa Google'ın izin formu (AEA/İngiltere) sorulur.
-                LaunchedEffect(adsEnabled) { if (adsEnabled) Ads.requestUmpIfNeeded(this@MainActivity, true) {} }
                 DisposableEffect(navigation) {
                     val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, _ ->
                         destination.route?.let { Telemetry.screen(it.substringBefore('/')) }
@@ -77,10 +69,10 @@ class MainActivity : ComponentActivity() {
                     onDispose { navigation.removeOnDestinationChangedListener(listener) }
                 }
                 NavHost(navigation, startDestination = Routes.next()) {
-                    composable(Routes.CONSENT) { ConsentScreen { advance(navigation) } }
                     composable(Routes.WELCOME) {
                         WelcomeScreen {
                             settings.welcomeSeen = true
+                            Services.applyMeasurement()
                             advance(navigation)
                         }
                     }
@@ -116,10 +108,8 @@ class MainActivity : ComponentActivity() {
                             onPairing = { navigation.navigate(Routes.PAIR) },
                             onTarget = { navigation.navigate(Routes.TARGET) },
                             onPsn = { navigation.navigate(Routes.PSN) },
-                            onPrivacy = { navigation.navigate(Routes.PRIVACY) },
                         )
                     }
-                    composable(Routes.PRIVACY) { ConsentScreen(editing = true) { navigation.popBackStack() } }
                     composable(Routes.SETTINGS) {
                         SettingsScreen(onBack = { navigation.popBackStack() }, onPacks = { navigation.navigate(Routes.PACKS) },
                             onTarget = { navigation.navigate(Routes.TARGET) }, onPairing = { navigation.navigate(Routes.PAIR) })

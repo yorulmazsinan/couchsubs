@@ -1,50 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// İzinle ilgili saf kurallar (Android'e bağlı değil; JVM testleri: AccountPoliciesTest).
+// Ölçümle ilgili saf kurallar (Android'e bağlı değil; JVM testleri: MeasurementPolicyTest).
 package com.couchsubs.mobile.account
 
-
 /**
- * Kullanıcının izin seçimi (KVKK/GDPR). İlk açılışta sorulur; karar verilene kadar hiçbir ölçüm ve reklam kimliği
- * toplanmaz. [analytics]: Firebase Analytics ve Crashlytics. [ads]: Meta App Events (reklam ölçümü), reklam kimliği ve
- * kişiselleştirilmiş reklam.
+ * SDK'lara verilecek bayraklar. Reklam yok (AdMob ve Google'ın izin formu UMP yok); reklam kimliği hiç toplanmaz.
+ * iPhone uygulamasıyla aynı: tek anahtar Profil › Kullanım verisi (varsayılan açık).
  */
-data class ConsentChoice(val decided: Boolean = false, val analytics: Boolean = false, val ads: Boolean = false)
-
-/** İzin ve uzak ayarlardan türeyen, SDK'lara verilecek bayraklar. */
-data class ConsentFlags(
+data class MeasurementFlags(
+    /** Firebase Analytics ve Crashlytics. */
     val analyticsCollection: Boolean,
     val crashReports: Boolean,
-    /** Firebase Consent Mode v2. */
-    val analyticsStorage: Boolean,
-    val adStorage: Boolean,
-    val adUserData: Boolean,
-    val adPersonalization: Boolean,
-    /** Meta SDK: App Events otomatik kaydı ve reklam kimliği. */
-    val metaEnabled: Boolean,
-    /** AdMob başlatılsın ve reklam gösterilsin mi. */
-    val showAds: Boolean,
-    /** Kişiselleştirilmemiş reklam istenmeli mi (npa=1). */
-    val nonPersonalizedAds: Boolean,
+    /** Meta App Events: olayın adı ve otomatik açılış/kurulum olayları (reklam kimliği olmadan). */
+    val metaEvents: Boolean,
 )
 
-object ConsentPolicy {
+object MeasurementPolicy {
     /**
-     * [adsEnabledRemote]: Firebase Remote Config "ads_enabled" (varsayılan false: reklam hiç gösterilmez).
-     * [umpCanRequestAds]: Google UMP formu reklam istemeye izin veriyor mu (AEA/İngiltere'de form, başka yerde true).
+     * [usageData]: Profil › Kullanım verisi. [welcomeSeen]: karşılama ekranı geçildi mi; Meta'nın otomatik olayları
+     * iPhone'daki gibi karşılamadan sonra açılır.
      */
-    fun flags(choice: ConsentChoice, adsEnabledRemote: Boolean, umpCanRequestAds: Boolean): ConsentFlags {
-        val analytics = choice.decided && choice.analytics
-        val ads = choice.decided && choice.ads
-        return ConsentFlags(
-            analyticsCollection = analytics,
-            crashReports = analytics,
-            analyticsStorage = analytics,
-            adStorage = ads,
-            adUserData = ads,
-            adPersonalization = ads,
-            metaEnabled = ads,
-            showAds = choice.decided && adsEnabledRemote && umpCanRequestAds,
-            nonPersonalizedAds = !ads,
-        )
-    }
+    fun flags(usageData: Boolean, welcomeSeen: Boolean) = MeasurementFlags(
+        analyticsCollection = usageData,
+        crashReports = usageData,
+        metaEvents = usageData && welcomeSeen,
+    )
 }

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile
 
-import com.couchsubs.mobile.account.ConsentChoice
-import com.couchsubs.mobile.account.ConsentPolicy
+import com.couchsubs.mobile.account.MeasurementPolicy
 import com.couchsubs.mobile.packs.PackDownloadException
 import com.couchsubs.mobile.packs.PackServer
 import com.couchsubs.mobile.packs.PackStore
@@ -15,43 +14,25 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 
-class ConsentTest {
+class MeasurementPolicyTest {
     @Test
-    fun nothingIsCollectedBeforeTheUserDecides() {
-        val flags = ConsentPolicy.flags(ConsentChoice(decided = false, analytics = true, ads = true), adsEnabledRemote = true, umpCanRequestAds = true)
-        assertFalse(flags.analyticsCollection)
-        assertFalse(flags.crashReports)
-        assertFalse(flags.metaEnabled)
-        assertFalse(flags.adUserData)
-        assertFalse(flags.showAds)
+    fun usageDataSwitchControlsEverything() {
+        val off = MeasurementPolicy.flags(usageData = false, welcomeSeen = true)
+        assertFalse(off.analyticsCollection)
+        assertFalse(off.crashReports)
+        assertFalse(off.metaEvents)
+
+        val on = MeasurementPolicy.flags(usageData = true, welcomeSeen = true)
+        assertTrue(on.analyticsCollection)
+        assertTrue(on.crashReports)
+        assertTrue(on.metaEvents)
     }
 
     @Test
-    fun analyticsAndAdsAreSeparate() {
-        val analyticsOnly = ConsentPolicy.flags(ConsentChoice(true, analytics = true, ads = false), false, true)
-        assertTrue(analyticsOnly.analyticsCollection)
-        assertTrue(analyticsOnly.analyticsStorage)
-        assertFalse(analyticsOnly.adStorage)
-        assertFalse(analyticsOnly.metaEnabled)
-        assertTrue(analyticsOnly.nonPersonalizedAds)
-
-        val adsOnly = ConsentPolicy.flags(ConsentChoice(true, analytics = false, ads = true), false, true)
-        assertFalse(adsOnly.analyticsCollection)
-        assertTrue(adsOnly.metaEnabled)
-        assertTrue(adsOnly.adPersonalization)
-        assertFalse(adsOnly.nonPersonalizedAds)
-    }
-
-    @Test
-    fun adsStayOffUnlessRemoteConfigAndUmpAllow() {
-        val choice = ConsentChoice(true, analytics = true, ads = true)
-        assertFalse(ConsentPolicy.flags(choice, adsEnabledRemote = false, umpCanRequestAds = true).showAds)
-        assertFalse(ConsentPolicy.flags(choice, adsEnabledRemote = true, umpCanRequestAds = false).showAds)
-        assertTrue(ConsentPolicy.flags(choice, adsEnabledRemote = true, umpCanRequestAds = true).showAds)
-        // Reklam ölçümüne izin vermeyen kullanıcıya da (açılırsa) kişiselleştirilmemiş reklam gider.
-        val declined = ConsentPolicy.flags(ConsentChoice(true, analytics = false, ads = false), true, true)
-        assertTrue(declined.showAds)
-        assertTrue(declined.nonPersonalizedAds)
+    fun metaEventsWaitForWelcome() {
+        val flags = MeasurementPolicy.flags(usageData = true, welcomeSeen = false)
+        assertTrue(flags.analyticsCollection)
+        assertFalse(flags.metaEvents)
     }
 }
 
