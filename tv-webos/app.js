@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.15';
+  var APP_VERSION = '0.9.16';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -36,6 +36,9 @@
   var MIN_VISIBLE_MS = 1200;
   var shownAt = 0;
   var shownParagraphs = false;
+  // Bilgisayardaki "Hızlı konuşmada önceki satırları üstte göster" ayarı (kapalıysa yeni satır eskisinin yerine geçer).
+  // Ayar bilgisayardan gelene kadar son bilinen değer kullanılır; hiç gelmediyse açıktır (eski davranış).
+  var stackPrevious = load('stackPrevious') !== '0';
   // Üstteki satırlar: 'subtitle-prev' bir önceki, 'subtitle-prev2' iki önceki. Her birinin kendi zamanlayıcıları var.
   var previousTimers = { 'subtitle-prev': [null, null], 'subtitle-prev2': [null, null] };
 
@@ -163,7 +166,7 @@
     // satır) ikinci çeviri gibi durmasın diye üste çıkmaz; görev paneli gibi çok satırlı yazılar da üst üste binmez.
     if (replacesCurrent(replaces, paragraphs)) {
       // Üstteki daha eski satırlar olduğu gibi kalır.
-    } else if ($('subtitle').className !== 'hidden' && current && now - shownAt < STACK_WITHIN_MS &&
+    } else if (stackPrevious && $('subtitle').className !== 'hidden' && current && now - shownAt < STACK_WITHIN_MS &&
         !paragraphs && !shownParagraphs && !sameLine(current, text)) {
       showPrevious(current);
     } else {
@@ -406,6 +409,11 @@
       $('subtitle-prev-text').style.background = 'rgba(0, 0, 0, ' + (alpha * 0.83).toFixed(2) + ')';
       $('subtitle-prev2-text').style.background = 'rgba(0, 0, 0, ' + (alpha * 0.83).toFixed(2) + ')';
     }
+    // Ayarı göndermeyen bilgisayar (eski Windows sürümü, Mac) eski davranışı bekler: önceki satırlar üstte kalır.
+    // Yoksa bir kez kapatılan ayar başka bilgisayara bağlanınca da kapalı kalırdı.
+    stackPrevious = typeof style.stackPrevious === 'boolean' ? style.stackPrevious : true;
+    save('stackPrevious', stackPrevious ? '1' : '0');
+    if (!stackPrevious) hidePrevious();
     if (typeof style.bold === 'boolean') {
       $('subtitle-text').style.fontWeight = style.bold ? '700' : '600';
       $('subtitle-prev-text').style.fontWeight = style.bold ? '700' : '600';

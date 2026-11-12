@@ -36,11 +36,16 @@ public sealed class TranslationCache
     private int _fileLines;
 
     /// <param name="file">null ise önbellek yalnız bellekte tutulur (testler, geçici çevirmenler).</param>
-    public TranslationCache(string? file = null, int limit = DefaultLimit)
+    /// <param name="engine">Motor adı (<see cref="Shared"/> verir); altyazı günlüğünde çevirinin hangi motordan geldiği görünür.</param>
+    public TranslationCache(string? file = null, int limit = DefaultLimit, string? engine = null)
     {
         _file = file;
         _limit = Math.Max(1, limit);
+        Engine = engine;
     }
+
+    /// <summary>Motor adı (<see cref="Shared"/> ile açılanlarda).</summary>
+    public string? Engine { get; }
 
     /// <summary>Motor ve dil çiftine göre dosya: <c>v1-opus_mt-en-tr.jsonl</c>.</summary>
     public static string FileFor(string directory, string engine, string source, string target) =>
@@ -48,7 +53,7 @@ public sealed class TranslationCache
 
     /// <summary>Aynı dosya için hep aynı önbellek döner; çevirmen her oturumda yeniden kurulsa da dosya bir kez okunur.</summary>
     public static TranslationCache Shared(string directory, string engine, string source, string target) =>
-        Opened.GetOrAdd(FileFor(directory, engine, source, target), file => new TranslationCache(file));
+        Opened.GetOrAdd(FileFor(directory, engine, source, target), file => new TranslationCache(file, engine: engine));
 
     public int Count
     {
@@ -64,6 +69,7 @@ public sealed class TranslationCache
             {
                 _entries[key] = (entry.Value, ++_tick);
                 value = entry.Value;
+                TranslationProbe.Current?.NoteHit();
                 return true;
             }
             value = "";
@@ -82,6 +88,7 @@ public sealed class TranslationCache
             if (same) return;
             EvictIfNeeded();
             Append(key, value);
+            TranslationProbe.Current?.NoteFresh(Engine);
         }
     }
 
@@ -169,6 +176,42 @@ public sealed class TranslationCache
 
     private static string Safe(string part) =>
         new([.. part.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_')]);
+}
+
+/// <summary>
+/// Bir çeviri isteğinde önbelleğin ne yaptığını sayar (altyazı günlüğü için; çeviriyi değiştirmez). Okuma hattı isteği
+/// <see cref="Current"/> ayarlıyken çalıştırır (<see cref="AsyncLocal{T}"/>: çağrının bekledikleri de görür); önbellekten
+/// dönen ve motorun yeni ürettiği (önbelleğe yeni yazılan) parçalar sayılır. Yedeğe düşen çevrimiçi motorda yeni parçayı
+/// yedeğin önbelleği yazar; günlükte gerçekten çeviren motor görünür. Mac'teki <c>TranslationProbe</c> ile aynı.
+/// </summary>
+public sealed class TranslationProbe
+{
+    private static readonly AsyncLocal<TranslationProbe?> Local = new();
+    private readonly object gate = new();
+    private readonly List<string> fresh = [];
+    private int hits;
+
+    public static TranslationProbe? Current
+    {
+        get => Local.Value;
+        set => Local.Value = value;
+    }
+
+    internal void NoteHit() { lock (gate) hits++; }
+
+    internal void NoteFresh(string? engine) { lock (gate) fresh.Add(engine ?? ""); }
+
+    public int Hits { get { lock (gate) return hits; } }
+
+    /// <summary>"çeviri:&lt;motor&gt;" (motor yeni çevirdi), "önbellek" (her parça önbellekten geldi) ya da bilinmiyorsa "çeviri:&lt;yedek ad&gt;".</summary>
+    public string Outcome(string fallbackEngine = "motor")
+    {
+        lock (gate)
+        {
+            if (fresh.Count > 0) return "çeviri:" + (fresh[^1].Length == 0 ? fallbackEngine : fresh[^1]);
+            return hits > 0 ? "önbellek" : "çeviri:" + fallbackEngine;
+        }
+    }
 }
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]

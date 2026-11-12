@@ -77,9 +77,16 @@ public enum SubtitleOutput: String, Codable, CaseIterable {
     public var showsOnComputer: Bool { self != .tv }
 }
 
+/// Uygulama pencerelerinin görünümü (Windows'taki `AppAppearance` ile aynı). Onaylı tasarım koyudur; varsayılan da odur.
+public enum AppAppearance: String, Codable, CaseIterable {
+    case dark, light, system
+}
+
 /// Kalıcı ayarlar (Anahtarlık değil, sıradan tercihler).
 public struct UserSettings: Codable, Equatable {
     public var region = CropRegion()
+    /// Bölgenin hazır seçimi (Alt bölge, Üst bölge, Tam ekran, Özel). Eski kayıtlarda yoktur; bölgeden çıkarılır.
+    public var areaPreset = AreaPreset.bottom
     public var style = SubtitleStyle()
     public var sourceLanguage = "en"
     public var targetLanguage = "tr"
@@ -105,6 +112,8 @@ public struct UserSettings: Codable, Equatable {
     public var gamePacks = true
     /// Pakette bulunmayan İngilizce satırlar ortak havuza gönderilir (anonim; bkz. `LinePool`).
     public var sharePool = LinePool.enabledByDefault
+    /// Koyu, açık ya da sistemle aynı. Eski kayıtlarda yoktur; onlar da koyu açılır.
+    public var appearance = AppAppearance.dark
 
     public init() {}
 
@@ -113,6 +122,7 @@ public struct UserSettings: Codable, Equatable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = UserSettings()
         region = try values.decodeIfPresent(CropRegion.self, forKey: .region) ?? defaults.region
+        areaPreset = (try? values.decodeIfPresent(AreaPreset.self, forKey: .areaPreset)) ?? AreaPreset.matching(region)
         style = try values.decodeIfPresent(SubtitleStyle.self, forKey: .style) ?? defaults.style
         sourceLanguage = try values.decodeIfPresent(String.self, forKey: .sourceLanguage) ?? defaults.sourceLanguage
         targetLanguage = try values.decodeIfPresent(String.self, forKey: .targetLanguage) ?? defaults.targetLanguage
@@ -129,6 +139,19 @@ public struct UserSettings: Codable, Equatable {
         overlayClickThrough = try values.decodeIfPresent(Bool.self, forKey: .overlayClickThrough) ?? defaults.overlayClickThrough
         gamePacks = try values.decodeIfPresent(Bool.self, forKey: .gamePacks) ?? defaults.gamePacks
         sharePool = try values.decodeIfPresent(Bool.self, forKey: .sharePool) ?? defaults.sharePool
+        appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
+    }
+
+    /// Hazır bölge seçilir; Özel seçilince kayıtlı bölge olduğu gibi kalır.
+    public mutating func selectAreaPreset(_ preset: AreaPreset) {
+        areaPreset = preset
+        if let region = preset.region { self.region = region }
+    }
+
+    /// Bölge elle değişti (kaydırıcı ya da sürükleme): seçim Özel olur.
+    public mutating func setCustomRegion(_ region: CropRegion) {
+        self.region = region
+        areaPreset = .custom
     }
 
     /// Listede olmayan kayıtlı modeller (eski ayar ya da listeden çıkarılan model) varsayılana döner.

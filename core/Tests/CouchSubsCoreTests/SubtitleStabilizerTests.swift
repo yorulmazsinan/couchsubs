@@ -216,6 +216,29 @@ final class SubtitleStabilizerRetryTests: XCTestCase {
         s.forgetSent()
         XCTAssertEqual(s.feed("Run!"), .translate("Run!"))
     }
+
+    /// Günlük için: kararlı olmadan kalkan çöp okuma ve yok sayılan kötü yeniden okuma not edilir; kararlar değişmez.
+    func testNotesGarbledDropAndWorseReread() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        let garbled = "- Nat) but, you knpw. shit, I m"
+        XCTAssertEqual(s.feed(garbled), .none)
+        XCTAssertNil(s.note)
+        clock.now += 100
+        XCTAssertEqual(s.feed(""), .none)
+        XCTAssertEqual(s.note, .garbledDropped(garbled))
+        XCTAssertEqual(s.feed(""), .none)
+        XCTAssertNil(s.note)
+
+        let full = "Shit, I just came by to see if there's somethin' I can help you with."
+        let worse = "Shit, I came by to see if there somethinl I can help ya."
+        XCTAssertEqual(s.feed(full), .translate(full))
+        XCTAssertNil(s.note)
+        _ = s.feed(worse)
+        let second = s.feed(worse)
+        XCTAssertEqual(second, .none)
+        XCTAssertEqual(s.note, .worseReread(worse))
+    }
 }
 
 /// Testlerde elle ilerletilen saat (milisaniye).

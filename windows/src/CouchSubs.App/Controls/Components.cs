@@ -89,4 +89,6 @@ public static class Glyphs
     public const string Keyboard = "\uE765";
     /// <summary>Segoe Fluent Icons "Package" (U+E7B8); oyun paketi karosu.</summary>
     public const string Package = "\uE7B8";
+    /// <summary>Segoe Fluent Icons "History" (U+E81C); altyaz\u0131 ge\u00E7mi\u015Fi.</summary>
+    public const string History = "\uE81C";
 }

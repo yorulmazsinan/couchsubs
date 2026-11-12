@@ -53,7 +53,15 @@ final class PhoneModel: ObservableObject {
     @Published private(set) var tvClients = 0
     @Published private(set) var lastSource = ""
     @Published private(set) var lastTranslation = ""
+    /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json; "Geçmiş" ekranı).
     @Published private(set) var history = SubtitleHistory()
+    /// Son satırın ölçümleri (yazı tanıma, çeviri, gecikme, güven).
+    @Published private(set) var lastMetrics: LineMetrics?
+    /// Son PS5 karesi (Ayarlar'daki bölge önizlemesi); yalnız önizleme izler.
+    let framePreview = PhoneFramePreview()
+    /// Geçmişin yazıldığı dosya (testlerde nil: hiçbir şey yazılmaz).
+    private var historyFile: URL?
+    private let historyQueue = DispatchQueue(label: "history.json", qos: .utility)
     @Published private(set) var translatorStatus: TranslatorStatus = .ready
     @Published private(set) var onlineIssue: OnlineKeyState?
     /// Son altyazı oyun paketinden mi geldi (ana ekrandaki "paket kullanılıyor" göstergesi).
@@ -267,7 +275,11 @@ final class PhoneModel: ObservableObject {
         let session = services.makeStream(console: console, accountId: accountId)
         session.onState = { [weak self] state in Task { @MainActor in self?.sessionStateChanged(state) } }
         session.onConsoleMoved = { [weak self] moved in Task { @MainActor in self?.consoleMoved(moved) } }
-        session.onFrame = { [weak self] frame in Task { @MainActor in await self?.handle(frame) } }
+        session.onFrame = { [weak self] frame in
+            // Karenin geldiği an: gecikme buradan TV'ye gidene kadar ölçülür.
+            let capturedAt = SubtitleStabilizer.uptimeMs()
+            Task { @MainActor in await self?.handle(frame, capturedAt: capturedAt) }
+        }
         session.start()
         self.session = session
         startKeeper()
@@ -275,6 +287,7 @@ final class PhoneModel: ObservableObject {
         startedAt = Date()
         runningSince = startedAt
         recentLines = []
+        lastMetrics = nil
         sessionLines = 0
         sessionPackLines = 0
         keepScreenAwake(true)
@@ -358,10 +371,11 @@ final class PhoneModel: ObservableObject {
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
             self?.lastSource = source
             self?.lastTranslation = translation
-            self?.history.add(source: source, translation: translation)
             let fromPack = pipeline?.lastOrigin == "paket"
+            self?.addToHistory(source: source, translation: translation, origin: fromPack ? .pack : .engine)
             self?.noteLine(source: source, translation: translation, fromPack: fromPack)
         }
+        pipeline.onMetrics = { [weak self] metrics in self?.lastMetrics = metrics }
         pipeline.onTranslationResult = { [weak self] error in
             let status: TranslatorStatus = switch error {
             case nil: .ready
@@ -376,11 +390,37 @@ final class PhoneModel: ObservableObject {
         self.pipeline = pipeline
     }
 
-    private func handle(_ frame: CGImage) async {
+    private func handle(_ frame: CGImage, capturedAt: Int) async {
+        framePreview.image = frame
         guard !processing, let pipeline else { return }
         processing = true
-        await pipeline.process(frame, region: settings.region)
+        await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
         processing = false
+    }
+
+    // MARK: - Geçmiş
+
+    /// Açılışta kayıtlı geçmiş okunur (uygulama çağırır; testlerde çağrılmaz, dosyaya yazılmaz).
+    func loadHistory(from file: URL = SubtitleHistory.defaultFile) {
+        historyFile = file
+        history = SubtitleHistory.load(from: file)
+    }
+
+    private func addToHistory(source: String, translation: String, origin: LineMetrics.Origin) {
+        history.add(source: source, translation: translation, origin: origin)
+        saveHistory()
+    }
+
+    /// "Geçmiş"teki "Temizle".
+    func clearHistory() {
+        history.clear()
+        saveHistory()
+    }
+
+    private func saveHistory() {
+        guard let historyFile else { return }
+        let history = self.history
+        historyQueue.async { try? history.save(to: historyFile) }
     }
 
     private func noteLine(source: String, translation: String, fromPack: Bool) {
@@ -588,4 +628,10 @@ final class PhoneModel: ObservableObject {
     func serverAddress(for tv: LGTV) -> String {
         "http://\(NetworkAddress.near(tv.host.isEmpty ? "192.168.1.1" : tv.host) ?? "127.0.0.1"):\(serverPort)"
     }
+}
+
+/// Son PS5 karesi; yalnız bölge önizlemesi izler (her karede bütün ekranlar yeniden çizilmesin).
+@MainActor
+final class PhoneFramePreview: ObservableObject {
+    @Published var image: CGImage?
 }

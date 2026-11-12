@@ -4,7 +4,7 @@
      de kurar. İzinlerin hepsi "public" düzeyde; Samsung'un herkese verdiği geliştirici sertifikası yeter. Sayfa ES5 ile
      yazıldığı için Tizen 3.0'ın tarayıcısında (Chromium 47) da çalışır. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://github.com/yorulmazsinan/couchsubs" version="0.9.15" viewmodes="maximized">
+        id="https://github.com/yorulmazsinan/couchsubs" version="0.9.16" viewmodes="maximized">
     <tizen:application id="CouchSubsT.CouchSubs" package="CouchSubsT" required_version="3.0"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>

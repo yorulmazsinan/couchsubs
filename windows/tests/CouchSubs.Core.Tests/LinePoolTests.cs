@@ -85,6 +85,48 @@ public class LinePoolTests
         Assert.True(LinePool.Accepts("Give me 50 dollars, Enzo."));
     }
 
+    /// <summary>Havuzda en çok görülen "satırlar" PS5'in Türkçe arayüzü ve onun yazı tanıma bozmalarıydı; İngilizce oyun satırı değiller.</summary>
+    [Theory]
+    [InlineData("Oturum Açtı")]
+    [InlineData("Oturum Aqtl")]
+    [InlineData("Oturum Aqtl.")]
+    [InlineData("Sifirlama Seqenekleri")]
+    [InlineData("Sifirlama Seqenekleri.")]
+    [InlineData("PS5 Sistemini Yeniden Baslat")]
+    [InlineData("PS5 Sistemini Yeniden Baslat.")]
+    [InlineData("Oyunu Kapat")]
+    [InlineData("Ana Ekranda Tut")]
+    [InlineData("Lütfen bekleyin..")]
+    [InlineData("Ekran ve Video")]
+    [InlineData("ilerlemenizi takip edin Kupalar")]
+    [InlineData("Keşfet PS5 ile ilgili Öne Çıkanlar")]
+    [InlineData("Ekran görüntüsü kaydedildi.")]
+    [InlineData("Kupa kazandınız!")]
+    [InlineData("John signed in.")]
+    [InlineData("You've earned a trophy!")]
+    [InlineData("Please do not quit or turn off your console while the Rockstar cloud save icon is showing.")]
+    [InlineData("GO to the")]
+    [InlineData("Take out the trash and the")]
+    [InlineData("it Auto V's Story Mode.")]
+    [InlineData("FREE MONTH OF GTA+")]
+    [InlineData("PHOTO MODE SELECT")]
+    [InlineData("Main menu")]
+    [InlineData("Hold on")]
+    public void RejectsTurkishSystemTextAndFragments(string line) => Assert.False(LinePool.Accepts(line), line);
+
+    /// <summary>Yabancı addaki tek ü/ö/ç, sözcük içi eşleşmeler ve noktalamayla biten kısa satırlar İngilizce satırı düşürmez.</summary>
+    [Theory]
+    [InlineData("Herr Müller will see you now.")]
+    [InlineData("This place was designed in a hurry.")]
+    [InlineData("Tell Sam I signed the deal.")]
+    [InlineData("I lie to you, you lie to me.")]
+    [InlineData("DON TORRISI WANTS YOU!")]
+    [InlineData("Get down!")]
+    [InlineData("Who's there?")]
+    [InlineData("Line number 7 here")]
+    [InlineData("We need to move before the cops show up")]
+    public void KeepsEnglishGameLines(string line) => Assert.True(LinePool.Accepts(line), line);
+
     [Fact]
     public async Task BatchesAreAtMostTwoHundredLines()
     {

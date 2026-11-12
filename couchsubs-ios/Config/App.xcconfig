@@ -7,7 +7,5 @@ PACKS_API_BASE_URL =
 // Meta (Facebook) uygulama kimliği ve istemci jetonu. Boşsa Meta SDK kurulmaz.
 FACEBOOK_APP_ID =
 FACEBOOK_CLIENT_TOKEN =
-// AdMob uygulama kimliği. Varsayılan Google'ın deneme kimliğidir; reklam zaten Remote Config ile kapalı.
-GAD_APPLICATION_ID = ca-app-pub-3940256099942544~1458002511
 
 #include? "Secrets.xcconfig"

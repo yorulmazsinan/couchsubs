@@ -29,8 +29,11 @@ public readonly record struct TextBox(double Left, double Top, double Right, dou
     }
 }
 
-/// <summary>Yazı tanımanın bulduğu bir satır; kutu okunan alana göredir, bilinmiyorsa null.</summary>
-public sealed record TextLine(string Text, TextBox? Box = null);
+/// <summary>
+/// Yazı tanımanın bulduğu bir satır; kutu okunan alana göredir, bilinmiyorsa null. Güven 0–1'dir; okuyucu vermiyorsa
+/// null (Windows'un yazı tanıması vermez).
+/// </summary>
+public sealed record TextLine(string Text, TextBox? Box = null, double? Confidence = null);
 
 /// <summary>Bir karenin okunan satırları, yukarıdan aşağı (Mac: CouchSubsCore/Reading.swift).</summary>
 public sealed class Reading
@@ -68,6 +71,11 @@ public sealed class Reading
             return total;
         }
     }
+
+    /// <summary>Satırların ortalama tanıma güveni (0–1); okuyucu güven vermiyorsa null.</summary>
+    public double? Confidence =>
+        Lines.Where(line => line.Confidence is not null).Select(line => line.Confidence!.Value).ToList() is { Count: > 0 } values
+            ? values.Average() : null;
 
     /// <summary>Oyunun düğme ipuçları ("R2 Swing", "△ Pick up") çıkarılmış hali; bunlar altyazı değildir.</summary>
     public Reading WithoutButtonPrompts() => new(Lines.Where(line => !ButtonPrompts.IsPrompt(line.Text)));

@@ -1,0 +1,7 @@
+# couchsubs.enmeraapps.com tanıtım sayfası (yalnız durağan dosyalar)
+name = "couchsubs-site"
+compatibility_date = "2026-11-01"
+routes = [{ pattern = "couchsubs.enmeraapps.com", custom_domain = true }]
+
+[assets]
+directory = "./public"

@@ -589,6 +589,33 @@ final class AppModelTests: XCTestCase {
             XCTAssertNotNil(tr?["value"] as? String, key)
         }
     }
+
+    /// Ölçüm satırı, bölge seçimleri ve geçmiş metinleri Türkçesiyle (çekirdekteki metinler Xcode'un taramasına girmez).
+    func testMetricsAreaAndHistoryStringsAreTranslated() throws {
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("CouchSubs/Resources/Localizable.xcstrings")
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        let strings = root?["strings"] as? [String: Any] ?? [:]
+        let expected = [
+            "OCR %lld ms": "OCR %lld ms", "Translation %lld ms": "Çeviri %lld ms", "Ready pack": "Hazır paket",
+            "Delay %lld ms": "Gecikme %lld ms", "Confidence %lld%%": "Güven %%%lld", "%lld%%": "%%%lld",
+            "Bottom area": "Alt bölge", "Top area": "Üst bölge", "Full screen": "Tam ekran", "Custom": "Özel",
+            "Vertical position": "Dikey konum", "Height": "Yükseklik", "Test on TV": "TV'de test et", "History": "Geçmiş",
+            "Clear": "Temizle", "Pack": "Paket",
+        ]
+        for (key, value) in expected {
+            let entry = strings[key] as? [String: Any]
+            let tr = ((entry?["localizations"] as? [String: Any])?["tr"] as? [String: Any])?["stringUnit"] as? [String: Any]
+            XCTAssertEqual(tr?["value"] as? String, value, key)
+        }
+    }
+
+    func testClearingHistoryEmptiesTheList() {
+        let model = AppModel(services: FakeServices(), store: MemoryStore(), defaults: .isolated())
+        model.history.add(source: "Stay close, boy.", translation: "Yakın dur, evlat.")
+        model.clearHistory()
+        XCTAssertTrue(model.history.entries.isEmpty)
+    }
 }
 
 @MainActor

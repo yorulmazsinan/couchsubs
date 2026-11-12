@@ -17,6 +17,8 @@ public final class TranslationCache: @unchecked Sendable {
 
     private let file: URL?
     private let limit: Int
+    /// Motor adı (`shared` ile açılanlarda); altyazı günlüğünde çevirinin hangi motordan geldiği görünür.
+    public let engine: String?
     private let lock = NSLock()
     private var entries: [String: (value: String, used: Int)] = [:]
     private var tick = 0
@@ -25,9 +27,10 @@ public final class TranslationCache: @unchecked Sendable {
     private var fileLines = 0
 
     /// `file` nil ise önbellek yalnız bellekte tutulur (testler, geçici çevirmenler).
-    public init(file: URL? = nil, limit: Int = TranslationCache.defaultLimit) {
+    public init(file: URL? = nil, limit: Int = TranslationCache.defaultLimit, engine: String? = nil) {
         self.file = file
         self.limit = max(1, limit)
+        self.engine = engine
     }
 
     /// Motor ve dil çiftine göre dosya: `v1-apple-en-tr.jsonl`.
@@ -44,7 +47,7 @@ public final class TranslationCache: @unchecked Sendable {
         let url = file(in: directory, engine: engine, source: source, target: target)
         return openLock.withLock {
             if let cache = opened[url] { return cache }
-            let cache = TranslationCache(file: url)
+            let cache = TranslationCache(file: url, engine: engine)
             opened[url] = cache
             return cache
         }
@@ -58,6 +61,7 @@ public final class TranslationCache: @unchecked Sendable {
             guard let entry = entries[key] else { return nil }
             tick += 1
             entries[key] = (entry.value, tick)
+            TranslationProbe.current?.noteHit()
             return entry.value
         }
     }
@@ -75,6 +79,7 @@ public final class TranslationCache: @unchecked Sendable {
             entries[key] = (value, tick)
             evictIfNeeded()
             append(key, value)
+            TranslationProbe.current?.noteFresh(engine: engine)
         }
     }
 
@@ -145,5 +150,36 @@ public final class TranslationCache: @unchecked Sendable {
 
     private static func safe(_ part: String) -> String {
         String(part.map { $0.isLetter || $0.isNumber || $0 == "_" ? $0 : "_" })
+    }
+}
+
+/// Bir çeviri isteğinde önbelleğin ne yaptığını sayar (altyazı günlüğü için; çeviriyi değiştirmez). Okuma hattı isteği
+/// `TranslationProbe.$current.withValue(probe)` içinde çalıştırır; önbellekten dönen ve motorun yeni ürettiği (önbelleğe
+/// yeni yazılan) parçalar sayılır. Yedeğe düşen çevrimiçi motorda yeni parçayı yedeğin önbelleği yazar; günlükte
+/// gerçekten çeviren motor görünür.
+public final class TranslationProbe: @unchecked Sendable {
+    @TaskLocal public static var current: TranslationProbe?
+
+    private let lock = NSLock()
+    private var hitCount = 0
+    private var fresh: [String] = []
+
+    public init() {}
+
+    func noteHit() { lock.withLock { hitCount += 1 } }
+
+    func noteFresh(engine: String?) { lock.withLock { fresh.append(engine ?? "") } }
+
+    public var hits: Int { lock.withLock { hitCount } }
+
+    /// Yeni çeviri yazan motorlar (sırayla; adı bilinmeyen boş).
+    public var freshEngines: [String] { lock.withLock { fresh } }
+
+    /// "çeviri:<motor>" (motor yeni çevirdi), "önbellek" (her parça önbellekten geldi) ya da bilinmiyorsa "çeviri:<yedek ad>".
+    public func outcome(fallbackEngine: String = "motor") -> String {
+        lock.withLock {
+            if let engine = fresh.last { return "çeviri:" + (engine.isEmpty ? fallbackEngine : engine) }
+            return hitCount > 0 ? "önbellek" : "çeviri:" + fallbackEngine
+        }
     }
 }

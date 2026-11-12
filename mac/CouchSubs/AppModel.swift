@@ -371,6 +371,20 @@ enum TVAppState: Equatable {
     case approveOnTV
 }
 
+extension AppAppearance {
+    /// Uygulamanın tüm pencerelerinin (ana pencere, ayarlar, kurulum, altyazı penceresi, menüler) görünümü; nil sistemi
+    /// izler. Theme.swift'teki renkler pencerenin görünümüne göre çözüldüğü için hepsi birlikte değişir.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .dark: NSAppearance(named: .darkAqua)
+        case .light: NSAppearance(named: .aqua)
+        case .system: nil
+        }
+    }
+
+    @MainActor func apply() { NSApplication.shared.appearance = nsAppearance }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     enum Step: Int, CaseIterable {
@@ -406,6 +420,7 @@ final class AppModel: ObservableObject {
             if settings.output != oldValue.output { outputChanged() }
             if settings.dubbing != oldValue.dubbing { dubbingSettingsChanged(from: oldValue.dubbing) }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
+            if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             if settings.sharePool != oldValue.sharePool {
                 let (pool, enabled) = (pool, settings.sharePool)
                 Task { await pool.setEnabled(enabled) }
@@ -432,8 +447,17 @@ final class AppModel: ObservableObject {
     @Published var tvClients = 0
     @Published var lastSource = ""
     @Published var lastTranslation = ""
-    /// Bu oturumda çevrilen altyazılar; kaçırılan satır ana pencereden yeniden okunur.
+    /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json); kaçırılan satır ana pencereden ve "Geçmiş"ten
+    /// yeniden okunur.
     @Published var history = SubtitleHistory()
+    /// Bu oturumun başladığı an; canlı altyazı alanı yalnız bu oturumun satırlarını gösterir (nil: hepsi).
+    @Published private(set) var sessionStartedAt: Date?
+    /// Son satırın ölçümleri (yazı tanıma, çeviri, gecikme, güven).
+    @Published var lastMetrics: LineMetrics?
+    @Published var showHistory = false
+    /// Geçmişin yazıldığı dosya (testlerde nil: hiçbir şey yazılmaz).
+    private var historyFile: URL?
+    private let historyQueue = DispatchQueue(label: "history.json", qos: .utility)
     @Published var translatorStatus: TranslatorStatus = .ready
     /// Çevrimiçi çeviri (DeepL ya da yapay zekâ) şu an çeviremiyor; o satırlar cihaz üstü çeviriyle çevriliyor.
     @Published var onlineIssue: OnlineKeyState?
@@ -512,6 +536,8 @@ final class AppModel: ObservableObject {
         let loaded = defaults.data(forKey: StoreKey.settings).flatMap { try? JSONDecoder().decode(UserSettings.self, from: $0) } ?? UserSettings()
         let curated = loaded.withCuratedModels()
         settings = curated
+        // Pencereler açılmadan önce: açılışta açık temanın bir an görünmesi olmaz.
+        curated.appearance.apply()
         let poolFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(AppIdentity.name, isDirectory: true).appendingPathComponent("pool.json")
         let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -519,8 +545,18 @@ final class AppModel: ObservableObject {
         if !testing {
             RemotePlayLog.enable()
             RemotePlayLog.write("CouchSubs \(AppIdentity.version), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+            // Altyazı günlüğü (aynı klasörde altyazi.log): okunan satırlar ve akıbetleri, görüntü duraklamaları.
+            SubtitleLog.enable()
+            let stalls = VideoStallTracker()
+            RemotePlayLog.observe { line in
+                if let note = stalls.note(line) { SubtitleLog.write(note) }
+            }
         }
         pool = LinePool(file: poolFile, app: AppIdentity.version, platform: "mac", enabled: curated.sharePool && !testing)
+        if !testing {
+            historyFile = SubtitleHistory.defaultFile
+            history = SubtitleHistory.load(from: SubtitleHistory.defaultFile)
+        }
         // Listede olmayan model varsayılana döndüyse ayar hemen kaydedilir.
         if curated != loaded, let data = try? JSONEncoder().encode(curated) { defaults.set(data, forKey: StoreKey.settings) }
         // Yarım kalan kurulum (ör. TV uygulaması kurulurken kapatıldı) PS5 kayıtlıysa TV adımından sürer.
@@ -588,6 +624,7 @@ final class AppModel: ObservableObject {
         let pool = self.pool
         let active = settings.gamePacks && settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
         pipeline.packLookup = active ? { packs.match($0) } : nil
+        pipeline.packName = { packs.searchScope }
         guard settings.sourceLanguage == "en" else {
             pipeline.onPackMiss = nil
             return
@@ -948,6 +985,12 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Ana ekrandaki "TV'de test et": sunucu henüz açık değilse açılır, deneme altyazısı gönderilir.
+    func testSubtitle() async {
+        try? await startServer()
+        sendTestSubtitle()
+    }
+
     func sendTestSubtitle() {
         server.sendStyle(settings.style)
         // Oyunda henüz altyazı görülmediyse altyazı bölgesinin altına yakın tipik bir yer kullanılır.
@@ -983,13 +1026,21 @@ final class AppModel: ObservableObject {
         server.sendStyle(settings.style)
 
         makePipeline()
+        sessionStartedAt = Date()
+        lastMetrics = nil
         if settings.dubbing.enabled, dubbingModelReady { makeDubber().prepare() }
+        SubtitleLog.write("oturum başladı: CouchSubs \(AppIdentity.version), \(settings.sourceLanguage)→\(settings.targetLanguage), "
+            + "motor: \(onlineTranslationActive ? settings.onlineEngine.rawValue : "ücretsiz"), paketler: \(settings.gamePacks ? "açık" : "kapalı")")
 
         RemotePlayLog.write("Çeviri başladı; PS5'e bağlanılıyor: \(console.name) \(console.host)")
         let session = services.makeStream(console: console, accountId: accountId)
         session.onState = { [weak self] state in Task { @MainActor in self?.sessionStateChanged(state) } }
         session.onConsoleMoved = { [weak self] moved in Task { @MainActor in self?.consoleMoved(moved) } }
-        session.onFrame = { [weak self] frame in Task { @MainActor in await self?.handle(frame) } }
+        session.onFrame = { [weak self] frame in
+            // Karenin geldiği an: canlı altyazı alanındaki gecikme buradan TV'ye gidene kadar ölçülür.
+            let capturedAt = SubtitleStabilizer.uptimeMs()
+            Task { @MainActor in await self?.handle(frame, capturedAt: capturedAt) }
+        }
         session.start()
         self.session = session
 
@@ -1116,15 +1167,17 @@ final class AppModel: ObservableObject {
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
             self?.lastSource = source
             self?.lastTranslation = translation
-            self?.history.add(source: source, translation: translation)
+            self?.addToHistory(source: source, translation: translation, origin: pipeline?.lastOrigin == "paket" ? .pack : .engine)
             if let box = pipeline?.lastBox { self?.lastSubtitleBox = box }
         }
+        pipeline.onMetrics = { [weak self] metrics in self?.lastMetrics = metrics }
         // Dil paketi bu arada indirilmiş olabilir; her çeviri sonucu durumu günceller.
         pipeline.onTranslationResult = { [weak self] error in
             self?.translatorStatus = Self.translatorStatus(after: error)
         }
         pipeline.onReadResult = { [weak self] error in self?.noteRead(error) }
         pipeline.onSpeech = { [weak self] lines in self?.speak(lines) }
+        pipeline.onLog = { SubtitleLog.write($0) }
         connectPacks(to: pipeline)
         onlineIssue = nil
         pipeline.warmUp()
@@ -1287,6 +1340,7 @@ final class AppModel: ObservableObject {
         keeper?.stop()
         keeper = nil
         pipeline?.reset()
+        if pipeline != nil { SubtitleLog.write("oturum bitti") }
         pipeline = nil
         activeLanguages = nil
         screenHotkey?.enabled = false
@@ -1310,6 +1364,14 @@ final class AppModel: ObservableObject {
     }
 
     private func sessionStateChanged(_ state: SessionState) {
+        // Altyazı günlüğünde yalnız durumun türü (adres ve ayrıntı remoteplay.log'da).
+        if state != sessionState {
+            switch state {
+            case .connecting: SubtitleLog.write("PS5: bağlanıyor")
+            case .streaming: SubtitleLog.write("PS5: bağlandı")
+            case .disconnected: SubtitleLog.write("PS5: bağlantı yok")
+            }
+        }
         sessionState = state
         // Bağlantı koptuysa TV'de eski altyazı kalmasın.
         if case .disconnected = state {
@@ -1397,13 +1459,38 @@ final class AppModel: ObservableObject {
         store.save(moved, for: StoreKey.console)
     }
 
-    private func handle(_ frame: CGImage) async {
+    private func handle(_ frame: CGImage, capturedAt: Int) async {
         lastFrame = frame
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
         guard !processing, let pipeline else { return }
         processing = true
-        await pipeline.process(frame, region: settings.region)
+        await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
         processing = false
+    }
+
+    // MARK: - Geçmiş
+
+    private func addToHistory(source: String, translation: String, origin: LineMetrics.Origin) {
+        history.add(source: source, translation: translation, origin: origin)
+        saveHistory()
+    }
+
+    /// "Geçmiş"teki "Temizle": listeyi ve dosyayı boşaltır.
+    func clearHistory() {
+        history.clear()
+        saveHistory()
+    }
+
+    /// Geçmiş arka planda dosyaya yazılır (küçük dosya; sırayla, en son hâli kalır).
+    private func saveHistory() {
+        guard let historyFile else { return }
+        let history = self.history
+        historyQueue.async { try? history.save(to: historyFile) }
+    }
+
+    /// Canlı altyazı alanındaki liste: bu oturumun satırları (oturum başlamadıysa hepsi).
+    var sessionHistory: [SubtitleHistory.Entry] {
+        sessionStartedAt.map { history.entries(since: $0) } ?? history.entries
     }
 
     private func startServer() async throws {

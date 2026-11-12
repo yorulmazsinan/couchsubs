@@ -136,7 +136,9 @@ private struct SettingsPage: View {
             case .language: LanguageCard()
             case .area: AreaCards()
             case .obs: OBSCard()
-            case .about: AboutCard()
+            case .about:
+                AppThemeCard()
+                AboutCard()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,24 +223,31 @@ private struct LanguageCard: View {
     }
 }
 
-/// Bölge seçici, son PS5 karesiyle (kare değişince yalnız bu görünüm yeniden çizilir).
-private struct LiveRegionPicker: View {
-    @Binding var region: CropRegion
+/// Bölge önizlemesi, son PS5 karesiyle (kare değişince yalnız bu görünüm yeniden çizilir).
+private struct LiveRegionPreview: View {
+    @Binding var settings: UserSettings
     @ObservedObject var preview: FramePreview
 
     var body: some View {
-        RegionPicker(region: $region, frame: preview.image)
+        RegionPreview(region: settings.region, frame: preview.image) { settings.setCustomRegion($0) }
     }
 }
 
-/// Altyazı bölgesi ve ekranı çevirme kısayolu.
+/// Altyazı bölgesi (hazır seçimler, canlı önizleme, Özel'de kaydırıcılar) ve ekranı çevirme kısayolu.
 private struct AreaCards: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         Card {
-            LiveRegionPicker(region: $model.settings.region, preview: model.framePreview)
+            Picker("Area preset", selection: Binding(get: { model.settings.areaPreset }, set: { model.settings.selectAreaPreset($0) })) {
+                ForEach(AreaPreset.allCases, id: \.self) { preset in Text(preset.title).tag(preset) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            LiveRegionPreview(settings: $model.settings, preview: model.framePreview)
+            if model.settings.areaPreset == .custom { CustomAreaSliders(settings: $model.settings) }
             HintText(text: "Adjust the frame so it covers where the game shows its subtitles.")
+            HintText(text: "Drag the frame to move it, or drag its corner to resize it.")
         }
         Card(title: "Translate the screen (⌥⌘T)") {
             HintText(text: "Press ⌥⌘T while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.")
@@ -271,6 +280,21 @@ private struct OBSCard: View {
                 .buttonStyle(.secondary)
             }
             HintText(text: "If OBS runs on another computer, use this Mac's network address instead of localhost. The overlay only shows subtitles while the translation is running.")
+        }
+    }
+}
+
+/// Uygulamanın görünümü: koyu (varsayılan, onaylı tasarım), açık ya da sistemle aynı. Tüm pencerelere anında uygulanır.
+private struct AppThemeCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Card {
+            Picker("Appearance", selection: $model.settings.appearance) {
+                Text("Dark").tag(AppAppearance.dark)
+                Text("Light").tag(AppAppearance.light)
+                Text("Same as system").tag(AppAppearance.system)
+            }
         }
     }
 }
@@ -781,53 +805,30 @@ private struct LocalAISection: View {
     }
 }
 
-/// Son karenin üstünde altyazı bölgesini gösteren ve kenarlardan ayarlanan çerçeve.
-struct RegionPicker: View {
-    @Binding var region: CropRegion
-    let frame: CGImage?
+/// Özel bölgenin dikey konumu ve yüksekliği (yüzde).
+private struct CustomAreaSliders: View {
+    @Binding var settings: UserSettings
 
     var body: some View {
-        VStack(spacing: 10) {
-            GeometryReader { geometry in
-                let size = geometry.size
-                ZStack(alignment: .topLeading) {
-                    if let frame {
-                        Image(decorative: frame, scale: 1).resizable()
-                    } else {
-                        RoundedRectangle(cornerRadius: Theme.radius("inner")).fill(Color.csBackground)
-                        Text("The game picture appears here once translating starts.")
-                            .font(.csCaption).foregroundStyle(Color.csSecondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                    Rectangle()
-                        .strokeBorder(Color.csAccent, lineWidth: 2)
-                        .background(Color.csAccent.opacity(0.14))
-                        .frame(width: size.width * (region.right - region.left), height: size.height * (region.bottom - region.top))
-                        .offset(x: size.width * region.left, y: size.height * region.top)
-                }
+        let percent = settings.region.verticalPercent
+        Grid(alignment: .leading, verticalSpacing: Theme.space("m")) {
+            GridRow {
+                Text("Vertical position")
+                Slider(value: Binding(get: { percent.position },
+                                      set: { settings.setCustomRegion(settings.region.withVertical(position: $0, height: percent.height)) }),
+                       in: 0...max(1, 100 - percent.height))
+                Text(verbatim: percentText(percent.position)).font(.csCallout.monospacedDigit()).foregroundStyle(Color.csSecondary)
+                    .frame(minWidth: 44, alignment: .trailing)
             }
-            .aspectRatio(16 / 9, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("inner")))
-
-            Grid(alignment: .leading) {
-                GridRow {
-                    Text("Top")
-                    Slider(value: $region.top, in: 0...max(0, region.bottom - 0.05))
-                }
-                GridRow {
-                    Text("Bottom")
-                    Slider(value: $region.bottom, in: min(1, region.top + 0.05)...1)
-                }
-                GridRow {
-                    Text("Left")
-                    Slider(value: $region.left, in: 0...max(0, region.right - 0.05))
-                }
-                GridRow {
-                    Text("Right")
-                    Slider(value: $region.right, in: min(1, region.left + 0.05)...1)
-                }
+            GridRow {
+                Text("Height")
+                Slider(value: Binding(get: { percent.height },
+                                      set: { settings.setCustomRegion(settings.region.withVertical(position: percent.position, height: $0)) }),
+                       in: CropRegion.minimumSize * 100...100)
+                Text(verbatim: percentText(percent.height)).font(.csCallout.monospacedDigit()).foregroundStyle(Color.csSecondary)
+                    .frame(minWidth: 44, alignment: .trailing)
             }
-            Button("Reset area") { region = CropRegion() }.buttonStyle(.secondary)
         }
+        Button("Reset area") { settings.selectAreaPreset(.bottom) }.buttonStyle(.secondary)
     }
 }

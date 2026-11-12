@@ -5,6 +5,8 @@
 // POST /v1/exported: (yönetici) çeviriye alınan anahtarları işaretler.
 // GET  /v1/stats   : herkese açık sayılar.
 
+import { accepts } from "./filter.js";
+
 const MAX_LINES = 200;
 const DAILY_LIMIT = 5000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,31 +47,39 @@ async function submit(req, env) {
   if (used >= DAILY_LIMIT) return json({ error: "quota" }, 429, { "retry-after": "3600" });
   const room = Math.min(lines.length, DAILY_LIMIT - used);
 
-  const now = new Date().toISOString();
-  const stmts = [];
-  let accepted = 0;
+  // Türkçe, PS5 sistem yazısı ve yarım okumalar hiç yazılmaz (eski sürümler süzmeden gönderiyor). Aynı istekteki
+  // yinelenen anahtar bir kez sayılır.
+  const fresh = new Map();
   for (const l of lines.slice(0, room)) {
     const text = String(l?.text || "").trim().replace(/\s+/g, " ");
-    if (text.length < 3 || text.length > 300) continue;
+    if (!accepts(text)) continue;
     const c = canon(text);
     if (c.split(" ").length < 2) continue;
     const k = await key(text); // istemcinin anahtarına güvenmeyiz, yeniden hesaplarız
-    stmts.push(env.DB.prepare(
-      "INSERT INTO lines(key,text,installs,first_seen,last_seen) VALUES(?,?,0,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen"
-    ).bind(k, text, now, now));
-    stmts.push(env.DB.prepare(
-      "INSERT OR IGNORE INTO sightings(key,install) VALUES(?,?)"
-    ).bind(k, install));
-    stmts.push(env.DB.prepare(
-      "UPDATE lines SET installs=(SELECT COUNT(*) FROM sightings WHERE key=?) WHERE key=?"
-    ).bind(k, k));
-    accepted++;
+    if (!fresh.has(k)) fresh.set(k, text);
   }
+
+  // D1'in günlük yazma kotası için satır başına en çok iki yazma: önce görülme kaydı; bu kurulum satırı zaten
+  // bildirdiyse (changes 0) satıra hiç dokunulmaz. Yeni görülmede sayaç sayılarak değil bir artırılarak güncellenir.
+  // Kota satırı istek başına tek yazmadır.
+  const now = new Date().toISOString();
+  const entries = [...fresh];
+  const seen = entries.length
+    ? await env.DB.batch(entries.map(([k]) =>
+      env.DB.prepare("INSERT OR IGNORE INTO sightings(key,install) VALUES(?,?)").bind(k, install)))
+    : [];
+  const stmts = [];
+  entries.forEach(([k, text], i) => {
+    if (!(seen[i]?.meta?.changes > 0)) return;
+    stmts.push(env.DB.prepare(
+      "INSERT INTO lines(key,text,installs,first_seen,last_seen) VALUES(?,?,1,?,?) ON CONFLICT(key) DO UPDATE SET installs=installs+1, last_seen=excluded.last_seen"
+    ).bind(k, text, now, now));
+  });
   stmts.push(env.DB.prepare(
     "INSERT INTO quota(install,day,count) VALUES(?,?,?) ON CONFLICT(install,day) DO UPDATE SET count=count+excluded.count"
   ).bind(install, day, room));
   await env.DB.batch(stmts);
-  return json({ accepted });
+  return json({ accepted: fresh.size, recorded: stmts.length - 1 });
 }
 
 async function exportLines(url, env) {

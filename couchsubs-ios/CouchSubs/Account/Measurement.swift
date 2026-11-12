@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ölçüm ve izinler: Firebase Analytics + Crashlytics, Meta App Events, izin akışı (Google UMP, sonra Apple ATT) ve
-// AdMob. Reklam varsayılan olarak kapalı: Remote Config'teki `ads_enabled` true olmadan reklam SDK'sı başlatılmaz.
+// Ölçüm: Firebase Analytics + Crashlytics ve Meta App Events. Reklam yok (AdMob, Google'ın izin formu UMP kaldırıldı);
+// izleme yok: Apple'ın izleme izni (ATT) istenmez, Meta reklam kimliği (IDFA) toplamaz.
 
-import AppTrackingTransparency
 import FacebookCore
 import FirebaseAnalytics
 import FirebaseCore
 import FirebaseCrashlytics
-import FirebaseRemoteConfig
-import GoogleMobileAds
 import UIKit
-import UserMessagingPlatform
 
-/// Firebase Analytics ve Meta App Events'e aynı olayı gönderir.
+/// Profil › Kullanım verisi (`usageData`, varsayılan açık). Kapalıyken Meta'ya olay gitmez; Firebase'in kendi ayarı kalıcıdır.
+enum UsageData {
+    static let key = "usageData"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+}
+
+/// Firebase Analytics ve Meta App Events'e aynı olayı gönderir (Meta'ya yalnız olayın adı).
 @MainActor
 final class AppAnalytics: AnalyticsLogging {
     private let firebase: Bool
@@ -25,7 +27,7 @@ final class AppAnalytics: AnalyticsLogging {
 
     func log(_ event: AnalyticsEvent) {
         if firebase { Analytics.logEvent(event.name, parameters: event.parameters) }
-        if meta { AppEvents.shared.logEvent(AppEvents.Name(event.name)) }
+        if meta && UsageData.enabled { AppEvents.shared.logEvent(AppEvents.Name(event.name)) }
     }
 
     func screen(_ name: String) {
@@ -34,6 +36,7 @@ final class AppAnalytics: AnalyticsLogging {
     }
 
     func setCollection(_ enabled: Bool) {
+        if meta { Settings.shared.isAutoLogAppEventsEnabled = enabled }
         guard firebase else { return }
         Analytics.setAnalyticsCollectionEnabled(enabled)
         Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(enabled)
@@ -43,49 +46,29 @@ final class AppAnalytics: AnalyticsLogging {
 /// Uygulama açılışındaki SDK kurulumu; her parça yalnız anahtarı/dosyası varsa kurulur.
 @MainActor
 enum Integrations {
-    /// Firebase (Analytics, Crashlytics, Remote Config): GoogleService-Info.plist varsa.
+    /// Firebase (Analytics, Crashlytics): GoogleService-Info.plist varsa.
     static func configureFirebase() -> Bool {
         guard AppConfig.hasFirebase else { return false }
         if FirebaseApp.app() == nil { FirebaseApp.configure() }
-        let config = RemoteConfig.remoteConfig()
-        config.setDefaults(["ads_enabled": false as NSObject])
         return true
     }
 
-    /// Meta SDK: Info.plist'te FacebookAppID ve FacebookClientToken varsa. Reklam kimliği ve otomatik olaylar izin
-    /// gelene kadar kapalı (Info.plist'te de kapalı başlar).
+    /// Meta SDK: Info.plist'te FacebookAppID ve FacebookClientToken varsa. Reklam kimliği hiç toplanmaz; otomatik olaylar
+    /// karşılama ekranına kadar kapalı (Info.plist'te de kapalı başlar).
     static func configureMeta(application: UIApplication, options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         guard AppConfig.facebookAppID != nil, AppConfig.facebookClientToken != nil else { return false }
+        // Eski bir yapıda izleme izni verilmiş olsa da reklam kimliği toplanmaz (ayar SDK'da kalıcı).
+        Settings.shared.isAdvertiserIDCollectionEnabled = false
         ApplicationDelegate.shared.application(application, didFinishLaunchingWithOptions: options)
         return true
     }
 
-    /// İzin akışı: önce Google'ın izin formu (AB/İngiltere'de gerekiyorsa), sonra Apple'ın izleme izni. Sonuca göre Meta'nın
-    /// reklam kimliği toplaması açılır; Remote Config `ads_enabled` true ise ve reklam izni varsa AdMob başlatılır.
-    static func requestConsent(meta: Bool, firebase: Bool) async {
-        let parameters = RequestParameters()
-        try? await ConsentInformation.shared.requestConsentInfoUpdate(with: parameters)
-        if let presenter = topViewController() {
-            try? await ConsentForm.loadAndPresentIfRequired(from: presenter)
-        }
-        let status = await ATTrackingManager.requestTrackingAuthorization()
-        if meta {
-            let allowed = status == .authorized
-            Settings.shared.isAdvertiserIDCollectionEnabled = allowed
-            Settings.shared.isAutoLogAppEventsEnabled = true
-        }
-        guard firebase else { return }
-        let config = RemoteConfig.remoteConfig()
-        _ = try? await config.fetchAndActivate()
-        if config.configValue(forKey: "ads_enabled").boolValue, ConsentInformation.shared.canRequestAds {
-            await MobileAds.shared.start()
-        }
-    }
-
-    static func topViewController() -> UIViewController? {
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        var top = scene?.keyWindow?.rootViewController
-        while let presented = top?.presentedViewController { top = presented }
-        return top
+    /// Karşılama ekranından sonra: Meta'nın otomatik olayları (açılış, kurulum) açılır, reklam kimliği (IDFA) kapalı
+    /// kalır. İzin formu ya da Apple'ın izleme izni (ATT) yok; Meta olayları IDFA olmadan (Aggregated Event
+    /// Measurement) gider.
+    static func startMeta() {
+        guard AppConfig.facebookAppID != nil, AppConfig.facebookClientToken != nil else { return }
+        Settings.shared.isAdvertiserIDCollectionEnabled = false
+        Settings.shared.isAutoLogAppEventsEnabled = UsageData.enabled
     }
 }

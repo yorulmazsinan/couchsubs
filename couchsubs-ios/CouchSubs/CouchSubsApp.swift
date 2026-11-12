@@ -37,6 +37,8 @@ struct CouchSubsApp: App {
             : Self.demoStore().map { PhoneModel(store: $0, packs: library) } ?? PhoneModel(packs: library)
         // Çeviri sürerken ekran kararmaz: iOS kilitlenen ya da arka plana geçen uygulamayı askıya alır.
         model.keepScreenAwake = { UIApplication.shared.isIdleTimerDisabled = $0 }
+        // Çevrilen son satırlar ("Geçmiş"); testlerde dosyaya dokunulmaz.
+        if !testing { model.loadHistory() }
 
         let analytics = AppAnalytics(firebase: firebase, meta: !testing && AppConfig.facebookAppID != nil)
         let store = testing ? nil : AppConfig.packsBaseURL.map { PackStore(baseURL: $0, directory: PackStore.defaultDirectory) }
@@ -110,8 +112,8 @@ struct RootView: View {
     private func finishWelcome() {
         welcomeSeen = true
         if model.step == .welcome { model.advance() }
-        // İzin akışı tanıtımdan sonra, uygulama öndeyken (Apple'ın izleme izni bağlamsız sorulmasın).
-        Task { await Integrations.requestConsent(meta: AppConfig.facebookAppID != nil, firebase: AppConfig.hasFirebase) }
+        // Meta'nın otomatik olayları karşılamadan sonra açılır (reklam kimliği olmadan; izin formu ya da ATT yok).
+        Integrations.startMeta()
     }
 
     /// Kurulum: PSN girişi → PS5 eşleme → altyazının yeri.
@@ -143,6 +145,7 @@ struct RootView: View {
                 case .ps5: PS5PairScreen(onBack: { path.removeLast() }) { path.removeLast() }
                 case .psn: PSNScreen(onBack: { path.removeLast() }) { path.removeLast() }
                 case .about: AboutScreen()
+                case .history: HistoryScreen()
                 }
             }
         }

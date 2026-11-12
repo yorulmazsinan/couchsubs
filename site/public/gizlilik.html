@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-MCDCN86B"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gizlilik: CouchSubs</title>
+<meta name="description" content="CouchSubs gizlilik politikası: hangi verinin nerede kaldığı, nereye gittiği.">
+<link rel="canonical" href="https://couchsubs.enmeraapps.com/gizlilik">
+<link rel="icon" href="img/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,700&display=swap" rel="stylesheet">
+<style>
+:root{--night:#141518;--cream:#F3EEE4;--muted:#A9A59C;--amber:#F5B83D;--line:rgba(243,238,228,.09);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--night);color:var(--cream);font:400 17px/1.6 "Atkinson Hyperlegible Next",system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:32px 20px 80px}
+header{display:flex;align-items:center;gap:10px;margin-bottom:48px}
+header a{display:flex;align-items:center;gap:10px;color:var(--cream);text-decoration:none;font:700 19px/1 "Bricolage Grotesque",sans-serif}
+header img{width:32px;height:32px}
+h1{font:700 clamp(36px,6vw,56px)/1 "Bricolage Grotesque",sans-serif;font-variation-settings:"wdth" 80;margin:0 0 12px}
+h2{font:700 24px/1.2 "Bricolage Grotesque",sans-serif;margin:40px 0 12px}
+p,li{color:#D9D4CA}
+.meta{color:var(--muted);margin:0 0 32px}
+ul{padding-left:20px}
+li{margin:0 0 10px}
+strong{color:var(--cream)}
+a{color:var(--amber)}
+code{font-size:15px;color:var(--cream)}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0 24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><a href="/"><img src="img/logo.svg" alt="" width="32" height="32">CouchSubs</a></header>
+<h1>Gizlilik</h1>
+<p class="meta">Son güncelleme: 12 Kasım 2026</p>
+
+<p>CouchSubs, Enmera tarafından yayınlanan, ücretsiz ve açık kaynaklı bir uygulamadır. Hesap açmanızı istemez, reklam göstermez, uygulama içi satın alma yoktur. Aşağıda hangi verinin cihazınızda kaldığını ve hangisinin nereye gittiğini tek tek yazdık.</p>
+
+<h2>Cihazınızda kalanlar</h2>
+<ul>
+  <li>PS5'ten gelen oyun görüntüsü yalnız altyazıyı okumak için bellekte işlenir; kaydedilmez, hiçbir yere gönderilmez.</li>
+  <li>Okunan altyazılar ve çevirileri cihazınızda üretilir ve yalnız ev ağınızdaki TV'ye gönderilir (çevrimiçi bir çeviri motorunu kendiniz açarsanız İngilizce metin o servise de gider; aşağıya bakın).</li>
+  <li>PlayStation Network hesap kimliği (sayısal), PS5 eşleme anahtarı, TV eşleme anahtarı ve girdiğiniz çeviri anahtarları cihazda saklanır: Mac ve iPhone'da Anahtar Zinciri'nde, Windows'ta yalnız sizin kullanıcı hesabınızın açabileceği şifreli bir dosyada.</li>
+  <li>Çevrilen son satırlar (Geçmiş) yalnız cihazınızda, küçük bir dosyada tutulur; uygulamadan silebilirsiniz.</li>
+</ul>
+
+<h2>Dışarıyla kurulan bağlantılar</h2>
+<ul>
+  <li><strong>Sony:</strong> PlayStation Network girişi doğrudan Sony'nin sayfasında yapılır; şifrenizi CouchSubs görmez. Girişten sonra Sony'den yalnız hesap kimliği alınır.</li>
+  <li><strong>Çeviri motorları (yalnız siz seçerseniz):</strong> Gemini, DeepL, OpenAI ya da Claude gibi çevrimiçi bir motoru kendi anahtarınızla açarsanız okunan İngilizce altyazı metni çeviri için o servise gönderilir. Görüntü, ses ve hesap bilgisi gönderilmez; o servisin kendi gizlilik koşulları geçerlidir. Yerel yapay zekâ (Ollama, LM Studio) seçerseniz metin bilgisayarınızdan çıkmaz.</li>
+  <li><strong>Çeviri modelleri:</strong> Windows'ta ilk açılışta çeviri modeli <code>huggingface.co</code> adresinden bir kez indirilir; Mac'te çeviri dillerini macOS indirir ve yönetir.</li>
+  <li><strong>Ortak havuz (Ayarlar › Çeviri'den kapatılabilir):</strong> hiçbir Türkçe yamada bulunmayan, okunan İngilizce altyazı satırları herkes için yeni yamalar hazırlamak üzere kendi sunucumuza (<code>couchsubs-pool.enmera.workers.dev</code>) gönderilir. Giden yalnız satırın metni, ondan üretilen anahtar, ilk görüldüğü an, uygulama sürümü, işletim sistemi ve kuruluma özgü rastgele bir kimliktir. Görüntü, ses, kullanıcı adı, PSN ya da hesap bilgisi gönderilmez. Kapatınca gönderim hemen durur ve bekleyen satırlar silinir.</li>
+  <li><strong>Ev ağı:</strong> PS5'i ve TV'yi bulmak, onlarla eşleşmek için yalnız yerel ağ kullanılır. TV uygulaması altyazıları yalnız ev ağındaki CouchSubs'tan alır.</li>
+</ul>
+
+<h2>Telefon uygulaması</h2>
+<ul>
+  <li>Telefon uygulamasında reklam yoktur ve sizi uygulamalar arasında izlemeyiz; Apple'ın izleme izni istenmez.</li>
+  <li>Uygulamanın nasıl kullanıldığını anlamak için Google Firebase Analytics ve Meta (Facebook) SDK'sı anonim kullanım istatistikleri toplar: çevirinin başlaması ve süresi, altyazının TV'de mi telefonda mı gösterildiği, ekran açılışları gibi olaylar, cihaza özgü rastgele bir uygulama kimliği ve IP adresinden çıkarılan yaklaşık konum (ülke, şehir). Uygulama çökerse Firebase Crashlytics çökme raporu gönderir. Profil'deki "Kullanım verisi" anahtarıyla bu ölçümü kapatabilirsiniz. Bu veriler adınızla, e-postanızla ya da PSN hesabınızla ilişkilendirilmez; reklam kimliği (IDFA) toplanmaz. Google ve Meta'nın kendi gizlilik koşulları geçerlidir.</li>
+  <li>Altyazı metni, oyun görüntüsü ve PSN bilgisi bu istatistiklere eklenmez.</li>
+</ul>
+
+<h2>Çocuklar</h2>
+<p>CouchSubs çocuklara yönelik değildir ve bilerek çocuklardan kişisel veri toplamaz.</p>
+
+<h2>İletişim</h2>
+<p>Sorularınız ve silme talepleriniz için: <a href="https://github.com/yorulmazsinan/couchsubs/issues">github.com/yorulmazsinan/couchsubs/issues</a>. Kaynak kodu da aynı yerde açıktır.</p>
+
+<hr>
+<p class="meta">CouchSubs, Sony Interactive Entertainment ile bağlantılı değildir. PlayStation ve PS5, Sony Interactive Entertainment Inc.'in markalarıdır.</p>
+</div>
+</body>
+</html>

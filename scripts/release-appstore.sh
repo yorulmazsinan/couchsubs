@@ -44,6 +44,12 @@ if [[ "$PLATFORM" == ios ]]; then
   # Remote Play kütüphanesinin iPhone dilimi gerekir (scripts/build-chiaki-ios.sh).
   [[ -d third-party/build/CChiaki.xcframework/ios-arm64 ]] || { echo "CChiaki.xcframework'te iOS dilimi yok: scripts/build-chiaki-ios.sh"; exit 1; }
   (cd couchsubs-ios && xcodegen generate --quiet)
+  # Apple multicast iznini onaylamadan önce TestFlight yapısı: COUCHSUBS_NO_MULTICAST=1 izni yetki dosyasından çıkarır;
+  # PS5/TV ağda kendiliğinden bulunmaz, adres elle girilir.
+  if [[ -n "${COUCHSUBS_NO_MULTICAST:-}" ]]; then
+    /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.networking.multicast' couchsubs-ios/CouchSubs/CouchSubs.entitlements 2>/dev/null || true
+    echo "Uyarı: multicast izni olmadan derleniyor."
+  fi
   xcodebuild -project couchsubs-ios/CouchSubs.xcodeproj -scheme CouchSubs -configuration Release \
     -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" "${SIGN_ARGS[@]}" "${VERSION_ARGS[@]}" archive \
     > "$OUT/archive-ios.log" 2>&1 || { grep -E "error:" "$OUT/archive-ios.log" | head -20; echo "Arşiv başarısız: $OUT/archive-ios.log"; exit 1; }

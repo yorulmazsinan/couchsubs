@@ -27,6 +27,10 @@ public enum SubtitlePlacement
 /// <param name="FontSize">36 (küçük), 46 (orta), 58 (büyük), 72 (çok büyük)</param>
 /// <param name="BottomPercent">Sabit yerleşimde altyazının ekranın altından uzaklığı, yüzde.</param>
 /// <param name="Background">Yazının arkasındaki siyah zeminin koyuluğu, yüzde (0: zemin yok).</param>
+/// <param name="StackPrevious">
+/// Hızlı konuşmada önceki satır(lar) yeni satırın üstünde kısa süre soluk kalsın mı; kapalıysa yeni satır eskisinin
+/// yerine geçer. TV uygulaması 0.9.16 ve sonrası tanır.
+/// </param>
 public sealed record SubtitleStyle(
     int FontSize = 46,
     int BottomPercent = 7,
@@ -34,7 +38,8 @@ public sealed record SubtitleStyle(
     int Background = 72,
     bool Bold = false,
     SubtitleTextColor TextColor = SubtitleTextColor.White,
-    TvDisplayMode DisplayMode = TvDisplayMode.InApp);
+    TvDisplayMode DisplayMode = TvDisplayMode.InApp,
+    bool StackPrevious = true);
 
 /// <summary>
 /// Android TV'de PS5 görüntüsünün nasıl gösterildiği. Yalnız Android TV uygulaması kullanır; diğer TV'ler ve OBS
@@ -437,6 +442,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             ["displayMode"] = style.DisplayMode == TvDisplayMode.Overlay ? "overlay" : "inApp",
             ["fontSize"] = style.FontSize,
             ["placement"] = style.Placement.ToString().ToLowerInvariant(),
+            ["stackPrevious"] = style.StackPrevious,
             ["textColor"] = style.TextColor.ToString().ToLowerInvariant(),
         });
 

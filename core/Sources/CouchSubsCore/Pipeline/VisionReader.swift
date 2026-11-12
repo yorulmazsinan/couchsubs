@@ -87,7 +87,8 @@ public struct VisionReader: TextReader {
                 // Vision'ın kutusu sol alttan ölçülür; burada üstten ölçülür.
                 let box = observation.boundingBox
                 return TextLine(candidate.string.trimmingCharacters(in: .whitespacesAndNewlines),
-                                box: TextBox(left: box.minX, top: 1 - box.maxY, right: box.maxX, bottom: 1 - box.minY))
+                                box: TextBox(left: box.minX, top: 1 - box.maxY, right: box.maxX, bottom: 1 - box.minY),
+                                confidence: Double(candidate.confidence))
             }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
         return Reading(lines: lines)

@@ -43,13 +43,21 @@ public partial class App : Application
             return;
         }
         RemotePlayDiagnostics.Start();
-        ThemeManager.Apply(Resources);
-        ThemeManager.Follow(Resources);
         var controller = new AppController(new LiveServices(), new DpapiAppStore(), new FileSettingsStore(), new WindowsSleepGuard(),
             Localizer.Current, action => Dispatcher.BeginInvoke(action))
         {
             // Samsung'un sertifika için giriş sayfası varsayılan tarayıcıda açılır.
             OpenInBrowser = BrowserLauncher.Open,
+        };
+        // Görünüm (varsayılan koyu) pencere açılmadan uygulanır; ayarlarda değişince anında yenilenir.
+        ThemeManager.Use(Resources, controller.Settings.Appearance);
+        ThemeManager.Follow(Resources);
+        controller.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(AppController.Settings)) return;
+            var appearance = controller.Settings.Appearance;
+            if (Dispatcher.CheckAccess()) ThemeManager.Use(Resources, appearance);
+            else Dispatcher.BeginInvoke(() => ThemeManager.Use(Resources, appearance));
         };
         var window = new ShellWindow(controller);
         MainWindow = window;

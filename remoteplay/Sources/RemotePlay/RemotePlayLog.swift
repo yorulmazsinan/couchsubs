@@ -34,6 +34,7 @@ public enum RemotePlayLog {
         let queue = DispatchQueue(label: "remoteplay.log", qos: .utility)
         let lock = NSLock()
         var file: URL?
+        var observer: (@Sendable (String) -> Void)?
         let formatter: DateFormatter = {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -57,13 +58,23 @@ public enum RemotePlayLog {
         state.lock.unlock()
     }
 
+    /// Her satır (dosyaya yazılsa da yazılmasa da) buna da verilir; altyazı günlüğü görüntü duraklamalarını ("FEC failed,
+    /// waiting for IDR frame") buradan çıkarır. libchiaki'nin iş parçacığında çağrılır; hızlı dönmeli.
+    public static func observe(_ handler: (@Sendable (String) -> Void)?) {
+        state.lock.lock()
+        state.observer = handler
+        state.lock.unlock()
+    }
+
     /// Bekleyen satırlar yazılana kadar bekler (testler ve kapanış için).
     public static func flush() { state.queue.sync {} }
 
     public static func write(_ line: String) {
         state.lock.lock()
         let file = state.file
+        let observer = state.observer
         state.lock.unlock()
+        observer?(line)
         guard let file else { return }
         let date = Date()
         state.queue.async {

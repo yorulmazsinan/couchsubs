@@ -144,7 +144,7 @@ public class GamePackTests
         watch.Stop();
         var memory = GC.GetTotalMemory(true) - before;
         Console.WriteLine($"paket yükleme: {watch.ElapsedMilliseconds} ms, bellek: {memory / 1024} KB, {all.Packs.Sum(p => p.Entries)} satır");
-        Assert.Equal(["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "elden-ring", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"], ids);
+        Assert.Equal(["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "death-stranding-directors-cut", "elden-ring", "gta-v", "mafia-the-old-country", "marvels-spider-man-2", "red-dead-redemption-2"], ids);
         Assert.All(all.Packs, pack => Assert.True(pack.BuiltIn));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10));
         GC.KeepAlive(all);
@@ -174,6 +174,13 @@ public class GamePackTests
     // "The Tarnished will soon return.", "Let it be Margit the Fell!", "Roundtable Hold"
     [InlineData("elden-ring.json.gz", "elden-ring", "Elden Ring + Shadow of the Erdtree", 37000,
         new[] { "fd7b2bef9d7e5fe1", "d9e5d9f200bbd946", "d5017888c04251a9" })]
+    // "I can’t help you with that. I make deliveries. That’s all.", "Yeah, I’ve heard of ya.",
+    // "Trying to stay dry, same as you. Timefall’s let up. My name is Fragile."
+    [InlineData("death-stranding-directors-cut.json.gz", "death-stranding-directors-cut", "Death Stranding Director's Cut", 1200,
+        new[] { "0bd205d28ea72e1e", "a278ec4528cdbe41", "b081efaf29693c2b" })]
+    // "More like sell yourself. It's the worst.", "You got any advice?", "Focus! Hunters! Lots of them!"
+    [InlineData("marvels-spider-man-2.json.gz", "marvels-spider-man-2", "Marvel's Spider-Man 2", 2000,
+        new[] { "40236a7f701ea389", "ee2428652bc9ceb2", "e829f8ce088898b8" })]
     public void EachEmbeddedPackHasItsLines(string file, string id, string title, int minimum, string[] keys)
     {
         var (name, data) = EmbeddedOnly(file).Single();
@@ -208,12 +215,15 @@ public class GamePackTests
         Assert.Equal(library.Find("All this will be behind us soon. Until then don’t let any of these bastards get to you, alright?"), library.Nearest(garbled));
     }
 
-    /// <summary>Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019) ve Elden Ring paketleri de uygulamaya gömülüdür.</summary>
+    /// <summary>Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019), Elden Ring, Death Stranding Director's Cut ve
+    /// Marvel's Spider-Man 2 paketleri de uygulamaya gömülüdür.</summary>
     [Theory]
     [InlineData("assassins-creed-shadows", "Assassin's Creed Shadows", 39000)]
     [InlineData("death-stranding-2", "Death Stranding 2: On the Beach", 23000)]
     [InlineData("call-of-duty-modern-warfare-2019", "Call of Duty: Modern Warfare (2019)", 50000)]
     [InlineData("elden-ring", "Elden Ring + Shadow of the Erdtree", 37000)]
+    [InlineData("death-stranding-directors-cut", "Death Stranding Director's Cut", 1200)]
+    [InlineData("marvels-spider-man-2", "Marvel's Spider-Man 2", 2000)]
     public void MoreEmbeddedPacksLoad(string id, string title, int minimum)
     {
         var library = new GamePackLibrary(GamePackLibrary.EmbeddedPacks, null);
@@ -236,5 +246,8 @@ public class GamePackTests
         Assert.Equal("Konumuma hava ikmali talep ediyorum!", library.Find("Requesting air drop on my position!"));
         Assert.Equal("Lekeli yakında geri dönecek.", library.Find("The Tarnished will soon return."));
         Assert.Equal("Margit, Uğursuz Alâmet", library.Find("Margit, the Fell Omen"));
+        Assert.Equal("Senin gibi kuru kalmaya çalışıyorum. Zaman yağmuru dindi. Adım Fragile.",
+            library.Find("Trying to stay dry, same as you. Timefall’s let up. My name is Fragile."));
+        Assert.Equal("Odaklan! Avcılar! Çok fazlalar!", library.Find("Focus! Hunters! Lots of them!"));
     }
 }

@@ -22,6 +22,8 @@ public partial class SettingsWindow : Window
     private bool loading = true;
     /// <summary>Çerçevesi düzenlenen bölge: 0 altyazı, 1, 2 ve 3 ek bölgeler.</summary>
     private int area;
+    /// <summary>Önizlemenin oyun görüntüsüyle son yenilendiği an (ms).</summary>
+    private long lastPreview;
 
     internal SettingsWindow(AppController controller)
     {
@@ -35,6 +37,10 @@ public partial class SettingsWindow : Window
         ShowPlacement(settings.Style.Placement);
         BackgroundOpacity.Value = settings.Style.Background;
         Bold.IsChecked = settings.Style.Bold;
+        StackPrevious.IsChecked = settings.Style.StackPrevious;
+        MisreadWait.Value = settings.MisreadWaitMs / 1000.0;
+        PartialWait.Value = settings.PartialWaitMs / 1000.0;
+        ShowWaits();
         TextColor.SelectedItem = TextColor.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Style.TextColor.ToString());
         DisplayMode.SelectedItem = DisplayMode.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Style.DisplayMode.ToString());
         // Yalnız çeviri modeli olan diller listelenir; tek dil varsa seçim gösterilmez.
@@ -58,12 +64,30 @@ public partial class SettingsWindow : Window
         GamePacks.IsChecked = settings.GamePacks;
         SharePool.IsChecked = settings.SharePool;
         ShowPacks();
+        AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
         loading = false;
+    }
+
+    private void OnAppearance(object sender, SelectionChangedEventArgs e)
+    {
+        if (AppearanceChoice.SelectedItem is ComboBoxItem { Tag: string tag })
+            Update(s => s with { Appearance = Enum.Parse<AppAppearance>(tag) });
     }
 
     private void OnControllerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(AppController.Settings)) ShowStyleTitle();
+        if (e.PropertyName == nameof(AppController.LastFrame)) ShowLiveFrame();
+    }
+
+    /// <summary>Alan sekmesi açıkken önizleme oyunun görüntüsüyle saniyede bir yenilenir (çerçeve sürüklenirken beklenir).</summary>
+    private void ShowLiveFrame()
+    {
+        if (!AreaTab.IsSelected || Region.IsDragging || controller.LastFrame is not { } frame) return;
+        var now = Environment.TickCount64;
+        if (now - lastPreview < 1000) return;
+        lastPreview = now;
+        Region.Frame = frame;
     }
 
     /// <summary>Altyazı bilgisayar ekranında da gösteriliyorsa görünüm kartı yalnız TV'ye ait değildir.</summary>
@@ -417,6 +441,36 @@ public partial class SettingsWindow : Window
     private void OnBold(object sender, RoutedEventArgs e) =>
         Update(s => s with { Style = s.Style with { Bold = Bold.IsChecked == true } });
 
+    private void OnMisreadWait(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        ShowWaits();
+        Update(s => s with { MisreadWaitMs = (int)Math.Round(e.NewValue * 1000) });
+    }
+
+    private void OnPartialWait(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        ShowWaits();
+        Update(s => s with { PartialWaitMs = (int)Math.Round(e.NewValue * 1000) });
+    }
+
+    private void OnWaitDefaults(object sender, RoutedEventArgs e)
+    {
+        MisreadWait.Value = SubtitlePipeline.PackWaitMs / 1000.0;
+        PartialWait.Value = SubtitlePipeline.CleanWaitMs / 1000.0;
+    }
+
+    /// <summary>Kaydırıcıların yanındaki süre ("0,8 sn").</summary>
+    private void ShowWaits()
+    {
+        if (MisreadWaitValue is null || PartialWaitValue is null) return;
+        var unit = Localizer.Current["sec"];
+        MisreadWaitValue.Text = $"{MisreadWait.Value.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)} {unit}";
+        PartialWaitValue.Text = $"{PartialWait.Value.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)} {unit}";
+    }
+
+    private void OnStackPrevious(object sender, RoutedEventArgs e) =>
+        Update(s => s with { Style = s.Style with { StackPrevious = StackPrevious.IsChecked == true } });
+
     private void OnTextColor(object sender, SelectionChangedEventArgs e)
     {
         if (TextColor.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
@@ -434,10 +488,62 @@ public partial class SettingsWindow : Window
         if (GameLanguage.SelectedItem is ComboBoxItem { Tag: string code }) Update(s => s with { SourceLanguage = code });
     }
 
+    /// <summary>
+    /// Çerçeve elle değişti. Altyazı bölgesinde seçim, bölge bir hazır seçimle aynıysa ("Alanı sıfırla") o, değilse Özel olur.
+    /// </summary>
     private void OnRegion(object? sender, CropRegion region)
     {
         var slot = area;
-        Update(s => slot == 0 ? s with { Region = region } : s.WithExtraRegion(slot, region));
+        Update(s => slot == 0 ? s with { Region = region, AreaPreset = AreaPresets.Matching(region) } : s.WithExtraRegion(slot, region));
+        if (slot == 0) ShowPreset();
+    }
+
+    /// <summary>Altyazı bölgesinin hazır seçimi işaretlenir; Özel'de kaydırıcılar bölgeyi gösterir.</summary>
+    private void ShowPreset()
+    {
+        var wasLoading = loading;
+        loading = true;
+        var settings = controller.Settings;
+        (settings.AreaPreset switch
+        {
+            AreaPreset.Top => PresetTop,
+            AreaPreset.Full => PresetFull,
+            AreaPreset.Custom => PresetCustom,
+            _ => PresetBottom,
+        }).IsChecked = true;
+        CustomPanel.Visibility = settings.AreaPreset == AreaPreset.Custom ? Visibility.Visible : Visibility.Collapsed;
+        var (position, height) = settings.Region.VerticalPercent();
+        VerticalPosition.Value = Math.Clamp(Math.Round(position), VerticalPosition.Minimum, VerticalPosition.Maximum);
+        AreaHeight.Value = Math.Clamp(Math.Round(height), AreaHeight.Minimum, AreaHeight.Maximum);
+        ShowVerticalValues();
+        loading = wasLoading;
+    }
+
+    private void ShowVerticalValues()
+    {
+        var text = Localizer.Current;
+        VerticalPositionValue.Text = text.Format("%lld%%", (int)Math.Round(VerticalPosition.Value));
+        AreaHeightValue.Text = text.Format("%lld%%", (int)Math.Round(AreaHeight.Value));
+    }
+
+    /// <summary>Hazır seçim bölgeyi değiştirir; Özel'de kayıtlı bölge kalır, kaydırıcılar açılır.</summary>
+    private void OnPreset(object sender, RoutedEventArgs e)
+    {
+        if (loading || area != 0 || sender is not RadioButton { Tag: string tag }) return;
+        var preset = Enum.Parse<AreaPreset>(tag);
+        Update(s => s.WithAreaPreset(preset));
+        Region.ShowRegion(controller.Settings.Region);
+        ShowPreset();
+    }
+
+    /// <summary>Özel bölgenin dikey konumu ya da yüksekliği değişti; sol ve sağ kenar olduğu gibi kalır.</summary>
+    private void OnVertical(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (loading || area != 0) return;
+        ShowVerticalValues();
+        var region = controller.Settings.Region.WithVertical(Math.Round(VerticalPosition.Value), Math.Round(AreaHeight.Value));
+        Update(s => s.WithCustomRegion(region));
+        Region.ShowRegion(region);
     }
 
     private void OnArea(object sender, RoutedEventArgs e)
@@ -457,6 +563,8 @@ public partial class SettingsWindow : Window
         {
             UseArea.Visibility = Visibility.Collapsed;
             ExtraTargetPanel.Visibility = Visibility.Collapsed;
+            PresetPanel.Visibility = Visibility.Visible;
+            ShowPreset();
             Region.IsEnabled = true;
             Region.DefaultRegion = new CropRegion();
             Region.ShowRegion(settings.Region);
@@ -467,6 +575,7 @@ public partial class SettingsWindow : Window
             var extra = settings.ExtraRegion(slot);
             UseArea.Visibility = Visibility.Visible;
             UseArea.IsChecked = extra is not null;
+            PresetPanel.Visibility = Visibility.Collapsed;
             ExtraTargetPanel.Visibility = Visibility.Visible;
             (settings.ExtraTarget(slot) switch { ResultTarget.Pc => ExtraPc, ResultTarget.Both => ExtraBoth, _ => ExtraTv }).IsChecked = true;
             Region.IsEnabled = extra is not null;

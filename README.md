@@ -2,7 +2,9 @@
 
 # CouchSubs
 
-**Türkçe dil desteği olmayan PS5 oyunlarını Türkçe altyazıyla oynayın.**
+**PS5 oyunlarına Türkçe yama: Türkçe dil desteği olmayan oyunları Türkçe altyazıyla oynayın.**
+
+Site, kurulum rehberi ve SSS: **[couchsubs.enmeraapps.com](https://couchsubs.enmeraapps.com)**
 
 CouchSubs, oyundaki İngilizce altyazıyı anlık okur, Türkçeye çevirir ve TV'de oyun görüntüsünün üstünde
 gösterir. Oyunu her zamanki gibi TV'de, kendi kolunuzla oynarsınız. Yazı tanıma ve çeviri bilgisayarınızda

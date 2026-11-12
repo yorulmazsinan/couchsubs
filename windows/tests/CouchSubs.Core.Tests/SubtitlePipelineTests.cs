@@ -146,6 +146,55 @@ public class SubtitlePipelineTests
         Assert.Equal(0.5, box.Top, 9);
     }
 
+    /// <summary>Altyazı günlüğü: ilk kare, ilk yazı, her kararlı satır ve akıbeti (motor ya da paket) yazılır.</summary>
+    [Fact]
+    public async Task LogsEachLineAndItsOutcome()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Hold the gate.", "Run!", "Run!"), new FakeTranslator(), sender);
+        var log = new List<string>();
+        pipeline.Log = log.Add;
+        pipeline.PackLookup = text => text == "Run!" ? new PackMatch("Koş!", []) : null;
+        pipeline.PackName = () => "mafia";
+        await Run(pipeline, 4);
+        pipeline.Reset();
+        Assert.Equal(["TR: Hold the gate.", "Koş!"], sender.Sent);
+        Assert.Equal(6, log.Count);
+        Assert.StartsWith("ilk kare: oturum başından ", log[0]);
+        Assert.StartsWith("ilk yazı: ", log[1]);
+        Assert.EndsWith("\"Hold the gate.\"", log[1]);
+        Assert.Equal("#1 \"Hold the gate.\" → çeviriye", log[2]);
+        Assert.StartsWith("#1 çeviri:motor ", log[3]);
+        Assert.EndsWith(" ms, gösterildi", log[3]);
+        Assert.Equal("#2 \"Run!\" → paket:mafia", log[4]);
+        Assert.Equal("hat sıfırlandı (paketten 1 satır)", log[5]);
+    }
+
+    /// <summary>Önbellekten dönen satır günlükte "önbellek" diye görünür.</summary>
+    [Fact]
+    public async Task LogTellsCachedTranslations()
+    {
+        var cache = new TranslationCache(engine: "opus-mt");
+        cache.Store("Hold the gate.", "Kapıyı tut.");
+        var translator = new CachedTranslator(cache);
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run now."), translator, new FakeSender());
+        var log = new List<string>();
+        pipeline.Log = log.Add;
+        await Run(pipeline, 2);
+        Assert.Contains(log, line => line.StartsWith("#1 önbellek ", StringComparison.Ordinal));
+        Assert.Contains(log, line => line.StartsWith("#2 çeviri:opus-mt ", StringComparison.Ordinal));
+    }
+
+    private sealed class CachedTranslator(TranslationCache cache) : ITextTranslator
+    {
+        public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
+        {
+            if (cache.TryGet(text, out var known)) return Task.FromResult(known);
+            cache.Store(text, "TR: " + text);
+            return Task.FromResult("TR: " + text);
+        }
+    }
+
     [Fact]
     public async Task StableTextIsTranslatedAndSentOnce()
     {

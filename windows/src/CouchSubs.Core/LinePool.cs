@@ -240,13 +240,16 @@ public sealed class LinePool : IDisposable
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or NotSupportedException) { return null; }
     }
 
-    /// <summary>Havuza uygun satır: en az iki sözcük, en çok 300 karakter, arayüz ya da yazı tanıma çöpü gibi görünmüyor.</summary>
+    /// <summary>
+    /// Havuza uygun satır: en az iki sözcük, en çok 300 karakter, arayüz ya da yazı tanıma çöpü gibi görünmüyor; Türkçe,
+    /// PS5'in sistem yazısı ya da yarım okuma değil (<see cref="PoolFilter"/>).
+    /// </summary>
     public static bool Accepts(string text)
     {
         text = text.Trim();
         if (text.Length == 0 || text.Length > MaxLength) return false;
         var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Count(word => word.EnumerateRunes().Any(Rune.IsLetter));
-        return words >= MinWords && !LooksLikeNoise(text);
+        return words >= MinWords && !LooksLikeNoise(text) && PoolFilter.Accepts(text);
     }
 
     /// <summary>Yazı tanıma çöpü içeren ("ou$3e") ya da harften çok rakam ve simge taşıyan ("100/100 HP 25%") satır.</summary>

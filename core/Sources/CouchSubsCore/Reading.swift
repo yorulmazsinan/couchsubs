@@ -42,10 +42,13 @@ public struct TextLine: Equatable, Sendable {
     public var text: String
     /// Okunan alana göre yeri; bilinmiyorsa nil.
     public var box: TextBox?
+    /// Yazı tanımanın bu satırdan ne kadar emin olduğu (0–1); okuyucu vermiyorsa nil.
+    public var confidence: Double?
 
-    public init(_ text: String, box: TextBox? = nil) {
+    public init(_ text: String, box: TextBox? = nil, confidence: Double? = nil) {
         self.text = text
         self.box = box
+        self.confidence = confidence
     }
 }
 
@@ -71,6 +74,12 @@ public struct Reading: Equatable, Sendable {
         lines.compactMap(\.box).reduce(nil) { total, box in total?.union(box) ?? box }
     }
 
+    /// Satırların ortalama tanıma güveni (0–1); okuyucu güven vermiyorsa nil.
+    public var confidence: Double? {
+        let values = lines.compactMap(\.confidence)
+        return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+    }
+
     /// Oyunun düğme ipuçları ("R2 Swing", "△ Pick up") çıkarılmış hali; bunlar altyazı değildir.
     public func withoutButtonPrompts() -> Reading {
         Reading(lines: lines.filter { !ButtonPrompts.isPrompt($0.text) })
@@ -79,7 +88,7 @@ public struct Reading: Equatable, Sendable {
     /// Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e", "waters2aljd") ayıklanmış hali; çevirmen bunları olduğu
     /// gibi taşıyıp TV'de anlamsız harfler gösteriyordu.
     public func withoutOcrNoise() -> Reading {
-        Reading(lines: lines.map { TextLine(OcrNoise.clean($0.text), box: $0.box) })
+        Reading(lines: lines.map { TextLine(OcrNoise.clean($0.text), box: $0.box, confidence: $0.confidence) })
     }
 
     /// Alandaki altyazı bloğu. Seçilen alanda altyazının yanında menü ("MAP / HELP / SETTINGS" alt alta), köşedeki
@@ -128,7 +137,7 @@ public struct Reading: Equatable, Sendable {
 
     /// Satır kutularını `area` içindeki oranlardan dış çerçevenin oranlarına taşır.
     public func placed(in area: TextBox) -> Reading {
-        Reading(lines: lines.map { TextLine($0.text, box: $0.box?.placed(in: area)) })
+        Reading(lines: lines.map { TextLine($0.text, box: $0.box?.placed(in: area), confidence: $0.confidence) })
     }
 }
 

@@ -2,6 +2,7 @@
 
 using System.Collections.Concurrent;
 using System.IO;
+using CouchSubs.Core;
 using CouchSubs.RemotePlay;
 
 namespace CouchSubs.App.Services;
@@ -22,6 +23,13 @@ internal static class RemotePlayDiagnostics
     {
         RemotePlayLog.MessageLogged += line => Lines.TryAdd($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {line}");
         new Thread(WriteLoop) { IsBackground = true, Name = "remoteplay.log" }.Start();
+        // Altyazı günlüğü (aynı klasörde altyazi.log): okunan satırlar ve akıbetleri, görüntü duraklamaları.
+        SubtitleLog.Enable();
+        var stalls = new VideoStallTracker();
+        RemotePlayLog.MessageLogged += line =>
+        {
+            if (stalls.Note(line) is { } note) SubtitleLog.Write(note);
+        };
     }
 
     public static void Note(string line) => Lines.TryAdd($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {line}");

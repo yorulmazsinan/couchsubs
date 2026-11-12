@@ -37,8 +37,9 @@ yalnız **iç TestFlight** içindir; dış test, inceleme ve yayın App Store Co
   durur. Mac App Store paketi için "Mac Installer Distribution" (3rd Party Mac Developer Installer) sertifikası da
   gerekir (anahtarlıkta yok); hesap açıkken `-allowProvisioningUpdates` ile Xcode'un oluşturması beklenir, oluşturamazsa
   developer.apple.com › Certificates'tan elle alınır. Bu henüz denenemedi.
-- **İhracat uyumu**: `ITSAppUsesNonExemptEncryption` bilerek yazılmadı. Her yapı yüklendikten sonra App Store
-  Connect › TestFlight'ta şifreleme sorusu yanıtlanır (Remote Play OpenSSL ile şifreli; bkz. Riskler).
+- **İhracat uyumu**: iPhone uygulamasında `ITSAppUsesNonExemptEncryption = false` (yalnız standart şifreleme: TLS ve
+  Remote Play'in standart AES'i); soru her yüklemede sorulmaz. Mac App Store sürümünde henüz yazılmadı, orada soru
+  App Store Connect › TestFlight'ta yanıtlanır (bkz. Riskler).
 
 Mac App Store arşivinden önce gerekenler (dist/ gitignore'dadır):
 
@@ -96,13 +97,18 @@ gösterilir.
 
 Ayrıntılar `docs/ios-plan.md`'de. App Store için yapılanlar:
 
+- Yalnız iPhone (`TARGETED_DEVICE_FAMILY = 1`): iPad'de iPhone uyumluluk kipinde açılır, App Store iPad ekran
+  görüntüsü istemez.
+- Reklam yok, izleme yok: AdMob ve Google'ın izin formu (UMP) kaldırıldı, Apple'ın izleme izni (ATT) istenmez.
+  Firebase Analytics/Crashlytics ve Meta App Events kimliğe bağlanmadan, reklam kimliği (IDFA) olmadan ölçer.
+  Gizlilik bildirimi `couchsubs-ios/CouchSubs/PrivacyInfo.xcprivacy`; App Store gizlilik etiketi onunla aynı olmalı.
+
 - Simge saydamlıksız, tam dolu 1024'lük kare (`scripts/make-icons.swift` üretir); App Store alfa kanallı simgeyi
   reddeder.
 - `com.apple.developer.networking.multicast` yetkisi projede. Apple onaylamadıysa otomatik imza bu yetkiyle profil
   üretemez ("Entitlement com.apple.developer.networking.multicast requires approval from Apple"); o zaman yetki onaya
   kadar `couchsubs-ios/project.yml`'den çıkarılır (PS5/TV adresi elle yazılır).
-- `Config/Secrets.xcconfig` ve `GoogleService-Info.plist` yoksa Firebase, Meta ve paket sunucusu kapalı derlenir;
-  AdMob Google'ın deneme kimliğiyle gelir, reklam Remote Config ile zaten kapalı.
+- `Config/Secrets.xcconfig` ve `GoogleService-Info.plist` yoksa Firebase, Meta ve paket sunucusu kapalı derlenir.
 
 ## Durum (2026-11-12)
 
@@ -136,8 +142,9 @@ Ayrıntılar `docs/ios-plan.md` §5'te; iki sürüm için de geçerli:
 - **AGPL-3.0 ve chiaki-ng**: App Store dağıtım koşulları AGPL'nin "ek kısıtlama yok" şartıyla çelişebilir. CouchSubs'ın
   kendi kodu tek sahipliyse sorun değil; chiaki-ng de AGPL ve katkıcılarının izni yok. Yayından önce hukuki karar
   gerekiyor (iç TestFlight için de).
-- **Şifreleme beyanı**: Remote Play OpenSSL (TLS, AES) kullanıyor. `ITSAppUsesNonExemptEncryption` yazılmadı; her
-  yüklemede App Store Connect soruyu sorar, sahibi yanıtlar (gerekirse Fransa için ayrı belge).
+- **Şifreleme beyanı**: Remote Play OpenSSL (TLS, AES) kullanıyor; yalnız standart şifreleme. iPhone'da
+  `ITSAppUsesNonExemptEncryption = false`; Mac App Store'da yazılmadı, her yüklemede App Store Connect soruyu sorar
+  (gerekirse Fransa için ayrı belge).
 - **Mac App Store'a özgü**: uygulama gömülü programlar (.NET yardımcısı, pocket-tts) çalıştırıyor ve LG kurulumu için
   `/usr/bin/ssh` açıyor; TV'lere uygulama kuruyor. Hepsi sandbox içinde ve uygulamanın paketinden geliyor, ama
   inceleme 2.4.5 / 2.5.2 kapsamında soru sorabilir. İnceleme notunda TV uygulamasının (aynı açık kaynak proje) TV'ye

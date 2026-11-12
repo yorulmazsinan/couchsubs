@@ -12,7 +12,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var app: AppModel
     @Binding var path: [Route]
     @AppStorage("notifyPackUpdates") private var notifyPackUpdates = true
-    @AppStorage("usageData") private var usageData = true
+    @AppStorage(UsageData.key) private var usageData = true
 
     var body: some View {
         MobileScreen {
@@ -179,6 +179,7 @@ struct SettingsScreen: View {
                     }
                 }
             }
+            AreaTile()
             Tile(spacing: 0) {
                 NavigationLink(value: Route.packs) {
                     ListRow(symbol: "bolt.fill", tint: .pro, title: "Game packs",

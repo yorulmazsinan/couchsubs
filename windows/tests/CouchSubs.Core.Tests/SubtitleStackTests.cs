@@ -9,6 +9,16 @@ public class SubtitleStackTests
 {
     private static List<string> Texts(SubtitleStack stack, double now) => [.. stack.Lines(now).Select(l => l.Text)];
 
+    /// <summary>Ayar kapalıyken hızlı konuşmada önceki satır üste çıkmaz; yeni satır eskisinin yerine geçer.</summary>
+    [Fact]
+    public void WithoutStackingNewLineReplacesThePrevious()
+    {
+        var stack = new SubtitleStack { StackPrevious = false };
+        stack.Show("Yere yat!", 4000, false, 0);
+        stack.Show("Kapıyı tut!", 4000, false, 0.5);
+        Assert.Equal(["Kapıyı tut!"], Texts(stack, 0.6));
+    }
+
     [Fact]
     public void LineStaysForGivenDuration()
     {

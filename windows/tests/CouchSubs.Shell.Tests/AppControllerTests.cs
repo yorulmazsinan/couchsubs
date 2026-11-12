@@ -108,6 +108,8 @@ internal sealed class FakeServices : IAppServices
     public List<string> ReaderLanguages { get; } = [];
     /// <summary>Okuyucunun her karede bulduğu satırlar (verilmezse karede yazı yoktur).</summary>
     public Reading? ReaderLines { get; set; }
+    /// <summary>Verilirse geçmiş bu dosyaya yazılır (geçici klasörde).</summary>
+    public string? HistoryFile { get; set; }
     public bool HasOcr { get; set; } = true;
     public bool HasOcrPack { get; set; } = true;
     public bool HasOcrLanguage(string language) => HasOcrPack;

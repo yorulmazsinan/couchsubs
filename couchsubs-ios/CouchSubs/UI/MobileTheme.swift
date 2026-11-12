@@ -365,6 +365,8 @@ struct SegmentedTabs<Value: Hashable>: View {
                     Text(option.value)
                         .font(Mobile.TypeScale.body.weight(selected ? .semibold : .medium))
                         .foregroundStyle(selected ? Mobile.Palette.text : Mobile.Palette.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 36)
                         .background {
                             if selected {
@@ -535,6 +537,10 @@ extension View {
         }
     }
 
+    /// Küçük bilgi sayfası içeriği kadar açılır (`.medium`/`.large`'daki boş alan olmaz); üstte tutamaç görünür.
+    /// İçerik yüksekliği ölçülür, değişince (ör. bir alan gizlenince) sayfa da uyar.
+    func fittedSheet() -> some View { modifier(FittedSheet()) }
+
     /// Seçim değişince hafif dokunsal geri bildirim. `sensoryFeedback` iOS 17'de geldi; iOS 16'da UIKit'in üreteciyle
     /// (yalnız seçilen düğmede, bir kez).
     @ViewBuilder func selectionFeedback(trigger selected: Bool) -> some View {
@@ -545,6 +551,29 @@ extension View {
                 if now { UISelectionFeedbackGenerator().selectionChanged() }
             }
         }
+    }
+}
+
+private struct SheetHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// Özel yükseklik alttaki güvenli alanı içermez; ölçülen içerik yüksekliği doğrudan kullanılır.
+private struct FittedSheet: ViewModifier {
+    @State private var height: CGFloat = 320
+
+    func body(content: Content) -> some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SheetHeightKey.self, value: proxy.size.height)
+            })
+            .onPreferenceChange(SheetHeightKey.self) { value in
+                if value > 0 { height = value.rounded(.up) }
+            }
+            .presentationDetents([.height(height)])
+            .presentationDragIndicator(.visible)
     }
 }
 

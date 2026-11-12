@@ -260,6 +260,8 @@
                                 <ContentPresenter.Resources>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                         <Setter Property="TextAlignment" Value="Center" />
+                                        <!-- Dar sütunda ("Bilgisayar ekranı") yazı kesilmez, iki satıra iner. -->
+                                        <Setter Property="TextWrapping" Value="Wrap" />
                                         <Setter Property="FontSize" Value="{DynamicResource bodyFontSize}" />
                                     </Style>
                                 </ContentPresenter.Resources>
@@ -614,7 +616,7 @@
                             <TextBlock Text="{TemplateBinding Title}" Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
                         </DockPanel>
                         <TextBlock x:Name="Value" Text="{TemplateBinding Value}" Style="{StaticResource HeadlineText}"
-                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Foreground="{DynamicResource textSecondaryBrush}" />
+                                   TextWrapping="Wrap" Foreground="{DynamicResource textSecondaryBrush}" />
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="Tone" Value="Good">

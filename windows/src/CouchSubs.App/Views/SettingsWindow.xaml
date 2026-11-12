@@ -78,6 +78,10 @@
                             </Grid>
                             <CheckBox x:Name="Bold" Content="{t:T 'Bold text'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,16"
                                       Checked="OnBold" Unchecked="OnBold" />
+                            <CheckBox x:Name="StackPrevious" Content="{t:T 'Keep previous lines above in fast dialogue'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,4"
+                                      Checked="OnStackPrevious" Unchecked="OnStackPrevious" />
+                            <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,16"
+                                       Text="{t:T 'When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.'}" />
                             <TextBlock Text="{t:T 'Text color'}" Margin="0,0,0,8" />
                             <ComboBox x:Name="TextColor" SelectionChanged="OnTextColor" Margin="0,0,0,16">
                                 <ComboBoxItem Content="{t:T 'White'}" Tag="White" />
@@ -183,6 +187,38 @@
                             </StackPanel>
                         </StackPanel>
                     </c:Card>
+                    <!-- Gelişmiş: kötü okunan satırların bekleme süreleri (SubtitlePipeline.PackWait / CleanWait). -->
+                    <c:Card Title="{t:T 'Advanced'}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                       Text="{t:T 'These waits only delay lines that were read badly; most lines are shown without waiting. A shorter wait shows those lines sooner but lets more wrong translations through.'}" />
+                            <TextBlock Text="{t:T 'Wait for a misread line'}" Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Slider x:Name="MisreadWait" Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        IsMoveToPointEnabled="True" ValueChanged="OnMisreadWait" />
+                                <TextBlock x:Name="MisreadWaitValue" Grid.Column="1" MinWidth="56" TextAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                       Text="{t:T 'When a line is read with words that are not in the dictionary, a better reading is awaited for at most this long. Measured in GTA V, translations from misread lines compared with 0 s: 0.2 s → 77%, 0.4 s → 49%, 0.6 s → 41%, 0.8 s (recommended) → 34%, 1.0 s → 31%.'}" />
+                            <TextBlock Text="{t:T 'Wait for a half-read line'}" Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Slider x:Name="PartialWait" Minimum="0" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        IsMoveToPointEnabled="True" ValueChanged="OnPartialWait" />
+                                <TextBlock x:Name="PartialWaitValue" Grid.Column="1" MinWidth="56" TextAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                       Text="{t:T 'When a line looks cut off (no sentence ending, such as a mission text with a colored word), the full line is awaited for at most this long. Its effect is small: at 0 s a few more lines arrive cut off. Recommended: 0.3 s.'}" />
+                            <Button Content="{t:T 'Restore defaults'}" HorizontalAlignment="Left" Click="OnWaitDefaults" />
+                        </StackPanel>
+                    </c:Card>
                 </StackPanel>
             </TabItem>
             <TabItem Header="{t:T 'Game packs'}">
@@ -235,7 +271,7 @@
                     </c:Card>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="{t:T 'Subtitle area'}">
+            <TabItem x:Name="AreaTab" Header="{t:T 'Subtitle area'}">
                 <StackPanel>
                     <TextBlock Text="{t:T 'Subtitle area'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
                     <c:Card>
@@ -248,6 +284,40 @@
                                     <RadioButton Content="{t:T 'Area 3'}" GroupName="area" Style="{StaticResource SegmentButton}" Checked="OnArea" Tag="3" />
                                 </StackPanel>
                             </Border>
+                            <!-- Altyazı bölgesinin hazır seçimleri; Özel'de dikey konum ve yükseklik kaydırıcıları -->
+                            <StackPanel x:Name="PresetPanel" Margin="0,0,0,12">
+                                <TextBlock Text="{t:T 'Area preset'}" Margin="0,0,0,8" />
+                                <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="PresetBottom" Content="{t:T 'Bottom area'}" GroupName="preset" Style="{StaticResource SegmentButton}" Checked="OnPreset" Tag="Bottom" />
+                                        <RadioButton x:Name="PresetTop" Content="{t:T 'Top area'}" GroupName="preset" Style="{StaticResource SegmentButton}" Checked="OnPreset" Tag="Top" />
+                                        <RadioButton x:Name="PresetFull" Content="{t:T 'Full screen'}" GroupName="preset" Style="{StaticResource SegmentButton}" Checked="OnPreset" Tag="Full" />
+                                        <RadioButton x:Name="PresetCustom" Content="{t:T 'Custom'}" GroupName="preset" Style="{StaticResource SegmentButton}" Checked="OnPreset" Tag="Custom" />
+                                    </StackPanel>
+                                </Border>
+                                <Grid x:Name="CustomPanel" Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="56" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="8" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{t:T 'Vertical position'}" VerticalAlignment="Center" />
+                                    <Slider x:Name="VerticalPosition" Grid.Column="1" Minimum="0" Maximum="95" SmallChange="1" LargeChange="5" Margin="12,0"
+                                            IsMoveToPointEnabled="True" ValueChanged="OnVertical" />
+                                    <TextBlock x:Name="VerticalPositionValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               Typography.NumeralAlignment="Tabular" />
+                                    <TextBlock Grid.Row="2" Text="{t:T 'Height'}" VerticalAlignment="Center" />
+                                    <Slider x:Name="AreaHeight" Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="100" SmallChange="1" LargeChange="5" Margin="12,0"
+                                            IsMoveToPointEnabled="True" ValueChanged="OnVertical" />
+                                    <TextBlock x:Name="AreaHeightValue" Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               Typography.NumeralAlignment="Tabular" />
+                                </Grid>
+                            </StackPanel>
                             <CheckBox x:Name="UseArea" Content="{t:T 'Use this area'}" Foreground="{DynamicResource textPrimaryBrush}" Margin="0,0,0,12"
                                       Visibility="Collapsed" Checked="OnUseArea" Unchecked="OnUseArea" />
                             <StackPanel x:Name="ExtraTargetPanel" Visibility="Collapsed" Margin="0,0,0,12">
@@ -310,6 +380,17 @@
                 <StackPanel>
                     <TextBlock Text="{t:T 'About CouchSubs'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
                     <s:TvAppCard Margin="0,0,0,16" />
+                    <!-- Uygulamanın görünümü: koyu (varsayılan), açık ya da Windows'un temasıyla aynı; anında uygulanır. -->
+                    <c:Card Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{t:T 'Appearance'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <ComboBox x:Name="AppearanceChoice" SelectionChanged="OnAppearance" MinWidth="200">
+                                <ComboBoxItem Content="{t:T 'Dark'}" Tag="Dark" />
+                                <ComboBoxItem Content="{t:T 'Light'}" Tag="Light" />
+                                <ComboBoxItem Content="{t:T 'Same as system'}" Tag="System" />
+                            </ComboBox>
+                        </StackPanel>
+                    </c:Card>
                     <c:Card>
                         <Grid>
                             <Button Content="{t:T 'About CouchSubs'}" Click="OnAbout" />

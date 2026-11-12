@@ -112,8 +112,8 @@ yazı tanıma ve altyazı sunucusu durur. Remote Play bir arka plan kipine (ses,
   zaman zaman yer aldı ama risk gerçek. TestFlight dış test incelemesi de aynı kuralları uygular.
 - **AGPL-3.0**: App Store dağıtımı AGPL ile çelişebilir (ek kısıtlamalar). Kaynak açık ve tek telif sahibi CouchSubs
   ise sorun değil; chiaki-ng de AGPL, katkıcılarının izni yok. Hukuki karar gerekiyor; TestFlight için de geçerli.
-- **Şifreleme beyanı**: Remote Play OpenSSL ile şifreli; yükleme sırasında ihracat uyumu sorusu yanıtlanmalı
-  (`ITSAppUsesNonExemptEncryption` bilinçli olarak yazılmadı).
+- **Şifreleme beyanı**: Remote Play OpenSSL ile şifreli, ama yalnız standart şifreleme (TLS, AES); Info.plist'te
+  `ITSAppUsesNonExemptEncryption = false`, yüklemede ihracat sorusu çıkmaz.
 - **Simge**: `design/logo-1024.png` saydam kenarlı (macOS ızgarası). iOS simgesi saydamlık içeremez; tam dolu 1024'lük
   simge `scripts/make-icons.swift` ile üretilmeli.
 
@@ -138,7 +138,7 @@ xcodebuild -project CouchSubs.xcodeproj -scheme CouchSubs -destination 'generic/
 xcodebuild -project CouchSubs.xcodeproj -scheme CouchSubs -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-## 8. Ücretsiz uygulama, ölçüm, reklam altyapısı ve paket indirme
+## 8. Ücretsiz uygulama, ölçüm ve paket indirme
 
 İş modeli: CouchSubs **tamamen ücretsiz** ve **hesap istemez**; masaüstü gibi telefon da ücretsiz çeviri, DeepL, kendi
 yapay zekâ anahtarı ve oyun paketlerini herkese verir. Abonelik, ödeme ekranı, giriş/kayıt yoktur. Satıcı: Enmera
@@ -146,14 +146,26 @@ yapay zekâ anahtarı ve oyun paketlerini herkese verir. Abonelik, ödeme ekran�
 
 | Parça | Nerede | Anahtar yokken |
 |---|---|---|
-| Firebase Analytics, Crashlytics, Remote Config | `Account/Measurement.swift` | `GoogleService-Info.plist` yoksa Firebase hiç kurulmaz |
-| Meta App Events | `Measurement.swift` | `FACEBOOK_APP_ID` boşsa Meta SDK kurulmaz; reklam kimliği ve otomatik olaylar izin gelene kadar kapalı |
-| İzin akışı: Google UMP formu, sonra Apple ATT | `Integrations.requestConsent` (karşılamadan sonra) | — |
-| AdMob | `Measurement.swift` | Reklam yok: Remote Config `ads_enabled` (varsayılan false) true olmadan SDK başlatılmaz; reklam birimi de yok |
+| Firebase Analytics (`FirebaseAnalyticsCore`: IDFA desteği ve reklam dönüşüm kitaplığı yok), Crashlytics | `Account/Measurement.swift` | `GoogleService-Info.plist` yoksa Firebase hiç kurulmaz |
+| Meta App Events | `Measurement.swift` | `FACEBOOK_APP_ID` boşsa Meta SDK kurulmaz; reklam kimliği (IDFA) hiç toplanmaz, otomatik olaylar karşılamadan sonra açılır (`Integrations.startMeta`) |
 | Paket güncelleme | `Packs/PackStore.swift`, `Account/AppModel.swift` | `PACKS_API_BASE_URL` boşsa yalnız uygulamayla gelen paketler |
 
-Ölçülen olaylar: `session_start`, `session_stop`, `pack_hit`, `tv_connected`, `packs_updated` ve ekran görüntülemeleri.
-Profil › Kullanım verisi kapatılınca Analytics ve Crashlytics toplaması durur.
+**Reklam yok, izleme yok** (2026-11-12): AdMob, Google'ın izin formu (UMP, "Our app wants to stay free for you") ve
+Remote Config'teki `ads_enabled` kaldırıldı; Info.plist'te `GADApplicationIdentifier`, `GADDelayAppMeasurementInit`,
+`NSUserTrackingUsageDescription` ve Google'ın SKAdNetwork listesi yok (Meta'nın iki kimliği kaldı). Apple'ın izleme izni
+(ATT) istenmez; Meta olayları IDFA olmadan (Aggregated Event Measurement) gider, `FacebookAdvertiserIDCollectionEnabled`
+kapalı ve açılışta da kapatılır. `CouchSubs/PrivacyInfo.xcprivacy`: izleme yok; kimliğe bağlanmayan ürün etkileşimi,
+cihaz kimliği (Firebase/Meta'nın uygulama kimlikleri), kaba konum (IP'den ülke), çökme verisi ve ortak havuz metni.
+
+Ölçülen olaylar: `session_start` (çıkış: tv/telefon), `session_stop` (saniye), `pack_hit`, `tv_connected` (marka),
+`packs_updated` (sayı) ve ekran görüntülemeleri (home, profile, settings, packs). Firebase'e parametreleriyle, Meta'ya
+yalnız olay adıyla gider; altyazı metni, PSN hesabı ya da anahtar gönderilmez. Profil › Kullanım verisi kapatılınca
+Analytics ve Crashlytics toplaması durur, Meta'ya da olay gitmez.
+
+Not: Meta SDK'sının kendi bildirimi (`FBSDKCoreKit/PrivacyInfo.xcprivacy`) `NSPrivacyTracking = true`, izleme alanı
+`ep1.facebook.com` ve izleme amaçlı cihaz kimliği diyor; Xcode bu alanı Info.plist'e de yazıyor. ATT istenmediği için
+iOS bu alana giden istekleri engeller ve SDK IDFA toplamaz. App Store gizlilik etiketi doldurulurken bu çelişki
+bilinmeli (Xcode › Archive › Generate Privacy Report).
 
 Paketler: uygulamayla gelenler (CouchSubsCore kaynakları) her zaman okunur; sunucudan indirilen güncel sürüm aynı
 kimlikli paketin yerine geçer. Sunucuya ulaşılamazsa telefondaki paketlerle devam edilir.
@@ -173,22 +185,20 @@ Sunucu `server/packs` (Cloudflare Worker, `feat/android-app` dalında; Android t
 ### Profil
 
 Hesap olmadığı için Profil bir cihaz ve tercih sayfasıdır: PS5 ve bağlantı, altyazı hedefi (TV'ler), ikinci PSN hesabı,
-bildirim tercihi, ortak havuza katkı, kullanım verisi, gizlilik, yardım ve Hakkında.
+bildirim tercihi, ortak havuza katkı, kullanım verisi (Analytics ve Crashlytics), gizlilik, yardım ve Hakkında.
 
 ### Sahibinin vermesi gerekenler
 
 1. **Firebase**: iOS uygulaması (`com.couchsubs.ios`) ekleyip `GoogleService-Info.plist`'i
    `couchsubs-ios/Config/GoogleService-Info.plist` olarak koymak (gitignore'da; derleme adımı varsa kopyalar).
-   Remote Config'te `ads_enabled = false`. Crashlytics için ek bir şey gerekmez (Release derlemesi sembolleri yükler).
+   Crashlytics için ek bir şey gerekmez (Release derlemesi sembolleri yükler).
 2. **Meta**: uygulama kimliği ve istemci jetonu → `Config/Secrets.xcconfig` içinde `FACEBOOK_APP_ID`,
-   `FACEBOOK_CLIENT_TOKEN`; Meta'da iOS platformu ve paket kimliği.
-3. **AdMob**: uygulama kimliği → `GAD_APPLICATION_ID` (şimdilik Google'ın deneme kimliği); UMP izin mesajı (AB/İngiltere)
-   AdMob panelinden; yayın öncesi SKAdNetwork listesi Google'ın ve Meta'nın güncel listesiyle karşılaştırılmalı.
-4. **Paket sunucusu adresi** → `PACKS_API_BASE_URL` (Cloudflare Worker yayına alınınca).
-5. **App Store Connect**: uygulama kaydı (satıcı Enmera, ücretsiz), gizlilik politikası adresi (`PRIVACY.md`), gizlilik
-   etiketi (Firebase Analytics/Crashlytics, Meta: kullanım ve tanılama verisi, reklam kimliği yalnız izinle), ATT metni
-   Info.plist'te.
-6. **Apple Developer** (`com.couchsubs.ios`, takım `79N3CT6T46`): multicast başvurusu (bkz. §3); (isteğe bağlı) Push.
+   `FACEBOOK_CLIENT_TOKEN`; Meta'da iOS platformu ve paket kimliği. Events Manager'da Aggregated Event Measurement.
+3. **Paket sunucusu adresi** → `PACKS_API_BASE_URL` (Cloudflare Worker yayına alınınca).
+4. **App Store Connect**: uygulama kaydı (satıcı Enmera, ücretsiz), gizlilik politikası adresi (`PRIVACY.md`), gizlilik
+   etiketi `PrivacyInfo.xcprivacy` ile aynı: izleme yok; kimliğe bağlanmayan kullanım verisi (ürün etkileşimi),
+   tanımlayıcı (cihaz kimliği), kaba konum, tanılama (çökme), diğer veri (ortak havuz). ATT metni yok.
+5. **Apple Developer** (`com.couchsubs.ios`, takım `79N3CT6T46`): multicast başvurusu (bkz. §3); (isteğe bağlı) Push.
    Sign in with Apple ve uygulama içi satın alma gerekmez.
 
 Değerler `couchsubs-ios/Config/Secrets.xcconfig`'e yazılır (örnek: `Secrets.xcconfig.example`), ardından `xcodegen`.

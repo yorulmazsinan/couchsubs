@@ -40,6 +40,9 @@ public sealed class RegionPicker : UserControl
 
     public event EventHandler<CropRegion>? RegionChanged;
 
+    /// <summary>Çerçeve şu an fareyle çiziliyor ya da taşınıyor (önizleme bu sırada yenilenmez).</summary>
+    public bool IsDragging => drag != Drag.None;
+
     /// <summary>"Alanı sıfırla" düğmesinin döneceği bölge (ek bölgelerin varsayılanı altyazınınkinden farklıdır).</summary>
     public CropRegion DefaultRegion { get; set; } = new();
 

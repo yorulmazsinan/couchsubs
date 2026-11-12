@@ -23,13 +23,7 @@ struct MainView: View {
                 let available = geometry.size.width
                 if available >= Self.controlsColumnMin + gap + Self.liveColumnMin {
                     HStack(alignment: .top, spacing: gap) {
-                        ScrollView {
-                            MainControls()
-                                .padding(.vertical, Theme.space("m"))
-                        }
-                        .scrollIndicators(.never)
-                        .padding(.vertical, -Theme.space("m"))
-                        .frame(width: min(Theme.size("mainColumn"), available - gap - Self.liveColumnMin))
+                        ControlsColumn(width: min(Theme.size("mainColumn"), available - gap - Self.liveColumnMin))
                         VStack(alignment: .leading, spacing: gap) {
                             PackInUseTile()
                             LiveSubtitlesTile()
@@ -43,6 +37,8 @@ struct MainView: View {
                             PackInUseTile()
                             LiveSubtitlesTile().frame(minHeight: Self.liveColumnMin)
                         }
+                        // Kaydırma alanı içeriğe genişlik önermeyebilir; genişlik sabitlenmezse yazılar satıra inmez.
+                        .frame(width: available)
                     }
                     .scrollIndicators(.never)
                 }
@@ -51,10 +47,11 @@ struct MainView: View {
         .padding(Theme.space("screen"))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $model.showSettings) { SettingsView().appSurface() }
+        .sheet(isPresented: $model.showHistory) { HistoryView().appSurface() }
     }
 }
 
-/// Logo, ad ve ayarlar düğmesi.
+/// Logo, ad, geçmiş ve ayarlar düğmeleri.
 private struct MainHeader: View {
     @EnvironmentObject private var model: AppModel
 
@@ -63,6 +60,11 @@ private struct MainHeader: View {
             LogoView(size: 36)
             Text(verbatim: "CouchSubs").font(.csTitle)
             Spacer()
+            Button { model.showHistory = true } label: {
+                Label("History", systemImage: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.secondary)
+            .help(Text("History"))
             Button { model.showSettings = true } label: {
                 Label("Settings", systemImage: "gearshape")
             }
@@ -72,13 +74,36 @@ private struct MainHeader: View {
     }
 }
 
+/// Sol sütun, kendi genişliğinde kayan. İçerik genişliği sabitlenir: dikey `ScrollView` içeriğine her düzen
+/// geçişinde kendi genişliğini önermez; pencere içerik boyuna göre yeniden ölçülünce (Ayarlar sayfası açılıp
+/// kapanınca) içerik "ideal" genişliğinde, yazılar tek satırda ölçülebiliyor. `MainControls`'ün ideal genişliği
+/// sütundan geniştir (456–681 pt); sabitlenmezse karolar sütundan taşıp ortalanır: sol kenar boşluğu daralır,
+/// sağda karolar sağ sütuna dayanır ve kenarları kesilir.
+struct ControlsColumn: View {
+    let width: CGFloat
+
+    var body: some View {
+        ScrollView {
+            MainControls()
+                .padding(.vertical, Theme.space("m"))
+                .frame(width: width)
+        }
+        .scrollIndicators(.never)
+        .padding(.vertical, -Theme.space("m"))
+        .frame(width: width)
+    }
+}
+
 /// Sol sütun: başlat/durdur, PS5 ve TV, altyazının yeri, çeviri motoru, kısayol, uyarılar.
-private struct MainControls: View {
+struct MainControls: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.space("gap")) {
-            StartStopButton()
+            HStack(spacing: Theme.space("m")) {
+                StartStopButton()
+                TestSubtitleButton()
+            }
             HStack(alignment: .top, spacing: Theme.space("gap")) {
                 StatusTile(symbol: "gamecontroller", title: "PS5", value: model.ps5StatusText,
                            tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning))
@@ -115,6 +140,24 @@ private struct StartStopButton: View {
         }
         .buttonStyle(CSButtonStyle(kind: model.isRunning ? .danger : .primary, fullWidth: true, height: "primaryActionHeight"))
         .disabled(model.isStarting || (!model.isRunning && !model.canStart))
+    }
+}
+
+/// Başlat düğmesinin yanında: deneme altyazısını TV'ye (ya da bilgisayar ekranına) gönderir.
+private struct TestSubtitleButton: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        let onTV = model.settings.output.showsOnTV
+        Button {
+            Task { await model.testSubtitle() }
+        } label: {
+            Label(onTV ? "Test on TV" : "Test on screen", systemImage: onTV ? "tv" : "macwindow")
+        }
+        .buttonStyle(CSButtonStyle(kind: .secondary, height: "primaryActionHeight"))
+        .fixedSize()
+        .disabled(onTV && !model.hasTV && !model.settings.output.showsOnComputer)
+        .help(Text(onTV ? "Sends a sample subtitle to the TV." : "Shows a sample subtitle on this computer's screen."))
     }
 }
 
@@ -235,6 +278,7 @@ private struct LiveSubtitlesTile: View {
                 HintText(text: "Subtitles will appear here while you play.")
             } else {
                 CurrentLine(translation: model.lastTranslation, source: model.lastSource)
+                if let metrics = model.lastMetrics { MetricsRow(metrics: metrics) }
                 SubtitleHistoryList()
             }
             Spacer(minLength: 0)
@@ -263,12 +307,28 @@ private struct CurrentLine: View {
     }
 }
 
-/// Kaçırılan satır buradan yeniden okunur (en yenisi üstte).
+/// Son satırın ölçümleri: yazı tanıma, çeviri, karenin gelişinden TV'ye kadar gecikme ve tanıma güveni.
+/// Küçük ve sessiz (13 pt, ikincil renk, sabit genişlikte rakamlar).
+struct MetricsRow: View {
+    let metrics: LineMetrics
+
+    var body: some View {
+        Text(verbatim: metrics.summary)
+            .font(.csCaption.monospacedDigit())
+            .foregroundStyle(Color.csSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityLabel(Text("Measurements"))
+            .accessibilityValue(Text(verbatim: metrics.summary))
+    }
+}
+
+/// Kaçırılan satır buradan yeniden okunur (en yenisi üstte; yalnız bu oturumun satırları).
 private struct SubtitleHistoryList: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        let entries = Array(model.history.entries.dropFirst())
+        let entries = Array(model.sessionHistory.dropFirst())
         if !entries.isEmpty {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Theme.space("m")) {

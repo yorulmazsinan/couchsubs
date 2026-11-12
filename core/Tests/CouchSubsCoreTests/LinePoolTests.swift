@@ -86,6 +86,34 @@ final class LinePoolTests: XCTestCase {
         XCTAssertTrue(LinePool.accepts("Give me 50 dollars, Enzo."))
     }
 
+    /// Havuzda en çok görülen "satırlar" PS5'in Türkçe arayüzü ve onun yazı tanıma bozmalarıydı; İngilizce oyun satırı değiller.
+    func testRejectsTurkishAndSystemText() {
+        for line in ["Oturum Açtı", "Oturum Aqtl", "Sifirlama Seqenekleri", "PS5 Sistemini Yeniden Baslat", "Oyunu Kapat",
+                     "Ana Ekranda Tut", "Lütfen bekleyin..", "Ekran ve Video", "ilerlemenizi takip edin Kupalar",
+                     "Keşfet PS5 ile ilgili Öne Çıkanlar", "Ekran görüntüsü kaydedildi.", "Kupa kazandınız!",
+                     "Oturum Aqtl.", "Sifirlama Seqenekleri.", "PS5 Sistemini Yeniden Baslat.",
+                     "John signed in.", "You've earned a trophy!",
+                     "Please do not quit or turn off your console while the Rockstar cloud save icon is showing."] {
+            XCTAssertFalse(LinePool.accepts(line), line)
+        }
+        // Yabancı addaki tek ü/ö/ç ve "designed in" gibi sözcük içi eşleşmeler İngilizce satırı düşürmez.
+        for line in ["Herr Müller will see you now.", "This place was designed in a hurry.", "Tell Sam I signed the deal.",
+                     "I lie to you, you lie to me.", "Don Torrisi wants you.", "DON TORRISI WANTS YOU!"] {
+            XCTAssertTrue(LinePool.accepts(line), line)
+        }
+    }
+
+    /// Yarım okumalar ve kısa arayüz yazıları havuza gitmez; noktalamayla biten kısa satır gider.
+    func testRejectsFragmentsAndShortLines() {
+        for line in ["GO to the", "Take out the trash and the", "it Auto V's Story Mode.", "FREE MONTH OF GTA+",
+                     "PHOTO MODE SELECT", "Main menu", "Hold on"] {
+            XCTAssertFalse(LinePool.accepts(line), line)
+        }
+        for line in ["Get down!", "Who's there?", "Line number 7 here", "We need to move before the cops show up"] {
+            XCTAssertTrue(LinePool.accepts(line), line)
+        }
+    }
+
     func testBatchesAreAtMostTwoHundredLines() async throws {
         let pool = makePool()
         for index in 0..<450 { await pool.offer("This is line number \(index) of the test") }

@@ -172,13 +172,14 @@ public actor LinePool {
         dirty = true
     }
 
-    /// Havuza uygun satır: en az iki sözcük, en çok 300 karakter, arayüz ya da yazı tanıma çöpü gibi görünmüyor.
+    /// Havuza uygun satır: en az iki sözcük, en çok 300 karakter, arayüz ya da yazı tanıma çöpü gibi görünmüyor; Türkçe,
+    /// PS5'in sistem yazısı ya da yarım okuma değil (`PoolFilter`).
     public static func accepts(_ text: String) -> Bool {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf16.count <= maxLength else { return false }
         let words = text.split(whereSeparator: \.isWhitespace).filter { $0.contains(where: \.isLetter) }
         guard words.count >= minWords else { return false }
-        return !looksLikeNoise(text)
+        return !looksLikeNoise(text) && PoolFilter.accepts(text)
     }
 
     /// Yazı tanıma çöpü içeren ("ou$3e") ya da harften çok rakam ve simge taşıyan ("100/100 HP 25%") satır.

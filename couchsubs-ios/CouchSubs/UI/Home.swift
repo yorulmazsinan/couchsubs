@@ -9,7 +9,7 @@ import UIKit
 
 /// Ana ekrandan açılan sayfalar.
 enum Route: Hashable {
-    case settings, profile, packs, target, ps5, psn, about
+    case settings, profile, packs, target, ps5, psn, about, history
 }
 
 /// Turun vurguladığı öğeler.
@@ -30,7 +30,7 @@ extension View {
     }
 }
 
-/// Ana ekranın ortak üst satırı: logo, ayarlar, profil.
+/// Ana ekranın ortak üst satırı: logo, geçmiş, ayarlar, profil.
 struct HomeHeader: View {
     @Binding var path: [Route]
 
@@ -38,6 +38,7 @@ struct HomeHeader: View {
         HStack(spacing: Mobile.Space.gap) {
             LogoView(size: 36)
             Spacer()
+            IconButton(symbol: "clock.arrow.circlepath", label: "History") { path.append(.history) }
             IconButton(symbol: "gearshape", label: "Settings") { path.append(.settings) }
             AvatarButton(initials: "") { path.append(.profile) }
                 .tourTarget(.profile)
@@ -191,6 +192,16 @@ struct RunningScreen: View {
                         Spacer()
                         if current.fromPack { Text("ready translation").font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.pro) }
                     }
+                    // Son satırın ölçümleri: küçük, sessiz, sabit genişlikte rakamlar.
+                    if let metrics = model.lastMetrics {
+                        Text(verbatim: metrics.summary)
+                            .font(Mobile.TypeScale.caption.monospacedDigit())
+                            .foregroundStyle(Mobile.Palette.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .accessibilityLabel(Text("Measurements"))
+                            .accessibilityValue(Text(verbatim: metrics.summary))
+                    }
                 } else {
                     Text("Subtitles will appear here while you play.").font(Mobile.TypeScale.body).foregroundStyle(Mobile.Palette.secondary)
                 }
@@ -232,6 +243,10 @@ struct RunningScreen: View {
         } bottom: {
             if model.settings.output.showsOnComputer {
                 Button { showSubtitles = true } label: { Label("Subtitle screen", systemImage: "rectangle.landscape.rotate") }
+                    .buttonStyle(.mobileSecondary)
+            }
+            if model.settings.output.showsOnTV {
+                Button { model.sendTestSubtitle() } label: { Label("Test on TV", systemImage: "tv") }
                     .buttonStyle(.mobileSecondary)
             }
             Button {

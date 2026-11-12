@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-MCDCN86B"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CouchSubs: PS5 oyunlarına Türkçe yama</title>
+<meta name="description" content="PS5 oyunlarına Türkçe yama: CouchSubs, Türkçe dil desteği olmayan PS5 oyunlarının İngilizce altyazısını okur, Türkçeye çevirir ve TV'nde oyunun üstünde gösterir. Ücretsiz ve açık kaynak.">
+<meta name="theme-color" content="#141518">
+<link rel="canonical" href="https://couchsubs.enmeraapps.com/">
+<link rel="icon" href="img/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/og.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="CouchSubs: PS5 oyunlarına Türkçe yama">
+<meta property="og:description" content="Türkçe dil desteği olmayan PS5 oyunlarına anında Türkçe yama. Ücretsiz, hesap istemez, açık kaynak.">
+<meta property="og:url" content="https://couchsubs.enmeraapps.com/">
+<meta property="og:image" content="https://couchsubs.enmeraapps.com/img/og.png">
+<meta property="og:locale" content="tr_TR">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+:root{
+  --night:#141518; --night-2:#1C1E23; --night-3:#25282F;
+  --line:rgba(243,238,228,.09); --line-2:rgba(243,238,228,.16);
+  --cream:#F3EEE4; --muted:#A9A59C; --dim:#77746D;
+  --amber:#F5B83D; --amber-hi:#FFCF6B; --on-amber:#17181B;
+  --green:#62C990;
+  --display:"Bricolage Grotesque", "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --text:"Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --gutter:clamp(16px, 4vw, 40px);
+  --max:1200px;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%; scroll-padding-top:72px}
+body{margin:0; background:var(--night); color:var(--cream); font:400 17px/1.55 var(--text); -webkit-font-smoothing:antialiased; overflow-x:hidden}
+img{display:block; max-width:100%; height:auto}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--amber); outline-offset:3px; border-radius:6px}
+.wrap{max-width:var(--max); margin:0 auto; padding:0 var(--gutter)}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+
+/* Üst çubuk */
+.top{position:fixed; inset:0 0 auto; z-index:20; transition:background .25s ease, border-color .25s ease; border-bottom:1px solid transparent}
+.top.solid{background:rgba(20,21,24,.86); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-color:var(--line)}
+.top .wrap{display:flex; align-items:center; gap:24px; height:64px}
+.brand{display:flex; align-items:center; gap:10px; text-decoration:none; font:700 19px/1 var(--display); letter-spacing:-.01em}
+.brand img{width:34px; height:34px}
+.nav{display:flex; gap:4px; margin-left:auto}
+.nav a{text-decoration:none; color:var(--muted); font-weight:500; font-size:15px; padding:8px 12px; border-radius:8px}
+.nav a:hover{color:var(--cream)}
+.gh{display:inline-flex; align-items:center; gap:8px; text-decoration:none; font-weight:500; font-size:15px; height:40px; padding:0 14px; border:1px solid var(--line-2); border-radius:10px}
+.gh:hover{border-color:var(--muted)}
+.gh svg{width:18px; height:18px}
+@media (max-width:760px){ .nav{display:none} .gh{margin-left:auto} }
+
+/* Düğmeler */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:10px; height:52px; padding:0 22px; border-radius:12px; font:700 17px/1 var(--text); text-decoration:none; cursor:pointer; border:1px solid transparent; transition:background .15s ease, border-color .15s ease, transform .1s ease}
+.btn:active{transform:translateY(1px)}
+.btn svg{width:20px; height:20px; flex:none}
+.btn.primary{background:var(--amber); color:var(--on-amber)}
+.btn.primary:hover{background:var(--amber-hi)}
+.btn.ghost{background:rgba(20,21,24,.55); color:var(--cream); border-color:var(--line-2)}
+.btn.ghost:hover{border-color:var(--muted)}
+.btn small{font-weight:500; opacity:.7; font-size:14px}
+
+/* Sahne: kaydırınca odaya giriyoruz */
+.scene{position:relative; height:330vh}
+.stage{position:sticky; top:0; height:100vh; height:100svh; overflow:hidden; background:var(--night)}
+#room{position:absolute; inset:0; width:100%; height:100%; display:block}
+.fallback{position:absolute; inset:0; background:var(--night) url(img/windows-pencere.webp) center/cover no-repeat; opacity:.55; display:none}
+.no-webgl .fallback{display:block}
+.shade{position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(90deg, rgba(20,21,24,.92) 0%, rgba(20,21,24,.6) 34%, rgba(20,21,24,0) 62%),
+             linear-gradient(0deg, rgba(20,21,24,.9) 0%, rgba(20,21,24,0) 30%)}
+.copy{position:absolute; left:0; right:0; bottom:clamp(40px, 9vh, 96px)}
+.beat{position:absolute; left:0; right:0; bottom:0; max-width:620px; opacity:0; transform:translateY(16px); transition:opacity .45s ease, transform .45s ease; pointer-events:none}
+.beat.on{opacity:1; transform:none; pointer-events:auto}
+.beat h1, .beat h2{font:700 clamp(44px, 7.4vw, 96px)/.95 var(--display); font-variation-settings:"wdth" 78; letter-spacing:-.02em; margin:0 0 20px; text-wrap:balance}
+.beat h2{font-size:clamp(40px, 6.4vw, 84px)}
+.beat p{font-size:clamp(17px, 1.6vw, 20px); color:#D9D4CA; margin:0 0 28px; max-width:34em}
+.beat .actions{display:flex; flex-wrap:wrap; gap:12px; align-items:center}
+.beat .note{margin:16px 0 0; font-size:14px; color:var(--muted)}
+.hint{position:absolute; right:var(--gutter); bottom:clamp(40px, 9vh, 96px); display:flex; align-items:center; gap:10px; color:var(--muted); font-size:14px; transition:opacity .3s}
+.hint i{display:block; width:22px; height:34px; border:1.5px solid var(--line-2); border-radius:12px; position:relative}
+.hint i::after{content:""; position:absolute; left:50%; top:7px; width:3px; height:7px; margin-left:-1.5px; border-radius:2px; background:var(--amber); animation:wheel 1.8s ease-in-out infinite}
+@keyframes wheel{0%{transform:translateY(0); opacity:1}70%{transform:translateY(10px); opacity:0}100%{opacity:0}}
+.progress{position:absolute; left:var(--gutter); right:var(--gutter); top:80px; display:flex; gap:6px; max-width:180px}
+.progress span{flex:1; height:3px; border-radius:2px; background:var(--line-2); overflow:hidden}
+.progress span b{display:block; height:100%; width:0; background:var(--amber)}
+@media (max-width:760px){
+  .shade{background:linear-gradient(0deg, rgba(20,21,24,.96) 0%, rgba(20,21,24,.75) 45%, rgba(20,21,24,0) 75%)}
+  .hint{display:none}
+  .beat .actions .btn{flex:1 1 100%}
+}
+
+/* Bölümler */
+section.block{padding:clamp(80px, 12vw, 160px) 0; border-top:1px solid var(--line)}
+.head{max-width:720px; margin-bottom:clamp(40px, 6vw, 72px)}
+.head h2{font:800 clamp(36px, 5vw, 64px)/1 var(--display); font-variation-settings:"wdth" 82; letter-spacing:-.02em; margin:0 0 16px; text-wrap:balance}
+.head p{color:var(--muted); font-size:19px; margin:0; max-width:36em}
+
+/* Kurulum adımları: gerçekten sıralı */
+.steps{display:grid; grid-template-columns:repeat(3, 1fr); gap:clamp(24px, 4vw, 56px); counter-reset:s; list-style:none; margin:0; padding:0}
+.steps li{counter-increment:s; border-top:2px solid var(--line-2); padding-top:24px}
+.steps li::before{content:counter(s); display:block; font:800 72px/1 var(--display); color:var(--amber); margin-bottom:20px; font-variation-settings:"wdth" 75}
+.steps h3{font:700 24px/1.2 var(--display); margin:0 0 10px}
+.steps p{margin:0; color:var(--muted)}
+@media (max-width:860px){ .steps{grid-template-columns:1fr} .steps li::before{font-size:56px} }
+
+/* Ekranlar */
+.screens{display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:clamp(32px, 5vw, 64px); align-items:start}
+.tabs{display:inline-flex; gap:4px; padding:4px; background:var(--night-2); border:1px solid var(--line); border-radius:12px; margin-bottom:20px}
+.tabs button{all:unset; cursor:pointer; padding:10px 16px; border-radius:8px; font-weight:500; font-size:15px; color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--night-3); color:var(--cream)}
+.tabs button:focus-visible{outline:2px solid var(--amber)}
+.desk{border-radius:16px; overflow:hidden; border:1px solid var(--line-2); background:var(--night-2); aspect-ratio:1200/760; position:relative; transition:aspect-ratio .3s ease}
+.desk img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; transition:opacity .35s ease}
+.desk img.on{opacity:1}
+.caption{color:var(--muted); font-size:15px; margin:14px 0 0}
+.phones{display:flex; gap:16px; align-items:flex-start}
+.phone{width:clamp(150px, 15vw, 200px); border-radius:32px; padding:8px; background:#0E0F12; border:1px solid var(--line-2)}
+.phone img{border-radius:25px; aspect-ratio:390/844; width:100%; object-fit:cover}
+.phone:nth-child(2){margin-top:48px}
+.phones-col .soon{display:inline-flex; align-items:center; gap:8px; margin-top:20px; font-size:15px; color:var(--muted)}
+.phones-col .soon b{color:var(--cream); font-weight:700}
+@media (max-width:980px){
+  .screens{grid-template-columns:1fr}
+  .phones{overflow-x:auto; padding-bottom:8px; scroll-snap-type:x mandatory}
+  .phone{flex:none; width:180px; scroll-snap-align:start}
+}
+
+/* Paketler */
+.packs{display:grid; grid-template-columns:minmax(0, 1.3fr) minmax(0, 1fr); gap:clamp(32px, 6vw, 96px); align-items:center}
+.games{list-style:none; margin:0; padding:0}
+.games li{font:700 clamp(26px, 3.4vw, 44px)/1.12 var(--display); font-variation-settings:"wdth" 80; letter-spacing:-.01em; padding:10px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:baseline; gap:16px}
+.games li span{font:500 14px/1 var(--text); color:var(--dim); white-space:nowrap}
+.packs aside p{color:var(--muted); margin:0 0 16px}
+.packs aside p strong{color:var(--cream)}
+@media (max-width:860px){ .packs{grid-template-columns:1fr} }
+
+/* İndir */
+.dl{display:grid; grid-template-columns:repeat(3, 1fr); gap:16px}
+.card{background:var(--night-2); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:10px; min-height:220px}
+.card h3{font:700 22px/1.2 var(--display); margin:0; display:flex; align-items:center; gap:10px}
+.card h3 svg{width:22px; height:22px; color:var(--muted)}
+.card p{margin:0; color:var(--muted); font-size:15px}
+.card .btn{margin-top:auto; height:48px; font-size:16px}
+.card.main{border-color:rgba(245,184,61,.45)}
+.card.later{background:transparent; border-style:dashed}
+.tag{display:inline-block; font:500 13px/1 var(--text); padding:6px 10px; border-radius:6px; background:var(--night-3); color:var(--cream); align-self:flex-start; margin-top:auto}
+.release{display:flex; flex-wrap:wrap; gap:8px 24px; margin-top:24px; color:var(--muted); font-size:15px}
+.release a{color:var(--cream)}
+@media (max-width:980px){ .dl{grid-template-columns:1fr 1fr} }
+@media (max-width:620px){ .dl{grid-template-columns:1fr} .card{min-height:0} }
+
+
+
+/* Bölüm sahneleri */
+section.has-bg{position:relative}
+section.has-bg > .wrap{position:relative}
+.fx-bg{position:absolute; inset:0; pointer-events:none}
+#fx{position:fixed; inset:0; width:100vw; height:100vh; z-index:-1; pointer-events:none}
+.head-row{display:flex; align-items:center; justify-content:space-between; gap:clamp(24px,4vw,64px); margin-bottom:clamp(40px,6vw,72px)}
+.head-row .head{margin-bottom:0}
+.fx{flex:none; width:clamp(280px,32vw,440px); aspect-ratio:4/3}
+.fx-aside{width:100%; max-width:440px; margin-bottom:24px}
+@media (max-width:860px){
+  .head-row{flex-direction:column; align-items:stretch; gap:8px}
+  .fx{width:100%; aspect-ratio:16/9; max-height:240px}
+}
+
+/* Kurulum rehberi */
+.guide{display:grid; grid-template-columns:240px minmax(0,1fr); gap:clamp(24px,4vw,48px); align-items:start}
+.guide-steps{display:flex; flex-direction:column; gap:4px; position:sticky; top:88px}
+.guide-steps button{all:unset; cursor:pointer; display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; color:var(--muted); font-weight:500}
+.guide-steps button b{display:grid; place-items:center; width:28px; height:28px; border-radius:999px; background:var(--night-3); color:var(--cream); font:700 14px/1 var(--text); flex:none}
+.guide-steps button:hover{color:var(--cream)}
+.guide-steps button[aria-selected="true"]{background:var(--night-2); color:var(--cream)}
+.guide-steps button[aria-selected="true"] b{background:var(--amber); color:var(--on-amber)}
+.guide-steps button:focus-visible{outline:2px solid var(--amber)}
+.guide-panel{display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:clamp(24px,3vw,40px); align-items:start}
+.guide-panel[hidden]{display:none}
+.guide-panel.stack{grid-template-columns:1fr}
+.guide-panel.stack .txt ul{columns:2 280px; column-gap:40px}
+.guide-panel.stack .txt li{break-inside:avoid}
+.shot{border-radius:16px; overflow:hidden; border:1px solid var(--line-2); background:var(--night-2)}
+.shot.phone-shot{max-width:280px; border-radius:32px; padding:8px; background:#0E0F12; justify-self:center}
+.shot.phone-shot img{border-radius:25px}
+.shot.files{display:grid; gap:12px; padding:28px; background:var(--night-2)}
+.file{display:flex; align-items:center; gap:14px; padding:14px; border-radius:12px; background:var(--night-3); font-weight:500; overflow-wrap:anywhere}
+.file img{width:44px; height:44px; flex:none}
+.txt h3{font:700 clamp(24px,2.4vw,30px)/1.15 var(--display); margin:0 0 14px}
+.txt h4{font:700 18px/1.2 var(--display); margin:0 0 8px}
+.txt p{color:var(--muted); margin:0 0 16px}
+.txt ul, .txt ol{margin:0 0 20px; padding-left:20px; color:var(--muted)}
+.txt li{margin:0 0 10px}
+.txt li strong{color:var(--cream); font-weight:700}
+.txt.wide{grid-column:1 / -1}
+.brands{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:20px}
+.brands > div{background:var(--night-2); border:1px solid var(--line); border-radius:16px; padding:20px 20px 4px}
+.brands ol{font-size:15px}
+.btn.sm{height:44px; font-size:15px; padding:0 16px}
+@media (max-width:980px){
+  .guide{grid-template-columns:1fr}
+  .guide-steps{position:static; flex-direction:row; overflow-x:auto; padding-bottom:6px; scroll-snap-type:x mandatory}
+  .guide-steps button{flex:none; scroll-snap-align:start; white-space:nowrap}
+  .guide-panel{grid-template-columns:1fr}
+  .brands{grid-template-columns:1fr}
+}
+.faq-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(24px,5vw,72px)}
+.faq h3{font:700 15px/1 var(--text); color:var(--muted); margin:0 0 4px}
+@media (max-width:860px){ .faq-grid{grid-template-columns:1fr} }
+
+/* SSS */
+.faq{min-width:0}
+.faq details{border-bottom:1px solid var(--line)}
+.faq summary{cursor:pointer; list-style:none; padding:22px 40px 22px 0; font:700 20px/1.3 var(--display); position:relative}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:""; position:absolute; right:6px; top:50%; width:10px; height:10px; border-right:2px solid var(--muted); border-bottom:2px solid var(--muted); transform:translateY(-70%) rotate(45deg); transition:transform .2s ease}
+.faq details[open] summary::after{transform:translateY(-30%) rotate(225deg)}
+.faq details p{margin:0 0 22px; color:var(--muted); max-width:40em}
+
+footer{border-top:1px solid var(--line); padding:48px 0 64px; color:var(--muted); font-size:14px}
+footer .wrap{display:flex; flex-wrap:wrap; gap:16px 40px; justify-content:space-between}
+footer p{margin:0; max-width:52em}
+footer a{color:var(--cream)}
+
+@media (prefers-reduced-motion: reduce){
+  .beat{transition:none}
+  .hint i::after{animation:none}
+  .desk img{transition:none}
+}
+</style>
+</head>
+<body>
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="img/logo.svg" alt="" width="34" height="34">CouchSubs</a>
+    <nav class="nav" aria-label="Sayfa">
+      <a href="#kurulum">Kurulum</a>
+      <a href="#ekranlar">Ekranlar</a>
+      <a href="#paketler">Türkçe yamalar</a>
+      <a href="#indir">İndir</a>
+      <a href="#sss">SSS</a>
+    </nav>
+    <a class="gh" href="https://github.com/yorulmazsinan/couchsubs" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="scene" id="scene">
+    <div class="stage">
+      <canvas id="room" aria-hidden="true"></canvas>
+      <div class="fallback" aria-hidden="true"></div>
+      <div class="shade"></div>
+      <div class="progress wrap" aria-hidden="true"><span><b></b></span><span><b></b></span><span><b></b></span></div>
+      <div class="copy wrap">
+        <div style="position:relative">
+          <div class="beat on" data-beat="0">
+            <h1>PS5 oyunlarına Türkçe yama.</h1>
+            <p>Türkçe dil desteği olmayan oyunlarda CouchSubs İngilizce altyazıyı okur, Türkçeye çevirir ve TV'nde oyunun üstünde gösterir. Oyuna bir şey kurmadan, ücretsiz, hesap istemeden.</p>
+            <div class="actions" id="hero-actions">
+              <a class="btn primary" data-indir="mac" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+                Mac için indir
+              </a>
+              <a class="btn ghost" data-indir="windows" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe">Windows için indir</a>
+            </div>
+            <p class="note" id="hero-note">macOS 13 ve üstü, Windows 10 ve 11. TV'ler: LG, Samsung, Android TV.</p>
+          </div>
+          <div class="beat" data-beat="1">
+            <h2>Önce okur.</h2>
+            <p>Bilgisayarın PS5'e Uzaktan Oynatma ile bağlanır ve altyazı satırını görüntüden okur. Oyuna da konsola da hiçbir şey kurulmaz.</p>
+          </div>
+          <div class="beat" data-beat="2">
+            <h2>Sonra Türkçe yazar.</h2>
+            <p>Çeviri, oyun akarken TV'ne gelir. Hazır yaması olan oyunlarda satır beklemeden çıkar; diğerlerinde ücretsiz motor ya da kendi anahtarınla Gemini, DeepL çevirir.</p>
+            <div class="actions"><a class="btn primary" href="#indir">İndirme seçenekleri</a></div>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><i></i>Kaydır, odaya gir</div>
+    </div>
+  </div>
+
+  <section class="block" id="kurulum" aria-labelledby="kurulum-h">
+    <div class="wrap">
+      <div class="head-row"><div class="head">
+        <h2 id="kurulum-h">Kurulum rehberi</h2>
+        <p>Bir kez kurarsın, on dakika sürer. Sonra oyunu açınca CouchSubs kendiliğinden çevirmeye başlar. Uygulamadaki kurulum da aynı adımları izler.</p>
+      </div><div class="fx" data-fx="kurulum" aria-hidden="true"></div></div>
+      <div class="guide">
+        <div class="guide-steps" role="tablist" aria-label="Kurulum adımları" aria-orientation="vertical">
+          <button role="tab" id="g-t1" aria-controls="g-p1" aria-selected="true"><b>1</b>İndir ve aç</button>
+          <button role="tab" id="g-t2" aria-controls="g-p2" aria-selected="false" tabindex="-1"><b>2</b>İkinci PSN hesabı</button>
+          <button role="tab" id="g-t3" aria-controls="g-p3" aria-selected="false" tabindex="-1"><b>3</b>PS5'i eşle</button>
+          <button role="tab" id="g-t4" aria-controls="g-p4" aria-selected="false" tabindex="-1"><b>4</b>Altyazı nerede</button>
+          <button role="tab" id="g-t5" aria-controls="g-p5" aria-selected="false" tabindex="-1"><b>5</b>TV uygulaması</button>
+          <button role="tab" id="g-t6" aria-controls="g-p6" aria-selected="false" tabindex="-1"><b>6</b>Oyunu aç</button>
+          <button role="tab" id="g-t7" aria-controls="g-p7" aria-selected="false" tabindex="-1"><b>7</b>Daha iyi çeviri</button>
+        </div>
+
+        <div class="guide-panel" role="tabpanel" id="g-p1" aria-labelledby="g-t1">
+          <div class="shot files" aria-hidden="true">
+            <div class="file"><img src="img/logo.svg" alt="" width="56" height="56"><span>CouchSubs-macos.dmg</span></div>
+            <div class="file"><img src="img/logo.svg" alt="" width="56" height="56"><span>CouchSubs-windows-Setup.exe</span></div>
+          </div>
+          <div class="txt">
+            <h3>İndir ve aç</h3>
+            <ul>
+              <li><strong>Mac:</strong> DMG'yi aç, CouchSubs'ı Uygulamalar klasörüne sürükle ve aç. Uygulama Apple onaylıdır.</li>
+              <li><strong>Windows:</strong> Setup.exe'yi aç; yönetici izni istemeden kurulur. "Windows bilgisayarınızı korudu" uyarısı çıkarsa <strong>Ek bilgi › Yine de çalıştır</strong>'a bas.</li>
+              <li>Güvenlik duvarı sorarsa <strong>Özel ağlar</strong>'a izin ver; TV ve PS5 ile ev ağında konuşur.</li>
+              <li>PS5, TV ve bilgisayar aynı ev ağında olmalı.</li>
+            </ul>
+            <a class="btn ghost sm" href="#indir">İndirme bağlantıları</a>
+          </div>
+        </div>
+
+        <div class="guide-panel" role="tabpanel" id="g-p2" aria-labelledby="g-t2" hidden>
+          <div class="shot phone-shot"><img src="img/telefon-psn.webp" alt="Kurulum ekranı: ikinci PSN hesabıyla giriş" width="780" height="1688" loading="lazy"></div>
+          <div class="txt">
+            <h3>İkinci bir PSN hesabıyla gir</h3>
+            <ul>
+              <li>Ücretsiz ikinci bir PlayStation Network hesabı aç. Kendi hesabınla girersen Uzaktan Oynatma senin kolunu kapatır; ikinci hesapla oyunun kesilmez.</li>
+              <li>Bu hesapla PS5'te bir kez oturum aç (PS5'e yeni kullanıcı olarak ekle).</li>
+              <li>CouchSubs'ta <strong>PSN ile giriş</strong>'e bas ve ikinci hesapla giriş yap. Hesap kimliği elle de girilebilir.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="guide-panel stack" role="tabpanel" id="g-p3" aria-labelledby="g-t3" hidden>
+          <div class="shot"><img src="img/windows-kurulum.webp" alt="Kurulum ekranı: PS5 bulundu, 8 haneli eşleme kodu kutuları" width="2400" height="1520" loading="lazy"></div>
+          <div class="txt">
+            <h3>PS5'i eşle</h3>
+            <ul>
+              <li>CouchSubs ev ağındaki PS5'i kendisi bulur.</li>
+              <li>PS5'te ikinci hesapla <strong>Ayarlar › Sistem › Uzaktan Oynatma › Cihazı Eşle</strong>'yi seç.</li>
+              <li>Ekranda çıkan 8 haneli kodu CouchSubs'a yaz ve <strong>Eşle</strong>'ye bas. "PS5 eşleşti" görünce sonraki adıma geçer.</li>
+              <li>Hata olursa sebebi aynı ekranda yazar, ör. "Kod yanlış ya da süresi dolmuş".</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="guide-panel" role="tabpanel" id="g-p4" aria-labelledby="g-t4" hidden>
+          <div class="shot phone-shot"><img src="img/telefon-hedef.webp" alt="Kurulum ekranı: altyazının TV'de, oyunun üstünde gösterileceği seçili" width="780" height="1688" loading="lazy"></div>
+          <div class="txt">
+            <h3>Altyazı nerede görünsün?</h3>
+            <ul>
+              <li><strong>TV'de, oyunun üstünde:</strong> en rahatı. Altyazı TV'deki CouchSubs uygulamasında, oyun görüntüsünün üstünde çıkar.</li>
+              <li><strong>Bilgisayar ekranında:</strong> oyunu bilgisayarda ya da monitörde oynuyorsan altyazı penceresi oyunun üstünde durur.</li>
+              <li><strong>İkisi de</strong> seçilebilir. Bunu sonra ana ekrandan değiştirirsin.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="guide-panel" role="tabpanel" id="g-p5" aria-labelledby="g-t5" hidden>
+          <div class="txt wide">
+            <h3>TV uygulamasını kur</h3>
+            <p>TV uygulamasını CouchSubs ağ üzerinden kendisi kurar. Senin yapacağın tek şey TV'de geliştirici modunu bir kez açmak; uygulama TV'nin markasına göre yolu gösterir.</p>
+            <div class="brands">
+              <div>
+                <h4>LG</h4>
+                <ol>
+                  <li>webostv.developer.lge.com'da ücretsiz LG geliştirici hesabı aç.</li>
+                  <li>TV'de LG Content Store'dan <strong>Developer Mode</strong> uygulamasını kur, hesabınla gir, <strong>Dev Mode Status</strong>'u aç.</li>
+                  <li>CouchSubs'ta TV'ni seçip <strong>Bağlan</strong>'a bas, TV'deki izni onayla.</li>
+                  <li>Developer Mode'da <strong>Key Server</strong>'ı aç; ekrandaki 6 karakterli parolayı CouchSubs'a yaz.</li>
+                </ol>
+              </div>
+              <div>
+                <h4>Samsung</h4>
+                <ol>
+                  <li>TV'de <strong>Uygulamalar</strong> ekranında kumandayla 1 2 3 4 5'e bas, <strong>Developer mode</strong>'u aç.</li>
+                  <li><strong>Host PC IP</strong>'ye CouchSubs'ın gösterdiği adresi yaz.</li>
+                  <li>TV'yi güç tuşuna 2 saniye basılı tutarak yeniden başlat.</li>
+                  <li>CouchSubs'ta <strong>Bağlan</strong>'a bas; açılan sayfada bir kez Samsung hesabınla gir.</li>
+                </ol>
+              </div>
+              <div>
+                <h4>Android TV, Google TV</h4>
+                <ol>
+                  <li><strong>Ayarlar › Cihaz Tercihleri › Hakkında</strong>'da Yapı numarasına 7 kez bas.</li>
+                  <li><strong>Geliştirici seçenekleri</strong>'nden USB hata ayıklamayı (varsa ağ hata ayıklamayı da) aç.</li>
+                  <li>CouchSubs'ta Android TV'yi seç.</li>
+                  <li>TV'de "hata ayıklamaya izin verilsin mi?" sorusunda <strong>Her zaman izin ver</strong>'i işaretleyip <strong>İzin ver</strong>'e bas.</li>
+                </ol>
+              </div>
+            </div>
+            <a class="btn ghost sm" href="https://github.com/yorulmazsinan/couchsubs/blob/main/docs/tv-kurulum.md" rel="noopener">Ayrıntılı TV rehberi</a>
+          </div>
+        </div>
+
+        <div class="guide-panel stack" role="tabpanel" id="g-p6" aria-labelledby="g-t6" hidden>
+          <div class="shot"><img src="img/windows-ana.webp" alt="Ana ekran: PS5 ve TV bağlı, canlı altyazı çevriliyor" width="2400" height="1520" loading="lazy"></div>
+          <div class="txt">
+            <h3>Oyunu aç, çeviriyi başlat</h3>
+            <ul>
+              <li>Oyunda <strong>altyazıyı aç</strong>. CouchSubs yalnız ekranda yazan altyazıyı okuyabilir.</li>
+              <li>CouchSubs'ta <strong>Çeviriyi başlat</strong>'a bas. PS5 ve TV yeşil görünür, satırlar akmaya başlar.</li>
+              <li>Altyazı okunmuyorsa <strong>Ayarlar › Altyazı alanı</strong>'ndan alanı oyuna göre ayarla.</li>
+              <li>Kısayollar: Windows'ta <strong>Num 9</strong> ekranı çevirir, <strong>Num 0</strong> duraklatır. Mac'te ekranı çevir <strong>⌥⌘T</strong>.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="guide-panel stack" role="tabpanel" id="g-p7" aria-labelledby="g-t7" hidden>
+          <div class="shot"><img src="img/windows-ceviri.webp" alt="Ayarlar: çeviri motoru seçimi" width="2400" height="1520" loading="lazy"></div>
+          <div class="txt">
+            <h3>İstersen daha iyi çeviri</h3>
+            <ul>
+              <li>Ücretsiz motor kutudan çıktığı gibi çalışır. Hazır yaması olan oyunlarda satırlar zaten paketten gelir.</li>
+              <li><strong>Gemini:</strong> Google'dan ücretsiz bir anahtar alıp Ayarlar › Çeviri'ye yapıştır; daha doğal çeviri.</li>
+              <li><strong>DeepL</strong> ya da kendi yapay zekâ anahtarın da olur.</li>
+              <li><strong>Yerel yapay zekâ:</strong> Ollama ya da LM Studio ile çeviri bilgisayarında yapılır; anahtar ve kota yok.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block has-bg" id="ekranlar" aria-labelledby="ekranlar-h">
+    <div class="fx-bg" data-fx="ekranlar" aria-hidden="true"></div>
+    <div class="wrap">
+      <div class="head-row"><div class="head">
+        <h2 id="ekranlar-h">Sade bir uygulama, karanlık odaya göre.</h2>
+        <p>Mac ve Windows'ta aynı ekranlar. Koyu görünüm varsayılan; istersen açık görünüme geçersin.</p>
+      </div></div>
+      <div class="screens">
+        <div>
+          <div class="tabs" role="tablist" aria-label="Masaüstü ekranları">
+            <button role="tab" aria-selected="true" aria-controls="desk" data-shot="0">Ana ekran</button>
+            <button role="tab" aria-selected="false" aria-controls="desk" data-shot="1">Oyun üstünde</button>
+            <button role="tab" aria-selected="false" aria-controls="desk" data-shot="2">Açık görünüm</button>
+          </div>
+          <div class="desk" id="desk" role="tabpanel">
+            <img class="on" src="img/windows-ana.webp" alt="CouchSubs ana ekranı: PS5 ve TV bağlı, canlı altyazıda Türkçe çeviri ve İngilizce aslı" width="2400" height="1520" loading="lazy">
+            <img src="img/windows-pencere.webp" alt="Altyazı penceresi oyun görüntüsünün üstünde, sürükleyip taşınabilir" width="2400" height="1350" loading="lazy">
+            <img src="img/windows-ana-acik.webp" alt="Açık görünümde CouchSubs ana ekranı" width="2400" height="1520" loading="lazy">
+          </div>
+          <p class="caption" id="desk-cap">Canlı altyazı: Türkçesi büyük, İngilizce aslı altında.</p>
+        </div>
+        <div class="phones-col">
+          <div class="phones">
+            <div class="phone"><img src="img/telefon-calisiyor.webp" alt="Telefon ekranı: çeviri sürüyor, hazır paketten gelen satırlar" width="780" height="1688" loading="lazy"></div>
+            <div class="phone"><img src="img/telefon-paketler.webp" alt="Telefon ekranı: yedi oyunun hazır çeviri paketi" width="780" height="1688" loading="lazy"></div>
+          </div>
+          <p class="soon"><b>Telefon sürümü</b> üzerinde çalışıyoruz, yakında geliyor.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="paketler" aria-labelledby="paketler-h">
+    <div class="wrap packs">
+      <div>
+        <div class="head" style="margin-bottom:32px">
+          <h2 id="paketler-h">Bu oyunların Türkçe yaması hazır.</h2>
+        </div>
+        <ul class="games">
+          <li>Grand Theft Auto V</li>
+          <li>Red Dead Redemption 2</li>
+          <li>Elden Ring</li>
+          <li>Mafia: The Old Country</li>
+          <li>Assassin's Creed Shadows</li>
+          <li>Death Stranding 2</li>
+          <li>Death Stranding <span>Director's Cut</span></li>
+          <li>Marvel's Spider-Man 2</li>
+          <li>Call of Duty: Modern Warfare <span>2019</span></li>
+        </ul>
+      </div>
+      <aside>
+        <div class="fx fx-aside" data-fx="paketler" aria-hidden="true"></div>
+        <p><strong>Oyunu açınca yama kendiliğinden seçilir.</strong> Yamada olan satır çeviri motoruna gitmeden, anında çıkar.</p>
+        <p>Yamada olmayan satırları seçtiğin motor çevirir. Yeni yamalar güncellemeyle gelir; listede olmayan oyunlar da çalışır.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="block" id="indir" aria-labelledby="indir-h">
+    <div class="wrap">
+      <div class="head-row"><div class="head">
+        <h2 id="indir-h">İndir, ücretsiz.</h2>
+        <p>Abonelik yok, hesap yok. Kaynak kodu GitHub'da açık.</p>
+      </div><div class="fx" data-fx="indir" aria-hidden="true"></div></div>
+      <div class="dl">
+        <div class="card main" data-os="mac">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Mac</h3>
+          <p>macOS 13 Ventura ve üstü. Apple Silicon ve Intel.</p>
+          <a class="btn primary" data-indir="mac" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg">DMG'yi indir</a>
+        </div>
+        <div class="card main" data-os="windows">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Windows</h3>
+          <p>Windows 10 (2004) ve 11, 64 bit. İlk açılışta çeviri modeli için yaklaşık 530 MB indirir.</p>
+          <a class="btn primary" data-indir="windows" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe">Kurulumu indir</a>
+        </div>
+        <div class="card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="5" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>Android TV</h3>
+          <p>Vestel, Arçelik, Beko, Grundig, Philips ve diğer Android TV, Google TV'ler. Bilgisayardaki CouchSubs kendisi kurar; elle kurmak istersen APK burada.</p>
+          <a class="btn ghost" data-indir="androidtv" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-androidtv.apk">APK'yı indir</a>
+        </div>
+        <div class="card">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="5" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>LG ve Samsung TV</h3>
+          <p>webOS 4 ve üstü LG'ler, 2019 ve sonrası Samsung'lar. TV uygulamasını bilgisayardaki CouchSubs kendisi kurar, ayrı bir şey indirmezsin.</p>
+          <a class="btn ghost" href="https://github.com/yorulmazsinan/couchsubs/blob/main/docs/tv-kurulum.md" rel="noopener">TV kurulum rehberi</a>
+        </div>
+        <div class="card later">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>iPhone</h3>
+          <p>iPhone'a APK yüklenmez; iPhone uygulamaları yalnız App Store'dan gelir. iPhone sürümü App Store'a hazırlanıyor.</p>
+          <span class="tag">Yakında</span>
+        </div>
+        <div class="card later">
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>Android telefon</h3>
+          <p>Telefon sürümü üzerinde çalışıyoruz. Çıkınca bu sayfaya ve GitHub'a eklenecek.</p>
+          <span class="tag">Yakında</span>
+        </div>
+      </div>
+      <div class="release">
+        <span id="ver">Son sürüm GitHub'da.</span>
+        <a href="https://github.com/yorulmazsinan/couchsubs/releases" rel="noopener">Tüm sürümler ve yenilikler</a>
+        <a href="https://github.com/yorulmazsinan/couchsubs/issues" rel="noopener">Sorun bildir</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="sss" aria-labelledby="sss-h">
+    <div class="wrap">
+      <div class="head-row"><div class="head"><h2 id="sss-h">Sık sorulanlar</h2></div><div class="fx" data-fx="sss" aria-hidden="true"></div></div>
+      <div class="faq-grid">
+        <div class="faq">
+          <h3>Genel</h3>
+          <details>
+            <summary>Ücretli mi?</summary>
+            <p>Hayır. CouchSubs tamamen ücretsiz; abonelik, reklam ya da hesap yok. Daha iyi çeviri istersen kendi Gemini veya DeepL anahtarını girebilirsin, o da isteğe bağlı.</p>
+          </details>
+          <details>
+            <summary>Hangi oyunlarda çalışır?</summary>
+            <p>Ekranda İngilizce altyazı gösteren her PS5 oyununda. GTA V, Red Dead Redemption 2, Elden Ring gibi hazır yaması olan oyunlarda satırlar yamadan anında gelir; diğerlerini seçtiğin çeviri motoru çevirir.</p>
+          </details>
+          <details>
+            <summary>PS5'e ya da oyuna bir şey kuruluyor mu?</summary>
+            <p>Hayır. CouchSubs, PS5'in kendi Uzaktan Oynatma özelliğiyle görüntünün bir kopyasını alır ve altyazıyı bilgisayarda okur. Konsola ve oyuna dokunmaz.</p>
+          </details>
+          <details>
+            <summary>Oyun görüntüm gecikir mi?</summary>
+            <p>Hayır. TV'de oyun yine doğrudan PS5'ten gelir; CouchSubs yalnız altyazıyı üstüne yazar. Çeviri motoruna giden satırlar bir an sonra görünebilir, paketteki satırlar beklemeden çıkar.</p>
+          </details>
+          <details>
+            <summary>Oynarken bilgisayar açık kalmalı mı?</summary>
+            <p>Evet. Okuma ve çeviri bilgisayarda yapılır; CouchSubs arka planda açık kalmalı. Bilgisayarın TV'nin yanında olması gerekmez, aynı ev ağında olması yeter.</p>
+          </details>
+          <details>
+            <summary>Telefonda ya da iPhone'da çalışır mı?</summary>
+            <p>Şimdilik CouchSubs bilgisayarda çalışır. Telefon sürümü üzerinde çalışıyoruz; iPhone'lar APK açmadığı için iPhone sürümü App Store'dan gelecek.</p>
+          </details>
+        </div>
+        <div class="faq">
+          <h3>Kurulum ve sorunlar</h3>
+          <details>
+            <summary>Neden ikinci bir PSN hesabı gerekiyor?</summary>
+            <p>Kendi hesabınla Uzaktan Oynatma'ya bağlanılırsa senin kolun kapanır. Ücretsiz ikinci hesapla CouchSubs aynı konsola bağlanır, sen oynamaya devam edersin. Bir kez eklenir.</p>
+          </details>
+          <details>
+            <summary>Hangi TV'ler destekleniyor?</summary>
+            <p>webOS 4 ve üstü LG'ler, 2019 ve sonrası Samsung'lar (2017–2018 modelleri deneysel) ve Vestel, Arçelik, Beko, Grundig, Philips gibi Android TV, Google TV'ler. TV yoksa altyazı bilgisayar ekranında da gösterilir.</p>
+          </details>
+          <details>
+            <summary>Windows "bilgisayarınızı korudu" diyor.</summary>
+            <p><strong>Ek bilgi › Yine de çalıştır</strong>'a bas. Yeni uygulamalarda Windows bu uyarıyı gösterir; kurulum yönetici izni istemez.</p>
+          </details>
+          <details>
+            <summary>TV'de altyazı çıkmıyor.</summary>
+            <p>Oyunda altyazının açık olduğuna, TV'de CouchSubs uygulamasının açık olduğuna ve TV'nin bilgisayarla aynı ağda olduğuna bak. Altyazı okunmuyorsa Ayarlar › Altyazı alanı'ndan alanı ayarla. Olmazsa uygulamadaki altyazı günlüğüyle GitHub'da sorun bildir.</p>
+          </details>
+          <details>
+            <summary>Samsung TV kendiliğinden HDMI'ya geçiyor.</summary>
+            <p>TV'de <strong>Ayarlar › Tüm Ayarlar › Bağlantı › Harici Cihaz Yöneticisi</strong>'nde Anynet+ (HDMI-CEC) ve Otomatik Kaynak Değiştirme'yi kapat.</p>
+          </details>
+          <details>
+            <summary>LG'de geliştirici modu kapanır mı?</summary>
+            <p>LG geliştirici modunu en çok 1000 saat açık tutar. CouchSubs her kullanışta süreyi baştan başlatır; uzun süre kullanmazsan Developer Mode uygulamasından EXTEND ile uzat.</p>
+          </details>
+          <details>
+            <summary>Bir sorun yaşarsam?</summary>
+            <p>GitHub'da <a href="https://github.com/yorulmazsinan/couchsubs/issues" rel="noopener">sorun bildir</a> ya da X ve Instagram'dan yaz. Uygulamadaki altyazı günlüğünü eklersen sorunu daha hızlı buluruz.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CouchSubs açık kaynaktır (AGPL-3.0). Kaynak kodu <a href="https://github.com/yorulmazsinan/couchsubs" rel="noopener">GitHub'da</a>. <a href="/gizlilik">Gizlilik</a>. © 2026 Enmera</p>
+    <p>CouchSubs, Sony Interactive Entertainment ile bağlantılı değildir. PlayStation ve PS5, Sony Interactive Entertainment Inc.'in markalarıdır. Oyun adları sahiplerinin markalarıdır.</p>
+  </div>
+</footer>
+
+<script>
+// İndirme düğmeleri: işletim sistemine göre sıra, GTM olayı, sürüm
+(function(){
+  var ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  var mobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  var isWin = /Win/i.test(plat) || /Windows/i.test(ua);
+  var actions = document.getElementById('hero-actions');
+  var mac = actions.querySelector('[data-indir="mac"]'), win = actions.querySelector('[data-indir="windows"]');
+  var arrow = mac.querySelector('svg');
+  if (mobile) {
+    actions.innerHTML = '<a class="btn primary" href="#indir">İndirme seçenekleri</a>';
+    document.getElementById('hero-note').textContent = 'CouchSubs bilgisayarda çalışır. Bu sayfayı Mac ya da Windows bilgisayarında aç.';
+  } else if (isWin) {
+    win.className = 'btn primary'; win.prepend(arrow);
+    mac.className = 'btn ghost';
+    actions.prepend(win);
+    var dl = document.querySelector('.dl'); dl.prepend(dl.querySelector('[data-os="windows"]'));
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('[data-indir]');
+    if (a) window.dataLayer.push({event:'indir', platform:a.getAttribute('data-indir')});
+  });
+  fetch('https://api.github.com/repos/yorulmazsinan/couchsubs/releases/latest')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){
+      if (!j || !j.tag_name) return;
+      var d = new Date(j.published_at);
+      document.getElementById('ver').textContent = 'Son sürüm ' + j.tag_name + ', ' + d.toLocaleDateString('tr-TR', {day:'numeric', month:'long'}) + '.';
+    }).catch(function(){});
+})();
+
+
+// Kurulum rehberi sekmeleri (ok tuşlarıyla da gezilir)
+(function(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.guide-steps [role=tab]'));
+  function show(t, focus){
+    tabs.forEach(function(x){
+      var on = x === t; x.setAttribute('aria-selected', on); x.tabIndex = on ? 0 : -1;
+      document.getElementById(x.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) t.focus();
+    if (matchMedia('(max-width:980px)').matches) t.scrollIntoView({block:'nearest', inline:'center'});
+    window.dataLayer.push({event:'kurulum_adim', adim:t.id});
+  }
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ show(t); });
+    t.addEventListener('keydown', function(e){
+      var k = e.key, j = i;
+      if (k === 'ArrowDown' || k === 'ArrowRight') j = (i + 1) % tabs.length;
+      else if (k === 'ArrowUp' || k === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+      else return;
+      e.preventDefault(); show(tabs[j], true);
+    });
+  });
+})();
+
+// Ekran sekmeleri
+(function(){
+  var caps = ['Canlı altyazı: Türkçesi büyük, İngilizce aslı altında.', 'Bilgisayar ekranında altyazı penceresi oyunun üstünde durur; sürükleyip yerini seçersin.', 'Aynı ekran açık görünümde. Ayarlar\'dan Koyu, Açık ya da Sistemle aynı seçilir.'];
+  var tabs = document.querySelectorAll('.tabs button'), imgs = document.querySelectorAll('#desk img');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      var i = +t.dataset.shot;
+      tabs.forEach(function(x){ x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+      imgs.forEach(function(im, k){ im.classList.toggle('on', k === i); });
+      document.getElementById('desk').style.aspectRatio = imgs[i].getAttribute('width') + ' / ' + imgs[i].getAttribute('height');
+      document.getElementById('desk-cap').textContent = caps[i];
+    });
+  });
+})();
+
+// Üst çubuk ve sahnedeki metinler
+(function(){
+  var top = document.getElementById('top'), scene = document.getElementById('scene');
+  var beats = document.querySelectorAll('.beat'), bars = document.querySelectorAll('.progress b'), hint = document.getElementById('hint');
+  var current = 0;
+  window.__sceneProgress = 0;
+  function onScroll(){
+    var r = scene.getBoundingClientRect(), total = scene.offsetHeight - innerHeight;
+    var p = Math.min(1, Math.max(0, -r.top / total));
+    window.__sceneProgress = p;
+    top.classList.toggle('solid', r.bottom < 80 || p > 0.98);
+    var b = p < 0.3 ? 0 : p < 0.64 ? 1 : 2;
+    if (b !== current) { beats[current].classList.remove('on'); beats[b].classList.add('on'); current = b; }
+    var edges = [0, 0.3, 0.64, 1];
+    bars.forEach(function(el, i){ el.style.width = (Math.min(1, Math.max(0, (p - edges[i]) / (edges[i+1] - edges[i]))) * 100) + '%'; });
+    hint.style.opacity = p > 0.04 ? 0 : 1;
+  }
+  // Üç boyutlu sahne yüklenemezse (eski tarayıcı, engellenen CDN) düz görsele geç
+  setTimeout(function(){ if (!window.__roomReady) document.documentElement.classList.add('no-webgl'); }, 5000);
+  addEventListener('scroll', onScroll, {passive:true});
+  addEventListener('resize', onScroll);
+  onScroll();
+})();
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+const canvas = document.getElementById('room');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  document.documentElement.classList.add('no-webgl');
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+RectAreaLightUniformsLib.init();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x141518);
+scene.fog = new THREE.FogExp2(0x141518, 0.05);
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 60);
+
+// --- Oda
+const mat = (c, r = 0.9, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), mat(0x24252b, 0.75));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(40, 14), mat(0x1a1b20, 0.95));
+wall.position.set(0, 7, -4.2); wall.receiveShadow = true; scene.add(wall);
+// Halı: kanepe ile TV arası
+const rug = new THREE.Mesh(new RoundedBoxGeometry(4.6, 0.02, 3.2, 2, 0.02), mat(0x262830, 1));
+rug.position.set(0, 0.01, -0.6); rug.receiveShadow = true; scene.add(rug);
+
+// TV ünitesi
+const unit = new THREE.Mesh(new RoundedBoxGeometry(4.6, 0.5, 0.6, 3, 0.04), mat(0x2a2c33, 0.7));
+unit.position.set(0, 0.25, -3.75); unit.castShadow = unit.receiveShadow = true; scene.add(unit);
+
+// Konsol: dikey duran beyaz kasa, ince mavi ışık
+const consoleBox = new THREE.Group();
+const shell = new THREE.Mesh(new RoundedBoxGeometry(0.13, 0.52, 0.34, 3, 0.03), mat(0xECECEE, 0.45));
+const core = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.3), mat(0x0c0c0f, 0.5));
+const strip = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.005, 0.3), new THREE.MeshBasicMaterial({ color: 0x5b8cff }));
+strip.position.y = 0.0;
+consoleBox.add(shell, core, strip);
+consoleBox.position.set(1.65, 0.76, -3.7); consoleBox.rotation.y = -0.25; consoleBox.traverse(o => o.castShadow = true);
+scene.add(consoleBox);
+
+// TV
+const tv = new THREE.Group(); tv.position.set(0, 1.62, -3.92); scene.add(tv);
+const bezel = new THREE.Mesh(new RoundedBoxGeometry(3.64, 2.1, 0.07, 3, 0.02), mat(0x08080a, 0.35, 0.2));
+tv.add(bezel);
+const SW = 3.52, SH = SW * 9 / 16;
+const tex = document.createElement('canvas'); tex.width = 1600; tex.height = 900;
+const ctx = tex.getContext('2d');
+const screenTex = new THREE.CanvasTexture(tex); screenTex.colorSpace = THREE.SRGBColorSpace; screenTex.anisotropy = 8;
+const screenMat = new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false, color: 0x000000 });
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), screenMat);
+screen.position.z = 0.037; tv.add(screen);
+const tvLight = new THREE.RectAreaLight(0x9db4dc, 0, SW, SH);
+tvLight.position.set(0, 1.62, -3.86); tvLight.lookAt(0, 1.62, 2); scene.add(tvLight);
+
+// Kanepe: logodaki gibi yuvarlak hatlı, krem
+const sofa = new THREE.Group(); sofa.position.set(0, 0, 1.7); scene.add(sofa);
+const fabric = mat(0xCFC7B8, 1);
+const part = (w, h, d, x, y, z, r = 0.12) => { const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, r), fabric); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; sofa.add(m); return m; };
+part(3.3, 0.42, 1.05, 0, 0.36, 0);          // oturak
+part(1.6, 0.18, 0.9, -0.82, 0.64, -0.04, 0.08); // minder
+part(1.6, 0.18, 0.9, 0.82, 0.64, -0.04, 0.08);
+part(3.3, 0.86, 0.3, 0, 0.82, 0.42, 0.14);   // arkalık
+part(0.3, 0.72, 1.05, -1.8, 0.52, 0, 0.14);   // kolçaklar
+part(0.3, 0.72, 1.05, 1.8, 0.52, 0, 0.14);
+const legMat = mat(0x3a3a3f, 0.6);
+for (const [x, z] of [[-1.75, -0.42], [1.75, -0.42], [-1.75, 0.42], [1.75, 0.42]]) {
+  const l = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), legMat); l.position.set(x, 0.08, z); sofa.add(l);
+}
+
+// Kumanda kanepede
+const pad = new THREE.Group();
+const padBody = new THREE.Mesh(new RoundedBoxGeometry(0.34, 0.07, 0.2, 3, 0.03), mat(0xEDEDEF, 0.5));
+const padL = new THREE.Mesh(new RoundedBoxGeometry(0.11, 0.07, 0.17, 3, 0.03), mat(0xEDEDEF, 0.5)); padL.position.set(-0.15, -0.005, 0.06);
+const padR = padL.clone(); padR.position.x = 0.15;
+const touch = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.072, 0.08), mat(0x1a1a1e, 0.4)); touch.position.z = -0.03;
+pad.add(padBody, padL, padR, touch); pad.traverse(o => o.castShadow = true);
+pad.position.set(0.7, 0.77, 1.62); pad.rotation.set(0, 0.5, 0); scene.add(pad);
+
+// Ayaklı lamba: odadaki tek sıcak ışık
+const lamp = new THREE.Group(); lamp.position.set(-3.1, 0, -2.6); scene.add(lamp);
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.75, 8), legMat); pole.position.y = 0.875;
+const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.04, 24), legMat); base.position.y = 0.02;
+const shadeMat = new THREE.MeshStandardMaterial({ color: 0xF5B83D, emissive: 0xFFC560, emissiveIntensity: 2.2, roughness: 1, side: THREE.DoubleSide });
+const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.34, 32, 1, true), shadeMat); lampShade.position.y = 1.85;
+lamp.add(pole, base, lampShade);
+const warm = new THREE.PointLight(0xFFB547, 5, 9, 1.6); warm.position.set(-3.1, 1.75, -2.6); warm.castShadow = true; warm.shadow.mapSize.set(1024, 1024); warm.shadow.bias = -0.002; scene.add(warm);
+
+const fill = new THREE.DirectionalLight(0xffe2b8, 0.55); fill.position.set(3, 3, 8); scene.add(fill);
+scene.add(new THREE.HemisphereLight(0x4a5570, 0x1a1b20, 0.7));
+
+// TV'nin arkasındaki şerit ışık: duvara yayılan sıcak hale
+const haloTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); const gr = g.createRadialGradient(128,128,0,128,128,128); gr.addColorStop(0,'rgba(245,184,61,.55)'); gr.addColorStop(.5,'rgba(245,184,61,.16)'); gr.addColorStop(1,'rgba(245,184,61,0)'); g.fillStyle = gr; g.fillRect(0,0,256,256); return new THREE.CanvasTexture(c); })();
+const haloMat = new THREE.MeshBasicMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+const halo = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 4.6), haloMat); halo.position.set(0, 1.62, -4.15); scene.add(halo);
+
+// Ekran ışığında süzülen toz
+const N = reduce ? 0 : 420;
+const dustGeo = new THREE.BufferGeometry();
+const pos = new Float32Array(N * 3), seed = new Float32Array(N);
+for (let i = 0; i < N; i++) { pos[i*3] = (Math.random() - .5) * 6; pos[i*3+1] = Math.random() * 2.8 + 0.1; pos[i*3+2] = -3.6 + Math.random() * 5.5; seed[i] = Math.random() * 100; }
+dustGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+const dot = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16,16,0,16,16,16); gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0,0,32,32); return new THREE.CanvasTexture(c); })();
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size: 0.028, map: dot, color: 0xcfdcff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+scene.add(dust);
+
+// --- TV görüntüsü: gece şehri, köşede harita, altta altyazı
+const EN = 'Are you listening to me?';
+const TR = 'Dinliyor musun beni?';
+const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const far = [], near = [], wins = [];
+for (let x = -20; x < 1620; x += 60 + rnd() * 70) far.push([x, 260 + rnd() * 200, 60 + rnd() * 90]);
+for (let x = -40; x < 1640; x += 110 + rnd() * 120) { const w = 90 + rnd() * 120, h = 430 + rnd() * 230; near.push([x, h, w]); for (let k = 0; k < 6; k++) if (rnd() > .35) wins.push([x + 14 + rnd() * (w - 34), 900 - h + 30 + rnd() * (h - 120), rnd()]); }
+function fontOk(f) { return `${f} "Atkinson Hyperlegible Next", system-ui, sans-serif`; }
+function drawScreen(t, scan, time) {
+  const W = tex.width, H = tex.height;
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#222a3a'); g.addColorStop(.6, '#1B1F27'); g.addColorStop(1, '#121419');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // Ay
+  ctx.fillStyle = 'rgba(243,238,228,.85)'; ctx.beginPath(); ctx.arc(1260, 150, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(243,238,228,.06)'; ctx.beginPath(); ctx.arc(1260, 150, 120, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#191d26'; for (const [x, h, w] of far) ctx.fillRect(x, 900 - h - 160, w, h + 160);
+  ctx.fillStyle = '#111318'; for (const [x, h, w] of near) ctx.fillRect(x, 900 - h, w, h);
+  for (const [x, y, s] of wins) { const on = Math.sin(time * 0.0004 + s * 40) > -0.85; ctx.fillStyle = on ? `rgba(245,184,61,${0.28 + s * 0.3})` : 'rgba(245,184,61,.06)'; ctx.fillRect(x, y, 14, 20); }
+  // Köşe haritası
+  ctx.save(); ctx.translate(120, 760); ctx.fillStyle = 'rgba(10,11,14,.7)'; ctx.beginPath(); ctx.arc(0, 0, 78, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(243,238,228,.22)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(-60, 20); ctx.lineTo(10, 10); ctx.lineTo(30, -50); ctx.moveTo(10, 10); ctx.lineTo(60, 40); ctx.stroke();
+  ctx.fillStyle = '#F5B83D'; ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(9, 10); ctx.lineTo(0, 5); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill(); ctx.restore();
+  // Altyazı
+  const cx = W / 2, y = 760;
+  const showTR = t > 0;
+  if (!showTR || t < 1) {
+    ctx.font = fontOk('500 46px'); const w = ctx.measureText(EN).width;
+    const a = showTR ? 1 - Math.min(1, t * 1.6) : 1;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(0,0,0,.72)'; roundRect(cx - w / 2 - 22, y - 44, w + 44, 66, 8); ctx.fill();
+    ctx.fillStyle = '#F3EEE4'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(EN, cx, y + 4);
+    if (scan > 0 && scan < 1) {
+      const sx = cx - w / 2 - 22 + (w + 44) * scan;
+      ctx.save(); ctx.beginPath(); roundRect(cx - w / 2 - 22, y - 44, (w + 44) * scan, 66, 8); ctx.clip();
+      ctx.fillStyle = 'rgba(245,184,61,.16)'; ctx.fillRect(cx - w / 2 - 22, y - 44, w + 44, 66);
+      ctx.fillStyle = '#FFCF6B'; ctx.fillText(EN, cx, y + 4); ctx.restore();
+      ctx.fillStyle = '#F5B83D'; ctx.fillRect(sx - 2, y - 54, 4, 86);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (showTR) {
+    const n = Math.round(TR.length * Math.min(1, t * 1.25));
+    const s = TR.slice(0, n);
+    ctx.font = fontOk('700 58px'); const full = ctx.measureText(TR).width;
+    ctx.fillStyle = 'rgba(0,0,0,.78)'; roundRect(cx - full / 2 - 26, y - 62, full + 52, 84, 8); ctx.fill();
+    ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'left'; ctx.fillText(s, cx - full / 2, y + 6);
+    if (n < TR.length) { const cw = ctx.measureText(s).width; ctx.fillStyle = '#F5B83D'; ctx.fillRect(cx - full / 2 + cw + 4, y - 40, 4, 52); }
+    if (t >= 1) { ctx.font = fontOk('500 30px'); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(243,238,228,.55)'; ctx.fillText(EN, cx, y + 64); }
+  }
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+// --- Kamera yolu: kanepenin arkasından ekrana
+const path = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(2.6, 2.25, 6.6),
+  new THREE.Vector3(1.4, 1.95, 4.4),
+  new THREE.Vector3(0.5, 1.72, 2.6),
+  new THREE.Vector3(-0.2, 1.64, 1.0),
+  new THREE.Vector3(-0.75, 1.6, -0.2),
+], false, 'centripetal');
+const lookFrom = new THREE.Vector3(-0.2, 1.2, -3.9), lookTo = new THREE.Vector3(-1.05, 1.5, -3.9);
+const look = new THREE.Vector3(), mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+addEventListener('pointermove', e => { mouse.tx = (e.clientX / innerWidth - .5); mouse.ty = (e.clientY / innerHeight - .5); }, { passive: true });
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = camera.aspect < 0.8 ? 58 : camera.aspect < 1.2 ? 48 : 40;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const clamp01 = x => Math.min(1, Math.max(0, x));
+let smooth = 0, lastKey = '', visible = true, start = performance.now();
+new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) requestAnimationFrame(frame); }).observe(canvas);
+
+function frame(now) {
+  if (!visible) return;
+  const target = window.__sceneProgress || 0;
+  smooth += (target - smooth) * (reduce ? 1 : 0.08);
+  const p = smooth;
+  // Kamera
+  const k = ease(clamp01(p / 0.86));
+  let cp = path.getPointAt(k);
+  if (camera.aspect < 1 && k > 0.6) { // dar ekranda TV ekranı genişliğe sığsın
+    const fit = (SW / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.aspect * 1.08;
+    cp.z = Math.max(cp.z, -3.9 + fit * ((k - 0.6) / 0.4) + (cp.z + 3.9) * (1 - (k - 0.6) / 0.4));
+  }
+  mouse.x += (mouse.tx - mouse.x) * 0.05; mouse.y += (mouse.ty - mouse.y) * 0.05;
+  const par = reduce ? 0 : (1 - k) * 0.35;
+  look.lerpVectors(lookFrom, lookTo, k);
+  if (camera.aspect < 1) { look.x *= 1 - k; cp.x *= 1 - k; look.y -= 0.7; }
+  camera.position.set(cp.x + mouse.x * par, cp.y - mouse.y * par * 0.5, cp.z);
+  camera.lookAt(look);
+
+  // TV açılışı: yüklenince bir kez
+  const on = reduce ? 1 : clamp01((now - start - 300) / 900);
+  const onE = 1 - Math.pow(1 - on, 3);
+  screenMat.color.setScalar(onE);
+  screen.scale.y = reduce ? 1 : Math.max(0.01, ease(clamp01(on / 0.45)));
+  tvLight.intensity = 7 * onE; haloMat.opacity = onE;
+  warm.intensity = 7 + (1 - k) * 3;
+
+  // Altyazı durumu
+  const scan = clamp01((p - 0.3) / 0.26);
+  const t = clamp01((p - 0.58) / 0.2);
+  const key = scan.toFixed(3) + '|' + t.toFixed(3) + '|' + Math.floor(now / 500);
+  if (key !== lastKey) { drawScreen(t, scan, now); screenTex.needsUpdate = true; lastKey = key; }
+
+  // Toz
+  if (N) {
+    const a = dustGeo.attributes.position.array, tt = now * 0.0001;
+    for (let i = 0; i < N; i++) { a[i*3+1] += Math.sin(tt * 3 + seed[i]) * 0.0006; a[i*3] += Math.cos(tt * 2 + seed[i]) * 0.0005; if (a[i*3+1] > 3) a[i*3+1] = 0.1; }
+    dustGeo.attributes.position.needsUpdate = true;
+  }
+  renderer.render(scene, camera);
+  window.__roomReady = true;
+  requestAnimationFrame(frame);
+}
+document.fonts && document.fonts.ready.then(() => { lastKey = ''; });
+requestAnimationFrame(frame);
+
+// --- Bölüm sahneleri: tek tuval, her bölümün kendi küçük sahnesi, kaydırmayla ilerler
+(() => {
+  const anchors = [...document.querySelectorAll('[data-fx]')];
+  if (!anchors.length) return;
+  const fxCanvas = document.createElement('canvas');
+  fxCanvas.id = 'fx'; fxCanvas.setAttribute('aria-hidden', 'true');
+  document.body.prepend(fxCanvas);
+  const r2 = new THREE.WebGLRenderer({ canvas: fxCanvas, antialias: true, alpha: true });
+  r2.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  r2.outputColorSpace = THREE.SRGBColorSpace;
+  r2.toneMapping = THREE.ACESFilmicToneMapping;
+  r2.setClearColor(0x000000, 0);
+  r2.autoClear = false;
+
+  const AMBER = 0xF5B83D, CREAM = 0xF3EEE4;
+  const std = (c, r = 0.6, m = 0, e) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m, ...(e ? { emissive: e, emissiveIntensity: 1 } : {}) });
+  const glow = c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+  const rb = (w, h, d, r, m) => new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, r), m);
+  const canvasTex = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); draw(g, w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.userData.ctx = g; t.userData.canvas = c; return t; };
+  const capsules = (g, w, h, y, widths) => { g.fillStyle = '#F5B83D'; widths.forEach((ww, i) => { const bh = h * 0.1, yy = y + i * bh * 1.5, x = (w - w * ww) / 2; g.beginPath(); g.roundRect(x, yy, w * ww, bh, bh / 2); g.fill(); }); };
+  function baseScene() {
+    const s = new THREE.Scene();
+    s.add(new THREE.HemisphereLight(0x8a96b8, 0x141518, 1.1));
+    const key = new THREE.DirectionalLight(0xfff1dc, 2.2); key.position.set(3, 5, 4); s.add(key);
+    const rim = new THREE.PointLight(AMBER, 6, 12, 1.5); rim.position.set(-3, 1.5, -2); s.add(rim);
+    return s;
+  }
+  const scenes = {};
+
+  // Kurulum: PS5 → bilgisayar → TV, ışık yol boyunca akar
+  scenes.kurulum = (() => {
+    const s = baseScene(), cam = new THREE.PerspectiveCamera(32, 4 / 3, 0.1, 50);
+    const ps = new THREE.Group();
+    ps.add(rb(0.34, 1.3, 0.9, 0.08, std(0xEDEDEF, 0.4)), new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.26, 0.86), std(0x111216, 0.5)));
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.012, 0.8), glow(0x5b8cff)); ps.add(strip);
+    ps.position.set(-1.9, 0.65, 0); ps.rotation.y = 0.5; s.add(ps);
+    const lap = new THREE.Group();
+    const lb = rb(1.3, 0.06, 0.9, 0.03, std(0x3a3c44, 0.5, 0.3)); lap.add(lb);
+    const scrT = canvasTex(256, 160, (g, w, h) => { g.fillStyle = '#1B1F27'; g.fillRect(0, 0, w, h); capsules(g, w, h, h * 0.55, [0.6, 0.42]); });
+    const ls = new THREE.Group(); ls.position.set(0, 0.03, -0.43);
+    const lid = rb(1.3, 0.86, 0.04, 0.03, std(0x3a3c44, 0.5, 0.3)); lid.position.y = 0.43; ls.add(lid);
+    const disp = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.76), new THREE.MeshBasicMaterial({ map: scrT, toneMapped: false })); disp.position.set(0, 0.43, 0.022); ls.add(disp);
+    ls.rotation.x = -0.25; lap.add(ls); lap.position.set(0, 0.03, 0.9); s.add(lap);
+    const tvG = new THREE.Group();
+    tvG.add(rb(2.0, 1.2, 0.06, 0.02, std(0x0a0a0c, 0.4)));
+    const tvT = canvasTex(320, 180, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#26304a'); gr.addColorStop(1, '#141821'); g.fillStyle = gr; g.fillRect(0, 0, w, h); capsules(g, w, h, h * 0.68, [0.5, 0.34]); });
+    const tvS = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.07), new THREE.MeshBasicMaterial({ map: tvT, toneMapped: false })); tvS.position.z = 0.032; tvG.add(tvS);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.3), std(0x2a2c33)); leg.position.y = -0.62; tvG.add(leg);
+    tvG.position.set(1.9, 0.9, -0.2); tvG.rotation.y = -0.45; s.add(tvG);
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(-1.75, 1.0, 0.2), new THREE.Vector3(-1.0, 1.2, 0.9), new THREE.Vector3(0, 0.75, 0.75), new THREE.Vector3(1.0, 1.25, 0.6), new THREE.Vector3(1.75, 1.0, 0)]);
+    const N = 80, pts = curve.getPoints(N);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    const line = new THREE.Line(lineGeo, new THREE.LineDashedMaterial({ color: AMBER, dashSize: 0.06, gapSize: 0.05, transparent: true, opacity: 0.85 }));
+    line.computeLineDistances(); s.add(line);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), glow(0xFFCF6B)); s.add(dot);
+    return { s, cam, update(p, t) {
+      const k = Math.min(1, p * 1.6);
+      lineGeo.setDrawRange(0, Math.max(2, Math.floor(N * k)));
+      dot.position.copy(curve.getPointAt(k)); dot.visible = k > 0.02 && k < 1;
+      const lit = k >= 1 ? 1 : 0.25; tvS.material.color.setScalar(0.35 + 0.65 * lit); disp.material.color.setScalar(k > 0.5 ? 1 : 0.4);
+      const a = -0.25 + p * 0.5; cam.position.set(Math.sin(a) * 8.6 + 0.2, 3.0, Math.cos(a) * 8.6); cam.lookAt(0.2, 0.7, 0.2);
+    } };
+  })();
+
+  // Ekranlar: bölümün arkasında derinlikte süzülen altyazı satırları
+  scenes.ekranlar = (() => {
+    const s = new THREE.Scene(), cam = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 60);
+    s.fog = new THREE.Fog(0x141518, 4, 18);
+    const rnd = (() => { let v = 11; return () => (v = (v * 16807) % 2147483647) / 2147483647; })();
+    const bars = [];
+    for (let i = 0; i < 70; i++) {
+      const amber = rnd() < 0.18, w = 0.6 + rnd() * 2.2;
+      const sh = new THREE.Shape(), h = 0.16, r = h / 2; sh.moveTo(-w / 2 + r, -r); sh.lineTo(w / 2 - r, -r); sh.absarc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2); sh.lineTo(-w / 2 + r, r); sh.absarc(-w / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5);
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(sh, 8), new THREE.MeshBasicMaterial({ color: amber ? AMBER : 0x4a4e59, transparent: true, opacity: amber ? 0.32 : 0.4, fog: true }));
+      m.position.set((rnd() - 0.5) * 18, (rnd() - 0.5) * 13, -3 - rnd() * 11);
+      m.userData = { y: m.position.y, sp: 0.4 + rnd() * 1.2, ph: rnd() * 6.28 };
+      s.add(m); bars.push(m);
+    }
+    return { s, cam, update(p, t) {
+      bars.forEach(b => { const d = b.userData; b.position.y = d.y + (p - 0.5) * 8 * d.sp + (reduce ? 0 : Math.sin(t * 0.0004 + d.ph) * 0.08); });
+      cam.position.set(0, 0, 4); cam.lookAt(0, 0, -6);
+    } };
+  })();
+
+  // Paketler: yedi oyun kutusu, kaydırdıkça raftan çekilir
+  scenes.paketler = (() => {
+    const s = baseScene(), cam = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 50);
+    const names = ['GTA V', 'RDR 2', 'ELDEN RING', 'MAFIA', 'AC SHADOWS', 'DS 2', 'MW 2019', 'SPIDER-MAN 2', 'DEATH STR.'];
+    const cases = names.map((n, i) => {
+      const spine = canvasTex(64, 512, (g, w, h) => { g.fillStyle = i === 0 ? '#F5B83D' : '#24262c'; g.fillRect(0, 0, w, h); g.save(); g.translate(w / 2 + 9, h / 2); g.rotate(-Math.PI / 2); g.fillStyle = i === 0 ? '#17181B' : '#F3EEE4'; g.font = '700 28px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(n, 0, 0); g.restore(); });
+      const side = std(i === 0 ? 0xD9A030 : 0x2c2e35, 0.5);
+      const mats = [side, side, side, side, new THREE.MeshStandardMaterial({ map: spine, roughness: 0.5 }), side];
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.7, 1.35), mats);
+      s.add(m); return m;
+    });
+    const shelf = rb(2.2, 0.08, 1.7, 0.03, std(0x2a2c33, 0.7)); shelf.position.set(0, -0.89, 0.1); s.add(shelf);
+    return { s, cam, update(p) {
+      const k = Math.min(1, Math.max(0, (p - 0.1) * 1.6));
+      cases.forEach((c, i) => {
+        const off = i - (names.length - 1) / 2;
+        const pull = Math.max(0, Math.min(1, k * 7 - i * 0.8));
+        const e = 1 - Math.pow(1 - pull, 3);
+        c.position.set(off * 0.19, 0, 0.0 + e * 0.35 * (i === 0 ? 1.4 : 1));
+        c.rotation.set(0, -off * 0.05 * e, off * 0.025 * e);
+      });
+      cam.position.set(-1.4 + p * 2.8, 0.3, 5.0); cam.lookAt(0, -0.45, 0.2);
+    } };
+  })();
+
+  // İndir: ok ekrana iner, ilerleme çubuğu dolar
+  scenes.indir = (() => {
+    const s = baseScene(), cam = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 50);
+    const lap = new THREE.Group();
+    lap.add(rb(2.4, 0.08, 1.6, 0.04, std(0x3a3c44, 0.5, 0.3)));
+    const scr = canvasTex(480, 300, () => {});
+    const ls = new THREE.Group(); ls.position.set(0, 0.04, -0.78);
+    const lid = rb(2.4, 1.55, 0.05, 0.04, std(0x3a3c44, 0.5, 0.3)); lid.position.y = 0.78; ls.add(lid);
+    const disp = new THREE.Mesh(new THREE.PlaneGeometry(2.24, 1.4), new THREE.MeshBasicMaterial({ map: scr, toneMapped: false })); disp.position.set(0, 0.78, 0.028); ls.add(disp);
+    ls.rotation.x = -0.18; lap.add(ls); lap.position.y = -0.8; s.add(lap);
+    const arrow = new THREE.Group();
+    const shaft = rb(0.22, 0.7, 0.22, 0.08, std(AMBER, 0.35, 0, 0x6b4a10)); shaft.position.y = 0.3; arrow.add(shaft);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.4, 4), std(AMBER, 0.35, 0, 0x6b4a10)); head.rotation.set(Math.PI, Math.PI / 4, 0); head.position.y = -0.18; arrow.add(head);
+    s.add(arrow);
+    let last = -1;
+    function draw(k) {
+      const g = scr.userData.ctx, w = 480, h = 300;
+      g.fillStyle = '#141518'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#1C1E23'; g.beginPath(); g.roundRect(40, 60, w - 80, h - 120, 16); g.fill();
+      g.fillStyle = '#F3EEE4'; g.font = '600 26px system-ui, sans-serif'; g.textAlign = 'left'; g.fillText(k >= 1 ? 'CouchSubs hazır' : 'CouchSubs iniyor', 70, 120);
+      g.fillStyle = '#30333A'; g.beginPath(); g.roundRect(70, 160, w - 140, 18, 9); g.fill();
+      g.fillStyle = k >= 1 ? '#62C990' : '#F5B83D'; g.beginPath(); g.roundRect(70, 160, Math.max(18, (w - 140) * k), 18, 9); g.fill();
+      scr.needsUpdate = true;
+    }
+    return { s, cam, update(p, t) {
+      const k = Math.min(1, Math.max(0, (p - 0.15) * 1.8));
+      const drop = Math.min(1, k * 1.6);
+      arrow.position.set(0, 1.6 - drop * 1.25 + (reduce ? 0 : Math.sin(t * 0.002) * 0.04 * (1 - drop)), 0.2);
+      arrow.rotation.y = (reduce ? 0 : t * 0.0006) + p * 2;
+      arrow.visible = drop < 1;
+      const prog = Math.max(0, (k - 0.55) / 0.45);
+      const q = Math.round(prog * 40) / 40; if (q !== last) { draw(q); last = q; }
+      cam.position.set(0.6 - p * 1.2, 1.2, 5.4); cam.lookAt(0, 0.1, 0);
+    } };
+  })();
+
+  // SSS: soru balonu ve altyazı kapsülleri süzülür
+  scenes.sss = (() => {
+    const s = baseScene(), cam = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 50);
+    const bubble = new THREE.Group();
+    const body = rb(1.7, 1.2, 0.3, 0.3, std(0x2a2c33, 0.55)); bubble.add(body);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.42, 3), std(0x2a2c33, 0.55)); tail.rotation.z = Math.PI * 0.8; tail.position.set(-0.45, -0.68, 0); bubble.add(tail);
+    const q = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#F5B83D'; g.font = '800 200px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', w / 2, h / 2 + 10); });
+    const qm = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: q, transparent: true, toneMapped: false })); qm.position.z = 0.16; bubble.add(qm);
+    s.add(bubble);
+    const caps = [[1.0, 0xF5B83D], [0.7, 0xF5B83D], [0.85, CREAM]].map(([w, c], i) => { const m = rb(w, 0.16, 0.12, 0.07, std(c, 0.4)); s.add(m); return m; });
+    return { s, cam, update(p, t) {
+      const f = reduce ? 0 : t * 0.001;
+      bubble.position.set(-0.3, 0.25 + Math.sin(f) * 0.05, 0); bubble.rotation.set(0.1, -0.4 + p * 0.8, Math.sin(f * 0.7) * 0.03);
+      caps.forEach((c, i) => { c.position.set(0.9 + i * 0.15, -0.55 - i * 0.28 + p * 0.5 * (i + 1) * 0.4, 0.4 - i * 0.2); c.rotation.set(0, -0.3 + p * 0.6, 0); });
+      cam.position.set(0, 0.2, 5); cam.lookAt(0.1, 0, 0);
+    } };
+  })();
+
+  const active = new Set();
+  const io = new IntersectionObserver(es => { es.forEach(e => e.isIntersecting ? active.add(e.target) : active.delete(e.target)); if (active.size) kick(); }, { rootMargin: '100px' });
+  anchors.forEach(a => io.observe(a));
+  let running = false;
+  function kick() { if (!running) { running = true; requestAnimationFrame(loop); } }
+  const sm = new Map();
+  function loop(t) {
+    if (!active.size) { running = false; r2.setScissorTest(false); r2.clear(); return; }
+    const W = innerWidth, H = innerHeight;
+    if (fxCanvas.width !== Math.floor(W * r2.getPixelRatio()) || fxCanvas.height !== Math.floor(H * r2.getPixelRatio())) r2.setSize(W, H, false);
+    r2.setScissorTest(false); r2.clear(); r2.setScissorTest(true);
+    for (const a of active) {
+      const sc = scenes[a.dataset.fx]; if (!sc) continue;
+      const rc = a.getBoundingClientRect();
+      if (rc.bottom < 0 || rc.top > H || rc.width < 2) continue;
+      const target = Math.min(1, Math.max(0, (H - rc.top) / (H + rc.height)));
+      const prev = sm.has(a) ? sm.get(a) : target;
+      const p = reduce ? target : prev + (target - prev) * 0.1; sm.set(a, p);
+      sc.cam.aspect = rc.width / rc.height; sc.cam.updateProjectionMatrix();
+      sc.update(p, t);
+      const y = H - rc.bottom;
+      r2.setViewport(rc.left, y, rc.width, rc.height); r2.setScissor(rc.left, y, rc.width, rc.height);
+      r2.render(sc.s, sc.cam);
+    }
+    requestAnimationFrame(loop);
+  }
+  addEventListener('scroll', kick, { passive: true });
+})();
+</script>
+<noscript><style>.beat{opacity:1;transform:none}.beat:not([data-beat="0"]){display:none}</style></noscript>
+</body>
+</html>

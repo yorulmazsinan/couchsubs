@@ -17,12 +17,20 @@
                 </Grid>
                 <TextBlock Text="CouchSubs" Style="{StaticResource TitleText}" Margin="12,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
-            <Button HorizontalAlignment="Right" Padding="16,0" ToolTip="{t:T 'Settings'}" Click="OnSettings">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{x:Static c:Glyphs.Settings}" Style="{StaticResource GlyphText}" FontSize="20" Margin="0,0,8,0" />
-                    <TextBlock Text="{t:T 'Settings'}" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Padding="16,0" Margin="0,0,8,0" ToolTip="{t:T 'History'}" Click="OnHistory">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{x:Static c:Glyphs.History}" Style="{StaticResource GlyphText}" FontSize="20" Margin="0,0,8,0" />
+                        <TextBlock Text="{t:T 'History'}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Padding="16,0" ToolTip="{t:T 'Settings'}" Click="OnSettings">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{x:Static c:Glyphs.Settings}" Style="{StaticResource GlyphText}" FontSize="20" Margin="0,0,8,0" />
+                        <TextBlock Text="{t:T 'Settings'}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <Grid>
@@ -51,6 +59,20 @@
                             <TextBlock x:Name="ToggleGlyph" Style="{StaticResource GlyphText}" FontSize="20" Margin="0,0,8,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                             <TextBlock x:Name="ToggleText" FontSize="{DynamicResource headlineFontSize}" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
+                    </Button>
+
+                    <!-- Deneme altyazısı: altyazı TV'ye gidiyorsa "TV'de dene", yalnız bilgisayardaysa "Ekranda dene" -->
+                    <Button HorizontalAlignment="Stretch" Margin="0,8,0,0" Click="OnTest">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                <Setter Property="Content" Value="{t:T 'Test on screen'}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowsOnTv}" Value="True">
+                                        <Setter Property="Content" Value="{t:T 'Test on TV'}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                     </Button>
 
                     <!-- Durum karoları -->
@@ -109,7 +131,7 @@
                                     <TextBlock Text="{x:Static c:Glyphs.Globe}" Style="{StaticResource GlyphText}" FontSize="18" HorizontalAlignment="Center" />
                                 </Border>
                                 <TextBlock Text="{t:T 'Translation'}" Style="{StaticResource CaptionText}" />
-                                <TextBlock x:Name="EngineText" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                <TextBlock x:Name="EngineText" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </c:Card>
                         <c:Card Grid.Row="4" Grid.Column="2">
@@ -193,6 +215,10 @@
                                    Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
                         <TextBlock Text="{Binding LastSource}" Style="{StaticResource CaptionText}" Margin="0,8,0,0"
                                    Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
+                        <!-- Son satırın ölçümleri: yazı tanıma, çeviri, gecikme (sessiz, 13 pt, sabit genişlikli rakamlar) -->
+                        <TextBlock Text="{Binding MetricsText}" Style="{StaticResource CaptionText}" Margin="0,12,0,0"
+                                   Typography.NumeralAlignment="Tabular" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding MetricsText, Converter={StaticResource VisibleIf}}" />
                     </StackPanel>
                 </c:Card>
             </DockPanel>

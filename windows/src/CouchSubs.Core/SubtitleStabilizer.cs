@@ -14,6 +14,17 @@ public readonly record struct StabilizerAction(StabilizerKind Kind, string? Text
     public static StabilizerAction Restore(string text) => new(StabilizerKind.Restore, text);
 }
 
+public enum StabilizerNoteKind
+{
+    /// <summary>Gönderilen satırın daha kötü (daha az sözcük okuyan) yeniden okuması; yeni satır sayılmadı.</summary>
+    WorseReread,
+    /// <summary>Çöp gibi okunan satır (<see cref="OcrNoise.LooksGarbled"/>) yeterince kararlı kalmadan kalktı ya da değişti; hiç gönderilmedi.</summary>
+    GarbledDropped,
+}
+
+/// <summary>Satırın gönderilmeden bırakıldığı durum (yalnız altyazı günlüğü için; kararları değiştirmez).</summary>
+public readonly record struct StabilizerNote(StabilizerNoteKind Kind, string Text);
+
 /// <summary>
 /// Kare kare gelen OCR çıktısını izler; altyazı kararlı hale gelince çevrilmesini,
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
@@ -82,14 +93,21 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     /// <summary>Çevirisi başarısız olan satır ve en erken yeniden deneneceği an.</summary>
     private string forgotten = "";
     private long retryAt;
+    /// <summary>Bekleyen (henüz gönderilmemiş) çöp gibi okunan aday; gönderilmeden kalkarsa günlüğe yazılır.</summary>
+    private string garbledPending = "";
+
+    /// <summary>Son <see cref="Feed"/> çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.</summary>
+    public StabilizerNote? Note { get; private set; }
 
     public StabilizerAction Feed(string rawText)
     {
         var time = now();
         var text = TextMatch.Normalize(rawText);
+        Note = null;
         // 3 karakterden kısa okumalar (gürültü, tek simge) boş kare sayılır.
         if (text.Length < 3)
         {
+            DropGarbled();
             candidate = "";
             candidateCount = 0;
             emptySince ??= time;
@@ -108,6 +126,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         }
         else
         {
+            DropGarbled();
             candidate = text;
             candidateRaw = rawText.Trim();
             candidateCount = 1;
@@ -117,14 +136,25 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider. Çöp gibi okunan satır
         // (altyazılar geçişte üst üste solarken karışan okuma) beklemeden gitmez; geçiş süresinden uzun kararlıysa gider.
         // cleanFastPathOnly (Linux, Tesseract): noktalamayla bitse bile çöp parçalı okuma ilk karede gitmez.
-        var ready = OcrNoise.LooksGarbled(rawText)
+        var garbled = OcrNoise.LooksGarbled(rawText);
+        var ready = garbled
             ? candidateCount >= stableFrames && time - candidateSince >= GarbledStableMs
             : candidateCount >= stableFrames || (EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if (!ready || IsSame(text, sent)) return StabilizerAction.None;
+        if (IsSame(text, sent)) return StabilizerAction.None;
+        if (!ready)
+        {
+            if (garbled) garbledPending = rawText.Trim();
+            return StabilizerAction.None;
+        }
+        garbledPending = "";
         // Aynı cümlenin bir iki sözcüğü başka okunmuş, daha iyi olmayan okuması da yeni satır değildir; çevrilseydi TV'de
         // aynı cümlenin iki üç çevirisi üst üste dururdu. Daha çok sözcük okuyan okuma yeniden çevrilir (TV yerine koyar).
-        if (sentRaw.Length > 0 && TextMatch.IsWorseReread(rawText, sentRaw)) return StabilizerAction.None;
+        if (sentRaw.Length > 0 && TextMatch.IsWorseReread(rawText, sentRaw))
+        {
+            Note = new StabilizerNote(StabilizerNoteKind.WorseReread, rawText.Trim());
+            return StabilizerAction.None;
+        }
 
         // Az önce kalkan satır geri geldiyse okuma birkaç kare kaçmıştır: çevirisi yeniden gösterilir, yeniden çevrilmez.
         var index = history.FindLastIndex(h => time - h.LeftAt <= RestoreWithinMs && IsSame(text, h.Rows));
@@ -144,6 +174,14 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         sentRaw = cleanFastPathOnly ? candidateRaw : rawText.Trim();
         sent = TextMatch.NormalizeRows(sentRaw);
         return StabilizerAction.Translate(sentRaw);
+    }
+
+    /// <summary>Bekleyen çöp aday gönderilmeden bırakıldı (kalktı ya da başka okumaya döndü): günlük için not edilir.</summary>
+    private void DropGarbled()
+    {
+        if (garbledPending.Length == 0) return;
+        Note = new StabilizerNote(StabilizerNoteKind.GarbledDropped, garbledPending);
+        garbledPending = "";
     }
 
     /// <summary>Okuma, bu satırların (gürültülü) yeniden okuması mı; sonuna sözcük eklenmiş hali yenidir.</summary>
@@ -182,12 +220,15 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         sentRaw = "";
         candidate = "";
         candidateCount = 0;
+        garbledPending = "";
     }
 
     public StabilizerAction Reset()
     {
         candidate = "";
         candidateCount = 0;
+        garbledPending = "";
+        Note = null;
         emptySince = null;
         history.Clear();
         forgotten = "";

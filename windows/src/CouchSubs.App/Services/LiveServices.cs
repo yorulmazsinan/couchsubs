@@ -47,6 +47,7 @@ public sealed class LiveServices : IAppServices
     public PackMatch? FindInPacks(string text) => GamePacks is { } packs ? PackLookup.Match(packs, text) : null;
     public LinePool? Pool { get; } = new(Path.Combine(AppPaths.Data, "pool.json"),
         AppVersion.Current(System.Reflection.Assembly.GetEntryAssembly() ?? typeof(LiveServices).Assembly));
+    public string? HistoryFile { get; } = Path.Combine(AppPaths.Data, "history.json");
 
     public async Task<IReadOnlyList<ConsoleInfo>> DiscoverConsolesAsync()
     {
@@ -299,7 +300,23 @@ public sealed class LiveServices : IAppServices
         }
     }
 
-    public ITextReader? MakeReader(string language) => WindowsOcrReader.Create(language);
+    public ITextReader? MakeReader(string language)
+    {
+        var reader = WindowsOcrReader.Create(language);
+        // Paketteki satırlar yazı tanımaya "doğru okuma" ölçüsü olur (yalnız birebir eşleşme; bulanık arama değil).
+        if (reader is not null && GamePacks is { } packs) reader.IsKnownLine = text => packs.Find(text) is not null;
+        // Paketli oyunlarda sözlükte olmayan sözcük içeren okuma kısa süre bekletilir (bkz. SubtitlePipeline.PackWaitMs).
+        // Sözlük: bozuk okuma bekletilir; aynı karenin ve aynı satırın okumalarından en çok gerçek sözcük içeren seçilir
+        // (paketi olmayan oyunlarda da: GTA 6 gibi). Sözlük İngilizcedir: başka dildeki oyunda her satır "bozuk" görünür,
+        // bekletilir ve en kısa okuma seçilirdi; o dillerde kapalıdır. Dil değişince eski ayar kalmasın diye her seferinde
+        // yeniden kurulur.
+        var dictionary = language.StartsWith("en", StringComparison.OrdinalIgnoreCase) && WindowsSpellCheck.Available;
+        SubtitlePipeline.ExtraMisreadCheck = dictionary ? WindowsSpellCheck.LooksMisread : null;
+        SubtitlePipeline.ExtraReadingScore = dictionary ? WindowsSpellCheck.Score : null;
+        SubtitlePipeline.DefaultHoldWithoutPacks = dictionary;
+        WindowsOcrReader.DictionaryScore = dictionary ? WindowsSpellCheck.Score : null;
+        return reader;
+    }
     public bool HasOcrLanguage(string language) => WindowsOcrReader.HasLanguage(language);
 
     /// <summary>Denetlenemeyen TV'ler için: TV uygulaması kendisi bağlanır.</summary>

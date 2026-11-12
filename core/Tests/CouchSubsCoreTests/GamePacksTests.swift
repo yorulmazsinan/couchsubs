@@ -113,7 +113,7 @@ final class GamePackTests: XCTestCase {
         let ids = all.packs.map(\.id)
         let elapsed = Date().timeIntervalSince(start)
         print("paket yükleme: \(Int(elapsed * 1000)) ms, \(all.packs.reduce(0) { $0 + $1.entries }) satır")
-        XCTAssertEqual(ids, ["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "elden-ring", "gta-v", "mafia-the-old-country", "red-dead-redemption-2"])
+        XCTAssertEqual(ids, ["assassins-creed-shadows", "call-of-duty-modern-warfare-2019", "death-stranding-2", "death-stranding-directors-cut", "elden-ring", "gta-v", "mafia-the-old-country", "marvels-spider-man-2", "red-dead-redemption-2"])
         XCTAssertTrue(all.packs.allSatisfy(\.builtIn))
         // Biçim 2 (parçalar ve imzalar) yüklemeyi Release'te ~%30 uzatıyor; Debug derlemede ve yüklü makinede daha yavaş.
         XCTAssertLessThan(elapsed, 30)
@@ -148,6 +148,13 @@ final class GamePackTests: XCTestCase {
             // "The Tarnished will soon return.", "Let it be Margit the Fell!", "Roundtable Hold"
             ("elden-ring.json.gz", "elden-ring", "Elden Ring + Shadow of the Erdtree", 37000,
              ["fd7b2bef9d7e5fe1", "d9e5d9f200bbd946", "d5017888c04251a9"]),
+            // "I can’t help you with that. I make deliveries. That’s all.", "Yeah, I’ve heard of ya.",
+            // "Trying to stay dry, same as you. Timefall’s let up. My name is Fragile."
+            ("death-stranding-directors-cut.json.gz", "death-stranding-directors-cut", "Death Stranding Director's Cut", 1200,
+             ["0bd205d28ea72e1e", "a278ec4528cdbe41", "b081efaf29693c2b"]),
+            // "More like sell yourself. It's the worst.", "You got any advice?", "Focus! Hunters! Lots of them!"
+            ("marvels-spider-man-2.json.gz", "marvels-spider-man-2", "Marvel's Spider-Man 2", 2000,
+             ["40236a7f701ea389", "ee2428652bc9ceb2", "e829f8ce088898b8"]),
         ]
         let directory = try XCTUnwrap(GamePackLibrary.bundledDirectory)
         for pack in expected {
@@ -164,7 +171,8 @@ final class GamePackTests: XCTestCase {
         }
     }
 
-    /// Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019) ve Elden Ring paketleri de uygulamayla gelir.
+    /// Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019), Elden Ring, Death Stranding Director's Cut ve
+    /// Marvel's Spider-Man 2 paketleri de uygulamayla gelir.
     func testMoreBundledPacksLoad() {
         let library = GamePackLibrary(bundled: GamePackLibrary.bundledDirectory, user: nil)
         let expected: [(id: String, title: String, minimum: Int)] = [
@@ -172,6 +180,8 @@ final class GamePackTests: XCTestCase {
             ("death-stranding-2", "Death Stranding 2: On the Beach", 23000),
             ("call-of-duty-modern-warfare-2019", "Call of Duty: Modern Warfare (2019)", 50000),
             ("elden-ring", "Elden Ring + Shadow of the Erdtree", 37000),
+            ("death-stranding-directors-cut", "Death Stranding Director's Cut", 1200),
+            ("marvels-spider-man-2", "Marvel's Spider-Man 2", 2000),
         ]
         for game in expected {
             let pack = library.packs.first { $0.id == game.id }
@@ -189,6 +199,9 @@ final class GamePackTests: XCTestCase {
         XCTAssertEqual(library.match("Requesting air drop on my position!")?.text, "Konumuma hava ikmali talep ediyorum!")
         XCTAssertEqual(library.match("The Tarnished will soon return.")?.text, "Lekeli yakında geri dönecek.")
         XCTAssertEqual(library.match("Margit, the Fell Omen")?.text, "Margit, Uğursuz Alâmet")
+        XCTAssertEqual(library.match("FRAGILE: Trying to stay dry, same as you. Timefall’s let up. My name is Fragile.")?.text,
+                       "FRAGILE: Senin gibi kuru kalmaya çalışıyorum. Zaman yağmuru dindi. Adım Fragile.")
+        XCTAssertEqual(library.match("Spider-Man: Focus! Hunters! Lots of them!")?.text, "Spider-Man: Odaklan! Avcılar! Çok fazlalar!")
     }
 }
 

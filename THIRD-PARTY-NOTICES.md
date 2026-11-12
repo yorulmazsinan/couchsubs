@@ -46,6 +46,19 @@ glossary of the Elden Ring Turkish fan translation by mehmetkrn
 ([elden-ring-turkce-yama](https://github.com/mehmetkrn/elden-ring-turkce-yama), MIT License, Copyright (c) mehmetkrn).
 ELDEN RING is a trademark of FromSoftware, Inc. and BANDAI NAMCO Entertainment Inc.
 
+The Death Stranding Director's Cut pack (`death-stranding-directors-cut.json.gz`) was translated with Claude (Claude ile
+çevrildi) from the fan-made English transcript at
+[Game Scripts Wiki](https://game-scripts-wiki.blogspot.com/2019/12/death-stranding-full-transcript.html); its terms
+follow the Death Stranding 2 pack. DEATH STRANDING is a trademark of Kojima Productions Co., Ltd. / Sony Interactive
+Entertainment LLC.
+
+The Marvel's Spider-Man 2 pack (`marvels-spider-man-2.json.gz`) was translated with Claude (Claude ile çevrildi) from
+the English [Marvel's Spider-Man 2 script](https://marvels-spider-man.fandom.com/wiki/Marvel%27s_Spider-Man_2_script)
+and [menu transcript](https://marvels-spider-man.fandom.com/wiki/Marvel%27s_Spider-Man_2_menu_transcript) on the
+Marvel's Spider-Man Wiki (Fandom, text under [CC BY-SA](https://creativecommons.org/licenses/by-sa/3.0/), by its
+contributors), and from English lines CouchSubs users read on screen (shared subtitle pool). Marvel's Spider-Man 2 is
+a trademark of Marvel and Sony Interactive Entertainment LLC.
+
 ## Windows app only
 
 | Component | License | Source |

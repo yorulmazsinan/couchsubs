@@ -11,6 +11,14 @@ public enum StabilizerAction: Equatable {
     case restore(String)
 }
 
+/// Satırın gönderilmeden bırakıldığı durumlar (yalnız altyazı günlüğü için; kararları değiştirmez).
+public enum StabilizerNote: Equatable {
+    /// Gönderilen satırın daha kötü (daha az sözcük okuyan) yeniden okuması; yeni satır sayılmadı.
+    case worseReread(String)
+    /// Çöp gibi okunan satır (`OcrNoise.looksGarbled`) yeterince kararlı kalmadan ekrandan kalktı ya da değişti; hiç gönderilmedi.
+    case garbledDropped(String)
+}
+
 /// Kare kare gelen OCR çıktısını izler; altyazı kararlı hale gelince çevrilmesini,
 /// ekrandan kalkınca TV'den temizlenmesini ister. Aynı altyazıyı tekrar göndermez.
 /// Kararlar okuma hızına değil saate bağlıdır (`clock`: milisaniye; testlerde sahtesi verilir).
@@ -47,6 +55,10 @@ public struct SubtitleStabilizer {
     /// Çevirisi başarısız olan satır ve en erken yeniden deneneceği an.
     private var forgotten = ""
     private var retryAt = 0
+    /// Bekleyen (henüz gönderilmemiş) çöp gibi okunan aday; gönderilmeden kalkarsa günlüğe yazılır.
+    private var garbledPending = ""
+    /// Son `feed` çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.
+    public private(set) var note: StabilizerNote?
 
     public init(similarity: Double = 0.85, stableFrames: Int = 2, clearAfterMs: Int = SubtitleStabilizer.clearAfterMs,
                 clock: @escaping () -> Int = SubtitleStabilizer.uptimeMs) {
@@ -59,8 +71,10 @@ public struct SubtitleStabilizer {
     public mutating func feed(_ rawText: String) -> StabilizerAction {
         let time = now()
         let text = TextMatch.normalize(rawText)
+        note = nil
         // 3 karakterden kısa okumalar (gürültü, tek simge) boş kare sayılır.
         guard text.count >= 3 else {
+            dropGarbled()
             candidate = ""
             candidateCount = 0
             let since = emptySince ?? time
@@ -76,6 +90,7 @@ public struct SubtitleStabilizer {
         if TextMatch.isSimilar(text, candidate, threshold: similarity) {
             candidateCount += 1
         } else {
+            dropGarbled()
             candidate = text
             candidateCount = 1
             candidateSince = time
@@ -83,14 +98,23 @@ public struct SubtitleStabilizer {
         // Daktilo efektinde metin büyürken aday değişir; tamamlanıp kararlı olunca gider.
         // Noktalamayla biten satır zaten tamamdır; hızlı konuşmada beklemeden ilk karede gider. Çöp gibi okunan satır
         // (altyazılar geçişte üst üste solarken karışan okuma) beklemeden gitmez; geçiş süresinden uzun kararlıysa gider.
-        let ready = OcrNoise.looksGarbled(rawText)
+        let garbled = OcrNoise.looksGarbled(rawText)
+        let ready = garbled
             ? candidateCount >= stableFrames && time - candidateSince >= Self.garbledStableMs
             : candidateCount >= stableFrames || Self.endsSentence(rawText)
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        guard ready, !Self.isSame(text, sent) else { return .none }
+        if Self.isSame(text, sent) { return .none }
+        guard ready else {
+            if garbled { garbledPending = rawText.trimmingCharacters(in: .whitespacesAndNewlines) }
+            return .none
+        }
+        garbledPending = ""
         // Aynı cümlenin bir iki sözcüğü başka okunmuş, daha iyi olmayan okuması da yeni satır değildir; çevrilseydi TV'de
         // aynı cümlenin iki üç çevirisi üst üste dururdu. Daha çok sözcük okuyan okuma yeniden çevrilir (TV yerine koyar).
-        if !sentRaw.isEmpty, TextMatch.isWorseReread(rawText, of: sentRaw) { return .none }
+        if !sentRaw.isEmpty, TextMatch.isWorseReread(rawText, of: sentRaw) {
+            note = .worseReread(rawText.trimmingCharacters(in: .whitespacesAndNewlines))
+            return .none
+        }
 
         // Az önce kalkan satır geri geldiyse okuma birkaç kare kaçmıştır: çevirisi yeniden gösterilir, yeniden çevrilmez.
         if let index = history.lastIndex(where: { time - $0.leftAt <= Self.restoreWithinMs && Self.isSame(text, $0.rows) }) {
@@ -107,6 +131,13 @@ public struct SubtitleStabilizer {
         sentRaw = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         sent = TextMatch.normalizeRows(sentRaw)
         return .translate(sentRaw)
+    }
+
+    /// Bekleyen çöp aday gönderilmeden bırakıldı (kalktı ya da başka okumaya döndü): günlük için not edilir.
+    private mutating func dropGarbled() {
+        guard !garbledPending.isEmpty else { return }
+        note = .garbledDropped(garbledPending)
+        garbledPending = ""
     }
 
     /// Okuma, bu satırların (gürültülü) yeniden okuması mı; sonuna sözcük eklenmiş hali yenidir.
@@ -146,11 +177,14 @@ public struct SubtitleStabilizer {
         sentRaw = ""
         candidate = ""
         candidateCount = 0
+        garbledPending = ""
     }
 
     public mutating func reset() -> StabilizerAction {
         candidate = ""
         candidateCount = 0
+        garbledPending = ""
+        note = nil
         emptySince = nil
         history.removeAll()
         forgotten = ""

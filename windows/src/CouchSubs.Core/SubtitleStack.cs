@@ -35,6 +35,9 @@ public sealed class SubtitleStack
         public double HideAt => FadeAt + PreviousFade;
     }
 
+    /// <summary>Kapalıysa önceki satır üste çıkmaz, yeni satır eskisinin yerine geçer (ayarlardaki seçenek).</summary>
+    public bool StackPrevious { get; set; } = true;
+
     private Current? current;
     private Slot? previous;
     private Slot? older;
@@ -54,7 +57,7 @@ public sealed class SubtitleStack
         {
             // Üstteki satırlar olduğu gibi kalır.
         }
-        else if (current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text))
+        else if (StackPrevious && current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text))
         {
             PushPrevious(shown.Text, now);
         }
