@@ -158,7 +158,25 @@ cd couchsubs-android
 gradle testDebugUnitTest -Pcouchsubs.skipNative=true --no-daemon --max-workers=4
 # Hata ayıklama APK'sı (NDK 27.0.12077973, CMake 3.22.1, protobuf'lu Python)
 gradle assembleDebug -Pcouchsubs.python=/yol/venv/bin/python3 --no-daemon --max-workers=4
+# İmzalı sürüm APK'sı (doğrudan indirme): imza ~/.config/couchsubs/android-signing.properties'ten okunur
+gradle assembleRelease -Pcouchsubs.python=/yol/venv/bin/python3 --no-daemon --max-workers=4
 ```
+
+JDK 21 kullanılmalı (`JAVA_HOME`): JDK 26 ile AGP 8.7'nin `androidJdkImage` dönüşümü düşüyor.
+
+### Sürüm imzası (doğrudan indirilen APK)
+
+Telefon uygulamasının kendi anahtarı vardır (TV uygulamasınınkinden ayrı): `~/.config/couchsubs/android-release.jks`
+(RSA 4096, 30 yıl, takma ad `couchsubs`, `CN=CouchSubs, O=Enmera, C=TR`); parolalar
+`~/.config/couchsubs/android-signing.properties`'te (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; izin 600).
+İkisi de depoya girmez; anahtar kaybolursa aynı uygulamaya güncelleme imzalanamaz, yedeklenmelidir. Dosya yoksa
+derleme CI sırlarına (`ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`), o da yoksa geliştirme anahtarına düşer.
+Sürüm adı masaüstüyle aynı çizgidedir (`0.1.0-beta.34`, kod 34); CI `-Pcouchsubs.versionName` / `-Pcouchsubs.versionCode`
+ile verebilir. R8 (küçültme) kapalı: JNI geri çağrıları için tutma kuralları yazılıp gerçek cihazda denenmeden açılmaz.
+
+Play'e geçişte Play App Signing kullanılırsa Play kendi uygulama imza anahtarıyla imzalar: bu APK'yı kuranlar Play
+sürümüne güncelleyemez, bir kez kaldırıp yeniden kurmaları gerekir (ayarlar silinir). Bunu önlemek için Play App
+Signing'e bu anahtar yüklenebilir ("kendi anahtarını kullan").
 
 İlk sonuç (Mac, Kasım 2026): 59 JVM testi geçti; `assembleDebug` yerel kütüphaneyle birlikte ~7,5 dk'da derlendi.
 Hata ayıklama APK'sı 64 MB: `libcouchsubs-jni.so` 4,8 MB, ML Kit çeviri 16 MB ve yazı tanıma 11 MB yerel kütüphanesi,
@@ -171,7 +189,8 @@ CI önerisi: `.github/workflows/android-app.yml` (yalnız `couchsubs-android/**`
 
 1. Gerçek cihazda uçtan uca deneme: ImageReader biçimi, ML Kit okuma kalitesi, ısınma, Wi-Fi uykusu.
 2. Tasarımın uygulanması ve İngilizce metinler (`values-en`).
-3. İmza: TV uygulamasıyla aynı anahtar (depo sırları); `release.yml`'e `CouchSubs-android.apk` olarak eklenmesi.
+3. İmza: telefon uygulamasının kendi anahtarı (yukarıda); `release.yml`'e `CouchSubs-android.apk` olarak eklenmesi
+   (CI için anahtarın depo sırrı olarak verilmesi gerekir).
 4. Uygulama içi güncelleme denetimi (masaüstündeki gibi GitHub sürümleri) — Play dışı dağıtım için.
 5. Play (kuruluş hesabı, kapalı test şartı yok): iç test kanalı, veri güvenliği formu, FGS beyanı, marka kullanımının
    gözden geçirilmesi.

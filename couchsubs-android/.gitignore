@@ -6,3 +6,7 @@ local.properties
 # Sırlar ve hesap dosyaları: depoya girmez (bkz. secrets.example.properties, docs/android-app-plan.md).
 secrets.properties
 app/google-services.json
+# Sürüm imza anahtarı depoya girmez (~/.config/couchsubs altında durur).
+*.jks
+*.keystore
+android-signing.properties
