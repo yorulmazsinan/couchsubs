@@ -43,6 +43,9 @@ public enum DisconnectKind
     /// <summary>Kayıtlı adreste PS5 aramaya yanıt vermedi ve oturum da açılamadı (ayrıntı: adres).</summary>
     NotFound,
     Other,
+    /// <summary>PS5 oturum isteğinde kaydı kabul etmedi (0x80108b09 kayıt geçersiz, 0x80108b02 hesap tanınmıyor).
+    /// Yeniden denemek aynı yere çıkar; PS5 ikinci hesapla yeniden eşlenmelidir.</summary>
+    RegistrationInvalid,
 }
 
 public sealed record DisconnectReason(DisconnectKind Kind, string? Detail = null);

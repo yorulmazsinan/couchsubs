@@ -3105,6 +3105,22 @@
         }
       }
     },
+    "The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 bu kaydı kabul etmedi. Ayarlar'dan PS5'i ikinci hesapla yeniden eşleyin."
+          }
+        }
+      }
+    },
     "The PS5 refused the code. Open Pair Device again on the PS5 and enter the new code.": {
       "localizations": {
         "en": {
