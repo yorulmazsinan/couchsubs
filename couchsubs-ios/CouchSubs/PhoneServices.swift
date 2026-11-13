@@ -55,7 +55,10 @@ protocol PhoneServices: AnyObject {
 
 final class LivePhoneServices: PhoneServices {
     func discoverConsoles() async -> [ConsoleInfo] {
-        let found = await Console.discover()
+        // İlk aramada iOS "Yerel Ağ" izin penceresini açar; kullanıcı izin verene kadar giden istekler düşer. Bulunamazsa
+        // bir kez daha aranır.
+        var found = await Console.discover()
+        if found.isEmpty { found = await Console.discover() }
         RemotePlayLog.write("PS5 araması: \(found.isEmpty ? "bulunamadı" : found.map { "\($0.name) \($0.host)" }.joined(separator: ", "))")
         return found
     }

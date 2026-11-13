@@ -14,7 +14,8 @@ private final class FakeStream: StreamControlling {
     private(set) var stopped = false
     func start() { started = true }
     func stop() { stopped = true }
-    func reconnectNow() {}
+    private(set) var reconnects = 0
+    func reconnectNow() { reconnects += 1 }
 }
 
 private final class FakeServices: PhoneServices {
@@ -109,6 +110,27 @@ final class PhoneModelTests: XCTestCase {
         XCTAssertFalse(model.isRunning)
         XCTAssertTrue(services.stream.stopped)
         XCTAssertEqual(awake, [true, false])
+    }
+
+    /// Denetim Merkezi ya da bildirimden dönmek bağlı PS5 oturumunu kapatıp açmaz; arka plandan dönmek yeniler.
+    func testReturningWithoutBackgroundKeepsTheLiveSession() async throws {
+        let model = makeModel()
+        try await model.completePSNLogin(redirect: URL(string: "https://example.com")!)
+        try await model.register(host: "192.168.1.20", pin: "12345678")
+        model.settings.output = .computer
+        await model.start()
+        services.stream.onState?(.streaming)
+        for _ in 0..<100 where model.sessionState != .streaming { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(model.sessionState, .streaming)
+        model.becameActive(afterBackground: false)
+        XCTAssertEqual(services.stream.reconnects, 0)
+        model.becameActive(afterBackground: true)
+        XCTAssertEqual(services.stream.reconnects, 1)
+        services.stream.onState?(.disconnected(.network))
+        for _ in 0..<100 where model.sessionState == .streaming { try await Task.sleep(nanoseconds: 10_000_000) }
+        model.becameActive(afterBackground: false)
+        XCTAssertEqual(services.stream.reconnects, 2)
+        model.stop()
     }
 
     func testPhoneScreenShowsSubtitlesOnlyWhenChosen() {

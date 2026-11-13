@@ -30,6 +30,36 @@ final class ReconnectPolicyTests: XCTestCase {
         policy.reset()
         XCTAssertEqual(policy.nextDelay(), 2)
     }
+
+    /// Bağlanıp birkaç saniyede düşen oturum aralığı sıfırlamaz: aç-kapa döngüsü 2 sn'de bir değil, giderek seyrek döner.
+    func testShortSessionsKeepBackingOff() {
+        var policy = ReconnectPolicy()
+        let start = Date(timeIntervalSince1970: 0)
+        var delays: [Int] = []
+        for round in 0..<6 {
+            let connected = start.addingTimeInterval(Double(round) * 100)
+            policy.connected(at: connected)
+            policy.ended(at: connected.addingTimeInterval(5))
+            delays.append(policy.nextDelay())
+        }
+        XCTAssertEqual(delays, [2, 4, 8, 16, 30, 30])
+    }
+
+    func testAStableSessionStartsTheBackoffOver() {
+        var policy = ReconnectPolicy()
+        _ = policy.nextDelay(); _ = policy.nextDelay(); _ = policy.nextDelay()
+        let connected = Date(timeIntervalSince1970: 0)
+        policy.connected(at: connected)
+        policy.ended(at: connected.addingTimeInterval(ReconnectPolicy.stableAfter + 1))
+        XCTAssertEqual(policy.nextDelay(), 2)
+    }
+
+    func testInUseWaitsAtLeastEightSeconds() {
+        var policy = ReconnectPolicy()
+        XCTAssertEqual(policy.nextDelay(inUse: true), 8)
+        XCTAssertEqual(policy.nextDelay(inUse: true), 16)
+        XCTAssertEqual(policy.nextDelay(inUse: true), 30)
+    }
 }
 
 final class RegisteredConsoleTests: XCTestCase {
@@ -47,6 +77,11 @@ final class ConsoleSubnetTests: XCTestCase {
         XCTAssertEqual(hosts.first, 0xC0A8_0101)
         XCTAssertEqual(hosts.last, 0xC0A8_01FE)
         XCTAssertFalse(hosts.contains(0xC0A8_010A))
+    }
+
+    func testCellularAdapterIsNotSearched() {
+        XCTAssertTrue(Console.isCellular("pdp_ip0"))
+        XCTAssertFalse(Console.isCellular("en0"))
     }
 
     func testLargeNetworksAreSkipped() {

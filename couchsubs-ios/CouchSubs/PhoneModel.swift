@@ -319,10 +319,18 @@ final class PhoneModel: ObservableObject {
     }
 
     /// Uygulama yeniden öne gelince (iOS arka planda bağlantıları keser) PS5 ve TV bağlantıları hemen yenilenir.
-    func becameActive() {
+    /// Arka plana gitmeden yalnız etkin olmaktan çıkıp dönünce (Denetim Merkezi, bildirim, izin penceresi) çalışan PS5
+    /// oturumu kapatılıp açılmaz: eskiden her dönüşte kapatılıyor, PS5'te ikinci hesap girip çıkıyordu.
+    func becameActive(afterBackground: Bool = true) {
         guard isRunning else { return }
-        session?.reconnectNow()
+        if afterBackground || !Self.isLive(sessionState) { session?.reconnectNow() }
         keeper?.reconnect()
+    }
+
+    /// Bağlı ya da bağlanıyor; yeniden bağlanmaya gerek yok.
+    private static func isLive(_ state: SessionState) -> Bool {
+        if case .disconnected = state { return false }
+        return true
     }
 
     private func startKeeper() {

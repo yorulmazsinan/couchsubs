@@ -243,7 +243,11 @@ struct PS5PairScreen: View {
                         }
                     }
                     Spacer()
-                    if searching { ProgressView().tint(Mobile.Palette.accent) } else if !host.isEmpty { MobileLiveDot(pulses: false) }
+                    if !host.isEmpty && !searching {
+                        MobileLiveDot(pulses: false)
+                    } else {
+                        SearchAgainButton(searching: searching) { Task { await search() } }
+                    }
                 }
             }
             Tile {
@@ -309,6 +313,7 @@ struct PS5PairScreen: View {
     }
 
     private func search() async {
+        guard !searching else { return }
         searching = true
         consoles = await model.discoverConsoles()
         searching = false
@@ -354,14 +359,21 @@ struct TargetScreen: View {
                     MobileTileIcon(symbol: "tv")
                     Text("On the TV, over the game").font(Mobile.TypeScale.headline)
                     Spacer()
-                    if searching { ProgressView().tint(Mobile.Palette.accent) }
+                    if !allTVs.isEmpty {
+                        SearchAgainButton(searching: searching) { Task { await search() } }
+                    }
                 }
                 ForEach(allTVs, id: \.self) { tv in
                     RowDivider()
                     Button { Task { await pair(tv) } } label: { tvRow(tv) }.buttonStyle(.plain).disabled(working != nil)
                 }
-                if allTVs.isEmpty && !searching {
-                    Text("No TV found on the network.").font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+                if allTVs.isEmpty {
+                    HStack(spacing: Mobile.Space.gap) {
+                        Text(searching ? "Looking for the TV on the network…" : "No TV found on the network.")
+                            .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+                        Spacer()
+                        SearchAgainButton(searching: searching) { Task { await search() } }
+                    }
                 }
             }
             BentoGrid {
@@ -452,6 +464,7 @@ struct TargetScreen: View {
     }
 
     private func search() async {
+        guard !searching else { return }
         searching = true
         tvs = await model.discoverTVs()
         searching = false
@@ -467,5 +480,21 @@ struct TargetScreen: View {
             self.error = String(localized: "Could not connect to the TV. Accept the request on the TV screen and try again.")
         }
         working = nil
+    }
+}
+
+/// PS5 ve TV aramasının yanındaki "Yeniden ara" düğmesi; ararken aynı yerde dönen gösterge durur.
+struct SearchAgainButton: View {
+    let searching: Bool
+    let action: () -> Void
+
+    var body: some View {
+        if searching {
+            ProgressView()
+                .tint(Mobile.Palette.accent)
+                .frame(width: Mobile.Control.icon, height: Mobile.Control.icon)
+        } else {
+            IconButton(symbol: "arrow.clockwise", label: "Search again", tint: Mobile.Palette.accent, action: action)
+        }
     }
 }
