@@ -50,8 +50,8 @@ android {
         targetSdk 35
         // Masaüstü sürüm çizgisiyle aynı ad; kod beta numarasıdır ve her yayında artar. CI etiketten verebilir:
         // -Pcouchsubs.versionName=0.1.0-beta.35 -Pcouchsubs.versionCode=35
-        versionCode((findProperty('couchsubs.versionCode') ?: '34').toString().toInteger())
-        versionName((findProperty('couchsubs.versionName') ?: '0.1.0-beta.34').toString())
+        versionCode((findProperty('couchsubs.versionCode') ?: '36').toString().toInteger())
+        versionName((findProperty('couchsubs.versionName') ?: '0.1.0-beta.36').toString())
         ndk { abiFilters(*abis) }
         buildConfigField 'String', 'PACKS_URL', "\"${secret('packs.url')}\""
         buildConfigField 'String', 'FACEBOOK_APP_ID', "\"${secret('facebook.appId')}\""

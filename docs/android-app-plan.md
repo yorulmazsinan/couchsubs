@@ -171,7 +171,7 @@ Telefon uygulamasının kendi anahtarı vardır (TV uygulamasınınkinden ayrı)
 `~/.config/couchsubs/android-signing.properties`'te (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; izin 600).
 İkisi de depoya girmez; anahtar kaybolursa aynı uygulamaya güncelleme imzalanamaz, yedeklenmelidir. Dosya yoksa
 derleme CI sırlarına (`ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`), o da yoksa geliştirme anahtarına düşer.
-Sürüm adı masaüstüyle aynı çizgidedir (`0.1.0-beta.34`, kod 34); CI `-Pcouchsubs.versionName` / `-Pcouchsubs.versionCode`
+Sürüm adı masaüstüyle aynı çizgidedir (`0.1.0-beta.36`, kod 36); CI `-Pcouchsubs.versionName` / `-Pcouchsubs.versionCode`
 ile verebilir. R8 (küçültme) kapalı: JNI geri çağrıları için tutma kuralları yazılıp gerçek cihazda denenmeden açılmaz.
 
 Play'e geçişte Play App Signing kullanılırsa Play kendi uygulama imza anahtarıyla imzalar: bu APK'yı kuranlar Play
