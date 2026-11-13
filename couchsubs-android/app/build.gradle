@@ -41,17 +41,17 @@ def python = (findProperty('couchsubs.python') ?: System.getenv('COUCHSUBS_PYTHO
 
 android {
     namespace 'com.couchsubs.mobile'
-    compileSdk 35
+    compileSdk 36
     ndkVersion '27.0.12077973'
 
     defaultConfig {
         applicationId 'com.couchsubs.mobile'
         minSdk 26
-        targetSdk 35
+        targetSdk 36
         // Masaüstü sürüm çizgisiyle aynı ad; kod beta numarasıdır ve her yayında artar. CI etiketten verebilir:
-        // -Pcouchsubs.versionName=0.1.0-beta.35 -Pcouchsubs.versionCode=35
-        versionCode((findProperty('couchsubs.versionCode') ?: '36').toString().toInteger())
-        versionName((findProperty('couchsubs.versionName') ?: '0.1.0-beta.36').toString())
+        // -Pcouchsubs.versionName=0.1.0-beta.37 -Pcouchsubs.versionCode=37
+        versionCode((findProperty('couchsubs.versionCode') ?: '37').toString().toInteger())
+        versionName((findProperty('couchsubs.versionName') ?: '0.1.0-beta.37').toString())
         ndk { abiFilters(*abis) }
         buildConfigField 'String', 'PACKS_URL', "\"${secret('packs.url')}\""
         buildConfigField 'String', 'FACEBOOK_APP_ID', "\"${secret('facebook.appId')}\""
@@ -65,7 +65,9 @@ android {
                 cmake {
                     // Yalnız kendi kütüphanemiz derlenir; chiaki-ng'nin eski Android uygulaması (chiaki-jni) derlenmez.
                     targets 'couchsubs-jni'
-                    arguments "-DPYTHON_EXECUTABLE=${python}", "-DPython3_EXECUTABLE=${python}", '-DANDROID_STL=c++_static'
+                    // 16 KB sayfa boyutu (Play şartı): NDK 27 varsayılanı 4 KB; LOAD segmentleri 16 KB hizalanır.
+                    arguments "-DPYTHON_EXECUTABLE=${python}", "-DPython3_EXECUTABLE=${python}", '-DANDROID_STL=c++_static',
+                        '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
                 }
             }
         }

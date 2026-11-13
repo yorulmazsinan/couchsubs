@@ -108,6 +108,7 @@ fun MainScreen(
     val settings = Services.settings
     val bounds = remember { mutableStateMapOf<TourStep, Rect>() }
     var tour by remember { mutableStateOf(if (settings.tourShown) null else TourStep.START) }
+    val paired = settings.console != null
     fun mark(step: TourStep) = Modifier.onGloballyPositioned { bounds[step] = it.boundsInRoot() }
     val topBar: @Composable () -> Unit = {
         TopBar {
@@ -119,9 +120,15 @@ fun MainScreen(
     Box(Modifier.fillMaxSize()) {
         if (status.running) RunningScreen(status, topBar, onStop, onPhoneView)
         else ScreenScaffold(top = topBar, bottom = {
-            PrimaryButton(stringResource(R.string.start), modifier = mark(TourStep.START), onClick = onStart)
+            // PS5 eşlenmemişse (kurulum atlandı) başlatmak yerine eşleme açılır.
+            if (paired) PrimaryButton(stringResource(R.string.start), modifier = mark(TourStep.START), onClick = onStart)
+            else PrimaryButton(stringResource(R.string.main_pair_button), modifier = mark(TourStep.START), onClick = onPairing)
         }) {
-            Heading(stringResource(R.string.main_ready), stringResource(R.string.main_ready_body))
+            if (paired) Heading(stringResource(R.string.main_ready), stringResource(R.string.main_ready_body))
+            else {
+                Heading(stringResource(R.string.main_unpaired), stringResource(R.string.main_unpaired_body))
+                NoteTile(stringResource(R.string.main_unpaired_note), Tokens.Color.secondary)
+            }
             status.error?.let { NoteTile(it) }
             TwoColumns(
                 { StatusTile(Icons.Filled.PlayArrow, "PS5", settings.console?.name ?: stringResource(R.string.profile_not_paired), it,

@@ -87,6 +87,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit().putBoolean("onboarded", value).apply()
 
+    /** Kurulumda PSN girişi ve PS5 eşlemesi "Şimdilik geç" ile atlandı; eşleme sonra Ayarlar'dan yapılır. */
+    var setupSkipped: Boolean
+        get() = prefs.getBoolean("setupSkipped", false)
+        set(value) = prefs.edit().putBoolean("setupSkipped", value).apply()
+
     var target: SubtitleTarget
         get() = enumOr(prefs.getString("target", null), SubtitleTarget.TV)
         set(value) = prefs.edit().putString("target", value.name).apply()

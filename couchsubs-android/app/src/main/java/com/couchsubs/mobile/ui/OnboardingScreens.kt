@@ -134,13 +134,13 @@ fun WelcomeScreen(onDone: () -> Unit) {
 /** Sony'nin giriş sayfası uygulama içi WebView'da; yönlendirme yakalanır, parola yalnız Sony'ye gider. */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun PsnLoginScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
+fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDone: () -> Unit) {
     var opened by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var why by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     if (!opened) {
-        ScreenScaffold(top = { TopBar(onBack = onBack) }, bottom = {
+        ScreenScaffold(top = { TopBar(onBack = onBack) { SkipAction(onSkip) } }, bottom = {
             GhostButton(stringResource(R.string.psn_why)) { why = true }
             PrimaryButton(stringResource(R.string.psn_open)) {
                 // Her girişte temiz oturum: önceki çerezler (ör. kendi hesabın) karışmasın.
@@ -192,6 +192,12 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
     })
 }
 
+/** Kurulumda PSN ve PS5 adımlarının sağ üstünde "Şimdilik geç" (PS5'siz de uygulama gezilebilsin). */
+@Composable
+private fun SkipAction(onSkip: (() -> Unit)?) {
+    if (onSkip != null) GhostButton(stringResource(R.string.skip_for_now), onClick = onSkip)
+}
+
 @Composable
 fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = Tokens.Color.surface2,
@@ -201,7 +207,7 @@ fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun PairScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
+fun PairScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDone: () -> Unit) {
     val settings = Services.settings
     var consoles by remember { mutableStateOf<List<ConsoleInfo>?>(null) }
     var host by remember { mutableStateOf(settings.console?.host ?: "") }
@@ -217,7 +223,7 @@ fun PairScreen(onBack: (() -> Unit)? = null, onDone: () -> Unit) {
         if (consoles.isNullOrEmpty()) manual = true
     }
     val pin = Registration.parsePin(code)
-    ScreenScaffold(top = { TopBar(onBack = onBack) }, bottom = {
+    ScreenScaffold(top = { TopBar(onBack = onBack) { SkipAction(onSkip) } }, bottom = {
         if (!manual) GhostButton(stringResource(R.string.pair_not_found)) { manual = true }
         PrimaryButton(stringResource(R.string.pair_button), enabled = !working && pin != null && host.isNotEmpty()) {
             val accountId = settings.accountId ?: return@PrimaryButton

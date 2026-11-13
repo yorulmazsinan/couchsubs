@@ -40,8 +40,9 @@ object Routes {
         val settings = Services.settings
         return when {
             !settings.welcomeSeen -> WELCOME
-            settings.accountId == null -> PSN
-            settings.console == null -> PAIR
+            // "Şimdilik geç" ile atlandıysa PS5'siz ana ekrana gidilir (ör. Play incelemesi); eşleme Ayarlar'dan.
+            settings.accountId == null && !settings.setupSkipped -> PSN
+            settings.console == null && !settings.setupSkipped -> PAIR
             !settings.onboarded -> TARGET
             else -> MAIN
         }
@@ -76,8 +77,15 @@ class MainActivity : ComponentActivity() {
                             advance(navigation)
                         }
                     }
-                    composable(Routes.PSN) { PsnLoginScreen(onBack = back(navigation)) { advance(navigation) } }
-                    composable(Routes.PAIR) { PairScreen(onBack = back(navigation)) { advance(navigation) } }
+                    composable(Routes.PSN) {
+                        PsnLoginScreen(onBack = back(navigation), onSkip = skip(navigation)) {
+                            // Ana ekrandan eşlemeye gelindiyse girişten sonra eşleme ekranı açılır.
+                            if (settings.console == null && navigation.previousBackStackEntry != null)
+                                navigation.navigate(Routes.PAIR) { popUpTo(Routes.PSN) { inclusive = true } }
+                            else advance(navigation)
+                        }
+                    }
+                    composable(Routes.PAIR) { PairScreen(onBack = back(navigation), onSkip = skip(navigation)) { advance(navigation) } }
                     composable(Routes.TARGET) {
                         val onboarding = navigation.previousBackStackEntry == null
                         TargetScreen(onBack = back(navigation)) {
@@ -92,7 +100,7 @@ class MainActivity : ComponentActivity() {
                             onStop = { TranslationService.stop(this@MainActivity) },
                             onPhoneView = { startActivity(Intent(this@MainActivity, PhoneSubtitleActivity::class.java)) },
                             onTarget = { navigation.navigate(Routes.TARGET) },
-                            onPairing = { navigation.navigate(Routes.PAIR) },
+                            onPairing = { pairing(navigation) },
                             onPacks = { navigation.navigate(Routes.PACKS) },
                             onProfile = { navigation.navigate(Routes.PROFILE) },
                             onSettings = { navigation.navigate(Routes.SETTINGS) },
@@ -105,14 +113,14 @@ class MainActivity : ComponentActivity() {
                         ProfileScreen(
                             onBack = { navigation.popBackStack() },
                             onSettings = { navigation.navigate(Routes.SETTINGS) },
-                            onPairing = { navigation.navigate(Routes.PAIR) },
+                            onPairing = { pairing(navigation) },
                             onTarget = { navigation.navigate(Routes.TARGET) },
                             onPsn = { navigation.navigate(Routes.PSN) },
                         )
                     }
                     composable(Routes.SETTINGS) {
                         SettingsScreen(onBack = { navigation.popBackStack() }, onPacks = { navigation.navigate(Routes.PACKS) },
-                            onTarget = { navigation.navigate(Routes.TARGET) }, onPairing = { navigation.navigate(Routes.PAIR) })
+                            onTarget = { navigation.navigate(Routes.TARGET) }, onPairing = { pairing(navigation) })
                     }
                 }
             }
@@ -135,6 +143,18 @@ class MainActivity : ComponentActivity() {
     /** Ana ekrandan açılmış adımda geri düğmesi; kurulumda (yığında önceki ekran yok) düğme görünmez. */
     private fun back(navigation: NavHostController): (() -> Unit)? =
         if (navigation.previousBackStackEntry != null) ({ navigation.popBackStack() }) else null
+
+    /** Kurulumda (yığında önceki ekran yok) "Şimdilik geç": PSN ve PS5 adımları atlanır, PS5'siz ana ekrana geçilir. */
+    private fun skip(navigation: NavHostController): (() -> Unit)? =
+        if (navigation.previousBackStackEntry == null) ({
+            Services.settings.setupSkipped = true
+            advance(navigation)
+        }) else null
+
+    /** PS5 eşleme: PSN girişi yoksa (kurulum atlandıysa) önce giriş, ardından eşleme. */
+    private fun pairing(navigation: NavHostController) {
+        navigation.navigate(if (Services.settings.accountId == null) Routes.PSN else Routes.PAIR)
+    }
 
     private fun startTranslation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

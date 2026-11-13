@@ -30,3 +30,6 @@ add_library(couchsubs-jni SHARED couchsubs-jni.c video-decoder.c video-decoder.h
 target_link_libraries(couchsubs-jni PRIVATE chiaki-lib log mediandk android)
 set_target_properties(couchsubs-jni PROPERTIES C_VISIBILITY_PRESET hidden)
 target_compile_options(couchsubs-jni PRIVATE -Wall)
+# 16 KB sayfa boyutlu cihazlar (Android 15+, Play şartı): LOAD segmentleri 16 KB hizalı. chiaki-ng ve OpenSSL bu
+# kütüphaneye durağan bağlandığı için hizayı yalnız buradaki bağlama belirler.
+target_link_options(couchsubs-jni PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")

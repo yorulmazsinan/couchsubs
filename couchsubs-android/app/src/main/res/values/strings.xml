@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
-<!-- Mobil metinler "sen" diliyle (TASARIM-MOBIL.md örnekleri). İngilizcesi (values-en) mağaza öncesi eklenecek. -->
+<!-- Mobil metinler "sen" diliyle (TASARIM-MOBIL.md örnekleri). İngilizcesi values-en/strings.xml'de; yeni metin ikisine birden eklenir. -->
 <resources>
     <string name="channel_translation">Altyazı çevirisi</string>
     <string name="notification_title">Çeviri sürüyor</string>
@@ -9,6 +9,7 @@
     <string name="start">Çeviriyi başlat</string>
     <string name="next">İleri</string>
     <string name="skip">Geç</string>
+    <string name="skip_for_now">Şimdilik geç</string>
     <string name="save">Kaydet</string>
     <string name="back">Geri</string>
     <string name="selected">Seçili</string>
@@ -95,7 +96,7 @@
     <string name="ok">Tamam</string>
     <string name="next_continue">Devam</string>
     <string name="setup_step">Kurulum · Adım %1$d/3</string>
-    <string name="url_privacy" translatable="false">https://github.com/yorulmazsinan/couchsubs/blob/main/PRIVACY.md</string>
+    <string name="url_privacy" translatable="false">https://couchsubs.enmeraapps.com/gizlilik</string>
     <string name="url_help" translatable="false">https://github.com/yorulmazsinan/couchsubs/issues</string>
     <string name="url_source" translatable="false">https://github.com/yorulmazsinan/couchsubs</string>
     <string name="url_tvs" translatable="false">https://github.com/yorulmazsinan/couchsubs#hangi-tvlerde-çalışır</string>
@@ -145,6 +146,10 @@
     <string name="target_unlisted_note">Desteklenen TV\'ler</string>
     <string name="main_ready">Hazır</string>
     <string name="main_ready_body">PS5\'te oyunu aç, sonra başlat.</string>
+    <string name="main_unpaired">PS5 eşlenmedi</string>
+    <string name="main_unpaired_body">Paketlere ve ayarlara şimdiden bakabilirsin.</string>
+    <string name="main_unpaired_note">PS5\'e bağlanmak için Ayarlar\'dan eşle.</string>
+    <string name="main_pair_button">PS5\'i eşle</string>
     <string name="main_packs_title">Hazır paketlerle anında altyazı</string>
     <string name="main_packs_games">GTA V, RDR2, Mafia ve 3 oyun daha</string>
     <string name="main_engine">Çeviri</string>
