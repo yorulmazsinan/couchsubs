@@ -293,6 +293,107 @@ public class SubtitleStabilizerTests
         Assert.Equal(StabilizerAction.Translate("Hold the gate"), s.Feed("Hold the gate"));
     }
 
+    /// <summary>Altyazının bölgedeki yeri ve bölge izi (64 × 12 gri örnek).</summary>
+    private static readonly TextBox Place = new(0.3, 0.6, 0.7, 0.85);
+
+    private static byte[] Scene(Action<byte[]>? change = null)
+    {
+        var signature = Enumerable.Repeat((byte)120, ReadScheduler.SignatureWidth * ReadScheduler.SignatureHeight).ToArray();
+        change?.Invoke(signature);
+        return signature;
+    }
+
+    /// <summary>Altyazının yerine düşen bir örnek (satır 8, sütun 30).</summary>
+    private static void SubtitleSpot(byte[] s, int delta) => s[(8 * ReadScheduler.SignatureWidth) + 30] = (byte)(120 + delta);
+
+    /// <summary>
+    /// Parlak zeminde yazı tanıma ekranda duran altyazıyı saniyelerce okuyamıyor (It Takes Two): satırın yeri, son
+    /// okunduğu kareden beri değişmediyse (bölgenin başka yerindeki kıpırtı ve video gürültüsü sayılmaz) satır silinmez,
+    /// yeniden okununca da yeniden çevrilmez.
+    /// </summary>
+    [Fact]
+    public void LineIsKeptThroughMissedReadsWhileItsPlaceIsUnchanged()
+    {
+        var clock = new TestClock();
+        var s = new SubtitleStabilizer(clock: clock.Read);
+        Assert.Equal(StabilizerAction.Translate("Hold the gate."), s.Feed("Hold the gate.", Scene(), Place));
+        var moving = Scene(x => { x[0] = 250; x[5] = 10; SubtitleSpot(x, 10); });
+        for (var t = 0; t < 3000; t += 50)
+        {
+            clock.Now += 50;
+            Assert.Equal(StabilizerAction.None, s.Feed("", moving, null));
+        }
+        Assert.Equal(StabilizerAction.None, s.Feed("Hold the gate.", Scene(), Place));
+        // Okunduktan sonra yine kaçarsa süre baştan sayılır.
+        for (var t = 0; t < 3000; t += 50)
+        {
+            clock.Now += 50;
+            Assert.Equal(StabilizerAction.None, s.Feed("", Scene(), null));
+        }
+    }
+
+    /// <summary>Altyazı gerçekten kalkınca (yeri değişti) satır her zamanki sürede silinir.</summary>
+    [Fact]
+    public void LineIsClearedOnTimeWhenItsPlaceChanges()
+    {
+        var clock = new TestClock();
+        var s = new SubtitleStabilizer(clock: clock.Read);
+        s.Feed("Hold the gate.", Scene(), Place);
+        var gone = Scene(x => SubtitleSpot(x, 60));
+        Assert.Equal(StabilizerAction.None, s.Feed("", gone, null));
+        clock.Now += SubtitleStabilizer.ClearAfterMs - 1;
+        Assert.Equal(StabilizerAction.None, s.Feed("", gone, null));
+        clock.Now += 1;
+        Assert.Equal(StabilizerAction.Clear, s.Feed("", gone, null));
+    }
+
+    /// <summary>Okuma bir süre kaçtıktan sonra satırın yeri değişirse silinme o andan itibaren her zamanki sürede olur.</summary>
+    [Fact]
+    public void HeldLineIsClearedOnTimeOnceItsPlaceChanges()
+    {
+        var clock = new TestClock();
+        var s = new SubtitleStabilizer(clock: clock.Read);
+        s.Feed("Hold the gate.", Scene(), Place);
+        clock.Now += 2000;
+        Assert.Equal(StabilizerAction.None, s.Feed("", Scene(), null));
+        clock.Now += 1000;
+        var gone = Scene(x => SubtitleSpot(x, -60));
+        Assert.Equal(StabilizerAction.None, s.Feed("", gone, null));
+        clock.Now += SubtitleStabilizer.ClearAfterMs - 1;
+        Assert.Equal(StabilizerAction.None, s.Feed("", Scene(), null));
+        clock.Now += 1;
+        Assert.Equal(StabilizerAction.Clear, s.Feed("", Scene(), null));
+    }
+
+    /// <summary>Yeri hiç değişmese de boş okunan satır en çok <see cref="SubtitleStabilizer.HoldUnchangedMs"/> tutulur.</summary>
+    [Fact]
+    public void UnchangedPlaceHoldsTheLineOnlyForALimitedTime()
+    {
+        var clock = new TestClock();
+        var s = new SubtitleStabilizer(clock: clock.Read);
+        s.Feed("Hold the gate.", Scene(), Place);
+        Assert.Equal(StabilizerAction.None, s.Feed("", Scene(), null));
+        clock.Now += SubtitleStabilizer.HoldUnchangedMs - 1;
+        Assert.Equal(StabilizerAction.None, s.Feed("", Scene(), null));
+        clock.Now += 1;
+        Assert.Equal(StabilizerAction.Clear, s.Feed("", Scene(), null));
+    }
+
+    /// <summary>Satırın yeri bilinmiyorsa (okuyucu kutu vermedi) ya da kare izi yoksa eski kural: 800 ms boşlukta silinir.</summary>
+    [Fact]
+    public void WithoutPlaceOrSignatureEmptyReadsClearAsBefore()
+    {
+        foreach (var (signature, place) in new (byte[]?, TextBox?)[] { (Scene(), null), (null, Place) })
+        {
+            var clock = new TestClock();
+            var s = new SubtitleStabilizer(clock: clock.Read);
+            s.Feed("Hold the gate.", signature, place);
+            s.Feed("", signature, null);
+            clock.Now += SubtitleStabilizer.ClearAfterMs;
+            Assert.Equal(StabilizerAction.Clear, s.Feed("", signature, null));
+        }
+    }
+
     /// Bekleme yalnız başarısız satır için: başka bir satır hemen çevrilir.
     [Fact]
     public void BackoffDoesNotDelayANewLine()

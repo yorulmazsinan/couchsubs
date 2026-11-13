@@ -162,27 +162,35 @@ private struct AppearanceCard: View {
             } onEditingChanged: { editing in
                 if editing { model.sendTestSubtitle() }
             }
-            Picker("Placement", selection: $model.settings.style.placement) {
-                Text("Over the English subtitle").tag(SubtitlePlacement.cover)
-                Text("Above the English subtitle").tag(SubtitlePlacement.above)
-                Text("Below the English subtitle").tag(SubtitlePlacement.below)
-                Text("Fixed position").tag(SubtitlePlacement.fixed)
-            }
-            if model.settings.style.placement == .fixed {
-                // Sürüklerken TV'de örnek altyazı görünür; böylece yeri doğrudan ekranda ayarlanır.
-                Slider(value: Binding(get: { Double(model.settings.style.bottomPercent) },
-                                      set: { model.settings.style.bottomPercent = Int($0.rounded()) }), in: 0...85) {
-                    Text("Position on screen")
-                } minimumValueLabel: {
-                    Text("Bottom").font(.csCallout).foregroundStyle(Color.csSecondary)
-                } maximumValueLabel: {
-                    Text("Top").font(.csCallout).foregroundStyle(Color.csSecondary)
-                } onEditingChanged: { editing in
-                    if editing { model.sendTestSubtitle() }
+            // Yer ayarları TV içindir; bilgisayar ekranındaki altyazı penceresi sürüklenerek taşınır (Genzo, 2026-11-13:
+            // "ekrandaki konum ayarı işlemiyor").
+            if model.settings.output.showsOnTV {
+                Picker("Placement", selection: $model.settings.style.placement) {
+                    Text("Over the English subtitle").tag(SubtitlePlacement.cover)
+                    Text("Above the English subtitle").tag(SubtitlePlacement.above)
+                    Text("Below the English subtitle").tag(SubtitlePlacement.below)
+                    Text("Fixed position").tag(SubtitlePlacement.fixed)
                 }
-                HintText(text: "In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.")
-            } else {
-                HintText(text: "The translation follows where the game shows its own subtitle.")
+                if model.settings.style.placement == .fixed {
+                    // Sürüklerken TV'de örnek altyazı görünür; böylece yeri doğrudan ekranda ayarlanır.
+                    Slider(value: Binding(get: { Double(model.settings.style.bottomPercent) },
+                                          set: { model.settings.style.bottomPercent = Int($0.rounded()) }), in: 0...85) {
+                        Text("Position on screen")
+                    } minimumValueLabel: {
+                        Text("Bottom").font(.csCallout).foregroundStyle(Color.csSecondary)
+                    } maximumValueLabel: {
+                        Text("Top").font(.csCallout).foregroundStyle(Color.csSecondary)
+                    } onEditingChanged: { editing in
+                        if editing { model.sendTestSubtitle() }
+                    }
+                    HintText(text: "In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.")
+                } else {
+                    HintText(text: "The translation follows where the game shows its own subtitle.")
+                }
+            }
+            if model.settings.output.showsOnComputer {
+                HintText(text: "On the computer screen, move the subtitle by dragging its window: press Adjust the subtitle window.")
+                Button("Adjust the subtitle window") { model.overlayAdjusting = true }.buttonStyle(.secondary)
             }
             Slider(value: Binding(get: { Double(model.settings.style.background) },
                                   set: { model.settings.style.background = Int($0.rounded()) }), in: 0...100) {

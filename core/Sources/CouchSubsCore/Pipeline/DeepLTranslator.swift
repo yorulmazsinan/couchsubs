@@ -47,6 +47,8 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
     private let cache: TranslationCache
     private var speech: [String: [SpokenLine]] = [:]
     private let names = SpeakerNames()
+    /// Çevrilmeyecek adlar ve terimler (ücretsiz çeviriyle aynı sözlük); DeepL'e etiketle korunarak gider.
+    private let glossaryStore: GlossaryStore
     /// Son gösterilen satırlar, eskiden yeniye.
     private var recent: [String] = []
     private var pausedUntil = Date.distantPast
@@ -55,11 +57,13 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
 
     /// `cache`: kalıcı önbellek; verilmezse yalnız bellekte tutulur.
     public init(key: String, fallback: TextTranslator, session: URLSession = DeepLTranslator.makeSession(),
-         cache: TranslationCache = TranslationCache()) {
+         cache: TranslationCache = TranslationCache(),
+         glossary: GlossaryStore = GlossaryStore(directory: GlossaryStore.userDirectory)) {
         self.key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         self.fallback = fallback
         self.session = session
         self.cache = cache
+        glossaryStore = glossary
     }
 
     public static func makeSession() -> URLSession {
@@ -78,17 +82,25 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
         // Bağlam, bu satırdan önce gösterilenlerdir; satırın kendisi bağlama girmez.
         let context = recent.isEmpty ? nil : recent.joined(separator: "\n")
         shown(text)
-        if let cached = cache.value(for: text) { return cached }
+        let glossary = glossaryStore.glossary
+        if let cached = cache.value(for: DeepLMarkup.cacheKey(text, glossary: glossary)) { return cached }
         guard Date() >= pausedUntil else { return try await fallback.translate(text) }
         let pieces = SubtitleSegmenter.split(text)
         names.learn(from: pieces)
         // Önbellekte duran cümleler yeniden gönderilmez; kota yalnız yeni cümlelere gider.
-        var translations: [String?] = pieces.map { $0.translate ? cache.value(for: $0.text) : nil }
+        var translations: [String?] = pieces.map {
+            $0.translate ? cache.value(for: DeepLMarkup.cacheKey($0.text, glossary: glossary)) : nil
+        }
         let missing = pieces.indices.filter { pieces[$0].translate && translations[$0] == nil }
-        let sources = missing.map { SubtitleSegmenter.normalizeCase(pieces[$0].text, names: names.all) }
+        let plain = missing.map { SubtitleSegmenter.normalizeCase(pieces[$0].text, names: names.all.union(glossary.capitalWords)) }
+        // Sözlükteki adlar etiketle korunur; etiket varsa istek XML olarak gider, diğer cümleler de kaçırılır.
+        let wrapped = plain.map { DeepLMarkup.wrap($0, glossary: glossary) }
+        let tagged = wrapped.contains { $0 != nil }
+        let sources = tagged ? zip(plain, wrapped).map { $1 ?? DeepLMarkup.escape($0) } : plain
         let translated: [String]
         do {
-            translated = sources.isEmpty ? [] : try await request(sources, context: context)
+            let reply = sources.isEmpty ? [] : try await request(sources, context: context, tagged: tagged)
+            translated = tagged ? reply.map(DeepLMarkup.unwrap) : reply
             report(nil)
         } catch is CancellationError {
             throw CancellationError()
@@ -99,12 +111,12 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
         }
         for (index, sentence) in zip(missing, translated) {
             translations[index] = sentence
-            cache.store(sentence, for: pieces[index].text)
+            cache.store(sentence, for: DeepLMarkup.cacheKey(pieces[index].text, glossary: glossary))
         }
         let result = zip(pieces, translations).map { $1 ?? $0.text }.joined()
         if speech.count >= 512 { speech.removeAll() }
         speech[text] = SpeechScript.lines(pieces: pieces, translations: translations)
-        cache.store(result, for: text)
+        cache.store(result, for: DeepLMarkup.cacheKey(text, glossary: glossary))
         return result
     }
 
@@ -127,13 +139,17 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
         return cached.isEmpty ? fallback.spokenLines(for: text) : cached
     }
 
-    private func request(_ sentences: [String], context: String?) async throws -> [String] {
+    private func request(_ sentences: [String], context: String?, tagged: Bool) async throws -> [String] {
         var body: [String: Any] = [
             "text": sentences, "source_lang": "EN", "target_lang": "TR",
             // Oyun konuşması: "siz" değil "sen" (DeepL Türkçede desteklemiyorsa yok sayar).
             "formality": "prefer_less", "preserve_formatting": true,
         ]
         if let context { body["context"] = context }
+        if tagged {
+            body["tag_handling"] = "xml"
+            body["ignore_tags"] = [DeepLMarkup.tag]
+        }
         var request = URLRequest(url: Self.baseURL(for: key).appending(path: "translate"))
         request.httpMethod = "POST"
         request.setValue("DeepL-Auth-Key \(key)", forHTTPHeaderField: "Authorization")

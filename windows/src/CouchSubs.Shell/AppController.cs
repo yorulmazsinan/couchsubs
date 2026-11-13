@@ -66,7 +66,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool subtitlesPaused;
     /// <summary>Oyundaki altyazının son görüldüğü yer; deneme altyazısı TV'de oraya yerleşir.</summary>
     private TextBox? lastSubtitleBox;
-    private int processing;
+    /// <summary>Hatta aynı anda tek kare girer; durdurma ve yeni hat kapıyı sıfırlar, takılan okuma hattı yeniden kurdurur.</summary>
+    private readonly FrameGate frameGate = new();
     private Dubber? dubber;
     private string? updateVersion;
     private bool updating;
@@ -478,7 +479,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public Action<Uri> OpenInBrowser { get; set; } = _ => { };
 
     /// <summary>Samsung'da geliştirici modunda "Host PC IP" olarak yazılacak bu bilgisayarın adresi.</summary>
-    public string? ComputerAddress => LocalAddress(tv is { Host.Length: > 0 } target ? target.Host : "192.168.1.1");
+    public string? ComputerAddress => LocalAddress(tv is { Host.Length: > 0 } target ? target.Host : null);
 
     /// <summary>
     /// Geliştirici modu açık TV'de uygulamayı eksikse kurar, eskiyse günceller.
@@ -1086,6 +1087,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         pipeline?.Reset();
         if (pipeline is not null) SubtitleLog.Write("oturum bitti");
         pipeline = null;
+        // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
+        frameGate.Reset();
         activeReader = null;
         screenWork?.Cancel();
         screenWork = null;
@@ -1202,6 +1205,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         pipeline?.Reset();
         pipeline = null;
+        // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
+        frameGate.Reset();
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage);
         activeReader = reader;
@@ -1466,14 +1471,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (subtitlesPaused) return;
             // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
             var current = pipeline;
-            if (current is null || Interlocked.Exchange(ref processing, 1) == 1) return;
+            if (current is null) return;
+            var entry = frameGate.TryEnter(Environment.TickCount64);
+            if (entry.Kind == FrameGate.EntryKind.Stuck)
+            {
+                // Okuma bitmedi: önizleme canlıyken altyazı hiç gelmiyordu ve ancak uygulamayı kapatıp açmak düzeltiyordu.
+                SubtitleLog.Write($"okuma {entry.Ms} ms'dir bitmedi; okuma hattı yeniden kuruldu");
+                post(MakePipeline);
+                return;
+            }
+            if (entry.Kind != FrameGate.EntryKind.Enter) return;
             try
             {
                 await current.ProcessAsync(frame, settings.Region, arrived);
             }
             finally
             {
-                Volatile.Write(ref processing, 0);
+                frameGate.Leave(entry.Token);
             }
         }
         catch
@@ -1509,24 +1523,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>TV ile aynı ağdaki bilgisayar adresi.</summary>
     private string ServerAddress(LgTv target) => $"http://{LocalAddress(target.Host) ?? "127.0.0.1"}:{ServerPort}";
 
-    public static string? LocalAddress(string near)
+    /// <summary>
+    /// <paramref name="near"/> adresine (TV) ulaşan bu bilgisayar adresi; TV adresi bilinmiyorsa (null ya da geçersiz)
+    /// Wi-Fi/Ethernet adresi. VPN ve sanal bağdaştırıcılar ancak başka adres yoksa seçilir (<see cref="LocalNetwork.ChooseComputerAddress"/>).
+    /// </summary>
+    public static string? LocalAddress(string? near)
     {
-        if (!IPAddress.TryParse(near, out var target) || target.AddressFamily != AddressFamily.InterNetwork) return null;
-        string? fallback = null;
-        foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
-        {
-            if (network.OperationalStatus != OperationalStatus.Up || network.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-            foreach (var unicast in network.GetIPProperties().UnicastAddresses)
-            {
-                if (unicast.Address.AddressFamily != AddressFamily.InterNetwork) continue;
-                var mask = unicast.IPv4Mask.GetAddressBytes();
-                var address = unicast.Address.GetAddressBytes();
-                var wanted = target.GetAddressBytes();
-                if (Enumerable.Range(0, 4).All(i => (address[i] & mask[i]) == (wanted[i] & mask[i]))) return unicast.Address.ToString();
-                fallback ??= unicast.Address.ToString();
-            }
-        }
-        return fallback;
+        IPAddress? target = IPAddress.TryParse(near, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork ? parsed : null;
+        return LocalNetwork.ChooseComputerAddress(LocalNetwork.Ipv4Adapters(), target);
     }
 
     // --- Windows Güvenlik Duvarı ---

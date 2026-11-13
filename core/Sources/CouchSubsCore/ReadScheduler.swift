@@ -12,7 +12,11 @@ public struct ReadScheduler {
         case read(deep: Bool)
     }
 
+    /// Bölge izinin (`RegionCropper.signature`) boyutu: satır başına bu kadar gri örnek, bu kadar satır.
+    public static let signatureWidth = 64, signatureHeight = 12
     /// Video gürültüsü bu farkı aşmaz; bir harf eklenmesi aşar.
+    public static let defaultChangeThreshold = 16
+
     private let changeThreshold: Int
     private let maxReuse: Int
     private let deepEvery: Int
@@ -22,7 +26,7 @@ public struct ReadScheduler {
     private var reused = 0
     private var emptyReads = 0
 
-    public init(changeThreshold: Int = 16, maxReuse: Int = 20, deepEvery: Int = 3) {
+    public init(changeThreshold: Int = ReadScheduler.defaultChangeThreshold, maxReuse: Int = 20, deepEvery: Int = 3) {
         self.changeThreshold = changeThreshold
         self.maxReuse = maxReuse
         self.deepEvery = deepEvery
@@ -55,7 +59,27 @@ public struct ReadScheduler {
     }
 
     private func changed(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+        Self.changed(a, b, threshold: changeThreshold)
+    }
+
+    /// İki bölge izi farklı mı: bir örnek `threshold`'dan çok değiştiyse. `box` verilirse yalnız o kutunun (bölgenin
+    /// kenarlarına oranla) örttüğü örneklere bakılır; bölgenin başka yerindeki kıpırtı sayılmaz (Windows: ReadScheduler.Changed).
+    public static func changed(_ a: [UInt8], _ b: [UInt8], threshold: Int, within box: TextBox? = nil) -> Bool {
         guard a.count == b.count else { return true }
-        return zip(a, b).contains { abs(Int($0) - Int($1)) > changeThreshold }
+        let columns = signatureWidth
+        let rows = a.count / columns
+        guard let box, rows > 0, a.count % columns == 0 else {
+            return zip(a, b).contains { abs(Int($0) - Int($1)) > threshold }
+        }
+        let left = min(max(Int((box.left * Double(columns)).rounded(.down)), 0), columns - 1)
+        let right = min(max(Int((box.right * Double(columns)).rounded(.up)), left + 1), columns)
+        let top = min(max(Int((box.top * Double(rows)).rounded(.down)), 0), rows - 1)
+        let bottom = min(max(Int((box.bottom * Double(rows)).rounded(.up)), top + 1), rows)
+        for y in top..<bottom {
+            for x in left..<right where abs(Int(a[y * columns + x]) - Int(b[y * columns + x])) > threshold {
+                return true
+            }
+        }
+        return false
     }
 }

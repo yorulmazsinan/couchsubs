@@ -41,6 +41,14 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
 {
     /// <summary>Bölge bu kadar boş kalırsa altyazı kalkmış sayılır; parlak arka planda kaçan birkaç okuma silmez.</summary>
     public const int ClearAfterMs = 800;
+    /// <summary>
+    /// Okuma boş döndüğü halde satırın yeri, satır son okunduğundan beri değişmediyse (bölge izi,
+    /// <see cref="ReadScheduler.Changed"/>) yazı hâlâ oradadır, yazı tanıma kaçırmıştır: parlak zeminde beyaz yazı
+    /// saniyelerce okunamıyor, TV'deki Türkçe İngilizce dururken siliniyordu (It Takes Two, 2026-11-13). Satırın yeri
+    /// değişince her zamanki <see cref="ClearAfterMs"/> sayılır. Değişmeyen yerde de satır en çok bu kadar tutulur:
+    /// küçültülmüş iz harfleri kaçırırsa kalkan satırın çevirisi en çok bu kadar fazla kalır.
+    /// </summary>
+    public const int HoldUnchangedMs = 4000;
     /// <summary>Kalkan satır bu süre içinde geri gelirse aynı satırdır (okuma kaçmıştı); yeniden çevrilmez.</summary>
     public const int RestoreWithinMs = 1500;
     /// <summary>Çevirisi başarısız olan satır en erken bu kadar sonra yeniden denenir.</summary>
@@ -88,6 +96,10 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     private string sent = "";
     private string sentRaw = "";
     private long? emptySince;
+    /// <summary>Boş okunan bölgede satırın yerinin değiştiği (ya da yeri bilinmediği için kalkmış sayıldığı) an.</summary>
+    private long? goneSince;
+    /// <summary>Ekrandaki satırın son okunduğu karenin bölge izi ve satırın bölgedeki yeri.</summary>
+    private (byte[] Signature, TextBox Box)? lastSeen;
     /// <summary>Son kalkan satırlar ve kalktıkları an.</summary>
     private readonly List<(string Rows, string Raw, long LeftAt)> history = [];
     /// <summary>Çevirisi başarısız olan satır ve en erken yeniden deneneceği an.</summary>
@@ -99,7 +111,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     /// <summary>Son <see cref="Feed"/> çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.</summary>
     public StabilizerNote? Note { get; private set; }
 
-    public StabilizerAction Feed(string rawText)
+    /// <param name="signature">Karenin bölge izi (<see cref="RegionCropper.Signature"/>); verilmezse boş okuma hep kalkma sayılır.</param>
+    /// <param name="box">Okunan yazının bölgedeki yeri (bölgenin kenarlarına oranla).</param>
+    public StabilizerAction Feed(string rawText, byte[]? signature = null, TextBox? box = null)
     {
         var time = now();
         var text = TextMatch.Normalize(rawText);
@@ -111,7 +125,10 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             candidate = "";
             candidateCount = 0;
             emptySince ??= time;
-            if (sent.Length > 0 && time - emptySince >= clearAfterMs)
+            if (sent.Length == 0) return StabilizerAction.None;
+            // Satırın yeri son okunduğu kareden beri değişmediyse yazı tanıma kaçırmıştır; kalkma sayılmaz.
+            if (goneSince is null && !LooksUnchanged(signature)) goneSince = time;
+            if ((goneSince is { } gone && time - gone >= clearAfterMs) || time - emptySince >= HoldUnchangedMs)
             {
                 LeaveScreen(time);
                 return StabilizerAction.Clear;
@@ -120,6 +137,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         }
 
         emptySince = null;
+        goneSince = null;
         if (TextMatch.IsSimilar(text, candidate, similarity))
         {
             candidateCount++;
@@ -141,7 +159,11 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             ? candidateCount >= stableFrames && time - candidateSince >= GarbledStableMs
             : candidateCount >= stableFrames || (EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if (IsSame(text, sent)) return StabilizerAction.None;
+        if (IsSame(text, sent))
+        {
+            Remember(signature, box);
+            return StabilizerAction.None;
+        }
         if (!ready)
         {
             if (garbled) garbledPending = rawText.Trim();
@@ -153,6 +175,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         if (sentRaw.Length > 0 && TextMatch.IsWorseReread(rawText, sentRaw))
         {
             Note = new StabilizerNote(StabilizerNoteKind.WorseReread, rawText.Trim());
+            Remember(signature, box);
             return StabilizerAction.None;
         }
 
@@ -164,6 +187,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             history.RemoveAt(index);
             LeaveScreen(time);
             (sent, sentRaw) = (back.Rows, back.Raw);
+            Remember(signature, box);
             return StabilizerAction.Restore(back.Raw);
         }
         // Çevirisi az önce başarısız olan satır her karede yeniden istenmez.
@@ -173,8 +197,18 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         forgotten = "";
         sentRaw = cleanFastPathOnly ? candidateRaw : rawText.Trim();
         sent = TextMatch.NormalizeRows(sentRaw);
+        Remember(signature, box);
         return StabilizerAction.Translate(sentRaw);
     }
+
+    /// <summary>Ekrandaki satır bu karede okundu: bölgenin izi ve satırın yeri saklanır (yer bilinmiyorsa hiçbiri).</summary>
+    private void Remember(byte[]? signature, TextBox? box) =>
+        lastSeen = signature is not null && box is { } place ? (signature, place) : null;
+
+    /// <summary>Bu karede satırın yeri, satırın son okunduğu karedekiyle aynı mı (izi ve yeri bilinmiyorsa hayır).</summary>
+    private bool LooksUnchanged(byte[]? signature) =>
+        signature is not null && lastSeen is { } seen
+        && !ReadScheduler.Changed(seen.Signature, signature, ReadScheduler.ChangeThreshold, seen.Box);
 
     /// <summary>Bekleyen çöp aday gönderilmeden bırakıldı (kalktı ya da başka okumaya döndü): günlük için not edilir.</summary>
     private void DropGarbled()
@@ -195,6 +229,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         if (history.Count > HistorySize) history.RemoveAt(0);
         sent = "";
         sentRaw = "";
+        lastSeen = null;
     }
 
     /// <summary>Satır nokta, ünlem, soru ya da üç noktayla bitiyor mu (kapanan tırnak ve parantezler yok sayılır).</summary>
@@ -218,6 +253,7 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         retryAt = now() + RetryAfterMs;
         sent = "";
         sentRaw = "";
+        lastSeen = null;
         candidate = "";
         candidateCount = 0;
         garbledPending = "";
@@ -230,6 +266,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         garbledPending = "";
         Note = null;
         emptySince = null;
+        goneSince = null;
+        lastSeen = null;
         history.Clear();
         forgotten = "";
         if (sent.Length == 0) return StabilizerAction.None;

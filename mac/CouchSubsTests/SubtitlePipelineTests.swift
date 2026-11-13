@@ -111,6 +111,22 @@ private final class TimedTranslator: TextTranslator {
     }
 }
 
+/// Okuması test bırakana kadar biten okuyucu (takılan ya da çok yavaş yazı tanıma).
+private final class BlockingReader: TextReader, @unchecked Sendable {
+    private let text: String
+    private let lock = NSLock()
+    private let gate = DispatchSemaphore(value: 0)
+    private var didStart = false
+    init(_ text: String) { self.text = text }
+    var started: Bool { lock.withLock { didStart } }
+    func release() { gate.signal() }
+    func read(_ image: CGImage) throws -> String {
+        lock.withLock { didStart = true }
+        gate.wait()
+        return text
+    }
+}
+
 private func lines(_ runs: (String, Int)...) -> [String] {
     runs.flatMap { Array(repeating: $0.0, count: $0.1) }
 }
@@ -139,6 +155,39 @@ final class SubtitlePipelineTests: XCTestCase {
         for _ in 0..<3 { await pipeline.process(frame, region: CropRegion()); await pipeline.waitForTranslations() }
         XCTAssertEqual(sender.sent, ["TR: Hold the gate"])
         XCTAssertEqual(pipeline.lastPair?.source, "Hold the gate")
+    }
+
+    /// Okuma sürerken hat sıfırlanırsa (Durdur, takılan okuma yüzünden yeniden kurulan hat) geç biten okuma yeni
+    /// oturuma karışmaz: TV'ye eski satır gitmez, çevirmen çağrılmaz.
+    func testReadFinishingAfterResetIsDropped() async {
+        let reader = BlockingReader("Hold the gate.")
+        let sender = FakeSender()
+        let translator = FakeTranslator()
+        let pipeline = SubtitlePipeline(reader: reader, translator: translator, server: sender)
+        var log: [String] = []
+        pipeline.onLog = { log.append($0) }
+        let running = Task { await pipeline.process(frame, region: CropRegion()) }
+        while !reader.started { await Task.yield() }
+        pipeline.reset()
+        reader.release()
+        await running.value
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, [])
+        XCTAssertEqual(translator.requested, [])
+        XCTAssertTrue(log.contains { $0.hasPrefix("eski okuma ") && $0.hasSuffix("hat sıfırlanmıştı; atıldı") }, log.joined(separator: "\n"))
+    }
+
+    /// Aynı okuma hat sıfırlanmadan biterse satır gider (yukarıdaki testin karşılığı).
+    func testBlockedReadIsSentWhenNotReset() async {
+        let reader = BlockingReader("Hold the gate.")
+        let sender = FakeSender()
+        let pipeline = SubtitlePipeline(reader: reader, translator: FakeTranslator(), server: sender)
+        let running = Task { await pipeline.process(frame, region: CropRegion()) }
+        while !reader.started { await Task.yield() }
+        reader.release()
+        await running.value
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, ["TR: Hold the gate."])
     }
 
     /// Altyazı günlüğü: ilk kare, ilk yazı, her kararlı satır ve akıbeti (motor ya da paket) yazılır.

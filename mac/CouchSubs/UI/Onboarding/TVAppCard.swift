@@ -52,6 +52,8 @@ struct TVAppCard: View {
                     Text("The Samsung account page opened in your browser. Finish signing in there. If you do not see it, switch to the browser or press Open the page again.")
                     HintText(text: "Samsung signs the app for your TV with your free Samsung account.")
                     HintText(text: "No account? You can create a free one on the same page. If the browser asks to allow access to devices on your network, allow it.")
+                    // Samsung'un sayfası girişi açılır pencerede açıyor; engellenince kullanıcılar takılıyordu (Burak Yazgan, 2026-11-13).
+                    HintText(text: "If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again.")
                     HStack(spacing: Theme.space("s")) {
                         ProgressView().controlSize(.small)
                         Text("Waiting for sign-in…").foregroundStyle(Color.csSecondary)

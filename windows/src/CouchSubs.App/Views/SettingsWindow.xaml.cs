@@ -76,7 +76,8 @@ public partial class SettingsWindow : Window
 
     private void OnControllerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AppController.Settings)) ShowStyleTitle();
+        if (e.PropertyName is nameof(AppController.Settings) or nameof(AppController.ShowsOnTv) or nameof(AppController.ShowsOnComputer))
+            ShowStyleTitle();
         if (e.PropertyName == nameof(AppController.LastFrame)) ShowLiveFrame();
     }
 
@@ -97,7 +98,12 @@ public partial class SettingsWindow : Window
         // Görüntü modu yalnız Android TV uygulamasında var.
         DisplayModePanel.Visibility = controller.ShowsOnTv && controller.Tv?.Brand == TvBrand.AndroidTv
             ? Visibility.Visible : Visibility.Collapsed;
+        // Yer ayarları TV içindir; bilgisayar ekranında "ekrandaki konum ayarı işlemiyor" sanılıyordu (Genzo, 2026-11-13).
+        TvPlacementPanel.Visibility = controller.ShowsOnTv ? Visibility.Visible : Visibility.Collapsed;
+        ComputerPlacementPanel.Visibility = controller.ShowsOnComputer ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void OnAdjustOverlay(object sender, RoutedEventArgs e) => controller.OverlayAdjusting = true;
     /// <summary>
     /// Kurulu oyun paketleri: iki sütunlu karolar (kısaltma rozeti, ad, satır sayısı) ve üstte "Ücretsiz · n oyun" hapı.
     /// Masaüstünde paketler ücretsizdir.

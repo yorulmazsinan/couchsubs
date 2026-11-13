@@ -10,15 +10,17 @@ namespace CouchSubs.Core;
 /// <c>{ "game": "God of War", "terms": { "Leviathan Axe": "Leviathan Baltası" }, "keep": ["Kratos", "Atreus"] }</c>.
 /// <c>terms</c> İngilizce terimi verilen Türkçeyle değiştirir, <c>keep</c> adları olduğu gibi bırakır. Eşleşme büyük/küçük
 /// harfe bakmaz, yalnız tam sözcüklerde olur, uzun terim önce gelir ("Leviathan Axe", "Axe"dan önce).
+/// <c>keepExact</c> da adları bırakır ama yalnız yazıldığı gibi (büyük/küçük harf aynı) geçince: aynı zamanda sıradan
+/// bir sözcük olan adlar için ("Soul" kahramanın adıyken "soul" ruh demek; Phantom Blade Zero).
 /// Uygulamayla gelen genel sözlüğün üstüne kullanıcının klasöründeki <c>*.json</c> dosyaları eklenir (ad sırasıyla;
 /// aynı terimde sonraki dosya kazanır).
 /// </summary>
 public sealed class Glossary
 {
-    /// <summary>Küçük harfli İngilizce → (sözlükte yazıldığı gibi İngilizce, Türkçe).</summary>
-    private readonly Dictionary<string, (string English, string Turkish)> _terms;
+    /// <summary>Küçük harfli İngilizce → (sözlükte yazıldığı gibi İngilizce, Türkçe, yalnız aynı büyük/küçük harfle mi).</summary>
+    private readonly Dictionary<string, (string English, string Turkish, bool Exact)> _terms;
     /// <summary>Uzundan kısaya terimler; arama bu sırayla yapılır.</summary>
-    private readonly List<(string English, string Turkish)> _ordered;
+    private readonly List<(string English, string Turkish, bool Exact)> _ordered;
 
     public static Glossary Empty { get; } = new([]);
 
@@ -27,15 +29,16 @@ public sealed class Glossary
     /// <summary>Uygulamayla gelen genel oyun terimleri (core/Sources/CouchSubsCore/Resources/glossary-en-tr.json).</summary>
     public static Glossary BuiltIn => BuiltInValue.Value;
 
-    private Glossary(Dictionary<string, (string English, string Turkish)> terms)
+    private Glossary(Dictionary<string, (string English, string Turkish, bool Exact)> terms)
     {
         _terms = terms;
         _ordered = [.. terms.Values.OrderByDescending(t => t.English.Length).ThenBy(t => t.English, StringComparer.Ordinal)];
         var words = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (english, _) in _ordered)
+        foreach (var (english, _, exact) in _ordered)
         {
             // Sözlükte büyük harfle yazılmış terimler ad sayılır: tümü büyük harfli cümlede de büyük harfle kalır.
-            if (!english.Any(char.IsUpper)) continue;
+            // keepExact adları sıradan sözcük de olduğundan büyük harfe çevrilmez ("I SOLD MY SOUL" → "soul").
+            if (exact || !english.Any(char.IsUpper)) continue;
             foreach (var word in english.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 if (word.Length >= 2) words.Add(word.ToLowerInvariant());
         }
@@ -62,29 +65,32 @@ public sealed class Glossary
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object) throw new FormatException("Glossary must be a JSON object.");
-        var terms = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        var terms = new Dictionary<string, (string, string, bool)>(StringComparer.Ordinal);
         if (root.TryGetProperty("terms", out var map) && map.ValueKind == JsonValueKind.Object)
             foreach (var entry in map.EnumerateObject())
                 if (entry.Value.ValueKind == JsonValueKind.String) Add(terms, entry.Name, entry.Value.GetString()!);
         if (root.TryGetProperty("keep", out var keep) && keep.ValueKind == JsonValueKind.Array)
             foreach (var name in keep.EnumerateArray())
                 if (name.ValueKind == JsonValueKind.String) Add(terms, name.GetString()!, name.GetString()!);
+        if (root.TryGetProperty("keepExact", out var keepExact) && keepExact.ValueKind == JsonValueKind.Array)
+            foreach (var name in keepExact.EnumerateArray())
+                if (name.ValueKind == JsonValueKind.String) Add(terms, name.GetString()!, name.GetString()!, exact: true);
         return new Glossary(terms);
     }
 
-    private static void Add(Dictionary<string, (string, string)> terms, string english, string turkish)
+    private static void Add(Dictionary<string, (string, string, bool)> terms, string english, string turkish, bool exact = false)
     {
         english = CollapseSpaces(english);
         turkish = CollapseSpaces(turkish);
         // Harfsiz terim her yerde eşleşirdi; yer tutucu sayısı sınırlı olduğundan çok uzun terim de alınmaz.
         if (!english.Any(char.IsLetter) || turkish.Length == 0 || english.Length > 80) return;
-        terms[english.ToLowerInvariant()] = (english, turkish);
+        terms[english.ToLowerInvariant()] = (english, turkish, exact);
     }
 
     /// <summary>Sözlükleri birleştirir; aynı terimde sonraki kazanır.</summary>
     public static Glossary Merge(IEnumerable<Glossary> glossaries)
     {
-        var terms = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        var terms = new Dictionary<string, (string, string, bool)>(StringComparer.Ordinal);
         foreach (var glossary in glossaries)
             foreach (var (key, value) in glossary._terms) terms[key] = value;
         return new Glossary(terms);
@@ -115,19 +121,19 @@ public sealed class Glossary
     }
 
     /// <summary>
-    /// Metindeki terimler: büyük/küçük harfe bakmadan, tam sözcük, uzun terim önce; çakışan kısa terim alınmaz.
+    /// Metindeki terimler: büyük/küçük harfe bakmadan (keepExact adları bakarak), tam sözcük, uzun terim önce; çakışan kısa terim alınmaz.
     /// Sonuç metindeki sıraya göredir.
     /// </summary>
     public IReadOnlyList<TermMatch> Find(string text)
     {
         var found = new List<TermMatch>();
         if (_ordered.Count == 0 || text.Length == 0) return found;
-        foreach (var (english, turkish) in _ordered)
+        foreach (var (english, turkish, exact) in _ordered)
         {
             var start = 0;
             while (start <= text.Length - english.Length)
             {
-                var index = text.IndexOf(english, start, StringComparison.OrdinalIgnoreCase);
+                var index = text.IndexOf(english, start, exact ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
                 if (index < 0) break;
                 var end = index + english.Length;
                 if (IsBoundary(text, index - 1) && IsBoundary(text, end) && !found.Any(m => index < m.Start + m.Length && m.Start < end))
@@ -153,11 +159,12 @@ public sealed class Glossary
         string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>FNV-1a (32 bit), terimler İngilizcesine göre sıralı; Mac'te de aynı hesap.</summary>
-    private static string MakeFingerprint(IEnumerable<(string English, string Turkish)> terms)
+    private static string MakeFingerprint(IEnumerable<(string English, string Turkish, bool Exact)> terms)
     {
         var hash = 2166136261u;
-        foreach (var (english, turkish) in terms.OrderBy(t => t.English.ToLowerInvariant(), StringComparer.Ordinal))
-            foreach (var b in Encoding.UTF8.GetBytes(english.ToLowerInvariant() + "\u0001" + turkish + "\u0002"))
+        // exact işareti yalnız varsa eklenir; eski sözlüklerin izi değişmez.
+        foreach (var (english, turkish, exact) in terms.OrderBy(t => t.English.ToLowerInvariant(), StringComparer.Ordinal))
+            foreach (var b in Encoding.UTF8.GetBytes(english.ToLowerInvariant() + "\u0001" + turkish + (exact ? "\u0003" : "") + "\u0002"))
                 hash = (hash ^ b) * 16777619u;
         return "g" + hash.ToString("x8");
     }

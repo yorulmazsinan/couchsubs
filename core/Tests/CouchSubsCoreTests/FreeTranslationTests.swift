@@ -89,6 +89,17 @@ final class GlossaryTests: XCTestCase {
         XCTAssertEqual(Glossary.builtIn.turkish("skill tree"), "yetenek ağacı")
     }
 
+    // Phantom Blade Zero: kahramanın adı "Soul" çevrilmez, sıradan "soul" çevrilir (Emir, 2026-11-13).
+    func testKeepExactNamesMatchOnlyAsWritten() throws {
+        let found = Glossary.builtIn.find("Soul, you sold your soul. SOUL!")
+        XCTAssertEqual(found.map(\.english), ["Soul"])
+        XCTAssertEqual(found.first?.start, 0)
+        XCTAssertFalse(Glossary.builtIn.capitalWords.contains("soul"))
+        let exact = try Glossary.parse(#"{ "keepExact": ["Soul"] }"#)
+        let loose = try Glossary.parse(#"{ "keep": ["Soul"] }"#)
+        XCTAssertNotEqual(exact.fingerprint, loose.fingerprint)
+    }
+
     func testLaterGlossaryWinsAndFingerprintFollowsContent() throws {
         let user = try Glossary.parse(#"{ "terms": { "skill tree": "beceri ağacı" } }"#)
         let merged = Glossary.merge([.builtIn, user])

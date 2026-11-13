@@ -41,7 +41,14 @@
                     <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource PrimaryButton}" Content="{t:T 'Install on the TV'}" Click="OnInstall" />
                 </Grid>
             </StackPanel>
-            <Button x:Name="OpenAgain" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{t:T 'Open the page again'}" Click="OnOpenAgain" />
+            <StackPanel x:Name="OpenAgain" Visibility="Collapsed" Margin="0,8,0,0">
+                <!-- Samsung'un sayfası girişi açılır pencerede açıyor; engellenince kullanıcılar takılıyordu (2026-11-13). -->
+                <TextBlock Style="{StaticResource HintText}" Text="{t:T 'If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again.'}" />
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="{t:T 'Open the page again'}" Click="OnOpenAgain" />
+                    <Button x:Name="CopyLink" Margin="8,0,0,0" Content="{t:T 'Copy the link'}" Click="OnCopyLink" />
+                </StackPanel>
+            </StackPanel>
             <TextBlock x:Name="Problem" Style="{StaticResource ErrorText}" Margin="0,8,0,0" />
             <Button x:Name="Retry" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{t:T 'Try again'}" Click="OnRetry" />
         </StackPanel>

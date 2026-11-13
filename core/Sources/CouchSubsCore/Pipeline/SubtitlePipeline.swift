@@ -145,12 +145,16 @@ public final class SubtitlePipeline {
             sawFrame = true
             log("ilk kare: oturum başından \(now() - sessionStart) ms sonra")
         }
+        // Okuma sürerken hat sıfırlandıysa (çeviri durdu, hat yeniden kuruldu) bu karenin sonucu yeni oturuma karışmaz:
+        // geç biten eski okuma TV'ye eski satırı göndermesin.
+        let startedSession = session
         // Yazı tanıma uzun sürebilir; arayüz takılmasın diye ana iş parçacığının dışında yapılır.
         let reader = self.reader
         let (area, signature) = await Task.detached(priority: .userInitiated) {
             let area = RegionCropper.crop(frame, to: region)
             return (area, RegionCropper.signature(of: area))
         }.value
+        guard session == startedSession else { return }
         switch scheduler.plan(signature: signature) {
         case .reuse:
             break
@@ -159,6 +163,10 @@ public final class SubtitlePipeline {
             let result = await Task.detached(priority: .userInitiated) {
                 Result { try reader.readLines(area, deep: deep) }
             }.value
+            guard session == startedSession else {
+                log("eski okuma \(now() - started) ms sonra bitti, hat sıfırlanmıştı; atıldı")
+                return
+            }
             lastReadMs = now() - started
             lastReading = (try? result.get()) ?? .empty
             onReadResult?(result.failure)
@@ -175,7 +183,8 @@ public final class SubtitlePipeline {
             sawText = true
             log("ilk yazı: oturum başından \(now() - sessionStart) ms sonra \(SubtitleLog.excerpt(reading.text))")
         }
-        let action = stabilizer.feed(reading.text)
+        // Bölge izi ve satırın yeri: okuma boş dönse de satırın yeri değişmediyse satır silinmez (parlak zemin).
+        let action = stabilizer.feed(reading.text, signature: signature, box: reading.box)
         // Ekranda duran kötü yeniden okuma her karede not edilir; günlüğe bir kez yazılır.
         if let note = stabilizer.note, note != lastNote {
             lastNote = note
@@ -190,6 +199,7 @@ public final class SubtitlePipeline {
         case .clear:
             lineLeft()
             server.clear()
+            log("kalktı: bölge boş okundu, ekran temizlendi")
         case .translate(let source):
             lineLeft()
             enqueue(source, box: box)

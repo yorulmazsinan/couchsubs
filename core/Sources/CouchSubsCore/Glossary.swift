@@ -6,6 +6,8 @@ import Foundation
 /// `{ "game": "God of War", "terms": { "Leviathan Axe": "Leviathan Baltası" }, "keep": ["Kratos", "Atreus"] }`.
 /// `terms` İngilizce terimi verilen Türkçeyle değiştirir, `keep` adları olduğu gibi bırakır. Eşleşme büyük/küçük harfe
 /// bakmaz, yalnız tam sözcüklerde olur, uzun terim önce gelir ("Leviathan Axe", "Axe"dan önce).
+/// `keepExact` da adları bırakır ama yalnız yazıldığı gibi (büyük/küçük harf aynı) geçince: aynı zamanda sıradan bir
+/// sözcük olan adlar için ("Soul" kahramanın adıyken "soul" ruh demek; Phantom Blade Zero).
 /// Uygulamayla gelen genel sözlüğün üstüne kullanıcının klasöründeki `*.json` dosyaları eklenir (ad sırasıyla;
 /// aynı terimde sonraki dosya kazanır).
 public final class Glossary: @unchecked Sendable {
@@ -19,10 +21,12 @@ public final class Glossary: @unchecked Sendable {
 
     public enum ParseError: Error { case notAnObject }
 
-    /// Küçük harfli İngilizce → (sözlükte yazıldığı gibi İngilizce, Türkçe).
-    private let terms: [String: (english: String, turkish: String)]
+    /// Sözlükte yazıldığı gibi İngilizce, Türkçe; `exact` ise yalnız aynı büyük/küçük harfle eşleşir.
+    typealias Term = (english: String, turkish: String, exact: Bool)
+    /// Küçük harfli İngilizce → terim.
+    private let terms: [String: Term]
     /// Uzundan kısaya terimler; arama bu sırayla yapılır.
-    private let ordered: [(english: String, turkish: String)]
+    private let ordered: [Term]
 
     /// Büyük harfle kalması gereken sözcükler (küçük harfle); `normalizeCase`'e ad olarak verilir.
     public let capitalWords: Set<String>
@@ -38,12 +42,13 @@ public final class Glossary: @unchecked Sendable {
         return glossary
     }()
 
-    private init(terms: [String: (english: String, turkish: String)]) {
+    private init(terms: [String: Term]) {
         self.terms = terms
         ordered = terms.values.sorted { $0.english.utf16.count != $1.english.utf16.count
             ? $0.english.utf16.count > $1.english.utf16.count : $0.english < $1.english }
         var words: Set<String> = []
-        for term in ordered where term.english.contains(where: \.isUppercase) {
+        // `keepExact` adları sıradan sözcük de olduğundan büyük harfe çevrilmez ("I SOLD MY SOUL" → "soul").
+        for term in ordered where !term.exact && term.english.contains(where: \.isUppercase) {
             // Sözlükte büyük harfle yazılmış terimler ad sayılır: tümü büyük harfli cümlede de büyük harfle kalır.
             for word in term.english.split(separator: " ") where word.count >= 2 { words.insert(word.lowercased()) }
         }
@@ -62,7 +67,7 @@ public final class Glossary: @unchecked Sendable {
         guard let root = try JSONSerialization.jsonObject(with: data, options: [.json5Allowed]) as? [String: Any] else {
             throw ParseError.notAnObject
         }
-        var terms: [String: (english: String, turkish: String)] = [:]
+        var terms: [String: Term] = [:]
         if let map = root["terms"] as? [String: Any] {
             // Sözlük sırası JSON'da tanımsız; aynı sonucu vermek için anahtar sırasıyla eklenir.
             for key in map.keys.sorted() { if let value = map[key] as? String { add(&terms, key, value) } }
@@ -70,22 +75,25 @@ public final class Glossary: @unchecked Sendable {
         if let keep = root["keep"] as? [Any] {
             for case let name as String in keep { add(&terms, name, name) }
         }
+        if let keep = root["keepExact"] as? [Any] {
+            for case let name as String in keep { add(&terms, name, name, exact: true) }
+        }
         return Glossary(terms: terms)
     }
 
     public static func parse(_ json: String) throws -> Glossary { try parse(Data(json.utf8)) }
 
-    private static func add(_ terms: inout [String: (english: String, turkish: String)], _ english: String, _ turkish: String) {
+    private static func add(_ terms: inout [String: Term], _ english: String, _ turkish: String, exact: Bool = false) {
         let english = collapse(english)
         let turkish = collapse(turkish)
         // Harfsiz terim her yerde eşleşirdi; yer tutucu sayısı sınırlı olduğundan çok uzun terim de alınmaz.
         guard english.contains(where: \.isLetter), !turkish.isEmpty, english.utf16.count <= 80 else { return }
-        terms[english.lowercased()] = (english, turkish)
+        terms[english.lowercased()] = (english, turkish, exact)
     }
 
     /// Sözlükleri birleştirir; aynı terimde sonraki kazanır.
     public static func merge(_ glossaries: [Glossary]) -> Glossary {
-        var terms: [String: (english: String, turkish: String)] = [:]
+        var terms: [String: Term] = [:]
         for glossary in glossaries { terms.merge(glossary.terms) { _, new in new } }
         return Glossary(terms: terms)
     }
@@ -105,7 +113,8 @@ public final class Glossary: @unchecked Sendable {
         return names.filter { $0.hasSuffix(".json") }.sorted().map { directory.appendingPathComponent($0) }
     }
 
-    /// Metindeki terimler: büyük/küçük harfe bakmadan, tam sözcük, uzun terim önce; çakışan kısa terim alınmaz.
+    /// Metindeki terimler: büyük/küçük harfe bakmadan (`keepExact` adları bakarak), tam sözcük, uzun terim önce; çakışan
+    /// kısa terim alınmaz.
     /// Sonuç metindeki sıraya göredir.
     public func find(_ text: String) -> [TermMatch] {
         guard !ordered.isEmpty, !text.isEmpty else { return [] }
@@ -114,7 +123,8 @@ public final class Glossary: @unchecked Sendable {
         for term in ordered {
             var start = 0
             while start < string.length {
-                let range = string.range(of: term.english, options: [.caseInsensitive], range: NSRange(location: start, length: string.length - start))
+                let range = string.range(of: term.english, options: term.exact ? [.literal] : [.caseInsensitive],
+                                         range: NSRange(location: start, length: string.length - start))
                 guard range.location != NSNotFound else { break }
                 let end = range.location + range.length
                 if Self.isBoundary(string, range.location - 1), Self.isBoundary(string, end),
@@ -139,10 +149,11 @@ public final class Glossary: @unchecked Sendable {
     }
 
     /// FNV-1a (32 bit), terimler İngilizcesine göre sıralı; Windows'ta da aynı hesap.
-    private static func makeFingerprint(_ terms: [(english: String, turkish: String)]) -> String {
+    private static func makeFingerprint(_ terms: [Term]) -> String {
         var hash: UInt32 = 2_166_136_261
         for term in terms.sorted(by: { $0.english.lowercased().utf8.lexicographicallyPrecedes($1.english.lowercased().utf8) }) {
-            for byte in (term.english.lowercased() + "\u{1}" + term.turkish + "\u{2}").utf8 {
+            // `exact` işareti yalnız varsa eklenir; eski sözlüklerin izi değişmez.
+            for byte in (term.english.lowercased() + "\u{1}" + term.turkish + (term.exact ? "\u{3}" : "") + "\u{2}").utf8 {
                 hash = (hash ^ UInt32(byte)) &* 16_777_619
             }
         }

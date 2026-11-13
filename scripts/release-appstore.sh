@@ -33,7 +33,14 @@ if [[ "$3" == --no-upload ]]; then
 fi
 
 VERSION_ARGS=(MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD")
-SIGN_ARGS=(-allowProvisioningUpdates DEVELOPMENT_TEAM=79N3CT6T46 CODE_SIGN_STYLE=Automatic)
+# App Store Connect API anahtarı (~/.config/couchsubs/asc.env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH) varsa Xcode
+# hesabının oturumu gerekmez; yoksa Xcode › Settings › Accounts'taki hesap kullanılır.
+AUTH_ARGS=()
+[[ -f ~/.config/couchsubs/asc.env ]] && source ~/.config/couchsubs/asc.env
+if [[ -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" && -f "${ASC_KEY_PATH:-/nonexistent}" ]]; then
+  AUTH_ARGS=(-authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+fi
+SIGN_ARGS=(-allowProvisioningUpdates "${AUTH_ARGS[@]}" DEVELOPMENT_TEAM=79N3CT6T46 CODE_SIGN_STYLE=Automatic)
 if [[ "$3" == --unsigned && "$PLATFORM" == ios ]]; then
   SIGN_ARGS=(CODE_SIGNING_ALLOWED=NO)
 elif [[ "$3" == --unsigned ]]; then
@@ -79,7 +86,7 @@ fi
 echo "Arşiv: $ARCHIVE"
 [[ "$3" == --unsigned ]] && exit 0
 
-xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$OPTIONS" -exportPath "$EXPORT" -allowProvisioningUpdates \
+xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$OPTIONS" -exportPath "$EXPORT" -allowProvisioningUpdates "${AUTH_ARGS[@]}" \
   > "$OUT/export-$PLATFORM.log" 2>&1 || { tail -30 "$OUT/export-$PLATFORM.log"; echo "Dışa aktarma/yükleme başarısız: $OUT/export-$PLATFORM.log"; exit 1; }
 if [[ "$3" == --no-upload ]]; then
   echo "Dışa aktarıldı: $EXPORT"

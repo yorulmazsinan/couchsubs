@@ -241,6 +241,96 @@ final class SubtitleStabilizerRetryTests: XCTestCase {
     }
 }
 
+/// Parlak zeminde beyaz altyazı (It Takes Two, 2026-11-13): yazı tanıma ekranda duran altyazıyı saniyelerce okuyamıyor,
+/// TV'deki Türkçe siliniyordu. Boş okumada satırın yeri (bölge izi) son okunduğu kareyle karşılaştırılır (Windows: aynı testler).
+final class SubtitleStabilizerHoldTests: XCTestCase {
+    /// Altyazının bölgedeki yeri.
+    private let place = TextBox(left: 0.3, top: 0.6, right: 0.7, bottom: 0.85)
+
+    /// Bölge izi (64 × 12 gri örnek).
+    private func scene(_ change: (inout [UInt8]) -> Void = { _ in }) -> [UInt8] {
+        var signature = [UInt8](repeating: 120, count: ReadScheduler.signatureWidth * ReadScheduler.signatureHeight)
+        change(&signature)
+        return signature
+    }
+
+    /// Altyazının yerine düşen bir örnek (satır 8, sütun 30).
+    private func subtitleSpot(_ s: inout [UInt8], _ delta: Int) {
+        s[8 * ReadScheduler.signatureWidth + 30] = UInt8(120 + delta)
+    }
+
+    /// Satırın yeri son okunduğu kareden beri değişmediyse (bölgenin başka yerindeki kıpırtı ve video gürültüsü
+    /// sayılmaz) boş okumalar satırı silmez; yeniden okununca da yeniden çevrilmez.
+    func testLineIsKeptThroughMissedReadsWhileItsPlaceIsUnchanged() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        XCTAssertEqual(s.feed("Hold the gate.", signature: scene(), box: place), .translate("Hold the gate."))
+        let moving = scene { $0[0] = 250; $0[5] = 10; self.subtitleSpot(&$0, 10) }
+        for _ in stride(from: 0, to: 3000, by: 50) {
+            clock.now += 50
+            XCTAssertEqual(s.feed("", signature: moving), .none)
+        }
+        XCTAssertEqual(s.feed("Hold the gate.", signature: scene(), box: place), .none)
+        // Okunduktan sonra yine kaçarsa süre baştan sayılır.
+        for _ in stride(from: 0, to: 3000, by: 50) {
+            clock.now += 50
+            XCTAssertEqual(s.feed("", signature: scene()), .none)
+        }
+    }
+
+    /// Altyazı gerçekten kalkınca (yeri değişti) satır her zamanki sürede silinir.
+    func testLineIsClearedOnTimeWhenItsPlaceChanges() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        _ = s.feed("Hold the gate.", signature: scene(), box: place)
+        let gone = scene { self.subtitleSpot(&$0, 60) }
+        XCTAssertEqual(s.feed("", signature: gone), .none)
+        clock.now += SubtitleStabilizer.clearAfterMs - 1
+        XCTAssertEqual(s.feed("", signature: gone), .none)
+        clock.now += 1
+        XCTAssertEqual(s.feed("", signature: gone), .clear)
+    }
+
+    /// Okuma bir süre kaçtıktan sonra satırın yeri değişirse silinme o andan itibaren her zamanki sürede olur.
+    func testHeldLineIsClearedOnTimeOnceItsPlaceChanges() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        _ = s.feed("Hold the gate.", signature: scene(), box: place)
+        clock.now += 2000
+        XCTAssertEqual(s.feed("", signature: scene()), .none)
+        clock.now += 1000
+        XCTAssertEqual(s.feed("", signature: scene { self.subtitleSpot(&$0, -60) }), .none)
+        clock.now += SubtitleStabilizer.clearAfterMs - 1
+        XCTAssertEqual(s.feed("", signature: scene()), .none)
+        clock.now += 1
+        XCTAssertEqual(s.feed("", signature: scene()), .clear)
+    }
+
+    /// Yeri hiç değişmese de boş okunan satır en çok `holdUnchangedMs` tutulur.
+    func testUnchangedPlaceHoldsTheLineOnlyForALimitedTime() {
+        let clock = TestClock()
+        var s = SubtitleStabilizer(clock: clock.read)
+        _ = s.feed("Hold the gate.", signature: scene(), box: place)
+        XCTAssertEqual(s.feed("", signature: scene()), .none)
+        clock.now += SubtitleStabilizer.holdUnchangedMs - 1
+        XCTAssertEqual(s.feed("", signature: scene()), .none)
+        clock.now += 1
+        XCTAssertEqual(s.feed("", signature: scene()), .clear)
+    }
+
+    /// Satırın yeri bilinmiyorsa (okuyucu kutu vermedi) ya da kare izi yoksa eski kural: 800 ms boşlukta silinir.
+    func testWithoutPlaceOrSignatureEmptyReadsClearAsBefore() {
+        for (signature, box) in [(scene(), nil), (nil, place)] as [([UInt8]?, TextBox?)] {
+            let clock = TestClock()
+            var s = SubtitleStabilizer(clock: clock.read)
+            _ = s.feed("Hold the gate.", signature: signature, box: box)
+            _ = s.feed("", signature: signature)
+            clock.now += SubtitleStabilizer.clearAfterMs
+            XCTAssertEqual(s.feed("", signature: signature), .clear)
+        }
+    }
+}
+
 /// Testlerde elle ilerletilen saat (milisaniye).
 final class TestClock: @unchecked Sendable {
     var now = 1_000_000

@@ -27,7 +27,7 @@ public enum RegionCropper {
 
     /// Bölgenin küçültülmüş gri kopyası: iki kareyi yazı tanımaya gerek kalmadan karşılaştırmaya yeter.
     public static func signature(of image: CGImage) -> [UInt8] {
-        let width = 64, height = 12
+        let width = ReadScheduler.signatureWidth, height = ReadScheduler.signatureHeight
         var pixels = [UInt8](repeating: 0, count: width * height)
         pixels.withUnsafeMutableBytes { buffer in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,

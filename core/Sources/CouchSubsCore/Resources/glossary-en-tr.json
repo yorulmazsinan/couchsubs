@@ -12,5 +12,6 @@
     "save point": "kayıt noktası",
     "cooldown": "bekleme süresi"
   },
-  "keep": []
+  "keep": [],
+  "keepExact": ["Soul"]
 }

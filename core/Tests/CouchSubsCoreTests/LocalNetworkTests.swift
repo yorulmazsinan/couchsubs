@@ -27,4 +27,23 @@ final class LocalNetworkTests: XCTestCase {
         XCTAssertFalse(LocalNetwork.isPrivate(address("8.8.8.8")))
         XCTAssertFalse(LocalNetwork.isPrivate(address("172.32.0.1")))
     }
+
+    // Host PC IP: VPN ve sanal bağdaştırıcılar seçilmez (Duhan Ay, 2026-11-13).
+    private let wifi = NetworkAddress.Candidate(interface: "en0", address: "192.168.1.34", netmask: "255.255.255.0")
+    private let vpn = NetworkAddress.Candidate(interface: "utun4", address: "10.8.0.2", netmask: "255.255.255.0", pointToPoint: true)
+    private let vm = NetworkAddress.Candidate(interface: "bridge100", address: "192.168.64.1", netmask: "255.255.255.0")
+
+    func testTheAdapterOnTheTVsNetworkIsChosen() {
+        XCTAssertEqual(NetworkAddress.choose([vpn, vm, wifi], near: "192.168.1.171"), "192.168.1.34")
+    }
+
+    func testWithoutATVAddressWiFiWinsOverVPNAndVirtualMachines() {
+        XCTAssertEqual(NetworkAddress.choose([vpn, vm, wifi], near: nil), "192.168.1.34")
+        XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "10.0.0.5"), "192.168.1.34")
+    }
+
+    func testAVirtualAdapterIsUsedOnlyWhenNothingElseExists() {
+        XCTAssertEqual(NetworkAddress.choose([vpn], near: nil), "10.8.0.2")
+        XCTAssertNil(NetworkAddress.choose([], near: nil))
+    }
 }

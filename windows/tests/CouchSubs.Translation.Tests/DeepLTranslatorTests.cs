@@ -63,6 +63,38 @@ public class DeepLTranslatorTests
         Assert.Equal("KRATOS: We move on.", JsonDocument.Parse(deepL.Requests[1].Body).RootElement.GetProperty("context").GetString());
     }
 
+    // Phantom Blade Zero: "Soul" adı DeepL'e etiketle korunarak gider; "began" "Pegan" olmuyordu (2026-11-13).
+    [Fact]
+    public async Task GlossaryNamesAreSentInIgnoredTags()
+    {
+        var deepL = new FakeDeepL(Echo);
+        var glossary = new GlossaryStore(null);
+        var translator = new DeepLTranslator("abc:fx", new FakeLocal(), new HttpClient(deepL), glossary: glossary);
+
+        var result = await translator.TranslateAsync("Soul began to fight. Sell your soul & run.");
+
+        var json = JsonDocument.Parse(deepL.Requests[0].Body).RootElement;
+        Assert.Equal("xml", json.GetProperty("tag_handling").GetString());
+        Assert.Equal("x", json.GetProperty("ignore_tags")[0].GetString());
+        var texts = json.GetProperty("text").EnumerateArray().Select(t => t.GetString()).ToList();
+        Assert.Contains("<x>Soul</x> began to fight.", texts);
+        Assert.Contains("Sell your soul &amp; run.", texts);
+        Assert.DoesNotContain("<x>", result);
+        Assert.Contains("[tr] Soul began to fight.", result);
+        Assert.Contains("& run.", result);
+    }
+
+    [Fact]
+    public async Task WithoutGlossaryTermsTheRequestIsPlainText()
+    {
+        var deepL = new FakeDeepL(Echo);
+        var translator = new DeepLTranslator("abc:fx", new FakeLocal(), new HttpClient(deepL), glossary: new GlossaryStore(null));
+        await translator.TranslateAsync("Stay close & quiet.");
+        var json = JsonDocument.Parse(deepL.Requests[0].Body).RootElement;
+        Assert.False(json.TryGetProperty("tag_handling", out _));
+        Assert.Equal("Stay close & quiet.", json.GetProperty("text")[0].GetString());
+    }
+
     [Fact]
     public async Task SameSubtitleIsNotSentTwice()
     {

@@ -30,20 +30,29 @@ public partial class TvAppCard : UserControl
             controller = DataContext as AppController;
             if (controller is null) return;
             controller.PropertyChanged += OnChanged;
+            System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkChanged;
             Show(controller.TvApp);
         };
         Unloaded += (_, _) =>
         {
             devModeWatch.Stop();
+            System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
             if (controller is not null) controller.PropertyChanged -= OnChanged;
         };
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppController.TvApp) or nameof(AppController.DevModeHoursLeft))
+        // Tv: TV adresi değişince Samsung adımındaki "Host PC IP" de yeniden seçilir.
+        if (e.PropertyName is nameof(AppController.TvApp) or nameof(AppController.DevModeHoursLeft) or nameof(AppController.Tv))
             Dispatcher.Invoke(() => Show(controller!.TvApp));
     }
+
+    /// <summary>Wi-Fi değişti, VPN açıldı/kapandı: gösterilen "Host PC IP" eski adreste kalmasın.</summary>
+    private void OnNetworkChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() =>
+    {
+        if (controller is not null) Show(controller.TvApp);
+    });
 
     private static Visibility Visible(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 
@@ -58,6 +67,7 @@ public partial class TvAppCard : UserControl
         AndroidSteps.Visibility = Visible(devModeOff && brand == TvBrand.AndroidTv);
         PassphraseArea.Visibility = Visible(state.Kind == TvAppKind.NeedsPassphrase);
         OpenAgain.Visibility = Visible(state.Kind == TvAppKind.SignIn);
+        if (state.Kind != TvAppKind.SignIn) CopyLink.Content = text["Copy the link"];
         Retry.Visibility = Visible(state.Kind == TvAppKind.Failed);
         SamsungHostStep.Text = text["3. Turn Developer mode On, type this computer's address as Host PC IP: %@ and press OK."]
             .Replace("%@", controller?.ComputerAddress ?? "?");
@@ -108,6 +118,15 @@ public partial class TvAppCard : UserControl
     private void OnOpenAgain(object sender, RoutedEventArgs e)
     {
         if (controller?.TvApp.Url is { } url) controller.OpenInBrowser(url);
+    }
+
+    /// <summary>Tarayıcı açılmazsa bağlantı başka bir tarayıcıya yapıştırılabilir.</summary>
+    private void OnCopyLink(object sender, RoutedEventArgs e)
+    {
+        if (controller?.TvApp.Url is not { } url) return;
+        try { Clipboard.SetText(url.AbsoluteUri); }
+        catch (System.Runtime.InteropServices.COMException) { return; } // pano başka bir uygulamada kilitli
+        CopyLink.Content = Localizer.Current["Copied"];
     }
 
     private void OnGuide(object sender, RoutedEventArgs e) =>

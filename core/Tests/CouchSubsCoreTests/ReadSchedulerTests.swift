@@ -81,6 +81,23 @@ final class ReadSchedulerTests: XCTestCase {
         XCTAssertEqual(scheduler.plan(signature: [40, 40]), .read(deep: false))
     }
 
+    /// Kutu verilince yalnız kutunun örttüğü örneklere bakılır; bölgenin başka yerindeki kıpırtı değişiklik sayılmaz.
+    func testChangeWithinABoxIgnoresTheRestOfTheRegion() {
+        let width = ReadScheduler.signatureWidth
+        let still = [UInt8](repeating: 120, count: width * ReadScheduler.signatureHeight)
+        let box = TextBox(left: 0.3, top: 0.6, right: 0.7, bottom: 0.85)
+        var elsewhere = still
+        elsewhere[0] = 250
+        elsewhere[8 * width + 10] = 250
+        XCTAssertTrue(ReadScheduler.changed(still, elsewhere, threshold: ReadScheduler.defaultChangeThreshold))
+        XCTAssertFalse(ReadScheduler.changed(still, elsewhere, threshold: ReadScheduler.defaultChangeThreshold, within: box))
+        var inside = still
+        inside[8 * width + 30] = 180
+        XCTAssertTrue(ReadScheduler.changed(still, inside, threshold: ReadScheduler.defaultChangeThreshold, within: box))
+        inside[8 * width + 30] = 130
+        XCTAssertFalse(ReadScheduler.changed(still, inside, threshold: ReadScheduler.defaultChangeThreshold, within: box))
+    }
+
     func testAlwaysReadDisablesReuse() {
         var scheduler = ReadScheduler.always
         _ = scheduler.plan(signature: still)

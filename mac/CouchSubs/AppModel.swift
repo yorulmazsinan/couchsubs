@@ -490,7 +490,8 @@ final class AppModel: ObservableObject {
     private var pipeline: SubtitlePipeline?
     /// Oyundaki altyazının son görüldüğü yer; deneme altyazısı TV'de oraya yerleşir.
     private var lastSubtitleBox: TextBox?
-    private var processing = false
+    /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur.
+    private var frameGate = FrameGate()
     private var wakeObserver: NSObjectProtocol?
 
     // Oyun paketleri ve ortak havuz
@@ -923,7 +924,7 @@ final class AppModel: ObservableObject {
 
     /// Samsung'da geliştirici modunda "Host PC IP" olarak yazılacak bu Mac'in adresi.
     var computerAddress: String? {
-        Self.localAddress(near: tv?.host.isEmpty == false ? tv!.host : "192.168.1.1")
+        Self.localAddress(near: tv?.host.isEmpty == false ? tv!.host : nil)
     }
 
     /// Key Server'dan anahtarı alır (TV ekranındaki parolayla) ve uygulamayı kurar.
@@ -1161,6 +1162,8 @@ final class AppModel: ObservableObject {
     /// Okuma hattını güncel dillerle (yeniden) kurar.
     private func makePipeline() {
         pipeline?.reset()
+        // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
+        frameGate.reset()
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage),
                                         translator: makeTranslator(),
                                         server: server, scheduler: ReadScheduler())
@@ -1342,6 +1345,8 @@ final class AppModel: ObservableObject {
         pipeline?.reset()
         if pipeline != nil { SubtitleLog.write("oturum bitti") }
         pipeline = nil
+        // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
+        frameGate.reset()
         activeLanguages = nil
         screenHotkey?.enabled = false
         screenTask?.cancel()
@@ -1461,11 +1466,18 @@ final class AppModel: ObservableObject {
 
     private func handle(_ frame: CGImage, capturedAt: Int) async {
         lastFrame = frame
+        guard pipeline != nil else { return }
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
-        guard !processing, let pipeline else { return }
-        processing = true
+        var entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
+        if case .stuck(let ms) = entry {
+            // Okuma bitmedi: önizleme canlıyken altyazı hiç gelmiyordu ve ancak uygulamayı kapatıp açmak düzeltiyordu.
+            SubtitleLog.write("okuma \(ms) ms'dir bitmedi; okuma hattı yeniden kuruldu")
+            makePipeline()
+            entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
+        }
+        guard case .enter(let token) = entry, let pipeline else { return }
         await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
-        processing = false
+        frameGate.leave(token)
     }
 
     // MARK: - Geçmiş
@@ -1511,7 +1523,7 @@ final class AppModel: ObservableObject {
         "http://\(Self.localAddress(near: tv.host) ?? "127.0.0.1"):\(serverPort)"
     }
 
-    static func localAddress(near host: String) -> String? { NetworkAddress.near(host) }
+    static func localAddress(near host: String?) -> String? { NetworkAddress.near(host) }
 }
 
 // MARK: - Dublaj

@@ -135,7 +135,7 @@ public static class RegionCropper
     /// <summary>Bölgenin küçültülmüş gri kopyası: iki kareyi yazı tanımaya gerek kalmadan karşılaştırmaya yeter.</summary>
     public static byte[] Signature(Frame image)
     {
-        const int width = 64, height = 12;
+        const int width = ReadScheduler.SignatureWidth, height = ReadScheduler.SignatureHeight;
         var samples = new byte[width * height];
         if (image.Width == 0 || image.Height == 0) return samples;
         for (var y = 0; y < height; y++)

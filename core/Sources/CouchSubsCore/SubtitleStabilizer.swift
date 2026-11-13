@@ -25,6 +25,12 @@ public enum StabilizerNote: Equatable {
 public struct SubtitleStabilizer {
     /// Bölge bu kadar boş kalırsa altyazı kalkmış sayılır; parlak arka planda kaçan birkaç okuma silmez.
     public static let clearAfterMs = 800
+    /// Okuma boş döndüğü halde satırın yeri, satır son okunduğundan beri değişmediyse (bölge izi, `ReadScheduler.changed`)
+    /// yazı hâlâ oradadır, yazı tanıma kaçırmıştır: parlak zeminde beyaz yazı saniyelerce okunamıyor, TV'deki Türkçe
+    /// İngilizce dururken siliniyordu (It Takes Two, 2026-11-13). Satırın yeri değişince her zamanki `clearAfterMs`
+    /// sayılır. Değişmeyen yerde de satır en çok bu kadar tutulur: küçültülmüş iz harfleri kaçırırsa kalkan satırın
+    /// çevirisi en çok bu kadar fazla kalır.
+    public static let holdUnchangedMs = 4000
     /// Kalkan satır bu süre içinde geri gelirse aynı satırdır (okuma kaçmıştı); yeniden çevrilmez.
     public static let restoreWithinMs = 1500
     /// Çevirisi başarısız olan satır en erken bu kadar sonra yeniden denenir.
@@ -50,6 +56,10 @@ public struct SubtitleStabilizer {
     private var sent = ""
     private var sentRaw = ""
     private var emptySince: Int?
+    /// Boş okunan bölgede satırın yerinin değiştiği (ya da yeri bilinmediği için kalkmış sayıldığı) an.
+    private var goneSince: Int?
+    /// Ekrandaki satırın son okunduğu karenin bölge izi ve satırın bölgedeki yeri.
+    private var lastSeen: (signature: [UInt8], box: TextBox)?
     /// Son kalkan satırlar ve kalktıkları an.
     private var history: [(rows: String, raw: String, leftAt: Int)] = []
     /// Çevirisi başarısız olan satır ve en erken yeniden deneneceği an.
@@ -68,7 +78,9 @@ public struct SubtitleStabilizer {
         self.now = clock
     }
 
-    public mutating func feed(_ rawText: String) -> StabilizerAction {
+    /// `signature`: karenin bölge izi (`RegionCropper.signature`); verilmezse boş okuma hep kalkma sayılır.
+    /// `box`: okunan yazının bölgedeki yeri (bölgenin kenarlarına oranla).
+    public mutating func feed(_ rawText: String, signature: [UInt8]? = nil, box: TextBox? = nil) -> StabilizerAction {
         let time = now()
         let text = TextMatch.normalize(rawText)
         note = nil
@@ -79,7 +91,11 @@ public struct SubtitleStabilizer {
             candidateCount = 0
             let since = emptySince ?? time
             emptySince = since
-            if !sent.isEmpty && time - since >= clearAfterMs {
+            guard !sent.isEmpty else { return .none }
+            // Satırın yeri son okunduğu kareden beri değişmediyse yazı tanıma kaçırmıştır; kalkma sayılmaz.
+            if goneSince == nil && !looksUnchanged(signature) { goneSince = time }
+            let gone = goneSince.map { time - $0 >= clearAfterMs } ?? false
+            if gone || time - since >= Self.holdUnchangedMs {
                 leaveScreen(at: time)
                 return .clear
             }
@@ -87,6 +103,7 @@ public struct SubtitleStabilizer {
         }
 
         emptySince = nil
+        goneSince = nil
         if TextMatch.isSimilar(text, candidate, threshold: similarity) {
             candidateCount += 1
         } else {
@@ -103,7 +120,10 @@ public struct SubtitleStabilizer {
             ? candidateCount >= stableFrames && time - candidateSince >= Self.garbledStableMs
             : candidateCount >= stableFrames || Self.endsSentence(rawText)
         // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if Self.isSame(text, sent) { return .none }
+        if Self.isSame(text, sent) {
+            remember(signature, box)
+            return .none
+        }
         guard ready else {
             if garbled { garbledPending = rawText.trimmingCharacters(in: .whitespacesAndNewlines) }
             return .none
@@ -113,6 +133,7 @@ public struct SubtitleStabilizer {
         // aynı cümlenin iki üç çevirisi üst üste dururdu. Daha çok sözcük okuyan okuma yeniden çevrilir (TV yerine koyar).
         if !sentRaw.isEmpty, TextMatch.isWorseReread(rawText, of: sentRaw) {
             note = .worseReread(rawText.trimmingCharacters(in: .whitespacesAndNewlines))
+            remember(signature, box)
             return .none
         }
 
@@ -121,6 +142,7 @@ public struct SubtitleStabilizer {
             let back = history.remove(at: index)
             leaveScreen(at: time)
             (sent, sentRaw) = (back.rows, back.raw)
+            remember(signature, box)
             return .restore(back.raw)
         }
         // Çevirisi az önce başarısız olan satır her karede yeniden istenmez.
@@ -130,7 +152,19 @@ public struct SubtitleStabilizer {
         forgotten = ""
         sentRaw = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         sent = TextMatch.normalizeRows(sentRaw)
+        remember(signature, box)
         return .translate(sentRaw)
+    }
+
+    /// Ekrandaki satır bu karede okundu: bölgenin izi ve satırın yeri saklanır (yer bilinmiyorsa hiçbiri).
+    private mutating func remember(_ signature: [UInt8]?, _ box: TextBox?) {
+        if let signature, let box { lastSeen = (signature, box) } else { lastSeen = nil }
+    }
+
+    /// Bu karede satırın yeri, satırın son okunduğu karedekiyle aynı mı (izi ve yeri bilinmiyorsa hayır).
+    private func looksUnchanged(_ signature: [UInt8]?) -> Bool {
+        guard let signature, let seen = lastSeen else { return false }
+        return !ReadScheduler.changed(seen.signature, signature, threshold: ReadScheduler.defaultChangeThreshold, within: seen.box)
     }
 
     /// Bekleyen çöp aday gönderilmeden bırakıldı (kalktı ya da başka okumaya döndü): günlük için not edilir.
@@ -152,6 +186,7 @@ public struct SubtitleStabilizer {
         if history.count > Self.historySize { history.removeFirst() }
         sent = ""
         sentRaw = ""
+        lastSeen = nil
     }
 
     /// Satır nokta, ünlem, soru ya da üç noktayla bitiyor mu (kapanan tırnak ve parantezler yok sayılır).
@@ -175,6 +210,7 @@ public struct SubtitleStabilizer {
         retryAt = now() + Self.retryAfterMs
         sent = ""
         sentRaw = ""
+        lastSeen = nil
         candidate = ""
         candidateCount = 0
         garbledPending = ""
@@ -186,6 +222,8 @@ public struct SubtitleStabilizer {
         garbledPending = ""
         note = nil
         emptySince = nil
+        goneSince = nil
+        lastSeen = nil
         history.removeAll()
         forgotten = ""
         guard !sent.isEmpty else { return .none }

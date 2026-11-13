@@ -37,15 +37,20 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
     private readonly ConcurrentDictionary<string, IReadOnlyList<SpokenLine>> _speech = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _names = new(StringComparer.Ordinal);
     private readonly List<string> _recent = [];
+    /// <summary>Çevrilmeyecek adlar ve terimler (ücretsiz çeviriyle aynı sözlük); DeepL'e etiketle korunarak gider.</summary>
+    private readonly GlossaryStore _glossary;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
 
     /// <param name="cache">Kalıcı önbellek; verilmezse yalnız bellekte tutulur.</param>
-    public DeepLTranslator(string key, ITextTranslator? fallback, HttpClient? http = null, TranslationCache? cache = null)
+    /// <param name="glossary">Verilmezse kullanıcının sözlük klasörü (ücretsiz çeviriyle aynı).</param>
+    public DeepLTranslator(string key, ITextTranslator? fallback, HttpClient? http = null, TranslationCache? cache = null,
+        GlossaryStore? glossary = null)
     {
         _key = key.Trim();
         _fallback = fallback;
         _http = http ?? SharedClient.Value;
         _cache = cache ?? new TranslationCache();
+        _glossary = glossary ?? new GlossaryStore(GlossaryStore.UserDirectory);
     }
 
     /// <summary>Son DeepL hatası; çeviri düzgün gidiyorsa null.</summary>
@@ -70,7 +75,8 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         // Bağlam, bu satırdan önce gösterilenlerdir; satırın kendisi bağlama girmez.
         var context = Context();
         Shown(text);
-        if (_cache.TryGet(text, out var cached)) return cached;
+        var glossary = _glossary.Current;
+        if (_cache.TryGet(DeepLMarkup.CacheKey(text, glossary), out var cached)) return cached;
         if (DateTimeOffset.UtcNow < _pausedUntil) return await FallbackAsync(text, cancellationToken).ConfigureAwait(false);
 
         var pieces = SubtitleSegmenter.Split(text);
@@ -78,15 +84,21 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
             foreach (var word in name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2))
                 _names[word.ToLowerInvariant()] = 0;
         var names = _names.Keys.ToHashSet(StringComparer.Ordinal);
+        names.UnionWith(glossary.CapitalWords);
         // Önbellekte duran cümleler yeniden gönderilmez; kota yalnız yeni cümlelere gider.
-        var translations = pieces.Select(p => p.Translate && _cache.TryGet(p.Text, out var known) ? known : null).ToList();
+        var translations = pieces.Select(p => p.Translate && _cache.TryGet(DeepLMarkup.CacheKey(p.Text, glossary), out var known) ? known : null).ToList();
         var missing = Enumerable.Range(0, pieces.Count).Where(i => pieces[i].Translate && translations[i] is null).ToList();
-        var sources = missing.Select(i => SubtitleSegmenter.NormalizeCase(pieces[i].Text, names)).ToList();
+        var plain = missing.Select(i => SubtitleSegmenter.NormalizeCase(pieces[i].Text, names)).ToList();
+        // Sözlükteki adlar etiketle korunur; etiket varsa istek XML olarak gider, diğer cümleler de kaçırılır.
+        var wrapped = plain.Select(p => DeepLMarkup.Wrap(p, glossary)).ToList();
+        var tagged = wrapped.Any(w => w is not null);
+        var sources = tagged ? plain.Select((p, i) => wrapped[i] ?? DeepLMarkup.Escape(p)).ToList() : plain;
 
         string[] translated;
         try
         {
-            translated = sources.Count == 0 ? [] : await RequestAsync(sources, context, cancellationToken).ConfigureAwait(false);
+            var reply = sources.Count == 0 ? [] : await RequestAsync(sources, context, tagged, cancellationToken).ConfigureAwait(false);
+            translated = tagged ? [.. reply.Select(DeepLMarkup.Unwrap)] : reply;
             Report(null);
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or DeepLException
@@ -99,7 +111,7 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         for (var i = 0; i < missing.Count; i++)
         {
             translations[missing[i]] = translated[i];
-            _cache.Store(pieces[missing[i]].Text, translated[i]);
+            _cache.Store(DeepLMarkup.CacheKey(pieces[missing[i]].Text, glossary), translated[i]);
         }
 
         var builder = new StringBuilder();
@@ -107,7 +119,7 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         if (_speech.Count >= 512) _speech.Clear();
         _speech[text] = SpeechScript.Lines(pieces, translations);
         var result = builder.ToString();
-        _cache.Store(text, result);
+        _cache.Store(DeepLMarkup.CacheKey(text, glossary), result);
         return result;
     }
 
@@ -137,10 +149,11 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         _fallback is null ? throw new TranslatorException(TranslatorStatus.NeedsDownload)
             : await _fallback.TranslateAsync(text, cancellationToken).ConfigureAwait(false);
 
-    private async Task<string[]> RequestAsync(List<string> sentences, string? context, CancellationToken cancellationToken)
+    private async Task<string[]> RequestAsync(List<string> sentences, string? context, bool tagged, CancellationToken cancellationToken)
     {
         // Oyun konuşması: "siz" değil "sen" (DeepL Türkçede desteklemiyorsa yok sayar).
-        var body = new TranslateRequest(sentences, "EN", "TR", context, "prefer_less", true);
+        var body = new TranslateRequest(sentences, "EN", "TR", context, "prefer_less", true,
+            tagged ? "xml" : null, tagged ? [DeepLMarkup.Tag] : null);
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(BaseUri(_key), "translate"))
         {
             Content = JsonContent.Create(body, DeepLJson.Default.TranslateRequest),
@@ -199,7 +212,9 @@ internal sealed record TranslateRequest(
     [property: JsonPropertyName("target_lang")] string TargetLang,
     [property: JsonPropertyName("context"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Context,
     [property: JsonPropertyName("formality")] string Formality,
-    [property: JsonPropertyName("preserve_formatting")] bool PreserveFormatting);
+    [property: JsonPropertyName("preserve_formatting")] bool PreserveFormatting,
+    [property: JsonPropertyName("tag_handling"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TagHandling = null,
+    [property: JsonPropertyName("ignore_tags"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? IgnoreTags = null);
 
 internal sealed record TranslateResponse([property: JsonPropertyName("translations")] IReadOnlyList<TranslatedText>? Translations);
 

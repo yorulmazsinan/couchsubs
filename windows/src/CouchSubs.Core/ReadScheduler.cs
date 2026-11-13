@@ -15,8 +15,13 @@ public readonly record struct ReadPlan(bool Reuse, string Text, bool Deep)
 /// Hangi karede yazı tanıma yapılacağını seçer. Oyun süresinin çoğunda bölge boştur ya da değişmez;
 /// işlemcinin büyük kısmı bu karelerde boşa gider.
 /// </summary>
-public sealed class ReadScheduler(int changeThreshold = 16, int maxReuse = 20, int deepEvery = 3)
+public sealed class ReadScheduler(int changeThreshold = ReadScheduler.ChangeThreshold, int maxReuse = 20, int deepEvery = 3)
 {
+    /// <summary>Bölge izinin (<see cref="RegionCropper.Signature"/>) boyutu: satır başına bu kadar gri örnek, bu kadar satır.</summary>
+    public const int SignatureWidth = 64, SignatureHeight = 12;
+    /// <summary>Video gürültüsü bu farkı aşmaz; bir harf eklenmesi aşar.</summary>
+    public const int ChangeThreshold = 16;
+
     private byte[]? previous;
     private string lastText = "";
     private int reused;
@@ -53,11 +58,31 @@ public sealed class ReadScheduler(int changeThreshold = 16, int maxReuse = 20, i
         emptyReads = 0;
     }
 
-    private bool Changed(byte[] a, byte[] b)
+    private bool Changed(byte[] a, byte[] b) => Changed(a, b, changeThreshold);
+
+    /// <summary>
+    /// İki bölge izi farklı mı: bir örnek <paramref name="threshold"/>'dan çok değiştiyse. <paramref name="within"/>
+    /// verilirse yalnız o kutunun (bölgenin kenarlarına oranla) örttüğü örneklere bakılır; bölgenin başka yerindeki
+    /// kıpırtı sayılmaz (Mac: ReadScheduler.changed).
+    /// </summary>
+    public static bool Changed(byte[] a, byte[] b, int threshold, TextBox? within = null)
     {
         if (a.Length != b.Length) return true;
-        for (var i = 0; i < a.Length; i++)
-            if (Math.Abs(a[i] - b[i]) > changeThreshold) return true;
+        const int columns = SignatureWidth;
+        var rows = a.Length / columns;
+        if (within is not { } box || rows == 0 || a.Length % columns != 0)
+        {
+            for (var i = 0; i < a.Length; i++)
+                if (Math.Abs(a[i] - b[i]) > threshold) return true;
+            return false;
+        }
+        var left = Math.Clamp((int)Math.Floor(box.Left * columns), 0, columns - 1);
+        var right = Math.Clamp((int)Math.Ceiling(box.Right * columns), left + 1, columns);
+        var top = Math.Clamp((int)Math.Floor(box.Top * rows), 0, rows - 1);
+        var bottom = Math.Clamp((int)Math.Ceiling(box.Bottom * rows), top + 1, rows);
+        for (var y = top; y < bottom; y++)
+            for (var x = left; x < right; x++)
+                if (Math.Abs(a[(y * columns) + x] - b[(y * columns) + x]) > threshold) return true;
         return false;
     }
 }

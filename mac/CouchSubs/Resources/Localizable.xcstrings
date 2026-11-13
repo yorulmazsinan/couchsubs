@@ -5457,6 +5457,22 @@
         }
       }
     },
+    "On the computer screen, move the subtitle by dragging its window: press Adjust the subtitle window.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the computer screen, move the subtitle by dragging its window: press Adjust the subtitle window."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilgisayar ekranındaki altyazıyı penceresini sürükleyerek taşıyın: Altyazı penceresini ayarla'ya basın."
+          }
+        }
+      }
+    },
     "When on, clicks go through to the window below. Press ⌥⌘L or use the menu bar to turn it off.": {
       "localizations": {
         "en": {
@@ -6205,6 +6221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "TV'de “Sunucu bakım altında” yazıyorsa TV, Samsung'un sunucularına ulaşamıyor: TV'nin internet bağlantısını, tarih ve saatini kontrol edin, TV'yi yeniden başlatıp tekrar deneyin."
+          }
+        }
+      }
+    },
+    "If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giriş penceresi açılmazsa tarayıcı onu açılır pencere diye engellemiş olabilir: adres çubuğundaki simgeden bu sayfa için açılır pencerelere izin verin, sonra Sayfayı yeniden aç'a basın."
           }
         }
       }

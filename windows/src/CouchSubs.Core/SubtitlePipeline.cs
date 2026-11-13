@@ -157,8 +157,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public async Task ProcessAsync(Frame frame, CropRegion region, long? capturedAt = null)
     {
         var captured = capturedAt ?? now();
+        // Okuma sürerken hat sıfırlandıysa (çeviri durdu, hat yeniden kuruldu) bu karenin sonucu yeni oturuma karışmaz.
+        int startedSession;
         lock (gate)
         {
+            startedSession = session;
             if (!sawFrame)
             {
                 sawFrame = true;
@@ -166,16 +169,18 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             }
         }
         // Yazı tanıma uzun sürebilir; çağıranı (arayüzü) bekletmemek için iş parçacığı havuzunda yapılır.
-        var (raw, ocrMs) = await Task.Run(() =>
+        var (raw, ocrMs, signature) = await Task.Run(() =>
         {
+            byte[]? signature = null;
             try
             {
                 var area = RegionCropper.Crop(frame, region);
+                signature = RegionCropper.Signature(area);
                 ReadPlan plan;
                 lock (gate)
                 {
-                    plan = schedule.Plan(RegionCropper.Signature(area));
-                    if (plan.Reuse) return (lastReading, lastReadMs);
+                    plan = schedule.Plan(signature);
+                    if (plan.Reuse) return (lastReading, lastReadMs, signature);
                 }
                 var readStarted = now();
                 var read = reader.ReadLines(area, plan.Deep);
@@ -186,10 +191,18 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     lastReading = read;
                     lastReadMs = readMs;
                 }
-                return (read, (int?)readMs);
+                return (read, (int?)readMs, signature);
             }
-            catch { return (Reading.Empty, (int?)null); }
+            catch { return (Reading.Empty, (int?)null, signature); }
         });
+        lock (gate)
+        {
+            if (session != startedSession)
+            {
+                Write("eski okuma bitti, hat sıfırlanmıştı; atıldı");
+                return;
+            }
+        }
         // Kumanda ipuçları ("R2 Swing") altyazı değildir; çevrilmez, yeri de altyazının yerine katılmaz.
         // Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e") de çevirmene gitmez.
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
@@ -206,7 +219,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 Write($"ilk yazı: oturum başından {now() - sessionStart} ms sonra {SubtitleLog.Excerpt(reading.Text)}");
             }
             currentRead = new ReadInfo(captured, ocrMs, reading.Confidence);
-            var action = stabilizer.Feed(reading.Text);
+            // Bölge izi ve satırın yeri: okuma boş dönse de satırın yeri değişmediyse satır silinmez (parlak zemin).
+            var action = stabilizer.Feed(reading.Text, signature, reading.Box);
             // Ekranda duran kötü yeniden okuma her karede not edilir; günlüğe bir kez yazılır.
             if (stabilizer.Note is { } note && note != lastNote)
             {
@@ -303,6 +317,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 case StabilizerKind.Clear:
                     LineLeft();
                     sender.Clear();
+                    Write("kalktı: bölge boş okundu, ekran temizlendi");
                     break;
                 case StabilizerKind.Translate:
                     LineLeft();

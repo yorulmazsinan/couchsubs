@@ -105,7 +105,8 @@ final class PhoneModel: ObservableObject {
     private var session: StreamControlling?
     private var keeper: KeeperControlling?
     private var pipeline: SubtitlePipeline?
-    private var processing = false
+    /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur (Mac ile aynı).
+    private var frameGate = FrameGate()
     private var savedKeys: Set<TranslationEngine> = []
     private var stack = SubtitleStack()
     private var stackTimer: Task<Void, Never>?
@@ -308,6 +309,8 @@ final class PhoneModel: ObservableObject {
         keeper = nil
         pipeline?.reset()
         pipeline = nil
+        // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
+        frameGate.reset()
         isRunning = false
         onlineIssue = nil
         sessionState = .disconnected(.stopped)
@@ -366,6 +369,8 @@ final class PhoneModel: ObservableObject {
 
     private func makePipeline() {
         pipeline?.reset()
+        // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
+        frameGate.reset()
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage), translator: makeTranslator(),
                                         server: server, scheduler: ReadScheduler())
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
@@ -392,10 +397,18 @@ final class PhoneModel: ObservableObject {
 
     private func handle(_ frame: CGImage, capturedAt: Int) async {
         framePreview.image = frame
-        guard !processing, let pipeline else { return }
-        processing = true
+        guard pipeline != nil else { return }
+        // Önceki kare hâlâ işleniyorsa bu kare atlanır. Tek okuma bitmezse çeviri tamamen duruyor, "Durdur / Başlat"
+        // düzeltmiyordu (Mac'te görüldü, 2026-11-13); takılan okuma hattı yeniden kurdurur.
+        var entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
+        if case .stuck(let ms) = entry {
+            SubtitleLog.write("okuma \(ms) ms'dir bitmedi; okuma hattı yeniden kuruldu")
+            makePipeline()
+            entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
+        }
+        guard case .enter(let token) = entry, let pipeline else { return }
         await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
-        processing = false
+        frameGate.leave(token)
     }
 
     // MARK: - Geçmiş
