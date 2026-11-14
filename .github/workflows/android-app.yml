@@ -47,9 +47,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
-      # nanopb'nin kod üreteci protobuf paketli Python ister.
-      - name: Python
+      # nanopb'nin kod üreteci protobuf paketli Python ister; chiaki-ng'nin takion.proto'su için protoc gerekir.
+      - name: Python ve protoc
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler > /dev/null
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --quiet protobuf grpcio-tools
           echo "COUCHSUBS_PYTHON=$RUNNER_TEMP/venv/bin/python3" >> "$GITHUB_ENV"
