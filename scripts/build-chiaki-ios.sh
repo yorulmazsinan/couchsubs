@@ -19,6 +19,16 @@ SRC="${CHIAKI_SRC:-$ROOT/third-party/chiaki-ng}"
 WORK="$ROOT/third-party/build/ios-work"
 VENV="$ROOT/third-party/build/venv-ios"
 JOBS="${JOBS:-4}"
+# nanopb sembolleri chiaki_nanopb_ önekini alır: uygulamadaki başka nanopb kopyalarıyla (iOS: Firebase'in 0.3'ü) karışmasın.
+NANOPB_PREFIX="$ROOT/third-party/patches/chiaki-nanopb-prefix.h"
+check_nanopb_prefix() {
+  local lib left
+  for lib in "$1/libprotobuf-nanopb.a" "$1/libchiaki.a"; do
+    left=$(nm -g "$lib" | grep -E ' _pb_[a-z0-9_]+$' | sort -u)
+    [[ -z "$left" ]] || { echo "HATA: ${lib:t} önek almamış nanopb sembolleri içeriyor (chiaki-nanopb-prefix.h):\n$left" >&2; exit 1; }
+    nm -g "$lib" | grep -q ' _chiaki_nanopb_encode$' || { echo "HATA: ${lib:t} içinde _chiaki_nanopb_encode yok" >&2; exit 1; }
+  done
+}
 SLICES=(${=SLICES:-iphoneos iphonesimulator})
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 # Uygulama iOS 16 ister; kütüphaneler daha eskiyi hedefleyebilir. chiaki-ng kendi CMakeLists'inde Apple için hedefi
@@ -126,7 +136,8 @@ for sdk in $SLICES; do
     -DCHIAKI_ENABLE_SPEEX=OFF -DCHIAKI_ENABLE_SETSU=OFF -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF \
     -DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF -DCHIAKI_ENABLE_BOREALIS=OFF \
     -DUSE_NGHTTP2=OFF -DUSE_LIBIDN2=OFF -DCURL_ZSTD=OFF -DCURL_BROTLI=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF \
-    -DUSE_LIBRTMP=OFF -DCURL_DISABLE_LDAP=ON -DCURL_USE_OPENSSL=ON >/dev/null
+    -DUSE_LIBRTMP=OFF -DCURL_DISABLE_LDAP=ON -DCURL_USE_OPENSSL=ON \
+    -DCMAKE_C_FLAGS="-include $NANOPB_PREFIX" >/dev/null
   cmake --build "$B/chiaki" --target chiaki-lib --parallel "$JOBS" >/dev/null
 
   rm -rf "$OUT"
@@ -136,6 +147,8 @@ for sdk in $SLICES; do
   find "$B/chiaki" -name "*.a" -exec cp {} "$OUT/lib/" \;
   cp "$PREFIX/lib/libcrypto.a" "$PREFIX/lib/libssl.a" "$PREFIX/lib/libjson-c.a" "$PREFIX/lib/libevent.a" \
      "$PREFIX/lib/libminiupnpc.a" "$OUT/lib/"
+
+  check_nanopb_prefix "$OUT/lib"
 
   # Her parça doğru platform için mi (cihaz: 2 = IOS, simülatör: 7 = IOSSIMULATOR)?
   want=$([[ $sdk == iphoneos ]] && echo 2 || echo 7)
