@@ -46,7 +46,7 @@ class StreamSession(
     private val onConsoleMoved: (RegisteredConsole) -> Unit = {},
     private val width: Int = 1920,
     private val height: Int = 1080,
-) {
+) : FrameSource {
     private companion object {
         const val TAG = "CouchSubsSession"
         const val RELOCATE_INTERVAL_MS = 30_000L
@@ -67,7 +67,7 @@ class StreamSession(
     private var nativeGeneration = 0
     private var reader: ImageReader? = null
 
-    fun start() {
+    override fun start() {
         val current = bump(true)
         queue.execute {
             policy.reset()
@@ -81,7 +81,7 @@ class StreamSession(
         queue.execute(::closeNative)
     }
 
-    fun dispose() {
+    override fun dispose() {
         stop()
         queue.execute {
             imageThread.quitSafely()
@@ -101,7 +101,7 @@ class StreamSession(
     }
 
     /** ImageReader'a gelen kare sayısı (tanı: görüntü geliyor mu). */
-    @Volatile var framesReceived = 0L
+    @Volatile override var framesReceived = 0L
         private set
 
     private val isRunning get() = synchronized(stateLock) { running }

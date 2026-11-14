@@ -29,6 +29,8 @@ import com.couchsubs.mobile.core.TextTranslator
 import com.couchsubs.mobile.ocr.RegionPixels
 import com.couchsubs.mobile.ocr.SubtitleReader
 import com.couchsubs.mobile.remoteplay.DisconnectKind
+import com.couchsubs.mobile.remoteplay.FrameSource
+import com.couchsubs.mobile.remoteplay.FrameSources
 import com.couchsubs.mobile.remoteplay.NativeBridge
 import com.couchsubs.mobile.remoteplay.SessionState
 import com.couchsubs.mobile.remoteplay.StreamSession
@@ -69,7 +71,7 @@ class TranslationService : Service() {
     }
 
     private lateinit var settings: AppSettings
-    private var session: StreamSession? = null
+    private var session: FrameSource? = null
     private var server: SubtitleServer? = null
     private var pipeline: SubtitlePipeline? = null
     private var reader: SubtitleReader? = null
@@ -130,7 +132,9 @@ class TranslationService : Service() {
             stopSelf()
             return
         }
-        if (!NativeBridge.available) {
+        // Yerine geçen kaynak yalnız debug yapısında kurulur (Play görüntüleri için kayıtlı klip); PS5 kitaplığı gerekmez.
+        val replacement = FrameSources.replacement
+        if (replacement == null && !NativeBridge.available) {
             LiveState.update { it.copy(running = false, error = getString(R.string.error_native)) }
             stopSelf()
             return
@@ -164,7 +168,9 @@ class TranslationService : Service() {
             LiveState.update { it.copy(error = getString(R.string.error_port)) }
         }
 
-        val linePool = LinePool(File(filesDir, "line-pool.json"), "CouchSubs Android ${BuildConfig.VERSION_NAME}", enabled = settings.sharePool)
+        // Klipten okunan satırlar ortak havuza gönderilmez (oyun yazısı değildir).
+        val linePool = LinePool(File(filesDir, "line-pool.json"), "CouchSubs Android ${BuildConfig.VERSION_NAME}",
+            enabled = settings.sharePool && replacement == null)
         pool = linePool
         val packTitles = library.infos.associate { it.id to it.title }
         reader = SubtitleReader()
@@ -191,20 +197,20 @@ class TranslationService : Service() {
             }
         }
 
-        session = StreamSession(console, accountId,
-            onFrame = { image ->
-                val now = System.currentTimeMillis()
-                if (!reading.get() && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
-                    SubtitleReader.copyRegion(image, region)?.let { pixels ->
-                        lastRead = now
-                        reading.set(true)
-                        ocr.execute { read(pixels) }
-                    }
+        val onFrame: (android.media.Image) -> Unit = { image ->
+            val now = System.currentTimeMillis()
+            if (!reading.get() && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
+                SubtitleReader.copyRegion(image, region)?.let { pixels ->
+                    lastRead = now
+                    reading.set(true)
+                    ocr.execute { read(pixels) }
                 }
-            },
-            onState = { state -> LiveState.update { it.copy(phase = describe(state)) } },
-            onConsoleMoved = { moved -> settings.console = moved },
-        ).also { it.start() }
+            }
+        }
+        val onState: (SessionState) -> Unit = { state -> LiveState.update { it.copy(phase = describe(state)) } }
+        session = (replacement?.create(this, onFrame, onState)
+            ?: StreamSession(console, accountId, onFrame, onState, onConsoleMoved = { moved -> settings.console = moved }))
+            .also { it.start() }
         background.scheduleWithFixedDelay({
             session?.let { s -> LiveState.update { it.copy(framesReceived = s.framesReceived) } }
         }, 2, 2, TimeUnit.SECONDS)
