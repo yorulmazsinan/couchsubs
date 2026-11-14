@@ -305,10 +305,16 @@ object AiRequest {
     /** Yanıttaki JSON dizisi; tek cümlede model diziyi unutup düz metin dönerse o metin alınır. */
     fun translations(text: String, count: Int): List<String> {
         var trimmed = text.trim()
+        // Düşünen modeller yanıtın başına <think>…</think> koyar; yalnız sonrası alınır.
+        val thought = trimmed.lastIndexOf("</think>")
+        if (thought >= 0) trimmed = trimmed.substring(thought + "</think>".length).trim()
         if (trimmed.startsWith("```")) trimmed = trimmed.split('\n').drop(1).filter { !it.startsWith("```") }.joinToString("\n").trim()
         val start = trimmed.indexOf('[')
         val end = trimmed.lastIndexOf(']')
-        if (start >= 0 && end > start) {
+        // org.json tırnaksız öğeleri de kabul eder ("[gülüyor]" → "gülüyor", "[Evet, efendim.]" → iki öğe); yalnız
+        // ilk öğesi tırnaklı (ya da boş) dizi JSON sayılır, gerisi tırnaksız dizi kuralıyla okunur.
+        val quoted = start >= 0 && trimmed.substring(start + 1).trimStart().let { it.startsWith('"') || it.startsWith(']') }
+        if (quoted && end > start) {
             try {
                 val array = JSONArray(trimmed.substring(start, end + 1))
                 if ((0 until array.length()).all { array.opt(it) is String }) {
@@ -319,8 +325,48 @@ object AiRequest {
                 // Dizi değil; düz metin olabilir.
             }
         }
+        unquotedList(trimmed, count)?.let { return it }
         if (count != 1) throw OnlineException(OnlineKeyState.UNREACHABLE)
         return listOf(trimmed.trim('"', '“', '”'))
+    }
+
+    /**
+     * Tırnaksız dizi: bazı modeller JSON istense de `[Hareket etmemiz lazım.]` ya da `[Satır bir., Satır iki.]` döndürür.
+     * Yalnız bütün yanıt köşeli parantez içindeyse ve öğe sayısı tam tutuyorsa alınır; tutmazsa null (her zamanki geri
+     * dönüş). Cümle içi virgülde yanlış bölmemek için sıra: satır sonu, cümle sonu işaretinden (. ! ? … ") sonra gelen
+     * virgül, en son düz virgül (Mac ve Windows ile aynı).
+     */
+    internal fun unquotedList(text: String, count: Int): List<String>? {
+        if (count < 1 || text.length < 2 || !text.startsWith('[') || !text.endsWith(']')) return null
+        val inner = text.substring(1, text.length - 1)
+        fun clean(item: String): String = item.trim().removeSuffix(",").trim().trim('"', '“', '”').trim()
+        val candidates = if (count == 1) listOf(listOf(inner)) else listOf(
+            inner.split('\n').filter { it.isNotBlank() },
+            sentenceSplit(inner),
+            inner.split(','),
+        )
+        for (parts in candidates) {
+            val items = parts.map(::clean)
+            if (items.size == count && items.none { it.isEmpty() }) return items
+        }
+        return null
+    }
+
+    /** Cümle sonu işaretinden (. ! ? … " ”) hemen sonra gelen virgüllerden böler; işaret öğede kalır. */
+    private fun sentenceSplit(text: String): List<String> {
+        val parts = mutableListOf<String>()
+        var start = 0
+        var last: Char? = null
+        for (i in text.indices) {
+            val c = text[i]
+            if (c == ',' && last != null && last in ".!?…\"”") {
+                parts.add(text.substring(start, i))
+                start = i + 1
+            }
+            if (!c.isWhitespace()) last = c
+        }
+        parts.add(text.substring(start))
+        return parts
     }
 
     fun failure(status: Int, body: String): OnlineKeyState {

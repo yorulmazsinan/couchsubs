@@ -273,6 +273,11 @@ public final class GamePackLibrary: @unchecked Sendable {
         lock.withLock { scope.flatMap { $0 < infos.count ? infos[$0].id : nil } }
     }
 
+    /// Oynanan oyunun adı: son tam eşleşmenin geldiği paketin başlığı; yoksa nil. Yapay zekâya bağlam olarak gider.
+    public var scopeTitle: String? {
+        lock.withLock { scope.flatMap { $0 < infos.count ? infos[$0].title : nil } }
+    }
+
     private func noteHit(_ key: UInt64, in searchable: [Searchable]) {
         let owners = searchable.indices.filter { searchable[$0].contains(key) }
         guard let first = owners.first else { return }

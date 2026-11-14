@@ -403,6 +403,79 @@ public class AiTranslatorTests
         Assert.Equal("Koş!", AiRequest.Text(AiProvider.OpenAi, """{"choices":[{"message":{"content":"Koş!"}}]}"""));
     }
 
+    /// <summary>Tırnaksız dizi (#27): bazı yerel modeller <c>[Hareket etmemiz lazım.]</c> döndürür; köşeli parantezler ekranda kalmaz.</summary>
+    [Fact]
+    public void UnquotedArrayForOneSentence()
+    {
+        Assert.Equal(["Hareket etmemiz lazım."], AiRequest.Translations("[Hareket etmemiz lazım.]", 1));
+        Assert.Equal(["Dur, bekle, gitme."], AiRequest.Translations("[Dur, bekle, gitme.]", 1));
+        Assert.Equal(["Geri çekil lan!"], AiRequest.Translations("<think>\nKısa bir cümle.\n</think>\n[Geri çekil lan!]", 1));
+        Assert.Equal(["Yerinden kıpırdama."], AiRequest.Translations("```json\n[Yerinden kıpırdama.]\n```", 1));
+        // İçi tırnaklı ama kaçışsız: JSON değil, yine de dış katman soyulur.
+        Assert.Equal(["Ona \"dur\" dedim."], AiRequest.Translations("[\"Ona \"dur\" dedim.\"]", 1));
+        // Köşeli parantez yalnız başta: düz metin olduğu gibi kalır.
+        Assert.Equal(["[gülüyor] Hadi gidelim."], AiRequest.Translations("[gülüyor] Hadi gidelim.", 1));
+    }
+
+    [Fact]
+    public void UnquotedArrayForSeveralSentences()
+    {
+        Assert.Equal(["Satır bir.", "Satır iki."], AiRequest.Translations("[Satır bir., Satır iki.]", 2));
+        Assert.Equal(["Gidelim.", "Yakın dur."], AiRequest.Translations("[\n  Gidelim.,\n  Yakın dur.\n]", 2));
+        Assert.Equal(["Koş!", "Hemen!"], AiRequest.Translations("<think>…</think>[Koş!, Hemen!]", 2));
+        // Sayı tutmazsa parti her zamanki geri dönüşe gider.
+        Assert.Throws<AiException>(() => AiRequest.Translations("[Satır bir.]", 2));
+        Assert.Throws<AiException>(() => AiRequest.Translations("[Bir., İki., Üç.]", 2));
+    }
+
+    /// <summary>Cümle içi virgül bölünmez: önce cümle sonundan sonra gelen virgül denenir, düz virgül yalnız sayı tam tutarsa.</summary>
+    [Fact]
+    public void UnquotedArrayKeepsCommasInsideSentences()
+    {
+        Assert.Equal(["Evet, efendim.", "Hayır, gitmiyorum."], AiRequest.Translations("[Evet, efendim., Hayır, gitmiyorum.]", 2));
+        Assert.Equal(["Dur, bekle, gitme!", "Tamam."], AiRequest.Translations("[Dur, bekle, gitme!, Tamam.]", 2));
+        Assert.Equal(["Sakin ol, dostum.", "Ben hallederim, merak etme."],
+                     AiRequest.Translations("[Sakin ol, dostum.\nBen hallederim, merak etme.]", 2));
+        Assert.Throws<AiException>(() => AiRequest.Translations("[Dur, bekle, gitme.]", 2));
+        Assert.Equal(["Hey", "Sen"], AiRequest.Translations("[Hey, Sen]", 2));
+    }
+
+    /// <summary>Tırnaksız yanıtla birden çok cümle yerel çeviriye düşmez.</summary>
+    [Fact]
+    public async Task UnquotedReplyIsUsedInsteadOfFallback()
+    {
+        var fake = new FakeAi((request, _) => Wrap(request, "[Gidelim., Yakın dur.]"));
+        Assert.Equal("Gidelim. Yakın dur.", await MakeLocal(fake).TranslateAsync("We go now. Stay close."));
+    }
+
+    /// <summary>"Ekranı çevir"in tek isteği de tırnaksız yanıtı okur; oyun adı orada da gider.</summary>
+    [Fact]
+    public async Task ScreenRequestReadsUnquotedReplyAndSendsGame()
+    {
+        var fake = new FakeAi((request, _) => Wrap(request, "[Haritayı aç., Kamptan ayrıl.]"));
+        var translator = new AiTranslator(AiProvider.Local, "", "qwen2.5:7b", new FakeLocal(), new HttpClient(fake),
+                                          budget: new RequestBudget(1000), server: LocalAiServer.Create(LocalAiServer.OllamaUrl, "qwen2.5:7b"),
+                                          game: () => "Ghost of Yōtei");
+        Assert.Equal(new[] { "Haritayı aç.", "Kamptan ayrıl." }, await translator.TranslateAllAsync(["Open the map.", "Leave the camp."]));
+        Assert.StartsWith("Game: Ghost of Yōtei\n\n", User(fake, 0));
+    }
+
+    /// <summary>Oyun biliniyorsa (paket eşleşmesi) istemde "Game:" satırı olarak gider; bilinmiyorsa hiç gitmez.</summary>
+    [Fact]
+    public async Task GameNameIsSentWhenKnown()
+    {
+        var fake = new FakeAi();
+        string? game = null;
+        var translator = new AiTranslator(AiProvider.Local, "", "qwen2.5:7b", new FakeLocal(), new HttpClient(fake),
+                                          budget: new RequestBudget(1000), server: LocalAiServer.Create(LocalAiServer.OllamaUrl, "qwen2.5:7b"),
+                                          game: () => game);
+        await translator.TranslateAsync("Sit tight.");
+        Assert.DoesNotContain("Game:", User(fake, 0));
+        game = "Grand Theft Auto V";
+        await translator.TranslateAsync("I'll handle the plastic.");
+        Assert.StartsWith("Game: Grand Theft Auto V\n\n", User(fake, 1));
+    }
+
     [Fact]
     public async Task PlainTextReplyForOneSentence()
     {

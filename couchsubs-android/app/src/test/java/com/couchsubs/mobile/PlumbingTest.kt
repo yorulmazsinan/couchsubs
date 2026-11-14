@@ -146,6 +146,16 @@ class OnlineTranslationTest {
     fun translationsAcceptFencedArraysAndPlainText() {
         assertEquals(listOf("Bir", "İki"), AiRequest.translations("```json\n[\"Bir\", \"İki\"]\n```", 2))
         assertEquals(listOf("Koş!"), AiRequest.translations("\"Koş!\"", 1))
+        // Tırnaksız dizi (#27): köşeli parantezler ekranda kalmaz, cümle içi virgül bölünmez.
+        assertEquals(listOf("Hareket etmemiz lazım."), AiRequest.translations("[Hareket etmemiz lazım.]", 1))
+        assertEquals(listOf("Geri çekil lan!"), AiRequest.translations("<think>…</think>\n[Geri çekil lan!]", 1))
+        assertEquals(listOf("[gülüyor] Hadi."), AiRequest.translations("[gülüyor] Hadi.", 1))
+        assertEquals(listOf("Satır bir.", "Satır iki."), AiRequest.translations("[Satır bir., Satır iki.]", 2))
+        assertEquals(listOf("Gidelim.", "Yakın dur."), AiRequest.translations("[\n  Gidelim.,\n  Yakın dur.\n]", 2))
+        assertEquals(listOf("Evet, efendim.", "Hayır, gitmiyorum."), AiRequest.translations("[Evet, efendim., Hayır, gitmiyorum.]", 2))
+        assertNull(AiRequest.unquotedList("[Dur, bekle, gitme.]", 2))
+        assertEquals(listOf("Dur, bekle, gitme."), AiRequest.translations("[Dur, bekle, gitme.]", 1))
+        assertNull(AiRequest.unquotedList("[Satır bir.]", 2))
         assertEquals(OnlineKeyState.INVALID, AiRequest.failure(400, "API key not valid"))
         assertEquals(OnlineKeyState.MODEL_REJECTED, AiRequest.failure(404, ""))
     }

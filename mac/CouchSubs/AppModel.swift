@@ -1251,15 +1251,19 @@ final class AppModel: ObservableObject {
         let engine = settings.onlineEngine
         guard onlineTranslationActive, let storeKey = engine.storeKey else { return local }
         let online: TextTranslator & OnlineTranslating
+        // Oyun paketi eşleştiyse oyunun adı modele bağlam olarak gider.
+        let packs = self.packs
+        let game: @Sendable () -> String? = { packs.scopeTitle }
         if engine == .local, let server = settings.localAIServer {
             // Yerel modelin anahtarı isteğe bağlıdır; önbellekte sunucu ve model ayrı tutulur.
             let key = store.load(String.self, for: storeKey) ?? ""
             online = AITranslator(provider: .local, key: key, model: server.model, server: server, fallback: local,
-                                  cache: Self.translationCache(engine: server.engineID, source: source, target: target))
+                                  cache: Self.translationCache(engine: server.engineID, source: source, target: target), game: game)
         } else if let key = store.load(String.self, for: storeKey), let provider = engine.aiProvider {
             let model = provider.model(settings.model(for: provider)).id
             online = AITranslator(provider: provider, key: key, model: model, fallback: local,
-                                  cache: Self.translationCache(engine: provider.engineID(model: model), source: source, target: target))
+                                  cache: Self.translationCache(engine: provider.engineID(model: model), source: source, target: target),
+                                  game: game)
         } else if let key = store.load(String.self, for: storeKey) {
             online = DeepLTranslator(key: key, fallback: local,
                                      cache: Self.translationCache(engine: DeepLTranslator.engineID, source: source, target: target))

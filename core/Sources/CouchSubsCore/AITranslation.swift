@@ -384,8 +384,54 @@ public enum AIRequest {
             guard list.count == count else { throw AIFailure.unreachable }
             return list.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         }
+        if let list = unquotedList(trimmed, count: count) { return list }
         guard count == 1 else { throw AIFailure.unreachable }
         return [trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "\"“”"))]
+    }
+
+    /// Tırnaksız dizi: bazı yerel modeller JSON istense de `[Hareket etmemiz lazım.]` ya da `[Satır bir., Satır iki.]`
+    /// döndürür. Yalnız bütün yanıt köşeli parantez içindeyse ve öğe sayısı tam tutuyorsa alınır; tutmazsa nil (hat
+    /// her zamanki geri dönüşe gider). Cümle içi virgülde yanlış bölmemek için sıra: satır sonu, cümle sonu işaretinden
+    /// (. ! ? … ") sonra gelen virgül, en son düz virgül.
+    static func unquotedList(_ text: String, count: Int) -> [String]? {
+        guard count >= 1, text.count >= 2, text.hasPrefix("["), text.hasSuffix("]") else { return nil }
+        let inner = String(text.dropFirst().dropLast())
+        func clean(_ item: Substring) -> String {
+            var value = item.trimmingCharacters(in: .whitespacesAndNewlines)
+            if value.hasSuffix(",") { value.removeLast() }
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\"“”"))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let candidates: [[Substring]] = count == 1 ? [[Substring(inner)]] : [
+            inner.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+            sentenceSplit(inner),
+            inner.split(separator: ",", omittingEmptySubsequences: false),
+        ]
+        for parts in candidates {
+            let items = parts.map(clean)
+            if items.count == count, !items.contains(where: \.isEmpty) { return items }
+        }
+        return nil
+    }
+
+    /// Cümle sonu işaretinden (. ! ? … " ”) hemen sonra gelen virgüllerden böler; işaret öğede kalır.
+    private static func sentenceSplit(_ text: String) -> [Substring] {
+        let ends: Set<Character> = [".", "!", "?", "…", "\"", "”"]
+        var parts: [Substring] = []
+        var start = text.startIndex
+        var last: Character?
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            if character == ",", let last, ends.contains(last) {
+                parts.append(text[start..<index])
+                start = text.index(after: index)
+            }
+            if !character.isWhitespace { last = character }
+            index = text.index(after: index)
+        }
+        parts.append(text[start...])
+        return parts
     }
 
     /// Başarısız HTTP yanıtının anlamı. Gövde yalnız tanınan hata kodları için okunur, hiçbir yere yazılmaz.
@@ -460,6 +506,8 @@ public final class AITranslationCore: @unchecked Sendable {
     private var pausedUntil = Date.distantPast
     private var failure: AIFailure?
     private var rateLimited = false
+    /// Oynanan oyunun adı (ör. paket eşleşmesinden); biliniyorsa istemde "Game:" olarak gider.
+    private let game: (@Sendable () -> String?)?
 
     /// Son hata; çeviri düzgün gidiyorsa nil. Değiştikçe `onFailureChanged` çağrılır.
     public var lastFailure: AIFailure? { lock.withLock { failure } }
@@ -472,9 +520,11 @@ public final class AITranslationCore: @unchecked Sendable {
     /// sayar; çeviri hattı yeniden kurulsa da hak sıfırlanmaz). Modelin sınırı yoksa hak da yoktur.
     /// `server`: yerel modelin sunucusu (yalnız `.local`; verilmezse Ollama'nın varsayılan adresi).
     /// `session`: verilmezse hizmete uygun zaman aşımıyla kurulur (yerel model daha uzun bekler).
+    /// `game`: oynanan oyunun adı; her istekte sorulur, nil ya da boşsa istemde oyun satırı olmaz.
     public init(provider: AIProvider, key: String, model: String? = nil, server: LocalAIServer? = nil, session: URLSession? = nil,
-                cache: TranslationCache = TranslationCache(), budget: RequestBudget? = nil) {
+                cache: TranslationCache = TranslationCache(), budget: RequestBudget? = nil, game: (@Sendable () -> String?)? = nil) {
         self.provider = provider
+        self.game = game
         self.key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolved = provider.model(model)
         self.model = resolved
@@ -578,7 +628,7 @@ public final class AITranslationCore: @unchecked Sendable {
             do {
                 let sentences = chunk.map { texts[$0] }
                 let request = AIRequest.make(provider: provider, key: key, model: model, sentences: sentences, context: [],
-                                             server: server, maxOutputTokens: AIRequest.screenOutputTokens)
+                                             game: game?(), server: server, maxOutputTokens: AIRequest.screenOutputTokens)
                 let translated = try await Self.send(request, provider: provider, count: sentences.count, session: screenSession)
                 setFailure(nil)
                 for (index, translation) in zip(chunk, translated) {
@@ -643,7 +693,7 @@ public final class AITranslationCore: @unchecked Sendable {
 
     private func request(_ sentences: [String], context: [AIContextLine]) async throws -> [String] {
         try await Self.send(AIRequest.make(provider: provider, key: key, model: model, sentences: sentences, context: context,
-                                           server: server),
+                                           game: game?(), server: server),
                             provider: provider, count: sentences.count, session: session)
     }
 
