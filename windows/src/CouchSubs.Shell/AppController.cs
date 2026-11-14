@@ -432,12 +432,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task PairAsync(LgTv target)
     {
         await StartServerAsync();
-        var pairing = await services.PairTvAsync(target, store.Load<string>(StoreKeys.TvKey), ServerAddress(target));
+        var savedKey = store.Load<string>(StoreKeys.TvKey);
+        var pairing = await services.PairTvAsync(target, savedKey, ServerAddress(target));
         if (tv?.Brand != target.Brand || (target.Brand != TvBrand.AndroidTv && tv?.Host != target.Host))
             store.Remove(StoreKeys.TvAppVersion);
         tv = target;
         store.Save(StoreKeys.Tv, target);
-        store.Save(StoreKeys.TvKey, pairing.Key);
+        // Samsung jetonla gelen bağlantıda jetonu yeniden göndermeyebilir; boş jeton saklı olanı silmez (#40).
+        store.Save(StoreKeys.TvKey, SamsungTokenHolder.KeptToken(savedKey, pairing.Key));
         tvAppMissing = !pairing.Launched;
         // Daha önce "TV'm yok" seçildiyse TV bağlanınca altyazı TV'ye gider.
         if (settings.Output == SubtitleOutput.Computer) Settings = settings with { Output = SubtitleOutput.Tv };
@@ -1024,7 +1026,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (keeper is not null || !ShowsOnTv || !HasTv || tv is not { } target) return;
         var running = server;
         var tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target) },
-            () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)));
+            () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)), key => post(() => store.Save(StoreKeys.TvKey, key)));
         tvKeeper.Start(TimeSpan.FromSeconds(5));
         keeper = tvKeeper;
         _ = RefreshTvAppAsync();

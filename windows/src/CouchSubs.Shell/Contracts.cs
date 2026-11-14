@@ -316,7 +316,9 @@ public interface IAppServices
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId);
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>
     /// <param name="onMoved">TV ağda yeni bir adreste bulununca çağrılır.</param>
-    IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved);
+    /// <param name="onKey">TV bağlantıda yeni jeton verdi (Samsung); saklanır.</param>
+    IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
+                       Action<string> onKey);
     /// <summary>Uygulamayla gelen TV paketinin sürümü (geliştirici derlemesinde paket olmayabilir).</summary>
     string? BundledTvAppVersion { get; }
     Task<bool> IsDevModeOnAsync(string host);

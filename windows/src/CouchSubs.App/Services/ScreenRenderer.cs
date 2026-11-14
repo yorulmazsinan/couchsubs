@@ -120,7 +120,8 @@ public static class ScreenRenderer
         public Task<IReadOnlyList<LgTv>> DiscoverTvsAsync() => Task.FromResult<IReadOnlyList<LgTv>>([new("[LG] webOS TV", "192.168.1.30")]);
         public Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server) => throw new NotSupportedException();
         public IStreamSession MakeStream(RegisteredConsole console, byte[] accountId) => throw new NotSupportedException();
-        public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved) => throw new NotSupportedException();
+        public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
+                                  Action<string> onKey) => throw new NotSupportedException();
         public string? BundledTvAppVersion => null;
         public Task<bool> IsDevModeOnAsync(string host) => Task.FromResult(false);
         public Task<string> FetchDevKeyAsync(string host, string passphrase) => throw new NotSupportedException();

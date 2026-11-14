@@ -30,7 +30,7 @@ private final class FakeServices: PhoneServices {
     func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing { TVPairing(key: "key", launched: launched) }
     func makeStream(console: RegisteredConsole, accountId: Data) -> StreamControlling { stream }
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling { IdleKeeper() }
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling { IdleKeeper() }
     func checkDeepLKey(_ key: String) async -> OnlineKeyCheck { OnlineKeyCheck(state: key == "good" ? .valid : .invalid) }
     func testAIKey(provider: AIProvider, key: String, model: String?) async -> Result<String, AIFailure> {
         key == "good" ? .success("Merhaba") : .failure(.invalidKey)

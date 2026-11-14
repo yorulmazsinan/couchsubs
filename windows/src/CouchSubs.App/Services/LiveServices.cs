@@ -96,17 +96,19 @@ public sealed class LiveServices : IAppServices
 
     public IStreamSession MakeStream(RegisteredConsole console, byte[] accountId) => new StreamSession(console, accountId);
 
-    public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
+    public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
+                              Action<string> onKey)
     {
         if (tv.Brand == TvBrand.AndroidTv) return new IdleKeeper();
         if (tv.Brand == TvBrand.Samsung)
         {
+            var token = new SamsungTokenHolder(key, onKey);
             var samsungLocator = new TvLocator(tv, async target =>
             {
-                var client = new SamsungClient(target, key);
+                var client = new SamsungClient(target, token.Current);
                 try
                 {
-                    await client.ConnectAsync();
+                    token.Received(await client.ConnectAsync());
                     return client;
                 }
                 catch

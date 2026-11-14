@@ -34,8 +34,9 @@ protocol AppServices: AnyObject {
     func makeStream(console: RegisteredConsole, accountId: Data) -> StreamControlling
     /// `onMoved`: TV ağda yeni bir adreste bulununca çağrılır.
     /// `appConnected`: TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).
+    /// `onKey`: TV bağlantıda yeni jeton verdi (Samsung); saklanır.
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling
     /// Uygulamayla gelen TV paketinin sürümü (geliştirici derlemesinde paket olmayabilir).
     var bundledTVAppVersion: String? { get }
     func isDevModeOn(host: String) async -> Bool
@@ -152,15 +153,17 @@ final class LiveServices: AppServices {
     }
 
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling {
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling {
         switch tv.brand {
         case .androidTV:
             return IdleKeeper()
         case .samsung:
+            let token = SamsungTokenHolder(token: key, onChange: onKey)
             let locator = TVLocator(tv: tv, connect: { tv in
-                let client = SamsungClient(tv: tv, token: key)
+                let client = SamsungClient(tv: tv, token: token.current)
                 do {
-                    _ = try await client.connect()
+                    let received = try await client.connect()
+                    token.received(received)
                 } catch {
                     client.close()
                     throw error
@@ -750,13 +753,15 @@ final class AppModel: ObservableObject {
 
     func pair(_ tv: LGTV) async throws {
         try await startServer()
-        let pairing = try await services.pairTV(tv, key: store.load(String.self, for: StoreKey.tvKey), server: serverAddress(for: tv))
+        let savedKey = store.load(String.self, for: StoreKey.tvKey)
+        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv))
         if self.tv?.brand != tv.brand || (tv.brand != .androidTV && self.tv?.host != tv.host) {
             store.remove(StoreKey.tvAppVersion)
         }
         self.tv = tv
         store.save(tv, for: StoreKey.tv)
-        store.save(pairing.key, for: StoreKey.tvKey)
+        // Samsung jetonla gelen bağlantıda jetonu yeniden göndermeyebilir; boş jeton saklı olanı silmez (#40).
+        store.save(SamsungTokenHolder.keptToken(stored: savedKey, received: pairing.key), for: StoreKey.tvKey)
         tvKeySaved = true
         tvAppMissing = !pairing.launched
         // Daha önce "TV'm yok" seçildiyse TV bağlanınca altyazı TV'ye gider.
@@ -1073,9 +1078,11 @@ final class AppModel: ObservableObject {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
         let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv)],
-                                         appConnected: { server.connectedClients > 0 }) { [weak self] moved in
+                                         appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
-        }
+        }, onKey: { [weak self] key in
+            Task { @MainActor in self?.store.save(key, for: StoreKey.tvKey) }
+        })
         keeper.start(interval: .seconds(5))
         self.keeper = keeper
         Task { await refreshTVApp() }

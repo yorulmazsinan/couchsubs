@@ -232,10 +232,12 @@ final class PhoneModel: ObservableObject {
     /// TV ile eşleşir ve TV uygulamasını telefonun adresiyle açmayı dener.
     func pair(_ tv: LGTV) async throws {
         try await startServer()
-        let pairing = try await services.pairTV(tv, key: store.load(String.self, for: StoreKey.tvKey), server: serverAddress(for: tv))
+        let savedKey = store.load(String.self, for: StoreKey.tvKey)
+        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv))
         self.tv = tv
         store.save(tv, for: StoreKey.tv)
-        store.save(pairing.key, for: StoreKey.tvKey)
+        // Samsung jetonla gelen bağlantıda jetonu yeniden göndermeyebilir; boş jeton saklı olanı silmez (#40).
+        store.save(SamsungTokenHolder.keptToken(stored: savedKey, received: pairing.key), for: StoreKey.tvKey)
         tvKeySaved = true
         tvAppMissing = !pairing.launched
         if settings.output == .computer { settings.output = .tv }
@@ -337,9 +339,11 @@ final class PhoneModel: ObservableObject {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
         let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv)],
-                                         appConnected: { server.connectedClients > 0 }) { [weak self] moved in
+                                         appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
-        }
+        }, onKey: { [weak self] key in
+            Task { @MainActor in self?.store.save(key, for: StoreKey.tvKey) }
+        })
         keeper.start(interval: .seconds(5))
         self.keeper = keeper
     }

@@ -32,6 +32,33 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertThrowsError(try SamsungMessages.connectResult(#"{"event":"ms.channel.unauthorized"}"#))
     }
 
+    func testUnansweredPromptStopsWaiting() {
+        XCTAssertThrowsError(try SamsungMessages.connectResult(#"{"event":"ms.channel.timeOut"}"#)) { error in
+            XCTAssertEqual(error as? SamsungClient.SamsungError, .cannotConnect)
+        }
+    }
+
+    /// #40: TV jetonsuz "connect" dönünce saklı jeton silinmemeli; silinirse her bağlantıda TV yeniden izin sorar.
+    func testEmptyTokenDoesNotReplaceSavedOne() {
+        XCTAssertEqual(SamsungTokenHolder.keptToken(stored: "55", received: ""), "55")
+        XCTAssertEqual(SamsungTokenHolder.keptToken(stored: "55", received: "77"), "77")
+        XCTAssertEqual(SamsungTokenHolder.keptToken(stored: nil, received: ""), "")
+    }
+
+    /// #40: bekçinin bağlantısında TV yeni jeton verirse sonraki bağlantı onu kullanır ve jeton saklanır.
+    func testKeeperRemembersNewToken() {
+        var saved: [String] = []
+        let holder = SamsungTokenHolder(token: "") { saved.append($0) }
+        holder.received("")
+        XCTAssertEqual(saved, [])
+        holder.received("88")
+        XCTAssertEqual(holder.current, "88")
+        holder.received("88")
+        holder.received("")
+        XCTAssertEqual(holder.current, "88")
+        XCTAssertEqual(saved, ["88"])
+    }
+
     func testOtherMessagesAreIgnored() throws {
         XCTAssertNil(try SamsungMessages.connectResult(#"{"event":"ms.channel.ready"}"#))
         XCTAssertNil(try SamsungMessages.connectResult("not json"))
