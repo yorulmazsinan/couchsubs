@@ -5,10 +5,23 @@ import XCTest
 
 final class SamsungTVTests: XCTestCase {
     func testAddressCarriesAppNameAndToken() {
-        XCTAssertEqual(SamsungMessages.url(host: "192.168.1.20", token: nil).absoluteString,
+        XCTAssertEqual(SamsungMessages.url(host: "192.168.1.20", token: nil)?.absoluteString,
                        "wss://192.168.1.20:8002/api/v2/channels/samsung.remote.control?name=Q291Y2hTdWJz")
-        XCTAssertTrue(SamsungMessages.url(host: "192.168.1.20", token: "123").absoluteString.hasSuffix("&token=123"))
-        XCTAssertFalse(SamsungMessages.url(host: "192.168.1.20", token: "").absoluteString.contains("token"))
+        XCTAssertEqual(SamsungMessages.url(host: "192.168.1.20", token: "123")?.absoluteString.hasSuffix("&token=123"), true)
+        XCTAssertEqual(SamsungMessages.url(host: "192.168.1.20", token: "")?.absoluteString.contains("token"), false)
+    }
+
+    /// Geçersiz adres uygulamayı kapatmaz: bağlantı hatayla biter.
+    func testBadAddressFailsInsteadOfCrashing() async {
+        XCTAssertNil(SamsungMessages.url(host: "192.168.1.20:8002", token: nil))
+        let client = SamsungClient(tv: LGTV(name: "TV", host: "192.168.1.20:8002", brand: .samsung), token: nil)
+        defer { client.close() }
+        do {
+            _ = try await client.connect()
+            XCTFail("bağlanmamalıydı")
+        } catch {
+            XCTAssertEqual(error as? SamsungClient.SamsungError, .cannotConnect)
+        }
     }
 
     func testLaunchMessageCarriesParametersAsMetaTag() throws {

@@ -693,8 +693,14 @@ final class AppModel: ObservableObject {
 
     /// PS5'e kayıt olur. Her başarısızlık kullanıcıya anlatılır (`AppError` ya da `DetailedError`); sessiz dönüş yok.
     func register(host: String, pin: String) async throws {
-        let host = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { throw AppError.missingConsole }
+        let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { throw AppError.missingConsole }
+        // Elle yazılan adres temizlenir ("192.168.1.5:9295", "http://…", virgüllü yazım); adres değilse libchiaki'ye
+        // gitmeden söylenir.
+        guard let host = ManualAddress.normalize(typed) else {
+            RemotePlayLog.write("PS5 kaydı: geçersiz adres yazıldı: \(typed)")
+            throw AppError.badAddress
+        }
         guard let value = Registration.pin(from: pin) else { throw AppError.invalidPin }
         guard let accountId else { throw AppError.missingAccount }
         let registered: RegisteredConsole

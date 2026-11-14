@@ -415,6 +415,30 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(failed.localizedDescription.contains("offline"))
     }
 
+    /// Elle yazılan PS5 adresi temizlenir; adres olmayan yazı libchiaki'ye gitmeden "bu adreste PS5 yok" iletisi alır.
+    func testManualConsoleAddressIsCleanedOrRejected() async throws {
+        for (typed, expected) in [("192.168.1.253:9295", "192.168.1.253"), ("http://192.168.1.253/", "192.168.1.253"),
+                                  ("192,168,1,253", "192.168.1.253")] {
+            let services = FakeServices()
+            let model = AppModel(services: services, store: MemoryStore(), defaults: .isolated())
+            model.accountId = Data(repeating: 1, count: 8)
+            try await model.register(host: typed, pin: "12345678")
+            XCTAssertEqual(services.registered?.host, expected, typed)
+        }
+        for typed in ["192.168.1.256", "192.168.1. 253", "PS5 salon", "fe80::1"] {
+            let services = FakeServices()
+            let model = AppModel(services: services, store: MemoryStore(), defaults: .isolated())
+            model.accountId = Data(repeating: 1, count: 8)
+            do {
+                try await model.register(host: typed, pin: "12345678")
+                XCTFail("Geçersiz adresle kayıt başlamamalı: \(typed)")
+            } catch {
+                XCTAssertEqual(error as? AppError, .badAddress, typed)
+                XCTAssertNil(services.registered, typed)
+            }
+        }
+    }
+
     /// PS5 seçilmeden ya da adres yazılmadan bağlanılırsa "PS5 bulunamadı" denir.
     func testMissingConsoleIsExplained() async {
         let model = AppModel(services: FakeServices(), store: MemoryStore(), defaults: .isolated())

@@ -50,7 +50,13 @@ public final class SSAPClient: NSObject, TVControlling, URLSessionDelegate, @unc
 
     /// Önce şifreli (3001), olmazsa düz (3000) bağlantı denenir; eski webOS'lar yalnız 3000'i açar.
     public convenience init(tv: LGTV, clientKey: String?) {
-        self.init(endpoints: [URL(string: "wss://\(tv.host):3001")!, URL(string: "ws://\(tv.host):3000")!], clientKey: clientKey)
+        self.init(endpoints: Self.endpoints(host: tv.host), clientKey: clientKey)
+    }
+
+    /// Adres URL'ye dönüşmezse (ör. elle yazılmış "192.168.1.5:3000") liste boş kalır ve `connect` `cannotConnect`
+    /// fırlatır. Eskiden burada zorla açılıyordu ve uygulama kapanıyordu.
+    static func endpoints(host: String) -> [URL] {
+        [URL(string: "wss://\(host):3001"), URL(string: "ws://\(host):3000")].compactMap { $0 }
     }
 
     init(endpoints: [URL], clientKey: String?, approvalTimeout: Duration = .seconds(60), handshakeTimeout: Duration = .seconds(5)) {

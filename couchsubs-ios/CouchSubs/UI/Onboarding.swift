@@ -347,6 +347,8 @@ struct TargetScreen: View {
     @State private var showManual = false
     @State private var manualHost = ""
     @State private var manualBrand = TVBrand.lg
+    /// Elle yazılan adres geçersizse sayfada gösterilen ileti.
+    @State private var manualError: String?
 
     var body: some View {
         MobileScreen {
@@ -448,9 +450,21 @@ struct TargetScreen: View {
                     .textFieldStyle(MobileFieldStyle())
                     .keyboardType(.decimalPad)
             }
+            if manualBrand != .androidTV, let manualError { MobileNote(text: manualError) }
             Link("Supported TVs", destination: AppIdentity.tvGuideURL).font(Mobile.TypeScale.caption).tint(Mobile.Palette.accent)
             Button("Connect") {
-                let host = manualHost.trimmingCharacters(in: .whitespaces)
+                // Adres temizlenir ("192.168.1.5:3000", "http://…", virgüllü yazım); geçersizse sayfa açık kalır ve
+                // söylenir. Eskiden olduğu gibi bağlanmaya gönderilen bozuk adres uygulamayı kapatıyordu.
+                let host: String
+                if manualBrand == .androidTV {
+                    host = ""
+                } else if let valid = ManualAddress.normalize(manualHost) {
+                    host = valid
+                } else {
+                    manualError = String(localized: "This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number.")
+                    return
+                }
+                manualError = nil
                 showManual = false
                 Task { await pair(LGTV(name: manualBrand == .androidTV ? "Android TV" : host, host: host, brand: manualBrand)) }
             }
