@@ -13,10 +13,25 @@ package com.couchsubs.tv;
  */
 final class FallbackWatch {
     static final long LIMIT_MS = 10_000;
+    /**
+     * Bazı TV'ler (ör. MediaTek tabanlı Google TV'ler) uygulama HDMI'yı açtıktan ~1-2 sn sonra kendi HDMI oynatıcısını
+     * öne çeker; CouchSubs arka plana düşer ve altyazı hiç görünmez. Giriş açıldıktan bu süre içinde arka plana
+     * itilirse katmana geçilir.
+     */
+    static final long TAKEOVER_MS = 5_000;
 
     /** Görüntüsüz geçen sürenin başlangıcı; -1: şu an sorun yok ya da izlenmiyor. */
     private long troubleSince = -1;
     private boolean played;
+    /** Girişin son açıldığı an; -1: açılmadı. */
+    private long tunedAt = -1;
+
+    void tuned(long now) { tunedAt = now; }
+
+    /** Uygulama girişi açtıktan hemen sonra arka plana itildi: TV HDMI'yı kendi oynatıcısında açtı. */
+    boolean takenOver(long now, boolean canDrawOverlays) {
+        return canDrawOverlays && tunedAt >= 0 && now - tunedAt < TAKEOVER_MS;
+    }
 
     /** Giriş açıldı ya da görüntü kayboldu (TvView bildirimi). Saat yalnız ilk sorunda başlar, yeniden denemeler sıfırlamaz. */
     void trouble(long now) {
