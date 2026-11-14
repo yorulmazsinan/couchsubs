@@ -42,6 +42,35 @@ final class MainLayoutTests: XCTestCase {
         }
     }
 
+    /// "Altyazıyı göster" kartının denetimleri sütunun içinde kalır. Segmentli seçici (NSSegmentedControl) bölmeleri
+    /// en uzun etiket kadar eşit çiziyor (~3 × 127 pt, "Bilgisayar ekranı" / "Computer screen"); kart 380 pt'lik
+    /// sütunda 420 pt'ye genişliyor, sütun ortalanıp iki yandan kesiliyordu. SwiftUI'nin ölçüsü (sizeThatFits) bunu
+    /// göstermiyor; kartın içindeki AppKit görünümlerinin pencerede yerleştikleri yere bakılır.
+    func testOutputCardControlsStayInsideTheColumn() {
+        for output in SubtitleOutput.allCases {
+            let model = model(output: output, running: false, clickThrough: false)
+            for width in [MainView.controlsColumnMin, Theme.size("mainColumn")] {
+                let host = NSHostingView(rootView: SubtitleOutputCard().environmentObject(model).appSurface().frame(width: width))
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.borderless],
+                                      backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                // Segmentli seçici AppKit denetimi, radyo düğmeleri ve anahtarlar odak halkalarıyla görünür.
+                let controls = views(in: host).dropFirst()
+                XCTAssertFalse(controls.isEmpty)
+                for control in controls {
+                    let frame = control.convert(control.bounds, to: host)
+                    XCTAssertGreaterThanOrEqual(frame.minX, 0, "\(output) sütun=\(width) \(type(of: control))")
+                    XCTAssertLessThanOrEqual(frame.maxX, width, "\(output) sütun=\(width) \(type(of: control))")
+                }
+                window.close()
+            }
+        }
+    }
+
+    private func views(in view: NSView) -> [NSView] { [view] + view.subviews.flatMap { views(in: $0) } }
+
     /// Kaydırma alanı içeriğe genişlik önermese de (ideal ölçü) sütun kendi genişliğinde kalır. İçeriğin ideal
     /// genişliği sütundan geniştir; sütun genişliği sabitlenmeseydi taşardı.
     func testColumnKeepsItsWidthWhenMeasuredAtIdealSize() {
