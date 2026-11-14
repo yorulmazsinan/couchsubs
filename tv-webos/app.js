@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.17';
+  var APP_VERSION = '0.9.18';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -494,6 +494,7 @@
   function connect(address) {
     if (demoRunning()) stopDemo();
     if (eventSource) eventSource.close();
+    if (address !== server) failures = 0;
     server = address;
     $('waiting').className = 'hidden';
     setStatus('st-server', address);
@@ -506,7 +507,8 @@
     lastActivity = Date.now();
     eventSource.onopen = function () {
       lastActivity = Date.now();
-      clearTimeout(scanTimer);
+      failures = 0;
+      cancelScan();
       clearTimeout(dropTimer);
       dropTimer = null;
       setStatus('st-conn', t('connected'), 'ok');
@@ -523,8 +525,8 @@
         }, DROP_HIDE_MS);
       }
       setStatus('st-conn', t('reconnecting'), 'bad');
-      // Bilgisayarın adresi değişmiş olabilir.
-      scheduleScan();
+      // Bilgisayarın adresi değişmiş ya da altyazı kaynağı başka cihaz olmuş olabilir.
+      noteFailure();
     };
     // Bilgisayar 15 sn'de bir "ping" gönderir; gelmezse bağlantı yarı kopmuştur (bkz. watchConnection).
     eventSource.addEventListener('ping', function () {
@@ -774,19 +776,76 @@
   }
 
   // --- Bilgisayarı ağda bulma ---
-  // Bilgisayar TV uygulamasını açamıyorsa adres gelmez. Adresini söyleyebilen TV'lerde uygulama aynı ağı tarar.
+  // Bilgisayar TV uygulamasını açamıyorsa adres gelmez; kayıtlı adres de eskiyebilir (altyazı kaynağı başka cihaz oldu
+  // ya da cihazın IP'si değişti). Uygulama o zaman ağı tarar: TV'nin kendi ağını (adresini söyleyebiliyorsa) ve kayıtlı
+  // adresin ağını. Kayıtlı adres art arda FAILS_BEFORE_SCAN kez yanıt vermezse tarama kısa süre içinde başlar.
 
   var SERVER_PORT = 8787;
   var SCAN_PARALLEL = 24;
   var SCAN_TIMEOUT_MS = 1200;
   var SCAN_PAUSE_MS = 30000;
+  var SCAN_SOON_MS = 3000;
+  var FAILS_BEFORE_SCAN = 3;
   var scanTimer = null;
+  var scanDue = 0;
   var scanning = false;
+  var failures = 0;
 
-  function scheduleScan() {
-    if (!platform.localAddress || scanning) return;
+  // Bekleyen tarama daha erken başlayacaksa korunur. Eskiden her bağlantı hatası zamanlayıcıyı baştan kuruyordu;
+  // EventSource birkaç saniyede bir yeniden denediğinden 30 sn hiç dolmuyor, tarama hiç başlamıyordu.
+  function scheduleScan(delay) {
+    if (scanning) return;
+    if (delay === undefined) delay = SCAN_PAUSE_MS;
+    var due = Date.now() + delay;
+    if (scanTimer !== null && scanDue <= due) return;
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(scanForServer, SCAN_PAUSE_MS);
+    scanDue = due;
+    scanTimer = setTimeout(function () {
+      scanTimer = null;
+      scanForServer();
+    }, delay);
+  }
+
+  function cancelScan() {
+    clearTimeout(scanTimer);
+    scanTimer = null;
+  }
+
+  // Bağlantı hatası: kayıtlı adres art arda birkaç kez yanıt vermediyse ağ hemen taranır, yoksa bir süre beklenir.
+  function noteFailure() {
+    failures++;
+    scheduleScan(failures >= FAILS_BEFORE_SCAN ? SCAN_SOON_MS : SCAN_PAUSE_MS);
+  }
+
+  function subnetOf(address) {
+    var match = /^(?:https?:\/\/)?(\d+\.\d+\.\d+)\.\d+(?::\d+)?\/?$/.exec(address || '');
+    return match ? match[1] : null;
+  }
+
+  // Taranacak ağlar: TV'nin kendi ağı, sonra kayıtlı adresin ağı (aynıysa bir kez).
+  function scanSubnets(done) {
+    var fromServer = subnetOf(server);
+    function finish(ip) {
+      var list = [];
+      var own = subnetOf(ip);
+      if (own) list.push(own);
+      if (fromServer && fromServer !== own) list.push(fromServer);
+      done(list);
+    }
+    if (!platform.localAddress) return finish(null);
+    var answered = false;
+    function once(ip) {
+      if (answered) return;
+      answered = true;
+      finish(ip);
+    }
+    // Adresi soran servis yanıt vermezse tarama kayıtlı adresin ağıyla sürer.
+    setTimeout(function () { once(null); }, 3000);
+    try {
+      platform.localAddress(once);
+    } catch (e) {
+      once(null);
+    }
   }
 
   function probe(address, done) {
@@ -810,18 +869,21 @@
   }
 
   function scanForServer() {
-    if (scanning || !platform.localAddress) return;
-    platform.localAddress(function (ip) {
-      var match = /^(\d+\.\d+\.\d+)\.\d+$/.exec(ip || '');
-      if (!match) return scheduleScan();
-      scanning = true;
-      var next = 1, active = 0, found = false;
+    if (scanning) return;
+    cancelScan();
+    scanning = true;
+    scanSubnets(function (subnets) {
+      var addresses = [];
+      for (var s = 0; s < subnets.length; s++) {
+        for (var host = 1; host <= 254; host++) addresses.push('http://' + subnets[s] + '.' + host + ':' + SERVER_PORT);
+      }
+      var next = 0, active = 0, found = false;
       function pump() {
-        while (!found && active < SCAN_PARALLEL && next <= 254) {
+        while (!found && active < SCAN_PARALLEL && next < addresses.length) {
           active++;
-          tryAddress('http://' + match[1] + '.' + (next++) + ':' + SERVER_PORT);
+          tryAddress(addresses[next++]);
         }
-        if (!found && !active && next > 254) {
+        if (!found && !active && next >= addresses.length) {
           scanning = false;
           scheduleScan();
         }
@@ -833,11 +895,10 @@
           if (!ok) return pump();
           found = true;
           scanning = false;
+          // Bulunan adres kaydedilir: TV bir sonraki açılışta eski adrese takılmasın.
+          save('server', address);
           // Aynı bilgisayarsa EventSource kendisi yeniden bağlanır; kapanıp vazgeçtiyse (CLOSED) yeniden kurulur.
-          if (address !== server || (eventSource && eventSource.readyState === 2)) {
-            save('server', address);
-            connect(address);
-          }
+          if (address !== server || (eventSource && eventSource.readyState === 2)) connect(address);
         });
       }
       pump();

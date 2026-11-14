@@ -94,6 +94,34 @@
       }
     },
 
+    // TV'nin yerel ağdaki IPv4 adresi (kablolu öncelikli); bilinemezse null. Uygulama altyazı kaynağını bu ağda arar.
+    localAddress: function (callback) {
+      var done = false;
+      function finish(ip) {
+        if (done) return;
+        done = true;
+        callback(ip || null);
+      }
+      try {
+        var bridge = new PalmServiceBridge();
+        bridge.onservicecallback = function (msg) {
+          var status;
+          try { status = JSON.parse(msg) || {}; } catch (e) { return finish(null); }
+          var wired = status.wired || {};
+          var wifi = status.wifi || {};
+          if (wired.state === 'connected' && wired.ipAddress) return finish(wired.ipAddress);
+          if (wifi.state === 'connected' && wifi.ipAddress) return finish(wifi.ipAddress);
+          finish(wired.ipAddress || wifi.ipAddress || null);
+        };
+        bridge.call('luna://com.webos.service.connectionmanager/getStatus', '{}');
+        // Köprü nesnesi çöpe gitmesin diye geri çağrı gelene kadar tutulur.
+        window.__netBridge = bridge;
+        setTimeout(function () { finish(null); }, 2000);
+      } catch (e) {
+        finish(null);
+      }
+    },
+
     exit: function () {
       if (window.PalmSystem && window.PalmSystem.platformBack) window.PalmSystem.platformBack();
     }

@@ -10,7 +10,7 @@ name: tv-android
 on:
   push:
     branches: [main, "feat/windows-*"]
-    paths: ["tv-android/**", "tv-webos/**", ".github/workflows/tv-android.yml"]
+    paths: ["tv-android/**", "tv-webos/**", "scripts/tv-discovery.test.js", ".github/workflows/tv-android.yml"]
   workflow_dispatch:
   # Sürüm iş akışı (release.yml) paketi buradan alır.
   workflow_call:
@@ -27,6 +27,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
+      # TV sayfasının ortak kodu (tv-webos): altyazı kaynağını ağda bulma.
+      - name: TV sayfası testleri
+        run: node --test scripts/tv-discovery.test.js
       - name: İmza anahtarı
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
