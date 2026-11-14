@@ -363,6 +363,8 @@ private class LoginClient(
         if (redirected || cancelled) return
         shown = true
         onVisible()
+        // Bir alt kaynak takılırsa onPageFinished gecikir; form görünür olur olmaz da bakılır.
+        if (readyPoll == null) poll(view)
     }
 
     override fun onPageFinished(view: WebView, url: String) {
