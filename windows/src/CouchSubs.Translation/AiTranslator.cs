@@ -28,6 +28,8 @@ public static class AiRequest
 {
     /// <summary>Bir altyazı satırına yeten çıktı sınırı; düşünen modellere de pay bırakır.</summary>
     public const int MaxOutputTokens = 1024;
+    /// <summary>"Ekranı çevir"in tek isteğinde çıktı sınırı: ekrandaki bütün yazılar birlikte döner.</summary>
+    public const int ScreenOutputTokens = 8192;
 
     public const string SystemPrompt =
         "You translate English video game subtitles into natural, spoken Turkish, the way people really talk. " +
@@ -64,7 +66,8 @@ public static class AiRequest
 
     /// <summary>Hizmete giden HTTP isteği. <paramref name="server"/>: yerel modelin sunucusu (verilmezse Ollama'nın varsayılan adresi).</summary>
     public static HttpRequestMessage Build(AiProvider provider, string key, AiModel model, IReadOnlyList<string> sentences,
-                                           IReadOnlyList<AiContextLine> context, string? game = null, LocalAiServer? server = null)
+                                           IReadOnlyList<AiContextLine> context, string? game = null, LocalAiServer? server = null,
+                                           int maxOutputTokens = MaxOutputTokens)
     {
         key = key.Trim();
         var user = UserMessage(sentences, context, game);
@@ -87,7 +90,7 @@ public static class AiRequest
                         ["role"] = "user",
                         ["parts"] = new JsonArray(new JsonObject { ["text"] = user }),
                     }),
-                    ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = MaxOutputTokens },
+                    ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = maxOutputTokens },
                 };
                 if (model.Thinking is { } level) body["generationConfig"]!["thinkingConfig"] = new JsonObject { ["thinkingLevel"] = level };
                 break;
@@ -102,7 +105,7 @@ public static class AiRequest
                     ["messages"] = new JsonArray(
                         new JsonObject { ["role"] = "developer", ["content"] = SystemPrompt },
                         new JsonObject { ["role"] = "user", ["content"] = user }),
-                    ["max_completion_tokens"] = MaxOutputTokens,
+                    ["max_completion_tokens"] = maxOutputTokens,
                 };
                 if (model.Effort is { } effort) body["reasoning_effort"] = effort;
                 break;
@@ -120,7 +123,7 @@ public static class AiRequest
                         new JsonObject { ["role"] = "system", ["content"] = SystemPrompt },
                         new JsonObject { ["role"] = "user", ["content"] = user }),
                     ["temperature"] = LocalTemperature,
-                    ["max_tokens"] = MaxOutputTokens,
+                    ["max_tokens"] = maxOutputTokens,
                     ["stream"] = false,
                 };
                 break;
@@ -134,7 +137,7 @@ public static class AiRequest
                 body = new JsonObject
                 {
                     ["model"] = model.Id,
-                    ["max_tokens"] = MaxOutputTokens,
+                    ["max_tokens"] = maxOutputTokens,
                     ["system"] = SystemPrompt,
                     ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = user }),
                 };
@@ -319,9 +322,17 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
     /// <summary>Hizmete uygun zaman aşımıyla paylaşılan istemci.</summary>
     public static HttpClient ClientFor(AiProvider provider) => provider.IsLocal() ? LocalClient.Value : SharedClient.Value;
 
+    /// <summary>"Ekranı çevir"de bulut hizmetinde beklenen en uzun süre: bütün ekranın çevirisi tek yanıtta gelir.</summary>
+    public static readonly TimeSpan ScreenTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>Bir istekte giden en çok parça; kalabalık ekran birkaç isteğe bölünür.</summary>
+    public const int ScreenBatch = 40;
+    private static readonly Lazy<HttpClient> ScreenClient = new(() => new HttpClient { Timeout = ScreenTimeout });
+
     private readonly string _key;
     private readonly ITextTranslator? _fallback;
     private readonly HttpClient _http;
+    /// <summary>"Ekranı çevir"in uzun yanıtlı tek isteği için daha uzun bekleyen istemci.</summary>
+    private readonly HttpClient _screenHttp;
     private readonly TranslationCache _cache;
     private readonly RequestBudget? _budget;
     private readonly ConcurrentDictionary<string, IReadOnlyList<SpokenLine>> _speech = new(StringComparer.Ordinal);
@@ -347,6 +358,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
         _key = key.Trim();
         _fallback = fallback;
         _http = http ?? ClientFor(provider);
+        _screenHttp = http ?? (provider.IsLocal() ? LocalTestClient.Value : ScreenClient.Value);
         _cache = cache ?? new TranslationCache();
         _budget = budget ?? RequestBudget.Shared(provider, Model);
     }
@@ -422,6 +434,72 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
         var result = builder.ToString();
         _cache.Store(text, result);
         return Remember(result, text);
+    }
+
+    public bool TranslatesTogether => true;
+
+    /// <summary>
+    /// "Ekranı çevir": birbirinden bağımsız parçalar (menü satırı, görev yazısı...) tek istekte, aynı sırada çevrilir.
+    /// Parça başına istek gitseydi kalabalık bir ekran Gemini'nin dakikalık hakkını (15) ilk saniyelerde bitirir, kalan
+    /// parçalar yerel çeviriye düşerdi; yerel model kurulu değilse ekranın hiçbir yazısı çevrilmezdi. Bu tek istek
+    /// kullanıcının tuşa basmasıyla gider: ortak hak o an bitmiş olsa da gönderilir (hakkı sayılır). Hata ya da dakikalık
+    /// sınırda parçalar yerel çeviriyle çevrilir; o da yoksa hata yukarı çıkar ve ekranda gösterilir (Mac ile aynı).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> TranslateAllAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(texts);
+        var results = texts.Select(text => _cache.TryGet(text, out var known) ? known : null).ToArray();
+        var missing = Enumerable.Range(0, texts.Count).Where(i => results[i] is null).ToList();
+        var failed = DateTimeOffset.UtcNow < _pausedUntil;
+        for (var start = 0; start < missing.Count && !failed; start += ScreenBatch)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var chunk = missing.Skip(start).Take(ScreenBatch).ToList();
+            _budget?.TryTake();
+            LastLineWasRateLimited = false;
+            try
+            {
+                var sentences = chunk.Select(i => texts[i]).ToList();
+                using var request = AiRequest.Build(Provider, _key, Model, sentences, [], server: Server, maxOutputTokens: AiRequest.ScreenOutputTokens);
+                using var response = await _screenHttp.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (AiRequest.RateLimit(response.StatusCode, body) is { } limit) throw new AiRateLimitedException(limit);
+                    throw new AiException(AiRequest.Failure(response.StatusCode, body));
+                }
+                var translated = AiRequest.Translations(AiRequest.Text(Provider, body), sentences.Count);
+                Report(null);
+                for (var i = 0; i < chunk.Count; i++)
+                {
+                    results[chunk[i]] = translated[i];
+                    _cache.Store(texts[chunk[i]], translated[i]);
+                }
+            }
+            catch (AiRateLimitedException limited) when (!cancellationToken.IsCancellationRequested)
+            {
+                if (limited.Limit.RequestsPerMinute is { } perMinute) _budget?.Lower(perMinute);
+                var pause = limited.Limit.RetryAfter is { } retry && retry < RateLimitPause ? retry : RateLimitPause;
+                if (pause < TimeSpan.FromSeconds(1)) pause = TimeSpan.FromSeconds(1);
+                LastLineWasRateLimited = true;
+                _pausedUntil = DateTimeOffset.UtcNow + pause;
+                failed = true;
+            }
+            catch (Exception error) when (error is HttpRequestException or TaskCanceledException or AiException
+                                          && !cancellationToken.IsCancellationRequested)
+            {
+                Report(error is AiException ai ? ai.State : OnlineKeyState.Unreachable);
+                _pausedUntil = DateTimeOffset.UtcNow + RetryAfter;
+                failed = true;
+            }
+        }
+        for (var i = 0; i < texts.Count; i++)
+        {
+            if (results[i] is not null) continue;
+            cancellationToken.ThrowIfCancellationRequested();
+            results[i] = await FallbackAsync(texts[i], cancellationToken).ConfigureAwait(false);
+        }
+        return [.. results.Select(result => result ?? "")];
     }
 
     public IReadOnlyList<SpokenLine> SpokenLines(string text) =>

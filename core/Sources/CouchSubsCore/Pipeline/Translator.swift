@@ -7,10 +7,23 @@ public protocol TextTranslator {
     func translate(_ text: String) async throws -> String
     /// Son çevrilen altyazının seslendirilecek cümleleri (konuşmacısıyla); dublaj için.
     func spokenLines(for text: String) -> [SpokenLine]
+    /// Birbirinden bağımsız metinleri ("ekranı çevir"deki menü satırları, görev yazıları) aynı sırada çevirir.
+    func translateAll(_ texts: [String]) async throws -> [String]
+    /// `translateAll` hepsini tek istekte çevirir (yapay zekâ); öyleyse ekran çevirisi parça parça istek göndermez.
+    var translatesTogether: Bool { get }
 }
 
 extension TextTranslator {
     public func spokenLines(for text: String) -> [SpokenLine] { [] }
+
+    /// Varsayılan: metinler sırayla tek tek çevrilir.
+    public func translateAll(_ texts: [String]) async throws -> [String] {
+        var result: [String] = []
+        for text in texts { result.append(try await translate(text)) }
+        return result
+    }
+
+    public var translatesTogether: Bool { false }
 }
 
 public enum TranslatorError: Error, Equatable {

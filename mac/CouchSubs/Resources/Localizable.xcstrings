@@ -4401,6 +4401,102 @@
         }
       }
     },
+    "Couldn't translate the screen: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't translate the screen: %@"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran çevrilemedi: %@"
+          }
+        }
+      }
+    },
+    "%@ has reached its per-minute limit. Try again in a minute.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has reached its per-minute limit. Try again in a minute."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dakikalık istek sınırına ulaştı. Bir dakika sonra yeniden deneyin."
+          }
+        }
+      }
+    },
+    "The free translation isn't downloaded yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free translation isn't downloaded yet."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ücretsiz çeviri henüz indirilmedi."
+          }
+        }
+      }
+    },
+    "The free translation doesn't work on this Mac.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free translation doesn't work on this Mac."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ücretsiz çeviri bu Mac'te çalışmıyor."
+          }
+        }
+      }
+    },
+    "The free translation couldn't be started.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free translation couldn't be started."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ücretsiz çeviri açılamadı."
+          }
+        }
+      }
+    },
+    "Something went wrong. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong. Try again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir sorun çıktı. Yeniden deneyin."
+          }
+        }
+      }
+    },
     "macOS can't read the text on the screen.": {
       "localizations": {
         "en": {

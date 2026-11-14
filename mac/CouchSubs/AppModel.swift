@@ -1141,7 +1141,8 @@ final class AppModel: ObservableObject {
         screenTask = Task { [weak self] in
             do {
                 let reading = try await Task.detached(priority: .userInitiated) { try reader.readLines(frame, deep: false) }.value
-                let items = try await ScreenTranslation.translate(reading, using: { try await translator.translate($0) }) { shown in
+                // Yapay zekâda ekranın bütün yazıları tek istekte gider (bkz. AITranslationCore.translateAll).
+                let items = try await ScreenTranslation.translate(reading, using: translator) { shown in
                     guard !Task.isCancelled else { return }
                     let milliseconds = ScreenTranslation.displayMilliseconds(shown)
                     server.sendScreen(shown, durationMs: milliseconds)
@@ -1152,12 +1153,36 @@ final class AppModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch let error as TranslatorError {
-                server.clear()
                 self?.translatorStatus = Self.translatorStatus(after: error)
+                self?.showScreenFailure(error, translator: translator)
             } catch {
-                server.clear()
+                self?.showScreenFailure(error, translator: translator)
             }
             if !Task.isCancelled { self?.screenTask = nil }
+        }
+    }
+
+    /// Ekran çevrilemedi: nedeni TV'de (ve bilgisayardaki altyazıda) birkaç saniye görünür, sessizce kaybolmaz.
+    private func showScreenFailure(_ error: Error, translator: TextTranslator) {
+        guard !Task.isCancelled else { return }
+        server.clear()
+        let reason = Self.screenFailureReason(error, translator: translator, engine: settings.onlineEngine, server: settings.localAIServer)
+        server.sendSubtitle(String(format: String(localized: "Couldn't translate the screen: %@"), reason), durationMs: 6000)
+    }
+
+    /// Ekran çevirisinin neden olmadığı: önce çevrimiçi motorun hatası, sonra ücretsiz çevirinin durumu.
+    static func screenFailureReason(_ error: Error, translator: TextTranslator, engine: TranslationEngine,
+                                    server: LocalAIServer?) -> String {
+        if let online = translator as? AITranslator {
+            if let failure = online.lastFailure { return TranslationCard.describe(failure, engine: engine, server: server) }
+            if online.lastLineWasRateLimited {
+                return String(format: String(localized: "%@ has reached its per-minute limit. Try again in a minute."), engine.displayName)
+            }
+        }
+        switch error as? TranslatorError {
+        case .needsDownload: return String(localized: "The free translation isn't downloaded yet.")
+        case .unsupported: return String(localized: "The free translation doesn't work on this Mac.")
+        case nil: return String(localized: "Something went wrong. Try again.")
         }
     }
 

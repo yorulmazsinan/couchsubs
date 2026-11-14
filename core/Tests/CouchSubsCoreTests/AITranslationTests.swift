@@ -580,4 +580,101 @@ final class AITranslationTests: XCTestCase {
         let empty = await AITranslationCore.test(provider: .claude, key: "  ", model: nil, session: FakeAI.session())
         XCTAssertEqual(empty, .failure(.invalidKey))
     }
+
+    // MARK: - Ekranı çevir
+
+    /// Ücretsiz çeviri kurulu değil: yerel çeviriye düşen satır hata verir (Mac'te dil paketi, Windows'ta model yok).
+    private struct MissingFree: TextTranslator {
+        func translate(_ text: String) async throws -> String { throw TranslatorError.needsDownload }
+    }
+
+    /// Birbirine benzemeyen yazılar (benzer satırları yazı tanıma çöpü sayan süzgece takılmasın).
+    private static let screenTexts = [
+        "Find the blacksmith.", "Open the world map", "Collect three iron bars", "Talk to the old hunter", "Leave the camp quietly",
+        "Upgrade your shield", "Rest at the campfire", "Follow the river north", "Climb the broken tower", "Defeat the wolf pack",
+        "Search the abandoned mine", "Light the signal fire", "Cross the frozen lake", "Return to the village", "Repair the bridge",
+        "Escort the merchant safely", "Hunt a wild boar", "Read the ancient runes", "Unlock the hidden vault", "Sharpen your axe",
+    ]
+
+    private func screen(_ count: Int) -> Reading {
+        Reading(lines: (0..<count).map { index in
+            // İki sütun, satırlar arası boşluk geniş: her satır ayrı grup.
+            let top = 0.02 + Double(index / 2) * 0.09, left = index % 2 == 0 ? 0.05 : 0.55
+            return TextLine(Self.screenTexts[index], box: TextBox(left: left, top: top, right: left + 0.35, bottom: top + 0.03))
+        })
+    }
+
+    /// Bildirilen hata (Gemini seçiliyken "Ekranı çevir" hiçbir şey göstermiyordu): parça başına istek gidince 20 satırlık
+    /// ekran dakikada 15 isteklik hakkı bitirir; kalan parçalar yerel çeviriye düşer, o kurulu değilse bütün ekran hata
+    /// verir. Canlı altyazı hakkı zaten bitirdiyse ilk parçada düşer, TV'ye tek çeviri gitmez.
+    func testScreenOneRequestPerParagraphRunsOutOfTheGeminiBudget() async throws {
+        let budget = RequestBudget(perMinute: 15)
+        let translator = AITranslator(provider: .gemini, key: secret, model: nil, fallback: MissingFree(), session: FakeAI.session(),
+                                      budget: budget)
+        var shown = 0
+        do {
+            _ = try await ScreenTranslation.translate(screen(20), using: { try await translator.translate($0) }) { shown = $0.count }
+            XCTFail("hak bitince yerel çeviri olmadan hata beklenir")
+        } catch {
+            XCTAssertEqual(error as? TranslatorError, .needsDownload)
+        }
+        XCTAssertEqual(FakeAI.requests.count, 15)
+        XCTAssertEqual(shown, 15)
+    }
+
+    /// Düzeltme: ekranın bütün parçaları tek istekte gider ve hepsi çevrilir; canlı altyazı dakikalık hakkı bitirmiş olsa da.
+    func testScreenIsTranslatedInOneRequestEvenWhenTheBudgetIsUsedUp() async throws {
+        let budget = RequestBudget(perMinute: 15)
+        for _ in 0..<15 { XCTAssertTrue(budget.take()) }
+        let translator = AITranslator(provider: .gemini, key: secret, model: nil, fallback: MissingFree(), session: FakeAI.session(),
+                                      budget: budget)
+        var reported: [Int] = []
+        let items = try await ScreenTranslation.translate(screen(20), using: translator) { reported.append($0.count) }
+        XCTAssertEqual(FakeAI.requests.count, 1)
+        XCTAssertEqual(items.count, 20)
+        XCTAssertEqual(Set(items.map(\.translation)), Set(Self.screenTexts.map { "[tr] " + $0 }))
+        XCTAssertEqual(reported, [20])
+        let config = FakeAI.requests[0].body["generationConfig"] as? [String: Any]
+        XCTAssertEqual(config?["maxOutputTokens"] as? Int, AIRequest.screenOutputTokens)
+        // Çevrilenler önbelleğe girer: yeniden basınca istek gitmez.
+        _ = try await ScreenTranslation.translate(screen(20), using: translator)
+        XCTAssertEqual(FakeAI.requests.count, 1)
+    }
+
+    /// Kalabalık ekran birkaç isteğe bölünür; sıra korunur.
+    func testCrowdedScreenIsSplitIntoBatches() async throws {
+        let core = make(.gemini)
+        let texts = (0..<(AITranslationCore.screenBatch + 5)).map { "Line \($0) of the menu" }
+        let result = try await core.translateAll(texts, fallback: local)
+        XCTAssertEqual(FakeAI.requests.count, 2)
+        XCTAssertEqual(result, texts.map { "[tr] " + $0 })
+    }
+
+    /// Hizmet çeviremezse parçalar yerel çeviriyle gelir ve hata bildirilir; yerel çeviri de yoksa hata yukarı çıkar.
+    func testScreenFailureFallsBackOrThrows() async throws {
+        FakeAI.failure = (500, "{}")
+        let core = make(.gemini)
+        var reported: [AIFailure?] = []
+        core.onFailureChanged = { reported.append($0) }
+        let result = try await core.translateAll(["Open the map", "Leave the camp"], fallback: local)
+        XCTAssertEqual(result, ["yerel: Open the map", "yerel: Leave the camp"])
+        XCTAssertEqual(reported, [.unreachable])
+
+        let translator = AITranslator(provider: .claude, key: secret, model: nil, fallback: MissingFree(), session: FakeAI.session(),
+                                      budget: RequestBudget(perMinute: 1000))
+        do {
+            _ = try await ScreenTranslation.translate(screen(3), using: translator)
+            XCTFail("hata beklenir")
+        } catch {
+            XCTAssertEqual(error as? TranslatorError, .needsDownload)
+            XCTAssertEqual(translator.lastFailure, .unreachable)
+        }
+    }
+
+    /// Yanıttaki dizi eksikse parçalar karışmaz: hepsi yerel çeviriye düşer.
+    func testScreenReplyWithWrongCountFallsBack() async throws {
+        FakeAI.replyText = #"["[tr] bir"]"#
+        let result = try await make(.openAI).translateAll(["One thing", "Another thing"], fallback: local)
+        XCTAssertEqual(result, ["yerel: One thing", "yerel: Another thing"])
+    }
 }

@@ -242,6 +242,8 @@ public struct AIContextLine: Equatable, Sendable {
 public enum AIRequest {
     /// Bir altyazı satırına yeten çıktı sınırı; düşünen modellere de pay bırakır.
     public static let maxOutputTokens = 1024
+    /// "Ekranı çevir"in tek isteğinde çıktı sınırı: ekrandaki bütün yazılar birlikte döner.
+    public static let screenOutputTokens = 8192
 
     public static let systemPrompt = """
         You translate English video game subtitles into natural, spoken Turkish, the way people really talk. \
@@ -275,7 +277,8 @@ public enum AIRequest {
 
     /// Hizmete giden HTTP isteği. `server`: yerel modelin sunucusu (verilmezse Ollama'nın varsayılan adresi).
     public static func make(provider: AIProvider, key: String, model: AIModel, sentences: [String],
-                            context: [AIContextLine], game: String? = nil, server: LocalAIServer? = nil) -> URLRequest {
+                            context: [AIContextLine], game: String? = nil, server: LocalAIServer? = nil,
+                            maxOutputTokens: Int = AIRequest.maxOutputTokens) -> URLRequest {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = userMessage(sentences: sentences, context: context, game: game)
         var request: URLRequest
@@ -445,6 +448,8 @@ public final class AITranslationCore: @unchecked Sendable {
     public let server: LocalAIServer?
     private let key: String
     private let session: URLSession
+    /// "Ekranı çevir"in uzun yanıtlı tek isteği için daha uzun bekleyen oturum.
+    private let screenSession: URLSession
     private let cache: TranslationCache
     private let budget: RequestBudget?
     private let names = SpeakerNames()
@@ -475,12 +480,17 @@ public final class AITranslationCore: @unchecked Sendable {
         self.model = resolved
         self.server = provider.isLocal ? server ?? LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: resolved.id) : nil
         self.session = session ?? Self.makeSession(provider: provider)
+        screenSession = session ?? Self.makeSession(timeout: provider.isLocal ? Self.localTestTimeout : Self.screenTimeout)
         self.cache = cache
         self.budget = budget ?? RequestBudget.shared(provider: provider, model: resolved)
     }
 
     /// Bulut hizmetinde beklenen en uzun süre.
     public static let timeout: TimeInterval = 5
+    /// "Ekranı çevir"de bulut hizmetinde beklenen en uzun süre: bütün ekranın çevirisi tek yanıtta gelir.
+    public static let screenTimeout: TimeInterval = 30
+    /// Bir istekte giden en çok parça; kalabalık ekran birkaç isteğe bölünür.
+    public static let screenBatch = 40
     /// Yerel modelde beklenen en uzun süre: bilgisayardaki model buluttan yavaştır ve bir süre boşta kalınca belleğe
     /// yeniden yüklenir. Yine de sınırlıdır: çeviriler sırayla gider, bir satır bütün sırayı bekletmesin; ekrandan çoktan
     /// kalkmış satırın geç gelen çevirisini hat zaten göstermez.
@@ -549,6 +559,55 @@ public final class AITranslationCore: @unchecked Sendable {
         }
         cache.store(result, for: text)
         return remember(result, for: text)
+    }
+
+    /// "Ekranı çevir": birbirinden bağımsız parçalar (menü satırı, görev yazısı...) tek istekte, aynı sırada çevrilir.
+    /// Parça başına istek gitseydi kalabalık bir ekran Gemini'nin dakikalık hakkını (15) ilk saniyelerde bitirir, kalan
+    /// parçalar yerel çeviriye düşerdi; yerel çeviri kurulu değilse ekranın hiçbir yazısı çevrilmezdi. Bu tek istek
+    /// kullanıcının tuşa basmasıyla gider: ortak hak o an bitmiş olsa da gönderilir (hakkı sayılır). Hata ya da dakikalık
+    /// sınırda parçalar yerel çeviriyle çevrilir; o da yoksa hata yukarı çıkar ve ekranda gösterilir.
+    public func translateAll(_ texts: [String], fallback: (String) async throws -> String) async throws -> [String] {
+        var results: [String?] = texts.map { cache.value(for: $0) }
+        let missing = texts.indices.filter { results[$0] == nil }
+        var failed = Date() < lock.withLock({ pausedUntil })
+        for chunk in stride(from: 0, to: missing.count, by: Self.screenBatch).map({ Array(missing[$0..<min($0 + Self.screenBatch, missing.count)]) })
+        where !failed {
+            try Task.checkCancellation()
+            _ = budget?.take()
+            lock.withLock { rateLimited = false }
+            do {
+                let sentences = chunk.map { texts[$0] }
+                let request = AIRequest.make(provider: provider, key: key, model: model, sentences: sentences, context: [],
+                                             server: server, maxOutputTokens: AIRequest.screenOutputTokens)
+                let translated = try await Self.send(request, provider: provider, count: sentences.count, session: screenSession)
+                setFailure(nil)
+                for (index, translation) in zip(chunk, translated) {
+                    results[index] = translation
+                    cache.store(translation, for: texts[index])
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as URLError where error.code == .cancelled && Task.isCancelled {
+                throw CancellationError()
+            } catch let error as AIRateLimited {
+                if let perMinute = error.limit.requestsPerMinute { budget?.lower(to: perMinute) }
+                let pause = max(1, min(error.limit.retryAfter ?? Self.rateLimitPause, Self.rateLimitPause))
+                lock.withLock {
+                    rateLimited = true
+                    pausedUntil = Date().addingTimeInterval(pause)
+                }
+                failed = true
+            } catch {
+                setFailure(error as? AIFailure ?? .unreachable)
+                lock.withLock { pausedUntil = Date().addingTimeInterval(Self.retryAfter) }
+                failed = true
+            }
+        }
+        for index in texts.indices where results[index] == nil {
+            try Task.checkCancellation()
+            results[index] = try await fallback(texts[index])
+        }
+        return results.map { $0 ?? "" }
     }
 
     public func spokenLines(for text: String, fallback: (String) -> [SpokenLine]) -> [SpokenLine] {

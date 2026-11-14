@@ -909,9 +909,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         screenWork = work;
         server.SendStyle(settings.Style);
         server.SendSubtitle(text["Translating the screen…"], 2500);
+        ITextTranslator? translator = null;
         try
         {
-            var translator = MakeTranslator();
+            translator = MakeTranslator();
+            // Yapay zekâda ekranın bütün yazıları tek istekte gider (bkz. AiTranslator.TranslateAllAsync).
             var items = await ScreenTranslation.TranslateAsync(frame, reader, translator, shown =>
             {
                 if (work.IsCancellationRequested) return;
@@ -932,19 +934,46 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         catch (TranslatorException error)
         {
-            server.Clear();
             post(() => TranslatorStatus = error.Status);
+            ShowScreenFailure(error, translator);
             return ScreenOutcome.TranslatorUnavailable;
         }
-        catch
+        catch (Exception error)
         {
-            server.Clear();
+            RemotePlayLog.Note($"Ekran çevrilemedi: {error.GetType().Name}: {error.Message}");
+            ShowScreenFailure(error, translator);
             return ScreenOutcome.Failed;
         }
         finally
         {
             if (screenWork == work) screenWork = null;
         }
+    }
+
+    /// <summary>Ekran çevrilemedi: nedeni TV'de (ve bilgisayardaki altyazıda) birkaç saniye görünür, sessizce kaybolmaz.</summary>
+    private void ShowScreenFailure(Exception error, ITextTranslator? translator)
+    {
+        server.Clear();
+        var reason = ScreenFailureReason(error, translator, settings.OnlineEngine, text, settings.LocalAiServer);
+        server.SendSubtitle(text.Format("Couldn't translate the screen: %@", reason), 6000);
+    }
+
+    /// <summary>Ekran çevirisinin neden olmadığı: önce çevrimiçi motorun hatası, sonra ücretsiz çevirinin durumu.</summary>
+    public static string ScreenFailureReason(Exception error, ITextTranslator? translator, TranslationEngine engine, Localizer text,
+                                             LocalAiServer? server = null)
+    {
+        if (translator is IOnlineTranslator online)
+        {
+            if (online.LastError is { } failure) return failure.Describe(engine, text, server);
+            if (online.LastLineWasRateLimited)
+                return text.Format("%@ has reached its per-minute limit. Try again in a minute.", engine.DisplayName());
+        }
+        return (error as TranslatorException)?.Status switch
+        {
+            TranslatorStatus.NeedsDownload => text["The free translation isn't downloaded yet."],
+            TranslatorStatus.EngineFailed => text["The free translation couldn't be started."],
+            _ => text["Something went wrong. Try again."],
+        };
     }
 
     private void HideScreen()
