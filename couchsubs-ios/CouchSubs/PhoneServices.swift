@@ -47,8 +47,9 @@ protocol PhoneServices: AnyObject {
     func discoverTVs() async -> [LGTV]
     func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing
     func makeStream(console: RegisteredConsole, accountId: Data) -> StreamControlling
+    /// `onKey`: TV bağlantıda yeni jeton verdi (Samsung); saklanır.
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling
     func checkDeepLKey(_ key: String) async -> OnlineKeyCheck
     func testAIKey(provider: AIProvider, key: String, model: String?) async -> Result<String, AIFailure>
 }
@@ -100,14 +101,21 @@ final class LivePhoneServices: PhoneServices {
     }
 
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling {
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling {
         switch tv.brand {
         case .androidTV:
             return IdleKeeper()
         case .samsung:
+            let token = SamsungTokenHolder(token: key, onChange: onKey)
             let locator = TVLocator(tv: tv, connect: { tv in
-                let client = SamsungClient(tv: tv, token: key)
-                do { _ = try await client.connect() } catch { client.close(); throw error }
+                let client = SamsungClient(tv: tv, token: token.current)
+                do {
+                    let received = try await client.connect()
+                    token.received(received)
+                } catch {
+                    client.close()
+                    throw error
+                }
                 return client
             }, search: { await SamsungDiscovery.search() }, onMoved: onMoved)
             return TVKeeper(connect: { try await locator.connect() }, appId: AppIdentity.samsungAppId, params: params,

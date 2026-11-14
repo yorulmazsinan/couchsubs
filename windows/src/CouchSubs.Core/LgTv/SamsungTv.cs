@@ -35,7 +35,10 @@ public static class SamsungMessages
         },
     }.ToJsonString();
 
-    /// <summary>Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), başka iletiyse null. Reddedildiyse hata.</summary>
+    /// <summary>
+    /// Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), başka iletiyse null. Reddedildiyse ya da TV'deki izin
+    /// sorusu yanıtsız kaldıysa (<c>ms.channel.timeOut</c>; 60 saniye boşuna beklenmez) hata.
+    /// </summary>
     public static string? ConnectResult(string text)
     {
         JsonNode? node;
@@ -44,6 +47,7 @@ public static class SamsungMessages
         {
             "ms.channel.connect" => node["data"]?["token"]?.GetValue<string>() ?? "",
             "ms.channel.unauthorized" => throw new SsapException("rejected"),
+            "ms.channel.timeOut" => throw new SsapException("cannot connect"),
             _ => null,
         };
     }
@@ -54,6 +58,36 @@ public static class SamsungMessages
         try { return JsonNode.Parse(json)?["device"]?["name"]?.GetValue<string>()?.Replace("&quot;", "\""); }
         catch (JsonException) { return null; }
     }
+}
+
+/// <summary>
+/// Bekçinin (TvKeeper) Samsung bağlantılarında kullandığı jeton. TV yeni jeton verirse bir sonraki bağlantı onu kullanır
+/// ve <paramref name="onChange"/> ile saklanır; önceden yalnız eşleşmedeki jeton kullanılıyor, sonradan gelen atılıyordu.
+/// </summary>
+public sealed class SamsungTokenHolder(string? token, Action<string> onChange)
+{
+    private readonly Lock gate = new();
+    private string? token = token;
+
+    public string? Current { get { lock (gate) return token; } }
+
+    /// <summary>Bağlantıda TV'nin döndüğü jeton; boşsa ya da aynıysa bir şey değişmez.</summary>
+    public void Received(string value)
+    {
+        lock (gate)
+        {
+            var kept = KeptToken(token, value);
+            if (kept == (token ?? "")) return;
+            token = kept;
+        }
+        onChange(value);
+    }
+
+    /// <summary>
+    /// Saklanacak jeton. TV yeni jeton verdiyse o; vermediyse (boş döndü, bazı TV'ler jetonla gelen bağlantıda yeniden
+    /// göndermez) eldeki korunur. Boş jeton eldekinin üstüne yazılınca sonraki her bağlantıda TV yeniden izin soruyordu (#40).
+    /// </summary>
+    public static string KeptToken(string? stored, string received) => received.Length == 0 ? stored ?? "" : received;
 }
 
 /// <summary>Samsung TV ile uzaktan kumanda WebSocket'i üzerinden konuşur. İlk bağlantıda TV izin sorar.</summary>

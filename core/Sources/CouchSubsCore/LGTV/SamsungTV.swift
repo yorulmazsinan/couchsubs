@@ -22,7 +22,7 @@ enum SamsungMessages {
         return (try? JSONSerialization.data(withJSONObject: message)) ?? Data()
     }
 
-    /// Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), reddedildiyse hata.
+    /// Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), reddedildiyse ya da soru zaman aşımına uğradıysa hata.
     static func connectResult(_ text: String) throws -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return nil }
         switch object["event"] as? String {
@@ -30,6 +30,9 @@ enum SamsungMessages {
             return ((object["data"] as? [String: Any])?["token"] as? String) ?? ""
         case "ms.channel.unauthorized":
             throw SamsungClient.SamsungError.rejected
+        case "ms.channel.timeOut":
+            // TV'deki izin sorusu yanıtsız kaldı; 60 saniye boşuna beklenmez.
+            throw SamsungClient.SamsungError.cannotConnect
         default:
             return nil
         }
@@ -40,6 +43,38 @@ enum SamsungMessages {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let device = object["device"] as? [String: Any], let name = device["name"] as? String else { return nil }
         return name.replacingOccurrences(of: "&quot;", with: "\"")
+    }
+}
+
+/// Bekçinin (TVKeeper) Samsung bağlantılarında kullandığı jeton. TV yeni jeton verirse bir sonraki bağlantı onu kullanır
+/// ve `onChange` ile saklanır; önceden yalnız eşleşmedeki jeton kullanılıyor, sonradan gelen atılıyordu.
+public final class SamsungTokenHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+    private let onChange: (String) -> Void
+
+    public init(token: String?, onChange: @escaping (String) -> Void) {
+        self.token = token
+        self.onChange = onChange
+    }
+
+    public var current: String? { lock.withLock { token } }
+
+    /// Bağlantıda TV'nin döndüğü jeton; boşsa ya da aynıysa bir şey değişmez.
+    public func received(_ value: String) {
+        let changed: Bool = lock.withLock {
+            let kept = Self.keptToken(stored: token, received: value)
+            guard kept != (token ?? "") else { return false }
+            token = kept
+            return true
+        }
+        if changed { onChange(value) }
+    }
+
+    /// Saklanacak jeton. TV yeni jeton verdiyse o; vermediyse (boş döndü, bazı TV'ler jetonla gelen bağlantıda yeniden
+    /// göndermez) eldeki korunur. Boş jeton eldekinin üstüne yazılınca sonraki her bağlantıda TV yeniden izin soruyordu (#40).
+    public static func keptToken(stored: String?, received: String) -> String {
+        received.isEmpty ? (stored ?? "") : received
     }
 }
 

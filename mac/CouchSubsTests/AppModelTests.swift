@@ -65,18 +65,22 @@ final class FakeServices: AppServices {
     func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing {
         launchedServer = server
         pairCount += 1
-        return TVPairing(key: "tv-key", launched: appOnTV != nil)
+        return TVPairing(key: pairKey, launched: appOnTV != nil)
     }
+    /// TV'nin eşleşmede döndüğü jeton (Samsung jetonla gelen bağlantıda boş dönebilir).
+    var pairKey = "tv-key"
+    var onKey: (@Sendable (String) -> Void)?
     func makeStream(console: RegisteredConsole, accountId: Data) -> StreamControlling {
         let stream = FakeStream()
         streams.append(stream)
         return stream
     }
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
-                    onMoved: @escaping (LGTV) -> Void) -> KeeperControlling {
+                    onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void) -> KeeperControlling {
         let keeper = FakeKeeper()
         keepers.append(keeper)
         self.onMoved = onMoved
+        self.onKey = onKey
         return keeper
     }
     var bundledTVAppVersion: String? = "0.6.1"
@@ -452,6 +456,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(store.load(String.self, for: StoreKey.tvKey), "tv-key")
     }
 
+    /// #40: Samsung jetonla gelen bağlantıda jeton göndermeyince saklı jeton silinmemeli (yoksa TV her seferinde izin sorar).
+    func testPairingWithoutNewTokenKeepsSavedToken() async throws {
+        let services = FakeServices()
+        services.pairKey = ""
+        let store = MemoryStore()
+        store.save("samsung-token", for: StoreKey.tvKey)
+        let model = AppModel(services: services, store: store, defaults: .isolated())
+        try await model.pair(LGTV(name: "Samsung", host: "192.168.1.20", brand: .samsung))
+        XCTAssertEqual(store.load(String.self, for: StoreKey.tvKey), "samsung-token")
+    }
+
     func testOnboardingWalksAllStepsInOrder() async throws {
         let model = AppModel(services: FakeServices(), store: MemoryStore(), defaults: .isolated())
         XCTAssertEqual(model.step, .welcome); model.advance()
@@ -638,6 +653,24 @@ final class AppModelRunTests: XCTestCase {
         XCTAssertEqual(services.streams.count, 1)
         XCTAssertEqual(services.keepers.count, 1)
         XCTAssertTrue(model.isRunning)
+        model.stop()
+    }
+
+    /// #40: bekçinin bağlantısında TV yeni jeton verirse saklanır; sonraki açılışta TV yeniden izin sormaz.
+    func testKeeperSavesNewTvToken() async throws {
+        let services = FakeServices()
+        let store = MemoryStore()
+        store.save(Data(repeating: 1, count: 8), for: StoreKey.accountId)
+        store.save(RegisteredConsole(host: "192.168.1.253", name: "PS5", registKey: Data(repeating: 0x31, count: 16), morning: Data(repeating: 2, count: 16)), for: StoreKey.console)
+        store.save(LGTV(name: "Samsung", host: "127.0.0.1", brand: .samsung), for: StoreKey.tv)
+        store.save("", for: StoreKey.tvKey)
+        let model = AppModel(services: services, store: store, defaults: .isolated())
+        await model.start()
+        let onKey = try XCTUnwrap(services.onKey)
+        onKey("new-token")
+        await Task.yield()
+        for _ in 0..<20 where store.load(String.self, for: StoreKey.tvKey) != "new-token" { await Task.yield() }
+        XCTAssertEqual(store.load(String.self, for: StoreKey.tvKey), "new-token")
         model.stop()
     }
 

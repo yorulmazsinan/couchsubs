@@ -183,8 +183,12 @@ internal sealed class FakeServices : IAppServices
         LaunchedServer = server;
         PairCount++;
         TvCalls++;
-        return Task.FromResult(new TvPairing("tv-key", AppOnTv is not null));
+        return Task.FromResult(new TvPairing(PairKey, AppOnTv is not null));
     }
+    /// <summary>TV'nin eşleşmede döndüğü jeton (Samsung jetonla gelen bağlantıda boş dönebilir).</summary>
+    public string PairKey { get; set; } = "tv-key";
+    /// <summary>Son bekçiye verilen "yeni jeton" geri çağrısı.</summary>
+    public Action<string>? OnKey { get; private set; }
     public IStreamSession MakeStream(RegisteredConsole console, byte[] accountId)
     {
         if (StreamError is not null) throw StreamError;
@@ -192,9 +196,11 @@ internal sealed class FakeServices : IAppServices
         Streams.Add(stream);
         return stream;
     }
-    public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved)
+    public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
+                              Action<string> onKey)
     {
         TvCalls++;
+        OnKey = onKey;
         var keeper = new FakeKeeper();
         Keepers.Add(keeper);
         return keeper;
@@ -615,6 +621,19 @@ public class AppControllerTests
         controller.Dispose();
     }
 
+    /// #40: Samsung jetonla gelen bağlantıda jeton göndermeyince saklı jeton silinmemeli (yoksa TV her seferinde izin sorar).
+    [Fact]
+    public async Task PairingWithoutNewTokenKeepsSavedToken()
+    {
+        var services = new FakeServices { PairKey = "" };
+        var store = new MemoryStore();
+        store.Save(StoreKeys.TvKey, "samsung-token");
+        var controller = Make(services, store);
+        await controller.PairAsync(new LgTv("Samsung", "192.168.1.20", TvBrand.Samsung));
+        Assert.Equal("samsung-token", store.Load<string>(StoreKeys.TvKey));
+        controller.Dispose();
+    }
+
     /// Çeviri modeli (~534 MB) sihirbazın başında arka planda inmeye başlar; model adımına gelindiğinde çoğunlukla hazırdır.
     [Fact]
     public void ModelDownloadStartsInBackgroundAfterWelcome()
@@ -779,6 +798,24 @@ public class AppControllerRunTests
         Assert.Single(services.Streams);
         Assert.Single(services.Keepers);
         Assert.True(controller.IsRunning);
+        controller.Dispose();
+    }
+
+    /// #40: bekçinin bağlantısında TV yeni jeton verirse saklanır; sonraki açılışta TV yeniden izin sormaz.
+    [Fact]
+    public async Task KeeperSavesNewTvToken()
+    {
+        var services = new FakeServices();
+        var store = new MemoryStore();
+        store.Save(StoreKeys.AccountId, Enumerable.Repeat((byte)1, 8).ToArray());
+        store.Save(StoreKeys.Console, new RegisteredConsole("192.168.1.253", "PS5", Enumerable.Repeat((byte)0x31, 16).ToArray(), Enumerable.Repeat((byte)2, 16).ToArray()));
+        store.Save(StoreKeys.Tv, new LgTv("Samsung", "127.0.0.1", TvBrand.Samsung));
+        store.Save(StoreKeys.TvKey, "");
+        var controller = AppControllerTests.Make(services, store);
+        await controller.StartAsync();
+        Assert.NotNull(services.OnKey);
+        services.OnKey!("new-token");
+        Assert.Equal("new-token", store.Load<string>(StoreKeys.TvKey));
         controller.Dispose();
     }
 
