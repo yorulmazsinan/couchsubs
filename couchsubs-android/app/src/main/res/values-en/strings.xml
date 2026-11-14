@@ -43,6 +43,7 @@
     <string name="psn_open">Sign in with Sony</string>
     <string name="psn_failed">Sign-in not completed: %1$s</string>
     <string name="psn_loading">Connecting to Sony…</string>
+    <string name="psn_loading_hint">If the page doesn\'t appear, you can sign in in your browser below.</string>
     <string name="psn_page_failed">Sony\'s sign-in page didn\'t open</string>
     <string name="psn_page_failed_hint">You can try again, or sign in in your phone\'s browser and paste the address here.</string>
     <string name="psn_retry">Try again</string>

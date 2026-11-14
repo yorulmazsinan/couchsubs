@@ -45,6 +45,7 @@
     <string name="psn_open">Sony ile giriş yap</string>
     <string name="psn_failed">Giriş tamamlanmadı: %1$s</string>
     <string name="psn_loading">Sony\'ye bağlanılıyor…</string>
+    <string name="psn_loading_hint">Sayfa gelmezse aşağıdan girişi tarayıcıda yapabilirsin.</string>
     <string name="psn_page_failed">Sony\'nin giriş sayfası açılamadı</string>
     <string name="psn_page_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapıp adresi buraya yapıştırabilirsin.</string>
     <string name="psn_retry">Yeniden dene</string>
