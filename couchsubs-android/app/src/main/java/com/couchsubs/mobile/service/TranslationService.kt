@@ -30,6 +30,8 @@ import com.couchsubs.mobile.ocr.RegionPixels
 import com.couchsubs.mobile.ocr.SubtitleReader
 import com.couchsubs.mobile.remoteplay.DisconnectKind
 import com.couchsubs.mobile.remoteplay.FrameSource
+import com.couchsubs.mobile.remoteplay.FrameSourceFactory
+import com.couchsubs.mobile.remoteplay.RegisteredConsole
 import com.couchsubs.mobile.remoteplay.FrameSources
 import com.couchsubs.mobile.remoteplay.NativeBridge
 import com.couchsubs.mobile.remoteplay.SessionState
@@ -71,13 +73,13 @@ class TranslationService : Service() {
     }
 
     private lateinit var settings: AppSettings
-    private var session: FrameSource? = null
-    private var server: SubtitleServer? = null
-    private var pipeline: SubtitlePipeline? = null
-    private var reader: SubtitleReader? = null
-    private var pool: LinePool? = null
-    private var freeTranslator: MlKitTranslator? = null
-    private var packs: GamePackLibrary? = null
+    @Volatile private var session: FrameSource? = null
+    @Volatile private var server: SubtitleServer? = null
+    @Volatile private var pipeline: SubtitlePipeline? = null
+    @Volatile private var reader: SubtitleReader? = null
+    @Volatile private var pool: LinePool? = null
+    @Volatile private var freeTranslator: MlKitTranslator? = null
+    @Volatile private var packs: GamePackLibrary? = null
     private val ocr = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs OCR").apply { isDaemon = true } }
     private val background = Executors.newSingleThreadScheduledExecutor { Thread(it, "CouchSubs background").apply { isDaemon = true } }
     private val reading = AtomicBoolean(false)
@@ -87,6 +89,9 @@ class TranslationService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private val region = CropRegion()
+    private val lifecycle = Any()
+    @Volatile private var destroyed = false
+    private var begun = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -101,7 +106,10 @@ class TranslationService : Service() {
             return START_NOT_STICKY
         }
         startInForeground()
-        if (session == null) begin()
+        if (!begun) {
+            begun = true
+            begin()
+        }
         return START_NOT_STICKY
     }
 
@@ -144,7 +152,24 @@ class TranslationService : Service() {
         LiveState.update { LiveStatus(running = true, phase = getString(R.string.phase_preparing), startedAt = startedAt, engineLabel = engineLabel()) }
         Telemetry.event(Telemetry.SESSION_START, "target" to settings.target.name.lowercase(), "engine" to settings.engine.name.lowercase(),
             "packs" to settings.packsEnabled)
+        // Paketlerin açılması, çeviri modeli ve sunucu kurulumu ana iş parçacığında yapılırsa zayıf telefonda
+        // "CouchSubs yanıt vermiyor" uyarısı çıkar; kurulum kendi iş parçacığında yapılır.
+        Thread({
+            try {
+                setup(console, accountId, replacement)
+            } catch (error: Exception) {
+                // Kurulum sürerken durdurulduysa (zamanlayıcı kapanmış olur) yalnız kurulanlar kapatılır.
+                if (destroyed) releaseParts()
+                else {
+                    Log.e(TAG, "setup", error)
+                    LiveState.update { it.copy(error = getString(R.string.error_native)) }
+                    stopSelf()
+                }
+            }
+        }, "CouchSubs start").start()
+    }
 
+    private fun setup(console: RegisteredConsole, accountId: ByteArray, replacement: FrameSourceFactory?) {
         // Paketler ücretsiz: uygulamayla gelenler ve sunucudan inmiş güncel sürümler. Ayardan kapatılırsa aranmaz.
         val library = Services.packLibrary(this)
         packs = library
@@ -208,9 +233,18 @@ class TranslationService : Service() {
             }
         }
         val onState: (SessionState) -> Unit = { state -> LiveState.update { it.copy(phase = describe(state)) } }
-        session = (replacement?.create(this, onFrame, onState)
-            ?: StreamSession(console, accountId, onFrame, onState, onConsoleMoved = { moved -> settings.console = moved }))
-            .also { it.start() }
+        val source = replacement?.create(this, onFrame, onState)
+            ?: StreamSession(console, accountId, onFrame, onState, onConsoleMoved = { moved -> settings.console = moved })
+        synchronized(lifecycle) {
+            // Kurulum sürerken durdurulduysa (onDestroy çalıştı) açılan bağlantı başlatılmaz.
+            if (destroyed) {
+                source.dispose()
+                releaseParts()
+                return
+            }
+            session = source
+            source.start()
+        }
         background.scheduleWithFixedDelay({
             session?.let { s -> LiveState.update { it.copy(framesReceived = s.framesReceived) } }
         }, 2, 2, TimeUnit.SECONDS)
@@ -291,18 +325,29 @@ class TranslationService : Service() {
         EngineChoice.CLAUDE -> "Claude"
     }
 
-    override fun onDestroy() {
-        if (startedAt > 0) settings.lastSessionMs = System.currentTimeMillis() - startedAt
-        if (startedAt > 0) Telemetry.event(Telemetry.SESSION_STOP, "seconds" to (System.currentTimeMillis() - startedAt) / 1000,
-            "pack_lines" to (pipeline?.packHits ?: 0), "lines" to LiveState.status.value.recent.size)
+    /** Kurulan parçaları kapatır; onDestroy'dan ve hizmet kurulum bitmeden durdurulduysa kurulum iş parçacığından çağrılır. */
+    private fun releaseParts() = synchronized(lifecycle) {
         session?.dispose()
         session = null
         pipeline?.reset()
         pipeline?.shutdown()
+        pipeline = null
         server?.stop()
+        server = null
         reader?.close()
+        reader = null
         freeTranslator?.close()
+        freeTranslator = null
         pool?.let { linePool -> Thread { linePool.flush() }.start() }
+        pool = null
+    }
+
+    override fun onDestroy() {
+        synchronized(lifecycle) { destroyed = true }
+        if (startedAt > 0) settings.lastSessionMs = System.currentTimeMillis() - startedAt
+        if (startedAt > 0) Telemetry.event(Telemetry.SESSION_STOP, "seconds" to (System.currentTimeMillis() - startedAt) / 1000,
+            "pack_lines" to (pipeline?.packHits ?: 0), "lines" to LiveState.status.value.recent.size)
+        releaseParts()
         background.shutdownNow()
         ocr.shutdownNow()
         wakeLock?.takeIf { it.isHeld }?.release()
