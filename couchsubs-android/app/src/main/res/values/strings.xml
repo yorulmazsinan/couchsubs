@@ -44,6 +44,23 @@
     <string name="psn_body">Telefon PS5\'e Remote Play ile bağlanır. Oyunu oynadığın hesaptan ayrı, ücretsiz ikinci bir PSN hesabıyla giriş yap.</string>
     <string name="psn_open">Sony ile giriş yap</string>
     <string name="psn_failed">Giriş tamamlanmadı: %1$s</string>
+    <string name="psn_loading">Sony\'ye bağlanılıyor…</string>
+    <string name="psn_page_failed">Sony\'nin giriş sayfası açılamadı</string>
+    <string name="psn_page_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapıp adresi buraya yapıştırabilirsin.</string>
+    <string name="psn_retry">Yeniden dene</string>
+    <string name="psn_browser">Tarayıcıda aç</string>
+    <string name="psn_browser_reopen">Tarayıcıyı yeniden aç</string>
+    <string name="psn_browser_title">Tarayıcıda giriş</string>
+    <string name="psn_browser_body">Açılan tarayıcıda ikinci hesabınla giriş yap. Giriş bitince tarayıcı remoteplay.dl.playstation.net ile başlayan bir sayfaya gider (boş ya da hata sayfası olabilir). O sayfanın adresini adres çubuğundan kopyala, buraya yapıştır ve İleri\'ye dokun.</string>
+    <string name="psn_browser_field">Sayfanın adresi</string>
+    <string name="psn_browser_wrong">Bu adreste giriş kodu yok. Adres https://remoteplay.dl.playstation.net/remoteplay/redirect?code= ile başlamalı.</string>
+    <string name="psn_problem_offline">İnternete ya da Sony\'ye ulaşılamadı. Bağlantını kontrol et.</string>
+    <string name="psn_problem_timeout">Sayfa çok uzun sürede açılmadı.</string>
+    <string name="psn_problem_ssl">Güvenli bağlantı kurulamadı (saat ve tarih doğru mu?).</string>
+    <string name="psn_problem_http">Sony sayfayı göndermedi.</string>
+    <string name="psn_problem_blank">Sayfa boş kaldı; Sony\'nin giriş uygulaması bu telefonun uygulama içi tarayıcısında çalışmadı.</string>
+    <string name="psn_problem_crashed">Uygulama içi tarayıcı (Android System WebView) çalışmadı. Play Store\'dan güncellemeyi deneyebilirsin.</string>
+    <string name="psn_problem_other">Sayfa yüklenirken bir hata oldu.</string>
     <string name="pair_title">PS5\'i eşle</string>
     <string name="pair_body">PS5\'te ikinci hesapla Ayarlar › Sistem › Uzaktan Oynatma › Cihazı Eşle\'yi seç, ekrandaki kodu yaz.</string>
     <string name="pair_searching">PS5 aranıyor…</string>

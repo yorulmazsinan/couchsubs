@@ -4,6 +4,7 @@ package com.couchsubs.mobile
 import com.couchsubs.mobile.core.LinePool
 import com.couchsubs.mobile.core.PackKey
 import com.couchsubs.mobile.remoteplay.PsnAccount
+import com.couchsubs.mobile.remoteplay.PsnPageProblem
 import com.couchsubs.mobile.remoteplay.RegisteredConsole
 import com.couchsubs.mobile.remoteplay.Registration
 import com.couchsubs.mobile.remoteplay.RegistrationFailure
@@ -63,6 +64,29 @@ class RemotePlayLogicTest {
             PsnAccount.errorFromRedirect("$base?error=access_denied&error_description=User+denied&error_code=4165"))
         assertTrue(PsnAccount.authorizeUrl.contains("redirect_uri=https://remoteplay.dl.playstation.net/remoteplay/redirect"))
         assertTrue(PsnAccount.authorizeUrl.contains("scope=psn:clientapp%20referenceDataService"))
+    }
+
+    @Test
+    fun pastedBrowserAddressGivesRedirect() {
+        val base = PsnAccount.REDIRECT_PREFIX
+        assertEquals("$base?code=v3.abc&cid=1", PsnAccount.redirectFromText("  $base?code=v3.abc&cid=1\n"))
+        assertEquals("$base?code=v3.abc", PsnAccount.redirectFromText("Adres: $base?code=v3.abc bu"))
+        assertEquals("$base?error=access_denied", PsnAccount.redirectFromText("$base?error=access_denied"))
+        assertNull(PsnAccount.redirectFromText(base))
+        assertNull(PsnAccount.redirectFromText("$base?cid=1"))
+        assertNull(PsnAccount.redirectFromText("https://example.com/?code=x"))
+    }
+
+    @Test
+    fun loginPageProblemsAreTold() {
+        assertEquals(PsnPageProblem.OFFLINE, PsnPageProblem.fromWebError(-2))
+        assertEquals(PsnPageProblem.OFFLINE, PsnPageProblem.fromWebError(-6))
+        assertEquals(PsnPageProblem.TIMEOUT, PsnPageProblem.fromWebError(-8))
+        assertEquals(PsnPageProblem.SSL, PsnPageProblem.fromWebError(-11))
+        assertEquals(PsnPageProblem.OTHER, PsnPageProblem.fromWebError(-1))
+        assertTrue(PsnPageProblem.looksBlank("0"))
+        assertTrue(PsnPageProblem.looksBlank("null"))
+        assertFalse(PsnPageProblem.looksBlank("42"))
     }
 
     @Test

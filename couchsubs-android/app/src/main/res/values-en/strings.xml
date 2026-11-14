@@ -42,6 +42,23 @@
     <string name="psn_body">The phone connects to your PS5 with Remote Play. Sign in with a free second PSN account, separate from the one you play with.</string>
     <string name="psn_open">Sign in with Sony</string>
     <string name="psn_failed">Sign-in not completed: %1$s</string>
+    <string name="psn_loading">Connecting to Sony…</string>
+    <string name="psn_page_failed">Sony\'s sign-in page didn\'t open</string>
+    <string name="psn_page_failed_hint">You can try again, or sign in in your phone\'s browser and paste the address here.</string>
+    <string name="psn_retry">Try again</string>
+    <string name="psn_browser">Open in browser</string>
+    <string name="psn_browser_reopen">Open the browser again</string>
+    <string name="psn_browser_title">Sign in in the browser</string>
+    <string name="psn_browser_body">Sign in with your second account in the browser that opens. When you finish, the browser goes to a page starting with remoteplay.dl.playstation.net (it may be blank or an error page). Copy that page\'s address from the address bar, paste it here and tap Next.</string>
+    <string name="psn_browser_field">Page address</string>
+    <string name="psn_browser_wrong">This address has no sign-in code. It should start with https://remoteplay.dl.playstation.net/remoteplay/redirect?code=</string>
+    <string name="psn_problem_offline">Couldn\'t reach the internet or Sony. Check your connection.</string>
+    <string name="psn_problem_timeout">The page took too long to open.</string>
+    <string name="psn_problem_ssl">Couldn\'t make a secure connection (are the date and time right?).</string>
+    <string name="psn_problem_http">Sony didn\'t send the page.</string>
+    <string name="psn_problem_blank">The page stayed blank; Sony\'s sign-in app didn\'t run in this phone\'s in-app browser.</string>
+    <string name="psn_problem_crashed">The in-app browser (Android System WebView) didn\'t work. Try updating it from the Play Store.</string>
+    <string name="psn_problem_other">Something went wrong while loading the page.</string>
     <string name="pair_title">Pair your PS5</string>
     <string name="pair_body">On the PS5, with the second account, choose Settings › System › Remote Play › Pair Device and enter the code shown.</string>
     <string name="pair_searching">Looking for PS5…</string>

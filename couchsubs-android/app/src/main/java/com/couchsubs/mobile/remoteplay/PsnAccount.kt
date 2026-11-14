@@ -14,6 +14,24 @@ import java.net.URLDecoder
 /** PSN girişinin nerede ve neden bittiği; kullanıcıya ayrı ayrı anlatılır. */
 enum class PsnLoginFailure { NO_CODE, REFUSED, RATE_LIMITED, HTTP, NETWORK, BAD_RESPONSE }
 
+/** Sony'nin giriş sayfası uygulama içinde neden açılamadı; ekranda nedeni ve çıkış yolu gösterilir. */
+enum class PsnPageProblem {
+    OFFLINE, TIMEOUT, SSL, HTTP, BLANK, CRASHED, OTHER;
+
+    companion object {
+        /** WebViewClient.ERROR_* kodundan (android.webkit sabitleri; JVM testinde de çalışsın diye sayıyla). */
+        fun fromWebError(code: Int): PsnPageProblem = when (code) {
+            -2, -6, -7 -> OFFLINE // HOST_LOOKUP, CONNECT, IO
+            -8 -> TIMEOUT
+            -11 -> SSL // FAILED_SSL_HANDSHAKE
+            else -> OTHER
+        }
+
+        /** Sayfadaki görünür yazının uzunluğu (evaluateJavascript sonucu); boşsa Sony'nin uygulaması çizilmemiştir. */
+        fun looksBlank(innerTextLength: String?): Boolean = innerTextLength?.trim('"')?.toIntOrNull()?.let { it == 0 } ?: true
+    }
+}
+
 class PsnAccountException(val failure: PsnLoginFailure, val status: Int? = null, val detail: String? = null) :
     IOException("PSN sign-in failed: $failure${status?.let { " (HTTP $it)" } ?: ""}${detail?.let { " $it" } ?: ""}")
 
@@ -48,6 +66,17 @@ object PsnAccount {
 
     /** Giriş bitince tarayıcının gittiği yönlendirme adresinden tek kullanımlık kod. */
     fun codeFromRedirect(url: String): String? = if (isRedirect(url)) queryValue(url, "code") else null
+
+    /**
+     * Tarayıcıda giriş yapılınca kullanıcının yapıştırdığı metinden yönlendirme adresi (adres çubuğundan kopyalanan
+     * adres; önünde arkasında başka yazı olabilir). Kod ya da Sony'nin hatası yoksa null.
+     */
+    fun redirectFromText(text: String): String? {
+        val start = text.indexOf(REDIRECT_PREFIX)
+        if (start < 0) return null
+        val url = text.substring(start).takeWhile { !it.isWhitespace() && it != '"' && it != '<' && it != '>' }
+        return url.takeIf { !codeFromRedirect(it).isNullOrEmpty() || errorFromRedirect(it) != null }
+    }
 
     /** Sony girişi tamamlamadıysa yönlendirmedeki hata (ör. "access_denied: ..."); yoksa null. */
     fun errorFromRedirect(url: String): String? {
