@@ -365,6 +365,72 @@ final class AITranslationTests: XCTestCase {
         XCTAssertEqual(try AIRequest.text(provider: .openAI, from: Data(#"{"choices":[{"message":{"content":"Koş!"}}]}"#.utf8)), "Koş!")
     }
 
+    /// Tırnaksız dizi (#27): bazı yerel modeller `[Hareket etmemiz lazım.]` döndürür; köşeli parantezler ekranda kalmaz.
+    func testUnquotedArrayForOneSentence() throws {
+        XCTAssertEqual(try AIRequest.translations(from: "[Hareket etmemiz lazım.]", count: 1), ["Hareket etmemiz lazım."])
+        XCTAssertEqual(try AIRequest.translations(from: "[Dur, bekle, gitme.]", count: 1), ["Dur, bekle, gitme."])
+        XCTAssertEqual(try AIRequest.translations(from: "<think>\nKısa bir cümle.\n</think>\n[Geri çekil lan!]", count: 1),
+                       ["Geri çekil lan!"])
+        XCTAssertEqual(try AIRequest.translations(from: "```json\n[Yerinden kıpırdama.]\n```", count: 1), ["Yerinden kıpırdama."])
+        // İçi tırnaklı ama kaçışsız: JSON değil, yine de dış katman soyulur.
+        XCTAssertEqual(try AIRequest.translations(from: "[\"Ona \"dur\" dedim.\"]", count: 1), ["Ona \"dur\" dedim."])
+        // Köşeli parantez yalnız başta: düz metin olduğu gibi kalır.
+        XCTAssertEqual(try AIRequest.translations(from: "[gülüyor] Hadi gidelim.", count: 1), ["[gülüyor] Hadi gidelim."])
+    }
+
+    func testUnquotedArrayForSeveralSentences() throws {
+        XCTAssertEqual(try AIRequest.translations(from: "[Satır bir., Satır iki.]", count: 2), ["Satır bir.", "Satır iki."])
+        XCTAssertEqual(try AIRequest.translations(from: "[\n  Gidelim.,\n  Yakın dur.\n]", count: 2), ["Gidelim.", "Yakın dur."])
+        XCTAssertEqual(try AIRequest.translations(from: "<think>…</think>[Koş!, Hemen!]", count: 2), ["Koş!", "Hemen!"])
+        // Sayı tutmazsa parti her zamanki geri dönüşe gider.
+        XCTAssertThrowsError(try AIRequest.translations(from: "[Satır bir.]", count: 2))
+        XCTAssertThrowsError(try AIRequest.translations(from: "[Bir., İki., Üç.]", count: 2))
+    }
+
+    /// Cümle içi virgül bölünmez: önce cümle sonundan sonra gelen virgül denenir, düz virgül yalnız sayı tam tutarsa.
+    func testUnquotedArrayKeepsCommasInsideSentences() throws {
+        XCTAssertEqual(try AIRequest.translations(from: "[Evet, efendim., Hayır, gitmiyorum.]", count: 2),
+                       ["Evet, efendim.", "Hayır, gitmiyorum."])
+        XCTAssertEqual(try AIRequest.translations(from: "[Dur, bekle, gitme!, Tamam.]", count: 2), ["Dur, bekle, gitme!", "Tamam."])
+        XCTAssertEqual(try AIRequest.translations(from: "[Sakin ol, dostum.\nBen hallederim, merak etme.]", count: 2),
+                       ["Sakin ol, dostum.", "Ben hallederim, merak etme."])
+        XCTAssertThrowsError(try AIRequest.translations(from: "[Dur, bekle, gitme.]", count: 2))
+        XCTAssertEqual(try AIRequest.translations(from: "[Hey, Sen]", count: 2), ["Hey", "Sen"])
+    }
+
+    /// Tırnaksız yanıtla birden çok cümle yerel çeviriye düşmez.
+    func testUnquotedReplyIsUsedInsteadOfFallback() async throws {
+        FakeAI.replyText = "[Gidelim., Yakın dur.]"
+        let result = try await makeLocal().translate("We go now. Stay close.", fallback: local)
+        XCTAssertEqual(result, "Gidelim. Yakın dur.")
+    }
+
+    /// "Ekranı çevir"in tek isteği de tırnaksız yanıtı okur; oyun adı orada da gider.
+    func testScreenRequestReadsUnquotedReplyAndSendsGame() async throws {
+        FakeAI.replyText = "[Haritayı aç., Kamptan ayrıl.]"
+        let core = AITranslationCore(provider: .local, key: "", model: "qwen2.5:7b",
+                                     server: LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "qwen2.5:7b"),
+                                     session: FakeAI.session(), cache: TranslationCache(), budget: RequestBudget(perMinute: 1000),
+                                     game: { "Ghost of Yōtei" })
+        let result = try await core.translateAll(["Open the map.", "Leave the camp."], fallback: local)
+        XCTAssertEqual(result, ["Haritayı aç.", "Kamptan ayrıl."])
+        XCTAssertTrue(user(0).hasPrefix("Game: Ghost of Yōtei\n\n"))
+    }
+
+    /// Oyun biliniyorsa (paket eşleşmesi) istemde "Game:" satırı olarak gider; bilinmiyorsa hiç gitmez.
+    func testGameNameIsSentWhenKnown() async throws {
+        let box = GameBox()
+        let core = AITranslationCore(provider: .local, key: "", model: "qwen2.5:7b",
+                                     server: LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: "qwen2.5:7b"),
+                                     session: FakeAI.session(), cache: TranslationCache(), budget: RequestBudget(perMinute: 1000),
+                                     game: { box.value })
+        _ = try await core.translate("Sit tight.", fallback: local)
+        XCTAssertFalse(user(0).contains("Game:"))
+        box.value = "Grand Theft Auto V"
+        _ = try await core.translate("I'll handle the plastic.", fallback: local)
+        XCTAssertTrue(user(1).hasPrefix("Game: Grand Theft Auto V\n\n"))
+    }
+
     func testPlainTextReplyForOneSentence() async throws {
         FakeAI.replyText = "Koş!"
         let result = try await make(.openAI).translate("Run!", fallback: local)
@@ -677,4 +743,8 @@ final class AITranslationTests: XCTestCase {
         let result = try await make(.openAI).translateAll(["One thing", "Another thing"], fallback: local)
         XCTAssertEqual(result, ["yerel: One thing", "yerel: Another thing"])
     }
+}
+
+private final class GameBox: @unchecked Sendable {
+    var value: String?
 }

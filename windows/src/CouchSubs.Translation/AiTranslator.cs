@@ -209,8 +209,60 @@ public static class AiRequest
             }
             catch (JsonException) { /* dizi değil; düz metin olabilir */ }
         }
+        if (UnquotedList(trimmed, count) is { } list) return list;
         if (count != 1) throw new AiException(OnlineKeyState.Unreachable);
         return [trimmed.Trim('"', '“', '”')];
+    }
+
+    /// <summary>
+    /// Tırnaksız dizi: bazı yerel modeller JSON istense de <c>[Hareket etmemiz lazım.]</c> ya da
+    /// <c>[Satır bir., Satır iki.]</c> döndürür. Yalnız bütün yanıt köşeli parantez içindeyse ve öğe sayısı tam tutuyorsa
+    /// alınır; tutmazsa null (hat her zamanki geri dönüşe gider). Cümle içi virgülde yanlış bölmemek için sıra: satır sonu,
+    /// cümle sonu işaretinden (. ! ? … ") sonra gelen virgül, en son düz virgül.
+    /// </summary>
+    internal static string[]? UnquotedList(string text, int count)
+    {
+        if (count < 1 || text.Length < 2 || !text.StartsWith('[') || !text.EndsWith(']')) return null;
+        var inner = text[1..^1];
+        IEnumerable<string[]> candidates = count == 1 ? [[inner]] :
+        [
+            [.. inner.Split('\n').Where(line => line.Trim().Length > 0)],
+            SentenceSplit(inner),
+            inner.Split(','),
+        ];
+        foreach (var parts in candidates)
+        {
+            var items = parts.Select(CleanItem).ToArray();
+            if (items.Length == count && items.All(item => item.Length > 0)) return items;
+        }
+        return null;
+    }
+
+    private static string CleanItem(string item)
+    {
+        var value = item.Trim();
+        if (value.EndsWith(',')) value = value[..^1];
+        return value.Trim().Trim('"', '“', '”').Trim();
+    }
+
+    /// <summary>Cümle sonu işaretinden (. ! ? … " ”) hemen sonra gelen virgüllerden böler; işaret öğede kalır.</summary>
+    private static string[] SentenceSplit(string text)
+    {
+        var parts = new List<string>();
+        var start = 0;
+        var last = '\0';
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == ',' && last is '.' or '!' or '?' or '…' or '"' or '”')
+            {
+                parts.Add(text[start..i]);
+                start = i + 1;
+            }
+            if (!char.IsWhiteSpace(c)) last = c;
+        }
+        parts.Add(text[start..]);
+        return [.. parts];
     }
 
     /// <summary>Başarısız HTTP yanıtının anlamı. Gövde yalnız tanınan hata kodları için okunur, hiçbir yere yazılmaz.</summary>
@@ -338,6 +390,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
     private readonly ConcurrentDictionary<string, IReadOnlyList<SpokenLine>> _speech = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _names = new(StringComparer.Ordinal);
     private readonly List<AiContextLine> _recent = [];
+    private readonly Func<string?>? _game;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
     private OnlineKeyState? _failure;
 
@@ -349,9 +402,14 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
     /// </param>
     /// <param name="server">Yerel modelin sunucusu (yalnız <see cref="AiProvider.Local"/>; verilmezse Ollama'nın varsayılan adresi).</param>
     /// <param name="http">Verilmezse hizmete uygun zaman aşımıyla paylaşılan istemci (yerel model daha uzun bekler).</param>
+    /// <param name="game">
+    /// Oynanan oyunun adı (ör. eşleşen oyun paketinin başlığı); her istekte sorulur, null ya da boşsa istemde oyun satırı olmaz.
+    /// </param>
     public AiTranslator(AiProvider provider, string key, string? model, ITextTranslator? fallback, HttpClient? http = null,
-                        TranslationCache? cache = null, RequestBudget? budget = null, LocalAiServer? server = null)
+                        TranslationCache? cache = null, RequestBudget? budget = null, LocalAiServer? server = null,
+                        Func<string?>? game = null)
     {
+        _game = game;
         Provider = provider;
         Model = provider.Model(model);
         Server = provider.IsLocal() ? server ?? LocalAiServer.Create(LocalAiServer.OllamaUrl, Model.Id) : null;
@@ -460,7 +518,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
             try
             {
                 var sentences = chunk.Select(i => texts[i]).ToList();
-                using var request = AiRequest.Build(Provider, _key, Model, sentences, [], server: Server, maxOutputTokens: AiRequest.ScreenOutputTokens);
+                using var request = AiRequest.Build(Provider, _key, Model, sentences, [], _game?.Invoke(), Server, maxOutputTokens: AiRequest.ScreenOutputTokens);
                 using var response = await _screenHttp.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
@@ -547,7 +605,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
 
     private async Task<string[]> RequestAsync(List<string> sentences, List<AiContextLine> context, CancellationToken cancellationToken)
     {
-        using var request = AiRequest.Build(Provider, _key, Model, sentences, context, server: Server);
+        using var request = AiRequest.Build(Provider, _key, Model, sentences, context, _game?.Invoke(), Server);
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)

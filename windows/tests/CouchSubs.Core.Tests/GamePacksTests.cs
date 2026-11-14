@@ -207,11 +207,15 @@ public class GamePackTests
         var library = new GamePackLibrary(() => EmbeddedOnly("mafia-the-old-country.json.gz"), null);
         const string garbled = "All this will bébehind u soon: Uötil'then don't let any of these båétards getpyou, alrightiz:t";
         Assert.Null(library.SearchScope);
+        Assert.Null(library.ScopeTitle);
         Assert.Null(library.Nearest(garbled));
         Assert.Equal("Che buono.", library.Find("Che buono."));
         Assert.NotNull(library.Find("then clear the way for someone who does."));
         Assert.NotNull(library.Find("You fucked up now, boy!"));
         Assert.Equal("mafia-the-old-country", library.SearchScope);
+        // Oynanan oyunun adı yapay zekâya bağlam olarak gider.
+        Assert.Equal(library.Packs.Single().Title, library.ScopeTitle);
+        Assert.False(string.IsNullOrEmpty(library.ScopeTitle));
         Assert.Equal(library.Find("All this will be behind us soon. Until then don’t let any of these bastards get to you, alright?"), library.Nearest(garbled));
     }
 

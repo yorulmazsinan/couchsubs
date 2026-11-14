@@ -365,6 +365,16 @@ final class PackFuzzyTests: XCTestCase {
                        "GAETANO: " + (library.match("All this will be behind us soon. Until then don’t let any of these bastards get to you, alright?")?.text ?? "-"))
     }
 
+    /// Oynanan oyunun adı yapay zekâya gider: tam eşleşme olana dek yok, sonra eşleşen paketin başlığı.
+    func testScopeTitleIsThePlayedGame() throws {
+        let library = try library("mafia-the-old-country.json.gz")
+        XCTAssertNil(library.scopeTitle)
+        XCTAssertNotNil(library.match("You fucked up now, boy!"))
+        let title = try XCTUnwrap(library.scopeTitle)
+        XCTAssertFalse(title.isEmpty)
+        XCTAssertEqual(title, library.packs.first?.title)
+    }
+
     /// Biçim 2: oyunun ayrı gösterdiği [delay] parçaları, cümleler ve Türkçesi İngilizcesiyle aynı satırlar.
     func testVersionTwoSegmentsAreFound() throws {
         let library = try library("mafia-the-old-country.json.gz")
