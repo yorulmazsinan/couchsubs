@@ -1,0 +1,16 @@
+{
+  "name": "couchsubs-packs",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "index": "node scripts/build-index.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}

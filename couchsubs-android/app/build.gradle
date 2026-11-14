@@ -1,0 +1,171 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+// Firebase (Analytics, Crashlytics) yapılandırması app/google-services.json'dan gelir. Dosya depoda
+// yoktur (.gitignore); yoksa eklentiler uygulanmaz, uygulama Firebase'siz derlenir ve çalışır (bkz. Backend.kt).
+def hasGoogleServices = file('google-services.json').exists()
+if (hasGoogleServices) {
+    apply plugin: 'com.google.gms.google-services'
+    apply plugin: 'com.google.firebase.crashlytics'
+}
+
+// Anahtarlar ve kimlikler couchsubs-android/secrets.properties'ten (depoda yok; örnek: secrets.example.properties).
+def secrets = new Properties()
+def secretsFile = rootProject.file('secrets.properties')
+if (secretsFile.exists()) secretsFile.withInputStream { secrets.load(it) }
+def secret = { String name, String fallback = '' -> (secrets.getProperty(name) ?: System.getenv(name.toUpperCase().replace('.', '_')) ?: fallback).trim() }
+
+def releaseSigning = null
+def signingFile = file(System.getenv('COUCHSUBS_ANDROID_SIGNING') ?: "${System.getProperty('user.home')}/.config/couchsubs/android-signing.properties")
+if (signingFile.exists()) {
+    def props = new Properties()
+    signingFile.withInputStream { props.load(it) }
+    releaseSigning = [storeFile: props.getProperty('storeFile'), storePassword: props.getProperty('storePassword'),
+                      keyAlias: props.getProperty('keyAlias', 'couchsubs'), keyPassword: props.getProperty('keyPassword')]
+} else if (System.getenv('ANDROID_KEYSTORE_FILE')) {
+    releaseSigning = [storeFile: System.getenv('ANDROID_KEYSTORE_FILE'), storePassword: System.getenv('ANDROID_KEYSTORE_PASSWORD'),
+                      keyAlias: System.getenv('ANDROID_KEY_ALIAS') ?: 'couchsubs', keyPassword: System.getenv('ANDROID_KEYSTORE_PASSWORD')]
+}
+
+// Depo kökü: oyun paketleri, model listesi ve chiaki-ng buradan okunur (masaüstüyle ortak).
+def repoRoot = rootProject.projectDir.parentFile
+def abis = (findProperty('couchsubs.abis') ?: 'arm64-v8a').toString().split(',')*.trim()
+// Yerel kütüphane olmadan (yalnız Kotlin ve arayüz) derlemek için: -Pcouchsubs.skipNative=true
+def skipNative = (findProperty('couchsubs.skipNative') ?: 'false').toString().toBoolean()
+// nanopb'nin kod üreteci protobuf paketli bir Python ister (Mac betiğindeki venv gibi).
+def python = (findProperty('couchsubs.python') ?: System.getenv('COUCHSUBS_PYTHON') ?: 'python3').toString()
+
+android {
+    namespace 'com.couchsubs.mobile'
+    compileSdk 36
+    ndkVersion '27.0.12077973'
+
+    defaultConfig {
+        applicationId 'com.couchsubs.mobile'
+        minSdk 26
+        targetSdk 36
+        // Masaüstü sürüm çizgisiyle aynı ad; kod beta numarasıdır ve her yayında artar. CI etiketten verebilir:
+        // -Pcouchsubs.versionName=0.1.0-beta.37 -Pcouchsubs.versionCode=37
+        versionCode((findProperty('couchsubs.versionCode') ?: '37').toString().toInteger())
+        versionName((findProperty('couchsubs.versionName') ?: '0.1.0-beta.37').toString())
+        ndk { abiFilters(*abis) }
+        buildConfigField 'String', 'PACKS_URL', "\"${secret('packs.url')}\""
+        buildConfigField 'String', 'FACEBOOK_APP_ID', "\"${secret('facebook.appId')}\""
+        buildConfigField 'boolean', 'HAS_FIREBASE', "${hasGoogleServices}"
+        manifestPlaceholders = [
+            facebookAppId      : secret('facebook.appId'),
+            facebookClientToken: secret('facebook.clientToken'),
+        ]
+        if (!skipNative) {
+            externalNativeBuild {
+                cmake {
+                    // Yalnız kendi kütüphanemiz derlenir; chiaki-ng'nin eski Android uygulaması (chiaki-jni) derlenmez.
+                    targets 'couchsubs-jni'
+                    // 16 KB sayfa boyutu (Play şartı): NDK 27 varsayılanı 4 KB; LOAD segmentleri 16 KB hizalanır.
+                    arguments "-DPYTHON_EXECUTABLE=${python}", "-DPython3_EXECUTABLE=${python}", '-DANDROID_STL=c++_static',
+                        '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+                }
+            }
+        }
+    }
+
+    if (!skipNative) {
+        externalNativeBuild {
+            cmake {
+                path 'src/main/cpp/CMakeLists.txt'
+                version '3.22.1'
+            }
+        }
+    }
+
+    // Sürüm imzası (telefon uygulamasına özel anahtar, TV uygulamasınınkinden ayrı): önce depo dışındaki
+    // ~/.config/couchsubs/android-signing.properties (ya da COUCHSUBS_ANDROID_SIGNING ile verilen dosya: storeFile,
+    // storePassword, keyAlias, keyPassword), yoksa CI sırları (ANDROID_KEYSTORE_FILE, ANDROID_KEYSTORE_PASSWORD).
+    // İkisi de yoksa geliştirme anahtarıyla imzalanır; CI yine derler.
+    signingConfigs {
+        release {
+            if (releaseSigning) {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig releaseSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-assets')
+    // Paketler ücretsiz ve her derlemede uygulamayla gelir (dokuz paket ~27 MB); sunucudan yalnız yenileri ve güncellemeleri iner.
+    sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
+    testOptions { unitTests.returnDefaultValues = true }
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
+}
+
+// Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
+tasks.register('copyCouchSubsAssets', Copy) {
+    into layout.buildDirectory.dir('generated/couchsubs-assets')
+    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json' }
+}
+tasks.register('copyCouchSubsPacks', Copy) {
+    into layout.buildDirectory.dir('generated/couchsubs-packs')
+    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'packs/*.json.gz' }
+}
+preBuild.dependsOn 'copyCouchSubsAssets', 'copyCouchSubsPacks'
+
+// CI'da chiaki-ng yamaları masaüstü derlemeleri gibi uygulanır (scripts/patch-chiaki.sh): -Pcouchsubs.patchChiaki=true
+if ((findProperty('couchsubs.patchChiaki') ?: 'false').toString().toBoolean()) {
+    tasks.register('patchChiaki', Exec) {
+        workingDir repoRoot
+        commandLine 'sh', 'scripts/patch-chiaki.sh'
+    }
+    preBuild.dependsOn 'patchChiaki'
+}
+
+// Testler, gömülü paketleri depodaki yerinden okur.
+tasks.withType(Test).configureEach {
+    systemProperty 'couchsubs.packs', "$repoRoot/core/Sources/CouchSubsCore/Resources/packs"
+}
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2024.12.01')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0'
+    // Cihaz üstü yazı tanıma (Latin modeli uygulamayla gelir) ve ücretsiz çeviri (EN→TR modeli ilk kullanımda iner).
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:translate:17.0.3'
+    implementation 'androidx.navigation:navigation-compose:2.8.5'
+    implementation 'androidx.compose.material:material-icons-core'
+
+    // Firebase: google-services.json yoksa da derlenir; çalışırken Backend.kt Firebase'in açılıp açılmadığına bakar.
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-crashlytics'
+    // Meta App Events (iPhone'la aynı): yalnız olay adları, reklam kimliği yok. Uygulamada reklam yok.
+    implementation 'com.facebook.android:facebook-core:17.0.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar'daki org.json yalnız iskelettir; JVM testleri gerçeğini kullanır.
+    testImplementation 'org.json:json:20240303'
+}

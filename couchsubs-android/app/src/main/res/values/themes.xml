@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<resources>
+    <!-- Pencere zemini design/tokens.json "background" (koyu); asıl tema Compose'ta (ui/Theme.kt). -->
+    <style name="Theme.CouchSubs" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+    </style>
+    <color name="background">#141518</color>
+</resources>
