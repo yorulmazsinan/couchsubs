@@ -13,15 +13,17 @@ struct SubtitleOutputCard: View {
     var body: some View {
         Card {
             Text("Show subtitles on").font(.csCaption).foregroundStyle(Color.csSecondary)
-            Picker("Show subtitles on", selection: $model.settings.output) {
-                Text(verbatim: "TV").tag(SubtitleOutput.tv)
-                Text("Computer screen").tag(SubtitleOutput.computer)
-                Text("Both").tag(SubtitleOutput.both)
+            // Segmentli seçici bölmeleri en uzun etiket kadar eşit çizer (~3 × 127 pt) ve daralmaz; ana ekranın 380 pt'lik
+            // sütununa sığmayınca kart sütundan taşıyordu. Sığmazsa aynı seçenekler yan yana radyo düğmeleriyle gösterilir.
+            ViewThatFits(in: .horizontal) {
+                outputPicker
+                    .pickerStyle(.segmented)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                outputPicker
+                    .pickerStyle(.radioGroup)
+                    .horizontalRadioGroupLayout()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
             if model.settings.output.showsOnComputer {
                 if detailed {
                     HintText(text: "Subtitles appear in a window on this computer, over the game or PS Remote Play.")
@@ -32,6 +34,15 @@ struct SubtitleOutputCard: View {
                 }
             }
         }
+    }
+
+    private var outputPicker: some View {
+        Picker("Show subtitles on", selection: $model.settings.output) {
+            Text(verbatim: "TV").tag(SubtitleOutput.tv)
+            Text("Computer screen").tag(SubtitleOutput.computer)
+            Text("Both").tag(SubtitleOutput.both)
+        }
+        .labelsHidden()
     }
 }
 
