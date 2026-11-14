@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Kurulum akışı (tuval: Telefon-Karsilama, -PSN, -PS5, -Hedef): izin → karşılama (3 sayfa) → PSN girişi (ikinci
-// hesap) → PS5 eşleme → altyazı nerede. Uygulamada hesap yoktur.
+// hesap; PsnLoginScreen.kt) → PS5 eşleme → altyazı nerede. Uygulamada hesap yoktur.
 package com.couchsubs.mobile.ui
 
-import android.annotation.SuppressLint
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,10 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
@@ -51,12 +42,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.remoteplay.ConsoleDiscovery
 import com.couchsubs.mobile.remoteplay.ConsoleInfo
-import com.couchsubs.mobile.remoteplay.PsnAccount
 import com.couchsubs.mobile.remoteplay.Registration
 import com.couchsubs.mobile.remoteplay.RegistrationException
 import com.couchsubs.mobile.remoteplay.RegistrationFailure
@@ -131,70 +120,9 @@ fun WelcomeScreen(onDone: () -> Unit) {
     }
 }
 
-/** Sony'nin giriş sayfası uygulama içi WebView'da; yönlendirme yakalanır, parola yalnız Sony'ye gider. */
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDone: () -> Unit) {
-    var opened by remember { mutableStateOf(false) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    var why by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    if (!opened) {
-        ScreenScaffold(top = { TopBar(onBack = onBack) { SkipAction(onSkip) } }, bottom = {
-            GhostButton(stringResource(R.string.psn_why)) { why = true }
-            PrimaryButton(stringResource(R.string.psn_open)) {
-                // Her girişte temiz oturum: önceki çerezler (ör. kendi hesabın) karışmasın.
-                CookieManager.getInstance().removeAllCookies(null)
-                opened = true
-            }
-        }) {
-            Heading(stringResource(R.string.psn_title), stringResource(R.string.psn_body), stringResource(R.string.setup_step, 1))
-            TwoColumns(
-                { StatusTile(Icons.Filled.Person, stringResource(R.string.psn_free_note), stringResource(R.string.psn_free), it) },
-                { StatusTile(Icons.Filled.PlayArrow, stringResource(R.string.psn_you_play_note), stringResource(R.string.psn_you_play), it) },
-            )
-            Tile(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                    TileIcon(Icons.Filled.Lock)
-                    Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
-                        Text(stringResource(R.string.psn_password_safe), style = Tokens.Type.headline, color = Tokens.Color.text)
-                        Text(stringResource(R.string.psn_password_safe_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-                    }
-                }
-            }
-            problem?.let { NoteTile(stringResource(R.string.psn_failed, it)) }
-        }
-        if (why) InfoDialog(stringResource(R.string.psn_why), stringResource(R.string.psn_why_body)) { why = false }
-        return
-    }
-    AndroidView(modifier = Modifier.fillMaxSize().safeDrawingPadding(), factory = { context ->
-        WebView(context).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    val url = request.url.toString()
-                    if (!PsnAccount.isRedirect(url)) return false
-                    scope.launch {
-                        try {
-                            Services.settings.accountId = withContext(Dispatchers.IO) { PsnAccount.accountIdFromRedirect(url) }
-                            onDone()
-                        } catch (error: Exception) {
-                            problem = error.message
-                            opened = false
-                        }
-                    }
-                    return true
-                }
-            }
-            loadUrl(PsnAccount.authorizeUrl)
-        }
-    })
-}
-
 /** Kurulumda PSN ve PS5 adımlarının sağ üstünde "Şimdilik geç" (PS5'siz de uygulama gezilebilsin). */
 @Composable
-private fun SkipAction(onSkip: (() -> Unit)?) {
+internal fun SkipAction(onSkip: (() -> Unit)?) {
     if (onSkip != null) GhostButton(stringResource(R.string.skip_for_now), onClick = onSkip)
 }
 
