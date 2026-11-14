@@ -154,6 +154,7 @@ class OnlineTranslationTest {
         assertEquals(listOf("Gidelim.", "Yakın dur."), AiRequest.translations("[\n  Gidelim.,\n  Yakın dur.\n]", 2))
         assertEquals(listOf("Evet, efendim.", "Hayır, gitmiyorum."), AiRequest.translations("[Evet, efendim., Hayır, gitmiyorum.]", 2))
         assertNull(AiRequest.unquotedList("[Dur, bekle, gitme.]", 2))
+        assertEquals(listOf("Dur, bekle, gitme."), AiRequest.translations("[Dur, bekle, gitme.]", 1))
         assertNull(AiRequest.unquotedList("[Satır bir.]", 2))
         assertEquals(OnlineKeyState.INVALID, AiRequest.failure(400, "API key not valid"))
         assertEquals(OnlineKeyState.MODEL_REJECTED, AiRequest.failure(404, ""))

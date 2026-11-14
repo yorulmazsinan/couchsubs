@@ -311,7 +311,10 @@ object AiRequest {
         if (trimmed.startsWith("```")) trimmed = trimmed.split('\n').drop(1).filter { !it.startsWith("```") }.joinToString("\n").trim()
         val start = trimmed.indexOf('[')
         val end = trimmed.lastIndexOf(']')
-        if (start >= 0 && end > start) {
+        // org.json tırnaksız öğeleri de kabul eder ("[gülüyor]" → "gülüyor", "[Evet, efendim.]" → iki öğe); yalnız
+        // ilk öğesi tırnaklı (ya da boş) dizi JSON sayılır, gerisi tırnaksız dizi kuralıyla okunur.
+        val quoted = start >= 0 && trimmed.substring(start + 1).trimStart().let { it.startsWith('"') || it.startsWith(']') }
+        if (quoted && end > start) {
             try {
                 val array = JSONArray(trimmed.substring(start, end + 1))
                 if ((0 until array.length()).all { array.opt(it) is String }) {
