@@ -69,4 +69,15 @@ public class FallbackWatchTest {
         assertFalse(watch.shouldSwitch(2 * LIMIT, true, true));
         assertTrue(watch.shouldSwitch(2 * LIMIT + 5_000, true, true));
     }
+
+    @Test
+    public void pushedToBackgroundRightAfterTuningIsATakeover() {
+        // MediaTek Google TV: TV kendi HDMI oynatıcısını ~1,3 sn sonra öne çekti.
+        FallbackWatch watch = new FallbackWatch();
+        assertFalse(watch.takenOver(1_000, true));
+        watch.tuned(1_000);
+        assertTrue(watch.takenOver(2_300, true));
+        assertFalse(watch.takenOver(2_300, false));
+        assertFalse(watch.takenOver(1_000 + FallbackWatch.TAKEOVER_MS, true));
+    }
 }

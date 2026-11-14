@@ -291,6 +291,11 @@ public class MainActivity extends Activity implements TvPage.Host {
     @Override
     protected void onStop() {
         super.onStop();
+        // TV kendi HDMI oynatıcısını öne çekti (bkz. FallbackWatch.TAKEOVER_MS): altyazı onun üstünde, katmanda çizilir.
+        if (!isFinishing() && tvView != null && watch.takenOver(SystemClock.elapsedRealtime(), overlayAllowed())) {
+            switchToOverlay(R.string.overlay_fallback);
+            return;
+        }
         if (page != null) page.background(true);
     }
 
@@ -319,6 +324,7 @@ public class MainActivity extends Activity implements TvPage.Host {
 
     private void tune(String id) {
         tunedInput = id;
+        watch.tuned(SystemClock.elapsedRealtime());
         tvView.tune(id, TvContract.buildChannelUriForPassthroughInput(id));
         // Görüntü gelene kadar izlenir; hiç gelmezse katmana geçilir.
         trouble();
