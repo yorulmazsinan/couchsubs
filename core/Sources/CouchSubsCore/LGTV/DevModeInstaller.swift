@@ -136,11 +136,13 @@ public struct DevModeInstaller: Sendable {
         }
     }
 
-    static func keyURL(host: String) -> URL { URL(string: "http://\(host):9991/webos_rsa")! }
+    /// Adres geçersizse nil (eskiden zorla açılıyordu).
+    static func keyURL(host: String) -> URL? { URL(string: "http://\(host):9991/webos_rsa") }
 
     /// Key Server'dan anahtarı alır ve TV ekranındaki parolayla çözer.
     public static func fetchKey(host: String, passphrase: String, runner: CommandRunning) async throws -> String {
-        var request = URLRequest(url: keyURL(host: host))
+        guard let url = keyURL(host: host) else { throw DevModeError.unreachable }
+        var request = URLRequest(url: url)
         request.timeoutInterval = 5
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { throw DevModeError.keyServerOff }

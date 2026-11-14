@@ -4,11 +4,12 @@ import Foundation
 
 /// Samsung uzaktan kumanda WebSocket'inin iletileri. Samsung bunu belgelemez; alanlar topluluk kaynaklarından.
 enum SamsungMessages {
-    static func url(host: String, token: String?) -> URL {
+    /// Adres geçersizse nil (bağlantı `cannotConnect` ile biter; eskiden zorla açılıp uygulamayı kapatıyordu).
+    static func url(host: String, token: String?) -> URL? {
         let name = Data("CouchSubs".utf8).base64EncodedString()
         var text = "wss://\(host):8002/api/v2/channels/samsung.remote.control?name=\(name)"
         if let token, !token.isEmpty { text += "&token=\(token)" }
-        return URL(string: text)!
+        return URL(string: text)
     }
 
     /// TV uygulaması parametreleri `PAYLOAD` içinde alır (bkz. tv-tizen/platform.js).
@@ -82,7 +83,7 @@ public final class SamsungTokenHolder: @unchecked Sendable {
 public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @unchecked Sendable {
     public enum SamsungError: Error { case cannotConnect, rejected }
 
-    private let url: URL
+    private let url: URL?
     private let approvalTimeout: Duration
     private var session: URLSession!
     private var socket: URLSessionWebSocketTask?
@@ -91,7 +92,8 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
         self.init(url: SamsungMessages.url(host: tv.host, token: token))
     }
 
-    init(url: URL, approvalTimeout: Duration = .seconds(60)) {
+    /// `url` nil ise (geçersiz adres) `connect` `cannotConnect` fırlatır.
+    init(url: URL?, approvalTimeout: Duration = .seconds(60)) {
         self.url = url
         self.approvalTimeout = approvalTimeout
         super.init()
@@ -100,6 +102,7 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
 
     /// Bağlanır ve jetonu döner. Kullanıcı TV'de onay verene kadar bekler.
     public func connect() async throws -> String {
+        guard let url else { throw SamsungError.cannotConnect }
         let task = session.webSocketTask(with: url)
         task.resume()
         let token = try await withThrowingTaskGroup(of: String.self) { group in
@@ -154,7 +157,7 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
     public func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge) async
         -> (URLSession.AuthChallengeDisposition, URLCredential?) {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              challenge.protectionSpace.host == url.host,
+              let host = url?.host, challenge.protectionSpace.host == host,
               let trust = challenge.protectionSpace.serverTrust else {
             return (.performDefaultHandling, nil)
         }

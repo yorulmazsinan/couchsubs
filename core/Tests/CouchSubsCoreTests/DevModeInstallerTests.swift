@@ -210,6 +210,7 @@ final class DevModeInstallerTests: XCTestCase {
     }
 
     func testKeyServerAddress() {
-        XCTAssertEqual(DevModeInstaller.keyURL(host: "192.168.1.230").absoluteString, "http://192.168.1.230:9991/webos_rsa")
+        XCTAssertEqual(DevModeInstaller.keyURL(host: "192.168.1.230")?.absoluteString, "http://192.168.1.230:9991/webos_rsa")
+        XCTAssertNil(DevModeInstaller.keyURL(host: "192.168.1.230:3000"))
     }
 }

@@ -8897,6 +8897,22 @@
         }
       }
     },
+    "This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu geçerli bir IP adresi değil. 192.168.1.20 gibi, http:// ve port numarası olmadan yazın."
+          }
+        }
+      }
+    },
     "This address is not valid. Example: %@": {
       "localizations": {
         "en": {

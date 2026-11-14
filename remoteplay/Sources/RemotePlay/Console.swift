@@ -32,7 +32,11 @@ public enum Console {
     public static func wake(_ console: RegisteredConsole) throws {
         guard let credential = console.wakeCredential else { throw ChiakiError(code: CHIAKI_ERR_INVALID_DATA) }
         let logger = ChiakiLogger()
-        let error = chiaki_discovery_wakeup(logger.pointer, nil, console.host, credential, true)
+        // Günlük çağrı bitene dek yaşamalı: Swift onu son kullanımda (`pointer` okununca) bırakabilir, libchiaki ise
+        // uyandırma sırasında günlüğe yazar (serbest kalmış belleğe yazmak chiaki_log'da çökertir).
+        let error = withExtendedLifetime(logger) {
+            chiaki_discovery_wakeup(logger.pointer, nil, console.host, credential, true)
+        }
         guard error.isSuccess else { throw ChiakiError(code: error) }
     }
 
@@ -43,6 +47,8 @@ public enum Console {
 
     static func search(timeout: Duration, host: String?) -> [ConsoleInfo] {
         let logger = ChiakiLogger()
+        // İlk defer en son çalışır: günlük, aşağıdaki chiaki_discovery_fini de dahil her C çağrısından sonra bırakılır.
+        defer { withExtendedLifetime(logger) {} }
         let discovery = UnsafeMutablePointer<ChiakiDiscovery>.allocate(capacity: 1)
         let thread = UnsafeMutablePointer<ChiakiDiscoveryThread>.allocate(capacity: 1)
         defer {
@@ -91,7 +97,6 @@ public enum Console {
             Thread.sleep(forTimeInterval: 0.5)
         }
         chiaki_discovery_thread_stop(thread)
-        withExtendedLifetime(logger) {}
 
         collector.lock.lock()
         defer { collector.lock.unlock() }
