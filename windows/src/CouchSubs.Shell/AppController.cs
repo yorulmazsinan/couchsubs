@@ -891,7 +891,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task<ScreenOutcome> TranslateScreenAsync()
     {
         var reader = activeReader;
-        if (!isRunning || reader is null || lastFrame is not { } frame) return ScreenOutcome.NotRunning;
+        if (!isRunning || reader is null) return ScreenOutcome.NotRunning;
+        if (lastFrame is not { } frame)
+        {
+            // Çeviri sürüyor ama PS5'ten henüz görüntü gelmedi: tuş sessizce yok sayılmasın.
+            server.SendSubtitle(text["Couldn't capture the screen: no picture from the PS5 yet."], 4000);
+            return ScreenOutcome.NotRunning;
+        }
         if (screenWork is { } running)
         {
             running.Cancel();

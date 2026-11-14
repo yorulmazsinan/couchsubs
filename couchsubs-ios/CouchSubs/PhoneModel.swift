@@ -575,6 +575,11 @@ final class PhoneModel: ObservableObject {
             stack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         case .clear:
             stack.clear(now: now)
+        // Telefonda "ekranı çevir" yok; gelirse satır satır gösterilir.
+        case .screen(let text, let durationMs):
+            stack.show(text, durationMs: durationMs, paragraphs: true, now: now)
+        case .screenClear:
+            stack.hide()
         }
         phoneRefresh()
     }

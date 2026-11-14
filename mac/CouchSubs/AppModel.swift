@@ -519,6 +519,8 @@ final class AppModel: ObservableObject {
     /// Pencerenin yeri ve genişliği ayarlanıyor: örnek yazı görünür, tıklamalar geçmez.
     @Published var overlayAdjusting = false
     var overlayStack = SubtitleStack()
+    /// "Ekranı çevir" çevirilerinin pencerede kalacağı an (`overlayClock` saatiyle); yoksa 0.
+    var overlayScreenUntil: TimeInterval = 0
     var overlayTimer: Task<Void, Never>?
     /// Yığının saati (saniye); testlerde ileri sarılır.
     var overlayClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
@@ -1122,7 +1124,12 @@ final class AppModel: ObservableObject {
     /// ⌥⌘T: oyunun şu anki karesinin tamamını bir kez okur, her yazı grubunu ayrı çevirip TV'de kendi yerine koyar.
     /// Çeviriler hazırlandıkça TV'ye gider. Çeviri sürerken ya da çeviriler TV'deyken yeniden basmak onları kaldırır.
     func translateScreen() {
-        guard isRunning, let frame = lastFrame else { return }
+        guard isRunning else { return }
+        guard let frame = lastFrame else {
+            // Çeviri sürüyor ama PS5'ten henüz görüntü gelmedi: tuş sessizce yok sayılmasın.
+            server.sendSubtitle(String(localized: "Couldn't capture the screen: no picture from the PS5 yet."), durationMs: 4000)
+            return
+        }
         if let task = screenTask {
             task.cancel()
             screenTask = nil

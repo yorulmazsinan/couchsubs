@@ -4497,6 +4497,22 @@
         }
       }
     },
+    "Couldn't capture the screen: no picture from the PS5 yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't capture the screen: no picture from the PS5 yet."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yakalanamadı: PS5'ten henüz görüntü gelmedi."
+          }
+        }
+      }
+    },
     "macOS can't read the text on the screen.": {
       "localizations": {
         "en": {

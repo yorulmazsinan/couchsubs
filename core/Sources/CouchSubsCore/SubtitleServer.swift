@@ -82,6 +82,10 @@ public enum SubtitleEvent: Equatable, Sendable {
     /// `replaces`: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.
     case subtitle(text: String, durationMs: Int, paragraphs: Bool, replaces: Bool = false)
     case clear
+    /// "Ekranı çevir" sonuçları: grupların çevirisi, yukarıdan aşağı, her biri ayrı satırda.
+    case screen(text: String, durationMs: Int)
+    /// "Ekranı çevir" çevirileri kaldırıldı.
+    case screenClear
 }
 
 /// TV uygulamasının bağlandığı yerel Server-Sent Events sunucusu.
@@ -221,11 +225,15 @@ public final class SubtitleServer: @unchecked Sendable {
             return json
         }
         broadcast(event: "screen", json: ["duration": durationMs, "items": list])
+        // Altyazı yalnız bilgisayardaysa (TV yok) çeviriler başka hiçbir yere gitmiyordu: tuşa basınca yalnız
+        // "Ekran çevriliyor…" görünüyordu.
+        onEvent?(.screen(text: items.map(\.translation).joined(separator: "\n"), durationMs: durationMs))
     }
 
     /// TV'deki "ekranı çevir" çevirilerini kaldırır (altyazıya dokunmaz).
     public func clearScreen() {
         broadcast(event: "screen-clear", json: [:])
+        onEvent?(.screenClear)
     }
 
     /// Dosyayı `path` adresinden verir ("/voices/male_1.wav").

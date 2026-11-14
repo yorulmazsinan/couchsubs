@@ -192,6 +192,18 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertEqual(received.all, [.subtitle(text: "Merhaba", durationMs: 4000, paragraphs: false), .clear])
     }
 
+    /// "Ekranı çevir" sonuçları da pencereye gider: altyazı yalnız bilgisayardayken (TV yok) hiçbir yerde görünmüyordu.
+    func testLocalListenerGetsScreenTranslations() {
+        let server = SubtitleServer(port: 0)
+        let received = LockedEvents()
+        server.onEvent = { received.append($0) }
+        let box = TextBox(left: 0.1, top: 0.1, right: 0.4, bottom: 0.2)
+        server.sendScreen([ScreenTranslation.Item(source: "Map\nInventory", translation: "Harita\nEnvanter", box: box, lineHeight: 0.03),
+                           ScreenTranslation.Item(source: "Leave", translation: "Ayrıl", box: box, lineHeight: 0.03)], durationMs: 12000)
+        server.clearScreen()
+        XCTAssertEqual(received.all, [.screen(text: "Harita\nEnvanter\nAyrıl", durationMs: 12000), .screenClear])
+    }
+
     func testHelloIdentifiesTheApp() async throws {
         let server = SubtitleServer(port: 0)
         let port = try await server.start()

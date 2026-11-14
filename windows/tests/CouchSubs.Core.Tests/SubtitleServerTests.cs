@@ -142,6 +142,19 @@ public class SubtitleServerTests
         Assert.Equal([new SubtitleEvent(SubtitleEventKind.Subtitle, "Merhaba", 4000, true), SubtitleEvent.Cleared], received);
     }
 
+    /// <summary>"Ekranı çevir" sonuçları da pencereye gider: altyazı yalnız bilgisayardayken (TV yok) hiçbir yerde görünmüyordu.</summary>
+    [Fact]
+    public void LocalListenerGetsScreenTranslations()
+    {
+        using var server = new SubtitleServer(0);
+        var received = new List<SubtitleEvent>();
+        server.EventSent += received.Add;
+        var box = new TextBox(0.1, 0.1, 0.4, 0.2);
+        server.SendScreen([new ScreenTranslation.Item("Map\nInventory", "Harita\nEnvanter", box, 0.03), new ScreenTranslation.Item("Leave", "Ayrıl", box, 0.03)], 12000);
+        server.ClearScreen();
+        Assert.Equal([new SubtitleEvent(SubtitleEventKind.Screen, "Harita\nEnvanter\nAyrıl", 12000, Paragraphs: true), new SubtitleEvent(SubtitleEventKind.ScreenClear)], received);
+    }
+
     [Fact]
     public async Task TurkishTextIsSentAsUtf8()
     {
