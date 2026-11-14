@@ -641,4 +641,107 @@ public class AiTranslatorTests
         Assert.Equal(OnlineKeyState.Unreachable, (await AiTranslator.TestAsync(AiProvider.OpenAi, Secret, null, new HttpClient(timeout))).State);
         Assert.Equal(OnlineKeyState.Invalid, (await AiTranslator.TestAsync(AiProvider.Claude, "  ", null)).State);
     }
+
+    // "Ekranı çevir" (Mac'teki AITranslationTests ile aynı durumlar).
+
+    /// <summary>Yerel model kurulu değil: yapay zekâ motorunun yedeği yoktur (bkz. AppController.MakeTranslator).</summary>
+    private static AiTranslator MakeWithoutFallback(AiProvider provider, FakeAi fake, RequestBudget budget) =>
+        new(provider, Secret, null, null, new HttpClient(fake), budget: budget);
+
+    /// <summary>Birbirine benzemeyen yazılar (benzer satırları yazı tanıma çöpü sayan süzgece takılmasın).</summary>
+    private static readonly string[] ScreenTexts =
+    [
+        "Find the blacksmith.", "Open the world map", "Collect three iron bars", "Talk to the old hunter", "Leave the camp quietly",
+        "Upgrade your shield", "Rest at the campfire", "Follow the river north", "Climb the broken tower", "Defeat the wolf pack",
+        "Search the abandoned mine", "Light the signal fire", "Cross the frozen lake", "Return to the village", "Repair the bridge",
+        "Escort the merchant safely", "Hunt a wild boar", "Read the ancient runes", "Unlock the hidden vault", "Sharpen your axe",
+    ];
+
+    /// <summary>İki sütun, satırlar arası boşluk geniş: her satır ayrı grup.</summary>
+    private static Reading Screen(int count) => new([.. Enumerable.Range(0, count).Select(index =>
+    {
+        var top = 0.02 + index / 2 * 0.09;
+        var left = index % 2 == 0 ? 0.05 : 0.55;
+        return new TextLine(ScreenTexts[index], new TextBox(left, top, left + 0.35, top + 0.03));
+    })]);
+
+    /// <summary>
+    /// Bildirilen hata (Gemini seçiliyken "Ekranı çevir" hiçbir şey göstermiyordu): parça başına istek gidince 20 satırlık
+    /// ekran dakikada 15 isteklik hakkı bitirir; kalan parçalar yerel çeviriye düşer, o kurulu değilse bütün ekran hata
+    /// verir. Canlı altyazı hakkı zaten bitirdiyse ilk parçada düşer, TV'ye tek çeviri gitmez.
+    /// </summary>
+    [Fact]
+    public async Task ScreenOneRequestPerParagraphRunsOutOfTheGeminiBudget()
+    {
+        var fake = new FakeAi();
+        var translator = MakeWithoutFallback(AiProvider.Gemini, fake, new RequestBudget(15));
+        var shown = 0;
+        var error = await Assert.ThrowsAsync<TranslatorException>(async () =>
+        {
+            foreach (var text in ScreenTexts)
+            {
+                await translator.TranslateAsync(text);
+                shown++;
+            }
+        });
+        Assert.Equal(TranslatorStatus.NeedsDownload, error.Status);
+        Assert.Equal(15, fake.Requests.Count);
+        Assert.Equal(15, shown);
+    }
+
+    /// <summary>Düzeltme: ekranın bütün parçaları tek istekte gider ve hepsi çevrilir; canlı altyazı dakikalık hakkı bitirmiş olsa da.</summary>
+    [Fact]
+    public async Task ScreenIsTranslatedInOneRequestEvenWhenTheBudgetIsUsedUp()
+    {
+        var fake = new FakeAi();
+        var budget = new RequestBudget(15);
+        for (var i = 0; i < 15; i++) Assert.True(budget.TryTake());
+        var translator = MakeWithoutFallback(AiProvider.Gemini, fake, budget);
+        var reported = new List<int>();
+        var items = await ScreenTranslation.TranslateAsync(Screen(20), translator, shown => reported.Add(shown.Count));
+        Assert.Single(fake.Requests);
+        Assert.Equal(ScreenTexts.Select(text => "[tr] " + text).Order(), items.Select(item => item.Translation).Order());
+        Assert.Equal(new[] { 20 }, reported);
+        var config = JsonNode.Parse(fake.Requests[0].Body)!["generationConfig"]!;
+        Assert.Equal(AiRequest.ScreenOutputTokens, config["maxOutputTokens"]!.GetValue<int>());
+        // Çevrilenler önbelleğe girer: yeniden basınca istek gitmez.
+        await ScreenTranslation.TranslateAsync(Screen(20), translator);
+        Assert.Single(fake.Requests);
+    }
+
+    /// <summary>Kalabalık ekran birkaç isteğe bölünür; sıra korunur.</summary>
+    [Fact]
+    public async Task CrowdedScreenIsSplitIntoBatches()
+    {
+        var fake = new FakeAi();
+        var texts = Enumerable.Range(0, AiTranslator.ScreenBatch + 5).Select(i => $"Line {i} of the menu").ToList();
+        var result = await Make(AiProvider.Gemini, fake).TranslateAllAsync(texts);
+        Assert.Equal(2, fake.Requests.Count);
+        Assert.Equal(texts.Select(text => "[tr] " + text), result);
+    }
+
+    /// <summary>Hizmet çeviremezse parçalar yerel çeviriyle gelir ve hata bildirilir; yerel çeviri de yoksa hata yukarı çıkar.</summary>
+    [Fact]
+    public async Task ScreenFailureFallsBackOrThrows()
+    {
+        var failing = new FakeAi((_, _) => Json("{}", HttpStatusCode.InternalServerError));
+        var translator = Make(AiProvider.Gemini, failing);
+        var reported = new List<OnlineKeyState?>();
+        translator.FailureChanged += reported.Add;
+        Assert.Equal(new[] { "yerel: Open the map", "yerel: Leave the camp" }, await translator.TranslateAllAsync(["Open the map", "Leave the camp"]));
+        Assert.Equal(new OnlineKeyState?[] { OnlineKeyState.Unreachable }, reported);
+
+        var alone = MakeWithoutFallback(AiProvider.Claude, failing, new RequestBudget(1000));
+        var error = await Assert.ThrowsAsync<TranslatorException>(() => ScreenTranslation.TranslateAsync(Screen(3), alone));
+        Assert.Equal(TranslatorStatus.NeedsDownload, error.Status);
+        Assert.Equal(OnlineKeyState.Unreachable, alone.LastError);
+    }
+
+    /// <summary>Yanıttaki dizi eksikse parçalar karışmaz: hepsi yerel çeviriye düşer.</summary>
+    [Fact]
+    public async Task ScreenReplyWithWrongCountFallsBack()
+    {
+        var fake = new FakeAi((request, _) => Wrap(request, """["[tr] bir"]"""));
+        Assert.Equal(new[] { "yerel: One thing", "yerel: Another thing" }, await Make(AiProvider.OpenAi, fake).TranslateAllAsync(["One thing", "Another thing"]));
+    }
 }

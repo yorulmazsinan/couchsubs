@@ -45,19 +45,50 @@ public enum ScreenTranslation {
         for group in groups(reading) {
             try Task.checkCancellation()
             var translated: [String] = []
-            var changed = false
-            for paragraph in group.paragraphs {
-                var text = try await translate(paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
-                if text.isEmpty { text = paragraph }
-                changed = changed || !TextMatch.isSimilar(TextMatch.normalize(paragraph), TextMatch.normalize(text), threshold: 0.90)
-                translated.append(text)
-            }
-            guard changed else { continue }
-            items.append(Item(source: group.paragraphs.joined(separator: "\n"), translation: translated.joined(separator: "\n"),
-                              box: group.box, lineHeight: group.lineHeight))
+            for paragraph in group.paragraphs { translated.append(try await translate(paragraph)) }
+            guard let item = item(group, translated) else { continue }
+            items.append(item)
             progress(items)
         }
         return items
+    }
+
+    /// Çevirmen parçaları tek istekte çevirebiliyorsa (yapay zekâ) ekranın bütün parçaları birlikte gider ve sonuç bir
+    /// kerede gelir; yoksa gruplar sırayla çevrilip hazırlandıkça bildirilir.
+    public static func translate(_ reading: Reading, using translator: TextTranslator,
+                                 progress: ([Item]) -> Void = { _ in }) async throws -> [Item] {
+        guard translator.translatesTogether else {
+            return try await translate(reading, using: { try await translator.translate($0) }, progress: progress)
+        }
+        let groups = groups(reading)
+        let paragraphs = groups.flatMap(\.paragraphs)
+        guard !paragraphs.isEmpty else { return [] }
+        let translations = try await translator.translateAll(paragraphs)
+        try Task.checkCancellation()
+        var items: [Item] = []
+        var next = 0
+        for group in groups {
+            let count = group.paragraphs.count
+            let translated = (next..<next + count).map { $0 < translations.count ? translations[$0] : paragraphs[$0] }
+            next += count
+            if let item = item(group, translated) { items.append(item) }
+        }
+        if !items.isEmpty { progress(items) }
+        return items
+    }
+
+    /// Grubun gösterilecek çevirisi; çevirisi aslıyla aynıysa (ad, sayı, zaten Türkçe yazı) nil.
+    private static func item(_ group: Group, _ translations: [String]) -> Item? {
+        var changed = false
+        let texts = zip(group.paragraphs, translations).map { paragraph, translation in
+            var text = translation.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty { text = paragraph }
+            changed = changed || !TextMatch.isSimilar(TextMatch.normalize(paragraph), TextMatch.normalize(text), threshold: 0.90)
+            return text
+        }
+        guard changed else { return nil }
+        return Item(source: group.paragraphs.joined(separator: "\n"), translation: texts.joined(separator: "\n"),
+                    box: group.box, lineHeight: group.lineHeight)
     }
 
     /// Satırları gruplara toplar. Kumanda ipuçları ve yazı tanıma çöpleri atılır; harfi olmayan ya da tek harfli satırlar
