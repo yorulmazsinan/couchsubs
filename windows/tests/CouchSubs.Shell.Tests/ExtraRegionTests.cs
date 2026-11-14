@@ -186,4 +186,41 @@ public class ScreenTranslationControllerTests
         Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
         controller.Stop();
     }
+
+    /// <summary>
+    /// Bildirilen hata: altyazı yalnız bilgisayar ekranındayken (TV yok, PS Remote Play monitörde) çeviriler yalnız TV'ye
+    /// giden "screen" olayıyla gidiyor, altyazı penceresine hiç ulaşmıyordu; yalnız "Ekran çevriliyor…" görünüyordu.
+    /// </summary>
+    [Fact]
+    public async Task ComputerOnlyShowsTheTranslationsInTheSubtitleWindow()
+    {
+        var (controller, services) = Ready();
+        controller.Settings = controller.Settings with { Output = SubtitleOutput.Computer };
+        services.ReaderLines = new Reading([new TextLine("Open the door.", new TextBox(0.4, 0.8, 0.6, 0.84))]);
+        var received = new List<SubtitleEvent>();
+        controller.OverlayEvent += received.Add;
+        await controller.StartAsync();
+        services.Streams[0].Emit(Frame.Blank(64, 64));
+        Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
+        var screen = Assert.Single(received, e => e.Kind == SubtitleEventKind.Screen);
+        Assert.NotEqual("", screen.Text);
+        Assert.NotEqual("Open the door.", screen.Text);
+        Assert.Equal(ScreenOutcome.Cleared, await controller.TranslateScreenAsync());
+        Assert.Contains(received, e => e.Kind == SubtitleEventKind.ScreenClear);
+        controller.Stop();
+    }
+
+    /// <summary>Çeviri sürüyor ama PS5'ten görüntü gelmedi: tuş sessizce yok sayılmaz.</summary>
+    [Fact]
+    public async Task NoPictureYetIsSaid()
+    {
+        var (controller, _) = Ready();
+        controller.Settings = controller.Settings with { Output = SubtitleOutput.Computer };
+        var received = new List<SubtitleEvent>();
+        controller.OverlayEvent += received.Add;
+        await controller.StartAsync();
+        Assert.Equal(ScreenOutcome.NotRunning, await controller.TranslateScreenAsync());
+        Assert.Contains(received, e => e.Kind == SubtitleEventKind.Subtitle && e.Text.Contains("PS5", StringComparison.Ordinal));
+        controller.Stop();
+    }
 }

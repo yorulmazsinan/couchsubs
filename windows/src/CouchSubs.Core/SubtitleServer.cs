@@ -72,7 +72,11 @@ public interface ISubtitleSender
     void Clear();
 }
 
-public enum SubtitleEventKind { Subtitle, Clear }
+/// <summary>
+/// <c>Screen</c>: "ekranı çevir" sonuçları (metin: grupların çevirisi, yukarıdan aşağı, her biri ayrı satırda);
+/// <c>ScreenClear</c>: onların kaldırılması. Bilgisayardaki altyazı penceresi bunları da gösterir.
+/// </summary>
+public enum SubtitleEventKind { Subtitle, Clear, Screen, ScreenClear }
 
 /// <summary>Sunucudan geçen ve bilgisayar ekranındaki altyazı penceresinin de gösterdiği olay.</summary>
 /// <param name="Replaces">Satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.</param>
@@ -225,10 +229,18 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             return json;
         }).ToList();
         Broadcast(Frame("screen", new SortedDictionary<string, object> { ["duration"] = durationMs, ["items"] = list }), subtitle: true);
+        // Altyazı yalnız bilgisayardaysa (TV yok) çeviriler başka hiçbir yere gitmiyordu: tuşa basınca yalnız
+        // "Ekran çevriliyor…" görünüyordu.
+        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Screen, string.Join('\n', items.Select(item => item.Translation)), durationMs,
+                                            Paragraphs: true));
     }
 
     /// <summary>TV'deki "ekranı çevir" çevirilerini kaldırır (altyazıya dokunmaz).</summary>
-    public void ClearScreen() => Broadcast(Frame("screen-clear", new SortedDictionary<string, object>()), subtitle: true);
+    public void ClearScreen()
+    {
+        Broadcast(Frame("screen-clear", new SortedDictionary<string, object>()), subtitle: true);
+        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.ScreenClear));
+    }
 
     private static SortedDictionary<string, object> BoxJson(TextBox b) => new()
     {

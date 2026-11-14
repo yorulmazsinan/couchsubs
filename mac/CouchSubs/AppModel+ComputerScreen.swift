@@ -20,9 +20,18 @@ extension AppModel {
         let now = overlayClock()
         switch event {
         case .subtitle(let text, let durationMs, let paragraphs, let replaces):
+            overlayScreenUntil = 0
             overlayStack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
+        // "Ekranı çevir": çeviriler satır satır gösterilir. Hemen ardından gelen "temizle" ("Ekran çevriliyor…" yazısı
+        // için) onları kaldırmaz; yeniden basmak ya da yeni altyazı kaldırır.
+        case .screen(let text, let durationMs):
+            overlayStack.show(text, durationMs: durationMs, paragraphs: true, now: now)
+            overlayScreenUntil = now + Double(durationMs) / 1000
+        case .screenClear:
+            if overlayScreenUntil > now { overlayStack.hide() }
+            overlayScreenUntil = 0
         case .clear:
-            overlayStack.clear(now: now)
+            if overlayScreenUntil <= now { overlayStack.clear(now: now) }
         }
         overlayRefresh()
     }

@@ -129,10 +129,31 @@ public sealed partial class SubtitleOverlayWindow : Window
     private void OnEvent(SubtitleEvent e) => Guard("altyazı", () =>
     {
         stack.StackPrevious = controller.Settings.Style.StackPrevious;
-        if (e.Kind == SubtitleEventKind.Subtitle) stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
-        else stack.Clear(Now);
+        switch (e.Kind)
+        {
+            case SubtitleEventKind.Subtitle:
+                screenUntil = 0;
+                stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
+                break;
+            // "Ekranı çevir": çeviriler satır satır gösterilir. Hemen ardından gelen "temizle" ("Ekran çevriliyor…"
+            // yazısı için) onları kaldırmaz; yeniden basmak (ScreenClear) ya da yeni altyazı kaldırır.
+            case SubtitleEventKind.Screen:
+                stack.Show(e.Text, e.DurationMs, paragraphs: true, Now);
+                screenUntil = Now + e.DurationMs / 1000.0;
+                break;
+            case SubtitleEventKind.ScreenClear:
+                if (screenUntil > Now) stack.Hide();
+                screenUntil = 0;
+                break;
+            default:
+                if (screenUntil <= Now) stack.Clear(Now);
+                break;
+        }
         Refresh();
     });
+
+    /// <summary>"Ekranı çevir" çevirilerinin pencerede kalacağı an (<see cref="Now"/> saatiyle); yoksa 0.</summary>
+    private double screenUntil;
 
     private void OnHidden() => Guard("gizleme", () =>
     {
