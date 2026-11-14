@@ -107,7 +107,8 @@ public enum Console {
         for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
             let entry = pointer.pointee
             let flags = Int32(entry.ifa_flags)
-            guard flags & IFF_UP != 0, flags & IFF_LOOPBACK == 0,
+            // iPhone'un hücresel bağdaştırıcısı (pdp_ip) ev ağında değildir; PS5 orada aranmaz.
+            guard flags & IFF_UP != 0, flags & IFF_LOOPBACK == 0, !isCellular(String(cString: entry.ifa_name)),
                   entry.ifa_addr?.pointee.sa_family == sa_family_t(AF_INET), let mask = entry.ifa_netmask else { continue }
             let address = UInt32(bigEndian: entry.ifa_addr!.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr })
             let netmask = UInt32(bigEndian: mask.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr })
@@ -115,6 +116,8 @@ public enum Console {
         }
         return targets(networks: networks).map { $0.bigEndian }
     }
+
+    static func isCellular(_ interface: String) -> Bool { interface.hasPrefix("pdp_ip") }
 
     /// Arama hedefleri (ana bilgisayar sıralı). Eskiden genel yayın yalnız hiç adres bulunamazsa ekleniyordu; Wi-Fi
     /// /22'den büyükken (ör. /16) başka bir arayüz (VPN, sanal makine) adres verince PS5'in ağına hiç sorulmuyordu.

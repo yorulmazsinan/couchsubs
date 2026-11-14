@@ -135,13 +135,14 @@ extension ButtonStyle where Self == MobileButtonStyle {
 struct IconButton: View {
     let symbol: String
     let label: LocalizedStringKey
+    var tint: Color = Mobile.Palette.text
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Mobile.Palette.text)
+                .foregroundStyle(tint)
                 .frame(width: Mobile.Control.icon, height: Mobile.Control.icon)
                 .background(Mobile.Palette.surface2, in: RoundedRectangle(cornerRadius: Mobile.Radius.control))
                 .overlay(RoundedRectangle(cornerRadius: Mobile.Radius.control).strokeBorder(Mobile.Palette.border))

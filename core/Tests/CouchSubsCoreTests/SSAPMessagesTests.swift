@@ -42,4 +42,23 @@ final class SSAPMessagesTests: XCTestCase {
         XCTAssertEqual(LGDiscovery.host(fromSSDPResponse: response), "192.168.1.153")
         XCTAssertNil(LGDiscovery.host(fromSSDPResponse: "HTTP/1.1 200 OK\r\nST: urn:other\r\n\r\n"))
     }
+
+    // Adres adres tarama (iPhone'da multicast izni yokken): LG cihaz tanımı ve ikinci ekran sunucusunun karşılığı tanınır.
+    func testScanRecognisesAnLGTV() {
+        let xml = "<?xml version=\"1.0\"?><root><device><friendlyName> [LG] webOS TV UK7550 </friendlyName><manufacturer>LG Electronics</manufacturer></device></root>"
+        XCTAssertTrue(LGDiscovery.isLGDescription(xml))
+        XCTAssertEqual(LGDiscovery.friendlyName(fromDescription: xml), "[LG] webOS TV UK7550")
+        XCTAssertFalse(LGDiscovery.isLGDescription("<root><device><manufacturer>Synology</manufacturer></device></root>"))
+        XCTAssertFalse(LGDiscovery.isLGDescription("<html>LG Electronics router</html>"))
+        XCTAssertNil(LGDiscovery.friendlyName(fromDescription: "<device><friendlyName></friendlyName></device>"))
+        XCTAssertTrue(LGDiscovery.isSSAPGreeting("Hello world\n"))
+        XCTAssertFalse(LGDiscovery.isSSAPGreeting("<html>Grafana</html>"))
+    }
+
+    func testUnicastSearchNamesTheTarget() {
+        let request = LGDiscovery.searchRequest(searchTarget: LGDiscovery.searchTarget, host: "192.168.1.153:1900")
+        XCTAssertTrue(request.hasPrefix("M-SEARCH * HTTP/1.1\r\nHOST: 192.168.1.153:1900\r\n"))
+        XCTAssertTrue(request.contains("ST: urn:lge-com:service:webos-second-screen:1\r\n"))
+        XCTAssertTrue(request.hasSuffix("\r\n\r\n"))
+    }
 }

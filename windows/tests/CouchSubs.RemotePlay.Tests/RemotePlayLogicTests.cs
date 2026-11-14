@@ -87,6 +87,38 @@ public class DisconnectReasonTests
         Assert.Equal(new DisconnectReason(DisconnectKind.Other, "Version Mismatch"),
                      DisconnectReasons.FromNative(NativeMethods.QuitOther, "Version Mismatch"));
     }
+
+    /// "Unknown Session Request Error"ın asıl nedeni libchiaki'nin günlük satırındadır (satırlar session.c'deki gibi).
+    [Theory]
+    [InlineData("Reported Application Reason: 0x80108b09 (Regist failed, probably invalid PIN)", DisconnectKind.RegistrationInvalid)]
+    [InlineData("Reported Application Reason: 0x80108B02 (Invalid PSN ID)", DisconnectKind.RegistrationInvalid)]
+    [InlineData("Session request connect failed eventually.", DisconnectKind.Network)]
+    [InlineData("Failed to receive session request response", DisconnectKind.Network)]
+    [InlineData("Failed to send session request", DisconnectKind.Network)]
+    public void SessionRequestLogLinesAreClassified(string line, DisconnectKind kind) =>
+        Assert.Equal(new DisconnectReason(kind), DisconnectReasons.SessionRequestHint(line));
+
+    [Theory]
+    [InlineData("Reported Application Reason: 0x80108b33 (unknown)")]
+    [InlineData("Reported Application Reason: garbage")]
+    [InlineData("Session request successful")]
+    [InlineData("Failed to parse session request response")]
+    [InlineData(null)]
+    public void OtherLogLinesGiveNoHint(string? line) => Assert.Null(DisconnectReasons.SessionRequestHint(line));
+
+    /// Günlükten anlaşılan neden yalnız bilinmeyen oturum isteği hatasının yerine geçer.
+    [Fact]
+    public void SessionRequestHintRefinesOnlyUnknownSessionRequest()
+    {
+        var invalid = new DisconnectReason(DisconnectKind.RegistrationInvalid);
+        Assert.Equal(invalid, DisconnectReasons.FromNative(NativeMethods.QuitOther, DisconnectReasons.UnknownSessionRequest, invalid));
+        Assert.Equal(new DisconnectReason(DisconnectKind.Other, DisconnectReasons.UnknownSessionRequest),
+                     DisconnectReasons.FromNative(NativeMethods.QuitOther, DisconnectReasons.UnknownSessionRequest, null));
+        Assert.Equal(new DisconnectReason(DisconnectKind.Other, "Version Mismatch"),
+                     DisconnectReasons.FromNative(NativeMethods.QuitOther, "Version Mismatch", invalid));
+        Assert.Equal(new DisconnectReason(DisconnectKind.InUse), DisconnectReasons.FromNative(NativeMethods.QuitInUse, null, invalid));
+        Assert.Equal(invalid, StreamSession.Classify(invalid, false, "192.168.1.70"));
+    }
 }
 
 public class SessionReasonTests

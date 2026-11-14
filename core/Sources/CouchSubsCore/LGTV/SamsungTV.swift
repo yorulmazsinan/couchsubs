@@ -144,30 +144,9 @@ public enum SamsungDiscovery {
         return await scan()
     }
 
-    private static let probe: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 0.8
-        configuration.timeoutIntervalForResource = 1.5
-        configuration.httpMaximumConnectionsPerHost = 1
-        return URLSession(configuration: configuration)
-    }()
-
     private static func scan() async -> [LGTV] {
-        let targets = LocalNetwork.scanTargets(LocalNetwork.privateAddresses())
-        var found: [LGTV] = []
-        // 64'erli gruplar: ağı ve bilgisayarı yormadan birkaç saniyede biter.
-        for start in stride(from: 0, to: targets.count, by: 64) {
-            let batch = targets[start..<min(start + 64, targets.count)]
-            await withTaskGroup(of: LGTV?.self) { group in
-                for host in batch {
-                    group.addTask {
-                        await name(host: host, session: probe).map { LGTV(name: $0, host: host, brand: .samsung) }
-                    }
-                }
-                for await tv in group { if let tv { found.append(tv) } }
-            }
-        }
-        return found.sorted { $0.host.compare($1.host, options: .numeric) == .orderedAscending }
+        await LocalNetwork.probeAll { host in await name(host: host, session: LocalNetwork.probeSession) }
+            .map { LGTV(name: $0.value, host: $0.host, brand: .samsung) }
     }
 
     private static func name(host: String, session: URLSession = .shared) async -> String? {
