@@ -26,6 +26,12 @@ mkdir -p "$OUT"
 
 OPTIONS=scripts/appstore/ExportOptions.plist
 EXPORT="$OUT/export-$PLATFORM"
+# İç TestFlight'a özel yapılar incelemeye gönderilemez; COUCHSUBS_FOR_REVIEW=1 bu kısıtı kaldırır.
+if [[ -n "${COUCHSUBS_FOR_REVIEW:-}" ]]; then
+  OPTIONS="$OUT/ExportOptions-review.plist"
+  cp scripts/appstore/ExportOptions.plist "$OPTIONS"
+  plutil -replace testFlightInternalTestingOnly -bool NO "$OPTIONS"
+fi
 if [[ "$3" == --no-upload ]]; then
   OPTIONS="$OUT/ExportOptions-export.plist"
   cp scripts/appstore/ExportOptions.plist "$OPTIONS"

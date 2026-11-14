@@ -33,6 +33,44 @@ internal static class DisconnectReasons
         NativeMethods.QuitNetwork => new(DisconnectKind.Network),
         _ => new(DisconnectKind.Other, text),
     };
+
+    /// <summary>libchiaki'nin CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN metni (yerel kütüphane CS_QUIT_OTHER ile verir).</summary>
+    internal const string UnknownSessionRequest = "Unknown Session Request Error";
+
+    /// <summary>CHIAKI_RP_APPLICATION_REASON_REGIST_FAILED ve _INVALID_PSN_ID.</summary>
+    internal static readonly uint[] RegistrationRejectedCodes = [0x80108b09, 0x80108b02];
+
+    private static readonly string[] UnreachableLines =
+    [
+        "Session request connect failed eventually",
+        "Failed to send session request",
+        "Failed to receive session request response",
+    ];
+
+    /// <summary>libchiaki oturum isteği (TCP 9295) düşünce yalnız "Unknown Session Request Error" der; asıl neden aynı
+    /// iş parçacığının az önce yazdığı günlük satırındadır. Satırdan anlaşılan neden; anlaşılmıyorsa null (genel metin
+    /// kalır, PS5'in kodu zaten "Reported Application Reason" satırıyla remoteplay.log'dadır).</summary>
+    public static DisconnectReason? SessionRequestHint(string? line)
+    {
+        if (line is null) return null;
+        const string marker = "Reported Application Reason:";
+        var at = line.IndexOf(marker, StringComparison.Ordinal);
+        if (at >= 0)
+        {
+            var token = line[(at + marker.Length)..].TrimStart().Split(' ', 2)[0];
+            if (token.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) token = token[2..];
+            if (!uint.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out var code)) return null;
+            return RegistrationRejectedCodes.Contains(code) ? new(DisconnectKind.RegistrationInvalid) : null;
+        }
+        // PS5'e bağlanılamadı ya da yanıt gelmedi: PS5 dinlenmeden yeni uyandıysa ilk denemelerde olağandır.
+        return UnreachableLines.Any(line.Contains) ? new(DisconnectKind.Network) : null;
+    }
+
+    /// <summary>Oturum isteği bilinmeyen nedenle düştüyse günlükten anlaşılan neden kullanılır.</summary>
+    public static DisconnectReason FromNative(int quit, string? text, DisconnectReason? sessionRequestHint) =>
+        quit == NativeMethods.QuitOther && text == UnknownSessionRequest && sessionRequestHint is not null
+            ? sessionRequestHint
+            : FromNative(quit, text);
 }
 
 /// <summary>Sırayla çalışan tek iş parçacıklı kuyruk (Mac'teki seri DispatchQueue karşılığı).</summary>
@@ -259,7 +297,7 @@ public sealed class StreamSession : IStreamSession
     }
 
     /// <summary>Yerel kütüphanenin iş parçacığından çağrılır.</summary>
-    private void Handle(int eventType, int quitReason, string? text, int eventGeneration)
+    private void Handle(int eventType, int quitReason, string? text, int eventGeneration, DisconnectReason? sessionRequestHint)
     {
         switch (eventType)
         {
@@ -282,13 +320,20 @@ public sealed class StreamSession : IStreamSession
                 });
                 break;
             case NativeMethods.EventQuit:
-                var reason = DisconnectReasons.FromNative(quitReason, text);
+                var reason = DisconnectReasons.FromNative(quitReason, text, sessionRequestHint);
                 RemotePlayLog.Write(1, $"Oturum kapandı: neden {quitReason} ({reason.Kind}) {text}");
                 queue.Post(() =>
                 {
                     // Eski bir oturumun (ör. ReconnectNow ile kapatılanın) kapanma olayı yeni oturumu etkilemez.
                     if (box?.Generation != eventGeneration) return;
                     CloseBox();
+                    if (reason.Kind == DisconnectKind.RegistrationInvalid)
+                    {
+                        // Kayıt geçersiz: yeniden denemek aynı yere çıkar (eskiden sonsuza kadar "Yeniden bağlanılıyor…").
+                        Bump(running: false);
+                        Emit(new SessionState(SessionPhase.Disconnected, reason));
+                        return;
+                    }
                     ScheduleReconnect(eventGeneration, reason);
                 });
                 break;
@@ -323,6 +368,8 @@ public sealed class StreamSession : IStreamSession
         private GCHandle handle;
         private nint native;
         private string? lastError;
+        /// <summary>Oturum isteğinin günlükten anlaşılan düşme nedeni (yerel iş parçacığında yazılır, okunur).</summary>
+        private volatile DisconnectReason? sessionRequestHint;
 
         private SessionBox(StreamSession owner, int generation)
         {
@@ -392,7 +439,7 @@ public sealed class StreamSession : IStreamSession
             try
             {
                 if (From(user) is { } box)
-                    box.owner.Handle(eventType, quitReason, NativeMethods.Utf8(reasonText), box.Generation);
+                    box.owner.Handle(eventType, quitReason, NativeMethods.Utf8(reasonText), box.Generation, box.sessionRequestHint);
             }
             catch (Exception error) { RemotePlayLog.Write(0, $"event: {error.Message}"); }
         }
@@ -405,7 +452,11 @@ public sealed class StreamSession : IStreamSession
             {
                 var text = NativeMethods.Utf8(message);
                 // Oturum başlatılamazsa nedeni son hata satırıdır (cs_session_start aynı iş parçacığında yazar).
-                if (level == 0 && text is not null && From(user) is { } box) box.lastError = text;
+                if (level == 0 && text is not null && From(user) is { } box)
+                {
+                    box.lastError = text;
+                    if (DisconnectReasons.SessionRequestHint(text) is { } hint) box.sessionRequestHint = hint;
+                }
                 RemotePlayLog.Write(level, text);
             }
             catch

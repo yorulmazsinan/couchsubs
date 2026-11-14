@@ -1069,6 +1069,8 @@ public class AppControllerRunTests
         Assert.Equal("Remote Play is in use on another device", AppController.StatusText(SessionState.Disconnected(DisconnectKind.InUse), true, text));
         Assert.Equal("The PS5 refused the connection. Set up the PS5 again.", AppController.StatusText(SessionState.Disconnected(DisconnectKind.Refused), true, text));
         Assert.Equal("Can't reach the PS5. Reconnecting…", AppController.StatusText(SessionState.Disconnected(DisconnectKind.Network), true, text));
+        Assert.Equal("The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings.",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.RegistrationInvalid), true, text));
         Assert.Equal("PS5 not found at 192.168.1.70. Make sure it is on and on the same network. Reconnecting…",
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.NotFound, "192.168.1.70"), true, text));
         Assert.Equal("Reconnecting… (Session Request RP Version Mismatch)",

@@ -30,6 +30,36 @@ final class ReconnectPolicyTests: XCTestCase {
         policy.reset()
         XCTAssertEqual(policy.nextDelay(), 2)
     }
+
+    /// Bağlanıp birkaç saniyede düşen oturum aralığı sıfırlamaz: aç-kapa döngüsü 2 sn'de bir değil, giderek seyrek döner.
+    func testShortSessionsKeepBackingOff() {
+        var policy = ReconnectPolicy()
+        let start = Date(timeIntervalSince1970: 0)
+        var delays: [Int] = []
+        for round in 0..<6 {
+            let connected = start.addingTimeInterval(Double(round) * 100)
+            policy.connected(at: connected)
+            policy.ended(at: connected.addingTimeInterval(5))
+            delays.append(policy.nextDelay())
+        }
+        XCTAssertEqual(delays, [2, 4, 8, 16, 30, 30])
+    }
+
+    func testAStableSessionStartsTheBackoffOver() {
+        var policy = ReconnectPolicy()
+        _ = policy.nextDelay(); _ = policy.nextDelay(); _ = policy.nextDelay()
+        let connected = Date(timeIntervalSince1970: 0)
+        policy.connected(at: connected)
+        policy.ended(at: connected.addingTimeInterval(ReconnectPolicy.stableAfter + 1))
+        XCTAssertEqual(policy.nextDelay(), 2)
+    }
+
+    func testInUseWaitsAtLeastEightSeconds() {
+        var policy = ReconnectPolicy()
+        XCTAssertEqual(policy.nextDelay(inUse: true), 8)
+        XCTAssertEqual(policy.nextDelay(inUse: true), 16)
+        XCTAssertEqual(policy.nextDelay(inUse: true), 30)
+    }
 }
 
 final class RegisteredConsoleTests: XCTestCase {
@@ -47,6 +77,11 @@ final class ConsoleSubnetTests: XCTestCase {
         XCTAssertEqual(hosts.first, 0xC0A8_0101)
         XCTAssertEqual(hosts.last, 0xC0A8_01FE)
         XCTAssertFalse(hosts.contains(0xC0A8_010A))
+    }
+
+    func testCellularAdapterIsNotSearched() {
+        XCTAssertTrue(Console.isCellular("pdp_ip0"))
+        XCTAssertFalse(Console.isCellular("en0"))
     }
 
     func testLargeNetworksAreSkipped() {
@@ -163,6 +198,33 @@ final class DisconnectReasonTests: XCTestCase {
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STOPPED), .stopped)
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED), .refused)
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED), .network)
+    }
+
+    /// "Unknown Session Request Error"ın asıl nedeni libchiaki'nin günlük satırındadır (satırlar session.c'deki gibi).
+    func testSessionRequestLogLinesAreClassified() {
+        XCTAssertEqual(DisconnectReason.sessionRequestHint(fromLog: "Reported Application Reason: 0x80108b09 (Regist failed, probably invalid PIN)"),
+                       .registrationInvalid)
+        XCTAssertEqual(DisconnectReason.sessionRequestHint(fromLog: "Reported Application Reason: 0x80108B02 (Invalid PSN ID)"),
+                       .registrationInvalid)
+        XCTAssertNil(DisconnectReason.sessionRequestHint(fromLog: "Reported Application Reason: 0x80108b33 (unknown)"))
+        XCTAssertNil(DisconnectReason.sessionRequestHint(fromLog: "Reported Application Reason: garbage"))
+        XCTAssertEqual(DisconnectReason.sessionRequestHint(fromLog: "Session request connect failed eventually."), .network)
+        XCTAssertEqual(DisconnectReason.sessionRequestHint(fromLog: "Failed to receive session request response"), .network)
+        XCTAssertEqual(DisconnectReason.sessionRequestHint(fromLog: "Failed to send session request"), .network)
+        XCTAssertNil(DisconnectReason.sessionRequestHint(fromLog: "Session request successful"))
+        XCTAssertNil(DisconnectReason.sessionRequestHint(fromLog: "Failed to parse session request response"))
+    }
+
+    /// Günlükten anlaşılan neden yalnız bilinmeyen oturum isteği hatasının yerine geçer.
+    func testSessionRequestHintRefinesOnlyUnknownSessionRequest() {
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN, sessionRequestHint: .registrationInvalid),
+                       .registrationInvalid)
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN, sessionRequestHint: .network), .network)
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN, sessionRequestHint: nil),
+                       .other("Unknown Session Request Error"))
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_IN_USE, sessionRequestHint: .network), .inUse)
+        // PS5 aramaya yanıt vermediyse bağlanamama "bulunamadı"dır; geçersiz kayıt öyle kalır.
+        XCTAssertEqual(DisconnectReason.classify(.registrationInvalid, searchAnswered: false, host: "192.168.1.70"), .registrationInvalid)
     }
 
     /// PS5 aramaya yanıt vermediyse ve oturum ağ hatasıyla düştüyse neden "bulunamadı"dır; yanıt verdiyse olduğu gibi kalır.

@@ -24,15 +24,35 @@ struct FrameThrottle {
 }
 
 /// Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, en çok 30 sn.
+///
+/// Aralık bağlanınca hemen değil, oturum `stableAfter` kadar sürdükten sonra kapanınca baştan başlar. Eskiden her
+/// bağlanışta sıfırlanıyordu: PS5 oturumu açılıp birkaç saniyede düşürünce (ör. aynı ikinci hesapla bağlı başka bir
+/// cihaz) telefon 2 sn sonra yeniden bağlanıyor, PS5'te ikinci hesap durmadan girip çıkıyordu.
 struct ReconnectPolicy {
+    static let stableAfter: TimeInterval = 60
     private var attempt = 0
+    private var connectedAt: Date?
 
-    mutating func nextDelay() -> Int {
+    /// `inUse`: Uzaktan Oynatma başka cihazda; sık denemek boşuna, en az 8 sn beklenir (8, 16, 30). Hemen en uzuna
+    /// atlanmaz: telefonun kendi eski oturumu PS5'te birkaç saniye daha açık görünebilir.
+    mutating func nextDelay(inUse: Bool = false) -> Int {
+        if inUse { attempt = max(attempt, 2) }
         defer { attempt = min(attempt + 1, 5) }
         return min(30, 2 << attempt)
     }
 
-    mutating func reset() { attempt = 0 }
+    mutating func reset() {
+        attempt = 0
+        connectedAt = nil
+    }
+
+    mutating func connected(at now: Date = Date()) { connectedAt = now }
+
+    /// Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder.
+    mutating func ended(at now: Date = Date()) {
+        if let connectedAt, now.timeIntervalSince(connectedAt) >= Self.stableAfter { attempt = 0 }
+        connectedAt = nil
+    }
 }
 
 /// Bağlantının neden koptuğu; kullanıcıya anlatılabilecek biçimde.
@@ -47,6 +67,9 @@ public enum DisconnectReason: Equatable, Sendable {
     case network
     /// İkinci kullanıcının PS5'te giriş şifresi var; Uzaktan Oynatma şifre istiyor.
     case loginPasscode
+    /// PS5 oturum isteğinde kaydı kabul etmedi (0x80108b09 kayıt geçersiz, 0x80108b02 hesap tanınmıyor). Yeniden denemek
+    /// aynı yere çıkar; PS5 ikinci hesapla yeniden eşlenmelidir.
+    case registrationInvalid
     /// Kayıtlı adreste PS5 aramaya yanıt vermedi ve oturum da açılamadı (değer: adres).
     case notFound(String)
     case other(String)
@@ -58,6 +81,37 @@ public enum DisconnectReason: Equatable, Sendable {
         switch reason {
         case .network, .other: return .notFound(host)
         default: return reason
+        }
+    }
+
+    /// libchiaki oturum isteği (TCP 9295) düşünce yalnız "Unknown Session Request Error" der; asıl neden aynı iş
+    /// parçacığının az önce yazdığı günlük satırındadır. Satırdan anlaşılan neden; anlaşılmıyorsa nil (genel metin
+    /// kalır, PS5'in kodu zaten "Reported Application Reason" satırıyla remoteplay.log'dadır).
+    static func sessionRequestHint(fromLog line: String) -> DisconnectReason? {
+        if let marker = line.range(of: "Reported Application Reason:") {
+            let token = line[marker.upperBound...].drop { $0 == " " }.prefix { !$0.isWhitespace }.lowercased()
+            let hex = token.hasPrefix("0x") ? String(token.dropFirst(2)) : token
+            guard let code = UInt32(hex, radix: 16) else { return nil }
+            return registrationRejectedCodes.contains(code) ? .registrationInvalid : nil
+        }
+        // PS5'e bağlanılamadı ya da yanıt gelmedi: PS5 dinlenmeden yeni uyandıysa ilk denemelerde olağandır.
+        return unreachableLines.contains(where: line.contains) ? .network : nil
+    }
+
+    /// CHIAKI_RP_APPLICATION_REASON_REGIST_FAILED ve _INVALID_PSN_ID.
+    static let registrationRejectedCodes: Set<UInt32> = [0x80108b09, 0x80108b02]
+    private static let unreachableLines = [
+        "Session request connect failed eventually",
+        "Failed to send session request",
+        "Failed to receive session request response",
+    ]
+
+    /// Oturum isteği bilinmeyen nedenle düştüyse günlükten anlaşılan neden kullanılır.
+    init(quit: ChiakiQuitReason, sessionRequestHint hint: DisconnectReason?) {
+        if quit == CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN, let hint {
+            self = hint
+        } else {
+            self.init(quit: quit)
         }
     }
 
@@ -94,10 +148,26 @@ final class ChiakiSessionBox {
     weak var owner: StreamSession?
     private var torn = false
     private let lock = NSLock()
+    /// Oturum isteğinin günlükten anlaşılan düşme nedeni. Ayrı kilit: `tearDown` join ederken `lock`'u tutar, o sırada
+    /// libchiaki günlüğe yazabilir.
+    private var hint: DisconnectReason?
+    private let hintLock = NSLock()
 
     init(generation: Int, owner: StreamSession?) {
         self.generation = generation
         self.owner = owner
+        logger.onMessage = { [weak self] text, _ in
+            guard let self, let found = DisconnectReason.sessionRequestHint(fromLog: text) else { return }
+            self.hintLock.lock()
+            self.hint = found
+            self.hintLock.unlock()
+        }
+    }
+
+    var sessionRequestHint: DisconnectReason? {
+        hintLock.lock()
+        defer { hintLock.unlock() }
+        return hint
     }
 
     /// `chiaki_session_init`; başarısızsa kutu kullanılmamış sayılır (kapatılacak iş parçacığı yok).
@@ -308,7 +378,7 @@ public final class StreamSession: @unchecked Sendable {
         chiaki_session_set_event_cb(box.pointer, { event, user in
             guard let event, let user else { return }
             let box = Unmanaged<ChiakiSessionBox>.fromOpaque(user).takeUnretainedValue()
-            box.owner?.handle(event.pointee, generation: box.generation)
+            box.owner?.handle(event.pointee, generation: box.generation, sessionRequestHint: box.sessionRequestHint)
         }, user)
         chiaki_session_set_video_sample_cb(box.pointer, { buffer, size, _, _, user in
             guard let buffer, let user else { return true }
@@ -332,12 +402,12 @@ public final class StreamSession: @unchecked Sendable {
     }
 
     /// libchiaki iş parçacığından çağrılır.
-    fileprivate func handle(_ event: ChiakiEvent, generation eventGeneration: Int) {
+    fileprivate func handle(_ event: ChiakiEvent, generation eventGeneration: Int, sessionRequestHint: DisconnectReason?) {
         switch event.type {
         case CHIAKI_EVENT_CONNECTED:
             queue.async { [weak self] in
                 guard let self, self.box?.generation == eventGeneration else { return }
-                self.policy.reset()
+                self.policy.connected()
                 self.emit(.streaming)
             }
         case CHIAKI_EVENT_LOGIN_PIN_REQUEST:
@@ -349,11 +419,17 @@ public final class StreamSession: @unchecked Sendable {
                 self.emit(.disconnected(.loginPasscode))
             }
         case CHIAKI_EVENT_QUIT:
-            let reason = DisconnectReason(quit: event.quit.reason)
+            let reason = DisconnectReason(quit: event.quit.reason, sessionRequestHint: sessionRequestHint)
             queue.async { [weak self] in
                 // Eski bir oturumun (ör. reconnectNow ile kapatılanın) kapanma olayı yeni oturumu etkilemez.
                 guard let self, self.box?.generation == eventGeneration else { return }
                 self.closeBox()
+                self.policy.ended()
+                if reason == .registrationInvalid {
+                    // Kayıt geçersiz: yeniden denemek aynı yere çıkar (eskiden sonsuza kadar "Yeniden bağlanılıyor…").
+                    _ = self.bump(running: false)
+                    return self.emit(.disconnected(.registrationInvalid))
+                }
                 self.scheduleReconnect(eventGeneration, reason: reason)
             }
         default:
@@ -366,7 +442,7 @@ public final class StreamSession: @unchecked Sendable {
         if let failed, !initialized { failed.markUnused() }
         emit(.disconnected(DisconnectReason.classify(reason, searchAnswered: searchAnswered, host: console.host)))
         guard isCurrent(current) else { return }
-        let delay = policy.nextDelay()
+        let delay = policy.nextDelay(inUse: reason == .inUse)
         queue.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in self?.connect(current) }
     }
 

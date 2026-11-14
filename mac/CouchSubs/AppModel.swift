@@ -1448,6 +1448,8 @@ final class AppModel: ObservableObject {
         case .inUse: return String(localized: "Remote Play is in use on another device")
         case .refused: return String(localized: "The PS5 refused the connection. Set up the PS5 again.")
         case .loginPasscode: return String(localized: "The second user has a login passcode on the PS5. Turn it off in Settings › Users and Accounts.")
+        // Eskiden "Yeniden bağlanılıyor… (Unknown Session Request Error)" diye sonsuza kadar deneniyordu.
+        case .registrationInvalid: return String(localized: "The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings.")
         // Eskiden ağ hatası, bulunamayan PS5 ve diğer nedenler hep yalnız "Yeniden bağlanılıyor…" idi.
         case .notFound(let host):
             return String(format: String(localized: "PS5 not found at %@. Make sure it is on and on the same network. Reconnecting…"), host)

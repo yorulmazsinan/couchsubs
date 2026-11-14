@@ -44,6 +44,42 @@ enum LocalNetwork {
         }
         return result
     }
+
+    /// Adres adres taramada kullanılacak yerel adresler: VPN, sanal makine ve hücresel (iPhone'da pdp_ip) bağdaştırıcıları
+    /// sayılmaz; TV ve PS5 onların ağında değildir. iPhone'un hücresel adresi çoğu zaman 10.x (özel) olduğundan eskiden
+    /// Wi-Fi'ın yanında operatör ağı da taranıyordu.
+    static func scanAddresses(_ candidates: [NetworkAddress.Candidate]) -> [in_addr] {
+        candidates.filter { !NetworkAddress.isVirtual($0) }
+            .map { in_addr(s_addr: inet_addr($0.address)) }
+            .filter(isPrivate)
+    }
+
+    /// Bu cihazın ev ağlarındaki (/24) diğer adresler.
+    static func homeTargets() -> [String] { scanTargets(scanAddresses(NetworkAddress.candidates())) }
+
+    /// Ev ağındaki (/24) her adres için `probe`; aynı anda en çok `width` adres denenir. Bulunanlar adres sırasıyla döner.
+    /// Çok noktaya yayın (SSDP) kullanılamadığında yedek yol: iPhone'da multicast izni olmadan SSDP isteği gönderilemez.
+    static func probeAll<T: Sendable>(width: Int = 64, probe: @escaping @Sendable (String) async -> T?) async -> [(host: String, value: T)] {
+        let targets = homeTargets()
+        var found: [(host: String, value: T)] = []
+        for start in stride(from: 0, to: targets.count, by: width) {
+            let batch = targets[start..<min(start + width, targets.count)]
+            await withTaskGroup(of: (String, T?).self) { group in
+                for host in batch { group.addTask { (host, await probe(host)) } }
+                for await (host, value) in group { if let value { found.append((host, value)) } }
+            }
+        }
+        return found.sorted { $0.host.compare($1.host, options: .numeric) == .orderedAscending }
+    }
+
+    /// Tarama sorguları için kısa zaman aşımlı oturum: yanıt vermeyen adres en çok ~1 sn bekletir.
+    static let probeSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 0.8
+        configuration.timeoutIntervalForResource = 1.5
+        configuration.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: configuration)
+    }()
 }
 
 /// Bu cihazın (Mac ya da iPhone/iPad) ev ağındaki adresi; TV uygulamasına altyazı sunucusunun adresi olarak verilir.
@@ -61,9 +97,11 @@ public enum NetworkAddress {
 
     /// VPN (utun, ipsec, ppp), sanal makine (vmnet, vboxnet, bridge) ve benzeri bağdaştırıcılar ev ağı adresi taşısa da
     /// TV onlara ulaşamaz; Samsung'un "Host PC IP" alanına bunlardan biri yazılınca TV bağlantıyı kesiyordu.
+    /// iPhone'un hücresel bağdaştırıcısı (pdp_ip) da ev ağında değildir.
     public static func isVirtual(_ candidate: Candidate) -> Bool {
         if candidate.pointToPoint { return true }
-        let prefixes = ["utun", "ipsec", "ppp", "gif", "stf", "vmnet", "vboxnet", "bridge", "feth", "tap", "tun", "awdl", "llw", "anpi", "zt"]
+        let prefixes = ["utun", "ipsec", "ppp", "gif", "stf", "vmnet", "vboxnet", "bridge", "feth", "tap", "tun", "awdl", "llw", "anpi", "zt",
+                        "pdp_ip"]
         return prefixes.contains { candidate.interface.hasPrefix($0) }
     }
 

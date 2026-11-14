@@ -42,6 +42,21 @@ final class LocalNetworkTests: XCTestCase {
         XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "10.0.0.5"), "192.168.1.34")
     }
 
+    // iPhone: hücresel bağdaştırıcının 10.x adresi taranmaz, yalnız Wi-Fi'ın /24'ü.
+    func testScanUsesOnlyTheHomeNetworkAdapters() {
+        let cellular = NetworkAddress.Candidate(interface: "pdp_ip0", address: "10.64.12.7", netmask: "255.255.255.255")
+        let addresses = LocalNetwork.scanAddresses([cellular, vpn, vm, wifi])
+        XCTAssertEqual(addresses.map { String(cString: inet_ntoa($0)) }, ["192.168.1.34"])
+        let targets = LocalNetwork.scanTargets(addresses)
+        XCTAssertEqual(targets.count, 253)
+        XCTAssertTrue(targets.allSatisfy { $0.hasPrefix("192.168.1.") })
+    }
+
+    func testCellularIsNotChosenAsTheServerAddress() {
+        let cellular = NetworkAddress.Candidate(interface: "pdp_ip0", address: "10.64.12.7", netmask: "255.255.255.255")
+        XCTAssertEqual(NetworkAddress.choose([cellular, wifi], near: nil), "192.168.1.34")
+    }
+
     func testAVirtualAdapterIsUsedOnlyWhenNothingElseExists() {
         XCTAssertEqual(NetworkAddress.choose([vpn], near: nil), "10.8.0.2")
         XCTAssertNil(NetworkAddress.choose([], near: nil))

@@ -707,6 +707,8 @@ final class AppModelRunTests: XCTestCase {
         XCTAssertEqual(AppModel.statusText(.disconnected(.inUse), running: true), String(localized: "Remote Play is in use on another device"))
         XCTAssertEqual(AppModel.statusText(.disconnected(.refused), running: true), String(localized: "The PS5 refused the connection. Set up the PS5 again."))
         XCTAssertEqual(AppModel.statusText(.disconnected(.network), running: true), String(localized: "Can't reach the PS5. Reconnecting…"))
+        XCTAssertEqual(AppModel.statusText(.disconnected(.registrationInvalid), running: true),
+                       String(localized: "The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings."))
         XCTAssertTrue(AppModel.statusText(.disconnected(.notFound("192.168.1.70")), running: true).contains("192.168.1.70"))
         XCTAssertTrue(AppModel.statusText(.disconnected(.other("Session Request RP Version Mismatch")), running: true)
             .contains("Session Request RP Version Mismatch"))

@@ -1,0 +1,9 @@
+name = "couchsubs-packs"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Paketler ücretsizdir: sır ya da giriş gerekmez. Yalnız R2 kovası bağlanır.
+[[r2_buckets]]
+binding = "PACKS"
+bucket_name = "couchsubs-packs"

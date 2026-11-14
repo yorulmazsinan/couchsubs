@@ -25,6 +25,8 @@ struct CouchSubsApp: App {
     @StateObject private var model: PhoneModel
     @StateObject private var app: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    /// Son etkin oluştan beri arka plana gidildi mi (yalnız etkin değilken dönmek bağlantıyı yenilemez).
+    @State private var wasInBackground = false
 
     init() {
         let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -81,8 +83,12 @@ struct CouchSubsApp: App {
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
-            case .active: model.becameActive()
-            case .background: Task { await model.flushPool() }
+            case .active:
+                model.becameActive(afterBackground: wasInBackground)
+                wasInBackground = false
+            case .background:
+                wasInBackground = true
+                Task { await model.flushPool() }
             default: break
             }
         }

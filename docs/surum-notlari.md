@@ -2,10 +2,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Site, kurulum rehberi ve SSS:** [couchsubs.enmeraapps.com](https://couchsubs.enmeraapps.com)
 
-**İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe)
+**İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (APK, deneme)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-android.apk)
 
 **Bu sürümde yeni**
 
+- **Android telefon uygulaması (deneme):** Bilgisayar olmadan çalışır: telefon PS5'e aynı Wi-Fi üzerinden kendisi bağlanır, altyazıyı okuyup çevirir, Türkçesini telefonda ya da TV'de gösterir. Oyun paketleri ücretsiz. APK yukarıdaki bağlantıda; Google Play sürümü incelemede. iPhone sürümü test ediliyor.
+- **"Unknown Session Request Error" artık sebebiyle gösteriliyor:** PS5 eşleme kaydını kabul etmezse CouchSubs boşuna yeniden denemiyor ve "PS5 bu kaydı kabul etmedi; Ayarlar'dan PS5'i yeniden eşleyin" diyor. Ağ ya da zaman aşımı sorunları ayrı gösteriliyor. Not: PS5 aynı anda tek Uzaktan Oynatma bağlantısına izin verir; CouchSubs çalışırken PS Remote Play açık olmamalı.
 - **Açık renkli sahnelerde çeviri kaybolmuyor:** İngilizce altyazı beyaz ya da parlak bir zeminin önündeyken yazı tanıma kısa süre kaçırınca Türkçe çeviri siliniyordu. Artık altyazının yeri değişmediyse çeviri ekranda kalıyor; altyazı gerçekten gidince eskisi gibi hemen kalkıyor.
 - **DeepL'de adlar korunuyor:** Sözlükteki adlar (ör. Phantom Blade Zero'daki "Soul") DeepL'de de çevrilmiyor; adın arkasındaki sözcük de bozulmuyor ("began" → "Pegan" gibi).
 - **Takılan okuma çeviriyi durdurmuyor (Windows ve iPhone):** Mac'te beta.35'te düzeltilen sorun diğer platformlarda da giderildi.

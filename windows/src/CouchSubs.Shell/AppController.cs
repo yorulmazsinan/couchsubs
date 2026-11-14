@@ -1140,6 +1140,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             DisconnectKind.InUse => text["Remote Play is in use on another device"],
             DisconnectKind.Refused => text["The PS5 refused the connection. Set up the PS5 again."],
             DisconnectKind.LoginPasscode => text["The second user has a login passcode on the PS5. Turn it off in Settings › Users and Accounts."],
+            // Eskiden "Yeniden bağlanılıyor… (Unknown Session Request Error)" diye sonsuza kadar deneniyordu.
+            DisconnectKind.RegistrationInvalid => text["The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings."],
             // Eskiden ağ hatası, bulunamayan PS5 ve diğer nedenler hep yalnız "Yeniden bağlanılıyor…" idi.
             DisconnectKind.NotFound => text.Format("PS5 not found at %@. Make sure it is on and on the same network. Reconnecting…", detail ?? "?"),
             DisconnectKind.Network => text["Can't reach the PS5. Reconnecting…"],
@@ -1632,7 +1634,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         var now = Clock();
         var ps5Trouble = isRunning && sessionState.Phase != SessionPhase.Streaming && sessionState.Reason?.Kind is not
-            (DisconnectKind.ConsoleAsleep or DisconnectKind.InUse or DisconnectKind.Refused or DisconnectKind.LoginPasscode);
+            (DisconnectKind.ConsoleAsleep or DisconnectKind.InUse or DisconnectKind.Refused or DisconnectKind.LoginPasscode
+             or DisconnectKind.RegistrationInvalid);
         ps5TroubleSince = ps5Trouble ? ps5TroubleSince ?? now : null;
         // Altyazı TV'ye gitmiyorsa ya da TV yoksa TV beklenmez.
         tvWaitingSince = isRunning && ShowsOnTv && HasTv && tvClients == 0 ? tvWaitingSince ?? now : null;
