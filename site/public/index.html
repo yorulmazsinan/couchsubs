@@ -162,6 +162,8 @@ section.block{padding:clamp(80px, 12vw, 160px) 0; border-top:1px solid var(--lin
 .card .btn{margin-top:auto; height:48px; font-size:16px}
 .card.main{border-color:rgba(245,184,61,.45)}
 .card.later{background:transparent; border-style:dashed}
+.card .alt{font-size:14px; color:var(--muted); text-align:center}
+.card .alt:hover{color:var(--cream)}
 .tag{display:inline-block; font:500 13px/1 var(--text); padding:6px 10px; border-radius:6px; background:var(--night-3); color:var(--cream); align-self:flex-start; margin-top:auto}
 .release{display:flex; flex-wrap:wrap; gap:8px 24px; margin-top:24px; color:var(--muted); font-size:15px}
 .release a{color:var(--cream)}
@@ -464,7 +466,7 @@ footer a{color:var(--cream)}
             <div class="phone"><img src="img/telefon-calisiyor.webp" alt="Telefon ekranı: çeviri sürüyor, hazır paketten gelen satırlar" width="780" height="1688" loading="lazy"></div>
             <div class="phone"><img src="img/telefon-paketler.webp" alt="Telefon ekranı: yedi oyunun hazır çeviri paketi" width="780" height="1688" loading="lazy"></div>
           </div>
-          <p class="soon"><b>Android</b> deneme sürümü hazır, bilgisayar gerekmez. <b>iPhone</b> sürümü test ediliyor.</p>
+          <p class="soon"><b>Android</b> uygulaması Google Play'de, bilgisayar gerekmez. <b>iPhone</b> sürümü test ediliyor.</p>
         </div>
       </div>
     </div>
@@ -528,10 +530,11 @@ footer a{color:var(--cream)}
           <p>iPhone'a APK yüklenmez; iPhone uygulamaları yalnız App Store'dan gelir. iPhone sürümü App Store'a hazırlanıyor.</p>
           <span class="tag">Yakında</span>
         </div>
-        <div class="card">
+        <div class="card main" data-os="android">
           <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>Android telefon</h3>
-          <p>Deneme sürümü, Google Play'i beklemeden: Android 8 ve üstü (64 bit). Kurarken "bilinmeyen kaynak" izni ister. Play sürümü çıkınca bir kez silip yeniden kurmanız gerekebilir.</p>
-          <a class="btn ghost" data-indir="android" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-android.apk">APK'yı indir (deneme)</a>
+          <p>Google Play'de ücretsiz: Android 8 ve üstü (64 bit). Telefon PS5'e kendisi bağlanır, bilgisayar gerekmez. Siteden APK kurduysanız Play sürümünden önce onu silin.</p>
+          <a class="btn primary" data-indir="android-play" href="https://play.google.com/store/apps/details?id=com.couchsubs.mobile" rel="noopener">Google Play'den indir</a>
+          <a class="alt" data-indir="android" href="https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-android.apk">Play Store'u olmayan cihazlar için APK</a>
         </div>
       </div>
       <div class="release">
@@ -570,7 +573,7 @@ footer a{color:var(--cream)}
           </details>
           <details>
             <summary>Telefonda ya da iPhone'da çalışır mı?</summary>
-            <p>Android telefonlar için deneme APK'sı İndir bölümünde; telefon PS5'e kendisi bağlanır, bilgisayar gerekmez. Henüz deneme aşamasında, sorun görürseniz bize yazın. iPhone'lar APK açmadığı için iPhone sürümü App Store'dan gelecek.</p>
+            <p>Android telefon uygulaması Google Play'de: Play Store'da "CouchSubs" diye aratın ya da İndir bölümündeki düğmeye basın. Telefon PS5'e kendisi bağlanır, bilgisayar gerekmez. iPhone'lar APK açmadığı için iPhone sürümü App Store'dan gelecek.</p>
           </details>
         </div>
         <div class="faq">
@@ -629,7 +632,11 @@ footer a{color:var(--cream)}
   var actions = document.getElementById('hero-actions');
   var mac = actions.querySelector('[data-indir="mac"]'), win = actions.querySelector('[data-indir="windows"]');
   var arrow = mac.querySelector('svg');
-  if (mobile) {
+  if (/Android/i.test(ua)) {
+    actions.innerHTML = '<a class="btn primary" data-indir="android-play" href="https://play.google.com/store/apps/details?id=com.couchsubs.mobile" rel="noopener">Google Play\'den indir</a><a class="btn ghost" href="#indir">Diğer seçenekler</a>';
+    document.getElementById('hero-note').textContent = 'Android telefonda bilgisayar gerekmez: Google Play\'den kurun.';
+    var dla = document.querySelector('.dl'); dla.prepend(dla.querySelector('[data-os="android"]'));
+  } else if (mobile) {
     actions.innerHTML = '<a class="btn primary" href="#indir">İndirme seçenekleri</a>';
     document.getElementById('hero-note').textContent = 'CouchSubs bilgisayarda çalışır. Bu sayfayı Mac ya da Windows bilgisayarında aç.';
   } else if (isWin) {

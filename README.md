@@ -38,7 +38,7 @@ https://github.com/user-attachments/assets/bb8569d8-115d-49c7-a772-da2d9e171c17
 | **Bilgisayar ekranındaki altyazı penceresi** | |
 | <img src="docs/screenshots/windows/pencere.png" width="420" alt="Altyazı penceresi tasarımı"> | |
 
-**Telefon uygulaması (yakında)** (tasarım; o da tamamen ücretsiz, hesap gerekmez; yatay altyazı ekranı:
+**Telefon uygulaması** (Android: [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile); iPhone yakında; tasarım; o da tamamen ücretsiz, hesap gerekmez; yatay altyazı ekranı:
 [09-altyazi.png](docs/screenshots/telefon/09-altyazi.png)):
 
 | | | | |
@@ -56,6 +56,10 @@ https://github.com/user-attachments/assets/bb8569d8-115d-49c7-a772-da2d9e171c17
 |---|---|
 | **Mac** (macOS 13+, Apple Silicon ve Intel) | **[CouchSubs-macos.dmg](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg)** |
 | **Windows** 10 / 11 (64 bit) | **[CouchSubs-windows-Setup.exe](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe)** |
+
+**Android telefon** (Android 8+, 64 bit; bilgisayar gerekmez): **[Google Play'den indirin](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)** (Play Store'da
+"CouchSubs: Türkçe Yama"). Play Store'u olmayan cihazlar için [APK](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-android.apk); siteden APK kurduysanız Play
+sürümünden önce onu silin.
 
 TV uygulamasını ayrıca indirmeniz gerekmez: bilgisayar uygulaması TV'nize kendisi kurar. Uygulama yeni sürümleri
 kendisi bulur ve tek tıkla günceller. Kurulum istemeyenler için zip paketleri de duruyor:
@@ -237,14 +241,14 @@ AI translation are used.
 Arçelik, Beko, Grundig and Philips, all tested on real TVs. CouchSubs installs the TV app on all of them. Mac and
 Windows are tested on real hardware.
 
-**Download:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (installer)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe). The app finds new versions and updates itself.
+**Download:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (installer)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android phone (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile). The app finds new versions and updates itself.
 
 **Screenshots:** the Mac app ([main screen](docs/screenshots/mac/ana.png),
 [setup](docs/screenshots/mac/kurulum.png), [translation settings](docs/screenshots/mac/ayarlar-ceviri.png),
 [game packs](docs/screenshots/mac/ayarlar-paketler.png)), the Windows design
 ([main screen](docs/screenshots/windows/ana.png), [setup](docs/screenshots/windows/kurulum.png),
 [translation](docs/screenshots/windows/ceviri.png), [game packs](docs/screenshots/windows/paketler.png),
-[subtitle window](docs/screenshots/windows/pencere.png)) and the design of the upcoming phone app
+[subtitle window](docs/screenshots/windows/pencere.png)) and the design of the phone app
 ([docs/screenshots/telefon](docs/screenshots/telefon)). Everything is free, game packs included; no account is needed.
 
 **Setup:** open the app and follow the setup assistant. On the TV step it shows how to turn on developer mode for your

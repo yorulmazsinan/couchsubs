@@ -110,7 +110,7 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
 
 ### Bilgisayarsız: Android telefondan kurulum (deneysel)
 
-Bilgisayarınız yoksa TV uygulamasını CouchSubs'ın Android uygulamasından da kurabilirsiniz (Samsung TV ve akıllı
+Bilgisayarınız yoksa TV uygulamasını CouchSubs'ın Android uygulamasından ([Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)) da kurabilirsiniz (Samsung TV ve akıllı
 monitörler; Android TV için aşağıdaki Android TV bölümüne bakın). Gerçek TV'lerde henüz az denendi.
 
 1. Telefonda **Ayarlar › Deneysel › TV uygulamasını bu telefondan kur**'u açın, altındaki satıra basın (aynı giriş

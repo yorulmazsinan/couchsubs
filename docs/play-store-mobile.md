@@ -424,4 +424,6 @@ Play Console › Uygulama içeriği › **Ön plan hizmeti izinleri**.
    anahtarını kabul edin › AAB'yi yükleyin › sürüm notu (tr-TR, en-US).
 6. **İncelemeye gönder.** Ön plan hizmeti beyanı ve uygulama erişimi elle incelenir; birkaç gün sürebilir, istekler
    hesabın e-postasına gelir.
-7. Yayından sonra siteye Play bağlantısını ekleyin; doğrudan APK "deneme" olarak kalabilir.
+7. Yayından sonra siteye Play bağlantısını ekleyin; doğrudan APK "deneme" olarak kalabilir. **Yapıldı:** uygulama
+   Play'de herkese açık (https://play.google.com/store/apps/details?id=com.couchsubs.mobile); site, README ve sürüm notları Play'e yönlendiriyor, APK
+   "Play Store'u olmayan cihazlar için" ikincil bağlantı.
