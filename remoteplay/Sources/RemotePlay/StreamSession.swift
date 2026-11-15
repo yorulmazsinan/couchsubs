@@ -493,6 +493,14 @@ public final class StreamSession: @unchecked Sendable {
             return true
         }, user)
 
+        // PS5 "bu görüntü yayınlanamaz" (korumalı içerik) ya da "yeniden yayınlanabilir" dediğinde libchiaki ctrl iş parçacığı
+        // `cantdisplay_cb`yi koşulsuz çağırır; atanmazsa NULL işlev çağrılır ve uygulama SIGSEGV ile kapanır. Altyazı için
+        // yapılacak bir şey yok: yalnız günlüğe yazılır, akış sürer.
+        var displaySink = ChiakiCtrlDisplaySink(user: user, cantdisplay_cb: { _, cantDisplay in
+            RemotePlayLog.write(cantDisplay ? "PS5 stream can't display (protected content)" : "PS5 stream can display again")
+        })
+        chiaki_session_ctrl_set_display_sink(box.pointer, &displaySink)
+
         let started = chiaki_session_start(box.pointer)
         guard started.isSuccess else {
             chiaki_session_fini(box.pointer)

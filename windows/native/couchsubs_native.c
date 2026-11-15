@@ -627,6 +627,15 @@ static bool cs_session_video_sample(uint8_t *buf, size_t buf_size, int32_t frame
 	return true;
 }
 
+/* PS5 "bu görüntü yayınlanamaz" (korumalı içerik) ya da "yeniden yayınlanabilir" dediğinde libchiaki'nin ctrl iş parçacığı bu
+ * geri çağrıyı koşulsuz çağırır (ctrl.c: displaya/displayb iletileri ve ctrl yanıtı). Atanmazsa NULL işlev çağrılır ve
+ * uygulama SIGSEGV ile kapanır. Altyazı için yapılacak bir şey yok: yalnız günlüğe yazılır, akış sürer. */
+static void cs_session_cant_display(void *user, bool cant_display)
+{
+	cs_session *session = user;
+	CHIAKI_LOGI(&session->log, "PS5 stream %s", cant_display ? "can't display (protected content)" : "can display again");
+}
+
 CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0x10], const uint8_t morning[0x10],
 		const uint8_t account_id[8], int max_fps,
 		cs_frame_cb frame, cs_event_cb event, cs_log_cb log, void *user)
@@ -682,6 +691,8 @@ CS_API cs_session *cs_session_start(const char *host, const uint8_t regist_key[0
 	}
 	chiaki_session_set_event_cb(&session->session, cs_session_event, session);
 	chiaki_session_set_video_sample_cb(&session->session, cs_session_video_sample, session);
+	ChiakiCtrlDisplaySink display_sink = { .user = session, .cantdisplay_cb = cs_session_cant_display };
+	chiaki_session_ctrl_set_display_sink(&session->session, &display_sink);
 
 	err = chiaki_session_start(&session->session);
 	if(err != CHIAKI_ERR_SUCCESS)
