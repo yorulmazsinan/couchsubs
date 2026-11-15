@@ -24,7 +24,7 @@ class MlKitTranslator(
 ) : TextTranslator, AutoCloseable {
     companion object {
         /** Kalıcı önbellek dosyasındaki motor adı; metin hattı değişince ([FreeTranslation.PIPELINE_VERSION]) bu da değişir. */
-        const val ENGINE_ID = "mlkit-p${FreeTranslation.PIPELINE_VERSION}"
+        val ENGINE_ID = "mlkit-p${FreeTranslation.PIPELINE_VERSION}"
     }
 
     private val translator = Translation.getClient(

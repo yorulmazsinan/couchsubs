@@ -145,7 +145,7 @@ class TranslationCache(private val file: File? = null, limit: Int = DEFAULT_LIMI
  * `{ "game": "God of War", "terms": { "Leviathan Axe": "Leviathan Baltası" }, "keep": ["Kratos"], "keepExact": ["Soul"] }`.
  * `terms` İngilizce terimi verilen Türkçeyle değiştirir, `keep` adları olduğu gibi bırakır; `keepExact` adları yalnız
  * yazıldığı gibi (büyük/küçük harf aynı) geçince bırakır. Eşleşme büyük/küçük harfe bakmaz, yalnız tam sözcüklerde olur,
- * uzun terim önce gelir. Uygulamayla gelen genel sözlüğün üstüne `files/glossary/*.json` dosyaları eklenir.
+ * uzun terim önce gelir. Uygulamayla gelen genel sözlüğün üstüne files/glossary klasöründeki JSON dosyaları eklenir.
  */
 class Glossary private constructor(private val terms: Map<String, Term>) {
     /** Metinde bulunan terim: konumu (UTF-16), sözlükteki İngilizcesi ve Türkçesi. */
@@ -211,7 +211,7 @@ class Glossary private constructor(private val terms: Map<String, Term>) {
             return merge(all)
         }
 
-        /** Uygulamanın sözlüğü: assets/glossary-en-tr.json ve files/glossary/*.json. */
+        /** Uygulamanın sözlüğü: assets/glossary-en-tr.json ve files/glossary klasöründeki JSON dosyaları. */
         fun load(context: android.content.Context): Glossary = load(
             runCatching { context.assets.open("glossary-en-tr.json").use { String(it.readBytes(), Charsets.UTF_8) } }.getOrNull(),
             File(context.filesDir, "glossary"),
