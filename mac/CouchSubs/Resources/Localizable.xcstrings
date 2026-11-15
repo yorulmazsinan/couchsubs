@@ -10236,7 +10236,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "CouchSubs TV uygulamasını Samsung, LG ya da Android TV'ne bilgisayar olmadan, bu telefondan kurar ve günceller. Ağdaki TV aranıyor; markayı sonra değiştirebilirsin."
+            "value": "CouchSubs TV uygulamasını Samsung, LG ya da Android TV'nize bilgisayar olmadan, bu telefondan kurar ve günceller. Ağdaki TV aranıyor; markayı sonra değiştirebilirsiniz."
           }
         }
       }
@@ -10268,7 +10268,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "CouchSubs TV uygulamasını Samsung TV'ne bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
+            "value": "CouchSubs TV uygulamasını Samsung TV'nize bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
           }
         }
       }
@@ -10332,7 +10332,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Samsung TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle de yazabilirsin (TV'de Ayarlar › Genel › Ağ › Ağ Durumu)."
+            "value": "Samsung TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle de yazabilirsiniz (TV'de Ayarlar › Genel › Ağ › Ağ Durumu)."
           }
         }
       }
@@ -10428,7 +10428,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'de geliştirici modunu aç"
+            "value": "TV'de geliştirici modunu açın"
           }
         }
       }
@@ -10444,7 +10444,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "2. Kumandada 1 2 3 4 5 tuşlarına bas (ya da ekran klavyesiyle 12345 yaz). Geliştirici modu penceresi açılır. Bazı yeni modellerde bu, Uygulamalar › Uygulama Ayarları ekranında çalışır."
+            "value": "2. Kumandada 1 2 3 4 5 tuşlarına basın (ya da ekran klavyesiyle 12345 yazın). Geliştirici modu penceresi açılır. Bazı yeni modellerde bu, Uygulamalar › Uygulama Ayarları ekranında çalışır."
           }
         }
       }
@@ -10460,7 +10460,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "3. Developer mode'u On yap, Host PC IP olarak bu telefonun adresini yaz ve OK'e bas:"
+            "value": "3. Developer mode'u On yapın, Host PC IP olarak bu telefonun adresini yazın ve OK'e basın:"
           }
         }
       }
@@ -10476,7 +10476,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. TV'yi yeniden başlat: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tut, sonra yeniden aç. Kısa basınca TV yalnız bekleme moduna geçer."
+            "value": "4. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun, sonra yeniden açın. Kısa basınca TV yalnız bekleme moduna geçer."
           }
         }
       }
@@ -10508,7 +10508,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "İlk kurulumda bir kez ücretsiz Samsung hesabıyla giriş istenir: Samsung uygulamayı yalnız senin TV'ne özel sertifikayla kabul eder. Telefonun adresi değişirse Host PC IP adımı yinelenir."
+            "value": "İlk kurulumda bir kez ücretsiz Samsung hesabıyla giriş istenir: Samsung uygulamayı yalnız sizin TV'nize özel sertifikayla kabul eder. Telefonun adresi değişirse Host PC IP adımı yinelenir."
           }
         }
       }
@@ -10588,7 +10588,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Samsung'dan TV'ne özel sertifika alınıyor…"
+            "value": "Samsung'dan TV'nize özel sertifika alınıyor…"
           }
         }
       }
@@ -10748,7 +10748,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV bu telefonu kabul etmedi. TV'deki geliştirici modu penceresinde Host PC IP'nin bu telefonun adresi (%@) olduğunu kontrol et ve TV'yi yeniden başlat (güç tuşunu yaklaşık 2 saniye basılı tut)."
+            "value": "TV bu telefonu kabul etmedi. TV'deki geliştirici modu penceresinde Host PC IP'nin bu telefonun adresi (%@) olduğunu kontrol edin ve TV'yi yeniden başlatın (güç tuşunu yaklaşık 2 saniye basılı tutun)."
           }
         }
       }
@@ -10764,7 +10764,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'de başka bir cihazda imzalanmış bir CouchSubs uygulaması var ve kaldırılamadı. TV'de Uygulamalar'ı aç, CouchSubs'ı seçip sil ve tekrar dene."
+            "value": "TV'de başka bir cihazda imzalanmış bir CouchSubs uygulaması var ve kaldırılamadı. TV'de Uygulamalar'ı açın, CouchSubs'ı seçip silin ve tekrar deneyin."
           }
         }
       }
@@ -10780,7 +10780,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV, daha önceki bir CouchSubs'ın kaydı hâlâ durduğu için uygulamayı kabul etmiyor (Tizen hatası 118, -22); uygulama listede görünmese de. CouchSubs TV'nin uygulamaları arasındaysa oradan silip tekrar dene. Değilse Smart Hub'ı sıfırlayıp (Ayarlar › Destek › Cihaz Bakımı › Kendi Kendine Tanılama › Smart Hub'ı Sıfırla) tekrar dene. Smart Hub'ı sıfırlamak, indirdiğin diğer uygulamaları da kaldırır."
+            "value": "TV, daha önceki bir CouchSubs'ın kaydı hâlâ durduğu için uygulamayı kabul etmiyor (Tizen hatası 118, -22); uygulama listede görünmese de. CouchSubs TV'nin uygulamaları arasındaysa oradan silip tekrar deneyin. Değilse Smart Hub'ı sıfırlayıp (Ayarlar › Destek › Cihaz Bakımı › Kendi Kendine Tanılama › Smart Hub'ı Sıfırla) tekrar deneyin. Smart Hub'ı sıfırlamak, indirdiğiniz diğer uygulamaları da kaldırır."
           }
         }
       }
@@ -10796,7 +10796,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kurulum sırasında TV bağlantısı koptu. TV'yi açık ve bu telefonla aynı Wi-Fi'da tutup tekrar dene; telefonun ekranı kapanmasın."
+            "value": "Kurulum sırasında TV bağlantısı koptu. TV'yi açık ve bu telefonla aynı Wi-Fi'da tutup tekrar deneyin; telefonun ekranı kapanmasın."
           }
         }
       }
@@ -10812,7 +10812,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV uygulaması kurulamadı. Tekrar dene; yine olmazsa kurulum günlüğünü bize gönder."
+            "value": "TV uygulaması kurulamadı. Tekrar deneyin; yine olmazsa kurulum günlüğünü bize gönderin."
           }
         }
       }
@@ -10828,7 +10828,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu telefon uygulamasında TV paketi yok. Uygulamayı güncelleyip tekrar dene."
+            "value": "Bu telefon uygulamasında TV paketi yok. Uygulamayı güncelleyip tekrar deneyin."
           }
         }
       }
@@ -10892,7 +10892,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "CouchSubs TV uygulamasını LG TV'ne (webOS) bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
+            "value": "CouchSubs TV uygulamasını LG TV'nize (webOS) bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
           }
         }
       }
@@ -10940,7 +10940,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "LG TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle de yazabilirsin (TV'de Ayarlar › Genel › Ağ › bağlı ağ)."
+            "value": "LG TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle de yazabilirsiniz (TV'de Ayarlar › Genel › Ağ › bağlı ağ)."
           }
         }
       }
@@ -10972,7 +10972,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Passphrase (anahtar kayıtlı; gerekirse yaz)"
+            "value": "Passphrase (anahtar kayıtlı; gerekirse yazın)"
           }
         }
       }
@@ -10988,7 +10988,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. webostv.developer.lge.com'da ücretsiz LG geliştirici hesabı aç."
+            "value": "1. webostv.developer.lge.com'da ücretsiz LG geliştirici hesabı açın."
           }
         }
       }
@@ -11004,7 +11004,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "2. TV'de LG Content Store'dan Developer Mode uygulamasını kur, açıp hesabınla giriş yap ve Dev Mode Status'u aç. TV yeniden başlar."
+            "value": "2. TV'de LG Content Store'dan Developer Mode uygulamasını kurun, açıp hesabınızla giriş yapın ve Dev Mode Status'u açın. TV yeniden başlar."
           }
         }
       }
@@ -11020,7 +11020,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "3. Developer Mode uygulamasını yeniden aç ve Key Server'ı aç. Uygulamayı ekranda bırak; sol altta 6 karakterli Passphrase görünür."
+            "value": "3. Developer Mode uygulamasını yeniden açın ve Key Server'ı açın. Uygulamayı ekranda bırakın; sol altta 6 karakterli Passphrase görünür."
           }
         }
       }
@@ -11036,7 +11036,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. Passphrase'i yukarıya yaz ve Kur ve aç'a bas. Parola yalnız ilk kurulumda gerekir."
+            "value": "4. Passphrase'i yukarıya yazın ve Kur ve aç'a basın. Parola yalnız ilk kurulumda gerekir."
           }
         }
       }
@@ -11068,7 +11068,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV yanıt vermedi. TV'nin açık ve bu telefonla aynı Wi-Fi'da olduğundan, Developer Mode uygulamasında Dev Mode Status'un açık olduğundan emin ol."
+            "value": "TV yanıt vermedi. TV'nin açık ve bu telefonla aynı Wi-Fi'da olduğundan, Developer Mode uygulamasında Dev Mode Status'un açık olduğundan emin olun."
           }
         }
       }
@@ -11100,7 +11100,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'de “USB hata ayıklamasına izin verilsin mi?” sorusuna İzin ver de (“Bu cihazdan her zaman izin ver”i işaretle)."
+            "value": "TV'de “USB hata ayıklamasına izin verilsin mi?” sorusuna İzin ver deyin (“Bu cihazdan her zaman izin ver”i işaretleyin)."
           }
         }
       }
@@ -11132,7 +11132,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "CouchSubs Android TV uygulamasını Android TV ya da Google TV'ne bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
+            "value": "CouchSubs Android TV uygulamasını Android TV ya da Google TV'nize bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
           }
         }
       }
@@ -11148,7 +11148,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'nin geliştirici seçeneklerinde hata ayıklama açık olmalı. Güncellemeler için açık bırak."
+            "value": "TV'nin geliştirici seçeneklerinde hata ayıklama açık olmalı. Güncellemeler için açık bırakın."
           }
         }
       }
@@ -11180,7 +11180,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Android TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle yazabilirsin (TV'de Ayarlar › Ağ ve İnternet › bağlı ağ)."
+            "value": "Android TV bulunamadı. TV açık ve aynı Wi-Fi'da mı? Adresini aşağıya elle yazabilirsiniz (TV'de Ayarlar › Ağ ve İnternet › bağlı ağ)."
           }
         }
       }
@@ -11308,7 +11308,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eşleme kodu (6 hane; daha önce eşlendiyse boş bırak)"
+            "value": "Eşleme kodu (6 hane; daha önce eşlendiyse boş bırakın)"
           }
         }
       }
@@ -11324,7 +11324,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kablosuz hata ayıklamada TV'nin portunu da yaz: TV'de Kablosuz hata ayıklama ekranının üstündeki “IP adresi ve bağlantı noktası” (ör. 192.168.1.20:41235)."
+            "value": "Kablosuz hata ayıklamada TV'nin portunu da yazın: TV'de Kablosuz hata ayıklama ekranının üstündeki “IP adresi ve bağlantı noktası” (ör. 192.168.1.20:41235)."
           }
         }
       }
@@ -11340,7 +11340,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eşleme kodunun yanında eşleme penceresindeki IP adresi ve portu da yaz (ör. 192.168.1.20:37099)."
+            "value": "Eşleme kodunun yanında eşleme penceresindeki IP adresi ve portu da yazın (ör. 192.168.1.20:37099)."
           }
         }
       }
@@ -11356,7 +11356,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'de hata ayıklamayı aç"
+            "value": "TV'de hata ayıklamayı açın"
           }
         }
       }
@@ -11372,7 +11372,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Geliştirici seçeneklerini aç: TV'de Ayarlar › Sistem (ya da Cihaz Tercihleri) › Hakkında › Android TV OS derlemesi satırına 7 kez bas."
+            "value": "1. Geliştirici seçeneklerini açın: TV'de Ayarlar › Sistem (ya da Cihaz Tercihleri) › Hakkında › Android TV OS derlemesi satırına 7 kez basın."
           }
         }
       }
@@ -11388,7 +11388,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "2. Ayarlar › Sistem › Geliştirici seçenekleri'nde USB hata ayıklama'yı aç. Bazı TV'lerde ayrıca “Ağ hata ayıklaması” ya da “ADB over network” olur; onu da aç."
+            "value": "2. Ayarlar › Sistem › Geliştirici seçenekleri'nde USB hata ayıklama'yı açın. Bazı TV'lerde ayrıca “Ağ hata ayıklaması” ya da “ADB over network” olur; onu da açın."
           }
         }
       }
@@ -11404,7 +11404,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "3. Kur ve aç'a bas. TV'de “USB hata ayıklamasına izin verilsin mi?” çıkınca “Bu cihazdan her zaman izin ver”i işaretleyip İzin ver'i seç. Bağlanamazsan Kablosuz hata ayıklama yolunu dene (Android 11 ve sonrası, Google TV)."
+            "value": "3. Kur ve aç'a basın. TV'de “USB hata ayıklamasına izin verilsin mi?” çıkınca “Bu cihazdan her zaman izin ver”i işaretleyip İzin ver'i seçin. Bağlanamazsanız Kablosuz hata ayıklama yolunu deneyin (Android 11 ve sonrası, Google TV)."
           }
         }
       }
@@ -11420,7 +11420,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "2. Geliştirici seçenekleri › Kablosuz hata ayıklama'yı aç, içine gir. Üstteki “IP adresi ve bağlantı noktası”nı TV'nin adresine yaz."
+            "value": "2. Geliştirici seçenekleri › Kablosuz hata ayıklama'yı açın, içine girin. Üstteki “IP adresi ve bağlantı noktası”nı TV'nin adresine yazın."
           }
         }
       }
@@ -11436,7 +11436,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "3. İlk kurulumda “Cihazı eşleme kodu ile eşle”ye bas; açılan penceredeki IP adresi ve portu, 6 haneli kodla birlikte buraya yaz ve pencere açıkken Kur ve aç'a bas."
+            "value": "3. İlk kurulumda “Cihazı eşleme kodu ile eşle”ye basın; açılan penceredeki IP adresi ve portu, 6 haneli kodla birlikte buraya yazın ve pencere açıkken Kur ve aç'a basın."
           }
         }
       }
@@ -11468,7 +11468,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV yanıt vermedi. TV'nin açık ve bu telefonla aynı Wi-Fi'da olduğundan, geliştirici seçeneklerinde hata ayıklamanın açık olduğundan emin ol. Kablosuz hata ayıklamada port her açılışta değişir; ekrandakini yaz."
+            "value": "TV yanıt vermedi. TV'nin açık ve bu telefonla aynı Wi-Fi'da olduğundan, geliştirici seçeneklerinde hata ayıklamanın açık olduğundan emin olun. Kablosuz hata ayıklamada port her açılışta değişir; ekrandakini yazın."
           }
         }
       }
@@ -11484,7 +11484,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV bu telefonu tanımıyor. Kablosuz hata ayıklamada önce eşle: TV'de “Cihazı eşleme kodu ile eşle”ye bas, penceredeki adresi ve kodu yazıp tekrar dene."
+            "value": "TV bu telefonu tanımıyor. Kablosuz hata ayıklamada önce eşleyin: TV'de “Cihazı eşleme kodu ile eşle”ye basın, penceredeki adresi ve kodu yazıp tekrar deneyin."
           }
         }
       }
@@ -11500,7 +11500,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eşleme olmadı: kod yanlış ya da TV'deki eşleme penceresi kapandı. Pencereyi yeniden aç, yeni kodu ve portu yazıp tekrar dene."
+            "value": "Eşleme olmadı: kod yanlış ya da TV'deki eşleme penceresi kapandı. Pencereyi yeniden açın, yeni kodu ve portu yazıp tekrar deneyin."
           }
         }
       }
@@ -11548,7 +11548,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'nin geliştirici seçeneklerinde hata ayıklama açık olmalı. Kurulumdan sonra kapatabilirsin."
+            "value": "TV'nin geliştirici seçeneklerinde hata ayıklama açık olmalı. Kurulumdan sonra kapatabilirsiniz."
           }
         }
       }
@@ -11708,7 +11708,7 @@
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV'deki CouchSubs Google Play'den kurulmuş ve bu sürüm onun üstüne kurulamadı. Play'deki sürümü kullanmaya devam edebilirsin; güncellemeyi Play kendisi getirir. Bu sürümü hemen kurmak istersen aşağıdaki düğmeyle TV'deki kopya kaldırılır ve yenisi kurulur (TV uygulamasının ayarları silinir)."
+            "value": "TV'deki CouchSubs Google Play'den kurulmuş ve bu sürüm onun üstüne kurulamadı. Play'deki sürümü kullanmaya devam edebilirsiniz; güncellemeyi Play kendisi getirir. Bu sürümü hemen kurmak isterseniz aşağıdaki düğmeyle TV'deki kopya kaldırılır ve yenisi kurulur (TV uygulamasının ayarları silinir)."
           }
         }
       }
