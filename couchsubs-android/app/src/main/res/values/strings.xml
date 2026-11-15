@@ -39,7 +39,7 @@
     <string name="screen_remove">Çevirileri kaldır</string>
     <string name="screen_translating">Ekran çevriliyor…</string>
     <string name="screen_none">Ekranda yazı bulunamadı.</string>
-    <string name="screen_no_picture">Ekran alınamadı: PS5'ten henüz görüntü gelmedi.</string>
+    <string name="screen_no_picture">Ekran alınamadı: PS5\'ten henüz görüntü gelmedi.</string>
     <string name="screen_failed">Ekran çevrilemedi: %1$s</string>
 
 
