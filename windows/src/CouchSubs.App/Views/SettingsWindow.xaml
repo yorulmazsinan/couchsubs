@@ -109,6 +109,7 @@
                         </StackPanel>
                     </c:Card>
                     <local:DubbingCard x:Name="Dubbing" Margin="0,16,0,0" />
+                    <local:FirewallSettingsCard x:Name="FirewallSettings" Margin="0,16,0,0" />
                 </StackPanel>
             </TabItem>
             <TabItem Header="{t:T 'Translation'}">

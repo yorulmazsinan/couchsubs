@@ -1,0 +1,17 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<UserControl x:Class="CouchSubs.App.Views.FirewallSettingsCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:CouchSubs.App.Controls"
+             xmlns:t="clr-namespace:CouchSubs.App.Theme"
+             Visibility="Collapsed">
+    <c:Card Title="{t:T 'Windows Firewall'}">
+        <StackPanel>
+            <TextBlock x:Name="Status" Style="{StaticResource HintText}" TextWrapping="Wrap" />
+            <TextBlock x:Name="PublicHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"
+                       Foreground="{DynamicResource warningBrush}"
+                       Text="{t:T 'This computer\'s network is set to Public. Windows then blocks the TV from finding it. Open Windows Settings › Network and set the network profile to Private.'}" />
+            <Button x:Name="Allow" HorizontalAlignment="Left" Margin="0,12,0,0" Content="{t:T 'Allow CouchSubs through Windows Firewall'}" Click="OnAllow" />
+        </StackPanel>
+    </c:Card>
+</UserControl>

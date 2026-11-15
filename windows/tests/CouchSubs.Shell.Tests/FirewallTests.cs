@@ -124,6 +124,17 @@ public class FirewallPairingTests
         Assert.Equal(FirewallPrompt.None, controller.FirewallPrompt);
         Assert.False(await controller.AllowThroughFirewallAsync());
     }
+
+    [Fact]
+    public async Task SettingsStateReportsRuleAndNetwork()
+    {
+        var firewall = new FakeFirewall { Rule = false };
+        var controller = AppControllerTests.Make(new FakeServices { Firewall = firewall });
+        Assert.Equal((false, false), await controller.GetFirewallStateAsync());
+        await controller.AllowThroughFirewallAsync();
+        Assert.Equal((true, false), await controller.GetFirewallStateAsync());
+        Assert.Null(await AppControllerTests.Make(new FakeServices()).GetFirewallStateAsync());
+    }
 }
 
 public class FirewallRunningTests

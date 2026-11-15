@@ -13,6 +13,9 @@ public interface IFirewall
 
     /// <summary>Yönetici izniyle (UAC) kuralı ekler; kullanıcı izin vermezse ya da kural yine yoksa false.</summary>
     Task<bool> AddRuleAsync();
+
+    /// <summary>Bağlı ağlardan biri "Ortak" profilde mi. Ortak ağda Windows, TV'nin bilgisayarı bulmasını engelleyebilir.</summary>
+    bool HasPublicNetwork() => false;
 }
 
 /// <summary>

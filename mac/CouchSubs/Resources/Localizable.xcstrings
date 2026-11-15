@@ -12400,6 +12400,86 @@
           }
         }
       }
+    },
+    "If the TV cannot connect: Windows Firewall may be blocking CouchSubs. Allow it in Settings › Windows Firewall, and set this network to Private in Windows.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the TV cannot connect: Windows Firewall may be blocking CouchSubs. Allow it in Settings › Windows Firewall, and set this network to Private in Windows."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV bağlanamıyorsa: Windows Güvenlik Duvarı CouchSubs'ı engelliyor olabilir. Ayarlar › Windows Güvenlik Duvarı'ndan izin verin ve bu ağı Windows'ta \"Özel\" yapın."
+          }
+        }
+      }
+    },
+    "Windows Firewall": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Firewall"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Güvenlik Duvarı"
+          }
+        }
+      }
+    },
+    "Windows Firewall already allows CouchSubs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Firewall already allows CouchSubs."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Güvenlik Duvarı CouchSubs'a zaten izin veriyor."
+          }
+        }
+      }
+    },
+    "Windows Firewall does not allow CouchSubs yet. The TV and the PS5 cannot reach this computer until you allow it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Firewall does not allow CouchSubs yet. The TV and the PS5 cannot reach this computer until you allow it."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows Güvenlik Duvarı CouchSubs'a henüz izin vermiyor. İzin verene kadar TV ve PS5 bu bilgisayara ulaşamaz."
+          }
+        }
+      }
+    },
+    "This computer's network is set to Public. Windows then blocks the TV from finding it. Open Windows Settings › Network and set the network profile to Private.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This computer's network is set to Public. Windows then blocks the TV from finding it. Open Windows Settings › Network and set the network profile to Private."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bilgisayarın ağı \"Ortak\" olarak ayarlı. Windows bu durumda TV'nin bilgisayarı bulmasını engeller. Windows Ayarları › Ağ bölümünden ağ profilini \"Özel\" yapın."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

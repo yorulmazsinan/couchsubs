@@ -97,6 +97,39 @@ internal sealed class WindowsFirewall : IFirewall
         catch (Exception) { return true; }
     }
 
+    /// <summary>Kaldırmada kural silinir. Yönetici izni gerekir; yoksa sessizce vazgeçilir (kalan kural zararsızdır).</summary>
+    public static void RemoveRuleQuietly()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("netsh.exe", $"advfirewall firewall delete rule name=\"{RuleName}\" dir=in")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+            });
+            process?.WaitForExit(10_000);
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>Ağ listesi COM'u (NetworkListManager): kategori 0 = Ortak, 1 = Özel, 2 = Etki alanı.</summary>
+    public bool HasPublicNetwork()
+    {
+        try
+        {
+            var type = Type.GetTypeFromCLSID(new Guid("DCB00C01-570F-4A9B-8D69-199FDBA5723B"));
+            if (type is null) return false;
+            dynamic manager = Activator.CreateInstance(type)!;
+            foreach (dynamic connection in (IEnumerable)manager.GetNetworkConnections())
+            {
+                if (!(bool)connection.IsConnected) continue;
+                if ((int)connection.GetNetwork().GetCategory() == 0) return true;
+            }
+        }
+        catch (Exception) { }
+        return false;
+    }
+
     private static bool FirewallEnabled(dynamic policy, int profile)
     {
         try { return (bool)policy.FirewallEnabled[profile]; }

@@ -60,6 +60,7 @@ public partial class SettingsWindow : Window
         controller.SnapshotRequested += OnSnapshot;
         Closed += (_, _) => controller.SnapshotRequested -= OnSnapshot;
         Dubbing.Attach(controller);
+        FirewallSettings.Attach(controller);
         OutputCard.Attach(controller);
         ShowStyleTitle();
         controller.PropertyChanged += OnControllerChanged;

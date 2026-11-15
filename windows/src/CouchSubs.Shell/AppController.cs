@@ -1987,6 +1987,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         return true;
     }
 
+    /// <summary>Ayarlar: güvenlik duvarı desteklenmiyorsa null; yoksa (kural var mı, ağ "Ortak" mı).</summary>
+    public async Task<(bool HasRule, bool PublicNetwork)?> GetFirewallStateAsync()
+    {
+        if (services.Firewall is not { } firewall) return null;
+        var hasRule = await HasFirewallRuleAsync(firewall);
+        bool publicNetwork;
+        try { publicNetwork = await Task.Run(firewall.HasPublicNetwork); }
+        catch (Exception) { publicNetwork = false; }
+        return (hasRule, publicNetwork);
+    }
+
     /// <summary>Eşleştirme başarısız oldu: kural eksikse düğme önerilir.</summary>
     private async Task OfferFirewallAsync()
     {
