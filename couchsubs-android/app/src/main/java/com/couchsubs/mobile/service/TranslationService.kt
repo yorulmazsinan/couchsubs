@@ -46,7 +46,9 @@ import com.couchsubs.mobile.translation.AiModel
 import com.couchsubs.mobile.translation.AiProvider
 import com.couchsubs.mobile.translation.AiTranslator
 import com.couchsubs.mobile.translation.DeepLTranslator
+import com.couchsubs.mobile.translation.Glossary
 import com.couchsubs.mobile.translation.MlKitTranslator
+import com.couchsubs.mobile.translation.TranslationCache
 import com.couchsubs.mobile.ui.MainActivity
 import java.io.File
 import java.util.concurrent.Executors
@@ -75,6 +77,19 @@ class TranslationService : Service() {
         fun stop(context: Context) {
             context.startService(Intent(context, TranslationService::class.java).setAction(ACTION_STOP))
         }
+
+        /** Çeviri sürerken açık altyazı sunucusu ("TV'de test et" için). */
+        @Volatile private var liveServer: SubtitleServer? = null
+
+        /**
+         * Deneme altyazısı (iPhone'daki "Deneme altyazısı gönder"): TV'de ya da telefon ekranında yazının nasıl
+         * göründüğü. Çeviri çalışmıyorsa (TV bağlı değil) false.
+         */
+        fun sendTestSubtitle(text: String): Boolean {
+            val server = liveServer ?: return false
+            server.sendSubtitle(text, 8000)
+            return true
+        }
     }
 
     private lateinit var settings: AppSettings
@@ -91,6 +106,7 @@ class TranslationService : Service() {
     private var lastRead = 0L
     private var lastSignature = 0L
     private var lastReading = com.couchsubs.mobile.core.Reading.Empty
+    private var lastOcrMs: Int? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     /** Altyazı bölgesi ve ek alanlar (Ayarlar › Altyazı alanı); çeviri sürerken değişirse hemen yenisi okunur. */
@@ -191,7 +207,10 @@ class TranslationService : Service() {
         // Paketler ücretsiz: uygulamayla gelenler ve sunucudan inmiş güncel sürümler. Ayardan kapatılırsa aranmaz.
         val library = Services.packLibrary(this)
         packs = library
-        val free = MlKitTranslator().also { freeTranslator = it }
+        // Terim sözlüğü ve kalıcı önbellek (iPhone ile aynı biçim): önceki oturumlarda çevrilen cümleler hemen gelir.
+        val glossary = Glossary.load(this)
+        glossaryInUse = glossary
+        val free = MlKitTranslator(cache(MlKitTranslator.ENGINE_ID), glossary).also { freeTranslator = it }
         val translator = onlineTranslator(free) ?: free
         val subtitleServer = SubtitleServer().also { server = it }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
@@ -214,6 +233,7 @@ class TranslationService : Service() {
         try {
             subtitleServer.start()
             subtitleServer.sendStyle(settings.style)
+            liveServer = subtitleServer
         } catch (error: Exception) {
             Log.e(TAG, "SSE server", error)
             LiveState.update { it.copy(error = getString(R.string.error_port)) }
@@ -251,7 +271,7 @@ class TranslationService : Service() {
         // ortak havuza önerilmez (arayüz yazıları havuzu kirletmesin). Mac ve iPhone ile aynı.
         val areaReader = SubtitleReader().also { regionReader = it }
         regionWatcher = com.couchsubs.mobile.core.RegionWatcher({ crop -> areaReader.read(crop.pixels as RegionPixels) },
-            onlineTranslator(free) ?: free, subtitleServer).apply {
+            onlineTranslator(free.separate()) ?: free.separate(), subtitleServer).apply {
             packLookup = { text -> if (packTitles != null && settings.packsEnabled) PackLookup.match(library, text) else null }
         }
         background.scheduleWithFixedDelay({ linePool.flush() }, LinePool.FLUSH_INTERVAL_MS, LinePool.FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS)
@@ -269,10 +289,12 @@ class TranslationService : Service() {
             val now = System.currentTimeMillis()
             if (!reading.get() && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
                 val area = region
+                // Karenin geldiği an: gecikme buradan TV'ye gidene kadar ölçülür (hattın saatiyle).
+                val capturedAt = com.couchsubs.mobile.core.monotonicClock()
                 SubtitleReader.copyRegion(image, area)?.let { pixels ->
                     lastRead = now
                     reading.set(true)
-                    ocr.execute { read(pixels, area) }
+                    ocr.execute { read(pixels, area, capturedAt) }
                 }
             }
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
@@ -322,15 +344,20 @@ class TranslationService : Service() {
         }, 2, 2, TimeUnit.SECONDS)
     }
 
-    private fun read(pixels: RegionPixels, area: CropRegion) {
+    private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long) {
         try {
             // Bölge değişmediyse (aynı altyazı duruyor) yeniden okunmaz; son okuma hattı yine besler (kararlılık ve
             // silme saate bağlıdır, Windows'taki ReadScheduler gibi).
             val current = pipeline ?: return
-            val result = if (pixels.signature == lastSignature) lastReading else reader?.read(pixels) ?: return
+            val reused = pixels.signature == lastSignature
+            val started = com.couchsubs.mobile.core.monotonicClock()
+            val result = if (reused) lastReading else reader?.read(pixels) ?: return
+            val ocrMs = if (reused) lastOcrMs else (com.couchsubs.mobile.core.monotonicClock() - started).toInt()
             lastSignature = pixels.signature
             lastReading = result
-            current.process(result, area.box)
+            lastOcrMs = ocrMs
+            current.process(result, area.box, com.couchsubs.mobile.core.RegionSignature.of(pixels.nv21, pixels.width, pixels.height),
+                capturedAt, ocrMs)
         } catch (error: Exception) {
             Log.w(TAG, "OCR", error)
         } finally {
@@ -344,7 +371,7 @@ class TranslationService : Service() {
         val key = settings.apiKey(engine)?.takeIf { it.isNotBlank() } ?: return null
         return when (engine) {
             EngineChoice.FREE -> null
-            EngineChoice.DEEPL -> DeepLTranslator(key, free)
+            EngineChoice.DEEPL -> DeepLTranslator(key, free, cache = cache(DeepLTranslator.ENGINE_ID), glossary = glossaryInUse)
             else -> {
                 val provider = when (engine) {
                     EngineChoice.GEMINI -> AiProvider.GEMINI
@@ -353,16 +380,17 @@ class TranslationService : Service() {
                 }
                 val models = aiModels()[provider.id].orEmpty()
                 val model = models.firstOrNull { it.id == settings.aiModel } ?: models.firstOrNull() ?: return null
-                AiTranslator(provider, key, model, free)
+                AiTranslator(provider, key, model, free, cache = cache(AiTranslator.engineId(provider, model)))
             }
         }
     }
 
-    private fun aiModels(): Map<String, List<AiModel>> = try {
-        AiModel.parse(assets.open("ai-models.json").use { String(it.readBytes(), Charsets.UTF_8) })
-    } catch (error: Exception) {
-        emptyMap()
-    }
+    private fun aiModels(): Map<String, List<AiModel>> = AiModel.load(this)
+
+    /** Motorun kalıcı önbelleği: files/Translations/v1-<motor>-en-tr.jsonl (iPhone'daki Translations klasörüyle aynı biçim). */
+    private fun cache(engine: String) = TranslationCache.shared(File(filesDir, "Translations"), engine)
+
+    @Volatile private var glossaryInUse = Glossary.Empty
 
     private fun describe(state: SessionState): String = when (state) {
         SessionState.Connecting -> getString(R.string.phase_connecting)
@@ -415,6 +443,7 @@ class TranslationService : Service() {
         pipeline?.reset()
         pipeline?.shutdown()
         pipeline = null
+        liveServer = null
         server?.stop()
         server = null
         reader?.close()

@@ -43,8 +43,13 @@ import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.core.SubtitleTextColor
 import com.couchsubs.mobile.remoteplay.LoginPasscode
+import com.couchsubs.mobile.service.TranslationService
 import com.couchsubs.mobile.settings.EngineChoice
 import com.couchsubs.mobile.settings.SubtitleTarget
+import com.couchsubs.mobile.translation.AiModel
+import com.couchsubs.mobile.translation.KeyCheck
+import com.couchsubs.mobile.translation.OnlineKeyState
+import com.couchsubs.mobile.translation.aiProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,7 +114,12 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
     val settings = Services.settings
     var tvInstall by remember { mutableStateOf(settings.experimentalTvInstall) }
     var engine by remember { mutableStateOf(settings.engine) }
-    var key by remember(engine) { mutableStateOf(settings.apiKey(engine) ?: "") }
+    // Anahtar kaydedilmeden önce denenir (iPhone gibi): yalnız kabul edilen anahtar gizli depoya yazılır.
+    var key by remember(engine) { mutableStateOf("") }
+    var saved by remember(engine) { mutableStateOf(!settings.apiKey(engine).isNullOrBlank()) }
+    var checking by remember { mutableStateOf(false) }
+    var keyRejected by remember(engine) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var scale by remember { mutableStateOf(settings.subtitleScale.toFloat()) }
     var color by remember { mutableStateOf(settings.textColor) }
     var screenOn by remember { mutableStateOf(settings.keepScreenOn) }
@@ -143,9 +153,43 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TileLabel(stringResource(R.string.settings_key_for, engineName(context)))
                     Spacer(Modifier.weight(1f))
-                    if (key.isNotBlank()) StatusLabel(stringResource(R.string.settings_key_saved))
+                    if (saved) StatusLabel(stringResource(R.string.settings_key_saved))
                 }
-                Field(key, { key = it; settings.setApiKey(engine, it) }, stringResource(R.string.settings_key), secret = true)
+                if (saved) {
+                    GhostButton(stringResource(R.string.settings_key_remove)) {
+                        settings.setApiKey(engine, null)
+                        saved = false
+                    }
+                } else {
+                    Field(key, { key = it; keyRejected = false }, stringResource(R.string.settings_key), secret = true)
+                    SecondaryButton(stringResource(if (checking) R.string.settings_key_checking else R.string.settings_key_save),
+                        enabled = !checking && key.isNotBlank()) {
+                        val choice = engine
+                        val typed = key.trim()
+                        checking = true
+                        keyRejected = false
+                        scope.launch {
+                            val state = withContext(Dispatchers.IO) {
+                                val provider = choice.aiProvider
+                                if (provider == null) KeyCheck.deepL(typed)
+                                else {
+                                    val models = AiModel.load(context)[provider.id].orEmpty()
+                                    val model = models.firstOrNull { it.id == settings.aiModel } ?: models.firstOrNull()
+                                    if (model == null) OnlineKeyState.UNREACHABLE else KeyCheck.ai(provider, typed, model)
+                                }
+                            }
+                            checking = false
+                            if (KeyCheck.accepted(state)) {
+                                settings.setApiKey(choice, typed)
+                                if (engine == choice) {
+                                    saved = true
+                                    key = ""
+                                }
+                            } else if (engine == choice) keyRejected = true
+                        }
+                    }
+                    if (keyRejected) NoteTile(stringResource(R.string.settings_key_rejected))
+                }
             }
             Text(stringResource(R.string.settings_engine_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
         }
@@ -205,6 +249,13 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
             }
             if (tvInstall) RowItem(stringResource(R.string.tvinstall_entry), onClick = onTvInstall)
         }
+        // Deneme altyazısı: TV'de (ya da telefon ekranında) yazının nasıl göründüğü; iPhone ile aynı.
+        var testNote by remember { mutableStateOf<String?>(null) }
+        SecondaryButton(stringResource(R.string.settings_test_subtitle)) {
+            testNote = if (TranslationService.sendTestSubtitle(context.getString(R.string.test_subtitle_text))) null
+                else context.getString(R.string.settings_test_needs_start)
+        }
+        testNote?.let { NoteTile(it, Tokens.Color.secondary) }
         Text(stringResource(R.string.settings_copyright), style = Tokens.Type.caption, color = Tokens.Color.secondary,
             modifier = Modifier.padding(top = Tokens.Space.inline))
     }

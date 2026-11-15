@@ -346,4 +346,16 @@
     <string name="extra_quest_title">Quest (top right)</string>
     <string name="extra_notification_title">Notification (bottom left)</string>
     <string name="extra_phone_title">Phone (bottom right)</string>
+    <string name="address_invalid">This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number.</string>
+    <string name="settings_key_save">Save and test</string>
+    <string name="settings_key_checking">Testing…</string>
+    <string name="settings_key_remove">Remove key</string>
+    <string name="settings_key_rejected">The key did not work. Check it and try again.</string>
+    <string name="metrics_ocr">OCR %1$d ms</string>
+    <string name="metrics_pack">Ready pack</string>
+    <string name="metrics_translation">Translation %1$d ms</string>
+    <string name="metrics_delay">Delay %1$d ms</string>
+    <string name="settings_test_subtitle">Test on TV</string>
+    <string name="settings_test_needs_start">Start translation first; the test subtitle shows once the TV app connects to the phone.</string>
+    <string name="test_subtitle_text">This is a test subtitle. Can you see it on top of the game?</string>
 </resources>

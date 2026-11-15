@@ -353,4 +353,16 @@
     <string name="extra_quest_title">Görev (sağ üst)</string>
     <string name="extra_notification_title">Bildirim (sol alt)</string>
     <string name="extra_phone_title">Telefon (sağ alt)</string>
+    <string name="address_invalid">Bu geçerli bir IP adresi değil. 192.168.1.20 gibi, http:// ve port numarası olmadan yazın.</string>
+    <string name="settings_key_save">Kaydet ve dene</string>
+    <string name="settings_key_checking">Deneniyor…</string>
+    <string name="settings_key_remove">Anahtarı kaldır</string>
+    <string name="settings_key_rejected">Anahtar çalışmadı. Kontrol edip yeniden deneyin.</string>
+    <string name="metrics_ocr">OCR %1$d ms</string>
+    <string name="metrics_pack">Hazır paket</string>
+    <string name="metrics_translation">Çeviri %1$d ms</string>
+    <string name="metrics_delay">Gecikme %1$d ms</string>
+    <string name="settings_test_subtitle">TV\'de test et</string>
+    <string name="settings_test_needs_start">Deneme altyazısı için önce çeviriyi başlatın; TV uygulaması telefona bağlanınca yazı görünür.</string>
+    <string name="test_subtitle_text">Bu bir deneme altyazısı. Oyunun üstünde görüyor musunuz?</string>
 </resources>

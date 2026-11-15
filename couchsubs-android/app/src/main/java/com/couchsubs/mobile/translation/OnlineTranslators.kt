@@ -22,6 +22,15 @@ enum class AiProvider(val id: String, val displayName: String) {
     GEMINI("gemini", "Gemini"), OPENAI("openai", "OpenAI"), CLAUDE("claude", "Claude");
 }
 
+/** Çevrimiçi motorun yapay zekâ hizmeti (DeepL ve ücretsiz motorda null). */
+val com.couchsubs.mobile.settings.EngineChoice.aiProvider: AiProvider?
+    get() = when (this) {
+        com.couchsubs.mobile.settings.EngineChoice.GEMINI -> AiProvider.GEMINI
+        com.couchsubs.mobile.settings.EngineChoice.OPENAI -> AiProvider.OPENAI
+        com.couchsubs.mobile.settings.EngineChoice.CLAUDE -> AiProvider.CLAUDE
+        else -> null
+    }
+
 /** Listedeki bir model ve onunla gönderilen ayarlar (ortak ai-models.json). */
 data class AiModel(
     val id: String,
@@ -32,6 +41,13 @@ data class AiModel(
     val requestsPerMinute: Int? = null,
 ) {
     companion object {
+        /** Uygulamayla gelen ai-models.json; okunamazsa boş. */
+        fun load(context: android.content.Context): Map<String, List<AiModel>> = try {
+            parse(context.assets.open("ai-models.json").use { String(it.readBytes(), Charsets.UTF_8) })
+        } catch (error: Exception) {
+            emptyMap()
+        }
+
         /** ai-models.json: hizmet adı → modeller; "_comment" gibi dizi olmayan alanlar atlanır. */
         fun parse(json: String): Map<String, List<AiModel>> {
             val root = JSONObject(json)
@@ -49,6 +65,56 @@ data class AiModel(
                 if (models.isNotEmpty()) result[name] = models
             }
             return result
+        }
+    }
+}
+
+/**
+ * Anahtar kaydedilmeden önce denenir (Mac/iPhone: DeepLTranslator.check ve AITranslationCore.test ile aynı kural):
+ * DeepL'de kullanım sorgulanır, yapay zekâ hizmetinde örnek bir satır çevrilir. Geçerli, kotası dolmuş ya da modeli
+ * reddedilen anahtar kabul edilir (anahtar doğrudur); geçersiz ya da ulaşılamayan anahtar kaydedilmez.
+ */
+object KeyCheck {
+    /** Denemede çevrilen örnek satır (iPhone ile aynı). */
+    const val SAMPLE = "KRATOS: We go now. Stay close, boy."
+
+    fun accepted(state: OnlineKeyState) =
+        state == OnlineKeyState.VALID || state == OnlineKeyState.QUOTA_EXCEEDED || state == OnlineKeyState.MODEL_REJECTED
+
+    /** DeepL: /usage; bu ay kota dolduysa QUOTA_EXCEEDED. Bloklar. */
+    fun deepL(key: String, http: Http = Http.Default): OnlineKeyState {
+        val trimmed = key.trim()
+        if (trimmed.isEmpty()) return OnlineKeyState.INVALID
+        return try {
+            val (status, body) = http.send("GET", DeepLTranslator.baseUrl(trimmed) + "usage",
+                mapOf("Authorization" to "DeepL-Auth-Key $trimmed"), null, 6000)
+            if (status !in 200..299) return DeepLTranslator.failure(status)
+            val usage = JSONObject(body)
+            val count = usage.optLong("character_count", 0)
+            val limit = usage.optLong("character_limit", 0)
+            if (limit > 0 && count >= limit) OnlineKeyState.QUOTA_EXCEEDED else OnlineKeyState.VALID
+        } catch (error: IOException) {
+            OnlineKeyState.UNREACHABLE
+        } catch (error: JSONException) {
+            OnlineKeyState.UNREACHABLE
+        }
+    }
+
+    /** Yapay zekâ hizmeti: örnek satır seçilen modelle çevrilir. Bloklar. */
+    fun ai(provider: AiProvider, key: String, model: AiModel, http: Http = Http.Default): OnlineKeyState {
+        if (key.isBlank()) return OnlineKeyState.INVALID
+        return try {
+            val request = AiRequest.build(provider, key, model, listOf(SAMPLE), emptyList())
+            val (status, body) = http.send("POST", request.url, request.headers, request.body, 15000)
+            if (status !in 200..299) return AiRequest.failure(status, body)
+            AiRequest.translations(AiRequest.text(provider, body), 1)
+            OnlineKeyState.VALID
+        } catch (error: OnlineException) {
+            error.state
+        } catch (error: IOException) {
+            OnlineKeyState.UNREACHABLE
+        } catch (error: JSONException) {
+            OnlineKeyState.UNREACHABLE
         }
     }
 }
@@ -79,16 +145,6 @@ fun interface Http {
     }
 }
 
-/** Kısa ömürlü bellek önbelleği: aynı satır (ve cümle) yeniden çevrilmez. */
-class TranslationCache(private val capacity: Int = 2000) {
-    private val map = object : LinkedHashMap<String, String>(256, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > capacity
-    }
-
-    fun get(text: String): String? = synchronized(map) { map[text] }
-    fun store(text: String, translation: String) = synchronized(map) { map[text] = translation }
-}
-
 /**
  * Cümle cümle çeviren çevrimiçi motorların ortak düzeni (Windows: DeepLTranslator ve AiTranslator): konuşmacı
  * etiketleri çevrilmez, önbellekteki cümleler yeniden gönderilmez, hata olursa o satır yerel motorla çevrilir ve bir
@@ -114,15 +170,21 @@ abstract class SentenceTranslator<C>(
 
     protected open fun remember(text: String, translation: String) {}
 
+    /** Önbellek anahtarı (DeepL'de sözlük terimi içeren satıra sözlüğün izi girer). */
+    protected open fun cacheKey(text: String): String = text
+
+    /** Büyük harfle kalacak ek sözcükler (sözlükteki adlar). */
+    protected open val extraNames: Set<String> get() = emptySet()
+
     override fun translate(text: String): String {
         val context = context(text)
-        cache.get(text)?.let { return it.also { remember(text, it) } }
+        cache.get(cacheKey(text))?.let { return it.also { remember(text, it) } }
         if (clock() < pausedUntil) return fallback(text)
         val pieces = SubtitleSegmenter.split(text)
         for (name in pieces.mapNotNull(SubtitleSegmenter::labelName))
             name.split(' ').filter { it.length >= 2 }.forEach { names.add(it.lowercase(Locale.ROOT)) }
-        val known = names.toSet()
-        val translations = pieces.map { if (it.translate) cache.get(it.text) else null }.toMutableList()
+        val known = names.toSet() + extraNames
+        val translations = pieces.map { if (it.translate) cache.get(cacheKey(it.text)) else null }.toMutableList()
         val missing = pieces.indices.filter { pieces[it].translate && translations[it] == null }
         val sources = missing.map { SubtitleSegmenter.normalizeCase(pieces[it].text, known) }
         val translated = try {
@@ -138,10 +200,10 @@ abstract class SentenceTranslator<C>(
         }
         for ((i, index) in missing.withIndex()) {
             translations[index] = translated[i]
-            cache.store(pieces[index].text, translated[i])
+            cache.store(cacheKey(pieces[index].text), translated[i])
         }
         val result = pieces.indices.joinToString("") { translations[it] ?: pieces[it].text }
-        cache.store(text, result)
+        cache.store(cacheKey(text), result)
         remember(text, result)
         return result
     }
@@ -156,20 +218,31 @@ abstract class SentenceTranslator<C>(
     }
 }
 
-/** Kullanıcının DeepL anahtarıyla çeviri; son 3 satır `context` olarak gider (ücretlendirilmez). */
+/**
+ * Kullanıcının DeepL anahtarıyla çeviri; son 3 satır `context` olarak gider (ücretlendirilmez). Sözlükteki adlar ve
+ * terimler etiketle korunur ([DeepLMarkup], iPhone ile aynı).
+ */
 class DeepLTranslator(
     key: String,
     fallback: TextTranslator?,
     private val http: Http = Http.Default,
-) : SentenceTranslator<String>(fallback) {
+    cache: TranslationCache = TranslationCache(),
+    private val glossary: Glossary = Glossary.Empty,
+) : SentenceTranslator<String>(fallback, cache) {
     private val key = key.trim()
     private val recent = ArrayDeque<String>()
 
+    override fun cacheKey(text: String) = DeepLMarkup.cacheKey(text, glossary)
+    override val extraNames: Set<String> get() = glossary.capitalWords
+
     companion object {
+        /** Kalıcı önbellek dosyasındaki motor adı (iPhone ile aynı). */
+        const val ENGINE_ID = "deepl"
+
         /** Ücretsiz anahtarlar ":fx" ile biter ve ayrı adrese gider. */
         fun baseUrl(key: String) = if (key.trim().endsWith(":fx")) "https://api-free.deepl.com/v2/" else "https://api.deepl.com/v2/"
 
-        fun body(sentences: List<String>, context: String?): String = JSONObject()
+        fun body(sentences: List<String>, context: String?, tagged: Boolean = false): String = JSONObject()
             .put("text", JSONArray(sentences))
             .put("source_lang", "EN")
             .put("target_lang", "TR")
@@ -177,6 +250,10 @@ class DeepLTranslator(
             // Oyun konuşması: "siz" değil "sen".
             .put("formality", "prefer_less")
             .put("preserve_formatting", true)
+            .apply {
+                // Etiketli terimler çevrilmez.
+                if (tagged) put("tag_handling", "xml").put("ignore_tags", JSONArray().put(DeepLMarkup.TAG))
+            }
             .toString()
 
         fun failure(status: Int) = when (status) {
@@ -196,14 +273,19 @@ class DeepLTranslator(
     }
 
     override fun request(sentences: List<String>, context: String): List<String> {
+        // Sözlükteki adlar etiketle korunur; etiket varsa istek XML olarak gider, diğer cümleler de kaçırılır.
+        val wrapped = sentences.map { DeepLMarkup.wrap(it, glossary) }
+        val tagged = wrapped.any { it != null }
+        val sources = if (tagged) sentences.indices.map { wrapped[it] ?: DeepLMarkup.escape(sentences[it]) } else sentences
         val (status, response) = http.send(
             "POST", baseUrl(key) + "translate",
-            mapOf("Authorization" to "DeepL-Auth-Key $key", "Content-Type" to "application/json"), body(sentences, context), 4000,
+            mapOf("Authorization" to "DeepL-Auth-Key $key", "Content-Type" to "application/json"), body(sources, context, tagged), 4000,
         )
         if (status !in 200..299) throw OnlineException(failure(status))
         val list = JSONObject(response).optJSONArray("translations") ?: throw OnlineException(OnlineKeyState.UNREACHABLE)
         if (list.length() != sentences.size) throw OnlineException(OnlineKeyState.UNREACHABLE)
-        return (0 until list.length()).map { list.getJSONObject(it).getString("text") }
+        val reply = (0 until list.length()).map { list.getJSONObject(it).getString("text") }
+        return if (tagged) reply.map(DeepLMarkup::unwrap) else reply
     }
 }
 
@@ -389,7 +471,13 @@ class AiTranslator(
     private val model: AiModel,
     fallback: TextTranslator?,
     private val http: Http = Http.Default,
-) : SentenceTranslator<List<AiRequest.ContextLine>>(fallback) {
+    cache: TranslationCache = TranslationCache(),
+) : SentenceTranslator<List<AiRequest.ContextLine>>(fallback, cache) {
+    companion object {
+        /** Kalıcı önbellek dosyasındaki motor adı (iPhone ile aynı: "gemini:<model>"). */
+        fun engineId(provider: AiProvider, model: AiModel) = "${provider.id}:${model.id}"
+    }
+
     private val key = key.trim()
     private val recent = ArrayDeque<AiRequest.ContextLine>()
 

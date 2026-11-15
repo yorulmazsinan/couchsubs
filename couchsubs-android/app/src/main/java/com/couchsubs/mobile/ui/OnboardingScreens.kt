@@ -53,6 +53,7 @@ import com.couchsubs.mobile.settings.SubtitleTarget
 import com.couchsubs.mobile.tv.FoundTv
 import com.couchsubs.mobile.tv.TvBrand
 import com.couchsubs.mobile.tv.TvDiscovery
+import com.couchsubs.mobile.core.ManualAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -143,6 +144,7 @@ fun PairScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDon
     var manual by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var addressError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val failures = registrationErrors()
     LaunchedEffect(Unit) {
@@ -153,13 +155,21 @@ fun PairScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDon
     val pin = Registration.parsePin(code)
     ScreenScaffold(top = { TopBar(onBack = onBack) { SkipAction(onSkip) } }, bottom = {
         if (!manual) GhostButton(stringResource(R.string.pair_not_found)) { manual = true }
-        PrimaryButton(stringResource(R.string.pair_button), enabled = !working && pin != null && host.isNotEmpty()) {
+        PrimaryButton(stringResource(R.string.pair_button), enabled = !working && pin != null && host.isNotBlank()) {
             val accountId = settings.accountId ?: return@PrimaryButton
+            // Elle yazılan adres temizlenir ("192.168.1.5:3000", "http://…", virgüllü yazım); adres değilse söylenir (#50).
+            val address = ManualAddress.normalize(host)
+            if (address == null) {
+                problem = null
+                addressError = true
+                return@PrimaryButton
+            }
+            addressError = false
             working = true
             problem = null
             scope.launch {
                 try {
-                    settings.console = withContext(Dispatchers.IO) { Registration.register(host, accountId, pin!!) }
+                    settings.console = withContext(Dispatchers.IO) { Registration.register(address, accountId, pin!!) }
                     onDone()
                 } catch (error: RegistrationException) {
                     problem = failures(error.failure) + (error.detail?.let { " ($it)" } ?: "")
@@ -186,7 +196,8 @@ fun PairScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDon
                 }
             }
         }
-        if (manual) Field(host, { host = it.trim() }, stringResource(R.string.pair_address), keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (manual) Field(host, { host = it; addressError = false }, stringResource(R.string.pair_address), keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (addressError) NoteTile(stringResource(R.string.address_invalid))
         Tile(Modifier.fillMaxWidth()) {
             TileLabel(stringResource(R.string.pair_code))
             // Görünmez alan rakamları alır; kutular gösterir.

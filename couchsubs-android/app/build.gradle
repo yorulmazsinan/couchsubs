@@ -129,7 +129,7 @@ android {
 // Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
 tasks.register('copyCouchSubsAssets', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-assets')
-    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json' }
+    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json', 'glossary-en-tr.json' }
 }
 tasks.register('copyCouchSubsPacks', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-packs')

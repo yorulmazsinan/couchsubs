@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile.translation
 
-import com.couchsubs.mobile.core.SubtitleSegmenter
 import com.couchsubs.mobile.core.TextTranslator
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
@@ -15,13 +14,23 @@ import java.util.concurrent.TimeoutException
 
 /**
  * Ücretsiz, cihaz üstü çeviri: Google ML Kit EN→TR (model yaklaşık 30 MB, ilk kullanımda bir kez iner; sonra internetsiz
- * çalışır). Masaüstündeki yerel modeldeki gibi cümle cümle çevrilir, konuşmacı etiketi ve tireler olduğu gibi kalır.
+ * çalışır). iPhone ve Mac'teki ücretsiz metin hattıyla aynı ([FreeLineTranslator]): cümle cümle çevrilir, terim sözlüğü
+ * korunur, kısa satır önceki cümleyle çevrilir, oyun deyimleri düz İngilizceye döner, Türkçe düzeltmeler yapılır.
+ * [cache]: kalıcı önbellek (önceki oturumlarda çevrilmiş cümleler hiç çevrilmeden döner).
  */
-class MlKitTranslator : TextTranslator, AutoCloseable {
+class MlKitTranslator(
+    private val cache: TranslationCache = TranslationCache(),
+    private val glossary: Glossary = Glossary.Empty,
+) : TextTranslator, AutoCloseable {
+    companion object {
+        /** Kalıcı önbellek dosyasındaki motor adı; metin hattı değişince ([FreeTranslation.PIPELINE_VERSION]) bu da değişir. */
+        const val ENGINE_ID = "mlkit-p${FreeTranslation.PIPELINE_VERSION}"
+    }
+
     private val translator = Translation.getClient(
         TranslatorOptions.Builder().setSourceLanguage(TranslateLanguage.ENGLISH).setTargetLanguage(TranslateLanguage.TURKISH).build()
     )
-    private val cache = TranslationCache()
+    private val line = FreeLineTranslator(cache, glossary, engine = ::machine)
 
     /** Model yoksa indirir (bloklar). [wifiOnly]: hücresel veride indirme. */
     fun prepare(wifiOnly: Boolean = false, timeoutSeconds: Long = 300) {
@@ -29,25 +38,16 @@ class MlKitTranslator : TextTranslator, AutoCloseable {
         await(translator.downloadModelIfNeeded(conditions), timeoutSeconds)
     }
 
-    override fun translate(text: String): String {
-        cache.get(text)?.let { return it }
-        val pieces = SubtitleSegmenter.split(text)
-        // iPhone ve Mac'teki ücretsiz metin hattıyla aynı: oyun deyimleri düz İngilizceye, çeviri Türkçe düzeltmelerden geçer;
-        // hitap satırın bütününe bakar ("Sana söyledim. Bekleyin!" → "Bekle!").
-        val sentences = pieces.map { piece ->
-            if (!piece.translate) null
-            else cache.get(piece.text) ?: translateSentence(piece.text).also { cache.store(piece.text, it) }
-        }
-        val final = TurkishPostEdit.register(sentences)
-        val result = pieces.indices.joinToString("") { final[it] ?: pieces[it].text }
-        cache.store(text, result)
-        return result
-    }
+    override fun translate(text: String): String = line.translate(text)
 
-    private fun translateSentence(sentence: String): String {
-        val input = GameEnglish.plain(SubtitleSegmenter.normalizeCase(sentence))
-        return TurkishPostEdit.apply(sentence, await(translator.translate(input), 10))
-    }
+    /**
+     * Aynı modeli ve önbelleği kullanan, kendi satır bağlamı olan çevirmen (ek alanlar için: görev yazısı altyazının
+     * kısa satırına bağlam olmasın).
+     */
+    fun separate(): TextTranslator = FreeLineTranslator(cache, glossary, engine = ::machine)
+
+    /** Hazır metni ML Kit'e verir. */
+    private fun machine(input: String): String = await(translator.translate(input), 10)
 
     override fun close() = translator.close()
 

@@ -158,9 +158,25 @@ object RegionSignature {
         return out
     }
 
-    fun changed(a: ByteArray, b: ByteArray, threshold: Int = CHANGE_THRESHOLD): Boolean {
+    /**
+     * İki iz farklı mı: bir örnek [threshold]'dan çok değiştiyse. [within] verilirse yalnız o kutunun (bölgenin kenarlarına
+     * oranla) örttüğü örneklere bakılır; bölgenin başka yerindeki kıpırtı sayılmaz (Mac/iPhone: ReadScheduler.changed).
+     */
+    fun changed(a: ByteArray, b: ByteArray, threshold: Int = CHANGE_THRESHOLD, within: TextBox? = null): Boolean {
         if (a.size != b.size) return true
-        for (i in a.indices) if (abs((a[i].toInt() and 0xff) - (b[i].toInt() and 0xff)) > threshold) return true
+        val rows = a.size / WIDTH
+        if (within == null || rows <= 0 || a.size % WIDTH != 0) {
+            for (i in a.indices) if (abs((a[i].toInt() and 0xff) - (b[i].toInt() and 0xff)) > threshold) return true
+            return false
+        }
+        val left = kotlin.math.floor(within.left * WIDTH).toInt().coerceIn(0, WIDTH - 1)
+        val right = kotlin.math.ceil(within.right * WIDTH).toInt().coerceAtMost(WIDTH).coerceAtLeast(left + 1)
+        val top = kotlin.math.floor(within.top * rows).toInt().coerceIn(0, rows - 1)
+        val bottom = kotlin.math.ceil(within.bottom * rows).toInt().coerceAtMost(rows).coerceAtLeast(top + 1)
+        for (y in top until bottom) for (x in left until right) {
+            val i = y * WIDTH + x
+            if (abs((a[i].toInt() and 0xff) - (b[i].toInt() and 0xff)) > threshold) return true
+        }
         return false
     }
 }

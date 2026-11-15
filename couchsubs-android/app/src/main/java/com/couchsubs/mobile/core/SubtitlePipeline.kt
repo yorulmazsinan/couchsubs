@@ -9,8 +9,20 @@ fun interface TextTranslator {
     fun translate(text: String): String
 }
 
-/** Gösterilen bir çeviri: nereden geldiği ("paket" ya da "motor") ve paketse hangi oyunun paketi. */
-data class ShownPair(val source: String, val translation: String, val origin: String, val packId: String? = null)
+/**
+ * Gösterilen bir çeviri: nereden geldiği ("paket" ya da "motor") ve paketse hangi oyunun paketi. Ölçümler (iPhone'daki
+ * LineMetrics ile aynı): yazı tanımanın süresi, çevirinin süresi (paketse yok) ve karenin geldiği andan TV'ye gönderildiği
+ * ana kadar geçen süre; bilinmeyen değer null.
+ */
+data class ShownPair(
+    val source: String,
+    val translation: String,
+    val origin: String,
+    val packId: String? = null,
+    val ocrMs: Int? = null,
+    val translationMs: Int? = null,
+    val totalMs: Int? = null,
+)
 
 /**
  * Okunan satırlar → kararlılık → paket / çeviri → TV (Windows: SubtitlePipeline.cs, Mac/iPhone: SubtitlePipeline.swift,
@@ -40,7 +52,8 @@ class SubtitlePipeline(
         fun readingTime(text: String) = minOf(8000, 2000 + text.length * 60)
     }
 
-    private class Request(val number: Int, val source: String, val box: TextBox?, val session: Int) {
+    private class Request(val number: Int, val source: String, val box: TextBox?, val session: Int,
+                          val capturedAt: Long? = null, val ocrMs: Int? = null) {
         @Volatile var leftAt: Long? = null
         /** Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez. */
         @Volatile var superseded = false
@@ -60,6 +73,11 @@ class SubtitlePipeline(
     private var lineOnScreen: Int? = null
     private val pairs = mutableListOf<Pair3>()
     private var session = 0
+    /** İşlenen karenin geldiği an (hattın saatiyle) ve okumasının süresi; ölçüm satırı için. */
+    private var frameAt: Long? = null
+    private var frameOcrMs: Int? = null
+
+    private fun totalMs(request: Request): Int? = request.capturedAt?.let { maxOf(0, (now() - it).toInt()) }
 
     /** Oyun paketi: kararlı satırın hazır Türkçesi (yoksa null). Motordan önce bakılır. */
     @Volatile var packLookup: ((String) -> PackMatch?)? = null
@@ -73,12 +91,17 @@ class SubtitlePipeline(
     var packHits = 0
         private set
 
-    /** Bir karenin okuması ve okunan alanın karedeki yeri. */
-    fun process(raw: Reading, area: TextBox) {
+    /**
+     * Bir karenin okuması ve okunan alanın karedeki yeri. [signature]: bölgenin izi ([RegionSignature.of]); okuma boş
+     * dönse de satırın yeri değişmediyse satır silinmez (parlak zemin).
+     */
+    fun process(raw: Reading, area: TextBox, signature: ByteArray? = null, capturedAt: Long? = null, ocrMs: Int? = null) {
+        frameAt = capturedAt
+        frameOcrMs = ocrMs
         // Kumanda ipuçları ve yazı tanıma çöpleri çevrilmez; yalnız altyazı bloğu çevrilir.
         val reading = raw.withoutButtonPrompts().withoutOcrNoise().subtitleBlock(area)
         val after: (() -> Unit)? = synchronized(lock) {
-            val action = stabilizer.feed(reading.text)
+            val action = stabilizer.feed(reading.text, signature, reading.box)
             val box = reading.box?.placedIn(area)?.centeredOnScreen()
             when (action.kind) {
                 StabilizerKind.CLEAR -> {
@@ -109,7 +132,7 @@ class SubtitlePipeline(
     }
 
     private fun enqueue(source: String, box: TextBox?): (() -> Unit)? {
-        val request = Request(++lastRequested, source, box, session)
+        val request = Request(++lastRequested, source, box, session, frameAt, frameOcrMs)
         lineOnScreen = request.number
         packLookup?.invoke(source)?.let { return showPacked(request, it) }
         val missed = onPackMissed
@@ -146,7 +169,8 @@ class SubtitlePipeline(
         sender.sendSubtitle(translated, 15000, request.box, revisesShown(source))
         lastShownSource = source
         val shown = onPairShown
-        return { shown?.invoke(ShownPair(source, translated, "paket", packed.packId)) }
+        val total = totalMs(request)
+        return { shown?.invoke(ShownPair(source, translated, "paket", packed.packId, request.ocrMs, null, total)) }
     }
 
     private fun restore(source: String, box: TextBox?): (() -> Unit)? {
@@ -192,6 +216,7 @@ class SubtitlePipeline(
 
     private fun translate(request: Request) {
         val source = request.source
+        val started = now()
         val translated = try {
             translator.translate(source)
         } catch (error: Exception) {
@@ -205,6 +230,8 @@ class SubtitlePipeline(
             return
         }
         onTranslationResult?.invoke(null)
+        val translationMs = maxOf(0, (now() - started).toInt())
+        var total: Int? = null
         synchronized(lock) {
             if (request.session != session) return
             val shouldSend = stabilizer.shouldSend(source, translated)
@@ -217,8 +244,9 @@ class SubtitlePipeline(
             lastShown = request.number
             sender.sendSubtitle(translated, if (onScreen) 15000 else readingTime(translated), request.box, revisesShown(source))
             lastShownSource = source
+            total = totalMs(request)
         }
-        onPairShown?.invoke(ShownPair(source, translated, "motor"))
+        onPairShown?.invoke(ShownPair(source, translated, "motor", null, request.ocrMs, translationMs, total))
     }
 
     private fun remember(number: Int, source: String, translation: String?) {

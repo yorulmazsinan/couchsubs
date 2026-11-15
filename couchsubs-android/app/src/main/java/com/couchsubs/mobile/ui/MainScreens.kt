@@ -172,6 +172,17 @@ fun MainScreen(
     }
 }
 
+/** Son satırın ölçümleri tek satırda; bilinmeyen değer yazılmaz, hiç ölçüm yoksa null. */
+fun metricsText(context: Context, pair: com.couchsubs.mobile.core.ShownPair): String? {
+    val total = pair.totalMs ?: return null
+    val parts = mutableListOf<String>()
+    pair.ocrMs?.let { parts.add(context.getString(R.string.metrics_ocr, it)) }
+    if (pair.origin == "paket") parts.add(context.getString(R.string.metrics_pack))
+    else pair.translationMs?.let { parts.add(context.getString(R.string.metrics_translation, it)) }
+    parts.add(context.getString(R.string.metrics_delay, total))
+    return parts.joinToString(" · ")
+}
+
 fun engineName(context: Context): String = when (Services.settings.engine) {
     com.couchsubs.mobile.settings.EngineChoice.FREE -> context.getString(R.string.engine_free_short)
     com.couchsubs.mobile.settings.EngineChoice.DEEPL -> "DeepL"
@@ -214,6 +225,8 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
                     Text(it.source, style = Tokens.Type.caption, color = Tokens.Color.secondary, modifier = Modifier.weight(1f))
                     if (it.origin == "paket") Text(stringResource(R.string.running_ready_translation), style = Tokens.Type.caption, color = Tokens.Color.pro)
                 }
+                // Ölçüm satırı (iPhone ile aynı): "OCR 42 ms · Çeviri 310 ms · Gecikme 520 ms".
+                metricsText(context, it)?.let { line -> Text(line, style = Tokens.Type.caption, color = Tokens.Color.secondary) }
             }
         }
         val previous = status.recent.drop(1).take(4)

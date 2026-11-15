@@ -38,6 +38,7 @@ import com.couchsubs.mobile.tv.lg.LgInstaller
 import com.couchsubs.mobile.tv.lg.LgKeys
 import com.couchsubs.mobile.tv.samsung.InstallLog
 import com.couchsubs.mobile.tv.samsung.InstallStep
+import com.couchsubs.mobile.core.ManualAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -65,6 +66,7 @@ internal fun LgInstallScreen(onBack: () -> Unit, brandPicker: @Composable () -> 
     var candidates by remember { mutableStateOf<List<LgCandidate>?>(null) }
     var host by remember { mutableStateOf("") }
     var manual by remember { mutableStateOf(false) }
+    var addressError by remember { mutableStateOf(false) }
     var passphrase by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<LgState>(LgState.Idle) }
     val working = state is LgState.Working
@@ -82,7 +84,12 @@ internal fun LgInstallScreen(onBack: () -> Unit, brandPicker: @Composable () -> 
     }
 
     fun install() {
-        val target = host.trim()
+        // Elle yazılan adres temizlenir ("192.168.1.5:3000", "http://…", virgüllü yazım); adres değilse söylenir (#50).
+        val target = ManualAddress.normalize(host) ?: run {
+            addressError = true
+            return
+        }
+        addressError = false
         val typed = passphrase.trim()
         state = LgState.Working(InstallStep.CONNECTING)
         val main = Handler(Looper.getMainLooper())
@@ -155,7 +162,8 @@ internal fun LgInstallScreen(onBack: () -> Unit, brandPicker: @Composable () -> 
                 }
             }
         }
-        if (manual) Field(host, { host = it.trim() }, stringResource(R.string.tvinstall_address),
+        if (addressError) NoteTile(stringResource(R.string.address_invalid))
+        if (manual) Field(host, { host = it.trim(); addressError = false }, stringResource(R.string.tvinstall_address),
             keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
         Field(passphrase, { passphrase = it.trim().uppercase() },
             stringResource(if (hasKey) R.string.tvinstall_lg_passphrase_saved else R.string.tvinstall_lg_passphrase),
