@@ -56,6 +56,8 @@ class PhoneSubtitleActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val color = if (settings.textColor == SubtitleTextColor.YELLOW) Tokens.Color.accentText else Tokens.Color.text
         val scale = settings.subtitleScale / 100f
+        // "Hızlı konuşmada önceki satırları üstte tut" kapalıysa soluk önceki satır gösterilmez (TV ve Windows ile aynı).
+        val stackPrevious = settings.stackPrevious
         val streaming = getString(R.string.phase_streaming)
         setContent {
             CouchSubsTheme {
@@ -81,7 +83,7 @@ class PhoneSubtitleActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
                         val style = Tokens.Type.subtitleLandscape
                         val previous = status.previous
-                        if (previous.isNotEmpty() && status.current.isNotEmpty() && previous != status.current) Text(previous,
+                        if (stackPrevious && previous.isNotEmpty() && status.current.isNotEmpty() && previous != status.current) Text(previous,
                             style = style.copy(fontSize = style.fontSize * scale * 0.8f, lineHeight = style.lineHeight * scale * 0.8f),
                             color = color.copy(alpha = 0.4f), textAlign = TextAlign.Center)
                         Text(status.current.ifEmpty { if (status.running) "" else "CouchSubs" },

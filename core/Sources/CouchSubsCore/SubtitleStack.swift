@@ -65,6 +65,9 @@ public struct SubtitleStack: Equatable, Sendable {
         var hideAt: TimeInterval { fadeAt + SubtitleStack.previousFade }
     }
 
+    /// Kapalıysa önceki satır üste çıkmaz, yeni satır eskisinin yerine geçer (ayarlardaki seçenek).
+    public var stackPrevious = true
+
     private var current: Current?
     private var previous: Slot?
     private var older: Slot?
@@ -85,7 +88,7 @@ public struct SubtitleStack: Equatable, Sendable {
         // durmasın diye üste çıkmaz; görev paneli gibi çok satırlı yazılar da üst üste binmez.
         if replaces, current != nil, !paragraphs {
             // Üstteki satırlar olduğu gibi kalır.
-        } else if let shown = current, now - shown.shownAt < Self.stackWithin, !paragraphs, !shown.paragraphs,
+        } else if stackPrevious, let shown = current, now - shown.shownAt < Self.stackWithin, !paragraphs, !shown.paragraphs,
            !Self.sameLine(shown.text, text) {
             pushPrevious(shown.text, now: now)
         } else {

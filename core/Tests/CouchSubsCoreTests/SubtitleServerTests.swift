@@ -296,6 +296,17 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertEqual(decoded.displayMode, .overlay)
         XCTAssertEqual(style.json["displayMode"] as? String, "overlay")
     }
+
+    /// "Hızlı konuşmada önceki satırları üstte tut": varsayılan açık, TV'ye `stackPrevious` olarak gider, eski ayar dosyasında yoksa açık kalır.
+    func testStackPreviousIsSentSavedAndDefaultsOn() throws {
+        var style = SubtitleStyle()
+        XCTAssertEqual(style.json["stackPrevious"] as? Bool, true)
+        style.stackPrevious = false
+        XCTAssertEqual(style.json["stackPrevious"] as? Bool, false)
+        let decoded = try JSONDecoder().decode(SubtitleStyle.self, from: JSONEncoder().encode(style))
+        XCTAssertFalse(decoded.stackPrevious)
+        XCTAssertTrue(try JSONDecoder().decode(SubtitleStyle.self, from: Data("{}".utf8)).stackPrevious)
+    }
 }
 
 private final class LockedEvents: @unchecked Sendable {

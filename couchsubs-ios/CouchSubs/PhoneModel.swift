@@ -744,6 +744,7 @@ final class PhoneModel: ObservableObject {
         switch event {
         case .subtitle(let text, let durationMs, let paragraphs, let replaces):
             // Aynı cümlenin uzamış ya da düzelmiş okuması öncekinin yerine geçer (Mac'teki pencere ve TV gibi).
+            stack.stackPrevious = settings.style.stackPrevious
             stack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         case .clear:
             stack.clear(now: now)

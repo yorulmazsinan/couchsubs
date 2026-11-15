@@ -215,6 +215,8 @@ private struct AppearanceCard: View {
             }
             HintText(text: "Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.")
             Toggle("Bold text", isOn: $model.settings.style.bold)
+            Toggle("Keep previous lines above in fast dialogue", isOn: $model.settings.style.stackPrevious)
+            HintText(text: "When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.")
             Picker("Text color", selection: $model.settings.style.textColor) {
                 Text("White").tag(SubtitleTextColor.white)
                 Text("Yellow").tag(SubtitleTextColor.yellow)

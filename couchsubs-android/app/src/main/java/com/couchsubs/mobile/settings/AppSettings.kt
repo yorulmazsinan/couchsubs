@@ -155,6 +155,11 @@ class AppSettings(context: Context) {
         get() = enumOr(prefs.getString("tvBackgroundShape", null), com.couchsubs.mobile.core.SubtitleBackgroundShape.FIT)
         set(value) = prefs.edit().putString("tvBackgroundShape", value.name).apply()
 
+    /** Hızlı konuşmada önceki satırları üstte tut: varsayılan açık (Windows, Mac ve iPhone ile aynı). */
+    var stackPrevious: Boolean
+        get() = prefs.getBoolean("stackPrevious", true)
+        set(value) = prefs.edit().putBoolean("stackPrevious", value).apply()
+
     /** TV'deki yazı boyu: 36, 46, 58, 72. */
     var tvFontSize: Int
         get() = prefs.getInt("tvFontSize", 46)
@@ -166,7 +171,7 @@ class AppSettings(context: Context) {
      */
     val style: SubtitleStyle
         get() = SubtitleStyle(fontSize = scaledFontSize(tvFontSize, subtitleScale), placement = SubtitlePlacement.COVER,
-            background = tvBackground, backgroundShape = tvBackgroundShape, textColor = textColor)
+            background = tvBackground, backgroundShape = tvBackgroundShape, textColor = textColor, stackPrevious = stackPrevious)
 
     /** Altyazının arandığı bölge (Ayarlar › Altyazı alanı; iPhone ile aynı hazır seçimler ve Özel). */
     var region: com.couchsubs.mobile.core.CropRegion
@@ -221,7 +226,7 @@ class AppSettings(context: Context) {
     fun onStyleChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "subtitleScale" || key == "textColor" || key == "tvFontSize" ||
-                key == "tvBackground" || key == "tvBackgroundShape") action()
+                key == "tvBackground" || key == "tvBackgroundShape" || key == "stackPrevious") action()
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return listener

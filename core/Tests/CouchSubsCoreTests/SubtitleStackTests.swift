@@ -42,6 +42,15 @@ final class SubtitleStackTests: XCTestCase {
         XCTAssertEqual(texts(stack, at: 1.5), ["İkinci", "Üçüncü", "Dördüncü"])
     }
 
+    /// Ayarlarda "önceki satırları üstte tut" kapalıyken hızlı konuşmada da yeni satır eskisinin yerine geçer.
+    func testFastSpeechReplacesTheLineWhenStackingIsOff() {
+        var stack = SubtitleStack()
+        stack.stackPrevious = false
+        stack.show("Birinci", durationMs: 8000, now: 0)
+        stack.show("İkinci", durationMs: 8000, now: 0.5)
+        XCTAssertEqual(texts(stack, at: 0.5), ["İkinci"])
+    }
+
     func testSlowSpeechReplacesTheLine() {
         var stack = SubtitleStack()
         stack.show("Birinci", durationMs: 8000, now: 0)

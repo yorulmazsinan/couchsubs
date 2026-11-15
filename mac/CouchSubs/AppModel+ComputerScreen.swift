@@ -38,6 +38,7 @@ extension AppModel {
         switch event {
         case .subtitle(let text, let durationMs, let paragraphs, let replaces):
             overlayScreenUntil = 0
+            overlayStack.stackPrevious = settings.style.stackPrevious
             overlayStack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         // "Ekranı çevir": çeviriler satır satır gösterilir. Hemen ardından gelen "temizle" ("Ekran çevriliyor…" yazısı
         // için) onları kaldırmaz; yeniden basmak ya da yeni altyazı kaldırır.

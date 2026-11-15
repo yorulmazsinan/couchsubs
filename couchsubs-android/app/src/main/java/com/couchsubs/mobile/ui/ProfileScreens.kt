@@ -129,6 +129,7 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
     var background by remember { mutableStateOf(settings.tvBackground.toFloat()) }
     var shape by remember { mutableStateOf(settings.tvBackgroundShape) }
     var screenOn by remember { mutableStateOf(settings.keepScreenOn) }
+    var stackPrevious by remember { mutableStateOf(settings.stackPrevious) }
     var passcode by remember { mutableStateOf(settings.loginPasscode ?: "") }
     // Tuvaldeki dört seçenek: Ücretsiz, DeepL, Gemini, Diğer (OpenAI / Claude).
     val segment = when (engine) {
@@ -237,6 +238,8 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
                 settings.tvBackgroundShape = shape
             }
             Text(stringResource(R.string.settings_background_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+            RowItem(stringResource(R.string.settings_stack_previous)) { Switch(stackPrevious, { stackPrevious = it; settings.stackPrevious = it }) }
+            Text(stringResource(R.string.settings_stack_previous_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
             RowItem(stringResource(R.string.settings_screen_on)) { Switch(screenOn, { screenOn = it; settings.keepScreenOn = it }) }
         }
         // Altyazı alanı ve ek alanlar (iPhone ile aynı sırada: görünümden sonra).

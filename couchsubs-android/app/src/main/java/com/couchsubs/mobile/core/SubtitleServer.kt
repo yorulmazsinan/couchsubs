@@ -35,6 +35,8 @@ data class SubtitleStyle(
     val bold: Boolean = false,
     val textColor: SubtitleTextColor = SubtitleTextColor.WHITE,
     val displayMode: TvDisplayMode = TvDisplayMode.IN_APP,
+    /** Hızlı konuşmada önceki satır(lar) yeni satırın üstünde kısa süre soluk kalsın mı; kapalıysa yeni satır eskisinin yerine geçer. */
+    val stackPrevious: Boolean = true,
 )
 
 /** Altyazıları TV'ye ileten taraf. */
@@ -132,6 +134,7 @@ class SubtitleServer(
                 "displayMode" to if (style.displayMode == TvDisplayMode.OVERLAY) "overlay" else "inApp",
                 "fontSize" to style.fontSize,
                 "placement" to style.placement.name.lowercase(Locale.ROOT),
+                "stackPrevious" to style.stackPrevious,
                 "textColor" to style.textColor.name.lowercase(Locale.ROOT),
             )
         )

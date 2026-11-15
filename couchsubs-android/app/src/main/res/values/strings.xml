@@ -141,6 +141,8 @@
     <string name="settings_packs">Oyun paketleri</string>
     <string name="settings_text_size">Altyazı görünümü</string>
     <string name="settings_pool">Ortak havuza katkı</string>
+    <string name="settings_stack_previous">Hızlı konuşmada önceki satırları üstte göster</string>
+    <string name="settings_stack_previous_note">Kapalıyken her yeni satır öncekinin yerine geçer. TV uygulaması 0.9.16 ve sonrası gerekir.</string>
     <string name="settings_screen_on">Ekranı açık tut</string>
     <string name="close">Kapat</string>
     <string name="ok">Tamam</string>

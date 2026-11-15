@@ -52,9 +52,12 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
     public var textColor: SubtitleTextColor
     /// Yalnız Android TV uygulaması kullanır; diğer TV'ler ve OBS katmanı alanı tanımaz.
     public var displayMode: TVDisplayMode
+    /// Hızlı konuşmada önceki satır(lar) yeni satırın üstünde kısa süre soluk kalsın mı; kapalıysa yeni satır eskisinin
+    /// yerine geçer. TV uygulaması 0.9.16 ve sonrası tanır (Windows: SubtitleStyle.StackPrevious).
+    public var stackPrevious: Bool
 
     public init(fontSize: Int = 46, bottomPercent: Int = 7, placement: SubtitlePlacement = .cover, background: Int = 72, backgroundShape: SubtitleBackgroundShape = .fit, bold: Bool = false,
-                textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .inApp) {
+                textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .inApp, stackPrevious: Bool = true) {
         self.fontSize = fontSize
         self.bottomPercent = bottomPercent
         self.placement = placement
@@ -63,9 +66,10 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         self.bold = bold
         self.textColor = textColor
         self.displayMode = displayMode
+        self.stackPrevious = stackPrevious
     }
 
-    private enum CodingKeys: String, CodingKey { case fontSize, bottomPercent, placement, background, backgroundShape, bold, textColor, displayMode }
+    private enum CodingKeys: String, CodingKey { case fontSize, bottomPercent, placement, background, backgroundShape, bold, textColor, displayMode, stackPrevious }
 
     /// Eski sürümün kaydettiği ayarlarda yeni alanlar yoktur; eksikler varsayılanla dolar.
     public init(from decoder: Decoder) throws {
@@ -79,13 +83,14 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         bold = try values.decodeIfPresent(Bool.self, forKey: .bold) ?? defaults.bold
         textColor = (try? values.decodeIfPresent(SubtitleTextColor.self, forKey: .textColor)) ?? defaults.textColor
         displayMode = (try? values.decodeIfPresent(TVDisplayMode.self, forKey: .displayMode)) ?? defaults.displayMode
+        stackPrevious = try values.decodeIfPresent(Bool.self, forKey: .stackPrevious) ?? defaults.stackPrevious
     }
 
     /// TV'ye giden `style` olayının gövdesi.
     var json: [String: Any] {
         ["fontSize": fontSize, "bottomPercent": bottomPercent, "placement": placement.rawValue,
          "background": max(0, min(100, background)), "backgroundShape": backgroundShape.rawValue, "bold": bold, "textColor": textColor.rawValue,
-         "displayMode": displayMode.rawValue]
+         "displayMode": displayMode.rawValue, "stackPrevious": stackPrevious]
     }
 }
 

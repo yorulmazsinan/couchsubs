@@ -139,6 +139,8 @@
     <string name="settings_packs">Game packs</string>
     <string name="settings_text_size">Subtitle appearance</string>
     <string name="settings_pool">Contribute to the shared pool</string>
+    <string name="settings_stack_previous">Keep previous lines above in fast dialogue</string>
+    <string name="settings_stack_previous_note">When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.</string>
     <string name="settings_screen_on">Keep screen on</string>
     <string name="close">Close</string>
     <string name="ok">OK</string>
