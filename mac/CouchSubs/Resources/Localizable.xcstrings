@@ -7815,6 +7815,8 @@
         }
       }
     },
+    "Picture mode (Android TV)": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Picture mode (Android TV)"}}, "tr": {"stringUnit": {"state": "translated", "value": "Görüntü modu (Android TV)"}}}},
+    "Overlay": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Overlay"}}, "tr": {"stringUnit": {"state": "translated", "value": "Katman"}}}},
     "Picture mode": {
       "localizations": {
         "en": {

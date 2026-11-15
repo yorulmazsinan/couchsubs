@@ -224,6 +224,15 @@ struct SettingsScreen: View {
                     }
                 }
                 .tint(Mobile.Palette.accent)
+                // Yalnız Android TV uygulaması kullanır: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor.
+                // Katman'da TV, PS5'i kendi HDMI girişinde gösterir (Mac ve Windows'taki Görüntü modu seçimi, Android ile aynı).
+                if model.settings.output.showsOnTV {
+                    Text("Picture mode (Android TV)").font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+                    SegmentedTabs(options: [TVDisplayMode.inApp: "Inside the app", .overlay: "Overlay"],
+                                  selection: $model.settings.style.displayMode)
+                    Text("If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If the picture never arrives, the TV app switches to Overlay by itself.")
+                        .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+                }
             }
             AreaTile()
             ExtraAreasTile()

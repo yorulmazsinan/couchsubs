@@ -43,6 +43,7 @@ import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.core.SubtitleBackgroundShape
 import com.couchsubs.mobile.core.SubtitleTextColor
+import com.couchsubs.mobile.core.TvDisplayMode
 import com.couchsubs.mobile.remoteplay.LoginPasscode
 import com.couchsubs.mobile.service.TranslationService
 import com.couchsubs.mobile.settings.EngineChoice
@@ -135,6 +136,7 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
     var shape by remember { mutableStateOf(settings.tvBackgroundShape) }
     var screenOn by remember { mutableStateOf(settings.keepScreenOn) }
     var stackPrevious by remember { mutableStateOf(settings.stackPrevious) }
+    var displayMode by remember { mutableStateOf(settings.tvDisplayMode) }
     var passcode by remember { mutableStateOf(settings.loginPasscode ?: "") }
     // Tuvaldeki dört seçenek: Ücretsiz, DeepL, Gemini, Diğer (OpenAI / Claude).
     val segment = when (engine) {
@@ -245,6 +247,17 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
             Text(stringResource(R.string.settings_background_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
             RowItem(stringResource(R.string.settings_stack_previous)) { Switch(stackPrevious, { stackPrevious = it; settings.stackPrevious = it }) }
             Text(stringResource(R.string.settings_stack_previous_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+            // Yalnız Android TV uygulaması kullanır: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor.
+            // Katman'da TV, PS5'i kendi HDMI girişinde gösterir (Mac ve Windows'taki Görüntü modu seçimi, iPhone ile aynı).
+            if (settings.target == SubtitleTarget.TV) {
+                TileLabel(stringResource(R.string.settings_display_mode))
+                Segmented(listOf(stringResource(R.string.settings_display_mode_in_app), stringResource(R.string.settings_display_mode_overlay)),
+                    if (displayMode == TvDisplayMode.OVERLAY) 1 else 0) {
+                    displayMode = if (it == 1) TvDisplayMode.OVERLAY else TvDisplayMode.IN_APP
+                    settings.tvDisplayMode = displayMode
+                }
+                Text(stringResource(R.string.settings_display_mode_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+            }
             RowItem(stringResource(R.string.settings_screen_on)) { Switch(screenOn, { screenOn = it; settings.keepScreenOn = it }) }
         }
         // Altyazı alanı ve ek alanlar (iPhone ile aynı sırada: görünümden sonra).
