@@ -23,7 +23,7 @@
                     <TextBlock Text="{t:T 'Setup'}" Style="{StaticResource TitleText}" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="12,16,12,0">
-                    <Button Content="Kurulumu sıfırla" Style="{StaticResource SecondaryButton}" Margin="0,0,0,14"
+                    <Button Content="{t:T 'Reset setup'}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,14"
                             Visibility="{Binding ConsoleKindLocked, Converter={StaticResource VisibleIf}}" Click="OnReset" />
                     <TextBlock x:Name="Counter" Style="{StaticResource CaptionText}" Margin="0,0,0,8" />
                     <ProgressBar x:Name="Progress" Minimum="0" Maximum="1" />

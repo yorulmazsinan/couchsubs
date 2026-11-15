@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.Windows;
 using System.Windows.Controls;
+using CouchSubs.Core;
 using CouchSubs.Shell;
 
 namespace CouchSubs.App.Views.Steps;
@@ -20,17 +21,18 @@ public partial class XboxConsoleStep : UserControl
     {
         Refresh.IsEnabled = false;
         Error.Text = "";
-        Status.Text = "Xbox konsolları aranıyor…";
+        var text = Localizer.Current;
+        Status.Text = text["Searching for Xbox consoles…"];
         Consoles.Children.Clear();
         try
         {
             var found = await Controller.DiscoverXboxConsolesAsync();
-            Status.Text = found.Count == 0 ? "Bu Microsoft hesabına bağlı ev konsolu bulunamadı." : "Kullanacağın konsolu seç:";
+            Status.Text = found.Count == 0 ? text["No home console found for this Microsoft account."] : text["Choose the console to use:"];
             foreach (var console in found)
             {
                 var option = new RadioButton
                 {
-                    Content = $"{console.Name} ({console.Model})" + (console.StreamingEnabled ? "" : " — uzaktan oynatma kapalı"),
+                    Content = $"{console.Name} ({console.Model})" + (console.StreamingEnabled ? "" : " — " + text["Remote play is off"]),
                     GroupName = "xbox", IsEnabled = console.StreamingEnabled,
                     IsChecked = Controller.SelectedXboxConsole?.Id == console.Id,
                     Margin = new Thickness(0, 0, 0, 12),
@@ -39,7 +41,7 @@ public partial class XboxConsoleStep : UserControl
                 Consoles.Children.Add(option);
             }
         }
-        catch (Exception error) { Error.Text = error.Message; Status.Text = "Konsollar getirilemedi."; }
+        catch (Exception error) { Error.Text = error.Message; Status.Text = text["Couldn't get the consoles."]; }
         finally { Refresh.IsEnabled = true; }
     }
 }

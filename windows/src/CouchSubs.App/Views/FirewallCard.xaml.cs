@@ -56,7 +56,7 @@ public partial class FirewallCard : UserControl
             FirewallPrompt.Failed => text["The firewall rule was not added. Try again and choose Yes when Windows asks."],
             FirewallPrompt.Allowed when running => text["Reconnecting…"],
             FirewallPrompt.Allowed => text["Open Pair Device again on the PS5 and enter the new code."],
-            _ when running && controller.IsXbox => "CouchSubs TV'den gelen bağlantılar için Windows güvenlik duvarı iznine ihtiyaç duyar.",
+            _ when running && controller.IsXbox => text["CouchSubs needs Windows Firewall permission for incoming connections from the TV."],
             _ when running => text["CouchSubs needs incoming connections from the PS5 and the TV. Windows asks for permission once."],
             _ => text["Allow CouchSubs, then open Pair Device again on the PS5 and enter the new code."],
         };

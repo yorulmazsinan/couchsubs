@@ -34,8 +34,8 @@ public partial class WelcomeStep : UserControl
     {
         if (Controller.IsXbox)
         {
-            Layout.Message = "Xbox desteği beta aşamasındadır. CouchSubs oyun görüntüsündeki altyazıları okur ve çeviriyi TV'de ya da bilgisayarda gösterir. Oynamaya kendi kumandanızla devam edersiniz.";
-            Requirements.Text = "Gerekenler: aynı ağdaki ev Xbox konsolunuz, Microsoft hesabınız ve altyazının görüneceği TV ya da bilgisayar. Xbox'ta uzaktan oynatma açık olmalıdır.";
+            Layout.Message = Localizer.Current["Xbox support is in beta. CouchSubs reads the subtitles in the game picture and shows the translation on your TV or computer. You keep playing with your own controller."];
+            Requirements.Text = Localizer.Current["You will need: your home Xbox on the same network, a Microsoft account, and a TV or computer to show the subtitles. Remote play must be turned on on the Xbox."];
             return;
         }
         // PS5 seçiliyken metinler önceki karşılama ekranıyla aynı: ortak katalogdan, her dilde.

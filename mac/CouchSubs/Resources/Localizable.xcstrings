@@ -4705,6 +4705,694 @@
         }
       }
     },
+    "Choose your Xbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your Xbox"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox'ınızı seçin"
+          }
+        }
+      }
+    },
+    "Sign in to Xbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to Xbox"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox'ta oturum açın"
+          }
+        }
+      }
+    },
+    "Choose your home Xbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your home Xbox"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ev Xbox konsolunuzu seçin"
+          }
+        }
+      }
+    },
+    "Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox'ınız açık ve bilgisayarla aynı ağda olmalı. Xbox ayarlarından uzaktan oynatmayı etkinleştirin."
+          }
+        }
+      }
+    },
+    "Find consoles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find consoles"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konsolları ara"
+          }
+        }
+      }
+    },
+    "Searching for Xbox consoles…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching for Xbox consoles…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox konsolları aranıyor…"
+          }
+        }
+      }
+    },
+    "No home console found for this Microsoft account.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No home console found for this Microsoft account."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu Microsoft hesabına bağlı ev konsolu bulunamadı."
+          }
+        }
+      }
+    },
+    "Choose the console to use:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the console to use:"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kullanacağınız konsolu seçin:"
+          }
+        }
+      }
+    },
+    "Remote play is off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote play is off"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uzaktan oynatma kapalı"
+          }
+        }
+      }
+    },
+    "Couldn't get the consoles.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't get the consoles."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konsollar getirilemedi."
+          }
+        }
+      }
+    },
+    "Sign in with your Microsoft account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with your Microsoft account"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft hesabınızla giriş yapın"
+          }
+        }
+      }
+    },
+    "Link your Xbox account with a Microsoft device code, as in Greenlight. The sign-in page opens in your default browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link your Xbox account with a Microsoft device code, as in Greenlight. The sign-in page opens in your default browser."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox hesabınızı Greenlight'taki gibi Microsoft cihaz koduyla bağlayın. Giriş sayfası varsayılan tarayıcınızda açılır."
+          }
+        }
+      }
+    },
+    "Sign in with Microsoft": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Microsoft"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft ile giriş yapın"
+          }
+        }
+      }
+    },
+    "Opening the Microsoft sign-in page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening the Microsoft sign-in page…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft giriş sayfası açılıyor…"
+          }
+        }
+      }
+    },
+    "Enter this code on the Microsoft page in your browser:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter this code on the Microsoft page in your browser:"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarayıcıdaki Microsoft sayfasına bu kodu girin:"
+          }
+        }
+      }
+    },
+    "Waiting for the sign-in to finish…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the sign-in to finish…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Girişin tamamlanması bekleniyor…"
+          }
+        }
+      }
+    },
+    "Microsoft sign-in is done. You can continue.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft sign-in is done. You can continue."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft girişi tamamlandı. Devam edebilirsiniz."
+          }
+        }
+      }
+    },
+    "Sign-in did not finish. You can try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in did not finish. You can try again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giriş tamamlanamadı. Yeniden deneyebilirsiniz."
+          }
+        }
+      }
+    },
+    "Choose your console": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your console"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konsolunuzu seçin"
+          }
+        }
+      }
+    },
+    "Xbox Series / Xbox One (Beta)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox Series / Xbox One (Beta)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox Series / Xbox One (Beta)"
+          }
+        }
+      }
+    },
+    "Xbox support is in beta. CouchSubs reads the subtitles in the game picture and shows the translation on your TV or computer. You keep playing with your own controller.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox support is in beta. CouchSubs reads the subtitles in the game picture and shows the translation on your TV or computer. You keep playing with your own controller."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox desteği beta aşamasındadır. CouchSubs oyun görüntüsündeki altyazıları okur ve çeviriyi TV'de ya da bilgisayarda gösterir. Oynamaya kendi kumandanızla devam edersiniz."
+          }
+        }
+      }
+    },
+    "You will need: your home Xbox on the same network, a Microsoft account, and a TV or computer to show the subtitles. Remote play must be turned on on the Xbox.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You will need: your home Xbox on the same network, a Microsoft account, and a TV or computer to show the subtitles. Remote play must be turned on on the Xbox."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerekenler: aynı ağdaki ev Xbox konsolunuz, Microsoft hesabınız ve altyazının görüneceği TV ya da bilgisayar. Xbox'ta uzaktan oynatma açık olmalıdır."
+          }
+        }
+      }
+    },
+    "The Xbox home console picture uses the open source approach of Greenlight (MIT).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox home console picture uses the open source approach of Greenlight (MIT)."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox ev konsolu görüntüsü Greenlight'ın açık kaynak yaklaşımını kullanır (MIT)."
+          }
+        }
+      }
+    },
+    "CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs, Microsoft ile bağlantılı değildir. Xbox, Microsoft Corporation'ın ticari markasıdır."
+          }
+        }
+      }
+    },
+    "CouchSubs needs Windows Firewall permission for incoming connections from the TV.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs needs Windows Firewall permission for incoming connections from the TV."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs'ın TV'den gelen bağlantılar için Windows güvenlik duvarı iznine ihtiyacı var."
+          }
+        }
+      }
+    },
+    "Reset setup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset setup"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurulumu sıfırla"
+          }
+        }
+      }
+    },
+    "%@ is ready. It connects when you start translating.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is ready. It connects when you start translating."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hazır. Çeviriyi başlattığınızda bağlanır."
+          }
+        }
+      }
+    },
+    "Retrying the Xbox connection: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying the Xbox connection: %@"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox bağlantısı yeniden deneniyor: %@"
+          }
+        }
+      }
+    },
+    "Retrying the Xbox connection…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying the Xbox connection…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox bağlantısı yeniden deneniyor…"
+          }
+        }
+      }
+    },
+    "Xbox streaming isn't available in this version.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox streaming isn't available in this version."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayını bu sürümde kullanılamıyor."
+          }
+        }
+      }
+    },
+    "Microsoft sign-in isn't finished.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft sign-in isn't finished."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microsoft girişi tamamlanmadı."
+          }
+        }
+      }
+    },
+    "The Xbox streaming component restarted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox streaming component restarted."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayın bileşeni yeniden başlatıldı."
+          }
+        }
+      }
+    },
+    "The Xbox streaming component is missing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox streaming component is missing."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayın bileşeni eksik."
+          }
+        }
+      }
+    },
+    "The Xbox streaming component couldn't start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox streaming component couldn't start."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayın bileşeni açılamadı."
+          }
+        }
+      }
+    },
+    "The Xbox streaming component closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox streaming component closed."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayın bileşeni kapandı."
+          }
+        }
+      }
+    },
+    "The Xbox service didn't answer the '%@' request.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox service didn't answer the '%@' request."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox hizmeti '%@' isteğine yanıt vermedi."
+          }
+        }
+      }
+    },
+    "The Xbox session was reset.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox session was reset."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox oturumu sıfırlandı."
+          }
+        }
+      }
+    },
+    "Couldn't start the Xbox stream": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't start the Xbox stream"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayını açılamadı"
+          }
+        }
+      }
+    },
+    "Timed out waiting for the Xbox stream to be ready.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed out waiting for the Xbox stream to be ready."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox yayını hazır olmayı beklerken zaman aşımına uğradı."
+          }
+        }
+      }
+    },
+    "The Xbox picture connection closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox picture connection closed."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox görüntü bağlantısı kapandı."
+          }
+        }
+      }
+    },
+    "The Xbox player is missing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox player is missing."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox oynatıcı eksik."
+          }
+        }
+      }
+    },
+    "The Xbox WebRTC connection was lost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox WebRTC connection was lost"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox WebRTC bağlantısı kesildi"
+          }
+        }
+      }
+    },
+    "This command isn't allowed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This command isn't allowed."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu komuta izin verilmiyor."
+          }
+        }
+      }
+    },
     "Translating the screen…": {
       "localizations": {
         "en": {

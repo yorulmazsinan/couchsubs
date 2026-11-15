@@ -7,10 +7,10 @@
     <c:StepLayout x:Name="Layout" Title="{t:T 'Welcome to CouchSubs'}"
                   Message="{t:T 'CouchSubs reads the English subtitles of your PS5 games and shows a Turkish translation on your TV, on top of the game. You keep playing on the TV with your own controller.'}">
         <StackPanel>
-            <c:Card Title="Konsolunuzu seçin">
+            <c:Card Title="{t:T 'Choose your console'}">
                 <StackPanel>
                     <RadioButton x:Name="Ps5" Content="PlayStation 5" GroupName="consoleKind" Margin="0,0,0,12" Checked="OnSelected" />
-                    <RadioButton x:Name="Xbox" Content="Xbox Series / Xbox One (Beta)" GroupName="consoleKind" Checked="OnSelected" />
+                    <RadioButton x:Name="Xbox" Content="{t:T 'Xbox Series / Xbox One (Beta)'}" GroupName="consoleKind" Checked="OnSelected" />
                 </StackPanel>
             </c:Card>
             <TextBlock x:Name="Requirements" Margin="0,20,0,0" TextWrapping="Wrap" Style="{StaticResource HintText}" />

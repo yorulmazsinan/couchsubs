@@ -16,7 +16,7 @@
         <TextBlock Text="Copyright © 2026 Sinan Yorulmaz" Style="{StaticResource SecondaryText}" TextAlignment="Center" Margin="0,0,0,8" />
         <TextBlock Text="{t:T 'Free and open source under the GNU AGPL-3.0 license.'}" TextAlignment="Center" />
         <TextBlock Text="{t:T 'Remote Play connection by chiaki-ng (AGPL-3.0). Thanks to its developers.'}" Style="{StaticResource SecondaryText}" TextAlignment="Center" Margin="0,12,0,0" />
-        <TextBlock Text="Xbox ev konsolu görüntüsü Greenlight'ın açık kaynak yaklaşımını kullanır (MIT)." Style="{StaticResource SecondaryText}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0" />
+        <TextBlock Text="{t:T 'The Xbox home console picture uses the open source approach of Greenlight (MIT).'}" Style="{StaticResource SecondaryText}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0" />
         <TextBlock Text="{t:T 'Translation model: OPUS-MT, University of Helsinki (CC BY 4.0).'}" Style="{StaticResource SecondaryText}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0" />
         <TextBlock TextAlignment="Center" Margin="0,12,0,0">
             <Hyperlink NavigateUri="https://github.com/yorulmazsinan/couchsubs" RequestNavigate="OnLink"><Run Text="{t:T 'Source code'}" /></Hyperlink>
@@ -28,7 +28,7 @@
         <TextBlock Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="0,16,0,0"
                    Text="{t:T 'CouchSubs is not affiliated with Sony Interactive Entertainment. PlayStation and PS5 are trademarks of Sony Interactive Entertainment Inc.'}" />
         <TextBlock Style="{StaticResource CaptionText}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0"
-                   Text="CouchSubs, Microsoft ile bağlantılı değildir. Xbox, Microsoft Corporation'ın ticari markasıdır." />
+                   Text="{t:T 'CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation.'}" />
         <Button Content="{t:T 'Close'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Margin="0,20,0,0" IsDefault="True" IsCancel="True" Click="OnClose" />
     </StackPanel>
 </Window>

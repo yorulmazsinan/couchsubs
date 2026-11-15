@@ -2,11 +2,12 @@
 <UserControl x:Class="CouchSubs.App.Views.Steps.XboxConsoleStep"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:c="clr-namespace:CouchSubs.App.Controls">
-    <c:StepLayout Title="Ev Xbox konsolunu seç"
-                  Message="Xbox açık ve bilgisayarla aynı ağda olmalı. Xbox ayarlarında uzaktan oynatmayı etkinleştir.">
+             xmlns:c="clr-namespace:CouchSubs.App.Controls"
+             xmlns:t="clr-namespace:CouchSubs.App.Theme">
+    <c:StepLayout Title="{t:T 'Choose your home Xbox'}"
+                  Message="{t:T 'Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings.'}">
         <StackPanel>
-            <Button x:Name="Refresh" Content="Konsolları ara" Style="{StaticResource PrimaryButton}" Click="OnRefresh" />
+            <Button x:Name="Refresh" Content="{t:T 'Find consoles'}" Style="{StaticResource PrimaryButton}" Click="OnRefresh" />
             <TextBlock x:Name="Status" Style="{StaticResource HintText}" Margin="0,16,0,8" TextWrapping="Wrap" />
             <StackPanel x:Name="Consoles" />
             <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,12,0,0" TextWrapping="Wrap" />

@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using CouchSubs.Core;
 using CouchSubs.Shell;
 
 namespace CouchSubs.App.Services;
@@ -20,12 +21,12 @@ internal sealed class XboxBridge : IDisposable
     private void EnsureStarted()
     {
         if (process is { HasExited: false }) return;
-        foreach (var item in pending.Values) item.TrySetException(new IOException("Xbox yayın bileşeni yeniden başlatıldı."));
+        foreach (var item in pending.Values) item.TrySetException(new IOException(Localizer.Current["The Xbox streaming component restarted."]));
         pending.Clear();
         process?.Dispose();
         var folder = Path.Combine(AppContext.BaseDirectory, "xbox-bridge");
         var script = Path.Combine(folder, "bridge.cjs");
-        if (!File.Exists(script)) throw new FileNotFoundException("Xbox yayın bileşeni eksik.", script);
+        if (!File.Exists(script)) throw new FileNotFoundException(Localizer.Current["The Xbox streaming component is missing."], script);
         var executable = Path.Combine(folder, "node.exe");
         if (!File.Exists(executable))
         {
@@ -38,7 +39,7 @@ internal sealed class XboxBridge : IDisposable
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
         };
         info.ArgumentList.Add(script);
-        process = Process.Start(info) ?? throw new InvalidOperationException("Xbox yayın bileşeni açılamadı.");
+        process = Process.Start(info) ?? throw new InvalidOperationException(Localizer.Current["The Xbox streaming component couldn't start."]);
         _ = ReadRepliesAsync(process);
         _ = process.StandardError.ReadToEndAsync();
         loadedToken = null;
@@ -68,7 +69,7 @@ internal sealed class XboxBridge : IDisposable
         {
             if (ReferenceEquals(process, running))
             {
-                foreach (var item in pending.Values) item.TrySetException(new IOException("Xbox yayın bileşeni kapandı."));
+                foreach (var item in pending.Values) item.TrySetException(new IOException(Localizer.Current["The Xbox streaming component closed."]));
                 pending.Clear();
             }
         }
@@ -100,7 +101,7 @@ internal sealed class XboxBridge : IDisposable
         catch (TimeoutException)
         {
             pending.TryRemove(id, out _);
-            throw new TimeoutException($"Xbox hizmeti '{command}' isteğine yanıt vermedi.");
+            throw new TimeoutException(Localizer.Current.Format("The Xbox service didn't answer the '%@' request.", command));
         }
     }
 
@@ -125,7 +126,7 @@ internal sealed class XboxBridge : IDisposable
         process?.Dispose();
         process = null;
         loadedToken = null;
-        foreach (var item in pending.Values) item.TrySetException(new IOException("Xbox oturumu sıfırlandı."));
+        foreach (var item in pending.Values) item.TrySetException(new IOException(Localizer.Current["The Xbox session was reset."]));
         pending.Clear();
     }
 }

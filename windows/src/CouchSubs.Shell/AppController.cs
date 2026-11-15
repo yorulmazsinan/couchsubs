@@ -199,13 +199,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
     public async Task<XboxLoginChallenge> BeginXboxLoginAsync()
     {
-        var login = await (services.Xbox ?? throw new InvalidOperationException("Xbox yayını bu sürümde kullanılamıyor.")).BeginLoginAsync();
+        var login = await (services.Xbox ?? throw new InvalidOperationException(text["Xbox streaming isn't available in this version."])).BeginLoginAsync();
         OpenInBrowser(login.Url);
         return login;
     }
     public async Task CompleteXboxLoginAsync()
     {
-        xboxToken = await (services.Xbox ?? throw new InvalidOperationException("Xbox yayını bu sürümde kullanılamıyor.")).CompleteLoginAsync();
+        xboxToken = await (services.Xbox ?? throw new InvalidOperationException(text["Xbox streaming isn't available in this version."])).CompleteLoginAsync();
         store.Save(StoreKeys.XboxToken, xboxToken);
         Changed(nameof(HasXboxAccount), nameof(CanAdvance), nameof(CanStart));
     }
@@ -220,7 +220,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         });
     }
     public Task<IReadOnlyList<XboxConsole>> DiscoverXboxConsolesAsync() =>
-        (services.Xbox ?? throw new InvalidOperationException("Xbox yayını bu sürümde kullanılamıyor.")).DiscoverAsync(xboxToken ?? throw new InvalidOperationException("Microsoft girişi tamamlanmadı."));
+        (services.Xbox ?? throw new InvalidOperationException(text["Xbox streaming isn't available in this version."])).DiscoverAsync(xboxToken ?? throw new InvalidOperationException(text["Microsoft sign-in isn't finished."]));
     public void SelectXboxConsole(XboxConsole selected)
     {
         if (!selected.StreamingEnabled) return;
@@ -242,9 +242,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         SessionPhase.Streaming => text["Connected"],
         SessionPhase.Connecting => text["Connecting…"],
-        _ when !isRunning => xboxConsole is null ? text["Not connected"] : $"{xboxConsole.Name} hazır. Çeviriyi başlatınca bağlanır.",
-        _ when !string.IsNullOrWhiteSpace(sessionState.Reason?.Detail) => $"Xbox bağlantısı yeniden deneniyor: {sessionState.Reason.Detail}",
-        _ => "Xbox bağlantısı yeniden deneniyor…",
+        _ when !isRunning => xboxConsole is null ? text["Not connected"] : text.Format("%@ is ready. It connects when you start translating.", xboxConsole.Name),
+        _ when !string.IsNullOrWhiteSpace(sessionState.Reason?.Detail) => text.Format("Retrying the Xbox connection: %@", sessionState.Reason.Detail),
+        _ => text["Retrying the Xbox connection…"],
     };
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
     public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText)]); }
@@ -1192,7 +1192,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (IsXbox)
             {
                 RemotePlayLog.Note($"Çeviri başladı; {ConsoleTitle} bağlantısı açılıyor.");
-                stream = (services.Xbox ?? throw new InvalidOperationException("Xbox yayını bu sürümde kullanılamıyor.")).MakeStream(xboxConsole!, xboxToken!);
+                stream = (services.Xbox ?? throw new InvalidOperationException(text["Xbox streaming isn't available in this version."])).MakeStream(xboxConsole!, xboxToken!);
             }
             else if (readsWindow)
             {

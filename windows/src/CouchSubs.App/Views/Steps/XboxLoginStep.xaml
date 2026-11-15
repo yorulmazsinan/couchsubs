@@ -2,13 +2,14 @@
 <UserControl x:Class="CouchSubs.App.Views.Steps.XboxLoginStep"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:c="clr-namespace:CouchSubs.App.Controls">
-    <c:StepLayout Title="Microsoft hesabınla giriş yap"
-                  Message="Xbox hesabını Greenlight'taki gibi Microsoft cihaz koduyla bağla. Giriş sayfası varsayılan tarayıcında açılır.">
+             xmlns:c="clr-namespace:CouchSubs.App.Controls"
+             xmlns:t="clr-namespace:CouchSubs.App.Theme">
+    <c:StepLayout Title="{t:T 'Sign in with your Microsoft account'}"
+                  Message="{t:T 'Link your Xbox account with a Microsoft device code, as in Greenlight. The sign-in page opens in your default browser.'}">
         <StackPanel>
-            <TextBlock Text="Giriş tamamlandı" Style="{StaticResource DoneText}" Margin="0,0,0,12"
+            <TextBlock Text="{t:T 'Signed in'}" Style="{StaticResource DoneText}" Margin="0,0,0,12"
                        Visibility="{Binding HasXboxAccount, Converter={StaticResource VisibleIf}}" />
-            <Button x:Name="SignIn" Content="Microsoft ile giriş yap" Style="{StaticResource PrimaryButton}" Click="OnSignIn" />
+            <Button x:Name="SignIn" Content="{t:T 'Sign in with Microsoft'}" Style="{StaticResource PrimaryButton}" Click="OnSignIn" />
             <TextBlock x:Name="Instruction" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,16,0,8" />
             <TextBlock x:Name="Code" FontSize="30" FontWeight="Bold" Margin="0,0,0,8" />
             <TextBlock x:Name="Status" Style="{StaticResource HintText}" TextWrapping="Wrap" />

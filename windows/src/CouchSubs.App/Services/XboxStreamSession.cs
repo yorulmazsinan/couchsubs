@@ -55,16 +55,16 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     if (state == "Provisioned") break;
                     if (state == "Failed")
                     {
-                        var reason = status.TryGetProperty("errorDetails", out var details) ? details.ToString() : "Xbox yayını açılamadı";
+                        var reason = status.TryGetProperty("errorDetails", out var details) ? details.ToString() : Localizer.Current["Couldn't start the Xbox stream"];
                         throw new InvalidOperationException(reason);
                     }
-                    if (attempt == 89) throw new TimeoutException("Xbox yayını hazır olmayı beklerken zaman aşımına uğradı.");
+                    if (attempt == 89) throw new TimeoutException(Localizer.Current["Timed out waiting for the Xbox stream to be ready."]);
                     await Task.Delay(1000, cancel.Token);
                 }
                 if (cancel.IsCancellationRequested) break;
                 await OpenPlayerAsync();
                 if (browserEnded is not null) await browserEnded.Task.WaitAsync(cancel.Token);
-                if (!cancel.IsCancellationRequested) throw new IOException("Xbox görüntü bağlantısı kapandı.");
+                if (!cancel.IsCancellationRequested) throw new IOException(Localizer.Current["The Xbox picture connection closed."]);
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested) { break; }
             catch (Exception error)
@@ -87,7 +87,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private async Task OpenPlayerAsync()
     {
         var folder = Path.Combine(AppContext.BaseDirectory, "xbox-bridge");
-        if (!File.Exists(Path.Combine(folder, "player.html"))) throw new FileNotFoundException("Xbox oynatıcı eksik.");
+        if (!File.Exists(Path.Combine(folder, "player.html"))) throw new FileNotFoundException(Localizer.Current["The Xbox player is missing."]);
         browser = new WebView2();
         window = new Window
         {
@@ -142,7 +142,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     if (state == "connected") StateChanged?.Invoke(SessionState.Streaming);
                     else if (state is "closed" or "failed" or "error")
                     {
-                        var detail = message.TryGetProperty("detail", out var value) ? value.GetString() : "Xbox WebRTC bağlantısı kesildi";
+                        var detail = message.TryGetProperty("detail", out var value) ? value.GetString() : Localizer.Current["The Xbox WebRTC connection was lost"];
                         StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Other, detail));
                         browserEnded?.TrySetResult(true);
                     }
@@ -152,7 +152,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     var command = message.GetProperty("command").GetString()!;
                     if (!PlayerCommands.Contains(command))
                     {
-                        browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "reply", id, error = "Komut izinli değil." }));
+                        browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "reply", id, error = Localizer.Current["This command isn't allowed."] }));
                         break;
                     }
                     var args = message.TryGetProperty("args", out var parameters) ? (object)parameters.Clone() : null;
