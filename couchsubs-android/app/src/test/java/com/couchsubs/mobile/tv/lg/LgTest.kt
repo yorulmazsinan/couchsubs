@@ -4,7 +4,6 @@ package com.couchsubs.mobile.tv.lg
 import com.couchsubs.mobile.tv.samsung.InstallStep
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.KeyPair
-import com.sun.net.httpserver.HttpServer
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.openssl.jcajce.JcePEMEncryptorBuilder
 import org.junit.Assert.assertArrayEquals
@@ -15,7 +14,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.StringWriter
-import java.net.InetSocketAddress
+import java.net.InetAddress
+import kotlin.concurrent.thread
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.security.KeyPairGenerator
@@ -85,19 +85,30 @@ class LgTest {
     @Test
     fun keyServerResponseIsDownloadedAndDecoded() {
         val pem = encryptedPem("QWERTY")
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/webos_rsa") { exchange ->
-            val bytes = pem.toByteArray()
-            exchange.sendResponseHeaders(200, bytes.size.toLong())
-            exchange.responseBody.use { it.write(bytes) }
+        // Sahte Key Server: tek isteğe yanıt veren en küçük HTTP sunucusu (testler android.jar'la derlenir; com.sun yok).
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        var path = ""
+        val worker = thread(isDaemon = true) {
+            server.accept().use { socket ->
+                val request = socket.getInputStream().bufferedReader()
+                path = request.readLine() ?: ""
+                while (!request.readLine().isNullOrEmpty()) Unit
+                val bytes = pem.toByteArray()
+                socket.getOutputStream().apply {
+                    write("HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                    write(bytes)
+                    flush()
+                }
+            }
         }
-        server.start()
         try {
-            val response = LgInstaller.downloadKey("127.0.0.1", server.address.port)
+            val response = LgInstaller.downloadKey("127.0.0.1", server.localPort)
             val key = LgInstaller.decodeKey(response, " qwerty ") { _, _ -> fail("eski PEM'de jsch'e gidilmemeli"); ByteArray(0) }
             assertArrayEquals(pkcs1(), body(String(key)))
+            worker.join(5000)
+            assertTrue(path.startsWith("GET /webos_rsa "))
         } finally {
-            server.stop(0)
+            server.close()
         }
         val closed = ServerSocket(0).use { it.localPort }
         assertEquals(LgInstallError.KEY_SERVER_OFF, expect<LgInstallException> { LgInstaller.downloadKey("127.0.0.1", closed, 1000) }.error)
