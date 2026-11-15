@@ -28,7 +28,7 @@ class LgTest {
     /** LG Key Server'ın verdiği gibi: eski PEM, "Proc-Type: 4,ENCRYPTED". */
     private fun encryptedPem(passphrase: String, cipher: String = "AES-128-CBC"): String {
         val writer = StringWriter()
-        JcaPEMWriter(writer).use { it.writeObject(pair.private, JcePEMEncryptorBuilder(cipher).build(passphrase.toCharArray())) }
+        JcaPEMWriter(writer).use { it.writeObject(pair.private, JcePEMEncryptorBuilder(cipher).setProvider(org.bouncycastle.jce.provider.BouncyCastleProvider()).build(passphrase.toCharArray())) }
         return writer.toString()
     }
 
