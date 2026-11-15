@@ -23,9 +23,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
-      - name: JVM testleri (paket anahtarı, kararlılık, SSE biçimi)
+      # TV paketleri (Android TV APK) son sürümden indirilir; CI'da indirilemezse derleme durur.
+      - name: JVM testleri (paket anahtarı, kararlılık, SSE biçimi, TV kurulumu)
         working-directory: couchsubs-android
-        run: gradle testDebugUnitTest -Pcouchsubs.skipNative=true --no-daemon
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: gradle testDebugUnitTest -Pcouchsubs.skipNative=true -Pcouchsubs.requireTvPackages=true --no-daemon
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -59,8 +62,10 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1" > /dev/null
       - name: Derle
         working-directory: couchsubs-android
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gradle assembleDebug -Pcouchsubs.patchChiaki=true --no-daemon
+          gradle assembleDebug -Pcouchsubs.patchChiaki=true -Pcouchsubs.requireTvPackages=true --no-daemon
           mkdir -p ../dist
           cp app/build/outputs/apk/debug/*.apk ../dist/CouchSubs-android-debug.apk
       - uses: actions/upload-artifact@v4

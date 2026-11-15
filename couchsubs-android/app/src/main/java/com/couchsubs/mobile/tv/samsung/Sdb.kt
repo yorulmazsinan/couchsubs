@@ -303,6 +303,7 @@ class SdbConnection private constructor(private val socket: Socket, private val 
  * istemez; isteyen TV'ye imza ve Android biçiminde açık anahtar gönderilir.
  */
 class AdbKey(private val privateKey: PrivateKey, val publicKey: RSAPublicKey) {
+    // Android TV kurulumu da (tv/android) aynı anahtar biçimini kullanır; anahtar dosyası ayrıdır.
     companion object {
         fun loadOrCreate(file: File): AdbKey {
             val factory = KeyFactory.getInstance("RSA")
@@ -348,6 +349,33 @@ class AdbKey(private val privateKey: PrivateKey, val publicKey: RSAPublicKey) {
     fun sign(token: ByteArray): ByteArray =
         Signature.getInstance("SHA1withRSA").run { initSign(privateKey); update(token); sign() }
 
-    fun publicKeyPayload(): ByteArray =
-        (Base64.getEncoder().encodeToString(encodePublicKey(publicKey)) + " couchsubs@android\u0000").toByteArray(Charsets.US_ASCII)
+    fun publicKeyPayload(): ByteArray = (publicKeyLine("couchsubs@android") + "\u0000").toByteArray(Charsets.US_ASCII)
+
+    /** adb'nin açık anahtar satırı: Android biçimindeki anahtarın base64'ü ve "kullanıcı@cihaz" (sonda NUL yok). */
+    fun publicKeyLine(name: String): String = Base64.getEncoder().encodeToString(encodePublicKey(publicKey)) + " " + name
+
+    /** Android TV'nin TLS'i (kablosuz hata ayıklama) için PKCS#8 özel anahtar. */
+    internal fun privateKeyBytes(): ByteArray = privateKey.encoded
+
+    /**
+     * adb'nin imzası (adbd auth.cpp, RSA_sign NID_sha1): TV'nin 20 baytlık jetonu SHA-1 özeti yerine geçer, yeniden
+     * özetlenmez. PKCS#1 v1.5 dolgusu ve SHA-1 DigestInfo önekiyle jetonun kendisi imzalanır. ([sign] jetonu özetler;
+     * Samsung'un sdbd'si onu bekler.)
+     */
+    fun signAdbToken(token: ByteArray): ByteArray {
+        val key = privateKey as RSAPrivateCrtKey
+        val size = (key.modulus.bitLength() + 7) / 8
+        val digestInfo = byteArrayOf(0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14) + token
+        require(digestInfo.size <= size - 11) { "jeton çok uzun" }
+        val block = ByteArray(size)
+        block[1] = 0x01
+        for (i in 2 until size - digestInfo.size - 1) block[i] = 0xFF.toByte()
+        digestInfo.copyInto(block, size - digestInfo.size)
+        val signature = BigInteger(1, block).modPow(key.privateExponent, key.modulus).toByteArray()
+        // Baştaki işaret baytı atılır, kısa çıkarsa sıfırla doldurulur.
+        val result = ByteArray(size)
+        val start = maxOf(0, signature.size - size)
+        signature.copyInto(result, size - (signature.size - start), start)
+        return result
+    }
 }

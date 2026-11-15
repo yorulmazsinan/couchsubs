@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
+import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.tv.TvBrand
 import com.couchsubs.mobile.tv.TvDiscovery
 import com.couchsubs.mobile.tv.samsung.AdbKey
@@ -77,8 +78,26 @@ private sealed interface InstallState {
     data class Failed(val error: SamsungInstallError?, val detail: String?) : InstallState
 }
 
+/** Kurulum ekranı: üstteki seçimle marka değişir (Samsung, Android TV); her markanın akışı ayrıdır. */
 @Composable
 fun TvInstallScreen(onBack: () -> Unit) {
+    var brand by remember { mutableStateOf(Services.settings.tvInstallBrand) }
+    val brands = listOf(TvBrand.SAMSUNG, TvBrand.ANDROID_TV)
+    val picker: @Composable () -> Unit = {
+        Segmented(listOf(stringResource(R.string.tvinstall_brand_samsung), stringResource(R.string.tvinstall_brand_android)),
+            brands.indexOf(brand).coerceAtLeast(0)) {
+            brand = brands[it]
+            Services.settings.tvInstallBrand = brand
+        }
+    }
+    when (brand) {
+        TvBrand.ANDROID_TV -> AndroidTvInstallScreen(onBack, picker)
+        else -> SamsungInstallScreen(onBack, picker)
+    }
+}
+
+@Composable
+private fun SamsungInstallScreen(onBack: () -> Unit, brandPicker: @Composable () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val phoneIp = remember { phoneAddress(context) }
@@ -148,6 +167,7 @@ fun TvInstallScreen(onBack: () -> Unit) {
             enabled = !working && host.isNotBlank()) { install() }
     }) {
         Heading(stringResource(R.string.tvinstall_title), stringResource(R.string.tvinstall_body))
+        if (!working) brandPicker()
         NoteTile(stringResource(R.string.tvinstall_experimental), Tokens.Color.secondary)
 
         TileLabel(stringResource(R.string.tvinstall_tvs))
@@ -250,7 +270,10 @@ private fun developerState(info: SamsungTvInfo?, phoneIp: String?): Pair<String,
 }
 
 @Composable
-private fun stepText(step: InstallStep) = stringResource(when (step) {
+internal fun stepText(step: InstallStep) = stringResource(when (step) {
+    InstallStep.PAIRING -> R.string.tvinstall_step_pairing
+    InstallStep.APPROVE_ON_TV -> R.string.tvinstall_step_approve
+    InstallStep.KEY -> R.string.tvinstall_step_key
     InstallStep.CONNECTING -> R.string.tvinstall_step_connecting
     InstallStep.READING -> R.string.tvinstall_step_reading
     InstallStep.SIGN_IN -> R.string.tvinstall_step_signin
@@ -298,7 +321,7 @@ private suspend fun findSamsungTvs(phoneIp: String?): List<SamsungCandidate> = w
 }
 
 /** Telefonun Wi-Fi'daki IPv4 adresi: TV'nin geliştirici modunda Host PC IP olarak yazılır. */
-private fun phoneAddress(context: Context): String? = try {
+internal fun phoneAddress(context: Context): String? = try {
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
     connectivity.getLinkProperties(connectivity.activeNetwork)?.linkAddresses
         ?.map { it.address }?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
@@ -306,7 +329,7 @@ private fun phoneAddress(context: Context): String? = try {
     null
 }
 
-private fun shareLog(context: Context, file: File) {
+internal fun shareLog(context: Context, file: File) {
     val text = runCatching { file.readText().takeLast(60_000) }.getOrDefault("")
     val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "CouchSubs tvinstall.log")
         .putExtra(Intent.EXTRA_TEXT, text)

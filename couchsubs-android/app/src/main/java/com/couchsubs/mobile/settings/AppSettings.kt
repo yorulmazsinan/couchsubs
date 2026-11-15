@@ -11,6 +11,7 @@ import com.couchsubs.mobile.core.SubtitleStyle
 import com.couchsubs.mobile.core.SubtitleTextColor
 import com.couchsubs.mobile.remoteplay.LoginPasscode
 import com.couchsubs.mobile.remoteplay.RegisteredConsole
+import com.couchsubs.mobile.tv.TvBrand
 import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -207,12 +208,17 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean("notify.packs", value).apply()
 
     /**
-     * Deneysel: TV uygulamasını bilgisayarsız, bu telefondan kurmak (şimdilik Samsung). Varsayılan kapalı; açılınca
+     * Deneysel: TV uygulamasını bilgisayarsız, bu telefondan kurmak (Samsung, Android TV). Varsayılan kapalı; açılınca
      * Ayarlar'da ve altyazı hedefi ekranında kurulum girişi görünür.
      */
     var experimentalTvInstall: Boolean
         get() = prefs.getBoolean("experimental.tvInstall", false)
         set(value) = prefs.edit().putBoolean("experimental.tvInstall", value).apply()
+
+    /** Kurulum ekranında son seçilen marka. */
+    var tvInstallBrand: TvBrand
+        get() = enumOr(prefs.getString("experimental.tvInstallBrand", null), TvBrand.SAMSUNG)
+        set(value) = prefs.edit().putString("experimental.tvInstallBrand", value.name).apply()
 
     fun apiKey(engine: EngineChoice): String? = secrets.get("key." + engine.name)
     fun setApiKey(engine: EngineChoice, key: String?) = secrets.put("key." + engine.name, key?.trim())

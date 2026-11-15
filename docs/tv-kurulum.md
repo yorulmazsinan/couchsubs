@@ -110,8 +110,8 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
 
 ### Bilgisayarsız: Android telefondan kurulum (deneysel)
 
-Bilgisayarınız yoksa TV uygulamasını CouchSubs'ın Android uygulamasından da kurabilirsiniz. Şimdilik yalnız Samsung TV
-ve akıllı monitörlerde, gerçek TV'lerde henüz az denendi.
+Bilgisayarınız yoksa TV uygulamasını CouchSubs'ın Android uygulamasından da kurabilirsiniz (Samsung TV ve akıllı
+monitörler; Android TV için aşağıdaki Android TV bölümüne bakın). Gerçek TV'lerde henüz az denendi.
 
 1. Telefonda **Ayarlar › Deneysel › TV uygulamasını bu telefondan kur**'u açın, altındaki satıra basın (aynı giriş
    altyazı hedefi ekranında da görünür).
@@ -190,3 +190,25 @@ CouchSubs TV'yi ağda bulamazsa (bazı TV'ler ağdan hata ayıklamaya izin verme
    indirip bir USB belleğe kopyalayın ve TV'ye takın.
 3. TV'de dosya yöneticisiyle dosyayı açıp kurun. TV'nizde dosya yöneticisi yoksa Play Store'dan ücretsiz birini kurun.
 4. CouchSubs'ın TV adımında **Android TV / Google TV**'yi seçin ve TV'de CouchSubs'ı açın.
+
+### Bilgisayarsız: Android telefondan kurulum (deneysel)
+
+TV uygulamasını CouchSubs'ın Android uygulamasından da kurabilirsiniz. Gerçek TV'lerde henüz az denendi.
+
+1. Telefonda **Ayarlar › Deneysel › TV uygulamasını bu telefondan kur**'u açın, altındaki satıra basın ve üstten
+   **Android TV**'yi seçin.
+2. TV'de hata ayıklamayı yukarıdaki gibi açın ve iki yoldan birini seçin:
+   - **USB/ağ hata ayıklama:** Listeden TV'yi seçin (5555 portu açıksa "Ağ hata ayıklaması açık" yazar) ya da adresini
+     yazın, **Kur ve aç**'a basın. TV'de "USB hata ayıklamaya izin verilsin mi?" çıkınca **Bu cihazdan her zaman izin
+     ver**'i işaretleyip **İzin ver**'e basın.
+   - **Kablosuz hata ayıklama** (Android 11 ve sonrası, ör. Google TV): **Geliştirici seçenekleri › Kablosuz hata
+     ayıklama**'yı açıp içine girin. Üstteki **IP adresi ve bağlantı noktası**'nı TV'nin adresine yazın. İlk kurulumda
+     **Cihazı eşleme kodu ile eşle**'ye basın; açılan penceredeki adresi ve 6 haneli kodu telefona yazıp pencere
+     açıkken **Kur ve aç**'a basın. Sonraki kurulumlarda kod gerekmez, yalnız adres ve port (port her açılışta değişir).
+3. Telefon uygulamayı kurar, "diğer uygulamaların üzerinde göster" iznini verir ve açar.
+
+Telefondaki paket, [Sürümler](https://github.com/yorulmazsinan/couchsubs/releases) sayfasındaki `CouchSubs-androidtv.apk`
+ile aynıdır (telefon uygulaması derlenirken son sürümden alınır). TV'deki CouchSubs Google Play'den kurulduysa imzası
+farklıdır ve bu paket üstüne kurulamaz; telefon bunu söyler ve yalnız siz **TV'deki kopyayı kaldırıp kur**'a basarsanız
+eski kopyayı kaldırır. Kod: `couchsubs-android/.../tv/android/`. Sorun çıkarsa **Kurulum günlüğünü paylaş** ile günlüğü
+[Issues](https://github.com/yorulmazsinan/couchsubs/issues) sayfasına ekleyin.

@@ -119,8 +119,11 @@ android {
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
     // Telefondan TV kurulumu (deneysel): imzasız Samsung paketi; kurulurken TV'ye özel sertifikayla imzalanır.
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-tv')
+    // Android TV paketi: son GitHub sürümünden (tvReleasePackages).
+    sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-tv-release')
     testOptions { unitTests.returnDefaultValues = true }
-    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
+    // BouncyCastle'ın jar'ları aynı OSGi dosyasını taşır.
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'] } }
 }
 
 // Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
@@ -150,7 +153,54 @@ tasks.register('samsungTvPackage', Zip) {
     }
     from("$repoRoot/tv-tizen") { include 'platform.js', 'config.xml', 'icon.png' }
 }
-preBuild.dependsOn 'copyCouchSubsAssets', 'copyCouchSubsPacks', 'samsungTvPackage'
+// Android TV paketi (.apk) kaynaktan derlenmez, son GitHub sürümünden indirilir: masaüstünün kurduğu ve TV'lerde duran
+// kopyayla aynı sürüm anahtarıyla imzalıdır, telefonun kurduğu sürüm onu güncelleyebilir (telefonda derlenen başka
+// anahtarlı APK güncelleyemezdi). Paket küçüktür (~100 KB); SHA256SUMS.txt ile denetlenir. İndirilemezse önceki indirilen
+// kalır; hiç yoksa uygulama "paket yok" der. CI -Pcouchsubs.requireTvPackages=true ile indirmeyi şart koşar.
+def tvReleaseDir = layout.buildDirectory.dir('generated/couchsubs-tv-release/tv').get().asFile
+def requireTvPackages = (findProperty('couchsubs.requireTvPackages') ?: 'false').toString().toBoolean()
+tasks.register('tvReleasePackages') {
+    def outDir = tvReleaseDir
+    def required = requireTvPackages
+    def token = System.getenv('GITHUB_TOKEN')
+    // Sürümdeki ad → uygulamadaki ad.
+    def wanted = [[pattern: ~/CouchSubs-androidtv\.apk/, file: 'couchsubs-androidtv.apk']]
+    doLast {
+        def fetch = { String url, boolean api ->
+            def connection = new URL(url).openConnection()
+            connection.connectTimeout = 15000
+            connection.readTimeout = 60000
+            connection.setRequestProperty('User-Agent', 'couchsubs-android-build')
+            if (api) connection.setRequestProperty('Accept', 'application/vnd.github+json')
+            if (api && token) connection.setRequestProperty('Authorization', "Bearer ${token}")
+            connection.inputStream.withStream { it.bytes }
+        }
+        try {
+            def release = new groovy.json.JsonSlurper().parse(fetch('https://api.github.com/repos/yorulmazsinan/couchsubs/releases/latest', true))
+            def sums = release.assets.find { it.name == 'SHA256SUMS.txt' }
+            if (!sums) throw new GradleException("${release.tag_name}: SHA256SUMS.txt yok")
+            def lines = new String(fetch(sums.browser_download_url, false), 'UTF-8').readLines()
+            def properties = ["release=${release.tag_name}"]
+            outDir.mkdirs()
+            wanted.each { item ->
+                def asset = release.assets.find { it.name ==~ item.pattern }
+                if (!asset) throw new GradleException("${release.tag_name}: ${item.pattern} yok")
+                def bytes = fetch(asset.browser_download_url, false)
+                def digest = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+                if (!lines.any { it.trim() == "${digest}  ${asset.name}".toString() }) throw new GradleException("${asset.name}: SHA-256 tutmuyor")
+                new File(outDir, item.file).bytes = bytes
+                properties << "${item.file}=${asset.name}".toString()
+            }
+            new File(outDir, 'tv-packages.properties').text = properties.join('\n') + '\n'
+            logger.lifecycle("TV paketleri: ${release.tag_name} (${wanted*.file.join(', ')})")
+        } catch (Exception error) {
+            if (required) throw new GradleException("TV paketleri indirilemedi: ${error.message}", error)
+            if (new File(outDir, 'tv-packages.properties').exists()) logger.warn("TV paketleri yenilenemedi, önceki indirilen kullanılıyor: ${error.message}")
+            else logger.warn("TV paketleri indirilemedi, telefondan Android TV kurulumu bu derlemede çalışmaz: ${error.message}")
+        }
+    }
+}
+preBuild.dependsOn 'copyCouchSubsAssets', 'copyCouchSubsPacks', 'samsungTvPackage', 'tvReleasePackages'
 
 // CI'da chiaki-ng yamaları masaüstü derlemeleri gibi uygulanır (scripts/patch-chiaki.sh): -Pcouchsubs.patchChiaki=true
 if ((findProperty('couchsubs.patchChiaki') ?: 'false').toString().toBoolean()) {
@@ -164,6 +214,8 @@ if ((findProperty('couchsubs.patchChiaki') ?: 'false').toString().toBoolean()) {
 // Testler, gömülü paketleri depodaki yerinden okur.
 tasks.withType(Test).configureEach {
     systemProperty 'couchsubs.packs', "$repoRoot/core/Sources/CouchSubsCore/Resources/packs"
+    systemProperty 'couchsubs.tvPackages', tvReleaseDir.absolutePath
+    systemProperty 'couchsubs.requireTvPackages', requireTvPackages.toString()
 }
 
 dependencies {
@@ -187,12 +239,14 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics'
     // Meta App Events (iPhone'la aynı): yalnız olay adları, reklam kimliği yok. Uygulamada reklam yok.
     implementation 'com.facebook.android:facebook-core:17.0.0'
+    // Telefondan Android TV kurulumu: kablosuz hata ayıklamanın TLS 1.3'ü, anahtar dışa aktarımı ve sertifika (MIT).
+    // Samsung testleri de sertifika isteğini ayrıştırmak ve sahte sertifika vermek için bunu kullanır.
+    implementation 'org.bouncycastle:bctls-jdk18on:1.79'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.79'
 
     testImplementation 'junit:junit:4.13.2'
     // android.jar'daki org.json yalnız iskelettir; JVM testleri gerçeğini kullanır.
     testImplementation 'org.json:json:20240303'
-    // Yalnız testlerde: Samsung sertifika isteğini ayrıştırmak ve sahte sertifika vermek için (MIT lisanslı).
-    testImplementation 'org.bouncycastle:bcpkix-jdk18on:1.79'
     // Yalnız testlerde: paket imzasını bağımsız bir XML imza doğrulayıcısıyla denetlemek için (Apache-2.0).
     testImplementation 'org.apache.santuario:xmlsec:3.0.4'
 }
