@@ -8,14 +8,16 @@
     <string name="overlay_choose_input">TV\'yi kumandadan PS5\'in girişine (HDMI %1$d) alın. Altyazı görüntünün üstünde çıkar.</string>
     <string name="overlay_permission_needed">Katman modu için \"Diğer uygulamaların üzerinde göster\" izni gerekiyor.</string>
     <string name="overlay_fallback_needs_permission">PS5 görüntüsü CouchSubs\'ın içinde gelmiyor. Bazı TV\'lerde görüntü burada siyah kalır; katman modu bunu çözer ama \"Diğer uygulamaların üzerinde göster\" izni gerekiyor.</string>
-    <string name="overlay_unavailable">PS5 görüntüsü CouchSubs\'ın içinde gelmiyor. Bazı TV\'lerde görüntü burada siyah kalır. Katman modu bunu çözer ama yalnız bilgisayardaki CouchSubs\'ın kurduğu TV uygulamasında var: bu kopyayı kaldırın, TV\'de USB hata ayıklamayı açın ve çeviriyi bilgisayarda başlatın.</string>
+    <string name="overlay_unavailable">Katman seçili, ama Google Play\'den kurulan bu TV uygulamasında Katman modu yok; altyazı CouchSubs\'ın içinde gösteriliyor. Katman, bilgisayardaki CouchSubs\'ın TV\'ye doğrudan kurduğu sürümde var: bu kopyayı kaldırın, TV\'de USB hata ayıklamayı açın ve çeviriyi bilgisayarda başlatın.</string>
     <string name="overlay_permission_how">Bilgisayardaki CouchSubs bu izni TV uygulamasını kurarken kendisi verir: USB hata ayıklama açıkken çeviriyi orada başlatın. Ya da TV\'de Ayarlar › Uygulamalar › Özel uygulama erişimi › Diğer uygulamaların üzerinde göster\'den CouchSubs\'ı açın.</string>
     <string name="no_picture">HDMI %1$d girişinden görüntü gelmiyor.</string>
     <string name="no_picture_empty">HDMI %1$d girişinde cihaz görünmüyor.</string>
     <string name="no_picture_choose">PS5\'in bağlı olduğu HDMI girişini seçin (ok tuşları ve Tamam, ya da 1–4 sayı tuşları):</string>
     <string name="no_picture_still_black">Doğru girişte de siyah mı? Bu TV HDMI görüntüsünü uygulamalara vermiyor olabilir (bazı Vestel ve MediaTek TV\'ler) ya da HDCP engelliyordur. PS5\'te Ayarlar › Sistem › HDMI › HDCP\'yi Etkinleştir\'i kapatmayı deneyin. Olmazsa TV\'yi kumandadan PS5\'in HDMI girişine alın, altyazıyı telefon ekranından izleyin.</string>
     <string name="hdmi_not_offered">Bu TV HDMI girişlerini uygulamalara açmıyor; PS5 görüntüsü CouchSubs\'ın içinde gösterilemiyor. TV\'yi kumandadan PS5\'in HDMI girişine alın, altyazıyı telefon ekranından izleyin.</string>
-    <string name="overlay_from_computer">Bilgisayardaki CouchSubs\'ın kurduğu TV uygulamasında katman modu var: altyazı TV\'nin kendi HDMI görüntüsünün üstünde çıkar.</string>
+    <string name="overlay_from_computer">Google Play\'den kurulan bu sürümde Katman modu yok. Bilgisayardaki CouchSubs\'ın kurduğu TV uygulamasında var: altyazı TV\'nin kendi HDMI görüntüsünün üstünde çıkar.</string>
     <string name="picker_connected">bağlı</string>
     <string name="picker_close">Kapat</string>
+    <string name="overlay_offer">Ya da Katman\'a geçin: TV, PS5\'i kendi HDMI girişinde gösterir, altyazı görüntünün üstünde çıkar.</string>
+    <string name="overlay_switch">Katman\'a geç</string>
 </resources>

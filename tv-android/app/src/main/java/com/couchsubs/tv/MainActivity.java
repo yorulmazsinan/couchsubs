@@ -247,7 +247,8 @@ public class MainActivity extends Activity implements TvPage.Host {
 
     private void showPermissionHelp(int message) {
         if (help == null || pickerShown) return;
-        // Play paketinde izin işe yaramaz: katman modu yalnız bilgisayarın kurduğu sürümde var.
+        // Play paketinde izin işe yaramaz: katman modu yalnız bilgisayarın kurduğu sürümde var. Telefonda ya da
+        // bilgisayarda Katman seçilince bu açıkça söylenir; seçim sessizce yok sayılmaz.
         help.setText(BuildConfig.OVERLAY_MODE
                 ? getString(message) + "\n\n" + getString(R.string.overlay_permission_how)
                 : getString(R.string.overlay_unavailable));
@@ -289,8 +290,15 @@ public class MainActivity extends Activity implements TvPage.Host {
                 if (console || (focus == null && input.connected && input.port != port)) focus = button;
             }
         }
-        if (BuildConfig.OVERLAY_MODE) {
-            if (!overlayAllowed()) text.append("\n\n").append(getString(R.string.overlay_permission_how));
+        if (overlayAllowed()) {
+            // Giriş boş göründüğü için kendiliğinden geçilmedi (FallbackWatch.shouldSwitch); PS5 başka girişteyse ya da
+            // TV görüntüyü uygulamaya vermiyorsa kullanıcı katmanı buradan seçer.
+            text.append("\n\n").append(getString(R.string.overlay_offer));
+            Button overlay = choiceButton(getString(R.string.overlay_switch));
+            overlay.setOnClickListener(v -> switchToOverlay(R.string.overlay_selected));
+            choices.addView(overlay);
+        } else if (BuildConfig.OVERLAY_MODE) {
+            text.append("\n\n").append(getString(R.string.overlay_permission_how));
         } else {
             text.append("\n\n").append(getString(R.string.overlay_from_computer));
         }
@@ -393,6 +401,8 @@ public class MainActivity extends Activity implements TvPage.Host {
     public void displayModeChanged(String mode) {
         if (!DisplayMode.OVERLAY.equals(mode)) return;
         if (overlayAllowed()) switchToOverlay(R.string.overlay_selected);
+        else if (pickerShown) Toast.makeText(this, BuildConfig.OVERLAY_MODE
+                ? R.string.overlay_permission_needed : R.string.overlay_unavailable, Toast.LENGTH_LONG).show();
         else showPermissionHelp(R.string.overlay_permission_needed);
     }
 
