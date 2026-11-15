@@ -201,8 +201,14 @@ struct SettingsScreen: View {
                               selection: $model.settings.style.backgroundShape)
                 Text("Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.")
                     .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
-                toggleRow("Keep previous lines above in fast dialogue", "When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.",
-                          isOn: $model.settings.style.stackPrevious)
+                Toggle(isOn: $model.settings.style.stackPrevious) {
+                    VStack(alignment: .leading, spacing: Mobile.Space.hair) {
+                        Text("Keep previous lines above in fast dialogue").font(Mobile.TypeScale.headline)
+                        Text("When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.")
+                            .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+                    }
+                }
+                .tint(Mobile.Palette.accent)
             }
             AreaTile()
             ExtraAreasTile()
