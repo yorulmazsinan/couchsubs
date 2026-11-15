@@ -27,7 +27,9 @@ the TizenSdb.Core sdb protocol and package signing and of the Apps2Samsung sign-
 (`app/src/main/java/com/couchsubs/mobile/tv/samsung/`), under the same MIT terms below. For installing on Android TV it
 bundles Bouncy Castle (`bctls`, `bcpkix`, `bcprov`, `bcutil`; MIT, Copyright (c) The Legion of the Bouncy Castle Inc.,
 https://www.bouncycastle.org) for the TLS 1.3 of ADB wireless debugging, and the released Android TV app
-(`CouchSubs-androidtv.apk`, part of CouchSubs).
+(`CouchSubs-androidtv.apk`, part of CouchSubs). For installing on LG TVs it bundles JSch (mwiede/jsch fork; BSD-3-Clause,
+Copyright (c) 2002-2018 ymnk, JCraft, Inc., https://github.com/mwiede/jsch) for the developer-mode SSH connection, and the
+released LG TV app (`com.couchsubs.tv_*_all.ipk`, part of CouchSubs).
 
 Samsung developer CA certificates (`vd_tizen_dev_author_ca`, `author_ca`, `vd_tizen_dev_public2`, `public2`) are
 redistributed unmodified from Tizen Studio, solely so that the TV app can be signed for the user's own Samsung TV. They

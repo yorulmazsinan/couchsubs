@@ -119,7 +119,7 @@ android {
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-packs')
     // Telefondan TV kurulumu (deneysel): imzasız Samsung paketi; kurulurken TV'ye özel sertifikayla imzalanır.
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-tv')
-    // Android TV paketi: son GitHub sürümünden (tvReleasePackages).
+    // Android TV ve LG paketleri: son GitHub sürümünden (tvReleasePackages).
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-tv-release')
     testOptions { unitTests.returnDefaultValues = true }
     // BouncyCastle'ın jar'ları aynı OSGi dosyasını taşır.
@@ -164,7 +164,9 @@ tasks.register('tvReleasePackages') {
     def required = requireTvPackages
     def token = System.getenv('GITHUB_TOKEN')
     // Sürümdeki ad → uygulamadaki ad.
-    def wanted = [[pattern: ~/CouchSubs-androidtv\.apk/, file: 'couchsubs-androidtv.apk']]
+    // LG paketi (.ipk) de masaüstünün kurduğuyla aynıdır (ares-package çıktısı); adı sürümü taşır.
+    def wanted = [[pattern: ~/CouchSubs-androidtv\.apk/, file: 'couchsubs-androidtv.apk'],
+                  [pattern: ~/com\.couchsubs\.tv_[0-9.]+_all\.ipk/, file: 'couchsubs-lg.ipk']]
     doLast {
         def fetch = { String url, boolean api ->
             def connection = new URL(url).openConnection()
@@ -243,6 +245,8 @@ dependencies {
     // Samsung testleri de sertifika isteğini ayrıştırmak ve sahte sertifika vermek için bunu kullanır.
     implementation 'org.bouncycastle:bctls-jdk18on:1.79'
     implementation 'org.bouncycastle:bcpkix-jdk18on:1.79'
+    // Telefondan LG kurulumu: geliştirici modunun SSH'si (9922). mwiede/jsch, BSD.
+    implementation 'com.github.mwiede:jsch:0.2.25'
 
     testImplementation 'junit:junit:4.13.2'
     // android.jar'daki org.json yalnız iskelettir; JVM testleri gerçeğini kullanır.

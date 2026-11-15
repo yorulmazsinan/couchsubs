@@ -82,9 +82,10 @@ private sealed interface InstallState {
 @Composable
 fun TvInstallScreen(onBack: () -> Unit) {
     var brand by remember { mutableStateOf(Services.settings.tvInstallBrand) }
-    val brands = listOf(TvBrand.SAMSUNG, TvBrand.ANDROID_TV)
+    val brands = listOf(TvBrand.SAMSUNG, TvBrand.LG, TvBrand.ANDROID_TV)
     val picker: @Composable () -> Unit = {
-        Segmented(listOf(stringResource(R.string.tvinstall_brand_samsung), stringResource(R.string.tvinstall_brand_android)),
+        Segmented(listOf(stringResource(R.string.tvinstall_brand_samsung), stringResource(R.string.tvinstall_brand_lg),
+            stringResource(R.string.tvinstall_brand_android)),
             brands.indexOf(brand).coerceAtLeast(0)) {
             brand = brands[it]
             Services.settings.tvInstallBrand = brand
@@ -92,6 +93,7 @@ fun TvInstallScreen(onBack: () -> Unit) {
     }
     when (brand) {
         TvBrand.ANDROID_TV -> AndroidTvInstallScreen(onBack, picker)
+        TvBrand.LG -> LgInstallScreen(onBack, picker)
         else -> SamsungInstallScreen(onBack, picker)
     }
 }

@@ -31,5 +31,11 @@ class TvPackagesTest {
             assertTrue(apk.getEntry("AndroidManifest.xml") != null)
             assertTrue(apk.getEntry("classes.dex") != null)
         }
+        // LG: ares-package'ın ipk'sı bir ar arşividir (debian-binary, control.tar.gz, data.tar.gz).
+        val ipkName = entries[TvPackages.LG_IPK]!!
+        assertTrue(com.couchsubs.mobile.tv.lg.LgInstaller.versionOfPackage(ipkName) != null)
+        val ipk = File(directory, TvPackages.LG_IPK).readBytes()
+        assertEquals("!<arch>\n", String(ipk, 0, 8, Charsets.US_ASCII))
+        assertTrue(String(ipk, Charsets.ISO_8859_1).contains("debian-binary"))
     }
 }

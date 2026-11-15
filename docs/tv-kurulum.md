@@ -51,6 +51,20 @@ baştan kurmanız gerekir. TV internetsiz 10 kez yeniden başlarsa da aynısı o
 
 Modu kapatıp yeniden açarsanız TV yeni anahtar üretir ve parola bir kez daha sorulur.
 
+### Bilgisayarsız: Android telefondan kurulum (deneysel)
+
+TV uygulamasını CouchSubs'ın Android uygulamasından da kurabilirsiniz. Gerçek TV'lerde henüz az denendi.
+
+1. Yukarıdaki 1. ve 2. adımlarla geliştirici modunu açın.
+2. Telefonda **Ayarlar › Deneysel › TV uygulamasını bu telefondan kur**'u açın, altındaki satıra basın ve üstten
+   **LG**'yi seçin. Listeden TV'yi seçin (geliştirici modu açıksa "Geliştirici modu açık" yazar) ya da adresini yazın.
+3. TV'de Developer Mode uygulamasında **Key Server**'ı açın, ekrandaki 6 karakterli **Passphrase**'i telefona yazıp
+   **Kur ve aç**'a basın. Telefon anahtarı alır, uygulamayı kurar ve açar. Parola yalnız ilk kurulumda gerekir.
+
+Telefon geliştirici modunun süresini **uzatmaz**; süre dolmadan Developer Mode uygulamasındaki **EXTEND**'e basın (ya da
+bilgisayardaki CouchSubs'ı açın). Paket, [Sürümler](https://github.com/yorulmazsinan/couchsubs/releases) sayfasındaki
+`.ipk` ile aynıdır. Kod: `couchsubs-android/.../tv/lg/`.
+
 ### Elle kurulum
 
 Otomatik kurulum çalışmazsa [Node.js](https://nodejs.org) kurup Terminal'de (Windows'ta PowerShell'de):
