@@ -122,8 +122,8 @@ android {
     // Android TV ve LG paketleri: son GitHub sürümünden (tvReleasePackages).
     sourceSets.main.assets.srcDirs += layout.buildDirectory.dir('generated/couchsubs-tv-release')
     testOptions { unitTests.returnDefaultValues = true }
-    // BouncyCastle'ın jar'ları aynı OSGi dosyasını taşır.
-    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'] } }
+    // BouncyCastle ve jsch jar'ları aynı OSGi dosyalarını taşır (uygulamada kullanılmaz).
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/versions/*/OSGI-INF/MANIFEST.MF'] } }
 }
 
 // Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
