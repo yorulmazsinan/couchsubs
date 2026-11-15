@@ -34,6 +34,13 @@
     <string name="error_port">Altyazı sunucusu açılamadı (8787 kullanımda).</string>
     <string name="error_translation">Çeviri şu an yapılamıyor; yeniden deneniyor.</string>
     <string name="error_model">Ücretsiz çeviri modeli indirilemedi. İnternet bağlantını kontrol et.</string>
+    <string name="screen_translate">Ekranı çevir</string>
+    <string name="screen_working">Ekran çevriliyor…</string>
+    <string name="screen_remove">Çevirileri kaldır</string>
+    <string name="screen_translating">Ekran çevriliyor…</string>
+    <string name="screen_none">Ekranda yazı bulunamadı.</string>
+    <string name="screen_no_picture">Ekran alınamadı: PS5'ten henüz görüntü gelmedi.</string>
+    <string name="screen_failed">Ekran çevrilemedi: %1$s</string>
 
 
     <string name="welcome1_title">PS5 oyunları Türkçe altyazıyla</string>

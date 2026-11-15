@@ -7,6 +7,12 @@ import java.util.concurrent.Executors
 /** Çeviri motoru. Bloklayarak çevirir (hattın kendi iş parçacığında çağrılır); başarısızsa istisna atar. */
 fun interface TextTranslator {
     fun translate(text: String): String
+
+    /** Birbirinden bağımsız metinleri ("ekranı çevir"deki menü satırları, görev yazıları) aynı sırada çevirir. */
+    fun translateAll(texts: List<String>): List<String> = texts.map(::translate)
+
+    /** [translateAll] hepsini tek istekte çevirir (yapay zekâ); öyleyse ekran çevirisi parça parça istek göndermez. */
+    val translatesTogether: Boolean get() = false
 }
 
 /**

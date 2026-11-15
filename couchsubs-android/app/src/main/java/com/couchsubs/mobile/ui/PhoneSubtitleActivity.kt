@@ -22,6 +22,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
+import com.couchsubs.mobile.service.LiveStatus
+import com.couchsubs.mobile.service.TranslationService
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,6 +71,10 @@ class PhoneSubtitleActivity : ComponentActivity() {
                         StatusLabel(stringResource(if (connected) R.string.subtitle_connected else R.string.subtitle_waiting), ok = connected, live = connected)
                         status.packInUse?.let { Pill(stringResource(R.string.running_pack, it), pro = true) }
                         Spacer(Modifier.weight(1f))
+                        if (connected) IconAction(
+                            if (status.screenState == LiveStatus.ScreenState.IDLE) Icons.Filled.Search else Icons.Filled.Delete,
+                            stringResource(if (status.screenState == LiveStatus.ScreenState.IDLE) R.string.screen_translate else R.string.screen_remove),
+                        ) { TranslationService.translateScreen() }
                         IconAction(Icons.Filled.Close, stringResource(R.string.close)) { finish() }
                     }
                     Column(Modifier.align(Alignment.Center).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
@@ -80,6 +90,21 @@ class PhoneSubtitleActivity : ComponentActivity() {
                     }
                     Text(stringResource(R.string.subtitle_screen_note), style = Tokens.Type.caption, color = Tokens.Color.secondary,
                         modifier = Modifier.align(Alignment.BottomCenter))
+                    // "Ekranı çevir" sonuçları: her çeviri kendi yazısının yerinde ve aynı boyda (TV'deki gibi).
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                        status.screen.forEach { item ->
+                            val box = item.box
+                            val width = maxOf(60.dp, maxWidth * (box.right - box.left).toFloat())
+                            val size = (maxHeight.value * item.lineHeight * 0.8).coerceIn(10.0, 28.0).toFloat()
+                            Text(item.translation, style = Tokens.Type.caption.copy(fontSize = size.sp, lineHeight = (size * 1.2f).sp),
+                                color = Tokens.Color.text, textAlign = TextAlign.Start,
+                                modifier = Modifier
+                                    .offset(x = maxWidth * box.left.toFloat(), y = maxHeight * ((box.top + box.bottom) / 2).toFloat() - (size * 0.8f).dp)
+                                    .width(width)
+                                    .background(Color.Black.copy(alpha = 0.85f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                    .padding(4.dp))
+                        }
+                    }
                     // Ek alanların (görev, telefon, bildirim) çevirisi oyundaki yerinde küçük kutuda (TV ve iPhone'daki gibi).
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         status.regions.forEach { region ->

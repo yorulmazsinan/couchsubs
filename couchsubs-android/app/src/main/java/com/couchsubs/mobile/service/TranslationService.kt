@@ -26,6 +26,7 @@ import com.couchsubs.mobile.core.GameSense
 import com.couchsubs.mobile.core.LinePool
 import com.couchsubs.mobile.packs.PackStore
 import com.couchsubs.mobile.core.PackLookup
+import com.couchsubs.mobile.core.ScreenTranslation
 import com.couchsubs.mobile.core.SubtitleEvent
 import com.couchsubs.mobile.core.SubtitlePipeline
 import com.couchsubs.mobile.core.SubtitleServer
@@ -80,6 +81,20 @@ class TranslationService : Service() {
             context.startService(Intent(context, TranslationService::class.java).setAction(ACTION_STOP))
         }
 
+        /** Çalışan hizmet ("ekranı çevir" düğmesi buraya gelir). */
+        @Volatile private var current: TranslationService? = null
+
+        /**
+         * "Ekranı çevir": PS5'in şu anki karesinin tamamı bir kez okunur, yazı grupları tek istekte çevrilir; sonuçlar
+         * telefonda ve TV'de yazının yerinde görünür. Çeviri sürerken ya da sonuçlar ekrandayken yeniden çağrılmak onları
+         * kaldırır (Mac ⌥⌘T ve iPhone ile aynı). Çeviri çalışmıyorsa false.
+         */
+        fun translateScreen(): Boolean {
+            val service = current ?: return false
+            service.toggleScreen()
+            return true
+        }
+
         /** Çeviri sürerken açık altyazı sunucusu ("TV'de test et" için). */
         @Volatile private var liveServer: SubtitleServer? = null
 
@@ -130,6 +145,7 @@ class TranslationService : Service() {
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
+        current = this
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -299,6 +315,7 @@ class TranslationService : Service() {
 
         val onFrame: (com.couchsubs.mobile.remoteplay.VideoFrame) -> Unit = { frame ->
             val now = System.currentTimeMillis()
+            if (screenRequested.compareAndSet(true, false)) startScreen(frame)
             if (!reading.get() && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
                 val area = region
                 // Karenin geldiği an: gecikme buradan TV'ye gidene kadar ölçülür (hattın saatiyle).
@@ -372,6 +389,94 @@ class TranslationService : Service() {
         background.scheduleWithFixedDelay({
             session?.let { s -> LiveState.update { it.copy(framesReceived = s.framesReceived) } }
         }, 2, 2, TimeUnit.SECONDS)
+    }
+
+    // --- Ekranı çevir ---
+
+    /** Düğmeye basıldı: sıradaki PS5 karesi tam okunsun. */
+    private val screenRequested = AtomicBoolean(false)
+    private val screenWork = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs screen").apply { isDaemon = true } }
+    private val screenExpiry = Executors.newSingleThreadScheduledExecutor { Thread(it, "CouchSubs screen expiry").apply { isDaemon = true } }
+    /** Her istek ve kaldırma bir üst numara alır; eski işin sonuçları yok sayılır. */
+    private val screenGeneration = java.util.concurrent.atomic.AtomicInteger()
+    @Volatile private var screenTask: java.util.concurrent.Future<*>? = null
+    @Volatile private var screenReader: SubtitleReader? = null
+
+    private fun toggleScreen() {
+        val server = server ?: return
+        val state = LiveState.status.value.screenState
+        if (state != LiveStatus.ScreenState.IDLE) {
+            hideScreen()
+            return
+        }
+        if (!streaming) {
+            server.sendSubtitle(getString(R.string.screen_no_picture), 4000)
+            return
+        }
+        screenGeneration.incrementAndGet()
+        LiveState.update { it.copy(screenState = LiveStatus.ScreenState.WORKING) }
+        server.sendStyle(settings.style)
+        server.sendSubtitle(getString(R.string.screen_translating), 2500)
+        screenRequested.set(true)
+    }
+
+    /** Çeviriyi durdurur, sonuçları telefondan ve TV'den kaldırır. */
+    private fun hideScreen() {
+        screenGeneration.incrementAndGet()
+        screenRequested.set(false)
+        screenTask?.cancel(true)
+        screenTask = null
+        server?.clearScreen()
+        server?.clear()
+        LiveState.update { it.copy(screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
+    }
+
+    /** Sıradaki kare geldi: bütün kare kopyalanır, okuma ve çeviri kendi iş parçacığında sürer. */
+    private fun startScreen(frame: com.couchsubs.mobile.remoteplay.VideoFrame) {
+        val pixels = SubtitleReader.copyRegion(frame, CropRegion(0.0, 1.0, 0.0, 1.0))
+        val generation = screenGeneration.get()
+        if (pixels == null) {
+            failScreen(generation, getString(R.string.screen_no_picture))
+            return
+        }
+        val free = freeTranslator
+        val server = server
+        if (free == null || server == null) {
+            failScreen(generation, getString(R.string.error_translation))
+            return
+        }
+        screenTask = screenWork.submit(Runnable {
+            try {
+                val reader = screenReader ?: SubtitleReader().also { screenReader = it }
+                val reading = reader.read(pixels)
+                // Yapay zekâda ekranın bütün yazıları tek istekte gider (bkz. AiTranslator.translateAll).
+                val translator = onlineTranslator(free.separate()) ?: free.separate()
+                val items = ScreenTranslation.translate(reading, translator, { screenGeneration.get() != generation }) { shown ->
+                    if (screenGeneration.get() != generation) return@translate
+                    val milliseconds = ScreenTranslation.displayMilliseconds(shown)
+                    server.sendScreen(shown, milliseconds)
+                    screenExpiry.schedule({ if (screenGeneration.get() == generation) hideScreen() }, milliseconds.toLong(), TimeUnit.MILLISECONDS)
+                }
+                if (screenGeneration.get() != generation) return@Runnable
+                server.clear()
+                if (items.isEmpty()) {
+                    LiveState.update { it.copy(screenState = LiveStatus.ScreenState.IDLE) }
+                    server.sendSubtitle(getString(R.string.screen_none), 2500)
+                }
+            } catch (error: InterruptedException) {
+                return@Runnable
+            } catch (error: Exception) {
+                Log.w(TAG, "screen", error)
+                failScreen(generation, getString(R.string.screen_failed, getString(R.string.error_translation)))
+            }
+        })
+    }
+
+    private fun failScreen(generation: Int, message: String) {
+        if (screenGeneration.get() != generation) return
+        LiveState.update { it.copy(screenState = LiveStatus.ScreenState.IDLE) }
+        server?.clear()
+        server?.sendSubtitle(message, 6000)
     }
 
     private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long) {
@@ -497,9 +602,16 @@ class TranslationService : Service() {
         background.shutdownNow()
         ocr.shutdownNow()
         regionWork.shutdownNow()
+        screenGeneration.incrementAndGet()
+        screenTask?.cancel(true)
+        screenWork.shutdownNow()
+        screenExpiry.shutdownNow()
+        screenReader?.close()
+        screenReader = null
+        if (current === this) current = null
         wakeLock?.takeIf { it.isHeld }?.release()
         wifiLock?.takeIf { it.isHeld }?.release()
-        LiveState.update { it.copy(running = false, phase = "", current = "", previous = "", regions = emptyList()) }
+        LiveState.update { it.copy(running = false, phase = "", current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
         super.onDestroy()
     }
 }

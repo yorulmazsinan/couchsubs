@@ -211,6 +211,22 @@ abstract class SentenceTranslator<C>(
     private fun fallback(text: String): String =
         (local ?: throw IOException("no local translator")).translate(text).also { remember(text, it) }
 
+    /** Toplu çeviride ("ekranı çevir") hizmet şu an dinleniyor mu (son hatadan sonra bir dakika denenmez). */
+    protected fun paused(): Boolean = clock() < pausedUntil
+
+    /** Toplu çeviri hizmetten döndü: hata durumu temizlenir. */
+    protected fun succeeded() = report(null)
+
+    /** Toplu çeviri hata verdi: hata bildirilir ve bir dakika hizmet denenmez. */
+    protected fun failed(error: Exception) {
+        report((error as? OnlineException)?.state ?: OnlineKeyState.UNREACHABLE)
+        pausedUntil = clock() + 60_000
+    }
+
+    /** Hizmet yanıt vermeyen parçalar yerel motorla çevrilir; yerel motor yoksa hata yukarı çıkar. */
+    protected fun localTranslation(text: String): String =
+        (local ?: throw IOException("no local translator")).translate(text)
+
     private fun report(state: OnlineKeyState?) {
         if (lastError == state) return
         lastError = state
@@ -294,6 +310,8 @@ data class AiHttpRequest(val url: String, val headers: Map<String, String>, val 
 
 object AiRequest {
     const val MAX_OUTPUT_TOKENS = 1024
+    /** "Ekranı çevir"in tek isteğinde çıktı sınırı: ekrandaki bütün yazılar birlikte döner (Mac/iPhone ile aynı). */
+    const val SCREEN_OUTPUT_TOKENS = 8192
 
     const val SYSTEM_PROMPT =
         "You translate English video game subtitles into natural, spoken Turkish, the way people really talk. " +
@@ -322,12 +340,15 @@ object AiRequest {
         return parts.joinToString("\n\n")
     }
 
-    fun build(provider: AiProvider, key: String, model: AiModel, sentences: List<String>, context: List<ContextLine>): AiHttpRequest {
+    fun build(
+        provider: AiProvider, key: String, model: AiModel, sentences: List<String>, context: List<ContextLine>,
+        maxOutputTokens: Int = MAX_OUTPUT_TOKENS,
+    ): AiHttpRequest {
         val trimmed = key.trim()
         val user = userMessage(sentences, context)
         return when (provider) {
             AiProvider.GEMINI -> {
-                val config = JSONObject().put("maxOutputTokens", MAX_OUTPUT_TOKENS)
+                val config = JSONObject().put("maxOutputTokens", maxOutputTokens)
                 model.thinking?.let { config.put("thinkingConfig", JSONObject().put("thinkingLevel", it)) }
                 val body = JSONObject()
                     .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYSTEM_PROMPT))))
@@ -344,7 +365,7 @@ object AiRequest {
                     .put("messages", JSONArray()
                         .put(JSONObject().put("role", "developer").put("content", SYSTEM_PROMPT))
                         .put(JSONObject().put("role", "user").put("content", user)))
-                    .put("max_completion_tokens", MAX_OUTPUT_TOKENS)
+                    .put("max_completion_tokens", maxOutputTokens)
                 model.effort?.let { body.put("reasoning_effort", it) }
                 AiHttpRequest("https://api.openai.com/v1/chat/completions",
                     mapOf("Authorization" to "Bearer $trimmed", "Content-Type" to "application/json"), body.toString())
@@ -352,7 +373,7 @@ object AiRequest {
             AiProvider.CLAUDE -> {
                 val body = JSONObject()
                     .put("model", model.id)
-                    .put("max_tokens", MAX_OUTPUT_TOKENS)
+                    .put("max_tokens", maxOutputTokens)
                     .put("system", SYSTEM_PROMPT)
                     .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", user)))
                 model.effort?.let { body.put("output_config", JSONObject().put("effort", it)) }
@@ -476,6 +497,47 @@ class AiTranslator(
     companion object {
         /** Kalıcı önbellek dosyasındaki motor adı (iPhone ile aynı: "gemini:<model>"). */
         fun engineId(provider: AiProvider, model: AiModel) = "${provider.id}:${model.id}"
+
+        /** "Ekranı çevir"de bir istekte giden en çok parça; kalabalık ekran birkaç isteğe bölünür (iPhone ile aynı). */
+        const val SCREEN_BATCH = 40
+        /** "Ekranı çevir"de beklenen en uzun süre: bütün ekranın çevirisi tek yanıtta gelir. */
+        const val SCREEN_TIMEOUT_MS = 30_000
+    }
+
+    override val translatesTogether: Boolean get() = true
+
+    /**
+     * "Ekranı çevir": birbirinden bağımsız parçalar (menü satırı, görev yazısı...) tek istekte, aynı sırada çevrilir
+     * (parça başına istek dakikalık hakkı bitirirdi; Mac/iPhone AITranslationCore.translateAll ile aynı). Önbellekteki
+     * parçalar gönderilmez. Hata olursa kalan parçalar yerel motorla çevrilir; o da yoksa hata yukarı çıkar.
+     */
+    override fun translateAll(texts: List<String>): List<String> {
+        val results = texts.map { cache.get(it) }.toMutableList()
+        val missing = texts.indices.filter { results[it] == null }
+        var stopped = paused()
+        for (chunk in missing.chunked(SCREEN_BATCH)) {
+            if (stopped) break
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
+            val sentences = chunk.map { texts[it] }
+            try {
+                val request = AiRequest.build(provider, key, model, sentences, emptyList(), AiRequest.SCREEN_OUTPUT_TOKENS)
+                val (status, body) = http.send("POST", request.url, request.headers, request.body, SCREEN_TIMEOUT_MS)
+                if (status !in 200..299) throw OnlineException(AiRequest.failure(status, body))
+                val translated = AiRequest.translations(AiRequest.text(provider, body), sentences.size)
+                succeeded()
+                for ((index, translation) in chunk.zip(translated)) {
+                    results[index] = translation
+                    cache.store(texts[index], translation)
+                }
+            } catch (error: IOException) {
+                failed(error)
+                stopped = true
+            } catch (error: org.json.JSONException) {
+                failed(error)
+                stopped = true
+            }
+        }
+        return texts.indices.map { results[it] ?: localTranslation(texts[it]) }
     }
 
     private val key = key.trim()

@@ -20,6 +20,10 @@ data class LiveStatus(
     val previous: String = "",
     /** Telefon ekranındaki ek alan çevirileri (görev, telefon, bildirim). */
     val regions: List<com.couchsubs.mobile.core.SubtitleEvent.Region> = emptyList(),
+    /** "Ekranı çevir" sonuçları (telefon ekranında yazının kendi yerinde); yoksa boş. */
+    val screen: List<com.couchsubs.mobile.core.ScreenTranslation.Item> = emptyList(),
+    /** "Ekranı çevir" düğmesinin durumu: çeviri sürüyor ya da sonuçlar ekranda. */
+    val screenState: LiveStatus.ScreenState = LiveStatus.ScreenState.IDLE,
     /** Son satırı veren oyun paketinin başlığı (ör. "GTA V"); paket kullanılmadıysa null. */
     val packInUse: String? = null,
     val error: String? = null,
@@ -40,6 +44,8 @@ data class LiveStatus(
      * Sunucunun olayı telefon ekranına: yeni satır öncekini üste iter; aynı cümlenin uzamış ya da düzelmiş okuması
      * (`replaces`) öncekinin yerine geçer, üste yığılmaz (TV ve iPhone ile aynı). Temizlenince ekran boşalır.
      */
+    enum class ScreenState { IDLE, WORKING, SHOWN }
+
     fun phoneEvent(event: com.couchsubs.mobile.core.SubtitleEvent): LiveStatus = when (event) {
         is com.couchsubs.mobile.core.SubtitleEvent.Subtitle ->
             copy(current = event.text, previous = if (event.replaces || current.isEmpty()) previous else current)
@@ -48,6 +54,8 @@ data class LiveStatus(
         is com.couchsubs.mobile.core.SubtitleEvent.Region ->
             copy(regions = regions.filter { it.id != event.id } + listOfNotNull(event.takeIf { it.text.isNotEmpty() }))
         com.couchsubs.mobile.core.SubtitleEvent.RegionsCleared -> copy(regions = emptyList())
+        is com.couchsubs.mobile.core.SubtitleEvent.Screen -> copy(screen = event.items, screenState = ScreenState.SHOWN)
+        com.couchsubs.mobile.core.SubtitleEvent.ScreenCleared -> copy(screen = emptyList(), screenState = ScreenState.IDLE)
     }
 }
 

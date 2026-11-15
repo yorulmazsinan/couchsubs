@@ -34,6 +34,13 @@
     <string name="error_port">The subtitle server could not start (port 8787 is in use).</string>
     <string name="error_translation">Translation is unavailable right now; retrying.</string>
     <string name="error_model">The free translation model could not be downloaded. Check your internet connection.</string>
+    <string name="screen_translate">Translate screen</string>
+    <string name="screen_working">Translating the screen…</string>
+    <string name="screen_remove">Remove screen translations</string>
+    <string name="screen_translating">Translating the screen…</string>
+    <string name="screen_none">No text found on the screen.</string>
+    <string name="screen_no_picture">Couldn't capture the screen: no picture from the PS5 yet.</string>
+    <string name="screen_failed">Couldn't translate the screen: %1$s</string>
 
     <string name="welcome1_title">PS5 games with Turkish subtitles</string>
     <string name="welcome1_body">In games without Turkish, your phone reads the English subtitles and translates them into Turkish. You play as usual.</string>

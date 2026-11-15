@@ -207,6 +207,7 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
     }
     ScreenScaffold(top = topBar, bottom = {
         SecondaryButton(stringResource(R.string.main_phone_view), onClick = onPhoneView)
+        if (status.phase == stringResource(R.string.phase_streaming)) ScreenTranslateButton(status)
         DestructiveButton(stringResource(R.string.stop), onClick = onStop)
     }) {
         Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap), verticalAlignment = Alignment.CenterVertically) {
@@ -354,4 +355,15 @@ fun open(context: Context, url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (error: Exception) {
     }
+}
+
+/** "Ekranı çevir": oyun ekranının tamamını çevirir; çeviri sürerken ya da sonuçlar ekrandayken dokununca kaldırır (iPhone ile aynı). */
+@Composable
+fun ScreenTranslateButton(status: LiveStatus, modifier: Modifier = Modifier) {
+    val label = when (status.screenState) {
+        LiveStatus.ScreenState.IDLE -> R.string.screen_translate
+        LiveStatus.ScreenState.WORKING -> R.string.screen_working
+        LiveStatus.ScreenState.SHOWN -> R.string.screen_remove
+    }
+    SecondaryButton(stringResource(label), modifier) { com.couchsubs.mobile.service.TranslationService.translateScreen() }
 }
