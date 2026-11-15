@@ -98,6 +98,13 @@ final class PhoneModel: ObservableObject {
     /// Telefon ekranındaki ek alan çevirileri (görev, telefon, bildirim); TV'deki gibi kendi yerlerinde küçük kutular.
     @Published private(set) var phoneRegions: [PhoneRegion] = []
 
+    /// "Ekranı çevir" sonuçları (telefon ekranında yazının kendi yerinde); boşken görünür bir şey yok.
+    @Published private(set) var screenItems: [ScreenTranslation.Item] = []
+    /// "Ekranı çevir" düğmesinin durumu: çeviri sürüyor ya da sonuçlar ekranda.
+    @Published private(set) var screenState: ScreenState = .idle
+
+    enum ScreenState: Equatable { case idle, working, shown }
+
     struct PhoneRegion: Identifiable, Equatable {
         let id: String
         let text: String
@@ -144,6 +151,9 @@ final class PhoneModel: ObservableObject {
     private var savedKeys: Set<TranslationEngine> = []
     private var stack = SubtitleStack()
     private var stackTimer: Task<Void, Never>?
+    /// Süren "ekranı çevir" işi ve sonuçların kalkma zamanlayıcısı.
+    private var screenTask: Task<Void, Never>?
+    private var screenExpiry: Task<Void, Never>?
     /// Yığının saati (saniye); testlerde ileri sarılır.
     var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
@@ -737,11 +747,9 @@ final class PhoneModel: ObservableObject {
             stack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         case .clear:
             stack.clear(now: now)
-        // Telefonda "ekranı çevir" yok; gelirse satır satır gösterilir.
-        case .screen(let text, let durationMs):
-            stack.show(text, durationMs: durationMs, paragraphs: true, now: now)
-        case .screenClear:
-            stack.hide()
+        // "Ekranı çevir" sonuçları yazının yerinde gösterilir (`screenItems`); satır yığınına girmez.
+        case .screen, .screenClear:
+            return
         // Ek alanın çevirisi telefon ekranında da kendi yerinde küçük kutuda görünür (boş metin kutuyu kaldırır).
         case .region(let id, let text, let box):
             var regions = phoneRegions.filter { $0.id != id }
@@ -776,6 +784,94 @@ final class PhoneModel: ObservableObject {
         stackTimer = nil
         if !phoneLines.isEmpty { phoneLines = [] }
         if !phoneRegions.isEmpty { phoneRegions = [] }
+        hideScreen()
+    }
+
+    // MARK: - Ekranı çevir
+
+    /// "Ekranı çevir": PS5'in şu anki karesinin tamamı bir kez okunur, yazı grupları (menü, görev paneli, bilgi kutusu...)
+    /// tek istekte çevrilir; sonuçlar telefonda ve TV'de yazının kendi yerinde görünür. Çeviri sürerken ya da sonuçlar
+    /// ekrandayken yeniden dokunmak onları kaldırır (Mac ⌥⌘T ile aynı).
+    func translateScreen() {
+        guard isRunning else { return }
+        if screenState != .idle {
+            hideScreen()
+            return
+        }
+        guard let frame = framePreview.image else {
+            server.sendSubtitle(String(localized: "Couldn't capture the screen: no picture from the PS5 yet."), durationMs: 4000)
+            return
+        }
+        screenState = .working
+        server.sendStyle(settings.style)
+        server.sendSubtitle(String(localized: "Translating the screen…"), durationMs: 2500)
+        let reader = VisionReader(language: settings.sourceLanguage)
+        let translator = makeTranslator()
+        let server = self.server
+        screenTask = Task { [weak self] in
+            do {
+                let reading = try await Task.detached(priority: .userInitiated) { try reader.readLines(frame, deep: false) }.value
+                let items = try await ScreenTranslation.translate(reading, using: translator) { shown in
+                    guard !Task.isCancelled else { return }
+                    let milliseconds = ScreenTranslation.displayMilliseconds(shown)
+                    server.sendScreen(shown, durationMs: milliseconds)
+                    self?.showScreen(shown, milliseconds: milliseconds)
+                }
+                guard !Task.isCancelled else { return }
+                server.clear()
+                if items.isEmpty {
+                    self?.screenState = .idle
+                    server.sendSubtitle(String(localized: "No text found on the screen."), durationMs: 2500)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.showScreenFailure(error, translator: translator)
+            }
+            self?.screenTask = nil
+        }
+    }
+
+    private func showScreen(_ items: [ScreenTranslation.Item], milliseconds: Int) {
+        if settings.output.showsOnComputer { screenItems = items }
+        screenState = .shown
+        screenExpiry?.cancel()
+        screenExpiry = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(milliseconds))
+            guard !Task.isCancelled else { return }
+            self?.hideScreen()
+        }
+    }
+
+    /// Çeviriyi durdurur, sonuçları telefondan ve TV'den kaldırır.
+    func hideScreen() {
+        guard screenState != .idle || !screenItems.isEmpty else { return }
+        screenTask?.cancel()
+        screenTask = nil
+        screenExpiry?.cancel()
+        screenExpiry = nil
+        screenItems = []
+        screenState = .idle
+        server.clearScreen()
+        server.clear()
+    }
+
+    /// Ekran çevrilemedi: nedeni telefonda ve TV'de birkaç saniye görünür.
+    private func showScreenFailure(_ error: Error, translator: TextTranslator) {
+        guard !Task.isCancelled else { return }
+        screenState = .idle
+        server.clear()
+        let reason: String
+        if let online = translator as? AITranslator, online.lastLineWasRateLimited {
+            reason = String(format: String(localized: "%@ has reached its per-minute limit. Try again in a minute."), settings.translationEngine.displayName)
+        } else {
+            switch error as? TranslatorError {
+            case .needsDownload: reason = String(localized: "The free translation isn't downloaded yet.")
+            case .unsupported: reason = String(localized: "The free translation doesn't work on this phone.")
+            case nil: reason = String(localized: "Something went wrong. Try again.")
+            }
+        }
+        server.sendSubtitle(String(format: String(localized: "Couldn't translate the screen: %@"), reason), durationMs: 6000)
     }
 
     /// Deneme altyazısı: TV'de ya da telefon ekranında yazının nasıl göründüğü.

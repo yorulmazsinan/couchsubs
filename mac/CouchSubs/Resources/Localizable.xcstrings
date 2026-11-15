@@ -4657,6 +4657,54 @@
         }
       }
     },
+    "Translate screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate screen"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekranı çevir"
+          }
+        }
+      }
+    },
+    "Remove screen translations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove screen translations"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Çevirileri kaldır"
+          }
+        }
+      }
+    },
+    "The free translation doesn't work on this phone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free translation doesn't work on this phone."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ücretsiz çeviri bu telefonda çalışmıyor."
+          }
+        }
+      }
+    },
     "Translating the screen…": {
       "localizations": {
         "en": {

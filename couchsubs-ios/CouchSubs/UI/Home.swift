@@ -265,6 +265,9 @@ struct RunningScreen: View {
                 Button { model.sendTestSubtitle() } label: { Label("Test on TV", systemImage: "tv") }
                     .buttonStyle(.mobileSecondary)
             }
+            if model.sessionState == .streaming {
+                ScreenTranslateButton()
+            }
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 model.stop()
@@ -327,6 +330,25 @@ struct SubtitleScreen: View {
                 }
             }
             .allowsHitTesting(false)
+            // "Ekranı çevir" sonuçları: her çeviri kendi yazısının yerinde ve aynı boyda (TV'deki gibi).
+            GeometryReader { proxy in
+                ForEach(Array(model.screenItems.enumerated()), id: \.offset) { _, item in
+                    let box = item.box
+                    let width = max(60, proxy.size.width * (box.right - box.left))
+                    let size = max(10, min(28, proxy.size.height * item.lineHeight * 0.8))
+                    Text(verbatim: item.translation)
+                        .font(.system(size: size, weight: .semibold))
+                        .foregroundStyle(Mobile.Palette.text)
+                        .multilineTextAlignment(.leading)
+                        .padding(4)
+                        .frame(width: width, alignment: .leading)
+                        .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 4))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .position(x: proxy.size.width * box.left + width / 2,
+                                  y: proxy.size.height * (box.top + box.bottom) / 2)
+                }
+            }
+            .allowsHitTesting(false)
             Text("The screen stays on · brightness is lowered automatically")
                 .font(Mobile.TypeScale.caption)
                 .foregroundStyle(Mobile.Palette.tertiary)
@@ -337,7 +359,16 @@ struct SubtitleScreen: View {
                 .padding(Mobile.Space.screen)
         }
         .overlay(alignment: .topTrailing) {
-            IconButton(symbol: "xmark", label: "Close") { dismiss() }.padding(Mobile.Space.screen)
+            HStack(spacing: Mobile.Space.inline) {
+                if model.sessionState == .streaming {
+                    IconButton(symbol: model.screenState == .idle ? "text.viewfinder" : "xmark.circle",
+                               label: model.screenState == .idle ? "Translate screen" : "Remove screen translations") {
+                        model.translateScreen()
+                    }
+                }
+                IconButton(symbol: "xmark", label: "Close") { dismiss() }
+            }
+            .padding(Mobile.Space.screen)
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -469,5 +500,24 @@ extension View {
         self.mask {
             Rectangle().overlay { mask().blendMode(.destinationOut) }.compositingGroup()
         }
+    }
+}
+
+/// "Ekranı çevir": oyun ekranının tamamını çevirir; çeviri sürerken ya da sonuçlar ekrandayken dokununca kaldırır.
+struct ScreenTranslateButton: View {
+    @EnvironmentObject private var model: PhoneModel
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            model.translateScreen()
+        } label: {
+            switch model.screenState {
+            case .idle: Label("Translate screen", systemImage: "text.viewfinder")
+            case .working: Label("Translating the screen…", systemImage: "hourglass")
+            case .shown: Label("Remove screen translations", systemImage: "xmark.circle")
+            }
+        }
+        .buttonStyle(.mobileSecondary)
     }
 }
