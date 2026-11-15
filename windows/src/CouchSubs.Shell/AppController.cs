@@ -528,7 +528,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private async Task RefreshLgAppAsync(LgTv target)
     {
         if (services.BundledTvAppVersion is not { } bundled) return;
-        if (!await services.IsDevModeOnAsync(target.Host))
+        var devModeOn = await services.IsDevModeOnAsync(target.Host);
+        // Beklerken parola alanından kurulum başladıysa kart geri "geliştirici modu kapalı"ya dönmez.
+        if (TvApp.Kind == TvAppKind.Working) return;
+        if (!devModeOn)
         {
             TvApp = tvAppMissing ? new TvAppState(TvAppKind.DevModeOff) : TvAppState.Unknown;
             return;

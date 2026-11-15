@@ -93,6 +93,9 @@ struct TVAppCard: View {
                 HintText(text: "1. Create a free account at webostv.developer.lge.com.")
                 HintText(text: "2. On the TV, install Developer Mode from the LG Content Store and sign in.")
                 HintText(text: "3. Turn on Dev Mode Status. The TV restarts and this screen continues by itself.")
+                // Parola alanı burada da görünür: CouchSubs geliştirici modunu göremese de TV'de Key Server ve parola
+                // açıksa kullanıcı takılmaz (#94). Anahtar ancak "TV'ye kur"a basılınca istenir.
+                passphraseEntry(error: nil)
             }
         case .samsung:
             Card(title: "CouchSubs TV app") {
@@ -123,16 +126,22 @@ struct TVAppCard: View {
     private func passphraseCard(error: DevModeError?) -> some View {
         Card(title: "CouchSubs TV app") {
             Text("Developer Mode is on. One last step to install the TV app:")
-            HintText(text: "Open the Developer Mode app on the TV, turn on Key Server and keep the app on screen. Type the Passphrase it shows.")
-            HStack {
-                TextField("Passphrase", text: $passphrase)
-                    .textFieldStyle(CSTextFieldStyle())
-                Button("Install on the TV") { Task { await model.installTVApp(passphrase: passphrase) } }
-                    .buttonStyle(.primary)
-                    .disabled(passphrase.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            ErrorText(error: error.map { Self.message(for: $0, brand: .lg) })
+            passphraseEntry(error: error)
         }
+    }
+
+    /// Key Server parolası alanı ve kurma düğmesi; parola kartında ve LG'nin geliştirici modu adımlarında aynı.
+    @ViewBuilder
+    private func passphraseEntry(error: DevModeError?) -> some View {
+        HintText(text: "Open the Developer Mode app on the TV, turn on Key Server and keep the app on screen. Type the Passphrase it shows.")
+        HStack {
+            TextField("Passphrase", text: $passphrase)
+                .textFieldStyle(CSTextFieldStyle())
+            Button("Install on the TV") { Task { await model.installTVApp(passphrase: passphrase) } }
+                .buttonStyle(.primary)
+                .disabled(passphrase.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        ErrorText(error: error.map { Self.message(for: $0, brand: .lg) })
     }
 
     /// `reason`: TV'nin verdiği sebep; varsa mesajın altına eklenir. Samsung'da ayrıntı (TV'nin kurulum çıktısı,

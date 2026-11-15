@@ -65,7 +65,9 @@ public partial class TvAppCard : UserControl
         LgSteps.Visibility = Visible(devModeOff && brand == TvBrand.Lg);
         SamsungSteps.Visibility = Visible(devModeOff && brand == TvBrand.Samsung);
         AndroidSteps.Visibility = Visible(devModeOff && brand == TvBrand.AndroidTv);
-        PassphraseArea.Visibility = Visible(state.Kind == TvAppKind.NeedsPassphrase);
+        // Parola alanı LG'nin geliştirici modu adımlarında da görünür: CouchSubs geliştirici modunu göremese de TV'de Key
+        // Server ve parola açıksa kullanıcı takılmaz (#94). Anahtar ancak "TV'ye kur"a basılınca istenir.
+        PassphraseArea.Visibility = Visible(state.Kind == TvAppKind.NeedsPassphrase || (devModeOff && brand == TvBrand.Lg));
         OpenAgain.Visibility = Visible(state.Kind == TvAppKind.SignIn);
         if (state.Kind != TvAppKind.SignIn) CopyLink.Content = text["Copy the link"];
         Retry.Visibility = Visible(state.Kind == TvAppKind.Failed);

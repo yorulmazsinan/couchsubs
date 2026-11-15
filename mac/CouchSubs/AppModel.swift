@@ -921,7 +921,10 @@ final class AppModel: ObservableObject {
 
     private func refreshLGApp(_ tv: LGTV) async {
         guard let bundled = services.bundledTVAppVersion else { return }
-        guard await services.isDevModeOn(host: tv.host) else {
+        let devModeOn = await services.isDevModeOn(host: tv.host)
+        // Beklerken parola kartından kurulum başladıysa kart geri "geliştirici modu kapalı"ya dönmez.
+        if tvApp == .working { return }
+        guard devModeOn else {
             tvApp = tvAppMissing ? .devModeOff : .unknown
             return
         }

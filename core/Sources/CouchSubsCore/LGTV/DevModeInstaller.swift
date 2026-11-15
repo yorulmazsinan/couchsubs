@@ -107,9 +107,17 @@ public struct DevModeInstaller: Sendable {
 
     // MARK: - Geliştirici modu
 
-    /// TV'de geliştirici modu açık mı? Kapalıysa port yanıt vermez.
+    /// Key Server'ın (TV'deki Developer Mode uygulaması) anahtarı verdiği port.
+    public static let keyServerPort: UInt16 = 9991
+
+    /// TV'de geliştirici modu açık mı? Kapalıysa portlar yanıt vermez. SSH (9922) ya da Key Server (9991) yanıt verirse
+    /// açık sayılır: yalnız SSH'a bakılırken TV'de Key Server ve parola göründüğü halde SSH geç yanıt verince parola alanı
+    /// hiç çıkmıyordu (#94).
     public static func isDevModeOn(host: String, timeout: Duration = .seconds(2)) async -> Bool {
-        await isPortOpen(host: host, port: port, timeout: timeout)
+        async let ssh = isPortOpen(host: host, port: port, timeout: timeout)
+        async let keyServer = isPortOpen(host: host, port: keyServerPort, timeout: timeout)
+        let (sshOpen, keyServerOpen) = await (ssh, keyServer)
+        return sshOpen || keyServerOpen
     }
 
     /// TCP portu bağlantı kabul ediyor mu? Samsung (26101) ve Android TV (5555) geliştirici modları için de kullanılır.
@@ -137,7 +145,7 @@ public struct DevModeInstaller: Sendable {
     }
 
     /// Adres geçersizse nil (eskiden zorla açılıyordu).
-    static func keyURL(host: String) -> URL? { URL(string: "http://\(host):9991/webos_rsa") }
+    static func keyURL(host: String) -> URL? { URL(string: "http://\(host):\(keyServerPort)/webos_rsa") }
 
     /// Key Server'dan anahtarı alır ve TV ekranındaki parolayla çözer.
     public static func fetchKey(host: String, passphrase: String, runner: CommandRunning) async throws -> String {

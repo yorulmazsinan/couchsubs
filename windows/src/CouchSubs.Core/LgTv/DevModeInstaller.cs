@@ -95,14 +95,27 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
         return match.Success ? match.Groups[1].Value : null;
     }
 
-    /// <summary>TV'de geliştirici modu açık mı? Kapalıysa port yanıt vermez.</summary>
+    /// <summary>Key Server'ın (TV'deki Developer Mode uygulaması) anahtarı verdiği port.</summary>
+    public const int KeyServerPort = 9991;
+
+    /// <summary>
+    /// TV'de geliştirici modu açık mı? Kapalıysa portlar yanıt vermez. SSH (9922) ya da Key Server (9991) yanıt verirse
+    /// açık sayılır: yalnız SSH'a bakılırken TV'de Key Server ve parola göründüğü halde SSH geç yanıt verince parola alanı
+    /// hiç çıkmıyordu (#94).
+    /// </summary>
     public static async Task<bool> IsDevModeOnAsync(string host, TimeSpan? timeout = null)
+    {
+        var checks = await Task.WhenAll(IsPortOpenAsync(host, Port, timeout), IsPortOpenAsync(host, KeyServerPort, timeout));
+        return checks[0] || checks[1];
+    }
+
+    private static async Task<bool> IsPortOpenAsync(string host, int port, TimeSpan? timeout)
     {
         using var client = new TcpClient();
         using var cancellation = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(2));
         try
         {
-            await client.ConnectAsync(host, Port, cancellation.Token);
+            await client.ConnectAsync(host, port, cancellation.Token);
             return true;
         }
         catch (Exception)
@@ -111,7 +124,7 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
         }
     }
 
-    public static Uri KeyUrl(string host) => new($"http://{host}:9991/webos_rsa");
+    public static Uri KeyUrl(string host) => new($"http://{host}:{KeyServerPort}/webos_rsa");
 
     /// <summary>Key Server'dan anahtarı alır ve TV ekranındaki parolayla çözer.</summary>
     public static async Task<string> FetchKeyAsync(string host, string passphrase, ICommandRunner runner, DevModeTools tools)
