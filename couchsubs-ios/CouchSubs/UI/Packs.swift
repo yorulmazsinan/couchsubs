@@ -35,14 +35,13 @@ struct PacksScreen: View {
             case .failed(let reason): MobileNote(text: reason, tone: Mobile.Palette.secondary)
             default: EmptyView()
             }
+            if !model.installedPacks.isEmpty {
+                Text("Tap a game to turn its pack on or off.")
+                    .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+            }
             BentoGrid {
                 ForEach(model.installedPacks) { pack in
-                    Tile {
-                        GameMonogram(code: Self.code(pack.title))
-                        Spacer(minLength: Mobile.Space.inline)
-                        Text(verbatim: pack.title).font(Mobile.TypeScale.headline).lineLimit(2)
-                        Text(Self.linesText(pack.entries)).font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
-                    }
+                    packTile(pack)
                 }
             }
             Tile {
@@ -60,6 +59,33 @@ struct PacksScreen: View {
                 .disabled(app.packStatus == .downloading || AppConfig.packsBaseURL == nil)
         }
         .onAppear { app.analytics.screen("packs") }
+    }
+
+    /// Paket karosu: dokununca paket açılır ya da kapanır (Android ile aynı). Kapalıysa soluk ve "Kapalı"; son satırı
+    /// veren paketse çerçeveli ve "Oynanıyor".
+    private func packTile(_ pack: GamePackLibrary.Info) -> some View {
+        let on = !model.disabledPacks.contains(pack.id)
+        let playing = model.isRunning && model.packInUse == pack.title
+        return Button { model.togglePack(pack.id) } label: {
+            Tile(emphasis: playing ? .selected : .none) {
+                HStack(alignment: .top) {
+                    GameMonogram(code: Self.code(pack.title))
+                    Spacer(minLength: Mobile.Space.inline)
+                    if playing {
+                        MobilePill(text: String(localized: "Now playing"), dot: true, compact: true)
+                    } else if !on {
+                        MobilePill(text: String(localized: "Off"), compact: true)
+                    }
+                }
+                Spacer(minLength: Mobile.Space.inline)
+                Text(verbatim: pack.title).font(Mobile.TypeScale.headline).lineLimit(2)
+                Text(Self.linesText(pack.entries)).font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+            }
+            .opacity(on && model.settings.gamePacks ? 1 : 0.5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(Text(on ? "On" : "Off"))
     }
 
     /// "Grand Theft Auto V" → "GTA", "Mafia: The Old Country" → "MTO".

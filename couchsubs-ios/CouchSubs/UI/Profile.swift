@@ -13,6 +13,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var app: AppModel
     @Binding var path: [Route]
     @AppStorage("notifyPackUpdates") private var notifyPackUpdates = true
+    @AppStorage(PhoneModel.notifyDisconnectKey) private var notifyDisconnect = true
     @AppStorage(UsageData.key) private var usageData = true
 
     var body: some View {
@@ -51,6 +52,8 @@ struct ProfileScreen: View {
             Tile(spacing: 0) {
                 toggleRow("Notifications", "New packs and updates", isOn: $notifyPackUpdates)
                 RowDivider()
+                toggleRow("PS5 connection", "Notify me when the connection drops", isOn: $notifyDisconnect)
+                RowDivider()
                 toggleRow("Contribute to the shared pool", "English lines that are read, anonymous", isOn: $model.settings.sharePool)
                 RowDivider()
                 toggleRow("Usage data", "Error and usage statistics", isOn: $usageData)
@@ -69,6 +72,8 @@ struct ProfileScreen: View {
             EmptyView()
         }
         .onChange(of: usageData) { value in app.analytics.setCollection(value) }
+        // Bağlantı bildirimi açılınca izin hemen istenir (yoksa ilk çeviride).
+        .onChange(of: notifyDisconnect) { value in if value { model.requestNotificationPermission() } }
         .onAppear { app.analytics.screen("profile") }
     }
 

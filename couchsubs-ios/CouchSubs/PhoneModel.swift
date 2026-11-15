@@ -99,11 +99,26 @@ final class PhoneModel: ObservableObject {
         let box: TextBox?
     }
     @Published private(set) var installedPacks: [GamePackLibrary.Info] = []
+    /// Paketler ekranında kapatılan paketlerin kimlikleri (Android'deki gibi karoya dokunarak; UserDefaults'ta).
+    @Published private(set) var disabledPacks: Set<String> = []
+    /// Son satırı veren paketin başlığı (Paketler ekranındaki "Oynanıyor"); çeviri durunca silinir.
+    @Published private(set) var packInUse: String?
+
+    /// Kurulumda "Şimdilik geç" (PSN girişi ve PS5 eşleme atlandı; eşleme sonra Profil ya da Ayarlar'dan).
+    static let setupSkippedKey = "setupSkipped"
+    static let disabledPacksKey = "disabledPacks"
+    /// Profil'deki "PS5 bağlantısı koptuğunda bildir" tercihi (varsayılan açık, Android ile aynı).
+    static let notifyDisconnectKey = "notifyDisconnect"
 
     /// Çeviri sürerken ekran kararmasın (iOS uygulamayı askıya alınca bağlantı da durur). Uygulama UIKit'e bağlar.
     var keepScreenAwake: (Bool) -> Void = { _ in }
     /// Ölçüm olayları (Firebase Analytics, Meta); uygulama `AppModel.analytics`'e bağlar.
     var onAnalytics: (AnalyticsEvent) -> Void = { _ in }
+    /// PS5 bağlantısı kendiliğinden koptu (kullanıcı durdurmadı). Uygulama, etkin değilken yerel bildirim gösterir;
+    /// testlerde boş.
+    var onConnectionLost: () -> Void = {}
+    /// Çeviri başlarken bildirim izni istenir (tercih açıksa; iOS yalnız ilk seferde sorar). Testlerde boş.
+    var requestNotificationPermission: () -> Void = {}
     private var startedAt: Date?
 
     private let services: PhoneServices
@@ -151,8 +166,11 @@ final class PhoneModel: ObservableObject {
         let loaded = defaults.data(forKey: StoreKey.settings).flatMap { try? JSONDecoder().decode(UserSettings.self, from: $0) }
         let curated = (loaded ?? UserSettings()).withCuratedModels()
         settings = curated
-        let done = accountId != nil && console != nil && store.load(Bool.self, for: StoreKey.setupComplete) == true
-        step = done ? .done : .welcome
+        // "Şimdilik geç" ile PSN ve PS5 atlandıysa PS5'siz ana ekrana gidilir; altyazı hedefi seçilmediyse oradan sürer.
+        let skipped = defaults.bool(forKey: Self.setupSkippedKey)
+        let done = (skipped || accountId != nil && console != nil) && store.load(Bool.self, for: StoreKey.setupComplete) == true
+        step = done ? .done : skipped ? .output : .welcome
+        disabledPacks = Set(defaults.stringArray(forKey: Self.disabledPacksKey) ?? [])
         let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         if !testing {
             RemotePlayLog.enable()
@@ -204,6 +222,14 @@ final class PhoneModel: ObservableObject {
         guard canAdvance, let next = Step(rawValue: step.rawValue + 1) else { return }
         step = next
     }
+
+    /// Kurulumda "Şimdilik geç": PSN girişi ve PS5 eşleme atlanır, altyazı hedefinden sonra PS5'siz ana ekrana geçilir.
+    func skipSetup() {
+        defaults.set(true, forKey: Self.setupSkippedKey)
+        step = .output
+    }
+
+    var notifiesDisconnect: Bool { defaults.object(forKey: Self.notifyDisconnectKey) as? Bool ?? true }
 
     func back() {
         guard let previous = Step(rawValue: step.rawValue - 1) else { return }
@@ -279,6 +305,7 @@ final class PhoneModel: ObservableObject {
         tv = nil
         tvKeySaved = false
         tvAppMissing = false
+        defaults.removeObject(forKey: Self.setupSkippedKey)
         step = .welcome
     }
 
@@ -314,7 +341,9 @@ final class PhoneModel: ObservableObject {
         lastMetrics = nil
         sessionLines = 0
         sessionPackLines = 0
+        packInUse = nil
         keepScreenAwake(true)
+        if notifiesDisconnect { requestNotificationPermission() }
         onAnalytics(.sessionStart(output: settings.output.rawValue))
     }
 
@@ -326,6 +355,7 @@ final class PhoneModel: ObservableObject {
             self.startedAt = nil
         }
         runningSince = nil
+        packInUse = nil
         session?.stop()
         session = nil
         updateGameProbe(connected: false)
@@ -419,7 +449,12 @@ final class PhoneModel: ObservableObject {
     }
 
     private func sessionStateChanged(_ state: SessionState) {
+        let wasStreaming = sessionState == .streaming
         sessionState = state
+        // Akış sürerken kendiliğinden koptu (kullanıcı durdurmadı): tercih açıksa bildirim (uygulama etkin değilse).
+        if wasStreaming, isRunning, case .disconnected(let reason) = state, reason != .stopped, notifiesDisconnect {
+            onConnectionLost()
+        }
         updateGameProbe(connected: state == .streaming)
         if case .disconnected = state {
             pipeline?.reset()
@@ -438,6 +473,7 @@ final class PhoneModel: ObservableObject {
             self?.lastSource = source
             self?.lastTranslation = translation
             let fromPack = pipeline?.lastOrigin == "paket"
+            if fromPack, let title = self?.packs.scopeTitle { self?.packInUse = title }
             self?.addToHistory(source: source, translation: translation, origin: fromPack ? .pack : .engine)
             self?.noteLine(source: source, translation: translation, fromPack: fromPack)
         }
@@ -528,6 +564,13 @@ final class PhoneModel: ObservableObject {
         settings.gamePacks && settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
     }
 
+    /// Paketler ekranında karoya dokunma: paket açılır ya da kapanır (okuma hattı hemen yeni listeyle eşleşir).
+    func togglePack(_ id: String) {
+        if disabledPacks.contains(id) { disabledPacks.remove(id) } else { disabledPacks.insert(id) }
+        defaults.set(disabledPacks.sorted(), forKey: Self.disabledPacksKey)
+        if let pipeline { connectPacks(to: pipeline) }
+    }
+
     /// Paketler güncellendi: okuma hattı yeni listeyle eşleşir.
     func packsChanged() {
         if let pipeline { connectPacks(to: pipeline) }
@@ -539,7 +582,13 @@ final class PhoneModel: ObservableObject {
         let packs = self.packs
         let pool = self.pool
         let active = packsActive
-        pipeline.packLookup = active ? { packs.match($0) } : nil
+        let disabled = disabledPacks
+        // Kapatılan paket: paketler tek sözlükte birleştiği için eşleşmeyi veren paket, bulanık aramanın kapsamından
+        // (son tam eşleşmenin paketi) okunur; o paket kapalıysa satır motorla çevrilir.
+        pipeline.packLookup = !active ? nil : disabled.isEmpty ? { packs.match($0) } : { text in
+            guard let found = packs.match(text) else { return nil }
+            return packs.searchScope.map(disabled.contains) == true ? nil : found
+        }
         // Ek alanlar da pakette aranır ama havuza önerilmez (arayüz yazıları havuzu kirletmesin).
         regionWatcher?.packLookup = pipeline.packLookup
         guard settings.sourceLanguage == "en" else {
@@ -547,7 +596,8 @@ final class PhoneModel: ObservableObject {
             return
         }
         pipeline.onPackMiss = { text in
-            guard active || packs.match(text) == nil else { return }
+            // Kapalı paketteki satır da havuza önerilmez (zaten çevrili).
+            guard (active && disabled.isEmpty) || packs.match(text) == nil else { return }
             Task { await pool.offer(text) }
         }
     }

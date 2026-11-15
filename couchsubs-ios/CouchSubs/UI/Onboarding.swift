@@ -104,6 +104,8 @@ struct WelcomeFlow: View {
 struct SetupHeader: View {
     let step: Int
     let onBack: (() -> Void)?
+    /// Kurulumda "Şimdilik geç" (PSN ve PS5 adımları); ana ekrandan açılınca nil.
+    var onSkip: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Mobile.Space.gap) {
@@ -114,6 +116,7 @@ struct SetupHeader: View {
                         Capsule().fill(index <= step ? Mobile.Palette.accent : Mobile.Palette.borderStrong).frame(height: 4)
                     }
                 }
+                if let onSkip { Button("Skip for now", action: onSkip).buttonStyle(.mobileGhost).fixedSize() }
             }
             .frame(height: Mobile.Control.icon)
         }
@@ -123,6 +126,7 @@ struct SetupHeader: View {
 struct PSNScreen: View {
     @EnvironmentObject private var model: PhoneModel
     var onBack: (() -> Void)?
+    var onSkip: (() -> Void)?
     var onDone: () -> Void
     @State private var showLogin = false
     @State private var showWhy = false
@@ -132,7 +136,7 @@ struct PSNScreen: View {
 
     var body: some View {
         MobileScreen {
-            SetupHeader(step: 1, onBack: onBack)
+            SetupHeader(step: 1, onBack: onBack, onSkip: onSkip)
         } content: {
             ScreenTitle(caption: "Setup · Step 1/3", title: "Second PSN account",
                         message: "The phone connects to the PS5 with Remote Play. Sign in with a free second PSN account, separate from the one you play with.")
@@ -206,6 +210,7 @@ struct PSNScreen: View {
 struct PS5PairScreen: View {
     @EnvironmentObject private var model: PhoneModel
     var onBack: (() -> Void)?
+    var onSkip: (() -> Void)?
     var onDone: () -> Void
     @State private var consoles: [ConsoleInfo] = []
     @State private var manualHost = ""
@@ -223,7 +228,7 @@ struct PS5PairScreen: View {
 
     var body: some View {
         MobileScreen {
-            SetupHeader(step: 2, onBack: onBack)
+            SetupHeader(step: 2, onBack: onBack, onSkip: onSkip)
         } content: {
             ScreenTitle(caption: "Setup · Step 2/3", title: "Pair the PS5",
                         message: "On the PS5, with the second account, choose Settings › System › Remote Play › Pair Device and type the code on the screen.")

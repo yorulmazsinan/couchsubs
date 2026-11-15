@@ -5,6 +5,7 @@ import FacebookCore
 import RemotePlay
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// SDK'lar uygulama açılırken kurulur (Firebase, Meta); her biri yalnız anahtarı/dosyası varsa.
 final class AppDelegate: NSObject, UIApplicationDelegate {
@@ -39,6 +40,11 @@ struct CouchSubsApp: App {
             : Self.demoStore().map { PhoneModel(store: $0, packs: library) } ?? PhoneModel(packs: library)
         // Çeviri sürerken ekran kararmaz: iOS kilitlenen ya da arka plana geçen uygulamayı askıya alır.
         model.keepScreenAwake = { UIApplication.shared.isIdleTimerDisabled = $0 }
+        // PS5 bağlantısı koptuğunda yerel bildirim (Profil'deki tercih; testlerde kapalı).
+        if !testing {
+            model.requestNotificationPermission = { ConnectionAlert.requestPermission() }
+            model.onConnectionLost = { ConnectionAlert.post() }
+        }
         // Çevrilen son satırlar ("Geçmiş"); testlerde dosyaya dokunulmaz.
         if !testing { model.loadHistory() }
 
@@ -95,6 +101,28 @@ struct CouchSubsApp: App {
     }
 }
 
+/// "PS5 bağlantısı koptu" yerel bildirimi (Android'deki gibi). Uygulama öndeyken gösterilmez: durum ekranda görünür.
+@MainActor
+enum ConnectionAlert {
+    private static let identifier = "connection-lost"
+
+    /// İzin yalnız ilk seferde sorulur; sonra iOS kayıtlı yanıtı döner.
+    static func requestPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    static func post() {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "PS5 connection lost")
+        content.body = String(localized: "Subtitles stopped. Open CouchSubs to reconnect.")
+        content.sound = .default
+        // Aynı kimlik: art arda kopmalarda bildirimler birikmez, sonuncusu kalır.
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var model: PhoneModel
     @EnvironmentObject private var app: AppModel
@@ -126,12 +154,12 @@ struct RootView: View {
     @ViewBuilder private var setup: some View {
         switch model.step {
         case .welcome, .psnLogin:
-            PSNScreen(onBack: { welcomeSeen = false }) {
+            PSNScreen(onBack: { welcomeSeen = false }, onSkip: { model.skipSetup() }, onDone: {
                 if model.step == .welcome { model.advance() }
                 model.advance()
-            }
+            })
         case .console:
-            PS5PairScreen(onBack: { model.back() }) { model.advance() }
+            PS5PairScreen(onBack: { model.back() }, onSkip: { model.skipSetup() }, onDone: { model.advance() })
         case .output, .done:
             TargetScreen(onBack: { model.back() }) { model.advance() }
         }
@@ -148,8 +176,14 @@ struct RootView: View {
                 case .profile: ProfileScreen(path: $path)
                 case .packs: PacksScreen()
                 case .target: TargetScreen(setup: false) { path.removeLast() }
-                case .ps5: PS5PairScreen(onBack: { path.removeLast() }) { path.removeLast() }
-                case .psn: PSNScreen(onBack: { path.removeLast() }) { path.removeLast() }
+                // Kurulum atlandıysa PSN girişi yoktur: PS5 eşlemeden önce giriş yapılır, ardından eşlemeye geçilir.
+                case .ps5 where model.accountId == nil:
+                    PSNScreen(onBack: { path.removeLast() }, onDone: {
+                        path.removeLast()
+                        path.append(.ps5)
+                    })
+                case .ps5: PS5PairScreen(onBack: { path.removeLast() }, onDone: { path.removeLast() })
+                case .psn: PSNScreen(onBack: { path.removeLast() }, onDone: { path.removeLast() })
                 case .about: AboutScreen()
                 case .history: HistoryScreen()
                 }

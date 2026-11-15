@@ -10128,6 +10128,102 @@
           }
         }
       }
+    },
+    "PS5 connection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 connection"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 bağlantısı"
+          }
+        }
+      }
+    },
+    "Notify me when the connection drops": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notify me when the connection drops"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı koptuğunda bildir"
+          }
+        }
+      }
+    },
+    "PS5 connection lost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 connection lost"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 bağlantısı koptu"
+          }
+        }
+      }
+    },
+    "Subtitles stopped. Open CouchSubs to reconnect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitles stopped. Open CouchSubs to reconnect."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altyazı durdu. Yeniden bağlanmak için CouchSubs'ı aç."
+          }
+        }
+      }
+    },
+    "Now playing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now playing"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oynanıyor"
+          }
+        }
+      }
+    },
+    "Tap a game to turn its pack on or off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a game to turn its pack on or off."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paketini açıp kapatmak için oyuna dokun."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

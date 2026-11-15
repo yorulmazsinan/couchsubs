@@ -83,8 +83,13 @@ struct HomeScreen: View {
             ScreenTitle(title: model.canStart ? "Ready" : "Almost ready",
                         message: model.canStart ? "Open the game on the PS5, then start." : "Finish the setup to start translating.")
             BentoGrid {
-                StatTile(symbol: "gamecontroller.fill", tint: .ok, label: "PS5",
-                         value: model.console.map { $0.name.isEmpty ? "PS5" : $0.name } ?? String(localized: "Not set up"), live: model.console != nil)
+                // PS5 karosu eşlemeyi açar; kurulum atlandıysa buradan eşlenir (PSN girişi yoksa önce giriş).
+                Button { path.append(.ps5) } label: {
+                    StatTile(symbol: "gamecontroller.fill", tint: .ok, label: "PS5",
+                             value: model.console.map { $0.name.isEmpty ? "PS5" : $0.name } ?? String(localized: "Pair the PS5"),
+                             live: model.console != nil)
+                }
+                .buttonStyle(.plain)
                 Button { path.append(.target) } label: {
                     StatTile(symbol: model.settings.output == .computer ? "iphone" : "tv", tint: .accent, label: "Subtitles",
                              value: targetName)
