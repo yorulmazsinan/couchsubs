@@ -3,7 +3,7 @@ CouchSubs shows the English subtitles of games on your HDMI-connected game conso
 <b>Important: this TV app does not translate on its own.</b> The free CouchSubs app on a computer (macOS or Windows) on the same home network reads the subtitles, translates them and sends them to this TV. A phone app is on the way. Computer app: https://github.com/yorulmazsinan/couchsubs
 
 <b>How it works</b>
-• Open CouchSubs on your computer and pair it with your console. The computer reads the subtitles from the console's remote play connection and translates them on the computer itself.
+• Open CouchSubs on your phone (Android) or computer and press Start translating; the TV app finds it on the same Wi-Fi by itself. CouchSubs reads the subtitles from the console's remote play connection and translates them on that device itself.
 • Open CouchSubs on the TV. It finds the computer on your home network by itself, opens the HDMI input your console is on and draws the translation over the game.
 • When people talk fast, the previous line stays above the new one for a moment so you can finish reading it.
 • Move the subtitles with the remote's up/down keys; pick the HDMI input from the status panel.

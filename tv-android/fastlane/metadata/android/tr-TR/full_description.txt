@@ -3,7 +3,7 @@ CouchSubs, HDMI ile TV'nize bağlı oyun konsolunuzdaki oyunların İngilizce al
 <b>Önemli: Bu TV uygulaması tek başına çeviri yapmaz.</b> Altyazıları aynı ev ağındaki bilgisayarınızda (macOS ya da Windows) çalışan ücretsiz CouchSubs uygulaması okur, çevirir ve bu TV'ye gönderir. Telefon uygulaması hazırlanıyor. Bilgisayar uygulaması: https://github.com/yorulmazsinan/couchsubs
 
 <b>Nasıl çalışır</b>
-• Bilgisayarınızda CouchSubs'ı açıp konsolunuzla eşleştirirsiniz. Bilgisayar, konsolun uzaktan oynatma bağlantısından altyazıyı okur ve çeviriyi kendi üzerinde yapar.
+• Telefonda (Android) ya da bilgisayarda CouchSubs'ı açıp Çeviriyi başlat'a basın; TV uygulaması onu aynı Wi-Fi'da kendisi bulur. CouchSubs, konsolun uzaktan oynatma bağlantısından altyazıyı okur ve çeviriyi kendi üzerinde yapar.
 • TV'de CouchSubs'ı açarsınız. Uygulama ev ağındaki bilgisayarı kendisi bulur; konsolun bağlı olduğu HDMI girişini açar ve çeviriyi oyunun üstüne yazar.
 • Hızlı konuşmalarda önceki satır kısa bir süre yeni satırın üstünde kalır, okumaya yetişirsiniz.
 • Altyazının yerini kumandanın yukarı/aşağı tuşlarıyla, HDMI girişini durum panelinden seçebilirsiniz.
