@@ -18,6 +18,8 @@ extension AppServices {
     func testLocalAI(server: LocalAIServer, key: String) async -> Result<String, AIFailure> {
         await AITranslationCore.test(provider: .local, key: key, model: server.model, server: server)
     }
+    /// Bu Mac'teki Remote Play penceresinden (PS Remote Play ya da chiaki-ng) okuyan görüntü kaynağı (bkz. `RemotePlayWindowStream`).
+    func makeWindowStream(app: RemotePlayApp) -> StreamControlling { RemotePlayWindowStream(app: app) }
     /// PS5'te o an çalışan oyun: yalnız bağlı PS5'in adresine keşif sorusu gider (ortak havuz için; bkz. `RunningGame`).
     func runningGame(host: String) async -> RunningGame? {
         guard let info = await Console.discover(timeout: .seconds(2), host: host).first else { return nil }
@@ -38,6 +40,8 @@ protocol AppServices: AnyObject {
     func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing
     /// `loginPasscode`: PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling
+    /// Görüntüyü bu Mac'teki Remote Play penceresinden alan kaynak (`UserSettings.frameSource`, `remotePlayApp`).
+    func makeWindowStream(app: RemotePlayApp) -> StreamControlling
     /// `onMoved`: TV ağda yeni bir adreste bulununca çağrılır.
     /// `appConnected`: TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).
     /// `onKey`: TV bağlantıda yeni jeton verdi (Samsung); saklanır.
@@ -432,6 +436,12 @@ final class AppModel: ObservableObject {
             if settings.dubbing != oldValue.dubbing { dubbingSettingsChanged(from: oldValue.dubbing) }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
+            let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
+            if settings.frameSource != oldValue.frameSource || windowAppChanged, isRunning {
+                // Görüntü kaynağı (ya da okunan Remote Play uygulaması) değişti: çeviri yeni kaynakla yeniden başlar.
+                stop()
+                Task { await start() }
+            }
             if settings.sharePool != oldValue.sharePool {
                 let (pool, enabled) = (pool, settings.sharePool)
                 Task { await pool.setEnabled(enabled) }
@@ -566,13 +576,14 @@ final class AppModel: ObservableObject {
         let tv = store.load(LGTV.self, for: StoreKey.tv)
         let tvKeySaved = store.load(String.self, for: StoreKey.tvKey) != nil
         let paired = tv != nil && tvKeySaved
-        let ready = Self.setupIsComplete(store: store, accountId: accountId, console: console, paired: paired)
+        let loaded = defaults.data(forKey: StoreKey.settings).flatMap { try? JSONDecoder().decode(UserSettings.self, from: $0) } ?? UserSettings()
+        let ready = Self.setupIsComplete(store: store, accountId: accountId, console: console, paired: paired,
+                                         readsWindow: loaded.frameSource == .remotePlayWindow)
         self.tvKeySaved = tvKeySaved
         hasLoginPasscode = LoginPasscode.normalized(store.load(String.self, for: StoreKey.loginPasscode)) != nil
         self.accountId = accountId
         self.console = console
         self.tv = tv
-        let loaded = defaults.data(forKey: StoreKey.settings).flatMap { try? JSONDecoder().decode(UserSettings.self, from: $0) } ?? UserSettings()
         let curated = loaded.withCuratedModels()
         settings = curated
         streamBackground = StreamBackground(stored: defaults.string(forKey: StoreKey.streamBackground))
@@ -697,8 +708,11 @@ final class AppModel: ObservableObject {
     /// Kurulum bitmiş mi. "Bitti" yalnız sihirbazın sonuna gelinince kaydedilir (TV adımı başarıyla geçildi ya da
     /// "TV'm yok" seçildi). Sihirbaz başlarken `false` yazılır: Samsung'da TV eşleşip uygulama kurulurken CouchSubs
     /// kapatılırsa eşleşme kayıtlı olsa da kurulum bitmiş sayılmaz. Hiç kayıt yoksa (beta.25'ten önce kurulmuş)
-    /// eskisi gibi eşleşmiş TV yeter ve "bitti" kaydedilir.
-    static func setupIsComplete(store: AppStore, accountId: Data?, console: RegisteredConsole?, paired: Bool) -> Bool {
+    /// eskisi gibi eşleşmiş TV yeter ve "bitti" kaydedilir. Görüntü PS Remote Play penceresinden okunuyorsa PS5 eşleşmesi
+    /// (hesap, PS5 kaydı) gerekmez; sihirbaz açılmaz, kayıt da değiştirilmez (PS5'e dönülürse eski durum geçerlidir).
+    static func setupIsComplete(store: AppStore, accountId: Data?, console: RegisteredConsole?, paired: Bool,
+                                readsWindow: Bool = false) -> Bool {
+        if readsWindow { return true }
         let saved = store.load(Bool.self, for: StoreKey.setupComplete)
         let ready = accountId != nil && console != nil && (saved ?? paired)
         if saved == nil { store.save(ready, for: StoreKey.setupComplete) }
@@ -1146,7 +1160,10 @@ final class AppModel: ObservableObject {
 
     func start() async {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
-        guard !isRunning, !isStarting, canStart, let console, let accountId else { return }
+        guard !isRunning, !isStarting, canStart else { return }
+        // PS5'e bağlanmak için eşleşmiş PS5 ve ikinci hesap gerekir; PS Remote Play penceresinden okumak için gerekmez.
+        let readsWindow = settings.frameSource == .remotePlayWindow
+        guard readsWindow || (console != nil && accountId != nil) else { return }
         isStarting = true
         defer { isStarting = false }
 
@@ -1159,11 +1176,20 @@ final class AppModel: ObservableObject {
         lastMetrics = nil
         if settings.dubbing.enabled, dubbingModelReady { makeDubber().prepare() }
         SubtitleLog.write("oturum başladı: CouchSubs \(AppIdentity.version), \(settings.sourceLanguage)→\(settings.targetLanguage), "
-            + "motor: \(onlineTranslationActive ? settings.onlineEngine.rawValue : "ücretsiz"), paketler: \(settings.gamePacks ? "açık" : "kapalı")")
+            + "motor: \(onlineTranslationActive ? settings.onlineEngine.rawValue : "ücretsiz"), paketler: \(settings.gamePacks ? "açık" : "kapalı"), "
+            + "görüntü: \(readsWindow ? "PS Remote Play penceresi" : "PS5")")
 
-        RemotePlayLog.write("Çeviri başladı; PS5'e bağlanılıyor: \(console.name) \(console.host)")
-        let session = services.makeStream(console: console, accountId: accountId,
+        let session: StreamControlling
+        if readsWindow {
+            RemotePlayLog.write("Çeviri başladı; görüntü bu Mac'teki Remote Play penceresinden (\(settings.remotePlayApp.rawValue))")
+            session = services.makeWindowStream(app: settings.remotePlayApp)
+        } else if let console, let accountId {
+            RemotePlayLog.write("Çeviri başladı; PS5'e bağlanılıyor: \(console.name) \(console.host)")
+            session = services.makeStream(console: console, accountId: accountId,
                                           loginPasscode: store.load(String.self, for: StoreKey.loginPasscode))
+        } else {
+            return
+        }
         session.onState = { [weak self] state in Task { @MainActor in self?.sessionStateChanged(state) } }
         session.onConsoleMoved = { [weak self] moved in Task { @MainActor in self?.consoleMoved(moved) } }
         session.onFrame = { [weak self] frame in
@@ -1175,7 +1201,8 @@ final class AppModel: ObservableObject {
         self.session = session
 
         startKeeper()
-        gameChoice.start(console: console.name.isEmpty ? console.host : console.name) { [weak self] in
+        // Remote Play penceresinden okurken PS5 eşleşmesi olmayabilir; son oyun o zaman PS5 adı olmadan hatırlanır.
+        gameChoice.start(console: console.map { $0.name.isEmpty ? $0.host : $0.name }) { [weak self] in
             guard let self else { return false }
             return self.settings.askGame && self.settings.sharePool
         }
@@ -1195,9 +1222,11 @@ final class AppModel: ObservableObject {
         updateClickThroughHotkey()
     }
 
-    /// Çeviri başlatılabilir mi: PS5 kurulu ve altyazının gideceği bir yer var (TV eşleşmiş ya da bilgisayar ekranı seçili).
+    /// Çeviri başlatılabilir mi: görüntü kaynağı hazır (PS5 kurulu ya da PS Remote Play penceresi seçili) ve altyazının
+    /// gideceği bir yer var (TV eşleşmiş ya da bilgisayar ekranı seçili).
     var canStart: Bool {
-        console != nil && accountId != nil && (settings.output.showsOnComputer || hasTV)
+        (settings.frameSource == .remotePlayWindow || (console != nil && accountId != nil))
+            && (settings.output.showsOnComputer || hasTV)
     }
 
     /// TV uygulamasını başlatır ve açık tutar; TV kapalıysa açıldığında bağlanır. Altyazı TV'ye gitmiyorsa ya da TV
@@ -1629,7 +1658,20 @@ final class AppModel: ObservableObject {
 
     /// Ana ekrandaki PS5 durumu (eşleşmiş PS5'in adıyla).
     var ps5StatusText: String {
-        Self.statusText(sessionState, running: isRunning, pairedName: console.map { $0.name.isEmpty ? "PS5" : $0.name })
+        if settings.frameSource == .remotePlayWindow { return Self.windowStatusText(sessionState, running: isRunning) }
+        return Self.statusText(sessionState, running: isRunning, pairedName: console.map { $0.name.isEmpty ? "PS5" : $0.name })
+    }
+
+    /// Görüntü bu Mac'teki Remote Play penceresinden okunurken durumun metni.
+    static func windowStatusText(_ state: SessionState, running: Bool) -> String {
+        switch state {
+        case .streaming: return String(localized: "Reading the Remote Play window")
+        case .connecting: return String(localized: "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this Mac.")
+        case .disconnected(let reason):
+            guard running else { return String(localized: "Reads the Remote Play window on this Mac when you start translating.") }
+            if case .other(let detail) = reason, !detail.isEmpty { return detail }
+            return String(localized: "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this Mac.")
+        }
     }
 
     /// PS5 durumunun kullanıcıya gösterilecek metni. `pairedName`: eşleşmiş PS5'in adı; çeviri başlamamışken eşleşmiş

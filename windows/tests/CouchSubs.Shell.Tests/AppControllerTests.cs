@@ -199,6 +199,15 @@ internal sealed class FakeServices : IAppServices
         Streams.Add(stream);
         return stream;
     }
+    /// <summary>Her pencere kaynağına verilen Remote Play uygulaması.</summary>
+    public List<RemotePlayApp> WindowStreams { get; } = [];
+    public IStreamSession MakeWindowStream(RemotePlayApp app)
+    {
+        WindowStreams.Add(app);
+        var stream = new FakeStream();
+        Streams.Add(stream);
+        return stream;
+    }
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
                               Action<string> onKey)
     {
@@ -813,6 +822,42 @@ public class AppControllerRunTests
         Assert.True(controller.SetLoginPasscode("1111"));
         controller.ResetSetup();
         Assert.False(controller.HasLoginPasscode);
+        controller.Dispose();
+    }
+
+    /// Remote Play penceresinden okurken PS5 kaydı gerekmez: sihirbaz açılmaz, kurulum kaydı değişmez, çeviri pencere
+    /// kaynağıyla (PS5'e bağlanmadan) başlar.
+    [Fact]
+    public async Task WindowSourceStartsWithoutPairedPs5()
+    {
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, RemotePlayApp = RemotePlayApp.Chiaki, Output = SubtitleOutput.Computer });
+        var services = new FakeServices();
+        var store = new MemoryStore();
+        var controller = AppControllerTests.Make(services, store, settings);
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.Null(store.Load<bool?>(StoreKeys.SetupComplete));
+        Assert.True(controller.CanStart);
+        Assert.Equal("Reads the Remote Play window on this PC when you start translating.", controller.Ps5StatusText);
+        await controller.StartAsync();
+        Assert.Equal([RemotePlayApp.Chiaki], services.WindowStreams);
+        Assert.Empty(services.StreamPasscodes);
+        Assert.True(controller.IsRunning);
+        controller.Dispose();
+    }
+
+    /// Görüntü kaynağı çeviri sürerken değişince çeviri yeni kaynakla yeniden başlar.
+    [Fact]
+    public async Task ChangingFrameSourceRestartsTranslation()
+    {
+        var (controller, services, _) = Ready();
+        await controller.StartAsync();
+        Assert.Single(services.Streams);
+        controller.Settings = controller.Settings with { FrameSource = FrameSource.RemotePlayWindow };
+        for (var i = 0; i < 200 && services.WindowStreams.Count == 0; i++) await Task.Delay(10);
+        Assert.Equal([RemotePlayApp.Automatic], services.WindowStreams);
+        Assert.Equal(2, services.Streams.Count);
+        Assert.True(controller.IsRunning);
         controller.Dispose();
     }
 

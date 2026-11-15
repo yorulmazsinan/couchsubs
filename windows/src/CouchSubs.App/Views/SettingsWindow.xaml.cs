@@ -71,6 +71,9 @@ public partial class SettingsWindow : Window
         AskGame.IsChecked = settings.AskGame;
         ShowPacks();
         AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
+        FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.FrameSource.ToString());
+        RemotePlayAppChoice.SelectedItem = RemotePlayAppChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.RemotePlayApp.ToString());
+        ShowFrameSource();
         ShowPasscode();
         loading = false;
     }
@@ -95,6 +98,28 @@ public partial class SettingsWindow : Window
     {
         controller.RemoveLoginPasscode();
         ShowPasscode();
+    }
+
+    /// <summary>Remote Play uygulaması seçimi ve ipuçları yalnız seçili görüntü kaynağına göre görünür.</summary>
+    private void ShowFrameSource()
+    {
+        var window = controller.Settings.FrameSource == FrameSource.RemotePlayWindow;
+        RemotePlayAppPanel.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
+        WindowSourceHint.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
+        Ps5SourceHint.Visibility = window ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnFrameSource(object sender, SelectionChangedEventArgs e)
+    {
+        if (FrameSourceChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        Update(s => s with { FrameSource = Enum.Parse<FrameSource>(tag) });
+        ShowFrameSource();
+    }
+
+    private void OnRemotePlayApp(object sender, SelectionChangedEventArgs e)
+    {
+        if (RemotePlayAppChoice.SelectedItem is ComboBoxItem { Tag: string tag })
+            Update(s => s with { RemotePlayApp = Enum.Parse<RemotePlayApp>(tag) });
     }
 
     private void OnAppearance(object sender, SelectionChangedEventArgs e)

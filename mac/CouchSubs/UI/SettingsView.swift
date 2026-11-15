@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Ayarların bölümleri; solda kenar çubuğunda listelenir, sağda seçili olan gösterilir.
 enum SettingsSection: CaseIterable, Identifiable {
-    case appearance, dubbing, translation, packs, language, area, obs, ps5, about
+    case appearance, dubbing, translation, packs, language, area, obs, source, ps5, about
 
     var id: Self { self }
 
@@ -18,6 +18,7 @@ enum SettingsSection: CaseIterable, Identifiable {
         case .language: "Language"
         case .area: "Subtitle area"
         case .obs: "OBS overlay"
+        case .source: "Picture source"
         case .ps5: "PS5 login passcode"
         case .about: "About CouchSubs"
         }
@@ -32,6 +33,7 @@ enum SettingsSection: CaseIterable, Identifiable {
         case .language: "character.bubble"
         case .area: "rectangle.dashed"
         case .obs: "dot.radiowaves.left.and.right"
+        case .source: "rectangle.on.rectangle"
         case .ps5: "lock"
         case .about: "info.circle"
         }
@@ -138,6 +140,7 @@ private struct SettingsPage: View {
             case .language: LanguageCard()
             case .area: AreaCards()
             case .obs: OBSCard()
+            case .source: FrameSourceCard()
             case .ps5: LoginPasscodeCard()
             case .about:
                 AppThemeCard()
@@ -459,6 +462,32 @@ private struct LoginPasscodeCard: View {
                 if invalid {
                     Text("Enter the 4-digit passcode.").font(.csCallout).foregroundStyle(Color.csSecondary)
                 }
+            }
+        }
+    }
+}
+
+/// Görüntünün nereden okunduğu: CouchSubs PS5'e kendisi bağlanır (ikinci hesap) ya da oyun bu Mac'teki Sony PS Remote
+/// Play uygulamasında oynanır ve CouchSubs onun penceresini okur (bkz. `RemotePlayWindowStream`). Çeviri sürerken
+/// değiştirilirse yeni kaynakla yeniden başlar.
+private struct FrameSourceCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Card {
+            Picker("Read the picture from", selection: $model.settings.frameSource) {
+                Text("The PS5 (second account)").tag(FrameSource.ps5)
+                Text("Remote Play window on this Mac").tag(FrameSource.remotePlayWindow)
+            }
+            if model.settings.frameSource == .remotePlayWindow {
+                Picker("Remote Play app", selection: $model.settings.remotePlayApp) {
+                    Text("Whichever is open").tag(RemotePlayApp.automatic)
+                    Text("PS Remote Play (Sony)").tag(RemotePlayApp.sony)
+                    Text("chiaki-ng").tag(RemotePlayApp.chiaki)
+                }
+                HintText(text: "Play in PS Remote Play or chiaki-ng on this Mac; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen, and allow Screen Recording for CouchSubs when macOS asks.")
+            } else {
+                HintText(text: "CouchSubs connects to the PS5 with the second account. Sony's PS Remote Play can't be used at the same time.")
             }
         }
     }

@@ -432,6 +432,35 @@
                     </c:Card>
                 </StackPanel>
             </TabItem>
+            <!-- Görüntünün nereden okunduğu: PS5 bağlantısı ya da bu bilgisayardaki Remote Play penceresi (PS Remote Play / chiaki-ng). -->
+            <TabItem Header="{t:T 'Picture source'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Picture source'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{t:T 'Read the picture from'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <ComboBox x:Name="FrameSourceChoice" SelectionChanged="OnFrameSource" MinWidth="260">
+                                    <ComboBoxItem Content="{t:T 'The PS5 (second account)'}" Tag="Ps5" />
+                                    <ComboBoxItem Content="{t:T 'Remote Play window on this PC'}" Tag="RemotePlayWindow" />
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel x:Name="RemotePlayAppPanel" Orientation="Horizontal" Margin="0,12,0,0">
+                                <TextBlock Text="{t:T 'Remote Play app'}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <ComboBox x:Name="RemotePlayAppChoice" SelectionChanged="OnRemotePlayApp" MinWidth="260">
+                                    <ComboBoxItem Content="{t:T 'Whichever is open'}" Tag="Automatic" />
+                                    <ComboBoxItem Content="{t:T 'PS Remote Play (Sony)'}" Tag="Sony" />
+                                    <ComboBoxItem Content="{t:T 'chiaki-ng'}" Tag="Chiaki" />
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock x:Name="WindowSourceHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'Play in PS Remote Play or chiaki-ng on this PC; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen.'}" />
+                            <TextBlock x:Name="Ps5SourceHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'CouchSubs connects to the PS5 with the second account. Sony\'s PS Remote Play can\'t be used at the same time.'}" />
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
             <!-- İkinci hesabın PS5 giriş şifresi (isteğe bağlı, 4 hane, şifreli depoda). PS5 isterse oturum açılırken gönderilir. -->
             <TabItem Header="{t:T 'PS5 login passcode'}">
                 <StackPanel>

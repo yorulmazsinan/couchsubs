@@ -11904,6 +11904,294 @@
           }
         }
       }
+    },
+    "Picture source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture source"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Görüntü kaynağı"
+          }
+        }
+      }
+    },
+    "Read the picture from": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the picture from"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Görüntüyü al"
+          }
+        }
+      }
+    },
+    "The PS5 (second account)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PS5 (second account)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5 (ikinci hesap)"
+          }
+        }
+      }
+    },
+    "CouchSubs connects to the PS5 with the second account. Sony's PS Remote Play can't be used at the same time.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs connects to the PS5 with the second account. Sony's PS Remote Play can't be used at the same time."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs PS5'e ikinci hesapla kendisi bağlanır. Bu sırada Sony'nin PS Remote Play uygulaması kullanılamaz."
+          }
+        }
+      }
+    },
+    "Allow Screen Recording for CouchSubs in System Settings › Privacy & Security, then start again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Screen Recording for CouchSubs in System Settings › Privacy & Security, then start again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Ses Kaydı'nda CouchSubs'a izin ver, sonra yeniden başlat."
+          }
+        }
+      }
+    },
+    "Remote Play window on this Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play window on this Mac"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu Mac'teki Remote Play penceresi"
+          }
+        }
+      }
+    },
+    "Remote Play app": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play app"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play uygulaması"
+          }
+        }
+      }
+    },
+    "Whichever is open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whichever is open"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hangisi açıksa"
+          }
+        }
+      }
+    },
+    "PS Remote Play (Sony)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS Remote Play (Sony)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS Remote Play (Sony)"
+          }
+        }
+      }
+    },
+    "Play in PS Remote Play or chiaki-ng on this Mac; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen, and allow Screen Recording for CouchSubs when macOS asks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play in PS Remote Play or chiaki-ng on this Mac; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen, and allow Screen Recording for CouchSubs when macOS asks."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyunu bu Mac'teki PS Remote Play'de ya da chiaki-ng'de aç; CouchSubs yalnız o pencereyi okur, ikinci hesap gerekmez. Altyazıyı bilgisayar ekranında göster ve macOS sorunca CouchSubs'a Ekran Kaydı izni ver."
+          }
+        }
+      }
+    },
+    "Reading the Remote Play window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading the Remote Play window"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play penceresi okunuyor"
+          }
+        }
+      }
+    },
+    "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this Mac.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this Mac."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play penceresi bekleniyor. Bu Mac'te PS Remote Play'i ya da chiaki-ng'yi aç."
+          }
+        }
+      }
+    },
+    "Reads the Remote Play window on this Mac when you start translating.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads the Remote Play window on this Mac when you start translating."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Çeviriyi başlatınca bu Mac'teki Remote Play penceresini okur."
+          }
+        }
+      }
+    },
+    "Remote Play window on this PC": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play window on this PC"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bilgisayardaki Remote Play penceresi"
+          }
+        }
+      }
+    },
+    "Play in PS Remote Play or chiaki-ng on this PC; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play in PS Remote Play or chiaki-ng on this PC; CouchSubs reads only that window, so no second account is needed. Show the subtitles on the computer screen."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyunu bu bilgisayardaki PS Remote Play'de ya da chiaki-ng'de aç; CouchSubs yalnız o pencereyi okur, ikinci hesap gerekmez. Altyazıyı bilgisayar ekranında göster."
+          }
+        }
+      }
+    },
+    "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this PC.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this PC."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play penceresi bekleniyor. Bu bilgisayarda PS Remote Play'i ya da chiaki-ng'yi aç."
+          }
+        }
+      }
+    },
+    "Reads the Remote Play window on this PC when you start translating.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads the Remote Play window on this PC when you start translating."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Çeviriyi başlatınca bu bilgisayardaki Remote Play penceresini okur."
+          }
+        }
+      }
+    },
+    "The Remote Play window comes through black: this app may block screen capture. Try chiaki-ng.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Remote Play window comes through black: this app may block screen capture. Try chiaki-ng."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote Play penceresi siyah geliyor: bu uygulama ekran yakalamayı engelliyor olabilir. chiaki-ng'yi dene."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

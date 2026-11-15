@@ -115,7 +115,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // Listede olmayan model varsayılana döndüyse ayar hemen kaydedilir.
         if (settings != loaded) settingsStore.Save(settings);
         var paired = tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
-        var ready = SetupIsComplete(store, accountId is not null && console is not null, paired);
+        // Remote Play penceresinden okurken PS5 eşleşmesi (hesap, PS5 kaydı) gerekmez; sihirbaz açılmaz, kayıt da değişmez.
+        var ready = settings.FrameSource == FrameSource.RemotePlayWindow
+                    || SetupIsComplete(store, accountId is not null && console is not null, paired);
         // Yarım kalan kurulum (ör. TV uygulaması kurulurken kapatıldı) PS5 kayıtlıysa TV adımından sürer.
         step = ready ? OnboardingStep.Done : accountId is not null && console is not null ? OnboardingStep.Tv : OnboardingStep.Welcome;
         AttachServer();
@@ -177,7 +179,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
     public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
-    public string Ps5StatusText => StatusText(sessionState, isRunning, text, console is null ? null : string.IsNullOrEmpty(console.Name) ? "PS5" : console.Name);
+    public string Ps5StatusText => settings.FrameSource == FrameSource.RemotePlayWindow
+        ? WindowStatusText(sessionState, isRunning, text)
+        : StatusText(sessionState, isRunning, text, console is null ? null : string.IsNullOrEmpty(console.Name) ? "PS5" : console.Name);
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
     public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText)]); }
     public StatusTone TvTone => HasTv ? TvToneFor(tvClients, isRunning) : StatusTone.Idle;
@@ -190,7 +194,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Altyazı TV'ye de gidecek ama TV eşleşmedi: ana ekranda "TV bağla" düğmesi çıkar.</summary>
     public bool NeedsTv => ShowsOnTv && !HasTv;
     /// <summary>Çeviri başlatılabilir mi: PS5 kurulu ve altyazının gideceği bir yer var (TV eşleşmiş ya da bilgisayar ekranı seçili).</summary>
-    public bool CanStart => console is not null && accountId is not null && (ShowsOnComputer || HasTv);
+    /// <summary>Görüntü kaynağı hazır (PS5 kurulu ya da Remote Play penceresi seçili) ve altyazının gideceği bir yer var.</summary>
+    public bool CanStart => (settings.FrameSource == FrameSource.RemotePlayWindow || (console is not null && accountId is not null))
+                            && (ShowsOnComputer || HasTv);
     public string LastSource { get => lastSource; private set => Set(ref lastSource, value); }
     public string LastTranslation { get => lastTranslation; private set => Set(ref lastTranslation, value); }
     /// <summary>TV'ye giden son satırın ölçümleri tek satırda ("OCR 40 ms · Çeviri 300 ms · Gecikme 520 ms"); satır gelene kadar boş.</summary>
@@ -232,6 +238,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if ((old.MisreadWaitMs != value.MisreadWaitMs || old.PartialWaitMs != value.PartialWaitMs) && pipeline is not null) ApplyWaits(pipeline);
             if (old.SharePool != value.SharePool) services.Pool?.SetEnabled(value.SharePool);
             UpdateRegionWatcher();
+            if (old.FrameSource != value.FrameSource) Changed(nameof(CanStart), nameof(Ps5StatusText));
+            var windowAppChanged = value.FrameSource == FrameSource.RemotePlayWindow && old.RemotePlayApp != value.RemotePlayApp;
+            if (isRunning && (old.FrameSource != value.FrameSource || windowAppChanged))
+            {
+                // Görüntü kaynağı (ya da okunan Remote Play uygulaması) değişti: çeviri yeni kaynakla yeniden başlar.
+                Stop();
+                _ = StartAsync().ContinueWith(task => RemotePlayLog.Note($"Çeviri yeniden başlatılamadı: {task.Exception?.GetBaseException().Message}"),
+                                              TaskContinuationOptions.OnlyOnFaulted);
+            }
             var translationChanged = old.OnlineTranslation != value.OnlineTranslation || old.OnlineEngine != value.OnlineEngine
                                      || old.GeminiModel != value.GeminiModel || old.OpenAiModel != value.OpenAiModel
                                      || old.ClaudeModel != value.ClaudeModel
@@ -1043,7 +1058,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task StartAsync()
     {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
-        if (isRunning || isStarting || !CanStart || console is null || accountId is null) return;
+        if (isRunning || isStarting || !CanStart) return;
+        // PS5'e bağlanmak için eşleşmiş PS5 ve ikinci hesap gerekir; Remote Play penceresinden okumak için gerekmez.
+        var readsWindow = settings.FrameSource == FrameSource.RemotePlayWindow;
+        if (!readsWindow && (console is null || accountId is null)) return;
         IsStarting = true;
         try
         {
@@ -1057,10 +1075,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             MakePipeline();
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
             SubtitleLog.Write($"oturum başladı: {settings.SourceLanguage}→{settings.TargetLanguage}, "
-                + $"motor: {(OnlineTranslationActive ? settings.OnlineEngine.ToString() : "ücretsiz")}, paketler: {(settings.GamePacks ? "açık" : "kapalı")}");
+                + $"motor: {(OnlineTranslationActive ? settings.OnlineEngine.ToString() : "ücretsiz")}, paketler: {(settings.GamePacks ? "açık" : "kapalı")}, "
+                + $"görüntü: {(readsWindow ? "Remote Play penceresi" : "PS5")}");
 
-            RemotePlayLog.Note($"Çeviri başladı; PS5'e bağlanılıyor: {console.Name} {console.Host}");
-            var stream = services.MakeStream(console, accountId, store.Load<string>(StoreKeys.LoginPasscode));
+            IStreamSession stream;
+            if (readsWindow)
+            {
+                RemotePlayLog.Note($"Çeviri başladı; görüntü bu bilgisayardaki Remote Play penceresinden ({settings.RemotePlayApp})");
+                stream = services.MakeWindowStream(settings.RemotePlayApp);
+            }
+            else
+            {
+                RemotePlayLog.Note($"Çeviri başladı; PS5'e bağlanılıyor: {console!.Name} {console.Host}");
+                stream = services.MakeStream(console, accountId!, store.Load<string>(StoreKeys.LoginPasscode));
+            }
             stream.StateChanged += state => post(() => SessionStateChanged(state));
             stream.ConsoleMoved += moved => post(() => ConsoleMoved(moved));
             stream.FrameReceived += HandleFrame;
@@ -1226,6 +1254,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>PS5 durumunun kullanıcıya gösterilecek metni.</summary>
     /// <param name="pairedName">Eşleşmiş PS5'in adı. Çeviri başlamamışken eşleşmiş PS5 için "Bağlı değil" yerine "eşleşti,
     /// başlatınca bağlanır" denir: eskiden eşleştirme başarılı olsa da ana ekran "Bağlı değil" diyordu.</param>
+    /// <summary>Görüntü bu bilgisayardaki Remote Play penceresinden okunurken durumun metni.</summary>
+    public static string WindowStatusText(SessionState state, bool running, Localizer text)
+    {
+        const string waiting = "Waiting for the Remote Play window. Open PS Remote Play or chiaki-ng on this PC.";
+        switch (state.Phase)
+        {
+            case SessionPhase.Streaming: return text["Reading the Remote Play window"];
+            case SessionPhase.Connecting: return text[waiting];
+        }
+        if (!running) return text["Reads the Remote Play window on this PC when you start translating."];
+        return state.Reason?.Detail is { Length: > 0 } detail ? detail : text[waiting];
+    }
+
     public static string StatusText(SessionState state, bool running, Localizer text, string? pairedName = null)
     {
         switch (state.Phase)

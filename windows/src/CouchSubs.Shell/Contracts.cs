@@ -161,6 +161,16 @@ public static class TranslationEngines
     };
 }
 
+/// <summary>
+/// Görüntünün nereden okunduğu. <c>Ps5</c>: CouchSubs PS5'e kendisi bağlanır (ikinci hesap). <c>RemotePlayWindow</c>:
+/// oyun bu bilgisayardaki PS Remote Play'de ya da chiaki-ng'de oynanır, CouchSubs yalnız o pencereyi okur; PS5'e ikinci
+/// oturum açılmadığı için ikinci hesap gerekmez (Mac'teki FrameSource ile aynı). Eski ayar dosyaları PS5 ile açılır.
+/// </summary>
+public enum FrameSource { Ps5, RemotePlayWindow }
+
+/// <summary>Pencereden okunurken hangi Remote Play uygulaması: hangisi açıksa, yalnız Sony'ninki ya da yalnız chiaki-ng.</summary>
+public enum RemotePlayApp { Automatic, Sony, Chiaki }
+
 /// <summary>Kalıcı ayarlar (şifreli depo değil, sıradan ayar dosyası).</summary>
 public sealed record UserSettings
 {
@@ -232,6 +242,10 @@ public sealed record UserSettings
     public bool AskGame { get; init; } = true;
     /// <summary>Koyu, açık ya da sistemle aynı. Eski ayar dosyalarında yoktur; onlar da koyu açılır.</summary>
     public AppAppearance Appearance { get; init; } = AppAppearance.Dark;
+    /// <summary>Görüntü PS5 bağlantısından mı, bu bilgisayardaki Remote Play penceresinden mi okunur.</summary>
+    public FrameSource FrameSource { get; init; } = FrameSource.Ps5;
+    /// <summary>Pencereden okunurken hangi Remote Play uygulaması (bkz. <see cref="Shell.RemotePlayApp"/>).</summary>
+    public RemotePlayApp RemotePlayApp { get; init; } = RemotePlayApp.Automatic;
 
     /// <summary>Ayarlarda seçili motor: çevrimiçi çeviri kapalıysa ücretsiz olan.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
@@ -375,6 +389,8 @@ public interface IAppServices
     Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server);
     /// <param name="loginPasscode">PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).</param>
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId, string? loginPasscode);
+    /// <summary>Görüntüyü bu bilgisayardaki Remote Play penceresinden (PS Remote Play ya da chiaki-ng) alan kaynak.</summary>
+    IStreamSession MakeWindowStream(RemotePlayApp app) => throw new NotSupportedException();
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>
     /// <param name="onMoved">TV ağda yeni bir adreste bulununca çağrılır.</param>
     /// <param name="onKey">TV bağlantıda yeni jeton verdi (Samsung); saklanır.</param>
