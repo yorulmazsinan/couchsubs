@@ -53,6 +53,19 @@ class SubtitlePipeline(
         /** Çeviri sürerken sırada en çok bu kadar satır bekler; daha eskisi atlanır (kuyruk konuşma hızıyla büyümesin). */
         const val MAX_WAITING = 2
         private const val REMEMBERED_PAIRS = 8
+        /**
+         * Bozuk okunan (OCR izi taşıyan) ve pakette bulunmayan satır en çok bu kadar bekletilir: aynı satırın düzgün
+         * okuması gelirse o çevrilir (Windows: PackWaitMs).
+         */
+        const val PACK_WAIT_MS = 800
+        /**
+         * Temiz ama yarım olabilecek satırın (küçük harfle başlıyor ya da cümle sonu işareti yok) bekleme süresi. Telefon
+         * yarım okumayı ("Get Franklin close to the") hemen çevirmene gönderiyordu; çeviri bilgisayardakinden kötü
+         * görünüyordu (Windows: CleanWaitMs).
+         */
+        const val CLEAN_WAIT_MS = 300
+        /** Çevrilen satırın daha iyi olmayan yeniden okuması bu süre içinde yeni satır sayılmaz. */
+        const val REREAD_WITHIN_MS = 4000
 
         /** Satır ekrandan kalktıktan sonra gelen çevirinin TV'de kalacağı süre (TV uygulamasıyla aynı kural). */
         fun readingTime(text: String) = minOf(8000, 2000 + text.length * 60)
@@ -74,6 +87,13 @@ class SubtitlePipeline(
 
     private data class Pair3(val number: Int, val source: String, val translation: String?)
 
+    /** Bekletilen okuma: kaynak, yer, bekletilmeye başlandığı an, en çok bekleme, puanı, ilk okunduğu kare. */
+    private data class Held(val source: String, val box: TextBox?, val since: Long, val wait: Int, val score: Int,
+                            val capturedAt: Long?, val ocrMs: Int?)
+
+    /** Son çevrilen (motora ya da pakete giden) okuma, puanı ve zamanı. */
+    private data class Sent(val source: String, val score: Int, val at: Long)
+
     private val lock = Any()
     private val now: () -> Long = clock ?: monotonicClock
     private val stabilizer = SubtitleStabilizer(clock = now)
@@ -92,6 +112,18 @@ class SubtitlePipeline(
     /** İşlenen karenin geldiği an (hattın saatiyle) ve okumasının süresi; ölçüm satırı için. */
     private var frameAt: Long? = null
     private var frameOcrMs: Int? = null
+    private var held: Held? = null
+    private var lastSent: Sent? = null
+
+    /**
+     * Yarım ya da bozuk okuma kısa süre bekletilip aynı satırın en iyi okuması mı çevrilsin (Windows'ta yazım denetimiyle
+     * açık). Telefon uygulaması açar; kapalıyken her kararlı okuma hemen çevrilir.
+     */
+    @Volatile var holdReadings = false
+    /** Bozuk okumanın bekleme süresi (0: beklenmez); testler değiştirir. */
+    @Volatile var packWait = PACK_WAIT_MS
+    /** Yarım olabilecek temiz okumanın bekleme süresi (0: beklenmez); testler değiştirir. */
+    @Volatile var cleanWait = CLEAN_WAIT_MS
 
     private fun totalMs(request: Request): Int? = request.capturedAt?.let { maxOf(0, (now() - it).toInt()) }
 
@@ -118,9 +150,62 @@ class SubtitlePipeline(
         frameOcrMs = ocrMs
         // Kumanda ipuçları ve yazı tanıma çöpleri çevrilmez; yalnız altyazı bloğu çevrilir.
         val reading = raw.withoutButtonPrompts().withoutOcrNoise().joiningRows().subtitleBlock(area)
+        var flushed: (() -> Unit)? = null
         val after: (() -> Unit)? = synchronized(lock) {
-            val action = stabilizer.feed(reading.text, signature, reading.box)
+            var action = stabilizer.feed(reading.text, signature, reading.box)
             val box = reading.box?.placedIn(area)?.centeredOnScreen()
+            var fromHold: (() -> Unit)? = null
+            held?.let { waiting ->
+                val time = now()
+                if (action.kind == StabilizerKind.TRANSLATE) {
+                    // Bozuk ve yarım okumaların her biri kararlayıcıya yeni satır gibi görünür.
+                    val source = action.text!!
+                    val wait = maxOf(waiting.wait, waitFor(source))
+                    if (findPack(source) != null) {
+                        // Pakette bulundu: bekleyen okuma çevrilmez, bu okuma her zamanki yoldan gider.
+                        held = null
+                    } else if (TextMatch.addsMeaning(source, waiting.source) &&
+                        TextMatch.isSimilar(TextMatch.normalize(source), TextMatch.normalize(waiting.source))) {
+                        // Olumsuzluk/sayı düzeltmesi bekleyenin yerini alır; yanlış ilk okuma çevrilmez.
+                        val merged = Rereads.keepMissingLines(source, waiting.source)
+                        held = waiting.copy(source = merged, box = box ?: waiting.box, wait = wait, score = Rereads.score(merged))
+                        action = StabilizerAction.None
+                        lineLeft()
+                        if (time - waiting.since >= wait) fromHold = flushHeld()
+                    } else if ((Rereads.isRereadOf(source, waiting.source) || Rereads.isRereadOf(waiting.source, source)) &&
+                        time - waiting.since < wait) {
+                        // Aynı satırın başka bir okuması: daha iyisi tutulur, süre baştan başlamaz.
+                        if (Rereads.score(source) > waiting.score) {
+                            val merged = Rereads.keepMissingLines(source, waiting.source)
+                            held = waiting.copy(source = merged, box = box ?: waiting.box, wait = wait, score = Rereads.score(merged))
+                        }
+                        action = StabilizerAction.None
+                        lineLeft()
+                    } else if (Rereads.looksMisread(waiting.source)) {
+                        // Bekleyen bozuk okumaydı ve yerine başka bir okuma geldi: bozuk okuma çevrilmez.
+                        held = null
+                    } else if (Rereads.looksMisread(source) && time - waiting.since < waiting.wait) {
+                        // Araya giren bozuk ve ilgisiz okuma bekleyeni bozmaz; yok sayılır.
+                        action = StabilizerAction.None
+                    } else {
+                        // Bekleyen temiz bir satırdı, yerine başka satır geldi: önce o çevrilir.
+                        flushed = flushHeld()
+                    }
+                } else if (action.kind != StabilizerKind.NONE) {
+                    // Bölge boşaldı ya da eski satır geri geldi: bekleyen temiz satır çevrilir, bozuk okuma çevrilmez.
+                    if (Rereads.looksMisread(waiting.source)) held = null else flushed = flushHeld()
+                } else {
+                    // Kararlayıcı aynı satır saydı; okuma daha iyiyse (ör. yarım okumanın tamamı) o tutulur.
+                    val text = reading.text.trim()
+                    var current = waiting
+                    if (text.length >= 3 && Rereads.related(text, waiting.source) && Rereads.score(text) > waiting.score) {
+                        val merged = Rereads.keepMissingLines(text, waiting.source)
+                        current = waiting.copy(source = merged, box = box ?: waiting.box, score = Rereads.score(merged))
+                        held = current
+                    }
+                    if (time - current.since >= current.wait) fromHold = flushHeld()
+                }
+            }
             val result = when (action.kind) {
                 StabilizerKind.CLEAR -> {
                     lineLeft()
@@ -129,20 +214,61 @@ class SubtitlePipeline(
                 }
                 StabilizerKind.TRANSLATE -> {
                     lineLeft()
-                    enqueue(action.text!!, box)
+                    translateOrHold(action.text!!, box)
                 }
                 StabilizerKind.RESTORE -> {
                     lineLeft()
                     restore(action.text!!, box)
                 }
-                StabilizerKind.NONE -> null
+                StabilizerKind.NONE -> fromHold
             }
             // Restore önce işlenir: geri görünen satırın leftAt bilgisi temizlenmeden iptal edilmemeli.
             abandonUndisplayableTranslation()
             result
         }
         // Olaylar kilidin dışında çağrılır.
+        flushed?.invoke()
         after?.invoke()
+    }
+
+    /** Bekletilen okumayı çeviriye gönderir (lock tutulurken çağrılır). */
+    private fun flushHeld(): (() -> Unit)? {
+        val waiting = held ?: return null
+        held = null
+        return enqueue(waiting.source, waiting.box, waiting.capturedAt, waiting.ocrMs)
+    }
+
+    private fun findPack(source: String): PackMatch? {
+        val lookup = packLookup ?: return null
+        return lookup(source) ?: SpeakerPrefix.split(source)?.let { lookup(it.body) }
+    }
+
+    /**
+     * Bozuk ya da yarım olabilecek okuma hemen çevrilmez, kısa süre bekletilir; aynı satırın daha iyi okuması gelirse o
+     * çevrilir. Temiz ve tam cümle ya da pakette bulunan satır beklemeden gider (Windows: TranslateOrHold).
+     */
+    private fun translateOrHold(source: String, box: TextBox?): (() -> Unit)? {
+        if (!holdReadings || findPack(source) != null) return enqueue(source, box)
+        // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
+        val time = now()
+        lastSent?.let { last ->
+            if (time - last.at < REREAD_WITHIN_MS && Rereads.allLinesCovered(source, last.source) && Rereads.score(source) <= last.score) {
+                lastSent = last.copy(at = time)
+                return null
+            }
+        }
+        val wait = waitFor(source)
+        if (wait <= 0) return enqueue(source, box)
+        held = Held(source, box, time, wait, Rereads.score(source), frameAt, frameOcrMs)
+        return null
+    }
+
+    /** Bozuksa [packWait], temiz ama yarım olabilecekse [cleanWait], temiz ve tam cümleyse 0. */
+    private fun waitFor(source: String): Int = when {
+        !holdReadings -> 0
+        Rereads.looksMisread(source) -> maxOf(0, packWait)
+        Rereads.looksComplete(source) -> 0
+        else -> maxOf(0, cleanWait)
     }
 
     /**
@@ -173,9 +299,10 @@ class SubtitlePipeline(
         lineOnScreen = null
     }
 
-    private fun enqueue(source: String, box: TextBox?): (() -> Unit)? {
-        val request = Request(++lastRequested, source, box, session, frameAt, frameOcrMs)
+    private fun enqueue(source: String, box: TextBox?, capturedAt: Long? = frameAt, ocrMs: Int? = frameOcrMs): (() -> Unit)? {
+        val request = Request(++lastRequested, source, box, session, capturedAt, ocrMs)
         lineOnScreen = request.number
+        lastSent = Sent(source, Rereads.score(source), now())
         packMatch(request)?.let { return showPacked(request, it) }
         val missed = onPackMissed
         val current = inFlight
@@ -322,6 +449,8 @@ class SubtitlePipeline(
     fun reset() = synchronized(lock) {
         session++
         lineOnScreen = null
+        held = null
+        lastSent = null
         waiting.clear()
         lastShownSource = null
         pairs.clear()

@@ -23,6 +23,35 @@ public final class SubtitlePipeline {
     /// Çeviri sürerken sırada en çok bu kadar satır bekler; daha eskisi atlanır (kuyruk konuşma hızıyla büyümesin).
     public static let maxWaiting = 2
     private static let rememberedPairs = 8
+    /// Bozuk okunan (OCR izi taşıyan) ve pakette bulunmayan satır en çok bu kadar bekletilir: aynı satırın düzgün okuması
+    /// gelirse o çevrilir (Windows: PackWaitMs).
+    public static let packWaitMs = 800
+    /// Temiz ama yarım olabilecek satırın (küçük harfle başlıyor ya da cümle sonu işareti yok) bekleme süresi. iPhone ve
+    /// Mac yarım okumayı ("Get Franklin close to the") hemen çevirmene gönderiyordu; çeviri Windows'takinden kötü
+    /// görünüyordu (Windows: CleanWaitMs).
+    public static let cleanWaitMs = 300
+    /// Çevrilen satırın daha iyi olmayan yeniden okuması bu süre içinde yeni satır sayılmaz.
+    public static let rereadWithinMs = 4000
+
+    /// Bekletilen okuma: kaynak, yer, bekletilmeye başlandığı an, en çok bekleme, puanı, ilk okunduğu kare.
+    private struct Held {
+        var source: String
+        var box: TextBox?
+        var since: Int
+        var wait: Int
+        var score: Int
+        var read: ReadInfo
+    }
+    private var held: Held?
+    /// Son çevrilen (motora ya da pakete giden) okuma, puanı ve zamanı.
+    private var lastSent: (source: String, score: Int, at: Int)?
+    /// Yarım ya da bozuk okuma kısa süre bekletilip aynı satırın en iyi okuması mı çevrilsin (Windows'ta yazım denetimiyle
+    /// açık). iPhone uygulaması açar; kapalıyken her kararlı okuma hemen çevrilir.
+    public var holdReadings = false
+    /// Bozuk okumanın bekleme süresi (0: beklenmez); testler değiştirir.
+    public var packWait = SubtitlePipeline.packWaitMs
+    /// Yarım olabilecek temiz okumanın bekleme süresi (0: beklenmez); testler değiştirir.
+    public var cleanWait = SubtitlePipeline.cleanWaitMs
 
     /// Bir çeviri isteği; satır ekrandan kalkınca `leftAt` not edilir.
     private final class Request {
@@ -192,13 +221,75 @@ public final class SubtitlePipeline {
             log("ilk yazı: oturum başından \(now() - sessionStart) ms sonra \(SubtitleLog.excerpt(reading.text))")
         }
         // Bölge izi ve satırın yeri: okuma boş dönse de satırın yeri değişmediyse satır silinmez (parlak zemin).
-        let action = stabilizer.feed(reading.text, signature: signature, box: reading.box)
+        var action = stabilizer.feed(reading.text, signature: signature, box: reading.box)
         // Ekranda duran kötü yeniden okuma her karede not edilir; günlüğe bir kez yazılır.
         if let note = stabilizer.note, note != lastNote {
             lastNote = note
             switch note {
             case .worseReread(let text): log("yeniden-okuma: \(SubtitleLog.excerpt(text)) gösterilenden kötü, yok sayıldı")
             case .garbledDropped(let text): log("çöp: \(SubtitleLog.excerpt(text)) kararlı olmadan kalktı, gönderilmedi")
+            }
+        }
+        if let waiting = held {
+            let time = now()
+            switch action {
+            case .translate(let source):
+                // Bozuk ve yarım okumaların her biri kararlayıcıya yeni satır gibi görünür.
+                let wait = max(waiting.wait, waitFor(source))
+                if findPack(source) != nil {
+                    // Pakette bulundu: bekleyen okuma çevrilmez, bu okuma her zamanki yoldan gider.
+                    held = nil
+                    log("bekleyen atıldı: \(SubtitleLog.excerpt(waiting.source)) yerine paketteki satır geldi")
+                } else if TextMatch.addsMeaning(source, to: waiting.source),
+                          TextMatch.isSimilar(TextMatch.normalize(source), TextMatch.normalize(waiting.source)) {
+                    // Olumsuzluk/sayı düzeltmesi bekleyenin yerini alır; yanlış ilk okuma çevrilmez.
+                    let merged = Rereads.keepMissingLines(source, older: waiting.source)
+                    held = Held(source: merged, box: box ?? waiting.box, since: waiting.since, wait: wait,
+                                score: Rereads.score(merged), read: waiting.read)
+                    action = .none
+                    lineLeft()
+                    if time - waiting.since >= wait { flushHeld() }
+                } else if Rereads.isRereadOf(source, waiting.source) || Rereads.isRereadOf(waiting.source, source),
+                          time - waiting.since < wait {
+                    // Aynı satırın başka bir okuması: daha iyisi tutulur, süre baştan başlamaz.
+                    if Rereads.score(source) > waiting.score {
+                        let merged = Rereads.keepMissingLines(source, older: waiting.source)
+                        held = Held(source: merged, box: box ?? waiting.box, since: waiting.since, wait: wait,
+                                    score: Rereads.score(merged), read: waiting.read)
+                    }
+                    action = .none
+                    lineLeft()
+                } else if Rereads.looksMisread(waiting.source) {
+                    // Bekleyen bozuk okumaydı ve yerine başka bir okuma geldi: bozuk okuma çevrilmez.
+                    held = nil
+                    log("bozuk okuma atıldı: \(SubtitleLog.excerpt(waiting.source)) yerine başka satır geldi")
+                } else if Rereads.looksMisread(source), time - waiting.since < waiting.wait {
+                    // Araya giren bozuk ve ilgisiz okuma bekleyeni bozmaz; yok sayılır.
+                    action = .none
+                } else {
+                    // Bekleyen temiz bir satırdı, yerine başka satır geldi: önce o çevrilir.
+                    flushHeld()
+                }
+            case .clear, .restore:
+                // Bölge boşaldı ya da eski satır geri geldi: bekleyen temiz satır çevrilir, bozuk okuma çevrilmez.
+                if Rereads.looksMisread(waiting.source) {
+                    held = nil
+                    log("bozuk okuma atıldı: \(SubtitleLog.excerpt(waiting.source)) beklerken kalktı")
+                } else {
+                    flushHeld()
+                }
+            case .none:
+                // Kararlayıcı aynı satır saydı; okuma daha iyiyse (ör. yarım okumanın tamamı) o tutulur.
+                let text = reading.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                var current = waiting
+                if text.count >= 3, Rereads.related(text, waiting.source), Rereads.score(text) > waiting.score {
+                    let merged = Rereads.keepMissingLines(text, older: waiting.source)
+                    current.source = merged
+                    current.box = box ?? waiting.box
+                    current.score = Rereads.score(merged)
+                    held = current
+                }
+                if time - current.since >= current.wait { flushHeld() }
             }
         }
         switch action {
@@ -210,7 +301,7 @@ public final class SubtitlePipeline {
             log("kalktı: bölge boş okundu, ekran temizlendi")
         case .translate(let source):
             lineLeft()
-            enqueue(source, box: box)
+            translateOrHold(source, box: box)
         case .restore(let source):
             lineLeft()
             restore(source, box: box)
@@ -254,10 +345,50 @@ public final class SubtitlePipeline {
         lineOnScreen = nil
     }
 
-    private func enqueue(_ source: String, box: TextBox?) {
+    /// Bekletilen okumayı çeviriye gönderir.
+    private func flushHeld() {
+        guard let waiting = held else { return }
+        held = nil
+        enqueue(waiting.source, box: waiting.box, read: waiting.read)
+    }
+
+    private func findPack(_ source: String) -> PackMatch? {
+        guard let packLookup else { return nil }
+        if let found = packLookup(source) { return found }
+        guard let prefix = SpeakerPrefix.split(source) else { return nil }
+        return packLookup(prefix.body)
+    }
+
+    /// Bozuk ya da yarım olabilecek okuma hemen çevrilmez, kısa süre bekletilir; aynı satırın daha iyi okuması gelirse o
+    /// çevrilir. Temiz ve tam cümle ya da pakette bulunan satır beklemeden gider (Windows: TranslateOrHold).
+    private func translateOrHold(_ source: String, box: TextBox?) {
+        if !holdReadings || findPack(source) != nil { return enqueue(source, box: box) }
+        let time = now()
+        // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
+        if let last = lastSent, time - last.at < Self.rereadWithinMs,
+           Rereads.allLinesCovered(source, by: last.source), Rereads.score(source) <= last.score {
+            lastSent = (last.source, last.score, time)
+            log("yeniden-okuma: \(SubtitleLog.excerpt(source)) az önce çevrilenden iyi değil, yok sayıldı")
+            return
+        }
+        let wait = waitFor(source)
+        guard wait > 0 else { return enqueue(source, box: box) }
+        held = Held(source: source, box: box, since: time, wait: wait, score: Rereads.score(source), read: currentRead)
+        log("bekletiliyor (en çok \(wait) ms): \(SubtitleLog.excerpt(source))")
+    }
+
+    /// Bozuksa `packWait`, temiz ama yarım olabilecekse `cleanWait`, temiz ve tam cümleyse 0.
+    private func waitFor(_ source: String) -> Int {
+        guard holdReadings else { return 0 }
+        if Rereads.looksMisread(source) { return max(0, packWait) }
+        return Rereads.looksComplete(source) ? 0 : max(0, cleanWait)
+    }
+
+    private func enqueue(_ source: String, box: TextBox?, read: ReadInfo? = nil) {
         lastRequested += 1
-        let request = Request(number: lastRequested, source: source, box: box, session: session, read: currentRead)
+        let request = Request(number: lastRequested, source: source, box: box, session: session, read: read ?? currentRead)
         lineOnScreen = request.number
+        lastSent = (source, Rereads.score(source), now())
         if let packed = packMatch(request) {
             showPacked(request, packed)
             return
@@ -475,6 +606,8 @@ public final class SubtitlePipeline {
         lastNote = nil
         session += 1
         lineOnScreen = nil
+        held = nil
+        lastSent = nil
         waiting.removeAll()
         // Apple'ın çevirisi görev iptaline uyar; süren çeviri beklenmeden bırakılır.
         work?.cancel()

@@ -577,6 +577,8 @@ final class PhoneModel: ObservableObject {
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage), translator: makeTranslator(),
                                         server: server, scheduler: ReadScheduler())
         pipeline.showSpeakerNames = settings.showSpeakerNames
+        // Yarım ya da bozuk okuma hemen çevrilmez; aynı satırın en iyi okuması çevrilir (Windows ve Android ile aynı).
+        pipeline.holdReadings = true
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
             self?.lastSource = source
             self?.lastTranslation = translation

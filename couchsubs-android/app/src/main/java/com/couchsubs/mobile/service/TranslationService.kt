@@ -294,6 +294,8 @@ class TranslationService : Service() {
         }
         reader = SubtitleReader()
         pipeline =SubtitlePipeline(translator, subtitleServer).apply {
+            // Yarım ya da bozuk okuma hemen çevrilmez; aynı satırın en iyi okuması çevrilir (Windows ve iPhone ile aynı).
+            holdReadings = true
             packLookup = { text -> if (packTitles != null && settings.packsEnabled) PackLookup.match(library, text) else null }
             showSpeakerNames = { settings.showSpeakerNames }
             onPackMissed = { text -> linePool.offer(text) }
