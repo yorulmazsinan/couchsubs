@@ -129,7 +129,12 @@ export async function handle(request: Request, env: Env, rate: RateLimiter = lim
   if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405);
   if (url.pathname === "/v1/packs") return list(env);
   const match = /^\/v1\/packs\/([^/]+)$/.exec(url.pathname);
-  if (match) return download(request, env, decodeURIComponent(match[1]), rate, now);
+  if (match) {
+    let id: string;
+    try { id = decodeURIComponent(match[1]); }
+    catch { return json({ error: "not_found" }, 404); }
+    return download(request, env, id, rate, now);
+  }
   return json({ error: "not_found" }, 404);
 }
 

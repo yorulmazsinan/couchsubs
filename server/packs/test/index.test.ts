@@ -165,3 +165,12 @@ it("still sends the pack when If-None-Match is unrelated", async () => {
   );
   expect(response.status).toBe(200);
 });
+
+it("returns 404 rather than crashing on invalid percent-encoded pack IDs", async () => {
+  const response = await handle(
+    get("/v1/packs/%E0%A4%A"),
+    env(),
+    new RateLimiter(),
+  );
+  expect(response.status).toBe(404);
+});
