@@ -28,9 +28,9 @@
     color: #fff; text-align: center; white-space: pre-line;
     text-shadow: 0 0 0.12em #000, 0 0.06em 0.12em #000;
     background: rgba(0, 0, 0, 0.6);
-    opacity: 0; transition: opacity 0.15s;
+    opacity: 0; visibility: hidden; transition: opacity 0.15s, visibility 0s linear 0.15s;
   }
-  #line.on { opacity: 1; }
+  #line.on { opacity: 1; visibility: visible; transition: opacity 0.15s; }
   /* İngilizce altyazının yeri biliniyorsa çeviri onu örter (TV'deki "örtme" ile aynı). */
   #line.cover { position: absolute; transform: translate(-50%, -50%); }
   #hint {
@@ -113,14 +113,17 @@
     if (style.placement) placement = style.placement;
   }
 
+  // Kalkarken yalnız "on" gider; "cover" ve metin solma bitene kadar yerinde kalır. "cover" gidince opak kutu
+  // kapın içinde tam yüksekliğe uzayıp OBS'te kısa süre siyah pencere olarak görünürdü.
   function hide() {
     clearTimeout(timer);
-    line.className = '';
+    line.classList.remove('on');
   }
 
   function show(text, duration, box) {
     clearTimeout(timer);
-    if (text) hideHint();
+    if (!text) return hide();
+    hideHint();
     line.textContent = text;
     var cover = box && placement === 'cover' && !fixed.bottom;
     if (cover) {
@@ -146,7 +149,7 @@
       line.style.maxWidth = '';
       apply(lastStyle);
     }
-    line.className = text ? (cover ? 'on cover' : 'on') : '';
+    line.className = cover ? 'on cover' : 'on';
     timer = setTimeout(hide, Math.max(1000, duration || 8000));
   }
 
