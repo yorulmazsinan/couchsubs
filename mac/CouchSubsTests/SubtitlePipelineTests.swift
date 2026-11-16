@@ -650,7 +650,7 @@ final class SubtitlePipelineTests: XCTestCase {
 
     /// Yeni satır gösterilmeden eski üretimin iptal edilip edilmediğini beklemeden yoklamak için.
     private func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0..<400 where !condition() { try? await Task.sleep(nanoseconds: 5_000_000) }
+        for _ in 0..<6000 where !condition() { try? await Task.sleep(nanoseconds: 5_000_000) }
         XCTAssertTrue(condition(), "Beklenen durum oluşmadı.")
     }
 

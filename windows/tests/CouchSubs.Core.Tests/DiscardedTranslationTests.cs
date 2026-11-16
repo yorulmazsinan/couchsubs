@@ -8,6 +8,15 @@ public class DiscardedTranslationTests
     private const string Old = "Hold the gate.";
     private const string Next = "Run!";
     private static readonly Frame Image = Frame.Blank(64, 64);
+    // Süreler yalnız takılmayı yakalar; yüklü CI'da yavaş kalmak testi düşürmesin.
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+
+    // Test bir havuz iş parçacığını bilerek tutar; havuz yavaş büyüyüp paralel testleri aç bırakmasın.
+    static DiscardedTranslationTests()
+    {
+        ThreadPool.GetMinThreads(out var worker, out var io);
+        ThreadPool.SetMinThreads(Math.Max(worker, 32), io);
+    }
 
     private sealed class Reader : ITextReader
     {
@@ -66,7 +75,7 @@ public class DiscardedTranslationTests
         }
         public async Task WaitForCalls(int count)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(2);
+            var deadline = DateTime.UtcNow + Patience;
             while (Translator.Calls.Length < count)
             {
                 Assert.True(DateTime.UtcNow < deadline, "Yeni replik eski üretimin bitmesini bekliyor.");
@@ -76,7 +85,7 @@ public class DiscardedTranslationTests
         public async ValueTask DisposeAsync()
         {
             Translator.Open();
-            await Pipeline.WaitForTranslationsAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            await Pipeline.WaitForTranslationsAsync().WaitAsync(Patience);
         }
     }
 
@@ -179,7 +188,7 @@ public class DiscardedTranslationTests
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
         Assert.True(scene.Translator.Calls[0].Token.IsCancellationRequested);
-        await scene.Pipeline.WaitForTranslationsAsync().WaitAsync(TimeSpan.FromSeconds(2));
+        await scene.Pipeline.WaitForTranslationsAsync().WaitAsync(Patience);
         Assert.Equal(["Koş!"], scene.Sender.Sent);
         Assert.Null(scene.Pipeline.LastError);
     }
@@ -299,14 +308,14 @@ public class DiscardedTranslationTests
         {
             if (source != Old) return;
             published.TrySetResult();
-            Assert.True(releaseEvent.Wait(TimeSpan.FromSeconds(3)));
+            Assert.True(releaseEvent.Wait(Patience));
         };
         try
         {
             await scene.Frame(Old, 0);
             await scene.Frame(Next, 100);
             scene.Translator.Calls[0].Result.SetResult("TR: " + Old);
-            await published.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await published.Task.WaitAsync(Patience);
             await scene.Frame(Next, 2700);
             Assert.False(scene.Translator.Calls[0].Token.IsCancellationRequested);
         }

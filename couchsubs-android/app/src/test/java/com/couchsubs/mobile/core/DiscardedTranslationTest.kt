@@ -60,7 +60,7 @@ class DiscardedTranslationTest {
     }
 
     private fun waitFor(what: String, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + 3000
+        val deadline = System.currentTimeMillis() + 30_000
         while (!condition() && System.currentTimeMillis() < deadline) Thread.sleep(5)
         assertTrue(what, condition())
     }
@@ -141,7 +141,7 @@ class DiscardedTranslationTest {
         pipeline.frame(next, 100)
         waitFor("eski üretim bırakıldı") { translator.cancelled == listOf(old) }
         translator.open()
-        Thread.sleep(50)
+        waitFor("paket satırı gösterildi") { sender.sent.isNotEmpty() }
         assertEquals(listOf("Koş!"), sender.sent)
     }
 
