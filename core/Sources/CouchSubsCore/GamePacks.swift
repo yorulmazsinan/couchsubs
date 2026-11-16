@@ -211,6 +211,17 @@ public final class GamePackLibrary: @unchecked Sendable {
     private var scope: Int?
     private var distinctive: Int?
     private var infos: [Info] = []
+    /// Paketlerin dosyaları (`infos` sırasıyla): elle seçilen oyunun paketi yalnız kendi satırlarıyla buradan okunur.
+    private var files: [URL] = []
+    /// Elle seçilen oyunun adı (`GameName.key`); nil ise bütün paketlerde aranır.
+    private var limitKey: String?
+    /// Elle seçilen oyunun paketi (bulunduysa) ya da `.missing`; nil ise henüz aranmadı.
+    private var limited: Limited?
+
+    private enum Limited {
+        case missing
+        case pack(index: Int, pack: GamePack, search: Searchable)
+    }
 
     /// `imported`: telefonda Ayarlar › Oyun paketleri'nden içe aktarılan topluluk paketleri (`GamePackImporter`). En son
     /// okunur, aynı satırda kazanır; sunucudan paket güncellenirken silinmesin diye indirilenlerden ayrı klasördedir.
@@ -247,9 +258,57 @@ public final class GamePackLibrary: @unchecked Sendable {
         }
     }
 
+    /// Kullanıcının elle seçtiği oyun (`GameSense.packLimit`). Verilirse satırlar yalnız o oyunun paketinde aranır
+    /// (tam ve bulanık), paketi yoksa hiç aranmaz: paketi olmayan oyunda "Let's go." gibi kısa, genel satırlar başka
+    /// oyunların paketinden yanlış çeviri getiriyor, oyunu da o pakete kaydırıyordu (#218). nil: bütün paketlerde aranır.
+    public func limit(toGame name: String?) {
+        let key = name.map(GameName.key).flatMap { $0.isEmpty ? nil : $0 }
+        lock.withLock {
+            guard key != limitKey else { return }
+            limitKey = key
+            limited = nil
+            scope = nil
+            distinctive = nil
+        }
+    }
+
+    /// Elle seçilen oyunun paketi: adı ya da kimliği (`GameName.key`) aynı olan son paket, yalnız kendi satırlarıyla.
+    /// Sınır yoksa nil. Dosya kilit dışında okunur; aynı seçimde bir kez.
+    private func resolveLimit() -> Limited? {
+        let (key, known, candidate) = lock.withLock { () -> (String?, Limited?, (index: Int, url: URL)?) in
+            loadIfNeeded()
+            guard let key = limitKey else { return (nil, nil, nil) }
+            if let limited { return (key, limited, nil) }
+            let index = infos.indices.last { index in
+                infos[index].id != GameSense.generalPack
+                    && (GameName.key(infos[index].title) == key || GameName.key(infos[index].id) == key)
+            }
+            return (key, nil, index.flatMap { $0 < files.count ? ($0, files[$0]) : nil })
+        }
+        guard let key else { return nil }
+        if let known { return known }
+        var found = Limited.missing
+        if let candidate, let data = try? Data(contentsOf: candidate.url),
+           let pack = try? GamePack.decode(data, name: Self.baseName(candidate.url)) {
+            found = .pack(index: candidate.index, pack: pack, search: Searchable(keys: pack.keys, fuzzy: pack.fuzzy))
+        }
+        lock.withLock {
+            // Bu arada seçim değiştiyse ya da paketler yeniden okunduysa sonuç saklanmaz.
+            if limitKey == key, limited == nil, candidate.map({ $0.index < files.count && files[$0.index] == $0.url }) ?? true {
+                limited = found
+            }
+        }
+        return found
+    }
+
     /// Satırın paketteki Türkçesi (bkz. `PackLookup`); yoksa nil. Tam anahtar bulunmazsa oynanan oyunun paketinde
-    /// OCR hatalarına dayanıklı bulanık arama yapılır.
+    /// OCR hatalarına dayanıklı bulanık arama yapılır. Kullanıcı elle oyun seçtiyse yalnız o oyunun paketinde aranır.
     public func match(_ text: String) -> PackMatch? {
+        switch resolveLimit() {
+        case .missing?: return nil
+        case .pack(let index, let pack, let search)?: return match(text, limitedTo: index, pack: pack, search: search)
+        case nil: break
+        }
         let (entries, searchable) = lock.withLock {
             loadIfNeeded()
             return (self.entries, self.searchable)
@@ -266,8 +325,29 @@ public final class GamePackLibrary: @unchecked Sendable {
             guard let pack = self.lock.withLock({ self.scope }).flatMap({ $0 < searchable.count ? searchable[$0] : nil }) else {
                 return nil
             }
-            let found = Self.corrected(line, in: pack, entries: entries)
+            let found = Self.corrected(line, in: pack, translation: { entries[$0] })
                 ?? pack.fuzzy?.nearest(line, translation: { entries[$0] }).flatMap { entries[$0] }
+            asked[line] = found
+            return found
+        })
+    }
+
+    /// Elle seçilen oyunun paketinde arama: Türkçe o paketin kendisinden gelir (başka oyunun aynı satırdaki çevirisi
+    /// değil), bulanık arama da hep o pakette yapılır.
+    private func match(_ text: String, limitedTo index: Int, pack: GamePack, search: Searchable) -> PackMatch? {
+        let own: (UInt64) -> String? = { pack.entries[$0] ?? pack.segments[$0] }
+        var asked: [String: String?] = [:]
+        return PackLookup.match(text, find: { line in
+            guard let number = PackKey.key(line).flatMap(PackKey.number), let turkish = own(number) else { return nil }
+            self.lock.withLock {
+                self.scope = index
+                self.distinctive = index
+            }
+            return turkish
+        }, nearest: { line in
+            if let known = asked[line] { return known }
+            let found = Self.corrected(line, in: search, translation: own)
+                ?? search.fuzzy?.nearest(line, translation: own).flatMap(own)
             asked[line] = found
             return found
         })
@@ -275,11 +355,11 @@ public final class GamePackLibrary: @unchecked Sendable {
 
     /// Tek OCR düzeltmesiyle (`PackFuzzy.variants`) oynanan oyunun paketinde tam bulunan satırın Türkçesi; düzeltmelerin
     /// hepsi aynı Türkçeye çıkmıyorsa nil.
-    private static func corrected(_ line: String, in pack: Searchable, entries: [UInt64: String]) -> String? {
+    private static func corrected(_ line: String, in pack: Searchable, translation: (UInt64) -> String?) -> String? {
         var found: String?
         for variant in PackFuzzy.variants(line) {
             guard let number = PackKey.key(variant).flatMap(PackKey.number), pack.contains(number),
-                  let turkish = entries[number] else { continue }
+                  let turkish = translation(number) else { continue }
             if let earlier = found, earlier != turkish { return nil }
             found = turkish
         }
@@ -323,25 +403,27 @@ public final class GamePackLibrary: @unchecked Sendable {
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
-        var packs: [(pack: GamePack, builtIn: Bool)] = []
+        var packs: [(pack: GamePack, builtIn: Bool, file: URL)] = []
         for (directory, builtIn) in directories {
             for file in Self.packFiles(in: directory) {
                 guard let data = try? Data(contentsOf: file),
                       let pack = try? GamePack.decode(data, name: Self.baseName(file)) else { continue }
                 packs.removeAll { $0.pack.id == pack.id }
-                packs.append((pack, builtIn))
+                packs.append((pack, builtIn, file))
             }
         }
         // Önce bütün paketlerin parçaları, sonra tam satırlar: bir oyunun tam satırı başka oyunun parçasına yenilmez.
         var merged: [UInt64: String] = [:]
         merged.reserveCapacity(packs.reduce(0) { $0 + $1.pack.entries.count + $1.pack.segments.count })
-        for (pack, _) in packs { merged.merge(pack.segments) { _, later in later } }
-        for (pack, _) in packs { merged.merge(pack.entries) { _, later in later } }
+        for (pack, _, _) in packs { merged.merge(pack.segments) { _, later in later } }
+        for (pack, _, _) in packs { merged.merge(pack.entries) { _, later in later } }
         entries = merged
         searchable = packs.map { Searchable(keys: $0.pack.keys, fuzzy: $0.pack.fuzzy) }
         scope = nil
         distinctive = nil
+        limited = nil
         infos = packs.map { Info(id: $0.pack.id, title: $0.pack.title, entries: $0.pack.entries.count, builtIn: $0.builtIn) }
+        files = packs.map(\.file)
     }
 
     static func packFiles(in directory: URL) -> [URL] {

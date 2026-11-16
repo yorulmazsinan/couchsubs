@@ -358,10 +358,12 @@ class TranslationService : Service() {
             }
             LiveState.update { it.copy(phase = describe(state)) }
         }
-        // Oynanan oyun (PS5'in bildirdiği, paketten tanınan ya da kullanıcının seçtiği; bkz. PlayedGame): havuza giden
+        // Oynanan oyun (PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan; bkz. PlayedGame): havuza giden
         // satırlar bu oyunla gider. Klipte oyun aranmaz, sorulmaz.
         if (replacement == null) {
             PlayedGame.packTitles = { packTitles?.filterKeys { it != GameSense.GENERAL_PACK }?.values?.toList() ?: emptyList() }
+            // Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır, paketi yoksa hiç aranmaz (#218).
+            PlayedGame.packs = library
             PlayedGame.onChange = { game ->
                 linePool.setGame(game)
                 // Yeni oyun: o oyunun (havuzdan otomatik) paketi sunucuda yeni çıkmış olabilir; inerse bu oturumun
@@ -387,6 +389,10 @@ class TranslationService : Service() {
                     Log.w(TAG, "running game", error)
                 }
             }, GAME_PROBE_MS / 4, GAME_PROBE_MS, TimeUnit.MILLISECONDS)
+        } else {
+            // Klipte oyun seçimi geçmez: önceki oturumun seçimi paket aramasını sınırlamasın.
+            PlayedGame.packs = null
+            library.limitToGame(null)
         }
         val source = replacement?.create(this, onFrame, onState)
             ?: xboxConsole?.let { XboxStreamSession(this, Services.xboxAuth, it, onFrame, onState, ::describeXbox) }

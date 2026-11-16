@@ -169,7 +169,7 @@ final class PhoneModel: ObservableObject {
     /// Oyun paketleri: uygulamayla gelenler ve sunucudan indirilen güncel sürümleri (ücretsiz, herkese).
     let packs: GamePackLibrary
     private let pool: LinePool
-    /// Oynanan oyun: PS5'in bildirdiği, paketten tanınan ya da kullanıcının seçtiği (havuza giden satırlar bu oyunla gider).
+    /// Oynanan oyun: PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan (havuza giden satırlar bu oyunla gider).
     let gameChoice: GameChoice
     /// Bağlıyken birkaç dakikada bir PS5'e çalışan oyunu sorar (havuza giden satırlar oyunla gider). Testlerde kapalı.
     private var gameProbe: Task<Void, Never>?
@@ -234,6 +234,8 @@ final class PhoneModel: ObservableObject {
             if game != nil { self?.onGameStarted() }
         }
         gameChoice.packTitles = { [weak self] in GameCatalog.packGames(self?.installedPacks ?? []) }
+        // Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır, paketi yoksa hiç aranmaz (#218).
+        gameChoice.packs = packs
         // Kullanıcı jetonu her yenilendiğinde Anahtar Zinciri'ne yazılır (Windows'taki DPAPI, Android'deki Keystore).
         tokenSink.handler = { [weak self, store] token in
             if let token { store.save(token.serialize(), for: XboxStoreKey.userToken) } else { store.remove(XboxStoreKey.userToken) }

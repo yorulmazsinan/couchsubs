@@ -121,6 +121,44 @@ public class GamePackTests
         Assert.Null(library.Find("Who is that?"));
     }
 
+    /// <summary>
+    /// Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır; paketi yoksa hiç aranmaz. Başka oyunların ortak
+    /// satırları ("Let's go.") yanlış çeviri getirmez, oyunu da o pakete kaydırmaz (#218). Mac ve Android'le aynı örnek.
+    /// </summary>
+    [Fact]
+    public void ChosenGameLimitsTheSearchToItsPack()
+    {
+        var common = PackKey.Key("Let's go.");
+        var tarnished = PackKey.Key("Rise, Tarnished.");
+        var horse = PackKey.Key("Easy, girl.");
+        var elden = $"{{\"format\":1,\"id\":\"elden-ring\",\"title\":\"Elden Ring\",\"entries\":{{\"{common}\":\"Gidelim.\",\"{tarnished}\":\"Kalk, Lekeli.\"}}}}";
+        var rdr = $"{{\"format\":1,\"id\":\"rdr-2\",\"title\":\"Red Dead Redemption 2\",\"entries\":{{\"{common}\":\"Hadi gidelim.\",\"{horse}\":\"Sakin ol kızım.\"}}}}";
+        IEnumerable<(string, byte[])> Bundled() => [("a.json", Encoding.UTF8.GetBytes(elden)), ("b.json", Encoding.UTF8.GetBytes(rdr))];
+        var library = new GamePackLibrary(Bundled, null);
+        // Seçim yokken bütün paketlerde aranır, aynı satırda sonraki paket kazanır.
+        Assert.Equal("Hadi gidelim.", library.Find("Let's go."));
+
+        // Paketi olmayan oyun: hiçbir pakette aranmaz.
+        library.LimitToGame("Marvel's Wolverine");
+        Assert.Null(library.Find("Let's go."));
+        Assert.Null(library.Find("Rise, Tarnished."));
+        Assert.Null(library.Nearest("Rise, Tarnlshed."));
+        Assert.Null(library.SearchScope);
+        Assert.Null(library.TakeDistinctiveHit());
+
+        // Paketi olan oyun: yalnız o paket, Türkçe de o paketin kendisinden.
+        library.LimitToGame("ELDEN RING");
+        Assert.Equal("Gidelim.", library.Find("Let's go."));
+        Assert.Equal("Kalk, Lekeli.", library.Find("Rise, Tarnished."));
+        Assert.Null(library.Find("Easy, girl."));
+        Assert.Equal("elden-ring", library.SearchScope);
+        Assert.Equal("elden-ring", library.TakeDistinctiveHit()?.Id);
+
+        // Seçim kalkınca yine bütün paketler.
+        library.LimitToGame(null);
+        Assert.Equal("Sakin ol kızım.", library.Find("Easy, girl."));
+    }
+
     [Fact]
     public void MissingDirectoriesGiveAnEmptyLibrary()
     {

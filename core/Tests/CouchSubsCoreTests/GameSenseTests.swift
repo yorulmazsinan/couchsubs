@@ -32,4 +32,19 @@ final class GameSenseTests: XCTestCase {
         sense.setConsole(RunningGame(name: "Mafia: The Old Country"))
         XCTAssertEqual(sense.current?.name, "Mafia: The Old Country")
     }
+
+    /// Elle seçilen oyun paket çoğunluğunun önüne geçer, PS5'in bildirdiğinin önüne geçmez; paket araması yalnız elle
+    /// seçim geçerliyken o oyunla sınırlanır (#218).
+    func testChosenGameBeatsThePackButNotTheConsole() {
+        let sense = GameSense()
+        sense.choose("Marvel's Wolverine")
+        for _ in 0..<5 { sense.noteLine(packId: rdr.id, title: rdr.title) }
+        XCTAssertEqual(sense.current?.name, "Marvel's Wolverine")
+        XCTAssertEqual(sense.source, .user)
+        XCTAssertEqual(sense.packLimit, "Marvel's Wolverine")
+        sense.setConsole(RunningGame(name: "Mafia: The Old Country"))
+        XCTAssertEqual(sense.current?.name, "Mafia: The Old Country")
+        XCTAssertEqual(sense.source, .console)
+        XCTAssertNil(sense.packLimit)
+    }
 }

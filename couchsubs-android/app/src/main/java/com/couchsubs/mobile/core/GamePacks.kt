@@ -323,6 +323,10 @@ class GamePackLibrary(
      */
     private var scope: Int? = null
     private var distinctive: Int? = null
+    /** Elle seçilen oyunun adı ([GameName.key]); null ise bütün paketlerde aranır. */
+    private var limitKey: String? = null
+    /** Elle seçilen oyunun paketi (paket listesi, sınır ve kapalı paketlere göre; her satırda yeniden aranmaz). */
+    private var limitCache: Triple<List<Pair<GamePack, Boolean>>, Pair<String, Set<String>>, Set<Int>>? = null
 
     val infos: List<Info>
         get() = synchronized(lock) {
@@ -345,16 +349,50 @@ class GamePackLibrary(
         infos
     }
 
+    /**
+     * Kullanıcının elle seçtiği oyun ([GameSense.packLimit]). Verilirse satırlar yalnız o oyunun paketinde aranır (tam ve
+     * bulanık), paketi yoksa ya da kapalıysa hiç aranmaz: paketi olmayan oyunda "Let's go." gibi kısa, genel satırlar
+     * başka oyunların paketinden yanlış çeviri getiriyor, oyunu da o pakete kaydırıyordu (#218). null: bütün paketler.
+     */
+    fun limitToGame(name: String?) {
+        val key = name?.let { GameName.key(it) }?.takeIf { it.isNotEmpty() }
+        synchronized(lock) {
+            if (key == limitKey) return
+            limitKey = key
+            scope = null
+            distinctive = null
+        }
+    }
+
+    /** Aramanın yapılacağı paketler: elle seçilen oyun varsa yalnız onun paketi (yoksa hiçbiri), sınırı yoksa hepsi. */
+    private fun searched(current: List<Pair<GamePack, Boolean>>, key: String?): Set<Int>? {
+        if (key == null) return null
+        val off = disabled
+        synchronized(lock) {
+            limitCache?.let { (list, of, result) -> if (list === current && of == key to off) return result }
+        }
+        val index = current.indices.lastOrNull { index ->
+            val pack = current[index].first
+            pack.id != GameSense.GENERAL_PACK && pack.id !in off &&
+                (GameName.key(pack.title) == key || GameName.key(pack.id) == key)
+        }
+        val result = setOfNotNull(index)
+        synchronized(lock) { limitCache = Triple(current, key to off, result) }
+        return result
+    }
+
     /** Satırın tamamı için paketteki Türkçe ve paketin kimliği (parçalara bölme yok; bkz. [PackLookup]). */
     fun findWithPack(text: String): PackMatch? {
-        val current = synchronized(lock) {
+        val (current, key) = synchronized(lock) {
             loadIfNeeded()
-            packs
+            packs to limitKey
         }
         if (current.isEmpty()) return null
+        val only = searched(current, key)
+        if (only?.isEmpty() == true) return null
         val number = PackKey.keyNumber(text) ?: return null
-        val found = lookup(current, number) ?: return null
-        noteHit(current, number)
+        val found = lookup(current, number, only) ?: return null
+        noteHit(current, number, only)
         return found
     }
 
@@ -363,14 +401,17 @@ class GamePackLibrary(
      * düzeltmesiyle ([PackFuzzy.variants]) tam anahtar, sonra bulanık imza. Hiç tam eşleşme olmadıysa null.
      */
     fun nearestWithPack(text: String): PackMatch? {
-        val (current, chosen) = synchronized(lock) {
+        val (current, chosen, limit) = synchronized(lock) {
             loadIfNeeded()
-            packs to scope
+            Triple(packs, scope, limitKey)
         }
-        val pack = chosen?.let { current.getOrNull(it)?.first }?.takeIf { it.id !in disabled } ?: return null
-        corrected(text, pack, current)?.let { return it }
-        val key = pack.fuzzy?.nearest(text) { lookup(current, it)?.text } ?: return null
-        return lookup(current, key)
+        // Elle seçilen oyunda bulanık arama da hep onun paketinde (tam eşleşme beklenmez); paketi yoksa yapılmaz.
+        val only = searched(current, limit)
+        val index = if (only != null) only.firstOrNull() else chosen
+        val pack = index?.let { current.getOrNull(it)?.first }?.takeIf { it.id !in disabled } ?: return null
+        corrected(text, pack, current, only)?.let { return it }
+        val key = pack.fuzzy?.nearest(text) { lookup(current, it, only)?.text } ?: return null
+        return lookup(current, key, only)
     }
 
     /** Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa null. */
@@ -383,13 +424,13 @@ class GamePackLibrary(
     val scopeTitle: String? get() = synchronized(lock) { scope?.let { packs.getOrNull(it)?.first?.title } }
 
     /** Tek OCR düzeltmesiyle [pack]'te tam bulunan satırın Türkçesi; düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa null. */
-    private fun corrected(text: String, pack: GamePack, current: List<Pair<GamePack, Boolean>>): PackMatch? {
+    private fun corrected(text: String, pack: GamePack, current: List<Pair<GamePack, Boolean>>, only: Set<Int>?): PackMatch? {
         var found: PackMatch? = null
         for (variant in PackFuzzy.variants(text)) {
             // ASCII canon metin yeniden sadeleştirilince değişmez; Normalizer'a gitmeden özetlenir.
             val number = (if (variant.all { it.code < 128 }) PackKey.canonNumber(variant) else PackKey.keyNumber(variant)) ?: continue
             if (!pack.contains(number)) continue
-            val turkish = lookup(current, number) ?: continue
+            val turkish = lookup(current, number, only) ?: continue
             if (found != null && found.text != turkish.text) return null
             found = turkish
         }
@@ -406,9 +447,11 @@ class GamePackLibrary(
         index?.let { packs.getOrNull(it) }?.let { (pack, builtIn) -> Info(pack.id, pack.title, pack.size, builtIn) }
     }
 
-    private fun noteHit(current: List<Pair<GamePack, Boolean>>, number: Long) {
+    private fun noteHit(current: List<Pair<GamePack, Boolean>>, number: Long, only: Set<Int>?) {
         val off = disabled
-        val owners = current.indices.filter { current[it].first.id !in off && current[it].first.contains(number) }
+        val owners = current.indices.filter {
+            (only == null || it in only) && current[it].first.id !in off && current[it].first.contains(number)
+        }
         val first = owners.firstOrNull() ?: return
         synchronized(lock) {
             if (packs !== current) return
@@ -417,18 +460,21 @@ class GamePackLibrary(
         }
     }
 
-    /** Anahtarın Türkçesi: açık paketlerde sondan başa tam satır, yoksa parça (masaüstünün birleşik sözlüğüyle aynı). */
-    private fun lookup(current: List<Pair<GamePack, Boolean>>, number: Long): PackMatch? {
+    /**
+     * Anahtarın Türkçesi: açık paketlerde sondan başa tam satır, yoksa parça (masaüstünün birleşik sözlüğüyle aynı).
+     * [only]: yalnız bu paketlerde (elle seçilen oyun).
+     */
+    private fun lookup(current: List<Pair<GamePack, Boolean>>, number: Long, only: Set<Int>? = null): PackMatch? {
         val off = disabled
         for (index in current.indices.reversed()) {
             val pack = current[index].first
-            if (pack.id in off) continue
+            if (pack.id in off || (only != null && index !in only)) continue
             pack[number]?.let { return PackMatch(it, pack.id) }
         }
         // Tam satır yoksa parçalar: bir oyunun tam satırı başka oyunun parçasına yenilmez (masaüstüyle aynı öncelik).
         for (index in current.indices.reversed()) {
             val pack = current[index].first
-            if (pack.id in off) continue
+            if (pack.id in off || (only != null && index !in only)) continue
             pack.segment(number)?.let { return PackMatch(it, pack.id) }
         }
         return null

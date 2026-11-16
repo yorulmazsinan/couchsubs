@@ -45,6 +45,24 @@ class GameSenseTest {
         assertEquals("Mafia: The Old Country", sense.current?.name)
     }
 
+    /**
+     * Elle seçilen oyun paket çoğunluğunun önüne geçer, PS5'in bildirdiğinin önüne geçmez; paket araması yalnız elle seçim
+     * geçerliyken o oyunla sınırlanır (#218).
+     */
+    @Test
+    fun chosenGameBeatsThePackButNotTheConsole() {
+        val sense = GameSense()
+        sense.choose("Marvel's Wolverine")
+        repeat(5) { sense.noteLine("rdr-2", "Red Dead Redemption 2") }
+        assertEquals("Marvel's Wolverine", sense.current?.name)
+        assertEquals(GameSense.Source.USER, sense.source)
+        assertEquals("Marvel's Wolverine", sense.packLimit)
+        sense.setConsole(RunningGame(null, "Mafia: The Old Country"))
+        assertEquals("Mafia: The Old Country", sense.current?.name)
+        assertEquals(GameSense.Source.CONSOLE, sense.source)
+        assertNull(sense.packLimit)
+    }
+
     @Test
     fun fiveOfTwentyLinesFromOnePackRecogniseTheGame() {
         val sense = GameSense()

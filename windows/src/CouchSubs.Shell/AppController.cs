@@ -87,7 +87,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? gameProbe;
     public static readonly TimeSpan GameProbeInterval = TimeSpan.FromMinutes(2);
     /// <summary>
-    /// Oynanan oyun: PS5'in bildirdiği, paketten tanınan ya da kullanıcının seçtiği (havuza giden satırlar bu oyunla gider;
+    /// Oynanan oyun: PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan (havuza giden satırlar bu oyunla gider;
     /// Mac ve iPhone'daki GameChoice ile aynı davranış).
     /// </summary>
     private readonly GameSense gameSense = new();
@@ -1551,6 +1551,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Oyun değiştiyse havuza bildirilir; yeni oyunun (havuzdan otomatik) paketi sunucuda yeni çıkmış olabilir.</summary>
     private void PublishGame()
     {
+        // Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır, paketi yoksa hiç aranmaz (#218).
+        services.GamePacks?.LimitToGame(gameSense.PackLimit);
         var current = gameSense.Current;
         PlayedGame = current?.Name;
         if (current == publishedGame) return;
@@ -1819,7 +1821,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var engine = settings.OnlineEngine;
         if (!OnlineTranslationActive || engine.StoreKey() is not { } storeKey) return local;
         // Oynanan oyunun adı modele bağlam olarak gider, önbellek de oyuna göre ayrılır. Ad kararlı oyundur (GameSense:
-        // PS5'in bildirdiği, son 20 satırın 5'i aynı paketten gelince o paketin oyunu ya da kullanıcının seçtiği); son
+        // PS5'in bildirdiği, kullanıcının seçtiği ya da son 20 satırın 5'i aynı paketten gelince o paketin oyunu); son
         // eşleşen paket değil, yoksa tek bir ortak satır adı başka oyuna geçirirdi (#27). Oyun bilinmiyorsa ad gitmez.
         Func<string?> game = () => gameSense.Current?.Name;
         ITextTranslator? online;

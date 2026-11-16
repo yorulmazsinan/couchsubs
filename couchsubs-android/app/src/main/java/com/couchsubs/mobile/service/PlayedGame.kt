@@ -23,6 +23,12 @@ object PlayedGame {
     @Volatile var onChange: ((RunningGame?) -> Unit)? = null
     /** Kurulu paketlerin oyun adları (öneriler için). */
     @Volatile var packTitles: () -> List<String> = { emptyList() }
+    /** Hazır paketler: kullanıcı elle oyun seçince satırlar yalnız o oyunun paketinde aranır ([GameSense.packLimit], #218). */
+    @Volatile var packs: GamePackLibrary? = null
+        set(value) {
+            field = value
+            value?.limitToGame(sense.packLimit)
+        }
 
     /** Çeviri başladı. */
     fun start(console: String, settings: AppSettings, startedAt: Long) {
@@ -93,6 +99,7 @@ object PlayedGame {
     fun suggestions(query: String): List<String> = GameCatalog.suggestions(query, packTitles(), lastPlayed)
 
     private fun publish() {
+        packs?.limitToGame(sense.packLimit)
         val current = sense.current
         LiveState.update { it.copy(game = current?.name) }
         if (current == last) return

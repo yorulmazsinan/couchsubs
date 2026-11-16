@@ -3,9 +3,11 @@
 import Foundation
 
 /// Oynanan oyun. PS5'in keşif yanıtı çalışan oyunu çoğu zaman bildirmiyor (running-app-titleid boş); oyun üç yoldan
-/// bilinir, öncelik sırasıyla: PS5'in bildirdiği (`setConsole`), okunan satırların art arda aynı hazır paketten gelmesi
-/// (son 20 satırın en az 5'i yalnız o pakette bulunan satırsa, `noteLine`) ve kullanıcının seçtiği (`choose`). Bilinen oyun
-/// ortak havuza giden satırlara eklenir (`LinePool.setGame`); sunucu aynı oyunun satırlarını ayrı pakete toplar.
+/// bilinir, öncelik sırasıyla: PS5'in bildirdiği (`setConsole`), kullanıcının elle seçtiği (`choose`) ve okunan satırların
+/// art arda aynı hazır paketten gelmesi (son 20 satırın en az 5'i yalnız o pakette bulunan satırsa, `noteLine`). Elle seçim
+/// paket çoğunluğunun önüne geçer: paketi olmayan oyunda ortak satırlar başka oyunun paketinden gelip oyunu
+/// değiştirmesin (#218). Bilinen oyun ortak havuza giden satırlara eklenir (`LinePool.setGame`); sunucu aynı oyunun
+/// satırlarını ayrı pakete toplar.
 /// Hiçbiri yoksa çeviri başladıktan iki dakika sonra bir kez "Hangi oyunu oynuyorsunuz?" sorulur (`shouldAsk`).
 /// Android'deki GameSense.kt ve Windows'taki CouchSubs.Core/GameSense.cs ile aynı kurallar.
 public final class GameSense: @unchecked Sendable {
@@ -30,12 +32,16 @@ public final class GameSense: @unchecked Sendable {
 
     public init() {}
 
-    /// Havuza giden oyun: PS5'in bildirdiği, yoksa paketten tanınan, yoksa kullanıcının seçtiği.
-    public var current: RunningGame? { lock.withLock { console ?? pack ?? chosen } }
+    /// Havuza giden oyun: PS5'in bildirdiği, yoksa kullanıcının seçtiği, yoksa paketten tanınan.
+    public var current: RunningGame? { lock.withLock { console ?? chosen ?? pack } }
 
     public var source: Source? {
-        lock.withLock { console != nil ? .console : pack != nil ? .pack : chosen != nil ? .user : nil }
+        lock.withLock { console != nil ? .console : chosen != nil ? .user : pack != nil ? .pack : nil }
     }
+
+    /// Paket aramasının sınırlanacağı oyun (`GamePackLibrary.limit(toGame:)`): kullanıcı elle seçtiyse ve PS5 bir oyun
+    /// bildirmiyorsa seçilen oyunun adı; yoksa nil (bütün paketlerde aranır).
+    public var packLimit: String? { lock.withLock { console == nil ? chosen?.name : nil } }
 
     /// Kullanıcının seçtiği oyunun adı (oturum boyunca).
     public var chosenName: String? { lock.withLock { chosen?.name } }

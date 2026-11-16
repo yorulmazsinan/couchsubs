@@ -7,9 +7,10 @@ namespace CouchSubs.Core;
 
 /// <summary>
 /// Oynanan oyun. PS5'in keşif yanıtı çalışan oyunu çoğu zaman bildirmiyor (running-app-titleid boş); oyun üç yoldan
-/// bilinir, öncelik sırasıyla: PS5'in bildirdiği (<see cref="SetConsole"/>), okunan satırların art arda aynı hazır paketten
-/// gelmesi (son 20 satırın en az 5'i yalnız o pakette bulunan satırsa, <see cref="NoteLine"/>) ve kullanıcının seçtiği
-/// (<see cref="Choose"/>). Bilinen oyun ortak havuza giden satırlara eklenir (<see cref="LinePool.SetGame"/>); sunucu aynı
+/// bilinir, öncelik sırasıyla: PS5'in bildirdiği (<see cref="SetConsole"/>), kullanıcının elle seçtiği (<see cref="Choose"/>)
+/// ve okunan satırların art arda aynı hazır paketten gelmesi (son 20 satırın en az 5'i yalnız o pakette bulunan satırsa,
+/// <see cref="NoteLine"/>). Elle seçim paket çoğunluğunun önüne geçer: paketi olmayan oyunda ortak satırlar başka oyunun
+/// paketinden gelip oyunu değiştirmesin (#218). Bilinen oyun ortak havuza giden satırlara eklenir (<see cref="LinePool.SetGame"/>); sunucu aynı
 /// oyunun satırlarını ayrı pakete toplar. Hiçbiri yoksa çeviri başladıktan iki dakika sonra bir kez "Hangi oyunu
 /// oynuyorsunuz?" sorulur (<see cref="ShouldAsk"/>). Mac ve iPhone'daki GameSense.swift ve Android'deki GameSense.kt ile
 /// aynı kurallar.
@@ -35,17 +36,23 @@ public sealed class GameSense
     private RunningGame? chosen;
     private bool asked;
 
-    /// <summary>Havuza giden oyun: PS5'in bildirdiği, yoksa paketten tanınan, yoksa kullanıcının seçtiği.</summary>
-    public RunningGame? Current { get { lock (gate) return console ?? pack ?? chosen; } }
+    /// <summary>Havuza giden oyun: PS5'in bildirdiği, yoksa kullanıcının seçtiği, yoksa paketten tanınan.</summary>
+    public RunningGame? Current { get { lock (gate) return console ?? chosen ?? pack; } }
 
     public GameSource? Source
     {
         get
         {
             lock (gate)
-                return console is not null ? GameSource.Console : pack is not null ? GameSource.Pack : chosen is not null ? GameSource.User : null;
+                return console is not null ? GameSource.Console : chosen is not null ? GameSource.User : pack is not null ? GameSource.Pack : null;
         }
     }
+
+    /// <summary>
+    /// Paket aramasının sınırlanacağı oyun (<see cref="GamePackLibrary.LimitToGame"/>): kullanıcı elle seçtiyse ve PS5 bir
+    /// oyun bildirmiyorsa seçilen oyunun adı; yoksa null (bütün paketlerde aranır).
+    /// </summary>
+    public string? PackLimit { get { lock (gate) return console is null ? chosen?.Name : null; } }
 
     /// <summary>
     /// Bir satır gösterildi. <paramref name="id"/>/<paramref name="title"/>: satır yalnız tek bir pakette bulunan

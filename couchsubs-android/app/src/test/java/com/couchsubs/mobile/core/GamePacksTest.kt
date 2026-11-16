@@ -99,6 +99,41 @@ class GamePackTest {
         assertEquals("SCANNATURI SPECIALE BIÇAĞI", pack[key])
     }
 
+    /**
+     * Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır; paketi yoksa hiç aranmaz. Başka oyunların ortak
+     * satırları ("Let's go.") yanlış çeviri getirmez, oyunu da o pakete kaydırmaz (#218). Mac ve Windows'la aynı örnek.
+     */
+    @Test
+    fun chosenGameLimitsTheSearchToItsPack() {
+        val common = PackKey.key("Let's go.")
+        val tarnished = PackKey.key("Rise, Tarnished.")
+        val horse = PackKey.key("Easy, girl.")
+        val elden = """{"format":1,"id":"elden-ring","title":"Elden Ring","entries":{"$common":"Gidelim.","$tarnished":"Kalk, Lekeli."}}"""
+        val rdr = """{"format":1,"id":"rdr-2","title":"Red Dead Redemption 2","entries":{"$common":"Hadi gidelim.","$horse":"Sakin ol kızım."}}"""
+        val library = GamePackLibrary({ listOf("a.json" to { elden.toByteArray() }, "b.json" to { rdr.toByteArray() }) }, null)
+        // Seçim yokken bütün paketlerde aranır, aynı satırda sonraki paket kazanır.
+        assertEquals("Hadi gidelim.", PackLookup.match(library, "Let's go.")?.text)
+
+        // Paketi olmayan oyun: hiçbir pakette aranmaz.
+        library.limitToGame("Marvel's Wolverine")
+        assertNull(PackLookup.match(library, "Let's go."))
+        assertNull(PackLookup.match(library, "Rise, Tarnished."))
+        assertNull(library.searchScope)
+        assertNull(library.takeDistinctiveHit())
+
+        // Paketi olan oyun: yalnız o paket, Türkçe de o paketin kendisinden.
+        library.limitToGame("ELDEN RING")
+        assertEquals("Gidelim.", PackLookup.match(library, "Let's go.")?.text)
+        assertEquals("elden-ring", PackLookup.match(library, "Rise, Tarnished.")?.packId)
+        assertNull(PackLookup.match(library, "Easy, girl."))
+        assertEquals("elden-ring", library.searchScope)
+        assertEquals("elden-ring", library.takeDistinctiveHit()?.id)
+
+        // Seçim kalkınca yine bütün paketler.
+        library.limitToGame(null)
+        assertEquals("Sakin ol kızım.", PackLookup.match(library, "Easy, girl.")?.text)
+    }
+
     @Test
     fun libraryMergesBundledAndUserPacks() {
         val user = Files.createTempDirectory("packs").toFile()

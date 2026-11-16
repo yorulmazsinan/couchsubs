@@ -527,7 +527,7 @@ final class AppModel: ObservableObject {
     /// Ayarlarda listelenen paketler (açılışta arka planda yüklenince dolar).
     @Published var installedPacks: [GamePackLibrary.Info] = []
     private let pool: LinePool
-    /// Oynanan oyun: PS5'in bildirdiği, paketten tanınan ya da kullanıcının seçtiği (havuza giden satırlar bu oyunla gider).
+    /// Oynanan oyun: PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan (havuza giden satırlar bu oyunla gider).
     let gameChoice: GameChoice
     private var poolTimer: Task<Void, Never>?
     private var terminateObserver: NSObjectProtocol?
@@ -629,6 +629,8 @@ final class AppModel: ObservableObject {
             if game != nil { self?.packsForGame() }
         }
         gameChoice.packTitles = { [weak self] in GameCatalog.packGames(self?.installedPacks ?? []) }
+        // Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır, paketi yoksa hiç aranmaz (#218).
+        gameChoice.packs = packs
 
         // Paketler ilk altyazıyı bekletmesin diye açılışta arka planda yüklenir.
         let packs = self.packs
@@ -1468,7 +1470,7 @@ final class AppModel: ObservableObject {
         guard onlineTranslationActive, let storeKey = engine.storeKey else { return local }
         let online: TextTranslator & OnlineTranslating
         // Oynanan oyunun adı modele bağlam olarak gider, önbellek de oyuna göre ayrılır. Ad kararlı oyundur (`GameSense`:
-        // PS5'in bildirdiği, son 20 satırın 5'i aynı paketten gelince o paketin oyunu ya da kullanıcının seçtiği); son
+        // PS5'in bildirdiği, kullanıcının seçtiği ya da son 20 satırın 5'i aynı paketten gelince o paketin oyunu); son
         // eşleşen paket değil, yoksa tek bir ortak satır adı başka oyuna geçirirdi (#27). Oyun bilinmiyorsa ad gitmez.
         let sense = gameChoice.sense
         let game: @Sendable () -> String? = { sense.current?.name }

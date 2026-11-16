@@ -34,6 +34,25 @@ public class GameSenseTests
         Assert.False(sense.NoteLine("gta-v", "Grand Theft Auto V"));
     }
 
+    /// <summary>
+    /// Elle seçilen oyun paket çoğunluğunun önüne geçer, PS5'in bildirdiğinin önüne geçmez; paket araması yalnız elle seçim
+    /// geçerliyken o oyunla sınırlanır (#218).
+    /// </summary>
+    [Fact]
+    public void ChosenGameBeatsThePackButNotTheConsole()
+    {
+        var sense = new GameSense();
+        sense.Choose("Marvel's Wolverine");
+        for (var i = 0; i < 5; i++) sense.NoteLine("rdr-2", "Red Dead Redemption 2");
+        Assert.Equal("Marvel's Wolverine", sense.Current?.Name);
+        Assert.Equal(GameSense.GameSource.User, sense.Source);
+        Assert.Equal("Marvel's Wolverine", sense.PackLimit);
+        sense.SetConsole(new RunningGame(null, "Mafia: The Old Country"));
+        Assert.Equal("Mafia: The Old Country", sense.Current?.Name);
+        Assert.Equal(GameSense.GameSource.Console, sense.Source);
+        Assert.Null(sense.PackLimit);
+    }
+
     /// <summary>Yapay zekâya giden ad kararlı oyundur: tek bir yabancı satır değiştirmez, 20 satırın 5'i değiştirir (#27).</summary>
     [Fact]
     public void OneStrayLineDoesNotChangeTheGame()

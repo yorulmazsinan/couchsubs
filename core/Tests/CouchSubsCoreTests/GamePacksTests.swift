@@ -92,6 +92,62 @@ final class GamePackTests: XCTestCase {
         XCTAssertNil(library.match("Who is that?"))
     }
 
+    /// İki küçük paket: Elden Ring ve RDR2, ikisinde de "Let's go.".
+    private func eldenAndRdr() throws -> GamePackLibrary {
+        let directory = temporaryDirectory()
+        let common = PackKey.key("Let's go.")!
+        let tarnished = PackKey.key("Rise, Tarnished.")!
+        let horse = PackKey.key("Easy, girl.")!
+        let elden = "{\"format\":1,\"id\":\"elden-ring\",\"title\":\"Elden Ring\",\"entries\":{\"\(common)\":\"Gidelim.\",\"\(tarnished)\":\"Kalk, Lekeli.\"}}"
+        let rdr = "{\"format\":1,\"id\":\"rdr-2\",\"title\":\"Red Dead Redemption 2\",\"entries\":{\"\(common)\":\"Hadi gidelim.\",\"\(horse)\":\"Sakin ol kızım.\"}}"
+        try Data(elden.utf8).write(to: directory.appendingPathComponent("a.json"))
+        try Data(rdr.utf8).write(to: directory.appendingPathComponent("b.json"))
+        return GamePackLibrary(bundled: directory, user: nil)
+    }
+
+    /// Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır; paketi yoksa hiç aranmaz. Başka oyunların ortak
+    /// satırları ("Let's go.") yanlış çeviri getirmez, oyunu da o pakete kaydırmaz (#218).
+    func testChosenGameLimitsTheSearchToItsPack() throws {
+        let library = try eldenAndRdr()
+        // Seçim yokken bütün paketlerde aranır, aynı satırda sonraki paket kazanır.
+        XCTAssertEqual(library.match("Let's go.")?.text, "Hadi gidelim.")
+
+        // Paketi olmayan oyun: hiçbir pakette aranmaz.
+        library.limit(toGame: "Marvel's Wolverine")
+        XCTAssertNil(library.match("Let's go."))
+        XCTAssertNil(library.match("Rise, Tarnished."))
+        XCTAssertNil(library.searchScope)
+        XCTAssertNil(library.takeDistinctiveHit())
+
+        // Paketi olan oyun: yalnız o paket, Türkçe de o paketin kendisinden.
+        library.limit(toGame: "ELDEN RING")
+        XCTAssertEqual(library.match("Let's go.")?.text, "Gidelim.")
+        XCTAssertEqual(library.match("Rise, Tarnished.")?.text, "Kalk, Lekeli.")
+        XCTAssertNil(library.match("Easy, girl."))
+        XCTAssertEqual(library.searchScope, "elden-ring")
+        XCTAssertEqual(library.takeDistinctiveHit()?.id, "elden-ring")
+
+        // Seçim kalkınca yine bütün paketler.
+        library.limit(toGame: nil)
+        XCTAssertEqual(library.match("Easy, girl.")?.text, "Sakin ol kızım.")
+    }
+
+    /// GameChoice elle seçimi paketlere bildirir; PS5 oyun bildirince sınır kalkar.
+    @MainActor
+    func testGameChoiceLimitsPacksToTheChosenGame() throws {
+        let library = try eldenAndRdr()
+        let choice = GameChoice(defaults: try XCTUnwrap(UserDefaults(suiteName: "game-choice-\(UUID().uuidString)")))
+        choice.packs = library
+        choice.start(console: nil) { false }
+        choice.choose("Marvel's Wolverine")
+        XCTAssertNil(library.match("Let's go."))
+        for _ in 0..<6 { choice.noteLine(fromPack: true, packs: library) }
+        XCTAssertEqual(choice.game?.name, "Marvel's Wolverine")
+        choice.consoleReported(RunningGame(titleId: "PPSA01234", name: "Red Dead Redemption 2"))
+        XCTAssertEqual(library.match("Let's go.")?.text, "Hadi gidelim.")
+        choice.stop()
+    }
+
     func testMissingDirectoriesGiveAnEmptyLibrary() {
         let library = GamePackLibrary(bundled: nil, user: URL(fileURLWithPath: "/nonexistent/packs"))
         XCTAssertEqual(library.packs, [])

@@ -6,9 +6,10 @@ import java.util.Locale
 
 /**
  * Oynanan oyun. PS5'in keşif yanıtı çalışan oyunu çoğu zaman bildirmiyor (running-app-titleid boş); oyun üç yoldan bilinir,
- * öncelik sırasıyla: PS5'in bildirdiği ([setConsole]), okunan satırların art arda aynı hazır paketten gelmesi (son 20
- * satırın en az 5'i yalnız o pakette bulunan satırsa, [noteLine]) ve kullanıcının seçtiği ([choose]). Bilinen oyun ortak
- * havuza giden satırlara eklenir ([LinePool.setGame]); sunucu aynı oyunun satırlarını ayrı pakete toplar. Hiçbiri yoksa
+ * öncelik sırasıyla: PS5'in bildirdiği ([setConsole]), kullanıcının elle seçtiği ([choose]) ve okunan satırların art arda
+ * aynı hazır paketten gelmesi (son 20 satırın en az 5'i yalnız o pakette bulunan satırsa, [noteLine]). Elle seçim paket
+ * çoğunluğunun önüne geçer: paketi olmayan oyunda ortak satırlar başka oyunun paketinden gelip oyunu değiştirmesin (#218).
+ * Bilinen oyun ortak havuza giden satırlara eklenir ([LinePool.setGame]); sunucu aynı oyunun satırlarını ayrı pakete toplar. Hiçbiri yoksa
  * çeviri başladıktan iki dakika sonra bir kez "Hangi oyunu oynuyorsunuz?" sorulur ([shouldAsk]).
  * Mac ve iPhone'daki GameSense.swift ve Windows'taki GameSense.cs ile aynı kurallar.
  */
@@ -24,18 +25,24 @@ class GameSense {
     private var chosen: RunningGame? = null
     private var asked = false
 
-    /** Havuza giden oyun: PS5'in bildirdiği, yoksa paketten tanınan, yoksa kullanıcının seçtiği. */
-    val current: RunningGame? get() = synchronized(lock) { console ?: pack ?: chosen }
+    /** Havuza giden oyun: PS5'in bildirdiği, yoksa kullanıcının seçtiği, yoksa paketten tanınan. */
+    val current: RunningGame? get() = synchronized(lock) { console ?: chosen ?: pack }
 
     val source: Source?
         get() = synchronized(lock) {
             when {
                 console != null -> Source.CONSOLE
-                pack != null -> Source.PACK
                 chosen != null -> Source.USER
+                pack != null -> Source.PACK
                 else -> null
             }
         }
+
+    /**
+     * Paket aramasının sınırlanacağı oyun ([GamePackLibrary.limitToGame]): kullanıcı elle seçtiyse ve PS5 bir oyun
+     * bildirmiyorsa seçilen oyunun adı; yoksa null (bütün paketlerde aranır).
+     */
+    val packLimit: String? get() = synchronized(lock) { if (console == null) chosen?.name else null }
 
     /**
      * Bir satır gösterildi. [packId]/[title]: satır yalnız tek bir pakette bulunan anahtarla geldiyse o paket

@@ -20,6 +20,10 @@ public final class GameChoice: ObservableObject {
     public var onChange: (RunningGame?) -> Void = { _ in }
     /// Kurulu paketlerin oyun adları (öneriler için).
     public var packTitles: () -> [String] = { [] }
+    /// Hazır paketler: kullanıcı elle oyun seçince satırlar yalnız o oyunun paketinde aranır (`GameSense.packLimit`).
+    public var packs: GamePackLibrary? {
+        didSet { packs?.limit(toGame: sense.packLimit) }
+    }
 
     static let rememberedKey = "lastGames"
     /// Kart açık mı diye bakma aralığı.
@@ -113,6 +117,7 @@ public final class GameChoice: ObservableObject {
     }
 
     private func publish() {
+        packs?.limit(toGame: sense.packLimit)
         let current = sense.current
         source = sense.source
         guard current != game else { return }
