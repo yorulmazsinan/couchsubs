@@ -388,21 +388,41 @@ public sealed class RemotePlayWindowStream : IStreamSession
             session.StartCapture();
         }
 
-        /// <summary>Windows yakalanan pencerenin çevresine sarı bir çerçeve çizer. Destekleyen sürümlerde (Windows 11,
-        /// Windows 10 20348+) çerçevesiz yakalama izni istenip çerçeve kapatılır; eski sürümlerde hiçbir şey değişmez.</summary>
+        /// <summary>Windows yakalanan pencerenin çevresine sarı bir çerçeve çizer. Destekleyen sürümlerde (Windows 11;
+        /// Windows 10'da yalnız Server 2022, 20348+) çerçevesiz yakalama izni istenip çerçeve kapatılır. Windows 10'un ev
+        /// sürümlerinde (22H2 dahil, 19045) Windows çerçeveyi kapatmaya izin vermez; yakalama yine sürer. Çerçeve neden
+        /// kaldıysa günlüğe bir kez yazılır (GitHub #224).</summary>
         private static void HideCaptureBorder(GraphicsCaptureSession session)
         {
-            if (!Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired"))
+            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348) ||
+                !Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired"))
+            {
+                NoteBorderOnce($"sarı yakalama çerçevesi kapatılamıyor: Windows {Environment.OSVersion.Version} bunu desteklemiyor (Windows 11 gerekir)");
                 return;
+            }
             try
             {
-                if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+                var access = GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless).AsTask().GetAwaiter().GetResult();
+                if (access != Windows.Security.Authorization.AppCapabilityAccess.AppCapabilityAccessStatus.Allowed)
                 {
-                    GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless).AsTask().GetAwaiter().GetResult();
-                    session.IsBorderRequired = false;
+                    // Windows 11'de "Ayarlar › Gizlilik ve güvenlik › Ekran görüntüsü kenarlıkları" kapalıysa izin gelmez.
+                    NoteBorderOnce($"sarı yakalama çerçevesi kapatılamadı: Windows çerçevesiz yakalamaya izin vermedi ({access})");
+                    return;
                 }
+                session.IsBorderRequired = false;
             }
-            catch (Exception) { /* İzin verilmezse çerçeve kalır; yakalama sürer. */ }
+            catch (Exception error)
+            {
+                // İzin verilmezse çerçeve kalır; yakalama sürer.
+                NoteBorderOnce($"sarı yakalama çerçevesi kapatılamadı: {error.GetType().Name}: {error.Message}");
+            }
+        }
+
+        private static int borderNoted;
+
+        private static void NoteBorderOnce(string text)
+        {
+            if (Interlocked.Exchange(ref borderNoted, 1) == 0) RemotePlayLog.Note(text);
         }
 
         private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
