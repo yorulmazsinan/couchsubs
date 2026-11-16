@@ -16,6 +16,8 @@ import { gameKey } from "./games.js";
 
 const MAX_LINES = 200;
 const DAILY_LIMIT = 5000;
+// D1 ücretsiz planda çağrı başına sorgu sınırı var; her deneme 2 sorgu. Yoğun çakışmada 503 busy dön, sorgu sınırına takılıp 500 verme.
+const QUOTA_CAS_ATTEMPTS = 8;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TAG = /<[^<>]{0,40}>/g;
 // PS5 oyun kimliği: dört harf, beş rakam, isteğe bağlı "_00" eki (PPSA01234, CUSA00419_00).
@@ -86,7 +88,7 @@ async function submit(req, env) {
   // requests both spend the same remaining quota. Retry if another request changed the count first.
   let room;
   let reserved = false;
-  for (let attempt = 0; attempt < 64; attempt++) {
+  for (let attempt = 0; attempt < QUOTA_CAS_ATTEMPTS; attempt++) {
     const q = await env.DB.prepare("SELECT count FROM quota WHERE install=? AND day=?").bind(install, day).first();
     const used = q?.count || 0;
     if (used >= DAILY_LIMIT) return json({ error: "quota" }, 429, { "retry-after": "3600" });
