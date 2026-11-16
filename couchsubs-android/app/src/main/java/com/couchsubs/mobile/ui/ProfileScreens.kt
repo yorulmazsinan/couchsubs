@@ -47,6 +47,7 @@ import com.couchsubs.mobile.core.SubtitleTextColor
 import com.couchsubs.mobile.core.TvDisplayMode
 import com.couchsubs.mobile.remoteplay.LoginPasscode
 import com.couchsubs.mobile.service.TranslationService
+import com.couchsubs.mobile.settings.AppSettings
 import com.couchsubs.mobile.settings.EngineChoice
 import com.couchsubs.mobile.settings.SubtitleTarget
 import com.couchsubs.mobile.translation.AiModel
@@ -214,9 +215,12 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TileLabel(stringResource(R.string.settings_text_size))
                 Spacer(Modifier.weight(1f))
-                Text("%${scale.toInt()}", style = Tokens.Type.headline, color = Tokens.Color.text)
+                Text("%${Math.round(scale)}", style = Tokens.Type.headline, color = Tokens.Color.text)
             }
-            Slider(scale, { scale = it; settings.subtitleScale = it.toInt() }, valueRange = 80f..160f, steps = 7,
+            // %10 adımlarla %40–160 (iPhone ile aynı): 13 değer, aradaki 11 durak.
+            Slider(scale, { scale = it; settings.subtitleScale = Math.round(it) },
+                valueRange = AppSettings.MIN_SUBTITLE_SCALE.toFloat()..AppSettings.MAX_SUBTITLE_SCALE.toFloat(),
+                steps = (AppSettings.MAX_SUBTITLE_SCALE - AppSettings.MIN_SUBTITLE_SCALE) / 10 - 1,
                 colors = SliderDefaults.colors(thumbColor = Tokens.Color.text, activeTrackColor = Tokens.Color.accent,
                     inactiveTrackColor = Tokens.Color.borderStrong, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent))
             // Önizleme altyazı içeriğidir: boyu ölçeğe göre değişir.

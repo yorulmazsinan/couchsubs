@@ -267,8 +267,16 @@ class AppSettings(context: Context) {
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
 
     companion object {
+        /**
+         * Yazı ölçeğinin sınırları, yüzde (iPhone ile aynı). Alt sınır eskiden %80'di (TV'de 37 piksel); TV'de en küçüğü
+         * bile büyük kalıyordu (#218). %40, TV'de 18 piksel: Mac'teki (20) ve Windows'taki (16) en küçük boya denk.
+         */
+        const val MIN_SUBTITLE_SCALE = 40
+        const val MAX_SUBTITLE_SCALE = 160
+
         /** Yüzde ölçekle yazı boyu (yuvarlanır). */
-        fun scaledFontSize(base: Int, percent: Int): Int = Math.round(base * percent.coerceIn(80, 160) / 100.0).toInt()
+        fun scaledFontSize(base: Int, percent: Int): Int =
+            Math.round(base * percent.coerceIn(MIN_SUBTITLE_SCALE, MAX_SUBTITLE_SCALE) / 100.0).toInt()
     }
 
     /** PSN hesap kimliği (8 bayt, base64). */
@@ -337,10 +345,10 @@ class AppSettings(context: Context) {
         get() = prefs.getLong("lastExitReportAt", 0)
         set(value) = prefs.edit().putLong("lastExitReportAt", value).apply()
 
-    /** Altyazı yazı ölçeği, yüzde (80–160; tasarım: Ayarlar › Altyazı görünümü). */
+    /** Altyazı yazı ölçeği, yüzde (40–160; tasarım: Ayarlar › Altyazı görünümü). */
     var subtitleScale: Int
-        get() = prefs.getInt("subtitleScale", 100)
-        set(value) = prefs.edit().putInt("subtitleScale", value.coerceIn(80, 160)).apply()
+        get() = prefs.getInt("subtitleScale", 100).coerceIn(MIN_SUBTITLE_SCALE, MAX_SUBTITLE_SCALE)
+        set(value) = prefs.edit().putInt("subtitleScale", value.coerceIn(MIN_SUBTITLE_SCALE, MAX_SUBTITLE_SCALE)).apply()
 
     /** Profil › Kullanım verisi: hata ve kullanım istatistikleri (Firebase, Meta olay adları). Varsayılan açık. */
     var usageData: Boolean

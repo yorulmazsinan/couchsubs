@@ -215,6 +215,9 @@ class ParityTest {
         assertEquals(55, AppSettings.scaledFontSize(46, 120))
         assertEquals(74, AppSettings.scaledFontSize(46, 160))
         assertEquals(37, AppSettings.scaledFontSize(46, 80))
+        // #218: TV'de en küçük boy masaüstüne yakın (Mac 20, Windows 16); daha azı alt sınıra çekilir.
+        assertEquals(18, AppSettings.scaledFontSize(46, 40))
+        assertEquals(18, AppSettings.scaledFontSize(46, 10))
     }
 
     @Test

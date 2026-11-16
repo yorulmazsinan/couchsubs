@@ -181,7 +181,9 @@ struct SettingsScreen: View {
                     Spacer()
                     Text(verbatim: "%\(percent)").font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
                 }
-                Slider(value: Binding(get: { Double(percent) }, set: { setPercent(Int($0)) }), in: 80...160, step: 10)
+                // %40–160 (Android ile aynı). Alt sınır eskiden %80'di (TV'de 37 piksel), TV'de en küçüğü bile büyük
+                // kalıyordu (#218); %40 TV'de 18 piksel, Mac'teki (20) ve Windows'taki (16) en küçük boya denk.
+                Slider(value: Binding(get: { Double(percent) }, set: { setPercent(Int($0.rounded())) }), in: 40...160, step: 10)
                     .tint(Mobile.Palette.accent)
                 Text(verbatim: "Dinliyor musun beni?")
                     .font(Mobile.TypeScale.subtitle(landscape: false, scale: Double(percent) / 100))
