@@ -65,6 +65,11 @@ class SubtitlePipeline(
         @Volatile var leftAt: Long? = null
         /** Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez. */
         @Volatile var superseded = false
+        /**
+         * Mevcut gösterim kurallarına göre elendi (daha yeni satır gösterildi ya da süresi doldu); iptali dinlemeyen
+         * motorun sonucu da gösterilmez.
+         */
+        @Volatile var abandoned = false
     }
 
     private data class Pair3(val number: Int, val source: String, val translation: String?)
@@ -75,6 +80,9 @@ class SubtitlePipeline(
     private var lastRequested = 0
     private var lastShown = 0
     private var inFlight: Request? = null
+    /** Çevirmenin şu an çalıştığı istek ve onu çalıştıran iş parçacığı (iptal için kesilir); çeviri sürmüyorsa null. */
+    private var translating: Request? = null
+    private var worker: Thread? = null
     private val waiting = mutableListOf<Request>()
     /** Son gösterilen satırın kaynağı: yeni satır onun düzelmiş okumasıysa TV yerine koyar. */
     private var lastShownSource: String? = null
@@ -113,7 +121,7 @@ class SubtitlePipeline(
         val after: (() -> Unit)? = synchronized(lock) {
             val action = stabilizer.feed(reading.text, signature, reading.box)
             val box = reading.box?.placedIn(area)?.centeredOnScreen()
-            when (action.kind) {
+            val result = when (action.kind) {
                 StabilizerKind.CLEAR -> {
                     lineLeft()
                     sender.clear()
@@ -129,9 +137,33 @@ class SubtitlePipeline(
                 }
                 StabilizerKind.NONE -> null
             }
+            // Restore önce işlenir: geri görünen satırın leftAt bilgisi temizlenmeden iptal edilmemeli.
+            abandonUndisplayableTranslation()
+            result
         }
         // Olaylar kilidin dışında çağrılır.
         after?.invoke()
+    }
+
+    /**
+     * Süren çeviri artık gösterilemeyecekse üretimi iptal eder (çeviri iş parçacığı kesilir), böylece sıradaki satır onu
+     * beklemez. Yalnız iki durumda: daha yeni bir satır ekranda gösterilmişse, ya da satır [LATE_RESULT_MS]'ten önce
+     * kalkmış, ekranda değil ve sırada gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar
+     * uzarsa uzasın iptal edilmez. İptal edilen satır ekrana geri gelirse ([restore]) yeniden çevrilir. Kesmeyi
+     * dinlemeyen motorun sonucu da gösterilmez ve eşzamanlı ikinci üretim başlamaz. Windows ve Mac/iPhone aynı kuralları uygular.
+     */
+    private fun abandonUndisplayableTranslation() {
+        val current = inFlight ?: return
+        if (translating !== current || current.session != session || current.superseded || current.abandoned) return
+        val time = now()
+        fun late(request: Request) = request.leftAt.let { left -> left != null && time - left > LATE_RESULT_MS }
+        val replaced = current.number < lastShown
+        val expired = current.number > lastShown && current.number != lineOnScreen && late(current)
+        if (!replaced && !expired) return
+        val hasWaiting = waiting.any { it.session == session && !it.superseded && !it.abandoned && !late(it) }
+        if (!replaced && !hasWaiting) return
+        current.abandoned = true
+        worker?.interrupt()
     }
 
     private fun lineLeft() {
@@ -156,7 +188,7 @@ class SubtitlePipeline(
             waiting.add(request)
             while (waiting.size > MAX_WAITING) waiting.removeAt(0)
             // Süren çeviri bu cümlenin yarım okumasınınsa (daktilo efekti) sonucu gösterilmez; tamamı sıradan çevrilir.
-            if (!current.superseded && current.session == session && TextMatch.isGrowth(source, current.source)) current.superseded = true
+            if (!current.superseded && !current.abandoned && current.session == session && TextMatch.isGrowth(source, current.source)) current.superseded = true
         }
         return missed?.let { callback -> { callback(source) } }
     }
@@ -206,7 +238,7 @@ class SubtitlePipeline(
         }
         // Çevirisi henüz gelmediyse istek sürüyordur; satır yeniden ekranda sayılır.
         for (request in requests()) {
-            if (request.source != source || request.session != session || request.superseded) continue
+            if (request.source != source || request.session != session || request.superseded || request.abandoned) continue
             request.leftAt = null
             lineOnScreen = request.number
             return null
@@ -217,12 +249,20 @@ class SubtitlePipeline(
     private fun pump(first: Request) {
         var request = first
         while (true) {
+            synchronized(lock) {
+                translating = request
+                worker = Thread.currentThread()
+            }
             try {
                 translate(request)
             } catch (error: RuntimeException) {
                 // Olay işleyicilerinden biri hata verse de sıra takılı kalmasın.
             }
             synchronized(lock) {
+                // İptal kesmesi bu istekten sonraki çeviriye sızmasın: kesme yalnız kilit altında ve translating doluyken gelir.
+                translating = null
+                worker = null
+                Thread.interrupted()
                 // Ekrandan çoktan kalkmış satır çevrilmez; çevirisi zaten gösterilmeyecekti.
                 val time = now()
                 waiting.removeAll { it.session != session || it.leftAt.let { left -> left != null && time - left > LATE_RESULT_MS } }
@@ -242,20 +282,21 @@ class SubtitlePipeline(
             translator.translate(input)
         } catch (error: Exception) {
             synchronized(lock) {
-                // Yerine uzamış okuması gelen satırın bırakılan çevirisi hata sayılmaz.
-                if (request.session != session || request.superseded) return
+                // Yerine uzamış okuması gelen ya da bırakılan satırın çevirisi hata sayılmaz.
+                if (request.session != session || request.superseded || request.abandoned) return
                 // Model eksikse ya da geçici hata olduysa satır ekranda kaldıkça (saniyede en çok bir kez) yeniden denenir.
                 if (request.number == lineOnScreen) stabilizer.forgetSent()
             }
             onTranslationResult?.invoke(error)
             return
         }
+        if (request.abandoned) return
         onTranslationResult?.invoke(null)
         val translated = present(sentence, request)
         val translationMs = maxOf(0, (now() - started).toInt())
         var total: Int? = null
         synchronized(lock) {
-            if (request.session != session) return
+            if (request.session != session || request.abandoned) return
             val shouldSend = stabilizer.shouldSend(input, sentence)
             remember(request.number, source, if (shouldSend) translated else null)
             if (request.number <= lastShown || !shouldSend || request.superseded) return

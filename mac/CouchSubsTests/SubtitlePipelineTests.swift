@@ -136,6 +136,55 @@ private final class BlockingReader: TextReader, @unchecked Sendable {
     }
 }
 
+/// Çeviriler test kapıyı açana kadar bekler ve görev iptaline uyar (iptal edilen çeviri hemen CancellationError ile biter).
+private final class CancelAwareTranslator: TextTranslator, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _requested: [String] = []
+    private var _cancelled: [String] = []
+    private var isOpen = false
+    private var nextId = 0
+    private var waiting: [Int: (text: String, continuation: CheckedContinuation<String, Error>)] = [:]
+    var requested: [String] { lock.withLock { _requested } }
+    var cancelled: [String] { lock.withLock { _cancelled } }
+
+    func translate(_ text: String) async throws -> String {
+        let id = lock.withLock { () -> Int in nextId += 1; return nextId }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                lock.lock()
+                _requested.append(text)
+                if isOpen {
+                    lock.unlock()
+                    continuation.resume(returning: "TR: " + text)
+                } else if Task.isCancelled {
+                    _cancelled.append(text)
+                    lock.unlock()
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    waiting[id] = (text, continuation)
+                    lock.unlock()
+                }
+            }
+        } onCancel: {
+            let entry = lock.withLock { () -> (text: String, continuation: CheckedContinuation<String, Error>)? in
+                guard let entry = waiting.removeValue(forKey: id) else { return nil }
+                _cancelled.append(entry.text)
+                return entry
+            }
+            entry?.continuation.resume(throwing: CancellationError())
+        }
+    }
+
+    func open() {
+        let pending = lock.withLock { () -> [(text: String, continuation: CheckedContinuation<String, Error>)] in
+            isOpen = true
+            defer { waiting.removeAll() }
+            return Array(waiting.values)
+        }
+        for entry in pending { entry.continuation.resume(returning: "TR: " + entry.text) }
+    }
+}
+
 private func lines(_ runs: (String, Int)...) -> [String] {
     runs.flatMap { Array(repeating: $0.0, count: $0.1) }
 }
@@ -592,6 +641,143 @@ final class SubtitlePipelineTests: XCTestCase {
         translator.open()
         await pipeline.waitForTranslations()
         XCTAssertTrue(sender.sent.isEmpty)
+    }
+
+    // MARK: Gösterilemeyecek çevirinin üretimi bırakılır (Windows'taki DiscardedTranslationTests ile aynı senaryolar)
+
+    private let old = "Hold the gate."
+    private let next = "Run!"
+
+    /// Yeni satır gösterilmeden eski üretimin iptal edilip edilmediğini beklemeden yoklamak için.
+    private func waitUntil(_ condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() { try? await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertTrue(condition(), "Beklenen durum oluşmadı.")
+    }
+
+    /// Eski satırın gösterim süresi dolmuş, yeni satır sırada bekliyor: eski üretim bırakılır, yeni satır beklemez.
+    func testExpiredTranslationReleasesWaitingLineWithoutWaitingForItsResult() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 1), (next, 60))), translator: translator, server: sender, clock: clock.read)
+        await run(pipeline, 61, wait: false, clock: clock)
+        await waitUntil { translator.requested.count == 2 }
+        XCTAssertEqual(translator.cancelled, [old])
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, ["TR: " + next])
+        XCTAssertNil(pipeline.lastError)
+    }
+
+    /// Süre dolmadan (2000 ms ve tam sınırda 2500 ms) iki satır da korunur.
+    func testGracePeriodPreservesBothLines() async {
+        for frames in [40, 50] {
+            let sender = FakeSender()
+            let clock = PipelineClock()
+            let translator = CancelAwareTranslator()
+            let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 1), (next, frames))), translator: translator, server: sender,
+                                            clock: clock.read)
+            await run(pipeline, frames + 1, wait: false, clock: clock)
+            XCTAssertTrue(translator.cancelled.isEmpty, "\(frames) kare")
+            translator.open()
+            await pipeline.waitForTranslations()
+            XCTAssertEqual(sender.sent, ["TR: " + old, "TR: " + next])
+        }
+    }
+
+    /// Ekranda duran satır üretimi ne kadar uzarsa uzasın iptal edilmez.
+    func testStillVisibleLineIsNotCancelledHoweverLongItsProductionTakes() async {
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 200))), translator: translator, server: FakeSender(), clock: clock.read)
+        await run(pipeline, 200, wait: false, clock: clock)
+        XCTAssertTrue(translator.cancelled.isEmpty)
+        translator.open()
+        await pipeline.waitForTranslations()
+    }
+
+    /// Yeni satır beklemiyorsa süresi dolmuş üretim yine de iptal edilmez.
+    func testNoNewWaitingLineDoesNotCancelExpiredWork() async {
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 1), ("", 100))), translator: translator, server: FakeSender(),
+                                        clock: clock.read)
+        await run(pipeline, 101, wait: false, clock: clock)
+        XCTAssertTrue(translator.cancelled.isEmpty)
+        translator.open()
+        await pipeline.waitForTranslations()
+    }
+
+    /// Iptali dinlemeyen motor: eşzamanlı ikinci üretim başlamaz, eski sonuç gösterilmez.
+    func testIgnoredCancellationDoesNotStartConcurrentWorkOrPublishOldResult() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = GatedTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 1), (next, 60))), translator: translator, server: sender, clock: clock.read)
+        await run(pipeline, 61, wait: false, clock: clock)
+        XCTAssertEqual(translator.requested, [old])
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(translator.requested, [old, next])
+        XCTAssertEqual(sender.sent, ["TR: " + next])
+    }
+
+    /// Daha yeni bir satır (paketten) gösterildiyse eski üretim hemen bırakılır.
+    func testNewerDisplayedPackLineCancelsUndisplayableProduction() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader([old, next]), translator: translator, server: sender, clock: clock.read)
+        pipeline.packLookup = { [next] text in text == next ? PackMatch(text: "Koş!", spoken: []) : nil }
+        await run(pipeline, 2, wait: false, clock: clock)
+        await waitUntil { translator.cancelled == [self.old] }
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, ["Koş!"])
+        XCTAssertNil(pipeline.lastError)
+    }
+
+    /// Paket sonucu gösterilmediyse (zaten hedef dilde) eski satır bırakılmaz.
+    func testPackResultThatWasNotDisplayedDoesNotCancelOldLine() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader([old, next]), translator: translator, server: sender, clock: clock.read)
+        pipeline.packLookup = { [next] text in text == next ? PackMatch(text: next, spoken: []) : nil }
+        await run(pipeline, 2, wait: false, clock: clock)
+        XCTAssertTrue(sender.sent.isEmpty)
+        XCTAssertTrue(translator.cancelled.isEmpty)
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(sender.sent, ["TR: " + old])
+    }
+
+    /// Bırakılan satır ekrana geri gelirse yeniden çevrilir.
+    func testAbandonedSourceCanReturnAndBeTranslatedAgain() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader(lines((old, 1), (next, 60), (old, 1))), translator: translator, server: sender,
+                                        clock: clock.read)
+        await run(pipeline, 62, wait: false, clock: clock)
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(translator.cancelled, [old])
+        XCTAssertEqual(translator.requested, [old, next, old])
+        XCTAssertEqual(sender.sent, ["TR: " + next, "TR: " + old])
+    }
+
+    /// Paketle bırakılan satır kısa sürede geri gelirse geri yükleme yolunda takılmadan yeniden çevrilir.
+    func testPackCancellationDoesNotTrapRestoredSource() async {
+        let sender = FakeSender()
+        let clock = PipelineClock()
+        let translator = CancelAwareTranslator()
+        let pipeline = SubtitlePipeline(reader: FakeReader([old, next, old]), translator: translator, server: sender, clock: clock.read)
+        pipeline.packLookup = { [next] text in text == next ? PackMatch(text: "Koş!", spoken: []) : nil }
+        await run(pipeline, 3, wait: false, clock: clock)
+        translator.open()
+        await pipeline.waitForTranslations()
+        XCTAssertEqual(translator.requested, [old, old])
+        XCTAssertEqual(sender.sent, ["Koş!", "TR: " + old])
     }
 
     func testShortLinesGetAZoomedSecondReading() throws {

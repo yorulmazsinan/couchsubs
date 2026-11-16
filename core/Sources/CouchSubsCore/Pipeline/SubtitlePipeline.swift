@@ -38,6 +38,9 @@ public final class SubtitlePipeline {
         var leftAt: Int?
         /// Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez.
         var superseded = false
+        /// Mevcut gösterim kurallarına göre elendi (daha yeni satır gösterildi ya da süresi doldu); iptali dinlemeyen
+        /// motorun sonucu da gösterilmez.
+        var abandoned = false
         init(number: Int, source: String, box: TextBox?, session: Int, read: ReadInfo) {
             self.number = number
             self.source = source
@@ -212,6 +215,30 @@ public final class SubtitlePipeline {
             lineLeft()
             restore(source, box: box)
         }
+        // Restore önce işlenir: geri görünen satırın leftAt bilgisi temizlenmeden iptal edilmemeli.
+        abandonUndisplayableTranslation()
+    }
+
+    /// Süren çeviri artık gösterilemeyecekse üretimi iptal eder, böylece sıradaki satır onu beklemez. Yalnız iki durumda:
+    /// daha yeni bir satır ekranda gösterilmişse, ya da satır `lateResultMs`'ten önce kalkmış, ekranda değil ve sırada
+    /// gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar uzarsa uzasın iptal edilmez.
+    /// İptal edilen satır ekrana geri gelirse (`restore`) yeniden çevrilir. Windows (SubtitlePipeline.cs) ve Android
+    /// (SubtitlePipeline.kt) aynı kuralları uygular.
+    private func abandonUndisplayableTranslation() {
+        guard let current = inFlight, current.session == session, !current.superseded, !current.abandoned,
+              work != nil else { return }
+        let time = now()
+        let replaced = current.number < lastShown
+        let expired = current.number > lastShown && current.number != lineOnScreen
+            && current.leftAt.map { time - $0 > Self.lateResultMs } == true
+        guard replaced || expired else { return }
+        let hasWaiting = waiting.contains {
+            $0.session == session && !$0.superseded && !$0.abandoned && !($0.leftAt.map { time - $0 > Self.lateResultMs } == true)
+        }
+        guard replaced || hasWaiting else { return }
+        current.abandoned = true
+        log(current, replaced ? "bırakıldı: daha yeni satır gösterildi" : "bırakıldı: gösterim süresi doldu, yeni satır bekliyor")
+        work?.cancel()
     }
 
     /// Süren ve sırada bekleyen istekler.
@@ -254,7 +281,7 @@ public final class SubtitlePipeline {
             waiting.removeFirst(waiting.count - Self.maxWaiting)
         }
         // Süren çeviri bu cümlenin yarım okumasınınsa (daktilo efekti) beklenmez: bırakılır, tamamı hemen çevrilir.
-        if !current.superseded, current.session == session, TextMatch.isGrowth(source, of: current.source) {
+        if !current.superseded, !current.abandoned, current.session == session, TextMatch.isGrowth(source, of: current.source) {
             log(current, "bırakıldı: uzamış okuması geldi (#\(request.number))")
             current.superseded = true
             work?.cancel()
@@ -319,7 +346,7 @@ public final class SubtitlePipeline {
             return
         }
         // Çevirisi henüz gelmediyse istek sürüyordur; satır yeniden ekranda sayılır.
-        for request in requests where request.source == source && request.session == session && !request.superseded {
+        for request in requests where request.source == source && request.session == session && !request.superseded && !request.abandoned {
             request.leftAt = nil
             lineOnScreen = request.number
             return
@@ -370,8 +397,8 @@ public final class SubtitlePipeline {
             let translated = present(sentence, request)
             let finished = now()
             let result = "\(probe.outcome()) \(finished - started) ms"
-            guard request.session == session else {
-                log(request, "\(result), atıldı: oturum bitti")
+            guard request.session == session, !request.abandoned else {
+                log(request, "\(result), atıldı: \(request.abandoned ? "istek bırakıldı" : "oturum bitti")")
                 return
             }
             lastError = nil
@@ -405,7 +432,7 @@ public final class SubtitlePipeline {
             if let onSpeech { onSpeech(SpeakerPrefix.voiced(translator.spokenLines(for: input), prefix: request.prefix)) }
         } catch {
             // Yerine uzamış okuması gelen satırın bırakılan çevirisi hata sayılmaz.
-            guard request.session == session, !request.superseded else { return }
+            guard request.session == session, !request.superseded, !request.abandoned else { return }
             let retry = request.number == lineOnScreen ? ", satır ekrandayken yeniden denenecek" : ""
             log(request, "hata (\(now() - started) ms): \(error)\(retry)")
             // Dil paketi eksikse ya da geçici bir hata olduysa satır ekranda kaldıkça (saniyede en çok bir kez) yeniden denenir.
