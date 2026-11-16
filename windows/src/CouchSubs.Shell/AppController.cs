@@ -2101,10 +2101,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         checkingFirewall = true;
         try
         {
-            var hasRule = await HasFirewallRuleAsync(firewall);
+            var prompt = await FirewallProblemAsync(firewall);
             if (!isRunning) return;
-            if (hasRule) firewallRuleSeen = true;
-            else FirewallPrompt = FirewallPrompt.Offer;
+            if (prompt == FirewallPrompt.None) firewallRuleSeen = true;
+            else FirewallPrompt = prompt;
         }
         finally
         {
@@ -2149,7 +2149,18 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private async Task OfferFirewallAsync()
     {
         if (services.Firewall is not { } firewall || firewallPrompt == FirewallPrompt.Working) return;
-        FirewallPrompt = await HasFirewallRuleAsync(firewall) ? FirewallPrompt.None : FirewallPrompt.Offer;
+        FirewallPrompt = await FirewallProblemAsync(firewall);
+    }
+
+    /// <summary>
+    /// Bağlantı takıldığında gösterilecek kart. İzin yalnız Özel ağda geçerlidir: kural olsa da bilgisayarın ağı "Ortak"
+    /// ise TV ve PS5 yine engellenir. Eskiden kural varsa hiçbir şey gösterilmiyor, kullanıcı sebebini göremiyordu.
+    /// </summary>
+    private static async Task<FirewallPrompt> FirewallProblemAsync(IFirewall firewall)
+    {
+        if (!await HasFirewallRuleAsync(firewall)) return FirewallPrompt.Offer;
+        try { return await Task.Run(firewall.HasPublicNetwork) ? FirewallPrompt.PublicNetwork : FirewallPrompt.None; }
+        catch (Exception) { return FirewallPrompt.None; }
     }
 
     /// <summary>Kurallar arka planda taranır; okunamayan izin verilmiş gibi gösterilmez.</summary>

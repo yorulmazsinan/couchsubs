@@ -52,6 +52,7 @@ public partial class FirewallCard : UserControl
             : text["Windows Firewall may be blocking the connection."];
         Hint.Text = prompt switch
         {
+            FirewallPrompt.PublicNetwork => text["Permission applies only to Private networks. If this is your trusted home network, set it to Private in Windows Settings."],
             FirewallPrompt.Working => text["Waiting for Windows…"],
             FirewallPrompt.Failed => text["Local-network permission could not be verified. Approve the Windows prompt, or review existing blocking rules in Windows Firewall."],
             FirewallPrompt.Allowed when running => text["Reconnecting…"],

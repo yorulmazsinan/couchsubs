@@ -21,5 +21,6 @@ public interface IFirewall
 /// <summary>
 /// Güvenlik duvarı kartının durumu. Offer: kural eksik ve bağlantı sorunlu, düğme görünür. Working: Windows'un izin
 /// sorusu bekleniyor. Allowed: kural eklendi (kısa onay). Failed: kural eklenemedi, düğme yeniden görünür.
+/// PublicNetwork: kural var ama yalnız Özel ağda geçerli, bilgisayarın ağı "Ortak"; düğme yok, ağı Özel yapmak önerilir.
 /// </summary>
-public enum FirewallPrompt { None, Offer, Working, Allowed, Failed }
+public enum FirewallPrompt { None, Offer, Working, Allowed, Failed, PublicNetwork }

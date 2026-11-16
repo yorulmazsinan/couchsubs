@@ -14,6 +14,8 @@ internal sealed class FakeFirewall : IFirewall
     public bool UserAccepts { get; set; } = true;
     public bool FailRead { get; set; }
     public bool FailWrite { get; set; }
+    /// <summary>Bilgisayarın ağı "Ortak" profilde.</summary>
+    public bool Public { get; set; }
     public int Checks { get; private set; }
     public int Adds { get; private set; }
 
@@ -23,6 +25,8 @@ internal sealed class FakeFirewall : IFirewall
         if (FailRead) throw new InvalidOperationException("Cannot read firewall");
         return Rule;
     }
+
+    public bool HasPublicNetwork() => Public;
 
     public Task<bool> AddRuleAsync()
     {
@@ -79,6 +83,15 @@ public class FirewallPairingTests
         var (controller, _) = await Pairing(new RegistrationException(RegistrationFailure.Failed), rule: true);
         await Assert.ThrowsAsync<AppException>(() => controller.RegisterAsync("192.168.1.253", "12345678"));
         Assert.Equal(FirewallPrompt.None, controller.FirewallPrompt);
+    }
+
+    [Fact]
+    public async Task FailedRegistrationOnPublicNetworkShowsNetworkHint()
+    {
+        var (controller, firewall) = await Pairing(new RegistrationException(RegistrationFailure.Failed), rule: true);
+        firewall.Public = true;
+        await Assert.ThrowsAsync<AppException>(() => controller.RegisterAsync("192.168.1.253", "12345678"));
+        Assert.Equal(FirewallPrompt.PublicNetwork, controller.FirewallPrompt);
     }
 
     /// Hesap yanlışsa sorun güvenlik duvarı değildir.
@@ -243,6 +256,30 @@ public class FirewallRunningTests
         clock.Advance(11);
         await controller.CheckConnectionsAsync();
         Assert.Equal(FirewallPrompt.Offer, controller.FirewallPrompt);
+        controller.Dispose();
+    }
+
+    /// İzin yalnız Özel ağda geçerli. Kural olsa da ağ "Ortak" ise TV engellenir; kart düğmesiz, ağı Özel yapmayı söyler.
+    [Fact]
+    public async Task TvWaitingOnPublicNetworkShowsNetworkHint()
+    {
+        var (controller, services, firewall, clock) = await Running(rule: true);
+        firewall.Public = true;
+        services.Streams[0].Emit(SessionState.Streaming);
+        clock.Advance(61);
+        await controller.CheckConnectionsAsync();
+        Assert.Equal(FirewallPrompt.PublicNetwork, controller.FirewallPrompt);
+        controller.Dispose();
+    }
+
+    [Fact]
+    public async Task TvWaitingOnPrivateNetworkWithRuleShowsNothing()
+    {
+        var (controller, services, _, clock) = await Running(rule: true);
+        services.Streams[0].Emit(SessionState.Streaming);
+        clock.Advance(61);
+        await controller.CheckConnectionsAsync();
+        Assert.Equal(FirewallPrompt.None, controller.FirewallPrompt);
         controller.Dispose();
     }
 
