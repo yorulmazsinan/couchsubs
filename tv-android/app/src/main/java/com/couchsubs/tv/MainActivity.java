@@ -125,6 +125,10 @@ public class MainActivity extends Activity implements TvPage.Host {
                     noVideo();
                 }
             });
+            // HDMI sesi tam sesle açılır. Android'in HDMI ses yolu (TvInputHardwareManager) uygulama ses düzeyi
+            // vermeden 0'da başlar: Sony gibi TV'lerde oyun sesi uygulama açılınca kesiliyordu. TvView bu düzeyi
+            // saklar, her yeni oturuma kendisi uygular.
+            tvView.setStreamVolume(1f);
             root.addView(tvView);
         }
 
@@ -509,6 +513,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         // PS5 görüntüsü gelirken TV boşta sanmasın: giriş açılır açılmaz ekran açık tutulur; görüntü gerçekten yoksa
         // (PS5 kapalı, kablo çıktı) noVideo() bırakır.
         keepScreenOn(true);
+        tvView.setStreamVolume(1f);
         tvView.tune(id, TvContract.buildChannelUriForPassthroughInput(id));
         // Görüntü gelene kadar izlenir; hiç gelmezse katmana geçilir.
         trouble();
