@@ -7,7 +7,9 @@ html, body {
   /* webOS HDMI görüntüyü sayfanın altındaki ayrı bir katmanda çizer; sayfa şeffaf kalmalı. */
   background: transparent;
   color: #fff;
-  font-family: "LG Smart UI", "Museo Sans", Arial, sans-serif;
+  /* Her TV'nin kendi yazı tipi: LG, Samsung (Tizen), Android TV; sonra genel yedek. "Segoe UI" bilerek yok: harfleri
+     ekran çevirisi kutularının satır yüksekliğini aşıyor, Windows'ta tv-screen.test.js'in 4K ölçümünü bozuyordu. */
+  font-family: "LG Smart UI", "Museo Sans", "SamsungOne", "Tizen Sans", Roboto, Arial, sans-serif;
 }
 
 #video-host, #video-host video {
@@ -151,7 +153,8 @@ body.band #subtitle-text, body.band #subtitle-prev-text, body.band #subtitle-pre
 /* Bantta örtü de ekranın iki kenarına uzanır; köşeleri yuvarlak kalınca ekran kenarında köşelerden oyun görünüyordu. */
 body.band #subtitle-cover { border-radius: 0; }
 
-/* Panel ve bekleme ekranı: design/tokens.json'un koyu tema renkleri (docs/TASARIM.md).
+/* Panel ve bekleme ekranı: design/tokens.json'un koyu tema renkleri (docs/TASARIM.md). Köşeler belirteç ölçeğinin
+   TV'deki iki katıdır: büyük kutular 32 (card), küçük notlar ve düğmeler 24 (control). En küçük arayüz yazısı 24 px.
    Köşedeki kutular TV'nin güvenli alanında durur (1080p'de üstte 54, yanlarda 96 piksel; Android TV'nin 27/48 dp'si):
    kenarı taşan (overscan) TV'lerde kesilmesinler. */
 #panel {
@@ -162,7 +165,7 @@ body.band #subtitle-cover { border-radius: 0; }
   min-width: 640px;
   max-width: 1100px;
   padding: 28px 36px;
-  border-radius: 24px;
+  border-radius: 32px;
   border: 2px solid #30333A;
   background: rgba(20, 21, 24, 0.92);
   color: #F3EEE4;
@@ -171,11 +174,22 @@ body.band #subtitle-cover { border-radius: 0; }
 }
 
 #panel.hidden { display: none; }
-#panel .title { display: flex; align-items: center; font-size: 32px; font-weight: 600; margin-bottom: 18px; }
+#panel .title {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+  align-items: center;
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
 #panel .title .logo { width: 48px; height: 48px; border-radius: 11px; margin-right: 16px; }
-#panel .row { display: flex; padding: 6px 0; }
+#panel .row { display: -webkit-box; display: -webkit-flex; display: flex; padding: 6px 0; }
 #panel .label { width: 200px; color: #A9A59C; }
-#panel .keys { margin-top: 18px; padding-top: 16px; border-top: 2px solid #30333A; font-size: 22px; color: #A9A59C; }
+#panel #app-version { margin-left: 12px; font-weight: 400; }
+#panel .keys { margin-top: 18px; padding-top: 16px; border-top: 2px solid #30333A; font-size: 24px; color: #A9A59C; }
 #panel .keys .key { padding: 3px 0; }
 #panel .keys .key b { display: inline-block; min-width: 150px; color: #F5B83D; font-weight: 600; }
 .muted { color: #A9A59C; }
@@ -226,14 +240,14 @@ body.band #subtitle-cover { border-radius: 0; }
   display: inline-block;
   margin-top: 36px;
   padding: 16px 44px;
-  border-radius: 14px;
+  border-radius: 24px;
   border: 3px solid #30333A;
-  background: #1C1E22;
+  background: #1C1E23;
   color: #F3EEE4;
   font-size: 30px;
   font-weight: 600;
 }
-#waiting .button.focused { background: #F5B83D; border-color: #FFFFFF; color: #1A1A1A; }
+#waiting .button.focused { background: #F5B83D; border-color: #FFFFFF; color: #17181B; }
 
 /* Demo sırasında sağ üstte ne gösterildiğini anlatan not. */
 #demo-badge {
@@ -243,7 +257,7 @@ body.band #subtitle-cover { border-radius: 0; }
   z-index: 20;
   max-width: 760px;
   padding: 18px 26px;
-  border-radius: 18px;
+  border-radius: 24px;
   border: 2px solid #30333A;
   background: rgba(20, 21, 24, 0.92);
   color: #A9A59C;
@@ -261,7 +275,7 @@ body.band #subtitle-cover { border-radius: 0; }
   z-index: 21;
   max-width: 820px;
   padding: 22px 30px;
-  border-radius: 18px;
+  border-radius: 24px;
   border: 2px solid #F5B83D;
   background: rgba(20, 21, 24, 0.95);
   color: #F3EEE4;
@@ -270,7 +284,7 @@ body.band #subtitle-cover { border-radius: 0; }
 }
 #source-tip.hidden { display: none; }
 #source-tip b { display: block; color: #F5B83D; font-size: 30px; margin-bottom: 8px; }
-#source-tip .close { display: block; margin-top: 12px; font-size: 22px; color: #A9A59C; }
+#source-tip .close { display: block; margin-top: 12px; font-size: 24px; color: #A9A59C; }
 
 /* HDMI görüntüsü gelmeyince ortada açılan kutu: neden, ne yapılacağı ve HDMI girişi düğmeleri (◀▶ ve Tamam, ya da 1–4). */
 #no-picture { z-index: 22; }
@@ -278,7 +292,7 @@ body.band #subtitle-cover { border-radius: 0; }
   width: 1300px;
   box-sizing: border-box;
   padding: 36px 48px;
-  border-radius: 24px;
+  border-radius: 32px;
   border: 2px solid #F5B83D;
   background: rgba(20, 21, 24, 0.96);
   color: #F3EEE4;
@@ -293,9 +307,9 @@ body.band #subtitle-cover { border-radius: 0; }
   display: inline-block;
   margin: 0 14px 10px 0;
   padding: 14px 30px;
-  border-radius: 14px;
+  border-radius: 24px;
   border: 3px solid #30333A;
-  background: #1C1E22;
+  background: #1C1E23;
   color: #F3EEE4;
   font-size: 28px;
   font-weight: 600;
@@ -303,4 +317,4 @@ body.band #subtitle-cover { border-radius: 0; }
 #no-picture .button.current { border-color: #A9A59C; }
 /* Doğru girişte de siyahsa ne yapılacağı: düğmelerin altında, küçük ve ikincil renkte (düğmelerin alt boşluğuyla 24 px). */
 #no-picture #no-picture-help { margin-top: 14px; font-size: 24px; line-height: 1.45; color: #A9A59C; }
-#no-picture .button.focused { background: #F5B83D; border-color: #FFFFFF; color: #1A1A1A; }
+#no-picture .button.focused { background: #F5B83D; border-color: #FFFFFF; color: #17181B; }

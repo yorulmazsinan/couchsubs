@@ -58,7 +58,7 @@
     // Bekleme kutusu ve demo kumandayla kapatılamaz; oyunun üstünde asılı kalmasın.
     style.textContent = 'body.overlay #waiting, body.overlay #demo-badge { display: none !important; }' +
       '#overlay-dot { position: absolute; top: 32px; right: 32px; width: 14px; height: 14px; border-radius: 50%;' +
-      ' background: #E5484D; opacity: 0.8; z-index: 50; }' +
+      ' background: #F28B82; opacity: 0.8; z-index: 50; }' +
       '#overlay-dot.hidden { display: none; }';
     document.head.appendChild(style);
     document.body.className += ' overlay';
