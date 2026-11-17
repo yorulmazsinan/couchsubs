@@ -390,8 +390,11 @@ public class MainActivity extends Activity implements TvPage.Host {
         String id = HdmiInputs.idForPort(this, port);
         if (tvView == null || id == null) {
             status("sourceError");
-            // TV HDMI girişlerini uygulamalara hiç açmıyor: TvView'da gösterilecek bir şey yok, hemen söylenir.
-            if (tvView != null && !pickerShown && !pickerClosed && HdmiInputs.list(this).isEmpty()) showPicker(false);
+            // TV HDMI girişlerini uygulamalara hiç açmıyor (giriş listesi boş ya da TV giriş servisi yok): TvView'da
+            // gösterilecek bir şey yok, hemen söylenir. Eskiden TV giriş servisi olmayan TV'lerde (#275) yalnız
+            // "kaynak desteklenmiyor" yazıyordu; ne yapılacağı ve Katman söylenmiyordu.
+            boolean noInputs = tvView == null || HdmiInputs.list(this).isEmpty();
+            if (noInputs && !pickerShown && !pickerClosed) showPicker(false);
             return;
         }
         retuneAttempts = 0;

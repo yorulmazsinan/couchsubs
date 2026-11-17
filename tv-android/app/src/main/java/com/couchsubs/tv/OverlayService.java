@@ -127,7 +127,11 @@ public class OverlayService extends Service implements TvPage.Host {
         if (page == null) return;
         String id = HdmiInputs.idForPort(this, port);
         if (id == null) {
+            // TV girişlerini uygulamalara açmıyor (#275): girişe biz geçemiyoruz, kullanıcı kumandadan geçer; altyazı
+            // yine görüntünün üstünde çıkar. Eskiden yalnız "kaynak desteklenmiyor" yazıyordu.
+            tunedPort = port;
             page.status("sourceError");
+            Toast.makeText(this, getString(R.string.overlay_choose_input, port), Toast.LENGTH_LONG).show();
             return;
         }
         Intent view = new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(id))
