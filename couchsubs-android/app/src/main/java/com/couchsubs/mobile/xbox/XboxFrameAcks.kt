@@ -51,7 +51,7 @@ internal class XboxDecoderFactory(private val listener: DecodedFrameListener) : 
 }
 
 /** Java çözücüsünü sarar: girişte geliş anını, çıkışta kareyi bildirir; kareye dokunmaz. */
-private class ReportingDecoder(private val inner: VideoDecoder, private val listener: DecodedFrameListener) : VideoDecoder {
+internal class ReportingDecoder(private val inner: VideoDecoder, private val listener: DecodedFrameListener) : VideoDecoder {
     /** captureTimeNs → çözücüye geliş anı. AndroidVideoDecoder çıkan karenin zamanını girişteki captureTimeNs'ten verir. */
     private val arrivals = ConcurrentHashMap<Long, Long>()
 
@@ -66,7 +66,7 @@ private class ReportingDecoder(private val inner: VideoDecoder, private val list
             }
         }
 
-    override fun decode(frame: EncodedImage, info: VideoDecoder.DecodeInfo): VideoCodecStatus {
+    override fun decode(frame: EncodedImage, info: VideoDecoder.DecodeInfo?): VideoCodecStatus {
         // Çözücünün düşürdüğü karelerin kaydı birikmesin.
         if (arrivals.size > 240) arrivals.clear()
         arrivals[frame.captureTimeNs] = SystemClock.elapsedRealtime()

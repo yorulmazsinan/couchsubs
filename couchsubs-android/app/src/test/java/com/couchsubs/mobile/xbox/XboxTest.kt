@@ -10,6 +10,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import org.webrtc.EncodedImage
+import org.webrtc.VideoCodecStatus
+import org.webrtc.VideoDecoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
@@ -507,5 +510,29 @@ class XboxSessionMachineTest {
         assertEquals(XboxSessionMachine.Action.Nothing, m.played())
         assertEquals(XboxSessionMachine.Action.Nothing, m.status("Provisioned", null))
         assertFalse(m.streaming())
+    }
+}
+
+class ReportingDecoderTest {
+    /** Sahte çözücü: kaç kare istendiğini sayar. */
+    private class CountingDecoder : VideoDecoder {
+        var decoded = 0
+        override fun initDecode(settings: VideoDecoder.Settings, callback: VideoDecoder.Callback) = VideoCodecStatus.OK
+        override fun release() = VideoCodecStatus.OK
+        override fun decode(frame: EncodedImage, info: VideoDecoder.DecodeInfo?): VideoCodecStatus {
+            decoded++
+            return VideoCodecStatus.OK
+        }
+        override fun getImplementationName() = "counting"
+    }
+
+    @Test fun decodeAcceptsNullInfoLikeLibwebrtc() {
+        // libwebrtc'nin yerel sarmalayıcısı (sdk/android/src/jni/video_decoder_wrapper.cc) Java decode'u info = null ile
+        // çağırır; null kabul etmeyen bir Kotlin imzası istisna atar ve süreç jvm.cc'deki denetimle kapanır.
+        val inner = CountingDecoder()
+        val decoder: VideoDecoder = ReportingDecoder(inner) { _, _, _ -> }
+        val frame = EncodedImage.builder().setBuffer(ByteBuffer.allocateDirect(1), null).setCaptureTimeNs(1_000_000).createEncodedImage()
+        assertEquals(VideoCodecStatus.OK, decoder.decode(frame, null))
+        assertEquals(1, inner.decoded)
     }
 }
