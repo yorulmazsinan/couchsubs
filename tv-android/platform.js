@@ -99,11 +99,8 @@
     speechElement: true,
 
     init: function () {
-      // Android TV'nin güvenli alanı (yanlarda 48dp, üstte 27dp: 1080p'de 96 ve 54 piksel): panel ve demo notu kenara
-      // taşan (overscan) TV'lerde kesilmesin (TV-OV).
-      var safe = document.createElement('style');
-      safe.textContent = '#panel { top: 54px; left: 96px; } #demo-badge { top: 54px; right: 96px; }';
-      document.head.appendChild(safe);
+      // Android TV'nin güvenli alanı (yanlarda 48dp, üstte 27dp: 1080p'de 96 ve 54 piksel, TV-OV) artık ortak
+      // style.css'in varsayılanıdır; burada ayrıca kurulmaz.
       if (overlay) setupOverlay();
       // Panelde Android uygulamasının kendi sürümü görünsün (ortak sayfadaki sayı LG ve Samsung'unkidir).
       var version = bridge.appVersion ? bridge.appVersion() : '';

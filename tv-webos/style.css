@@ -151,11 +151,13 @@ body.band #subtitle-text, body.band #subtitle-prev-text, body.band #subtitle-pre
 /* Bantta örtü de ekranın iki kenarına uzanır; köşeleri yuvarlak kalınca ekran kenarında köşelerden oyun görünüyordu. */
 body.band #subtitle-cover { border-radius: 0; }
 
-/* Panel ve bekleme ekranı: design/tokens.json'un koyu tema renkleri (docs/TASARIM.md). */
+/* Panel ve bekleme ekranı: design/tokens.json'un koyu tema renkleri (docs/TASARIM.md).
+   Köşedeki kutular TV'nin güvenli alanında durur (1080p'de üstte 54, yanlarda 96 piksel; Android TV'nin 27/48 dp'si):
+   kenarı taşan (overscan) TV'lerde kesilmesinler. */
 #panel {
   position: absolute;
-  top: 48px;
-  left: 48px;
+  top: 54px;
+  left: 96px;
   z-index: 20;
   min-width: 640px;
   max-width: 1100px;
@@ -218,8 +220,8 @@ body.band #subtitle-cover { border-radius: 0; }
 /* Demo sırasında sağ üstte ne gösterildiğini anlatan not. */
 #demo-badge {
   position: absolute;
-  top: 48px;
-  right: 48px;
+  top: 54px;
+  right: 96px;
   z-index: 20;
   max-width: 760px;
   padding: 18px 26px;
@@ -236,8 +238,8 @@ body.band #subtitle-cover { border-radius: 0; }
 /* Samsung: TV kendiliğinden HDMI girişine geçtiyse (Anynet+) sağ üstte ipucu; Tamam ya da Geri ile kapanır. */
 #source-tip {
   position: absolute;
-  top: 48px;
-  right: 48px;
+  top: 54px;
+  right: 96px;
   z-index: 21;
   max-width: 820px;
   padding: 22px 30px;

@@ -644,10 +644,15 @@
 
   // Konum hem CouchSubs uygulamasından hem kumandanın oklarıyla ayarlanır. Kumandayla
   // seçilen konum, uygulamadaki ayar değişene kadar korunur (son değiştiren geçerlidir).
+  // Alttan en az %3: ekran kenarı taşan (overscan) TV'lerde altyazının alt satırı kesilmesin.
+  var BOTTOM_MIN_PERCENT = 3;
+
   function setBottom(percent) {
-    bottomPercent = Math.max(0, Math.min(85, percent));
+    bottomPercent = Math.max(BOTTOM_MIN_PERCENT, Math.min(85, percent));
     layout();
   }
+
+  var SIDE_MIN = 0.05;
 
   // Altyazıyı seçilen yerleşime göre konumlar. İngilizce altyazının yeri bilinmiyorsa sabit yükseklik kullanılır.
   function layout() {
@@ -670,11 +675,11 @@
     if (mode === 'below' && box.bottom > 0.88) mode = 'above';
     if (mode === 'above' && box.top < 0.12) mode = 'below';
 
-    // Yatayda İngilizce satırın ortasına hizalanır.
+    // Yatayda İngilizce satırın ortasına hizalanır; yanlarda güvenli alan (1920'de 96 piksel, %5) kadar boşluk kalır.
     var center = (box.left + box.right) / 2;
     var half = Math.max(0.3, Math.min(center, 1 - center));
-    el.style.left = (Math.max(0.02, center - half) * 100) + '%';
-    el.style.right = (Math.max(0.02, 1 - center - half) * 100) + '%';
+    el.style.left = (Math.max(SIDE_MIN, center - half) * 100) + '%';
+    el.style.right = (Math.max(SIDE_MIN, 1 - center - half) * 100) + '%';
 
     if (mode === 'cover') {
       // İngilizce yazı koyu bir zeminle örtülür, çeviri onun ortasına gelir.
