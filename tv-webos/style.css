@@ -100,12 +100,13 @@ html, body {
    kendi katmanı ve görünürlüğü değişmez. */
 #subtitle-prev, #subtitle-prev2 {
   margin-bottom: 14px;
-  opacity: 0.6;
+  opacity: 0.75;
   -webkit-transition: opacity 0.4s linear;
   transition: opacity 0.4s linear;
 }
-/* İki önceki satır en üstte, daha da soluk durur (ekranda en çok üç satır). */
-#subtitle-prev2 { opacity: 0.45; }
+/* İki önceki satır en üstte, daha da soluk durur (ekranda en çok üç satır). Açık sahnede de okunsun diye %60'ın
+   altına inmez. */
+#subtitle-prev2 { opacity: 0.6; }
 #subtitle-prev.fading, #subtitle-prev2.fading { opacity: 0; }
 #subtitle-prev.hidden, #subtitle-prev2.hidden { display: none; }
 
@@ -117,9 +118,11 @@ html, body {
   font-size: 37px;
   line-height: 1.3;
   font-weight: 600;
-  text-shadow: 0 2px 4px #000;
+  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 2px 4px #000;
 }
 
+/* Gölge üst üste üç katmandır: zemin koyuluğu düşükken (bilgisayardaki "Zemin koyuluğu" %0'a kadar iner) beyaz yazı
+   açık sahnede (kar, gökyüzü) tek yumuşak gölgeyle seçilmiyordu. Renkli değil, yalnız siyah kontur. */
 #subtitle-text {
   display: inline-block;
   padding: 10px 26px;
@@ -128,7 +131,12 @@ html, body {
   font-size: 46px;
   line-height: 1.3;
   font-weight: 600;
-  text-shadow: 0 2px 4px #000;
+  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 2px 4px #000;
+}
+
+/* Zemin %30'dan saydamsa (app.js applyStyle) yazının çevresine 1 px'lik sert siyah kontur eklenir. */
+body.thin-bg #subtitle-text, body.thin-bg #subtitle-prev-text, body.thin-bg #subtitle-prev2-text {
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 4px #000, 0 2px 4px #000;
 }
 
 
@@ -140,6 +148,8 @@ body.band #subtitle-text, body.band #subtitle-prev-text, body.band #subtitle-pre
   box-sizing: border-box;
   border-radius: 0;
 }
+/* Bantta örtü de ekranın iki kenarına uzanır; köşeleri yuvarlak kalınca ekran kenarında köşelerden oyun görünüyordu. */
+body.band #subtitle-cover { border-radius: 0; }
 
 /* Panel ve bekleme ekranı: design/tokens.json'un koyu tema renkleri (docs/TASARIM.md). */
 #panel {

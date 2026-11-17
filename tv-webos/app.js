@@ -716,6 +716,15 @@
   var coverBackground = '';
   var bandShape = false;
 
+  // body'deki tek bir sınıfı açar ya da kapatır; diğerleri kalır. Eskiden className baştan yazılıyordu ve Android TV
+  // katmanının 'overlay' sınıfı ilk style olayında siliniyordu.
+  function setBodyClass(name, on) {
+    var body = document.body;
+    if (!body) return;
+    var rest = (' ' + body.className + ' ').replace(' ' + name + ' ', ' ');
+    body.className = (on ? rest + name : rest).replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+  }
+
   // Bilgisayardaki "Yazı rengi" seçimi; bilinmeyen değer gelirse renk değişmez.
   var TEXT_COLORS = { white: '#FFFFFF', yellow: '#FFE135' };
 
@@ -730,9 +739,11 @@
     }
     if (PLACEMENTS[style.placement]) placement = style.placement;
     bandShape = style.backgroundShape === 'band';
-    document.body.className = bandShape ? 'band' : '';
+    setBodyClass('band', bandShape);
     if (typeof style.background === 'number') {
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;
+      // Zemin çok saydamsa yazıya sert kontur eklenir (style.css, body.thin-bg).
+      setBodyClass('thin-bg', alpha < 0.3);
       textBackground = 'rgba(0, 0, 0, ' + alpha + ')';
       coverBackground = style.background >= 100 ? '#000' : textBackground;
       $('subtitle-text').style.background = textBackground;
