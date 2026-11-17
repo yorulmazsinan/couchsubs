@@ -402,18 +402,16 @@
                                 </Border>
                             </StackPanel>
                             <c:RegionPicker x:Name="Region" RegionChanged="OnRegion" />
-                            <Button Content="{t:T 'Refresh picture (Num 8 or Ctrl+Shift+8)'}" Click="OnRefresh" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                            <Button x:Name="RefreshButton" Click="OnRefresh" HorizontalAlignment="Left" Margin="0,12,0,0" />
                             <TextBlock x:Name="AreaHint" Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </c:Card>
-                    <c:Card Title="{t:T 'Translate the screen (Num 9 or Ctrl+Shift+9)'}" Margin="0,16,0,0">
-                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                   Text="{t:T 'Press Num 9 or Ctrl+Shift+9 while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations.'}" />
+                    <c:Card x:Name="ScreenCard" Margin="0,16,0,0">
+                        <TextBlock x:Name="ScreenHint" Style="{StaticResource HintText}" TextWrapping="Wrap" />
                     </c:Card>
-                    <c:Card Title="{t:T 'Free area (Num 5 or Ctrl+Shift+5)'}" Margin="0,16,0,0">
+                    <c:Card x:Name="FreeAreaCard" Margin="0,16,0,0">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
-                                       Text="{t:T 'Press Num 5 or Ctrl+Shift+5 while playing: the picture freezes on the PC, drag over any part of it to translate that part once. Esc closes.'}" />
+                            <TextBlock x:Name="FreeAreaHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12" />
                             <TextBlock Text="{t:T 'Show the result'}" Margin="0,0,0,8" />
                             <Border Style="{StaticResource SegmentGroup}" Margin="0,0,0,12" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal">
@@ -422,10 +420,33 @@
                                     <RadioButton x:Name="FreeBoth" Content="{t:T 'On both'}" GroupName="freeTarget" Style="{StaticResource SegmentButton}" Checked="OnFreeTarget" Tag="Both" />
                                 </StackPanel>
                             </Border>
-                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                       Text="{t:T 'Num 0 or Ctrl+Shift+0 pauses or resumes the live subtitle translation, which helps when you translate areas.'}" />
+                            <TextBlock x:Name="PauseHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,8" />
                             <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
-                                       Text="{t:T 'The shortcuts work only while translating, so the number keys stay free in other apps. Keep Num Lock on for the Num keys. No numeric keypad? Hold Ctrl+Shift and press the number keys above the letters.'}" />
+                                       Text="{t:T 'The shortcuts work only while translating, so the keys stay free in other apps. Keep Num Lock on for the Num keys. You can change them under Keyboard shortcuts.'}" />
+                        </StackPanel>
+                    </c:Card>
+                </StackPanel>
+            </TabItem>
+            <!-- Her işin iki kısayolu (varsayılan Num rakamı ve Ctrl+Shift+rakam); satırlar koddan kurulur. -->
+            <TabItem x:Name="ShortcutsTab" Header="{t:T 'Keyboard shortcuts'}">
+                <StackPanel>
+                    <TextBlock Text="{t:T 'Keyboard shortcuts'}" Style="{StaticResource DisplayText}" Margin="0,0,0,16" />
+                    <c:Card>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                                       Text="{t:T 'Each action has two shortcuts, so it also works on keyboards without a numeric keypad. Click a shortcut and press the new keys. Backspace removes it, Esc cancels.'}" />
+                            <Grid x:Name="ShortcutGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                            </Grid>
+                            <TextBlock x:Name="ShortcutMessage" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed" />
+                            <TextBlock x:Name="ShortcutError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed" />
+                            <Button Content="{t:T 'Restore defaults'}" Click="OnShortcutDefaults" HorizontalAlignment="Left" Margin="0,16,0,0" />
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'The shortcuts work only while translating, even when CouchSubs is in the background.'}" />
                         </StackPanel>
                     </c:Card>
                 </StackPanel>

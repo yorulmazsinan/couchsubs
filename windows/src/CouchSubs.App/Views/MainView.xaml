@@ -140,7 +140,7 @@
                                     <TextBlock Text="{x:Static c:Glyphs.Keyboard}" Style="{StaticResource GlyphText}" FontSize="18" HorizontalAlignment="Center" />
                                 </Border>
                                 <TextBlock Text="{t:T 'Shortcut'}" Style="{StaticResource CaptionText}" />
-                                <TextBlock Text="{t:T 'Translate the screen (Num 9 or Ctrl+Shift+9)'}" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                <TextBlock x:Name="ScreenShortcutText" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </c:Card>
                     </Grid>

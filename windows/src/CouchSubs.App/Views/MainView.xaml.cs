@@ -74,6 +74,7 @@ public partial class MainView : UserControl
     {
         var text = Localizer.Current;
         var settings = controller.Settings;
+        ScreenShortcutText.Text = HotkeyText.Title(settings, HotkeyAction.Screen, "Translate the screen (%@)");
         EngineText.Text = settings.Engine == TranslationEngine.Free ? text["Free"] : settings.Engine.DisplayName();
         var packs = controller.InstalledPacks.Count;
         var active = settings.GamePacks && settings.SourceLanguage == "en" && settings.TargetLanguage == "tr" && packs > 0;

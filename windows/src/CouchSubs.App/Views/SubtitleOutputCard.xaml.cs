@@ -58,6 +58,8 @@ public partial class SubtitleOutputCard : UserControl
         WindowHint.Visibility = Detailed ? Visibility.Visible : Visibility.Collapsed;
         ClickThrough.IsChecked = settings.OverlayClickThrough;
         ClickThroughHint.Visibility = Detailed || settings.OverlayClickThrough ? Visibility.Visible : Visibility.Collapsed;
+        ClickThroughHint.Text = HotkeyText.Sentence(settings, HotkeyAction.ClickThrough,
+            "When on, clicks go through to the window below. Press %@ to turn it off.");
         Adjust.IsEnabled = !controller.OverlayAdjusting;
         loading = false;
     }

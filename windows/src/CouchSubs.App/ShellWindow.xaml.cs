@@ -24,11 +24,12 @@ public partial class ShellWindow : Window
         controller.PropertyChanged += OnChanged;
         // Bilgisayar uykudan uyanınca bağlantılar hemen yenilenir.
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        // Num 0, 1, 2, 3, 5, 7, 8, 9 ve Ctrl+Shift+rakam kısayolları yalnız çeviri sürerken tutulur.
+        // Kısayollar (varsayılan Num 0, 1, 2, 3, 5, 7, 8, 9 ve Ctrl+Shift+rakam; Ayarlar › Kısayollar'da değişir) yalnız
+        // çeviri sürerken tutulur.
         SourceInitialized += (_, _) =>
         {
             hotkeys = new GlobalHotkeys(new WindowInteropHelper(this).Handle, OnHotkey);
-            hotkeys.Enabled = controller.IsRunning;
+            ApplyHotkeys();
         };
         // Bilgisayarda gösterilecek çeviriler küçük, üstte duran bir kutuda çıkar.
         controller.PcResultReady += PcResultWindow.Display;
@@ -57,7 +58,16 @@ public partial class ShellWindow : Window
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(AppController.Step)) ShowScreen();
-        if (e.PropertyName == nameof(AppController.IsRunning) && hotkeys is not null) hotkeys.Enabled = controller.IsRunning;
+        if (e.PropertyName is nameof(AppController.IsRunning) or nameof(AppController.HotkeysPaused) or nameof(AppController.Settings))
+            ApplyHotkeys();
+    }
+
+    /// <summary>Kısayol tablosu ayarlardan gelir; Ayarlar'da yeni tuş beklenirken kısayollar bırakılır.</summary>
+    private void ApplyHotkeys()
+    {
+        if (hotkeys is null) return;
+        hotkeys.Bindings = HotkeyTable.Resolve(controller.Settings.Hotkeys);
+        hotkeys.Enabled = controller.IsRunning && !controller.HotkeysPaused;
     }
 
     private void OnHotkey(HotkeyAction action)

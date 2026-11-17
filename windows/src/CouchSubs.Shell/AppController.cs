@@ -1377,6 +1377,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Pencerenin yeri ve genişliği ayarlanıyor: örnek yazı görünür, tıklamalar geçmez.</summary>
     public bool OverlayAdjusting { get => overlayAdjusting; set => Set(ref overlayAdjusting, value); }
 
+    private bool hotkeysPaused;
+
+    /// <summary>
+    /// Ayarlar'da yeni kısayol bekleniyor: genel kısayollar bırakılır, böylece basılan tuş (çeviri sürerken bile) işi
+    /// çalıştırmadan seçim kutusuna ulaşır.
+    /// </summary>
+    public bool HotkeysPaused { get => hotkeysPaused; set => Set(ref hotkeysPaused, value); }
+
     /// <summary>Num 7 ve ana ekrandaki seçenek: altyazı penceresinde tıklamaların geçmesini açar/kapatır.</summary>
     public void ToggleClickThrough() => Settings = settings with { OverlayClickThrough = !settings.OverlayClickThrough };
 

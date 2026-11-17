@@ -24,8 +24,7 @@
                               VerticalAlignment="Center" Margin="0,0,16,8" Checked="OnClickThrough" Unchecked="OnClickThrough" />
                     <Button x:Name="Adjust" Content="{t:T 'Adjust the subtitle window'}" Padding="16,0" Margin="0,0,0,8" Click="OnAdjust" />
                 </WrapPanel>
-                <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,0"
-                           Text="{t:T 'When on, clicks go through to the window below. Press Num 7 or Ctrl+Shift+7 to turn it off.'}" />
+                <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,0" />
             </StackPanel>
         </StackPanel>
     </c:Card>
