@@ -88,8 +88,10 @@ a{color:inherit}
   background:linear-gradient(90deg, rgba(20,21,24,.92) 0%, rgba(20,21,24,.6) 34%, rgba(20,21,24,0) 62%),
              linear-gradient(0deg, rgba(20,21,24,.9) 0%, rgba(20,21,24,0) 30%)}
 .copy{position:absolute; left:0; right:0; bottom:clamp(40px, 9vh, 96px)}
-.beat{position:absolute; left:0; right:0; bottom:0; max-width:620px; opacity:0; transform:translateY(16px); transition:opacity .45s ease, transform .45s ease; pointer-events:none}
-.beat.on{opacity:1; transform:none; pointer-events:auto}
+/* Geçişte iki metin üst üste binmesin: giden hızlı söner, gelen onun ardından belirir. */
+.beat{position:absolute; left:0; right:0; bottom:0; max-width:620px; opacity:0; transform:translateY(16px); transition:opacity .18s ease, transform .18s ease; pointer-events:none}
+.beat.on{opacity:1; transform:none; pointer-events:auto; transition:opacity .4s ease .16s, transform .4s ease .16s}
+@media (prefers-reduced-motion:reduce){ .beat, .beat.on{transition:none} }
 .beat h1, .beat h2{font:700 clamp(44px, 7.4vw, 96px)/.95 var(--display); font-variation-settings:"wdth" 78; letter-spacing:-.02em; margin:0 0 20px; text-wrap:balance}
 .beat h2{font-size:clamp(40px, 6.4vw, 84px)}
 .beat p{font-size:clamp(17px, 1.6vw, 20px); color:#D9D4CA; margin:0 0 28px; max-width:34em}
@@ -124,8 +126,9 @@ section.block{padding:clamp(80px, 12vw, 160px) 0; border-top:1px solid var(--lin
 
 /* Ekranlar */
 .screens{display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:clamp(32px, 5vw, 64px); align-items:start}
-.tabs{display:inline-flex; gap:4px; padding:4px; background:var(--night-2); border:1px solid var(--line); border-radius:12px; margin-bottom:20px}
-.tabs button{all:unset; cursor:pointer; padding:10px 16px; border-radius:8px; font-weight:500; font-size:15px; color:var(--muted)}
+.tabs{display:inline-flex; gap:4px; padding:4px; background:var(--night-2); border:1px solid var(--line); border-radius:12px; margin-bottom:20px; max-width:100%; overflow-x:auto; scrollbar-width:none}
+.tabs button{all:unset; cursor:pointer; padding:10px 16px; border-radius:8px; font-weight:500; font-size:15px; color:var(--muted); white-space:nowrap; transition:color .15s ease, background .15s ease}
+.tabs button:hover{color:var(--cream)}
 .tabs button[aria-selected="true"]{background:var(--night-3); color:var(--cream)}
 .tabs button:focus-visible{outline:2px solid var(--amber)}
 .desk{border-radius:16px; overflow:hidden; border:1px solid var(--line-2); background:var(--night-2); aspect-ratio:1200/760; position:relative; transition:aspect-ratio .3s ease}
@@ -138,7 +141,8 @@ section.block{padding:clamp(80px, 12vw, 160px) 0; border-top:1px solid var(--lin
 .phone:nth-child(2){margin-top:48px}
 .phones-col .soon{display:inline-flex; align-items:center; gap:8px; margin-top:20px; font-size:15px; color:var(--muted)}
 .phones-col .soon b{color:var(--cream); font-weight:700}
-@media (max-width:980px){
+/* Üç telefon yan yana ~580 px tutar; bundan dar ekranda masaüstü görüntüsü ve sekmeler sıkışmasın diye tek sütun. */
+@media (max-width:1120px){
   .screens{grid-template-columns:1fr}
   .phones{overflow-x:auto; padding-bottom:8px; scroll-snap-type:x mandatory}
   .phone{flex:none; width:180px; scroll-snap-align:start}
