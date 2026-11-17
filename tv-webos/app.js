@@ -1173,10 +1173,24 @@
     return match ? match[1] : null;
   }
 
+  // Bekleme ekranındaki durum satırı: TV'nin adresi (biliniyorsa; telefonda elle yazılabilir) ve aramanın sürdüğü.
+  // Adres ayrıca sorulmaz, taramanın zaten sorduğu adres kullanılır.
+  var tvAddress = null;
+
+  function renderWaitingStatus() {
+    var el = $('waiting-status');
+    if (!el) return;
+    el.textContent = (tvAddress ? t('waitingAddress').replace('%1', tvAddress) + ' · ' : '') + t('waitingSearching');
+  }
+
   // Taranacak ağlar: TV'nin kendi ağı, sonra kayıtlı adresin ağı (aynıysa bir kez).
   function scanSubnets(done) {
     var fromServer = subnetOf(server);
     function finish(ip) {
+      if (ip && ip !== tvAddress) {
+        tvAddress = ip;
+        renderWaitingStatus();
+      }
       var list = [];
       var own = subnetOf(ip);
       if (own) list.push(own);
@@ -1474,6 +1488,7 @@
 
   $('app-version').textContent = APP_VERSION;
   renderDiag();
+  renderWaitingStatus();
   // Önceki açılışta TV kendiliğinden kaynağa geçtiyse ipucu şimdi gösterilir.
   maybeShowSourceTip();
   var initial = parseParams(platform.launchParams());
