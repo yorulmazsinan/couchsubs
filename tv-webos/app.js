@@ -177,8 +177,10 @@
 
   function showNoPicture(port, failed) {
     if (noPictureClosed || pictureOk || demoRunning()) return;
+    // Neden ve ne yapılacağı düğmelerin üstünde; uzun "hâlâ siyah mı" açıklaması (index.html, #no-picture-help)
+    // düğmelerin altında, küçük ve ikincil renkte durur.
     $('no-picture-text').textContent = t(failed ? 'noPictureError' : 'noPicture').replace('%1', port) + ' ' +
-      t('noPictureChoose') + '\n\n' + t('noPictureStillBlack');
+      t('noPictureChoose');
     var box = $('no-picture-choices');
     box.innerHTML = '';
     var actions = [];
@@ -190,6 +192,8 @@
       button.className = 'button' + (actions[j].port === port ? ' current' : '');
       button.textContent = actions[j].label;
       button.addEventListener('click', choiceClick(actions[j], j));
+      // LG Magic Remote: işaretçinin üstünde durduğu düğme seçili olur; Tamam ve oklar oradan devam eder.
+      button.addEventListener('mouseover', choiceHover(j));
       actions[j].el = button;
       box.appendChild(button);
     }
@@ -211,6 +215,12 @@
     };
   }
 
+  function choiceHover(index) {
+    return function () {
+      if (index !== noPictureFocus) focusNoPicture(index);
+    };
+  }
+
   function focusNoPicture(index) {
     var count = noPictureActions.length;
     noPictureFocus = (index + count) % count;
@@ -218,6 +228,28 @@
       var el = noPictureActions[i].el;
       el.className = el.className.replace(' focused', '') + (i === noPictureFocus ? ' focused' : '');
     }
+  }
+
+  // ▲▼: düğmeler iki satıra bölünürse (uzun dil, dar ekran) bir üst/alt satırda yatayda en yakın düğmeye geçer.
+  // Tek satırda yerinde kalır (◀▶ zaten sırayla gezer).
+  function focusNoPictureRow(step) {
+    var current = noPictureActions[noPictureFocus].el;
+    var top = current.offsetTop;
+    var center = current.offsetLeft + current.offsetWidth / 2;
+    var best = -1, bestRow = 0, bestSide = 0;
+    for (var i = 0; i < noPictureActions.length; i++) {
+      var el = noPictureActions[i].el;
+      var row = (el.offsetTop - top) * step;
+      // Aynı satırdakiler (birkaç piksel fark dahil) ve ters yöndekiler atlanır.
+      if (row <= 2) continue;
+      var side = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+      if (best < 0 || row < bestRow - 2 || (Math.abs(row - bestRow) <= 2 && side < bestSide)) {
+        best = i;
+        bestRow = row;
+        bestSide = side;
+      }
+    }
+    if (best >= 0) focusNoPicture(best);
   }
 
   function runNoPicture(action) {
@@ -1384,8 +1416,11 @@
     if (code === KEY.OK) lastOkKey = Date.now();
     if (code === KEY.OK && sourceTipShown()) {
       hideSourceTip();
-    } else if (noPictureShown() && (code === KEY.LEFT || code === KEY.RIGHT || code === KEY.UP || code === KEY.DOWN)) {
-      focusNoPicture(noPictureFocus + (code === KEY.RIGHT || code === KEY.DOWN ? 1 : -1));
+    } else if (noPictureShown() && (code === KEY.LEFT || code === KEY.RIGHT)) {
+      focusNoPicture(noPictureFocus + (code === KEY.RIGHT ? 1 : -1));
+      e.preventDefault();
+    } else if (noPictureShown() && (code === KEY.UP || code === KEY.DOWN)) {
+      focusNoPictureRow(code === KEY.DOWN ? 1 : -1);
       e.preventDefault();
     } else if (noPictureShown() && code === KEY.OK) {
       runNoPicture(noPictureActions[noPictureFocus]);

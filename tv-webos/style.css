@@ -286,4 +286,6 @@ body.band #subtitle-cover { border-radius: 0; }
   font-weight: 600;
 }
 #no-picture .button.current { border-color: #A9A59C; }
+/* Doğru girişte de siyahsa ne yapılacağı: düğmelerin altında, küçük ve ikincil renkte (düğmelerin alt boşluğuyla 24 px). */
+#no-picture #no-picture-help { margin-top: 14px; font-size: 24px; line-height: 1.45; color: #A9A59C; }
 #no-picture .button.focused { background: #F5B83D; border-color: #FFFFFF; color: #1A1A1A; }
