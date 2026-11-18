@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.tv.InstalledTv
+import com.couchsubs.mobile.tv.TvAddress
 import com.couchsubs.mobile.tv.TvAppUpdate
 import com.couchsubs.mobile.tv.TvBrand
 import com.couchsubs.mobile.tv.TvDiscovery
@@ -135,7 +136,7 @@ internal fun AndroidTvInstallScreen(onBack: () -> Unit, onDone: () -> Unit, bran
     ScreenScaffold(top = { TopBar(onBack = onBack) }, bottom = {
         if (state is AndroidState.Done) PrimaryButton(stringResource(R.string.tvinstall_go_home), onClick = onDone)
         else PrimaryButton(stringResource(if (state is AndroidState.Failed) R.string.tvinstall_retry else R.string.tvinstall_button),
-            enabled = !working && address.isNotBlank()) { install() }
+            enabled = !working && address.isNotBlank() && !TvAddress.isPhoneAddress(address, phoneIp)) { install() }
     }) {
         Heading(stringResource(R.string.tvinstall_title), stringResource(R.string.tvinstall_android_body))
         if (!working) brandPicker()
@@ -170,9 +171,9 @@ internal fun AndroidTvInstallScreen(onBack: () -> Unit, onDone: () -> Unit, bran
         TileLabel(stringResource(R.string.tvinstall_android_mode))
         Segmented(listOf(stringResource(R.string.tvinstall_android_mode_network), stringResource(R.string.tvinstall_android_mode_wireless)),
             if (wireless) 1 else 0) { if (!working) wireless = it == 1 }
-        Field(address, { address = it.trim() },
-            stringResource(if (wireless) R.string.tvinstall_android_address_wireless else R.string.tvinstall_android_address),
-            keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        TvAddressField(address, { address = it.trim() }, phoneIp,
+            label = stringResource(if (wireless) R.string.tvinstall_android_address_wireless else R.string.tvinstall_android_address),
+            placeholder = if (wireless) null else stringResource(R.string.tvinstall_address_example))
         if (wireless) {
             Field(pairAddress, { pairAddress = it.trim() }, stringResource(R.string.tvinstall_android_pair_address),
                 keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))

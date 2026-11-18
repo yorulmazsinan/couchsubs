@@ -13,7 +13,10 @@ enum TVText {
     static var searching: String { String(localized: "Looking for TVs…") }
     static var none: String { String(localized: "No Samsung TV found. Is the TV on and on the same Wi-Fi? You can also type its address below (on the TV: Settings › General › Network › Network Status).") }
     static var notFound: String { String(localized: "My TV isn't listed") }
-    static var address: String { String(localized: "TV's IP address") }
+    static var address: String { String(localized: "TV's IP address (on the TV under Settings › Network)") }
+    static var addressExample: String { String(localized: "e.g. 192.168.1.100") }
+    static func addressNotPhone(_ a0: String) -> String { String(format: String(localized: "Not this phone's address. This phone's address: %@"), a0) }
+    static var addressIsPhone: String { String(localized: "This address is this phone's; type the TV's address.") }
     static var devOn: String { String(localized: "Developer mode is on") }
     static var devOff: String { String(localized: "Developer mode is off") }
     static func devOtherIp(_ a0: String) -> String { String(format: String(localized: "Host PC IP belongs to another device: %@"), a0) }
@@ -86,7 +89,7 @@ enum TVText {
     static var androidMode: String { String(localized: "Connection") }
     static var androidModeNetwork: String { String(localized: "USB/network debugging") }
     static var androidModeWireless: String { String(localized: "Wireless debugging") }
-    static var androidAddress: String { String(localized: "TV's IP address") }
+    static var androidAddress: String { String(localized: "TV's IP address (on the TV under Settings › Network)") }
     static var androidAddressWireless: String { String(localized: "TV's IP address and port (e.g. 192.168.1.20:41235)") }
     static var androidPairAddress: String { String(localized: "IP address and port in the pairing window") }
     static var androidPairCode: String { String(localized: "Pairing code (6 digits; leave empty if already paired)") }

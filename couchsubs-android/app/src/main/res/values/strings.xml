@@ -331,7 +331,10 @@
     <string name="tvinstall_searching">TV\'ler aranıyor…</string>
     <string name="tvinstall_none">Samsung TV bulunamadı. TV açık ve aynı Wi-Fi\'da mı? Adresini aşağıya elle de yazabilirsin (TV\'de Ayarlar › Genel › Ağ › Ağ Durumu).</string>
     <string name="tvinstall_not_found">TV\'m listede yok</string>
-    <string name="tvinstall_address">TV\'nin IP adresi</string>
+    <string name="tvinstall_address">TV\'nin IP adresi (TV\'de Ayarlar › Ağ\'da yazar)</string>
+    <string name="tvinstall_address_example">örn. 192.168.1.100</string>
+    <string name="tvinstall_address_not_phone">Bu telefonun adresi değil. Bu telefonun adresi: %1$s</string>
+    <string name="tvinstall_address_is_phone">Bu adres bu telefonun; TV\'nin adresini yazın.</string>
     <string name="tvinstall_dev_on">Geliştirici modu açık</string>
     <string name="tvinstall_dev_off">Geliştirici modu kapalı</string>
     <string name="tvinstall_dev_other_ip">Host PC IP başka bir cihazın: %1$s</string>
@@ -406,7 +409,7 @@
     <string name="tvinstall_android_mode">Bağlantı yolu</string>
     <string name="tvinstall_android_mode_network">USB/ağ hata ayıklama</string>
     <string name="tvinstall_android_mode_wireless">Kablosuz hata ayıklama</string>
-    <string name="tvinstall_android_address">TV\'nin IP adresi</string>
+    <string name="tvinstall_android_address">TV\'nin IP adresi (TV\'de Ayarlar › Ağ\'da yazar)</string>
     <string name="tvinstall_android_address_wireless">TV\'nin IP adresi ve portu (ör. 192.168.1.20:41235)</string>
     <string name="tvinstall_android_pair_address">Eşleme penceresindeki IP adresi ve port</string>
     <string name="tvinstall_android_pair_code">Eşleme kodu (6 hane; daha önce eşlendiyse boş bırak)</string>

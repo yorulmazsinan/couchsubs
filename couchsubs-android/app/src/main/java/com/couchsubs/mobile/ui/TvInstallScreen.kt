@@ -48,6 +48,7 @@ import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.tv.InstalledTv
+import com.couchsubs.mobile.tv.TvAddress
 import com.couchsubs.mobile.tv.TvAppStatus
 import com.couchsubs.mobile.tv.TvAppUpdate
 import com.couchsubs.mobile.tv.TvBrand
@@ -218,7 +219,7 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
         if (!manual && !working) GhostButton(stringResource(R.string.tvinstall_not_found)) { manual = true }
         if (state is InstallState.Done) PrimaryButton(stringResource(R.string.tvinstall_go_home), onClick = onDone)
         else PrimaryButton(stringResource(if (state is InstallState.Failed) R.string.tvinstall_retry else R.string.tvinstall_button),
-            enabled = !working && host.isNotBlank()) { install() }
+            enabled = !working && host.isNotBlank() && !TvAddress.isPhoneAddress(host, phoneIp)) { install() }
     }) {
         Heading(stringResource(R.string.tvinstall_title), stringResource(R.string.tvinstall_body))
         if (!working) brandPicker()
@@ -247,8 +248,7 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
                 }
             }
         }
-        if (manual) Field(host, { host = it.trim() }, stringResource(R.string.tvinstall_address),
-            keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (manual) TvAddressField(host, { host = it.trim() }, phoneIp)
 
         Tile(Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.tvinstall_steps_title), style = Tokens.Type.headline, color = Tokens.Color.text)
@@ -280,6 +280,21 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
             }
         }
     }
+}
+
+/**
+ * TV'nin adresi yazılan alan: etiket adresin TV'de nerede yazdığını söyler, altında bu telefonun adresi durur. İki
+ * kullanıcı TV'nin kutusuna telefonun/bilgisayarın adresini yazmıştı (#343); aynısı yazılınca kurulum başlamaz, uyarılır.
+ */
+@Composable
+internal fun TvAddressField(
+    value: String, onChange: (String) -> Unit, phoneIp: String?,
+    label: String = stringResource(R.string.tvinstall_address),
+    placeholder: String? = stringResource(R.string.tvinstall_address_example),
+) {
+    Field(value, onChange, label, keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri), placeholder = placeholder)
+    if (TvAddress.isPhoneAddress(value, phoneIp)) NoteTile(stringResource(R.string.tvinstall_address_is_phone))
+    else if (phoneIp != null) Text(stringResource(R.string.tvinstall_address_not_phone, phoneIp), style = Tokens.Type.caption, color = Tokens.Color.secondary)
 }
 
 /** Uygulama içinde Samsung'un giriş sayfası; "Tarayıcıda aç" aynı dinleyiciye döner. */

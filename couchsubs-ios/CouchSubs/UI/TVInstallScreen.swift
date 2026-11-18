@@ -179,6 +179,30 @@ struct InstallResult: View {
 /// Telefonun TV ile aynı ağdaki adresi (Samsung'da Host PC IP olarak yazılır).
 func phoneAddress(near host: String?) -> String? { NetworkAddress.near(host?.isEmpty == false ? host : nil) }
 
+/// TV'nin adresi yazılan alan (Android'deki TvAddressField ile aynı): etiket adresin TV'de nerede yazdığını söyler, altında
+/// bu telefonun adresi durur. İki kullanıcı TV'nin kutusuna telefonun/bilgisayarın adresini yazmıştı (#343); aynısı
+/// yazılınca kurulum düğmesi kapanır ve uyarı çıkar.
+struct TVAddressField: View {
+    let label: String
+    @Binding var text: String
+    var placeholder: String? = TVText.addressExample
+    var keyboard: UIKeyboardType = .decimalPad
+
+    var body: some View {
+        let phone = phoneAddress(near: nil)
+        VStack(alignment: .leading, spacing: Mobile.Space.hair) {
+            Text(verbatim: label).font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+            TextField(placeholder ?? label, text: $text)
+                .textFieldStyle(MobileFieldStyle()).keyboardType(keyboard).autocorrectionDisabled().textInputAutocapitalization(.never)
+            if NetworkAddress.isOwnAddress(text, own: phone) {
+                MobileNote(text: TVText.addressIsPhone)
+            } else if let phone {
+                Text(verbatim: TVText.addressNotPhone(phone)).font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+            }
+        }
+    }
+}
+
 /// Ağın /24 bölümünde `port`u açık adresler (Android'deki gibi en çok 32 paralel deneme).
 func scanSubnet(port: UInt16, near host: String?) async -> [String] {
     guard let phone = phoneAddress(near: host), let dot = phone.lastIndex(of: ".") else { return [] }
@@ -240,7 +264,7 @@ struct SamsungInstallSection: View {
             ProgressView().tint(Mobile.Palette.accent)
         }
         if manual {
-            TextField(TVText.address, text: $host).textFieldStyle(MobileFieldStyle()).keyboardType(.decimalPad)
+            TVAddressField(label: TVText.address, text: $host, keyboard: .decimalPad)
         } else if !phase.isWorking {
             Button(TVText.notFound) { manual = true }.buttonStyle(.mobileGhost)
         }
@@ -254,7 +278,8 @@ struct SamsungInstallSection: View {
             } else {
                 Button(phase == .idle || phase.isWorking ? TVText.button : TVText.retry) { install() }
                     .buttonStyle(.mobilePrimary)
-                    .disabled(phase.isWorking || host.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(phase.isWorking || host.trimmingCharacters(in: .whitespaces).isEmpty
+                              || NetworkAddress.isOwnAddress(host, own: phoneAddress(near: nil)))
             }
         }
             .task { await search() }
@@ -414,8 +439,8 @@ struct AndroidTVInstallSection: View {
         Text(verbatim: TVText.androidMode).font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
         SegmentedTabs(options: [false: LocalizedStringKey(TVText.androidModeNetwork), true: LocalizedStringKey(TVText.androidModeWireless)],
                       selection: $wireless)
-        TextField(wireless ? TVText.androidAddressWireless : TVText.androidAddress, text: $address)
-            .textFieldStyle(MobileFieldStyle()).keyboardType(.numbersAndPunctuation).autocorrectionDisabled().textInputAutocapitalization(.never)
+        TVAddressField(label: wireless ? TVText.androidAddressWireless : TVText.androidAddress, text: $address,
+                       placeholder: wireless ? nil : TVText.addressExample, keyboard: .numbersAndPunctuation)
         if wireless {
             TextField(TVText.androidPairAddress, text: $pairAddress)
                 .textFieldStyle(MobileFieldStyle()).keyboardType(.numbersAndPunctuation).autocorrectionDisabled().textInputAutocapitalization(.never)
@@ -434,7 +459,8 @@ struct AndroidTVInstallSection: View {
             } else {
                 Button(phase == .idle || phase.isWorking ? TVText.button : TVText.retry) { install() }
                     .buttonStyle(.mobilePrimary)
-                    .disabled(phase.isWorking || address.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(phase.isWorking || address.trimmingCharacters(in: .whitespaces).isEmpty
+                              || NetworkAddress.isOwnAddress(address, own: phoneAddress(near: nil)))
             }
         }
             .task { await search() }

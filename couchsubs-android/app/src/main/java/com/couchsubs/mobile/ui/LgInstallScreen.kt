@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.tv.InstalledTv
+import com.couchsubs.mobile.tv.TvAddress
 import com.couchsubs.mobile.tv.TvAppUpdate
 import com.couchsubs.mobile.tv.TvBrand
 import com.couchsubs.mobile.tv.TvDiscovery
@@ -65,6 +66,7 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val keys = remember { LgKeys(File(context.noBackupFilesDir, "lg")) }
+    val phoneIp = remember { phoneAddress(context) }
     var candidates by remember { mutableStateOf<List<LgCandidate>?>(null) }
     var host by remember { mutableStateOf(preset?.host ?: Services.settings.installedTv?.takeIf { it.brand == TvBrand.LG }?.host ?: "") }
     var manual by remember { mutableStateOf(false) }
@@ -147,7 +149,7 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
         // Kurulum bitince ana düğme ana ekrana götürür; kurulumda geri düğmesi 3. adıma dönüyor, kullanıcı orada kalıyordu (#113).
         if (state is LgState.Done) PrimaryButton(stringResource(R.string.tvinstall_go_home), onClick = onDone)
         else PrimaryButton(stringResource(if (state is LgState.Failed) R.string.tvinstall_retry else R.string.tvinstall_button),
-            enabled = !working && host.isNotBlank() && (passphrase.isNotBlank() || hasKey)) { install() }
+            enabled = !working && host.isNotBlank() && !TvAddress.isPhoneAddress(host, phoneIp) && (passphrase.isNotBlank() || hasKey)) { install() }
     }) {
         Heading(stringResource(R.string.tvinstall_title), stringResource(R.string.tvinstall_lg_body))
         if (!working) brandPicker()
@@ -177,8 +179,7 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
             }
         }
         if (addressError) NoteTile(stringResource(R.string.address_invalid))
-        if (manual) Field(host, { host = it.trim(); addressError = false }, stringResource(R.string.tvinstall_address),
-            keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (manual) TvAddressField(host, { host = it.trim(); addressError = false }, phoneIp)
         Field(passphrase, { passphrase = it.trim().uppercase() },
             stringResource(if (hasKey) R.string.tvinstall_lg_passphrase_saved else R.string.tvinstall_lg_passphrase),
             keyboard = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, keyboardType = KeyboardType.Ascii))
