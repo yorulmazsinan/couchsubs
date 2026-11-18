@@ -144,6 +144,52 @@ public enum NetworkAddress {
         return result
     }
 
-    /// `host` ile aynı alt ağdaki IPv4 adresi; yoksa Wi-Fi/Ethernet adresi (bkz. `choose`).
-    public static func near(_ host: String?) -> String? { choose(candidates(), near: host) }
+    /// TV'ye giden bağlantının bu cihazdaki kaynak adresi: UDP soketi "bağlanır" (paket gönderilmez) ve yerel uç okunur;
+    /// TCP bağlantısı da aynı bağdaştırıcıdan çıkar. Okunamazsa nil.
+    public static func routeSource(to host: String) -> String? {
+        let target = inet_addr(host)
+        guard target != UInt32.max else { return nil }
+        let fd = socket(AF_INET, SOCK_DGRAM, 0)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var remote = sockaddr_in()
+        remote.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        remote.sin_family = sa_family_t(AF_INET)
+        remote.sin_port = in_port_t(8001).bigEndian
+        remote.sin_addr = in_addr(s_addr: target)
+        let connected = withUnsafePointer(to: &remote) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard connected == 0 else { return nil }
+        var local = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &local) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        }
+        guard named == 0, local.sin_addr.s_addr != 0 else { return nil }
+        return String(cString: inet_ntoa(local.sin_addr))
+    }
+
+    /// TV'nin göreceği adres: TV'ye giden yolun kaynak adresi açık bir bağdaştırıcınınsa o, yoksa `choose`. Alt ağ tahmini
+    /// birden çok bağdaştırıcıda yanlış adresi seçebiliyordu; Samsung Host PC IP ile karşılaştırılan adres bu (#343).
+    public static func choose(_ candidates: [Candidate], near host: String?, routeSource: String?) -> String? {
+        if let source = routeSource, source != "0.0.0.0", !source.hasPrefix("127."),
+           candidates.isEmpty || candidates.contains(where: { $0.address == source }) {
+            return source
+        }
+        return choose(candidates, near: host)
+    }
+
+    /// TV'nin adres kutusuna bu cihazın kendi adresi mi yazılmış? (Samsung'da Host PC IP'ye yazılacak olan; iki kullanıcı
+    /// TV'nin kutusuna bunu yazmıştı, #343.) Kablosuz hata ayıklamadaki port (`:41235`) atılır.
+    public static func isOwnAddress(_ typed: String, own: String?) -> Bool {
+        guard let own = own?.trimmingCharacters(in: .whitespaces), !own.isEmpty else { return false }
+        let host = typed.trimmingCharacters(in: .whitespaces).split(separator: ":", maxSplits: 1).first.map(String.init) ?? ""
+        return !host.isEmpty && host == own
+    }
+
+    /// TV'ye giden yolun kaynak adresi; yoksa `host` ile aynı alt ağdaki IPv4 adresi, o da yoksa Wi-Fi/Ethernet adresi.
+    public static func near(_ host: String?) -> String? {
+        choose(candidates(), near: host, routeSource: host.flatMap { routeSource(to: $0) })
+    }
 }

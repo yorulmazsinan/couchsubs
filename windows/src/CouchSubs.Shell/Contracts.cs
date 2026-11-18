@@ -587,6 +587,11 @@ public interface IAppServices
     /// <summary>Samsung ve Android TV için uygulamayla gelen paket (geliştirici derlemesinde olmayabilir).</summary>
     BundledTvApp? BundledApp(TvBrand brand);
     Task<bool> IsSamsungDevModeOnAsync(string host);
+    /// <summary>
+    /// Kurulumdan önce TV'nin geliştirici modu bilgisi (8001) ve TV'ye giden yolun bu bilgisayardaki adresi. TV yanıt
+    /// vermezse Info null olur; kurulum yine denenir.
+    /// </summary>
+    Task<SamsungPreflight> CheckSamsungAsync(string host) => Task.FromResult(new SamsungPreflight(null, null));
     /// <summary>TV'deki sürüme bakar, eksik ya da eskiyse kurar; TV'deki sürümü ve kurulup kurulmadığını döner.</summary>
     Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent);
     Task<bool> IsAndroidDebugOnAsync(string host);
@@ -669,10 +674,16 @@ public sealed record TvInstallEvent(TvInstallEventKind Kind, Uri? Url = null, st
 public enum TvAppKind { Unknown, Working, UpToDate, DevModeOff, NeedsPassphrase, Failed, SignIn, ApproveOnTv }
 
 /// <summary>TV uygulamasının kurulum durumu.</summary>
-public sealed record TvAppState(TvAppKind Kind, string? Version = null, DevModeError? Error = null, Uri? Url = null, string? Reason = null)
+/// <param name="HostPcIp">HostPcMismatch'te TV'deki "Host PC IP".</param>
+/// <param name="ComputerAddress">HostPcMismatch'te TV'nin göreceği bu bilgisayar adresi.</param>
+public sealed record TvAppState(TvAppKind Kind, string? Version = null, DevModeError? Error = null, Uri? Url = null, string? Reason = null,
+    string? HostPcIp = null, string? ComputerAddress = null)
 {
     public static readonly TvAppState Unknown = new(TvAppKind.Unknown);
 }
+
+/// <summary>Samsung kurulumundan önceki denetim: TV'nin 8001 yanıtı ve TV'ye giden yolun bu bilgisayardaki adresi.</summary>
+public sealed record SamsungPreflight(SamsungDeveloperInfo? Info, string? ComputerAddress);
 
 /// <summary>Durum noktasının rengi: bağlı (yeşil), sorun var (turuncu), boşta (gri).</summary>
 public enum StatusTone { Idle, Warning, Good }

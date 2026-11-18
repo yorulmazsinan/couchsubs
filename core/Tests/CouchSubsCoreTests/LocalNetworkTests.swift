@@ -42,6 +42,29 @@ final class LocalNetworkTests: XCTestCase {
         XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "10.0.0.5"), "192.168.1.34")
     }
 
+    // #343: TV'ye giden yolun kaynak adresi alt ağ tahmininden önce gelir.
+    func testTheAddressTheTVSeesWinsOverTheSubnetGuess() {
+        let cable = NetworkAddress.Candidate(interface: "en7", address: "192.168.1.35", netmask: "255.255.255.0")
+        XCTAssertEqual(NetworkAddress.choose([wifi, cable], near: "192.168.1.171", routeSource: "192.168.1.35"), "192.168.1.35")
+        XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "192.168.1.171", routeSource: nil), "192.168.1.34")
+        XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "192.168.1.171", routeSource: "127.0.0.1"), "192.168.1.34")
+        XCTAssertEqual(NetworkAddress.choose([vm, wifi], near: "192.168.1.171", routeSource: "10.9.9.9"), "192.168.1.34")
+    }
+
+    func testOwnAddressTypedAsTheTVsIsRecognised() {
+        XCTAssertTrue(NetworkAddress.isOwnAddress("192.168.1.34", own: "192.168.1.34"))
+        XCTAssertTrue(NetworkAddress.isOwnAddress(" 192.168.1.34:41235", own: "192.168.1.34"))
+        XCTAssertFalse(NetworkAddress.isOwnAddress("192.168.1.100", own: "192.168.1.34"))
+        XCTAssertFalse(NetworkAddress.isOwnAddress("192.168.1.340", own: "192.168.1.34"))
+        XCTAssertFalse(NetworkAddress.isOwnAddress("192.168.1.34", own: nil))
+        XCTAssertFalse(NetworkAddress.isOwnAddress("", own: "192.168.1.34"))
+    }
+
+    func testRouteSourceTowardsThisMachineIsLoopback() {
+        XCTAssertEqual(NetworkAddress.routeSource(to: "127.0.0.1"), "127.0.0.1")
+        XCTAssertNil(NetworkAddress.routeSource(to: "not an address"))
+    }
+
     // iPhone: hücresel bağdaştırıcının 10.x adresi taranmaz, yalnız Wi-Fi'ın /24'ü.
     func testScanUsesOnlyTheHomeNetworkAdapters() {
         let cellular = NetworkAddress.Candidate(interface: "pdp_ip0", address: "10.64.12.7", netmask: "255.255.255.255")

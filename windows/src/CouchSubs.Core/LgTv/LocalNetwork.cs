@@ -113,6 +113,40 @@ public static class LocalNetwork
         return best?.Address.ToString();
     }
 
+    /// <summary>
+    /// TV'ye giden bağlantının kaynak adresi: işletim sistemi <paramref name="target"/>'a hangi bağdaştırıcıdan çıkacaksa
+    /// onun adresi. UDP soketi "bağlanır" (paket gönderilmez) ve yerel uç okunur; TCP bağlantısı da aynı adresi kullanır.
+    /// Birden çok bağdaştırıcıda (Wi-Fi + Ethernet, VPN, WSL) TV'nin göreceği adres budur. Okunamazsa null.
+    /// </summary>
+    public static IPAddress? RouteSourceAddress(IPAddress target)
+    {
+        if (target.AddressFamily != AddressFamily.InterNetwork) return null;
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            socket.Connect(new IPEndPoint(target, 8001));
+            return (socket.LocalEndPoint as IPEndPoint)?.Address;
+        }
+        catch (SocketException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// TV'nin göreceği bu bilgisayar adresi: TV'ye giden yolun kaynak adresi (<paramref name="routeSource"/>) açık bir
+    /// bağdaştırıcınınsa o; yoksa <see cref="ChooseComputerAddress(IReadOnlyList{AdapterAddress}, IPAddress?)"/>.
+    /// Alt ağ tahmini birden çok bağdaştırıcıda (aynı ağda Wi-Fi ve Ethernet, Hyper-V dış anahtarı) yanlış adresi
+    /// seçebiliyordu; Samsung "Host PC IP" ile karşılaştırılan adres yanlış olunca TV bağlantıyı kesiyordu (#343).
+    /// </summary>
+    public static string? ChooseComputerAddress(IReadOnlyList<AdapterAddress> adapters, IPAddress? near, IPAddress? routeSource)
+    {
+        if (routeSource is { AddressFamily: AddressFamily.InterNetwork } source && !IPAddress.IsLoopback(source) && !source.Equals(IPAddress.Any)
+            && (adapters.Count == 0 || adapters.Any(a => a.Address.Equals(source))))
+            return source.ToString();
+        return ChooseComputerAddress(adapters, near);
+    }
+
     public static bool IsPrivate(IPAddress address)
     {
         var b = address.GetAddressBytes();

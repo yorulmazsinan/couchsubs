@@ -58,7 +58,48 @@ public static class SamsungMessages
         try { return JsonNode.Parse(json)?["device"]?["name"]?.GetValue<string>()?.Replace("&quot;", "\""); }
         catch (JsonException) { return null; }
     }
+
+    /// <summary>
+    /// <c>http://TV:8001/api/v2/</c> yanıtında geliştirici modu açık mı (<c>device.developerMode</c>: "1" ya da "0");
+    /// alan yoksa ya da yanıt okunamazsa null (eski TV'ler bildirmez, kurulum yine denenir).
+    /// </summary>
+    public static bool? DeveloperMode(string json)
+    {
+        var value = DeviceField(json, "developerMode");
+        if (value is null) return null;
+        return value == "1" || value.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// TV'nin geliştirici modunda girilen "Host PC IP" (<c>device.developerIP</c>); TV yalnız bu adresten gelen sdb
+    /// bağlantısını kabul eder. Boşsa ya da "0.0.0.0" ise null.
+    /// </summary>
+    public static string? DeveloperIp(string json) => DeviceField(json, "developerIP") is { } ip && ip != "0.0.0.0" ? ip : null;
+
+    /// <summary>
+    /// TV'deki Host PC IP bu bilgisayarın adresinden farklı mı? İkisinden biri bilinmiyorsa farklı sayılmaz (kurulum
+    /// denenir). Farklıysa TV 26101'deki sdb el sıkışmasında bağlantıyı keser (#343).
+    /// </summary>
+    public static bool HostPcIpMismatch(string? developerIp, string? computerAddress) =>
+        !string.IsNullOrWhiteSpace(developerIp) && !string.IsNullOrWhiteSpace(computerAddress) &&
+        !string.Equals(developerIp.Trim(), computerAddress.Trim(), StringComparison.Ordinal);
+
+    private static string? DeviceField(string json, string name)
+    {
+        try
+        {
+            if (JsonNode.Parse(json)?["device"]?[name] is not JsonValue value) return null;
+            var text = (value.TryGetValue<string>(out var s) ? s : value.ToJsonString()).Trim();
+            return text.Length > 0 ? text : null;
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException) { return null; }
+    }
 }
+
+/// <summary>Samsung TV'nin 8001 yanıtındaki geliştirici modu bilgisi.</summary>
+/// <param name="DeveloperMode">Geliştirici modu açık mı; TV bildirmezse null.</param>
+/// <param name="DeveloperIp">TV'deki "Host PC IP"; boşsa null.</param>
+public sealed record SamsungDeveloperInfo(bool? DeveloperMode, string? DeveloperIp);
 
 /// <summary>
 /// Bekçinin (TvKeeper) Samsung bağlantılarında kullandığı jeton. TV yeni jeton verirse bir sonraki bağlantı onu kullanır
@@ -159,6 +200,20 @@ public static class SamsungDiscovery
 {
     internal const string SearchTarget = "urn:samsung.com:device:RemoteControlReceiver:1";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+
+    /// <summary>TV'nin geliştirici modu bilgisi (<c>http://TV:8001/api/v2/</c>); TV yanıt vermezse null.</summary>
+    public static async Task<SamsungDeveloperInfo?> DeveloperInfoAsync(string host, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var json = await Http.GetStringAsync($"http://{host}:8001/api/v2/", cancellationToken);
+            return new SamsungDeveloperInfo(SamsungMessages.DeveloperMode(json), SamsungMessages.DeveloperIp(json));
+        }
+        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidOperationException or UriFormatException)
+        {
+            return null;
+        }
+    }
 
     public static async Task<IReadOnlyList<LgTv>> SearchAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {

@@ -71,6 +71,35 @@ public class SamsungTvTests
         Assert.Null(SamsungMessages.DeviceName("{}"));
     }
 
+    // Samsung'un 8001 yanıtından (kısaltılmış): geliştirici modu ve Host PC IP metin olarak gelir.
+    private const string DevModeOn =
+        "{\"device\":{\"name\":\"[TV] Samsung Q60\",\"developerMode\":\"1\",\"developerIP\":\"192.168.1.50\",\"ip\":\"192.168.1.20\"},\"type\":\"Samsung SmartTV\"}";
+
+    [Fact]
+    public void DeveloperModeAndHostPcIpAreRead()
+    {
+        Assert.True(SamsungMessages.DeveloperMode(DevModeOn));
+        Assert.Equal("192.168.1.50", SamsungMessages.DeveloperIp(DevModeOn));
+        Assert.False(SamsungMessages.DeveloperMode("{\"device\":{\"developerMode\":\"0\",\"developerIP\":\"0.0.0.0\"}}"));
+        // "0.0.0.0" ve boş alan Host PC IP girilmemiş demek.
+        Assert.Null(SamsungMessages.DeveloperIp("{\"device\":{\"developerMode\":\"0\",\"developerIP\":\"0.0.0.0\"}}"));
+        Assert.Null(SamsungMessages.DeveloperIp("{\"device\":{\"developerIP\":\"\"}}"));
+        // Bildirmeyen eski TV ve bozuk yanıt: bilinmiyor.
+        Assert.Null(SamsungMessages.DeveloperMode("{\"device\":{\"name\":\"TV\"}}"));
+        Assert.Null(SamsungMessages.DeveloperMode("<html>"));
+        Assert.Null(SamsungMessages.DeveloperIp("{\"device\":[]}"));
+        Assert.True(SamsungMessages.DeveloperMode("{\"device\":{\"developerMode\":1}}"));
+    }
+
+    [Fact]
+    public void HostPcIpMismatchNeedsBothAddresses()
+    {
+        Assert.True(SamsungMessages.HostPcIpMismatch("192.168.1.50", "192.168.1.34"));
+        Assert.False(SamsungMessages.HostPcIpMismatch("192.168.1.34", "192.168.1.34"));
+        Assert.False(SamsungMessages.HostPcIpMismatch(null, "192.168.1.34"));
+        Assert.False(SamsungMessages.HostPcIpMismatch("192.168.1.50", null));
+    }
+
     [Fact]
     public void SavedTvWithoutBrandIsLg() =>
         Assert.Equal(TvBrand.Lg, JsonSerializer.Deserialize<Tv>("{\"Name\":\"LG TV\",\"Host\":\"1.2.3.4\"}")!.Brand);

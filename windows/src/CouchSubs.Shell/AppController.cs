@@ -807,10 +807,24 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (services.BundledApp(TvBrand.Samsung) is not { } bundled) return;
         var remembered = !NeedsInstall(bundled);
-        if (!await services.IsSamsungDevModeOnAsync(target.Host))
+        // TV 8001'de geliştirici modunu ve Host PC IP'yi söyler (Android ve iPhone uygulaması da buna bakar). Host PC IP
+        // bu bilgisayarınki değilse TV 26101'de sdb el sıkışmasında bağlantıyı keser ve önceden yalnız genel "TV bu
+        // bilgisayarı kabul etmedi" görünüyordu (#343); bu durumda sdb hiç denenmez, iki adres de söylenir.
+        var check = await services.CheckSamsungAsync(target.Host);
+        var devModeOn = check.Info?.DeveloperMode != false && await services.IsSamsungDevModeOnAsync(target.Host);
+        if (!devModeOn)
         {
             // Geliştirici modu kapalıyken TV'ye sorulamaz; bu bilgisayarın kurduğu sürüme bakılır.
             TvApp = remembered ? new TvAppState(TvAppKind.UpToDate, InstalledAppVersion ?? bundled.Version) : new TvAppState(TvAppKind.DevModeOff);
+            return;
+        }
+        if (SamsungMessages.HostPcIpMismatch(check.Info?.DeveloperIp, check.ComputerAddress))
+        {
+            // Çalışan uygulama "kurulamadı" diye gösterilmez (Unreachable'daki gibi); güncelleme Host PC IP düzelince gelir.
+            TvApp = remembered
+                ? new TvAppState(TvAppKind.UpToDate, InstalledAppVersion ?? bundled.Version)
+                : new TvAppState(TvAppKind.Failed, Error: DevModeError.HostPcMismatch, HostPcIp: check.Info!.DeveloperIp,
+                    ComputerAddress: check.ComputerAddress);
             return;
         }
         // Güncel bilinen uygulamada denetim sessiz sürer; kart ancak kurulum başlarsa değişir.
@@ -2314,12 +2328,15 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// <paramref name="near"/> adresine (TV) ulaşan bu bilgisayar adresi; TV adresi bilinmiyorsa (null ya da geçersiz)
-    /// Wi-Fi/Ethernet adresi. VPN ve sanal bağdaştırıcılar ancak başka adres yoksa seçilir (<see cref="LocalNetwork.ChooseComputerAddress"/>).
+    /// Wi-Fi/Ethernet adresi. TV adresi biliniyorsa işletim sisteminin TV'ye çıkacağı bağdaştırıcının adresi önce gelir
+    /// (birden çok bağdaştırıcıda doğru kaynak adres, #343). VPN ve sanal bağdaştırıcılar ancak başka adres yoksa seçilir
+    /// (<see cref="LocalNetwork.ChooseComputerAddress(IReadOnlyList{LocalNetwork.AdapterAddress}, IPAddress?, IPAddress?)"/>).
     /// </summary>
     public static string? LocalAddress(string? near)
     {
         IPAddress? target = IPAddress.TryParse(near, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork ? parsed : null;
-        return LocalNetwork.ChooseComputerAddress(LocalNetwork.Ipv4Adapters(), target);
+        var route = target is null ? null : LocalNetwork.RouteSourceAddress(target);
+        return LocalNetwork.ChooseComputerAddress(LocalNetwork.Ipv4Adapters(), target, route);
     }
 
     // --- Windows Güvenlik Duvarı ---

@@ -26,6 +26,16 @@ extension AppServices {
         guard let info = await Console.discover(timeout: .seconds(2), host: host).first else { return nil }
         return RunningGame(titleId: info.runningAppTitleId, name: info.runningAppName)
     }
+    /// Samsung kurulumundan önce: TV'nin 8001 yanıtı ve TV'ye giden yolun bu Mac'teki adresi (#343).
+    func checkSamsung(host: String) async -> SamsungPreflight {
+        SamsungPreflight(info: await SamsungDiscovery.developerInfo(host: host), computerAddress: NetworkAddress.near(host))
+    }
+}
+
+/// Samsung kurulumundan önceki denetim: TV'nin geliştirici modu bilgisi ve TV'nin göreceği bu Mac'in adresi.
+struct SamsungPreflight: Equatable {
+    var info: SamsungDeveloperInfo?
+    var computerAddress: String?
 }
 
 protocol AppServices: AnyObject {
@@ -62,6 +72,7 @@ protocol AppServices: AnyObject {
     /// Samsung ve Android TV için uygulamayla gelen paket (geliştirici derlemesinde olmayabilir).
     func bundledApp(for brand: TVBrand) -> BundledTVApp?
     func isSamsungDevModeOn(host: String) async -> Bool
+    func checkSamsung(host: String) async -> SamsungPreflight
     /// TV'deki sürüme bakar, eksik ya da eskiyse kurar; TV'deki sürümü ve kurulup kurulmadığını döner.
     func installSamsungApp(host: String, app: BundledTVApp,
                            onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> (version: String, installed: Bool)
@@ -403,6 +414,8 @@ enum TVAppState: Equatable {
     case signIn(URL)
     /// Android TV: TV ekranında hata ayıklama izni bekleniyor.
     case approveOnTV
+    /// Samsung: TV'deki Host PC IP (`tvIp`) bu Mac'in adresi (`computer`) değil; sdb denenmedi (#343).
+    case hostPcMismatch(tvIp: String, computer: String)
 }
 
 extension AppAppearance {
@@ -1042,9 +1055,20 @@ final class AppModel: ObservableObject {
         guard let bundled = services.bundledApp(for: .samsung) else { return }
         let remembered = !needsInstall(bundled)
         let current = TVAppState.upToDate(installedAppVersion ?? bundled.version)
-        guard await services.isSamsungDevModeOn(host: tv.host) else {
+        // TV 8001'de geliştirici modunu ve Host PC IP'yi söyler (Android ve iPhone uygulaması da buna bakar). Host PC IP
+        // bu Mac'inki değilse TV sdb el sıkışmasında bağlantıyı keser (#343); sdb hiç denenmez, iki adres söylenir.
+        let check = await services.checkSamsung(host: tv.host)
+        let devModeOn: Bool
+        if check.info?.developerMode == false { devModeOn = false } else { devModeOn = await services.isSamsungDevModeOn(host: tv.host) }
+        guard devModeOn else {
             // Geliştirici modu kapalıyken TV'ye sorulamaz; bu Mac'in kurduğu sürüme bakılır.
             tvApp = remembered ? current : .devModeOff
+            return
+        }
+        if let tvIp = check.info?.developerIp, let computer = check.computerAddress,
+           SamsungDeveloperInfo.hostPcIpMismatch(developerIp: tvIp, computer: computer) {
+            TVInstallLog.write("TV'deki Host PC IP (developerIP) \(tvIp), bu Mac'in TV'ye giden adresi \(computer); kurulum denenmedi.")
+            tvApp = remembered ? current : .hostPcMismatch(tvIp: tvIp, computer: computer)
             return
         }
         // Güncel bilinen uygulamada denetim sessiz sürer; kart ancak kurulum başlarsa değişir.

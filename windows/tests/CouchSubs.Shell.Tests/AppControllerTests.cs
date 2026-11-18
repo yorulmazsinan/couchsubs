@@ -292,6 +292,9 @@ internal sealed class FakeServices : IAppServices
         TvCalls++;
         return Task.FromResult(SamsungDevMode);
     }
+    /// <summary>Samsung TV'nin 8001 yanıtı ve TV'ye giden yolun bu bilgisayardaki adresi.</summary>
+    public SamsungPreflight SamsungCheck { get; set; } = new(null, null);
+    public Task<SamsungPreflight> CheckSamsungAsync(string host) => Task.FromResult(SamsungCheck);
     /// <summary>Samsung TV'de kurulu sürüm (sahte TV'nin vd_applist'i); null: uygulama yok.</summary>
     public string? SamsungOnTv { get; set; }
     public Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent)
@@ -1841,6 +1844,61 @@ public class TvAppInstallTests
         await controller.RefreshTvAppAsync();
         Assert.Equal(DevModeError.Unreachable, controller.TvApp.Error);
         Assert.Equal("sdb: closed", controller.TvApp.Reason);
+    }
+
+    // #343: TV'deki Host PC IP başka bir adres; sdb denenmez, iki adres de söylenir.
+    [Fact]
+    public async Task SamsungWithAnotherHostPcIpSaysWhichAddressToTypeWithoutTryingSdb()
+    {
+        var services = new FakeServices
+        {
+            SamsungDevMode = true,
+            SamsungCheck = new SamsungPreflight(new SamsungDeveloperInfo(true, "192.168.1.50"), "192.168.1.34"),
+        };
+        services.Bundled[TvBrand.Samsung] = SamsungApp;
+        var controller = Make(services);
+        await controller.PairAsync(Samsung);
+        Assert.Equal(new TvAppState(TvAppKind.Failed, Error: DevModeError.HostPcMismatch, HostPcIp: "192.168.1.50",
+            ComputerAddress: "192.168.1.34"), controller.TvApp);
+        Assert.Empty(services.BrandInstalls);
+
+        var tr = TvAppMessages.Problem(controller.TvApp, TvBrand.Samsung, Localizer.ForLanguage("tr"), "x.log");
+        Assert.Contains("192.168.1.50", tr);
+        Assert.Contains("192.168.1.34", tr);
+        Assert.Contains("2 sn", tr);
+        var en = TvAppMessages.Problem(controller.TvApp, TvBrand.Samsung, Localizer.ForLanguage("en"), "x.log");
+        Assert.StartsWith("The TV's Host PC IP is 192.168.1.50, but this computer's address is 192.168.1.34.", en);
+
+        // Host PC IP düzeltilince kurulur.
+        services.SamsungCheck = new SamsungPreflight(new SamsungDeveloperInfo(true, "192.168.1.34"), "192.168.1.34");
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.7.0"), controller.TvApp);
+    }
+
+    [Fact]
+    public async Task SamsungSayingDeveloperModeIsOffShowsTheSteps()
+    {
+        // 26101 açık görünse de TV geliştirici modunun kapalı olduğunu söylüyorsa adımlar gösterilir.
+        var services = new FakeServices
+        {
+            SamsungDevMode = true,
+            SamsungCheck = new SamsungPreflight(new SamsungDeveloperInfo(false, null), "192.168.1.34"),
+        };
+        services.Bundled[TvBrand.Samsung] = SamsungApp;
+        var controller = Make(services);
+        await controller.PairAsync(Samsung);
+        Assert.Equal(TvAppKind.DevModeOff, controller.TvApp.Kind);
+        Assert.Empty(services.BrandInstalls);
+    }
+
+    [Fact]
+    public void SamsungUnreachableSaysThisComputersAddress()
+    {
+        var state = new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable);
+        var text = TvAppMessages.Problem(state, TvBrand.Samsung, Localizer.ForLanguage("tr"), "x.log", "192.168.1.34");
+        Assert.Contains("192.168.1.34", text);
+        Assert.NotEqual(TvAppMessages.ComputerAddressLine, Localizer.ForLanguage("tr")[TvAppMessages.ComputerAddressLine]);
+        Assert.DoesNotContain("192.168.1.34", TvAppMessages.Problem(state, TvBrand.Lg, Localizer.ForLanguage("tr"), "x.log", "192.168.1.34"));
     }
 
     [Fact]

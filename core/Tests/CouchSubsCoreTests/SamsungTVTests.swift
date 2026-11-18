@@ -83,6 +83,25 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertNil(SamsungMessages.deviceName(Data("{}".utf8)))
     }
 
+    // #343: 8001 yanıtındaki geliştirici modu ve Host PC IP.
+    func testDeveloperModeAndHostPcIpAreRead() {
+        let on = Data(#"{"device":{"developerMode":"1","developerIP":"192.168.1.50"}}"#.utf8)
+        XCTAssertEqual(SamsungMessages.developerMode(on), true)
+        XCTAssertEqual(SamsungMessages.developerIp(on), "192.168.1.50")
+        let off = Data(#"{"device":{"developerMode":"0","developerIP":"0.0.0.0"}}"#.utf8)
+        XCTAssertEqual(SamsungMessages.developerMode(off), false)
+        XCTAssertNil(SamsungMessages.developerIp(off))
+        XCTAssertNil(SamsungMessages.developerMode(Data(#"{"device":{"name":"TV"}}"#.utf8)))
+        XCTAssertNil(SamsungMessages.developerIp(Data("not json".utf8)))
+    }
+
+    func testHostPcIpMismatchNeedsBothAddresses() {
+        XCTAssertTrue(SamsungDeveloperInfo.hostPcIpMismatch(developerIp: "192.168.1.50", computer: "192.168.1.34"))
+        XCTAssertFalse(SamsungDeveloperInfo.hostPcIpMismatch(developerIp: "192.168.1.34", computer: "192.168.1.34"))
+        XCTAssertFalse(SamsungDeveloperInfo.hostPcIpMismatch(developerIp: nil, computer: "192.168.1.34"))
+        XCTAssertFalse(SamsungDeveloperInfo.hostPcIpMismatch(developerIp: "192.168.1.50", computer: nil))
+    }
+
     func testBrandDefaultsToLGForSavedTVs() throws {
         let saved = Data(#"{"name":"LG TV","host":"192.168.1.230"}"#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(LGTV.self, from: saved).brand, .lg)

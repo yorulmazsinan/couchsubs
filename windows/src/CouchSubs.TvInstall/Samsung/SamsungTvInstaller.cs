@@ -394,6 +394,14 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     {
         if (!IPAddress.TryParse(host, out var address))
             throw new SamsungInstallException(SamsungInstallError.Unreachable, $"geçersiz TV adresi: {host}");
+        // TV yalnız geliştirici modunda girilen Host PC IP'den gelen sdb bağlantısını kabul eder; ikisi de günlükte
+        // olsun ki "TV kabul etmedi" hatasında hangi adresin yazılması gerektiği görülsün (#343).
+        var local = SourceAddressTowards(address);
+        var (developerMode, developerIp) = await ReadDeveloperInfoAsync(host, cancellationToken);
+        Log.Write($"Bu bilgisayarın TV'ye giden adresi (LocalEndPoint): {local ?? "?"}; TV'deki Host PC IP (developerIP): " +
+                  $"{developerIp ?? "?"}; geliştirici modu: {developerMode ?? "?"}");
+        if (developerIp is not null && local is not null && developerIp != local)
+            Log.Write($"UYARI: TV'deki Host PC IP ({developerIp}) bu bilgisayarın adresi ({local}) değil; TV bağlantıyı kesecek.");
         var device = new SdbTcpDevice(address, SdbPort);
         try
         {
@@ -404,7 +412,58 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             await device.DisposeAsync();
-            throw new SamsungInstallException(SamsungInstallError.Unreachable, $"sdb {host}:{SdbPort}: {error.Message}");
+            throw new SamsungInstallException(SamsungInstallError.Unreachable,
+                $"sdb {host}:{SdbPort}: {error.Message} (bu bilgisayar {local ?? "?"}, TV'deki Host PC IP {developerIp ?? "?"})");
+        }
+    }
+
+    /// <summary>
+    /// TV'ye giden bağlantının bu bilgisayardaki kaynak adresi (TV'ye açılan soketin LocalEndPoint'i). UDP soketi
+    /// "bağlanır", paket gönderilmez; işletim sistemi TCP için de aynı bağdaştırıcıyı seçer. Okunamazsa null.
+    /// </summary>
+    internal static string? SourceAddressTowards(IPAddress target)
+    {
+        try
+        {
+            using var socket = new Socket(target.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
+            socket.Connect(new IPEndPoint(target, SdbPort));
+            return (socket.LocalEndPoint as IPEndPoint)?.Address.ToString();
+        }
+        catch (SocketException)
+        {
+            return null;
+        }
+    }
+
+    private static readonly HttpClient InfoHttp = new() { Timeout = TimeSpan.FromSeconds(2) };
+
+    /// <summary>TV'nin 8001 yanıtındaki geliştirici modu ve Host PC IP; okunamazsa ikisi de null.</summary>
+    private static async Task<(string? Mode, string? Ip)> ReadDeveloperInfoAsync(string host, CancellationToken cancellationToken)
+    {
+        try { return DeveloperInfo(await InfoHttp.GetStringAsync($"http://{host}:8001/api/v2/", cancellationToken)); }
+        catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary><c>device.developerMode</c> ve <c>device.developerIP</c> ("0.0.0.0" boş sayılır).</summary>
+    internal static (string? Mode, string? Ip) DeveloperInfo(string json)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("device", out var device) || device.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return (null, null);
+            string? Field(string name) => device.TryGetProperty(name, out var value)
+                ? (value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString() : value.GetRawText())?.Trim() is { Length: > 0 } text ? text : null
+                : null;
+            var ip = Field("developerIP");
+            return (Field("developerMode"), ip == "0.0.0.0" ? null : ip);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return (null, null);
         }
     }
 

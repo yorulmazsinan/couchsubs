@@ -40,6 +40,8 @@ public enum DevModeError
     PackageBlocked,
     /// <summary>Kurulum sırasında TV bağlantısı koptu.</summary>
     ConnectionLost,
+    /// <summary>Samsung: TV'deki "Host PC IP" bu bilgisayarın adresi değil; sdb denenmez (#343).</summary>
+    HostPcMismatch,
 }
 
 /// <param name="detail">Sorunu bulmak için ayrıntı (komut çıktısı gibi); hata günlüğüne yazılır, kullanıcıya gösterilmez.</param>

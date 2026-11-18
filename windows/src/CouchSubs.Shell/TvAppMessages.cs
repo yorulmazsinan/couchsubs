@@ -16,12 +16,24 @@ public static class TvAppMessages
     public const string SourceSwitchTip =
         "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.";
 
+    /// <summary>TV'deki Host PC IP bu bilgisayarınki değil: iki adres ve ne yapılacağı (#343).</summary>
+    public const string HostPcMismatchMessage =
+        "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds).";
+
+    /// <summary>Samsung bağlantı hatalarında Host PC IP'ye yazılacak adres.</summary>
+    public const string ComputerAddressLine = "This computer's address (Host PC IP): %@";
+
     /// <param name="samsungLog">Samsung kurulum günlüğünün yolu; Samsung hatalarında metnin sonunda yazar.</param>
-    public static string Problem(TvAppState state, TvBrand brand, Localizer text, string samsungLog)
+    /// <param name="computerAddress">TV'nin göreceği bu bilgisayar adresi; Samsung "TV kabul etmedi" hatasında yazılır.</param>
+    public static string Problem(TvAppState state, TvBrand brand, Localizer text, string samsungLog, string? computerAddress = null)
     {
         if (state.Error is not { } error) return "";
-        var result = text[Key(error, brand)];
         var samsung = brand == TvBrand.Samsung;
+        if (error == DevModeError.HostPcMismatch)
+            return text.Format(HostPcMismatchMessage, state.HostPcIp ?? "?", state.ComputerAddress ?? computerAddress ?? "?");
+        var result = text[Key(error, brand)];
+        if (samsung && error == DevModeError.Unreachable && !string.IsNullOrWhiteSpace(computerAddress))
+            result += "\n\n" + text.Format(ComputerAddressLine, computerAddress);
         if (state.Reason is { } reason)
             result += $"\n\n{text[samsung ? "Details:" : "TV says:"]} {reason}";
         if (!samsung) return result;
@@ -64,6 +76,7 @@ public static class TvAppMessages
         DevModeError.KeyRefused => "The TV refused the key. Open Key Server and type the passphrase again.",
         DevModeError.Unreachable when brand == TvBrand.Samsung =>
             "The TV did not accept this computer. In the TV's Developer Mode window, check that Host PC IP is this computer's address, then restart the TV.",
+        DevModeError.HostPcMismatch => HostPcMismatchMessage,
         DevModeError.Unreachable => "The TV did not respond. Make sure it is on and on the same network.",
         DevModeError.ToolMissing => "Windows' OpenSSH Client is missing. Add it in Settings › System › Optional features and try again.",
         DevModeError.TooOld => "This Samsung TV is too old for the CouchSubs TV app (2017 models and later are supported).",

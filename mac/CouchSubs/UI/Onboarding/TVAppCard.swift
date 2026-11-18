@@ -78,7 +78,27 @@ struct TVAppCard: View {
             case .failed(let error, let reason):
                 Card(title: "CouchSubs TV app") {
                     ErrorText(error: Self.message(for: error, brand: brand, reason: reason))
+                    // TV bu Mac'i kabul etmediyse Host PC IP'ye yazılacak adres de görünür (#343).
+                    if brand == .samsung, error == .unreachable {
+                        HintText(text: "This computer's address (Host PC IP): \(model.computerAddress ?? "?")")
+                    }
                     Button("Try again") { Task { await model.refreshTVApp() } }.buttonStyle(.secondary)
+                }
+            case .hostPcMismatch(let tvIp, let computer):
+                Card(title: "CouchSubs TV app") {
+                    ErrorText(error: String(format: String(localized: "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds)."), tvIp, computer))
+                    HintText(text: "1. On the TV, open Apps and scroll to the very bottom of the page.")
+                    HintText(text: "2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.")
+                    HintText(text: "3. Turn Developer mode On, type this computer's address as Host PC IP: \(computer) and press OK.")
+                    HintText(text: "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself.")
+                    Button("Try again") { Task { await model.refreshTVApp() } }.buttonStyle(.secondary)
+                }
+                // Host PC IP düzeltilip TV yeniden başlayınca kendiliğinden devam eder.
+                .task {
+                    while !Task.isCancelled, case .hostPcMismatch = model.tvApp {
+                        try? await Task.sleep(for: .seconds(3))
+                        await model.refreshTVApp()
+                    }
                 }
             }
         }

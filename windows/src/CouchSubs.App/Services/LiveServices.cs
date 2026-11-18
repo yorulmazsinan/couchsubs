@@ -226,6 +226,12 @@ public sealed class LiveServices : IAppServices
 
     public Task<bool> IsSamsungDevModeOnAsync(string host) => SamsungTvInstaller.IsDevModeOnAsync(host);
 
+    public async Task<SamsungPreflight> CheckSamsungAsync(string host)
+    {
+        var info = await SamsungDiscovery.DeveloperInfoAsync(host);
+        return new SamsungPreflight(info, AppController.LocalAddress(host));
+    }
+
     public async Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(1) };

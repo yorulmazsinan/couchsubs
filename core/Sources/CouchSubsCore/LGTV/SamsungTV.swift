@@ -45,6 +45,44 @@ enum SamsungMessages {
               let device = object["device"] as? [String: Any], let name = device["name"] as? String else { return nil }
         return name.replacingOccurrences(of: "&quot;", with: "\"")
     }
+
+    /// 8001 yanıtında geliştirici modu açık mı (`device.developerMode`: "1"/"0"); bildirilmezse nil.
+    static func developerMode(_ data: Data) -> Bool? {
+        guard let value = deviceField(data, "developerMode") else { return nil }
+        return value == "1" || value.lowercased() == "true"
+    }
+
+    /// TV'nin geliştirici modundaki "Host PC IP" (`device.developerIP`); boş ya da "0.0.0.0" ise nil.
+    static func developerIp(_ data: Data) -> String? {
+        guard let value = deviceField(data, "developerIP"), value != "0.0.0.0" else { return nil }
+        return value
+    }
+
+    private static func deviceField(_ data: Data, _ name: String) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let device = object["device"] as? [String: Any], let raw = device[name] else { return nil }
+        let text = (raw as? String ?? "\(raw)").trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : text
+    }
+}
+
+/// Samsung TV'nin 8001 yanıtındaki geliştirici modu bilgisi.
+public struct SamsungDeveloperInfo: Equatable, Sendable {
+    /// Geliştirici modu açık mı; TV bildirmezse nil.
+    public var developerMode: Bool?
+    /// TV'deki "Host PC IP"; boşsa nil.
+    public var developerIp: String?
+    public init(developerMode: Bool?, developerIp: String?) {
+        self.developerMode = developerMode
+        self.developerIp = developerIp
+    }
+
+    /// TV'deki Host PC IP bu bilgisayarın adresinden farklı mı? Biri bilinmiyorsa farklı sayılmaz (#343).
+    public static func hostPcIpMismatch(developerIp: String?, computer: String?) -> Bool {
+        guard let ip = developerIp?.trimmingCharacters(in: .whitespaces), !ip.isEmpty,
+              let mine = computer?.trimmingCharacters(in: .whitespaces), !mine.isEmpty else { return false }
+        return ip != mine
+    }
 }
 
 /// Bekçinin (TVKeeper) Samsung bağlantılarında kullandığı jeton. TV yeni jeton verirse bir sonraki bağlantı onu kullanır
@@ -168,6 +206,14 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
 /// Yerel ağdaki Samsung TV'leri SSDP ile bulur.
 public enum SamsungDiscovery {
     static let searchTarget = "urn:samsung.com:device:RemoteControlReceiver:1"
+
+    /// TV'nin geliştirici modu bilgisi (`http://TV:8001/api/v2/`); TV yanıt vermezse nil.
+    public static func developerInfo(host: String) async -> SamsungDeveloperInfo? {
+        guard let url = URL(string: "http://\(host):8001/api/v2/"),
+              let (data, _) = try? await LocalNetwork.probeSession.data(from: url) else { return nil }
+        guard (try? JSONSerialization.jsonObject(with: data)) != nil else { return nil }
+        return SamsungDeveloperInfo(developerMode: SamsungMessages.developerMode(data), developerIp: SamsungMessages.developerIp(data))
+    }
 
     public static func search(timeout: Duration = .seconds(3)) async -> [LGTV] {
         let hosts = await Task.detached { LGDiscovery.collectHosts(searchTarget: searchTarget, timeout: timeout) }.value

@@ -121,6 +121,9 @@ final class FakeServices: AppServices {
     var brandInstalls: [(brand: TVBrand, host: String)] = []
     func bundledApp(for brand: TVBrand) -> BundledTVApp? { bundled[brand] }
     func isSamsungDevModeOn(host: String) async -> Bool { samsungDevMode }
+    /// Samsung TV'nin 8001 yanıtı ve TV'ye giden yolun bu Mac'teki adresi.
+    var samsungCheck = SamsungPreflight(info: nil, computerAddress: nil)
+    func checkSamsung(host: String) async -> SamsungPreflight { samsungCheck }
     /// Samsung TV'de kurulu sürüm (sahte TV'nin vd_applist'i); nil: uygulama yok.
     var samsungOnTV: String?
     func installSamsungApp(host: String, app: BundledTVApp,
@@ -1063,6 +1066,36 @@ final class TVAppInstallTests: XCTestCase {
         await model.refreshTVApp()
         XCTAssertEqual(model.tvApp, .devModeOff)
         XCTAssertTrue(model.canInstallTVApp)
+    }
+
+    // #343: TV'deki Host PC IP başka bir adres; sdb denenmez, iki adres de söylenir.
+    func testSamsungWithAnotherHostPcIpSaysWhichAddressToType() async {
+        let services = FakeServices()
+        services.samsungDevMode = true
+        services.samsungCheck = SamsungPreflight(info: SamsungDeveloperInfo(developerMode: true, developerIp: "192.168.1.50"),
+                                                 computerAddress: "192.168.1.34")
+        services.bundled[.samsung] = app
+        let model = model(services)
+        model.tv = samsung
+        await model.refreshTVApp()
+        XCTAssertEqual(model.tvApp, .hostPcMismatch(tvIp: "192.168.1.50", computer: "192.168.1.34"))
+        XCTAssertTrue(services.brandInstalls.isEmpty)
+
+        services.samsungCheck = SamsungPreflight(info: SamsungDeveloperInfo(developerMode: true, developerIp: "192.168.1.34"),
+                                                 computerAddress: "192.168.1.34")
+        await model.refreshTVApp()
+        XCTAssertEqual(model.tvApp, .upToDate("0.7.0"))
+    }
+
+    func testSamsungSayingDeveloperModeIsOffShowsTheSteps() async {
+        let services = FakeServices()
+        services.samsungDevMode = true
+        services.samsungCheck = SamsungPreflight(info: SamsungDeveloperInfo(developerMode: false, developerIp: nil), computerAddress: "192.168.1.34")
+        services.bundled[.samsung] = app
+        let model = model(services)
+        model.tv = samsung
+        await model.refreshTVApp()
+        XCTAssertEqual(model.tvApp, .devModeOff)
     }
 
     func testSamsungInstallOpensSignInAndRemembersTheVersion() async {

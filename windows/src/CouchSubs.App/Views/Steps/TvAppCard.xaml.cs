@@ -63,7 +63,9 @@ public partial class TvAppCard : UserControl
         var devModeOff = state.Kind == TvAppKind.DevModeOff;
         Visibility = Visible(state.Kind != TvAppKind.Unknown);
         LgSteps.Visibility = Visible(devModeOff && brand == TvBrand.Lg);
-        SamsungSteps.Visibility = Visible(devModeOff && brand == TvBrand.Samsung);
+        // TV bu bilgisayarı kabul etmediyse de adımlar (Host PC IP satırı bu bilgisayarın adresiyle) görünür (#343).
+        var hostPcProblem = state.Kind == TvAppKind.Failed && state.Error is DevModeError.Unreachable or DevModeError.HostPcMismatch;
+        SamsungSteps.Visibility = Visible((devModeOff || hostPcProblem) && brand == TvBrand.Samsung);
         AndroidSteps.Visibility = Visible(devModeOff && brand == TvBrand.AndroidTv);
         // Parola alanı LG'nin geliştirici modu adımlarında da görünür: CouchSubs geliştirici modunu göremese de TV'de Key
         // Server ve parola açıksa kullanıcı takılmaz (#94). Anahtar ancak "TV'ye kur"a basılınca istenir.
@@ -101,8 +103,9 @@ public partial class TvAppCard : UserControl
             _ => "",
         };
         Detail.Visibility = Visible(Detail.Text.Length > 0);
-        Problem.Text = TvAppMessages.Problem(state, brand, text, Services.LiveServices.TvInstallLogPath);
-        if (devModeOff) devModeWatch.Start();
+        Problem.Text = TvAppMessages.Problem(state, brand, text, Services.LiveServices.TvInstallLogPath, controller?.ComputerAddress);
+        // Host PC IP düzeltilip TV yeniden başlayınca da kendiliğinden devam eder.
+        if (devModeOff || (brand == TvBrand.Samsung && state.Error == DevModeError.HostPcMismatch)) devModeWatch.Start();
         else devModeWatch.Stop();
     }
 

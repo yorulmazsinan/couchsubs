@@ -13,6 +13,20 @@ namespace CouchSubs.TvInstall.Tests;
 
 public class SamsungTests
 {
+    // Günlüğe yazılan geliştirici modu bilgisi (#343): 8001 yanıtı ve TV'ye giden yolun yerel adresi.
+    [Fact]
+    public void DeveloperInfoIsReadForTheLog()
+    {
+        Assert.Equal(("1", "192.168.1.50"),
+            SamsungTvInstaller.DeveloperInfo("{\"device\":{\"developerMode\":\"1\",\"developerIP\":\"192.168.1.50\"}}"));
+        Assert.Equal(("0", null), SamsungTvInstaller.DeveloperInfo("{\"device\":{\"developerMode\":\"0\",\"developerIP\":\"0.0.0.0\"}}"));
+        Assert.Equal((null, null), SamsungTvInstaller.DeveloperInfo("{\"device\":{\"name\":\"TV\"}}"));
+        Assert.Equal((null, null), SamsungTvInstaller.DeveloperInfo("not json"));
+    }
+
+    [Fact]
+    public void SourceAddressIsTheLocalEndOfTheRouteToTheTv() =>
+        Assert.Equal("127.0.0.1", SamsungTvInstaller.SourceAddressTowards(IPAddress.Loopback));
 
     /// <summary>TizenInstaller gibi: dosyayı açar, kapatmadan bırakır.</summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

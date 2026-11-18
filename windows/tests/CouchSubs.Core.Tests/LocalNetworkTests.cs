@@ -57,6 +57,33 @@ public class LocalNetworkTests
         Assert.Equal("192.168.1.34", LocalNetwork.ChooseComputerAddress([Vpn, HyperV, Wifi], IPAddress.Parse("10.0.0.9")));
     }
 
+    // Aynı ağda Wi-Fi ve Ethernet: alt ağ tahmini ilkini seçiyordu, TV ise diğerinden gelen bağlantıyı görüyordu (#343).
+    private static readonly LocalNetwork.AdapterAddress Cable = Adapter("Ethernet", "Realtek PCIe GbE", "192.168.1.35", true);
+
+    [Fact]
+    public void TheAddressTheTvSeesWinsOverTheSubnetGuess()
+    {
+        var tv = IPAddress.Parse("192.168.1.171");
+        Assert.Equal("192.168.1.35", LocalNetwork.ChooseComputerAddress([Wifi, Cable], tv, IPAddress.Parse("192.168.1.35")));
+        // Hyper-V dış anahtarında gerçek adres sanal adlı bağdaştırıcıdadır; yol oradan geçiyorsa o seçilir.
+        Assert.Equal("172.24.80.1", LocalNetwork.ChooseComputerAddress([HyperV, Wifi], tv, IPAddress.Parse("172.24.80.1")));
+    }
+
+    [Fact]
+    public void AnUnknownRouteFallsBackToTheSubnetGuess()
+    {
+        var tv = IPAddress.Parse("192.168.1.171");
+        Assert.Equal("192.168.1.34", LocalNetwork.ChooseComputerAddress([HyperV, Wifi], tv, null));
+        Assert.Equal("192.168.1.34", LocalNetwork.ChooseComputerAddress([HyperV, Wifi], tv, IPAddress.Loopback));
+        Assert.Equal("192.168.1.34", LocalNetwork.ChooseComputerAddress([HyperV, Wifi], tv, IPAddress.Any));
+        // Hiçbir açık bağdaştırıcıya ait olmayan adres (bağdaştırıcı listesi eskidi) kullanılmaz.
+        Assert.Equal("192.168.1.34", LocalNetwork.ChooseComputerAddress([HyperV, Wifi], tv, IPAddress.Parse("10.9.9.9")));
+    }
+
+    [Fact]
+    public void RouteSourceTowardsThisComputerIsLoopback() =>
+        Assert.Equal(IPAddress.Loopback, LocalNetwork.RouteSourceAddress(IPAddress.Loopback));
+
     [Fact]
     public void AVirtualAdapterIsUsedOnlyWhenNothingElseExists()
     {
