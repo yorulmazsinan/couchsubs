@@ -103,6 +103,8 @@ class SubtitlePipeline(
     private val lock = Any()
     private val now: () -> Long = clock ?: monotonicClock
     private val stabilizer = SubtitleStabilizer(clock = now)
+    /** Konuşma değişirken sabit duran görev/HUD satırları (GTA 6). */
+    private val stickyRows = StickyRows()
     private var lastRequested = 0
     private var lastShown = 0
     private var inFlight: Request? = null
@@ -158,7 +160,9 @@ class SubtitlePipeline(
         frameAt = capturedAt
         frameOcrMs = ocrMs
         // Kumanda ipuçları ve yazı tanıma çöpleri çevrilmez; yalnız altyazı bloğu çevrilir.
-        val reading = raw.withoutButtonPrompts().withoutOcrNoise().joiningRows().subtitleBlock(area)
+        // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
+        val rows = raw.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        val reading = synchronized(lock) { stickyRows.filter(rows, now()) }.subtitleBlock(area)
         var flushed: (() -> Unit)? = null
         val after: (() -> Unit)? = synchronized(lock) {
             var action = stabilizer.feed(reading.text, signature, reading.box)
@@ -510,6 +514,7 @@ class SubtitlePipeline(
         waiting.clear()
         lastShownSource = null
         pairs.clear()
+        stickyRows.reset()
         if (stabilizer.reset() == StabilizerAction.Clear) sender.clear()
     }
 

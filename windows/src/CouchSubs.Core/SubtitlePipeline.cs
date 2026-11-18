@@ -80,6 +80,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private int session;
     /// <summary>Son okunan satırlar; kare değişmediyse yeniden okunmaz, bunlar kullanılır.</summary>
     private Reading lastReading = Reading.Empty;
+    /// <summary>Konuşma değişirken sabit duran görev/HUD satırları (GTA 6).</summary>
+    private readonly StickyRows stickyRows = new();
     /// <summary>Oturumun (hat kurulunca ya da sıfırlanınca) başladığı an; ilk karenin ne kadar sonra geldiği günlüğe yazılır.</summary>
     private long sessionStart = (clock ?? DefaultClock)();
     private bool sawFrame;
@@ -234,7 +236,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e") de çevirmene gitmez.
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
         var area = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
-        var reading = raw.WithoutButtonPrompts().WithoutOcrNoise().JoiningRows().SubtitleBlock(area);
+        // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
+        var rows = raw.WithoutButtonPrompts().WithoutOcrNoise().JoiningRows();
+        lock (gate)
+        {
+            rows = stickyRows.Filter(rows, now());
+            foreach (var row in stickyRows.NewlySticky)
+                Write($"sabit satır: {SubtitleLog.Excerpt(row)} görev/HUD yazısı sayıldı, çevrilmiyor");
+        }
+        var reading = rows.SubtitleBlock(area);
 
         Action? after = null;
         Action? flushed = null;
@@ -918,6 +928,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             lastReadMs = null;
             currentRead = null;
             schedule.Reset();
+            stickyRows.Reset();
             if (stabilizer.Reset() == StabilizerAction.Clear) sender.Clear();
         }
     }

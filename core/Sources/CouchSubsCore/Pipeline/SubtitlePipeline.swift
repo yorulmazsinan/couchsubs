@@ -112,6 +112,7 @@ public final class SubtitlePipeline {
     private var session = 0
     /// Son okunan satırlar; kare değişmediyse yeniden okunmaz, bunlar kullanılır.
     private var lastReading = Reading.empty
+    private var stickyRows = StickyRows()
     /// Son yazı tanımanın süresi (ms); kare değişmeyip okuma yeniden kullanılınca da o okumanın süresi geçerlidir.
     private var lastReadMs: Int?
     /// İşlenen karenin okunması (satır kararlı olunca isteğe geçer).
@@ -217,7 +218,10 @@ public final class SubtitlePipeline {
         // Yazı tanımanın uydurduğu sözcük çöpleri ("ou$3e") de çevirmene gitmez.
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
         let place = TextBox(left: region.left, top: region.top, right: region.right, bottom: region.bottom)
-        let reading = lastReading.withoutButtonPrompts().withoutOcrNoise().joiningRows().subtitleBlock(in: place)
+        // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
+        let rows = stickyRows.filter(lastReading.withoutButtonPrompts().withoutOcrNoise().joiningRows(), at: now())
+        for row in stickyRows.newlySticky { log("sabit satır: \(SubtitleLog.excerpt(row)) görev/HUD yazısı sayıldı, çevrilmiyor") }
+        let reading = rows.subtitleBlock(in: place)
         currentRead = ReadInfo(capturedAt: captured, ocrMs: lastReadMs, confidence: reading.confidence)
         let box = reading.box?.placed(in: place).centeredOnScreen()
         if !sawText, !reading.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -668,6 +672,7 @@ public final class SubtitlePipeline {
         lastReading = .empty
         lastReadMs = nil
         scheduler.reset()
+        stickyRows.reset()
         if stabilizer.reset() == .clear { server.clear() }
     }
 }
