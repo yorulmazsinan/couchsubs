@@ -6,12 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Mac'te Android/Google TV seçince çökme giderildi (#359, #365):** Kurulumda Android TV ya da Google TV seçip "Devam"a basınca uygulama kapanıyordu; artık sonraki adıma geçiyor.
-- **Samsung'da yanlış Host PC IP kurulumdan önce uyarılıyor (#361):** TV'nin Geliştirici modunda yazılı Host PC IP bu bilgisayarın adresi değilse kurulum başlamadan söyleniyor; bilgisayarın adresi TV'ye giden ağ yolundan alınıyor.
-- **Windows'ta gelişmiş yazı tanıma (isteğe bağlı, #336):** Ayarlar › Gelişmiş › Yazı tanıma'da "Gelişmiş · açık sahneleri daha iyi okur" seçilirse altyazı PaddleOCR PP-OCRv6 ile okunuyor; gökyüzü, kar gibi açık zeminde beyaz altyazı daha az kaçıyor. Varsayılan değişmedi. Katkı: [erayslyrt00](https://github.com/erayslyrt00).
-- **Mac'te konsolsuz deneme modu (#345):** PS5 ve PSN hesabı olmadan örnek altyazılarla uygulamanın nasıl çalıştığı görülebiliyor.
-- **Telefonlar (Android, iPhone, #364, #348):** TV'nin IP alanında adresin TV'de nerede bulunacağı ve telefonun kendi adresi gösteriliyor; yanlışlıkla telefonun adresi yazılırsa uyarılıyor. Telefon kısmı Play/App Store güncellemesiyle gelir.
-- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.55). TV uygulaması 0.9.24'te kaldı.
+- **GTA 6'da görev yazısında altyazının takılı kalması düzeltildi (Mac, Windows, Android, #394):** Ekranın altındaki görev yazısı ("Follow…", "Get in…") konuşma altyazısının hemen altında uzun süre durduğu için çeviri eski konuşmada takılı kalıyor, görev yazısının yanında gelen kısa konuşmalar ("Okay.") hiç çevrilmiyordu. Artık uzun süre ekranda kalan görev/HUD satırı ayrılıyor; konuşma altyazısı her zamanki gibi akıyor, konuşma bitince TV'deki çeviri kalkıyor. Aynı düzen başka oyunlarda da (ekranda sabit kalan ipucu ya da görev satırı) geçerli.
+- **GTA 6 Türkçe paketi:** Grand Theft Auto VI için hazır Türkçe paket yayında ve oyuncular oynadıkça her gece genişliyor (topluluk katkısı: [lones8888](https://github.com/lones8888), #387). Paket uygulama güncellemesi beklemeden kendiliğinden iner.
+- **Windows'ta oyun kapağı seçimi (#363):** Oyun kartında kare kapak görseli seçilebiliyor; görsel bilgisayarda güvenli biçimde saklanıyor. Katkı: [erenbati](https://github.com/erenbati).
+- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.56, görev yazısı düzeltmesiyle). TV uygulaması 0.9.24'te kaldı.
+
+**beta.48'de gelenler:** Mac'te Android/Google TV seçince çökmenin giderilmesi, Samsung'da yanlış Host PC IP uyarısı, Windows'ta isteğe bağlı gelişmiş yazı tanıma (katkı: erayslyrt00), Mac'te konsolsuz deneme modu, telefonlarda TV IP alanı yardımı.
 
 **beta.47'de gelenler:** çeviri durunca TV uygulamasının kapanması (TV uygulaması 0.9.24, katkı: erenbati), yerel modelde hata sonrası 5 saniyelik bekleme (katkı: lones8888).
 
