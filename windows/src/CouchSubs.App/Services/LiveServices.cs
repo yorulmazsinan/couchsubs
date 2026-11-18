@@ -440,7 +440,16 @@ public sealed class LiveServices : IAppServices
 
         public async Task DownloadAsync(string source, string target, IProgress<double> progress, CancellationToken cancellationToken)
         {
-            await englishTurkish.DownloadAsync(progress, cancellationToken);
+            try
+            {
+                await englishTurkish.DownloadAsync(progress, cancellationToken);
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                // Ekran yalnız "internet bağlantınızı kontrol edin" der; asıl neden (TLS, disk, antivirüs, özet) hata.log'da kalsın.
+                StartupGuard.Log("Ücretsiz çeviri modeli indirilemedi", error);
+                throw;
+            }
             // Önceki sürümlerin ONNX modeli (yaklaşık 530 MB) artık kullanılmaz; yeni model kurulunca silinir.
             try
             {
