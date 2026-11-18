@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using CouchSubs.App.Services;
 using CouchSubs.Core;
 using CouchSubs.Shell;
 using Frame = CouchSubs.Core.Frame;
@@ -58,6 +59,8 @@ public sealed class FreeAreaWindow : Window
         ShowInTaskbar = false;
         Background = Brushes.Black;
         Cursor = Cursors.Cross;
+        // Başka bir üstte duran pencere öne gelirse seçim ekranı yeniden en üste konur (kapanınca kanca kalkar).
+        _ = new TopmostKeeper(this);
 
         var bitmap = BitmapSource.Create(frame.Width, frame.Height, 96, 96, PixelFormats.Bgra32, null, frame.Pixels, frame.Stride);
         canvas = new Canvas { Width = frame.Width, Height = frame.Height, Background = Brushes.Transparent };

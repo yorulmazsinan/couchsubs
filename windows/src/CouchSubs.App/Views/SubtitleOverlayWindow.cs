@@ -13,6 +13,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using CouchSubs.App.Services;
 using CouchSubs.Core;
 using CouchSubs.Shell;
 
@@ -46,6 +47,8 @@ public sealed partial class SubtitleOverlayWindow : Window
     /// <summary>Görünen satırların kutuları; solan satırın animasyonu yeniden çizimde baştan başlamasın.</summary>
     private readonly Dictionary<int, Border> boxes = [];
     private readonly Grid adjustLayer = new() { Visibility = Visibility.Collapsed };
+    /// <summary>Başka bir tam ekran ya da üstte duran pencere öne gelince altyazıyı yeniden en üste koyar.</summary>
+    private readonly TopmostKeeper topmost;
     private IntPtr handle;
     /// <summary>Pencere bir kez açılamadı ya da çizilemedi: bu oturumda bir daha denenmez, çeviri pencere olmadan sürer.</summary>
     private bool broken;
@@ -69,6 +72,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         ShowActivated = false;
         Focusable = false;
         Title = "CouchSubs";
+        topmost = new TopmostKeeper(this);
 
         var root = new Grid();
         root.Children.Add(adjustLayer);
@@ -111,6 +115,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         controller.OverlayHidden -= OnHidden;
         controller.PropertyChanged -= OnChanged;
         timer.Stop();
+        topmost.Dispose();
         try { Close(); }
         catch (InvalidOperationException error) { StartupGuard.Log("Altyazı penceresi kapatılamadı", error); }
     }
@@ -237,6 +242,8 @@ public sealed partial class SubtitleOverlayWindow : Window
         var visible = controller.ShowsOnComputer && (lines.Count > 0 || regions.Count > 0);
         if (visible && !IsVisible) Show();
         else if (!visible && IsVisible) Hide();
+        // Arada öne gelen tam ekran/üstte duran pencere altyazıyı örtmüş olabilir; odak alınmadan yeniden üste konur.
+        if (visible) topmost.RaiseThrottled();
 
         timer.Stop();
         if (stack.NextChange(now) is { } next)

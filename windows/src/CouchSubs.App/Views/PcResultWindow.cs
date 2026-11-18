@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using CouchSubs.App.Services;
 
 namespace CouchSubs.App.Views;
 
@@ -38,6 +39,8 @@ public sealed class PcResultWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         MaxWidth = work.Width * 0.7;
         Cursor = Cursors.Hand;
+        // Başka bir üstte duran pencere öne gelirse kutu yeniden en üste konur (kapanınca kanca kalkar).
+        _ = new TopmostKeeper(this);
 
         Content = new Border
         {
