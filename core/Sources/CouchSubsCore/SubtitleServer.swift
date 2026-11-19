@@ -56,7 +56,7 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
     /// yerine geçer. TV uygulaması 0.9.16 ve sonrası tanır (Windows: SubtitleStyle.StackPrevious).
     public var stackPrevious: Bool
 
-    public init(fontSize: Int = 46, bottomPercent: Int = 7, placement: SubtitlePlacement = .cover, background: Int = 72, backgroundShape: SubtitleBackgroundShape = .fit, bold: Bool = false,
+    public init(fontSize: Int = 46, bottomPercent: Int = 7, placement: SubtitlePlacement = .cover, background: Int = 90, backgroundShape: SubtitleBackgroundShape = .fit, bold: Bool = false,
                 textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .inApp, stackPrevious: Bool = true) {
         self.fontSize = fontSize
         self.bottomPercent = bottomPercent

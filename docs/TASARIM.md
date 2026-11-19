@@ -226,8 +226,8 @@ iki yanda genişletme tutamakları; yer, genişlik ve ekran hatırlanır.
 
 TV'de her zaman koyu temanın renkleri kullanılır (oyunun üstünde durur). Bilgi paneli ve "uygulamayı açın"
 ekranı `background` %92–94 saydam zemin, 2 px `border` çerçeve, 24–32 px köşe; başlıkta logo. Kumanda
-tuşları satır satır, tuş adı `accent` renginde. Altyazı kutusu siyah %72 saydam zemin üstünde beyaz,
-yarı kalın yazı (okunaklılık için tema rengi değil). Bekleme ekranı açıkken panel kendiliğinden açılmaz.
+tuşları satır satır, tuş adı `accent` renginde. Altyazı kutusu mavimsi siyah (`#0c0e12`) %90 zemin üstünde beyaz,
+normal kalınlıkta yazı (okunaklılık için tema rengi değil); iç boşluk ve köşe yazı boyuna göre (em). Bekleme ekranı açıkken panel kendiliğinden açılmaz.
 Bekleme ekranında tek düğme "Demoyu izle"dir; seçili düğme `accent` dolgu ve beyaz çerçeveyle belli olur.
 Demo sırasında sağ üstte panel biçiminde "DEMO" notu durur. Geri tuşu önce demoyu ya da paneli kapatır,
 giriş ekranında TV'nin ana ekranına döner (mağaza kuralı).

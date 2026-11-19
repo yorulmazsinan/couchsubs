@@ -46,7 +46,7 @@ public sealed record SubtitleStyle(
     int FontSize = 46,
     int BottomPercent = 7,
     SubtitlePlacement Placement = SubtitlePlacement.Cover,
-    int Background = 72,
+    int Background = 90,
     bool Bold = false,
     SubtitleTextColor TextColor = SubtitleTextColor.White,
     TvDisplayMode DisplayMode = TvDisplayMode.InApp,

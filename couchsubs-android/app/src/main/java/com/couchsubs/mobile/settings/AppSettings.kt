@@ -190,7 +190,7 @@ class AppSettings(context: Context) : AreaStore {
 
     /** TV'deki altyazı kutusunun koyuluğu, yüzde (100: tamamen opak; oyundaki İngilizce yazıyı kapatır). */
     var tvBackground: Int
-        get() = prefs.getInt("tvBackground", 72).coerceIn(0, 100)
+        get() = prefs.getInt("tvBackground", 90).coerceIn(0, 100)
         set(value) = prefs.edit().putInt("tvBackground", value.coerceIn(0, 100)).apply()
 
     var tvBackgroundShape: com.couchsubs.mobile.core.SubtitleBackgroundShape

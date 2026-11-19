@@ -38,8 +38,8 @@ html, body {
 #subtitle-cover {
   position: absolute;
   z-index: 9;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.97);
+  border-radius: 1.4vh;
+  background: rgba(12, 14, 18, 0.97);
 }
 #subtitle-cover.hidden { display: none; }
 
@@ -114,29 +114,40 @@ html, body {
 
 #subtitle-prev-text, #subtitle-prev2-text {
   display: inline-block;
-  padding: 6px 20px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.6);
+  padding: 0.24em 0.5em;
+  border-radius: 0.33em;
+  background: rgba(12, 14, 18, 0.75);
+  max-width: 100%;
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
   font-size: 37px;
-  line-height: 1.3;
-  font-weight: 600;
-  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 2px 4px #000;
+  line-height: 1.25;
+  font-weight: 400;
+  text-shadow: 0 2px 4px #000;
 }
 
-/* Gölge üst üste üç katmandır: zemin koyuluğu düşükken (bilgisayardaki "Zemin koyuluğu" %0'a kadar iner) beyaz yazı
-   açık sahnede (kar, gökyüzü) tek yumuşak gölgeyle seçilmiyordu. Renkli değil, yalnız siyah kontur. */
+/* Zemin mavimsi siyah ve neredeyse opaktır; oyunun parlak sahneleri kutudan sızmaz. İç boşluk ve köşe em cinsindendir:
+   yazı boyu (ve uzun cümlede otomatik küçülme) değişse de kutu/yazı oranı aynı kalır. Zemin saydamlaşınca yazıya
+   sert kontur eklenir (body.thin-bg). Boşluksuz çok uzun bir sözcük (ad, adres) ekrandan taşmasın diye gerekirse
+   ortasından kırılır; overflow-wrap: anywhere'i tanımayan eski TV tarayıcılarında word-wrap aynı işi görür. */
 #subtitle-text {
   display: inline-block;
-  padding: 10px 26px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.72);
+  padding: 0.24em 0.5em;
+  border-radius: 0.33em;
+  background: rgba(12, 14, 18, 0.9);
+  max-width: 100%;
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
   font-size: 46px;
-  line-height: 1.3;
-  font-weight: 600;
-  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 2px 4px #000;
+  line-height: 1.25;
+  font-weight: 400;
+  text-shadow: 0 2px 4px #000;
 }
 
-/* Zemin %30'dan saydamsa (app.js applyStyle) yazının çevresine 1 px'lik sert siyah kontur eklenir. */
+/* Zemin %50'den saydamsa (app.js applyStyle) yazının çevresine 1 px'lik sert siyah kontur eklenir: tek yumuşak gölge
+   açık sahnede (kar, gökyüzü) beyaz yazıyı seçtirmiyor. */
 body.thin-bg #subtitle-text, body.thin-bg #subtitle-prev-text, body.thin-bg #subtitle-prev2-text {
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 4px #000, 0 2px 4px #000;
 }

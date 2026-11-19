@@ -292,7 +292,7 @@ final class SubtitleServerTests: XCTestCase {
 
     func testOldSavedStyleGetsNewDefaults() throws {
         let style = try JSONDecoder().decode(SubtitleStyle.self, from: Data(#"{"fontSize":58,"bottomPercent":12}"#.utf8))
-        XCTAssertEqual(style, SubtitleStyle(fontSize: 58, bottomPercent: 12, placement: .cover, background: 72, bold: false,
+        XCTAssertEqual(style, SubtitleStyle(fontSize: 58, bottomPercent: 12, placement: .cover, background: 90, bold: false,
                                              textColor: .white, displayMode: .inApp))
     }
 

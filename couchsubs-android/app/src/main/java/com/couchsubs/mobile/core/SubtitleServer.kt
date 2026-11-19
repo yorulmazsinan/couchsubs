@@ -30,7 +30,7 @@ data class SubtitleStyle(
     val fontSize: Int = 46,
     val bottomPercent: Int = 7,
     val placement: SubtitlePlacement = SubtitlePlacement.COVER,
-    val background: Int = 72,
+    val background: Int = 90,
     val backgroundShape: SubtitleBackgroundShape = SubtitleBackgroundShape.FIT,
     val bold: Boolean = false,
     val textColor: SubtitleTextColor = SubtitleTextColor.WHITE,
