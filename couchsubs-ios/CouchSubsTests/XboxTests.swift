@@ -289,7 +289,7 @@ final class XboxSessionMachineTests: XCTestCase {
         _ = m.played()
         // Konsol yayını reddetti: yeniden denenmez.
         XCTAssertEqual(m.status("Failed", errorDetails: #"{"code":"ServerInUse"}"#), .retry(delayMs: nil))
-        if case let .failed(kind, _, willRetry, _) = m.phase { XCTAssertEqual(kind, .busy); XCTFalse(willRetry) } else { XCTFail() }
+        if case let .failed(kind, _, willRetry, _) = m.phase { XCTAssertEqual(kind, .busy); XCTAssertFalse(willRetry) } else { XCTFail() }
         XCTAssertEqual(m.fail(.signInRequired, "giriş"), .retry(delayMs: nil))
         m.stop()
         XCTAssertEqual(m.start(), .nothing)
