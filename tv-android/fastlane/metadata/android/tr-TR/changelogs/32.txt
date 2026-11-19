@@ -1,0 +1,1 @@
+0.9.29: Bazı Android TV'lerde (Thomson, Philips) CouchSubs arka plandayken TV'nin kendi HDMI ekranı artık yeşil ya da siyah kalmıyor.

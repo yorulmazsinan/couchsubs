@@ -6,6 +6,7 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
+- **Android TV'de yeşil/siyah ekran (TV uygulaması 0.9.29, #453):** CouchSubs arka plana geçince (kumandadan Giriş › HDMI, Ana ekran) HDMI girişini artık bırakıyor; Thomson, Philips gibi TV'lerde TV'nin kendi HDMI ekranı yeşil ya da siyah kalmıyor. CouchSubs'a dönünce PS5 görüntüsü yeniden açılıyor.
 - **DeepL daha kararlı (Windows, Mac, iPhone, Android, #433, #440, #441):** Çeviri sürerken DeepL bağlantısı açık tutuluyor (ilk satır daha hızlı); bağlantı koparsa satır bir kez daha deneniyor; hata sonrası bekleme 1 dakikadan 15 saniyeye indi. Kota ve anahtar hataları yeniden denenmiyor. Katkı: [DevBoX11](https://github.com/DevBoX11).
 - **Aynı evde iki PS5, iki TV ya da iki CouchSubs (Windows, Mac, iPhone, Android, TV uygulaması 0.9.28, #425):** Cihazlar artık birbirine karışmıyor. Uygulama PS5'i adıyla tanıyor, başka PS5'e geçmiyor; ağda birden çok Android TV varsa hangisine kurulacağını soruyor; TV uygulaması kendi bilgisayarına ya da telefonuna bağlanıyor, başka TV'ye hizmet eden CouchSubs'a geçmiyor.
 - **TV uygulaması: Samsung ultra geniş monitörler (#304, #436):** Odyssey G8/G9 gibi 21:9 ve 32:9 ekranlarda PS5 görüntüsü artık ekranı dolduruyor (önceden ortada küçük kalıyordu). 16:9 TV'lerde değişiklik yok. TV'deki uygulama kendiliğinden güncellenir. Android TV'de bağlantı kopunca çıkan çevrimdışı noktası da artık doğru zamanda görünüyor (#446, katkı: erenbati).

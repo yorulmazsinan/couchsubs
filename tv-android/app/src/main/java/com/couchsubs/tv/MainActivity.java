@@ -72,8 +72,8 @@ public class MainActivity extends Activity implements TvPage.Host {
     private boolean pickerShown;
     private boolean pickerClosed;
     private String launchParams = "";
-    /** Son açılan HDMI girişi; uygulama öne gelince ya da bağlantı kopunca yeniden açılır. */
-    private String tunedInput;
+    /** Son açılan HDMI girişi; ekran önden çekilince bırakılır, öne gelince ya da bağlantı kopunca yeniden açılır. */
+    private final HdmiSession session = new HdmiSession();
     private int retuneAttempts;
     private final FallbackWatch watch = new FallbackWatch();
     private boolean watching;
@@ -240,9 +240,9 @@ public class MainActivity extends Activity implements TvPage.Host {
     /** Uygulama içinden katmana: TvView girişi bırakır ki TV kendi ekranında açabilsin. */
     private void switchToOverlay(int message) {
         stopWatching();
-        String previous = tunedInput;
+        String previous = session.input();
         if (tvView != null) tvView.reset();
-        tunedInput = null;
+        session.clear();
         if (!startOverlay()) {
             // Katman açılamadı: uygulama kapanmaz, nedeni söylenir, bırakılan giriş yeniden açılır.
             if (previous != null && tvView != null) tune(previous);
@@ -288,7 +288,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         watching = false;
         if (isFinishing() || tvView == null || watch.played()) return;
         long now = SystemClock.elapsedRealtime();
-        boolean source = HdmiInputs.hasSource(this, tunedInput);
+        boolean source = HdmiInputs.hasSource(this, session.input());
         boolean permitted = overlayAllowed();
         if (watch.shouldSwitch(now, source, permitted)) {
             switchToOverlay(R.string.overlay_fallback);
@@ -336,7 +336,7 @@ public class MainActivity extends Activity implements TvPage.Host {
             int port = tunedPort(inputs);
             if (port > 0) {
                 text.append(getString(sourceConnected ? R.string.no_picture : R.string.no_picture_empty, port)).append(' ');
-            } else if (tunedInput == null) {
+            } else if (session.input() == null) {
                 // Konsolun girişi bulunamadı, hiçbir giriş açılmadı (bkz. chooseInput).
                 text.append(getString(R.string.console_not_found)).append(' ');
             }
@@ -376,7 +376,7 @@ public class MainActivity extends Activity implements TvPage.Host {
     /** Açık girişin numarası, bilinmiyorsa 0. */
     private int tunedPort(List<HdmiInputs.Choice> inputs) {
         for (HdmiInputs.Choice input : inputs) {
-            if (input.id.equals(tunedInput)) return input.port;
+            if (input.id.equals(session.input())) return input.port;
         }
         return 0;
     }
@@ -582,12 +582,13 @@ public class MainActivity extends Activity implements TvPage.Host {
         }
     }
 
-    /** Bazı TV'ler (ör. TCL) uygulama arka plana gidince HDMI'yi bırakır; öne gelince görüntü yeniden açılır. */
+    /** Ekran önden çekilince bırakılan HDMI girişi (bkz. onPause) öne gelince yeniden açılır. */
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
-        if (tvView != null && tunedInput != null) tune(tunedInput);
+        String id = session.toForeground();
+        if (tvView != null && id != null) tune(id);
     }
 
     /** Uygulamadan çıkılınca (Ana ekran, başka uygulama) Türkçe dublaj susar; altyazı bağlantısı sürer (TV-NP). */
@@ -609,25 +610,36 @@ public class MainActivity extends Activity implements TvPage.Host {
         if (page != null) page.background(false);
     }
 
-    /** Arka plandayken katmana geçilmez (kullanıcı başka bir şey izliyor olabilir); öne gelince saat yeniden başlar. */
+    /**
+     * Arka plandayken katmana geçilmez (kullanıcı başka bir şey izliyor olabilir); öne gelince saat yeniden başlar.
+     * HDMI girişi bırakılır (#453): TV'nin kendi giriş ekranı açılırken CouchSubs girişi tutarsa aynı HDMI'yı tek
+     * oturuma veren TV'lerde (Thomson, Philips) o ekran yeşil ya da siyah kalıyordu. onStop beklenmez: yeni ekran
+     * (TV'nin HDMI oynatıcısı) bu ekranın onStop'undan önce açılır ve girişi o anda ister.
+     */
     @Override
     protected void onPause() {
         super.onPause();
         resumed = false;
         stopWatching();
         watch.pause();
+        if (tvView != null && session.toBackground()) {
+            tvView.reset();
+            keepScreenOn(false);
+        }
     }
 
     /** Bağlantı koptuysa birkaç kez, gittikçe seyrek yeniden dener. */
     private void retuneLater() {
-        if (tvView == null || tunedInput == null || retuneAttempts >= 5) return;
+        String id = session.input();
+        if (tvView == null || !session.canRetune(id) || retuneAttempts >= 5) return;
         retuneAttempts++;
-        String id = tunedInput;
-        handler.postDelayed(() -> { if (id.equals(tunedInput)) tune(id); }, 1500L * retuneAttempts);
+        // Arka plana düşüldüyse yeniden denenmez: giriş TV'nin kendi ekranındadır.
+        handler.postDelayed(() -> { if (session.canRetune(id)) tune(id); }, 1500L * retuneAttempts);
     }
 
     private void tune(String id) {
-        tunedInput = id;
+        // Ekran arka plandaysa giriş açılmaz, yalnız hatırlanır; öne gelince açılır (onResume).
+        if (!session.want(id)) return;
         watch.tuned(SystemClock.elapsedRealtime());
         // PS5 görüntüsü gelirken TV boşta sanmasın: giriş açılır açılmaz ekran açık tutulur; görüntü gerçekten yoksa
         // (PS5 kapalı, kablo çıktı) noVideo() bırakır.

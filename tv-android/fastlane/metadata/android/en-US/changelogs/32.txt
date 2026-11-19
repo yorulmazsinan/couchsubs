@@ -1,0 +1,1 @@
+0.9.29: On some Android TVs (Thomson, Philips) the TV's own HDMI screen no longer stays green or black while CouchSubs is in the background.
