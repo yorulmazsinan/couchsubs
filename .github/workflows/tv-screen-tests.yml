@@ -2,10 +2,10 @@
 name: tv-screen-tests
 on:
   pull_request:
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', '.github/workflows/tv-screen-tests.yml']
   push:
     branches: [main]
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', '.github/workflows/tv-screen-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,3 +30,5 @@ jobs:
         run: node --test scripts/tv-screen.test.js
       - name: Samsung ultrawide görünüm testleri
         run: node --test scripts/tv-tizen.test.js
+      - name: OBS katmanı yerleşim testleri
+        run: node --test scripts/obs-overlay.test.js

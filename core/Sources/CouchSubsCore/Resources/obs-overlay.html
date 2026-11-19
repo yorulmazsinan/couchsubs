@@ -33,8 +33,10 @@
     opacity: 0; visibility: hidden; transition: opacity 0.15s, visibility 0s linear 0.15s;
   }
   #line.on { opacity: 1; visibility: visible; transition: opacity 0.15s; }
-  /* İngilizce altyazının yeri biliniyorsa çeviri onu örter (TV'deki "örtme" ile aynı). */
-  #line.cover { position: absolute; transform: translate(-50%, -50%); }
+  /* İngilizce altyazının yeri biliniyorsa çeviri onu örter (TV'deki "örtme" ile aynı). Genişlik yazının kendisi kadardır
+     (en çok 84vw): konumlanmış kutu kendiliğinden yalnız soldaki boşluktan sağ kenara kadar genişleyebiliyordu (ortada
+     50vw); uygulamanın iki satıra böldüğü çeviri OBS'te yeniden bölünüp 3-4 satır oluyordu. */
+  #line.cover { position: absolute; transform: translate(-50%, -50%); width: max-content; }
   #hint {
     position: absolute; left: 0; right: 0; bottom: 7%; text-align: center;
     font: 600 28px/1.3 -apple-system, "Segoe UI", system-ui, sans-serif;
@@ -277,6 +279,12 @@
       line.style.background = typeof bg === 'number' && !isNaN(bg) ? (bg >= 100 ? '#000' : boxColor(bg)) : 'rgba(0, 0, 0, 0.97)';
       if (pageColor) line.style.background = '#000';
       line.className = 'on cover';
+      if (!band) {
+        // Genişleyen kutu ekranın kenarından taşmasın: ortası kutunun yarısı kadar içeride kalır.
+        var pageWidth = window.innerWidth || 1920, half = line.offsetWidth / 2;
+        var center = Math.min(Math.max((box.left + box.right) / 2 * pageWidth, half), pageWidth - half);
+        line.style.left = (center / pageWidth * 100) + '%';
+      }
     } else {
       line.style.left = '';
       line.style.top = '';
