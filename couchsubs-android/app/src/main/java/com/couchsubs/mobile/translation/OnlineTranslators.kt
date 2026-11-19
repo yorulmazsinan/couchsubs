@@ -229,10 +229,13 @@ abstract class SentenceTranslator<C>(
     /** Hata sonrası hizmetin denenmediği süre. */
     protected open val retryAfterMs: Long get() = RETRY_AFTER_MS
 
-    /** Hata sonrası bekleme; 429'da (çok sık istek) en az [RATE_LIMIT_PAUSE_MS] ve yerel çeviri olmasa da istek gitmez. */
+    /** 429 (çok sık istek) sonrası en az bekleme; DeepL Windows ve Mac/iPhone gibi kendi süresini kullanır. */
+    protected open val rateLimitPauseMs: Long get() = RATE_LIMIT_PAUSE_MS
+
+    /** Hata sonrası bekleme; 429'da (çok sık istek) en az [rateLimitPauseMs] ve yerel çeviri olmasa da istek gitmez. */
     private fun pauseAfter(error: Exception?) {
         val rateLimited = (error as? OnlineException)?.rateLimited == true
-        pausedUntil = clock() + if (rateLimited) maxOf(retryAfterMs, RATE_LIMIT_PAUSE_MS) else retryAfterMs
+        pausedUntil = clock() + if (rateLimited) maxOf(retryAfterMs, rateLimitPauseMs) else retryAfterMs
         pauseRateLimited = rateLimited
     }
 
@@ -404,6 +407,7 @@ class DeepLTranslator(
     }
 
     override val retryAfterMs: Long get() = DeepLTranslator.RETRY_AFTER_MS
+    override val rateLimitPauseMs: Long get() = DeepLTranslator.RETRY_AFTER_MS
 
     override fun translate(text: String): String {
         warmer?.touch(key)
