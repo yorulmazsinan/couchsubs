@@ -13,22 +13,33 @@ const tizenDir = path.join(__dirname, '..', 'tv-tizen');
 const code = fs.readFileSync(path.join(tizenDir, 'platform.js'), 'utf8');
 
 // innerWidth/innerHeight: uygulama yüzeyinin paketteki "width=device-width" görünümündeki ölçüsü.
-function load(innerWidth, innerHeight) {
+// opts.screen: ekranın fiziksel ölçüsü (window.screen); opts.logical: Samsung'un '100%' pencere için bildirdiği
+// dikdörtgen (mantıksal yüzey); opts.reject(rect): true ise show o dikdörtgeni reddeder; opts.picture: kayıtlı seçim.
+function load(innerWidth, innerHeight, opts = {}) {
   const meta = { content: 'width=device-width', setAttribute(name, value) { if (name === 'content') this.content = value; } };
   const shown = [];
-  const window = { innerWidth, innerHeight, addEventListener() {} };
+  const store = {};
+  if (opts.picture) store['couchsubs.picture'] = opts.picture;
+  const window = { innerWidth, innerHeight, addEventListener() {},
+    localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } } };
+  if (opts.screen) window.screen = { width: opts.screen[0], height: opts.screen[1] };
+  const logical = opts.logical || [innerWidth, innerHeight];
   const tizen = {
     systeminfo: {
       getPropertyValue(name, ok) { ok({ connected: [{ type: 'HDMI', number: 1 }], disconnected: [] }); },
     },
     tvwindow: {
       setSource(source, ok) { ok(); },
-      show(ok, fail, rect, type, z) { shown.push({ rect, type, z }); ok(); },
+      show(ok, fail, rect, type, z) {
+        shown.push({ rect: [...rect], type, z });
+        if (opts.reject && opts.reject(rect)) return fail(new Error('NotSupportedError'));
+        ok(rect[2] === '100%' ? ['0px', '0px', logical[0] + 'px', logical[1] + 'px'] : rect);
+      },
     },
   };
   const document = { querySelector: (q) => (q === 'meta[name="viewport"]' ? meta : null) };
   vm.runInNewContext(code, { window, document, tizen });
-  return { platform: window.COUCHSUBS_PLATFORM, meta, shown };
+  return { platform: window.COUCHSUBS_PLATFORM, meta, shown, store };
 }
 
 test('16:9 TV (1080p ve 4K): görünüm 1920 piksel kalır', () => {
@@ -61,15 +72,81 @@ test('viewportFor: geçersiz ölçüde dokunmaz, oranı korur', () => {
   assert.equal(platform.viewportFor(1440, 1080), null);
 });
 
-test('HDMI penceresi yüzeyin tamamını kaplar, sayfanın arkasında açılır', () => {
-  for (const [w, h] of [[1920, 1080], [1920, 804]]) {
-    const { platform, shown } = load(w, h);
-    const statuses = [];
-    platform.showHdmi(1, null, (s) => statuses.push(s));
-    assert.deepEqual(statuses, ['loading', 'playing']);
-    assert.equal(shown.length, 1);
-    assert.deepEqual(JSON.parse(JSON.stringify(shown[0])), { rect: ['0', '0', '100%', '100%'], type: 'MAIN', z: 'BEHIND' });
+const FULL = ['0', '0', '100%', '100%'];
+
+function playHdmi(loaded) {
+  const statuses = [];
+  loaded.platform.showHdmi(1, null, (s) => statuses.push(s));
+  assert.deepEqual(statuses, ['loading', 'playing']);
+  return loaded.shown.map((s) => s.rect);
+}
+
+test('16:9 TV (1080p ve 4K): HDMI penceresi yüzeyin tamamı, sayfanın arkasında; tek show', () => {
+  for (const screen of [[1920, 1080], [3840, 2160], undefined]) {
+    const loaded = load(1920, 1080, { screen });
+    assert.deepEqual(playHdmi(loaded), [FULL]);
+    assert.equal(loaded.shown[0].type, 'MAIN');
+    assert.equal(loaded.shown[0].z, 'BEHIND');
+    assert.equal(loaded.platform.pictureModes(), null);
   }
+});
+
+// #304 (son8 fotoğrafı): Odyssey G8'de '100%' penceresi 2580x1080 mantıksal pikseldi ve fiziksel ekranda büyütülmeden
+// ortaya çiziliyordu (ekranın %75'i, dört yanda siyah). Pencere fiziksel ölçüde, aynı merkeze göre istenir.
+test('3440x1440 (Odyssey G8): HDMI penceresi varsayılan tam yükseklik 16:9, ortalanmış', () => {
+  const loaded = load(2580, 1080, { screen: [3440, 1440] });
+  assert.equal(loaded.meta.content, 'width=2580');
+  assert.deepEqual(playHdmi(loaded), [FULL, ['10px', '-180px', '2560px', '1440px']]);
+  assert.equal(loaded.platform.pictureModes(), 'fit');
+});
+
+test('3440x1440: "ekranı doldur" seçiliyse pencere ekranın tamamı (3440x1440)', () => {
+  const loaded = load(2580, 1080, { screen: [3440, 1440], picture: 'fill' });
+  assert.deepEqual(playHdmi(loaded), [FULL, ['-430px', '-180px', '3440px', '1440px']]);
+});
+
+test('3440x1440: Samsung 2560x1080 mantıksal yüzey bildirse de merkez ve ölçü doğru', () => {
+  const loaded = load(2580, 1080, { screen: [3440, 1440], logical: [2560, 1080], picture: 'fill' });
+  assert.deepEqual(playHdmi(loaded).at(-1), ['-440px', '-180px', '3440px', '1440px']);
+});
+
+test('3440x1440: screen yoksa fiziksel ölçü sayfa x görünüm ölçeğinden', () => {
+  const loaded = load(2580, 1080, { picture: 'fill' });
+  // visualViewport yok: ölçek 1, sayfa ölçüsü fiziksel sayılır; pencere zaten o boyda, ikinci show yok.
+  assert.deepEqual(playHdmi(loaded), [FULL]);
+});
+
+test('Samsung eksi kökeni reddederse sol üst köken, o da olmazsa 100% denenir; görüntü yine açılır', () => {
+  const negative = (rect) => rect.some((v) => String(v).startsWith('-'));
+  assert.deepEqual(playHdmi(load(2580, 1080, { screen: [3440, 1440], reject: negative })),
+    [FULL, ['10px', '-180px', '2560px', '1440px'], ['0px', '0px', '2560px', '1440px']]);
+  const onlyPercent = (rect) => !String(rect[2]).endsWith('%');
+  assert.deepEqual(playHdmi(load(2580, 1080, { screen: [3440, 1440], reject: onlyPercent })),
+    [FULL, ['10px', '-180px', '2560px', '1440px'], ['0px', '0px', '2560px', '1440px'], FULL]);
+});
+
+test('Sarı tuş (togglePicture): seçim kaydedilir, açık pencere yeni ölçüyle yeniden çizilir', () => {
+  const loaded = load(2580, 1080, { screen: [3440, 1440] });
+  playHdmi(loaded);
+  assert.equal(loaded.platform.togglePicture(), 'fill');
+  assert.equal(loaded.store['couchsubs.picture'], 'fill');
+  assert.deepEqual(loaded.shown.at(-1).rect, ['-430px', '-180px', '3440px', '1440px']);
+  assert.equal(loaded.platform.togglePicture(), 'fit');
+  assert.deepEqual(loaded.shown.at(-1).rect, ['10px', '-180px', '2560px', '1440px']);
+});
+
+test('32:9 (Odyssey G9 5120x1440): 16:9 tam yükseklik ya da tam ekran', () => {
+  assert.deepEqual(playHdmi(load(3840, 1080, { screen: [5120, 1440] })).at(-1), ['640px', '-180px', '2560px', '1440px']);
+  assert.deepEqual(playHdmi(load(3840, 1080, { screen: [5120, 1440], picture: 'fill' })).at(-1),
+    ['-640px', '-180px', '5120px', '1440px']);
+});
+
+test('pictureRect: 16:9 ekranda ve geçersiz ölçüde null', () => {
+  const { platform } = load(1920, 1080);
+  assert.equal(platform.pictureRect([0, 0, 1920, 1080], [3840, 2160], 'fill'), null);
+  assert.equal(platform.pictureRect(null, [3440, 1440], 'fill'), null);
+  assert.equal(platform.pictureRect([0, 0, 2580, 1080], null, 'fill'), null);
+  assert.equal(platform.pictureRect([0, 0, 3440, 1440], [3440, 1440], 'fill'), null);
 });
 
 test('config.xml: yüzey ekranın tamamı (base_screen_resolution=fullscreen)', () => {

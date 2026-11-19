@@ -1,0 +1,1 @@
+0.9.32: On Samsung ultrawide monitors (21:9, 32:9) the console picture now fills the screen height instead of sitting in a small box in the middle. The Yellow button switches between 16:9 and stretched to fill the whole screen.

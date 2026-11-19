@@ -1,0 +1,1 @@
+0.9.32: Samsung ultra geniş monitörlerde (21:9, 32:9) konsol görüntüsü artık ortada küçük bir kutuda kalmıyor, ekranın tam yüksekliğini kullanıyor. Sarı tuş 16:9 ile ekranı tamamen dolduran (gerilmiş) görüntü arasında geçiş yapar.

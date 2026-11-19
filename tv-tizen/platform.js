@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var KEYS = ['0', '1', '2', '3', '4', 'ColorF0Red', 'ColorF1Green', 'ColorF3Blue'];
+  var KEYS = ['0', '1', '2', '3', '4', 'ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue'];
   // Çözünürlük değişikliği dinleyicisi (bir kez kurulur) ve güncel değeri alan işlev.
   var resolutionListener = null;
   var resolutionCallback = null;
@@ -35,6 +35,86 @@
       var meta = document.querySelector('meta[name="viewport"]');
       if (meta) meta.setAttribute('content', content);
     } catch (e) {}
+  }
+
+  // --- Geniş ekranda HDMI penceresi (#304) ---
+  // Odyssey G8'de (3440x1440) TVWindow '100%' penceresi ekranın ortasında 2580x1080 piksellik bir kutuya çiziliyordu
+  // (kullanıcı fotoğrafları: her iki yönde ekranın %75'i, ortalanmış; 0.9.22'de sayfa 16:9 kutudayken de aynı boy).
+  // Samsung pencere ölçüsünü uygulamanın 1080 satırlık mantıksal yüzeyinde (show'un bildirdiği dikdörtgen) alıyor,
+  // görüntü katmanında ise bunu fiziksel piksele büyütmeden ekranın ortasına koyuyor. Bu yüzden geniş ekranda pencere
+  // fiziksel ölçüde istenir ve aynı merkeze göre konur: kutu ekran boyuna büyür. 16:9 TV'lerde bir şey değişmez.
+  // PS5 16:9 verir: varsayılan 'fit' tam yükseklikte 16:9 (yanlarda siyah), 'fill' ekranın tamamı (görüntü gerilir).
+  var PICTURE_KEY = 'couchsubs.picture';
+  var shownPort = null;
+
+  function pictureMode() {
+    try { return window.localStorage.getItem(PICTURE_KEY) === 'fill' ? 'fill' : 'fit'; } catch (e) { return 'fit'; }
+  }
+
+  // Ekranın fiziksel ölçüsü: screen (cihaz pikseli) ya da sayfa yüzeyi x görünüm ölçeği.
+  function physicalSize() {
+    var candidates = [];
+    try {
+      var dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+      if (window.screen) candidates.push([window.screen.width * dpr, window.screen.height * dpr]);
+    } catch (e) {}
+    try {
+      var scale = window.visualViewport && window.visualViewport.scale > 0 ? window.visualViewport.scale : 1;
+      candidates.push([window.innerWidth * scale, window.innerHeight * scale]);
+    } catch (e) {}
+    var best = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (c[0] > 0 && c[1] > 0 && (!best || c[1] > best[1])) best = c;
+    }
+    return best ? [Math.round(best[0]), Math.round(best[1])] : null;
+  }
+
+  function parseRect(rect) {
+    if (!rect || rect.length !== 4) return null;
+    var out = [];
+    for (var i = 0; i < 4; i++) {
+      var text = String(rect[i]);
+      if (text.indexOf('%') >= 0) return null;
+      var value = parseFloat(text);
+      if (isNaN(value)) return null;
+      out.push(value);
+    }
+    return out[2] > 0 && out[3] > 0 ? out : null;
+  }
+
+  // shown: show('100%') sonrası pencerenin mantıksal dikdörtgeni [x, y, w, h]; screen: fiziksel [w, h].
+  // 16:9 (ve dar) ekranda ya da pencere zaten ekran boyundaysa null: '100%' penceresi kalır.
+  function pictureRect(shown, screen, mode) {
+    if (!shown || !screen || !(screen[0] > 0) || !(screen[1] > 0)) return null;
+    if (screen[0] / screen[1] < WIDE_RATIO) return null;
+    var width = mode === 'fill' ? screen[0] : Math.min(screen[0], Math.round(screen[1] * 16 / 9));
+    var height = screen[1];
+    if (Math.abs(width - shown[2]) < 2 && Math.abs(height - shown[3]) < 2) return null;
+    var x = Math.round(shown[0] + (shown[2] - width) / 2);
+    var y = Math.round(shown[1] + (shown[3] - height) / 2);
+    return [x + 'px', y + 'px', width + 'px', height + 'px'];
+  }
+
+  // Pencereyi açar; geniş ekranda ölçüyü düzeltir. Samsung ekran dışına taşan (eksi) kökeni reddederse aynı ölçü
+  // sol üst kökenle denenir, o da olmazsa '100%' penceresi (eski davranış) kalır.
+  function showWindow(done, failed) {
+    tizen.tvwindow.show(function (rect) {
+      var target = pictureRect(parseRect(rect) || [0, 0, window.innerWidth, window.innerHeight], physicalSize(),
+        pictureMode());
+      if (!target) return done();
+      var attempts = [target, ['0px', '0px', target[2], target[3]], FULL_SCREEN];
+      var next = function (i) {
+        try {
+          tizen.tvwindow.show(function () { done(); }, function () {
+            if (i + 1 < attempts.length) next(i + 1); else done();
+          }, attempts[i], 'MAIN', 'BEHIND');
+        } catch (e) {
+          if (i + 1 < attempts.length) next(i + 1); else done();
+        }
+      };
+      next(0);
+    }, failed, FULL_SCREEN, 'MAIN', 'BEHIND');
   }
 
   // Samsung ağ API'sindeki IPv4 adresi (izin: network.public); API yoksa ya da adres boşsa null.
@@ -90,6 +170,26 @@
     // Birim testi için (scripts/tv-tizen.test.js).
     viewportFor: viewportFor,
     samsungIp: samsungIp,
+    pictureRect: pictureRect,
+
+    // Geniş ekranda (21:9, 32:9) HDMI görüntüsü: 'fit' 16:9 tam yükseklik, 'fill' ekranı doldurur (gerer). Sarı tuş
+    // değiştirir (app.js); 16:9 TV'de yoktur.
+    pictureModes: function () {
+      return viewportFor(window.innerWidth, window.innerHeight) ? pictureMode() : null;
+    },
+    togglePicture: function (onStatus) {
+      var next = pictureMode() === 'fill' ? 'fit' : 'fill';
+      try { window.localStorage.setItem(PICTURE_KEY, next); } catch (e) {}
+      if (shownPort !== null) {
+        var failed = function () { if (onStatus) onStatus('inputError'); };
+        try {
+          showWindow(function () { if (onStatus) onStatus('playing'); }, failed);
+        } catch (e) {
+          failed();
+        }
+      }
+      return next;
+    },
 
     // Anynet+ (HDMI-CEC) ya da Otomatik Kaynak Değiştirme TV'yi kendiliğinden HDMI'ya geçirirse uygulama ipucu
     // gösterir (app.js). Menü adları Samsung'unkiler; başka TV'lerde gösterilmez.
@@ -131,8 +231,8 @@
         var failed = function () { onStatus('inputError'); };
         try {
           tizen.tvwindow.setSource(source, function () {
-            tizen.tvwindow.show(function () { onStatus('playing'); }, failed,
-              FULL_SCREEN, 'MAIN', 'BEHIND');
+            shownPort = port;
+            showWindow(function () { onStatus('playing'); }, failed);
           }, failed);
         } catch (e) {
           failed();

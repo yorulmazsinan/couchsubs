@@ -61,7 +61,15 @@ async function render(page, width, height) {
       function box(el) { var b = el.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; }
       // Bilgi paneli (kumandada OK) açık çizilir: kullanıcının fotoğrafındaki sol üst kutu.
       document.getElementById('panel').className = '';
+      // HDMI penceresi (#304): sahte TVWindow, '100%' için Samsung'un bildirdiği mantıksal dikdörtgen sayfa ölçüsüdür.
+      var rects = [];
+      window.tizen = { systeminfo: { getPropertyValue: function (name, ok) { ok({ connected: [{ type: 'HDMI', number: 1 }] }); } },
+        tvwindow: { setSource: function (s, ok) { ok(); }, show: function (ok, fail, rect) {
+          rects.push(rect.slice());
+          ok(rect[2] === '100%' ? ['0px', '0px', innerWidth + 'px', innerHeight + 'px'] : rect); } } };
+      window.COUCHSUBS_PLATFORM.showHdmi(1, null, function () {});
       done(JSON.stringify({
+        rects: rects,
         viewport: document.querySelector('meta[name="viewport"]').getAttribute('content'),
         inner: [innerWidth, innerHeight],
         scale: visualViewport.scale,
@@ -113,6 +121,9 @@ test('Samsung paketi: ultrawide ve 16:9 ekranda sayfa ekranın tamamına çizili
       assert.ok(r.panel.right > r.panel.left, JSON.stringify(r));
       // Altyazı alanı tam genişlikte ortalanır.
       assert.ok(Math.abs((r.subtitle.left + r.subtitle.right) / 2 - 1290) < 2, JSON.stringify(r));
+      // HDMI penceresi: '100%' 2580x1080 mantıksal kutu ekranın %75'iydi (son8); fiziksel ölçü (screen 3440x1440)
+      // tarayıcıdan doğru okunur, pencere tam yükseklikte 16:9 ve ortada istenir.
+      assert.deepEqual(r.rects, [['0', '0', '100%', '100%'], ['10px', '-180px', '2560px', '1440px']]);
     });
 
     await t.test('1920x1080 (16:9 TV): görünüm eskisi gibi 1920', async () => {
@@ -121,6 +132,8 @@ test('Samsung paketi: ultrawide ve 16:9 ekranda sayfa ekranın tamamına çizili
       assert.deepEqual(r.inner, [1920, 1080]);
       assert.ok(Math.abs(r.panel.left - 96) < 2, JSON.stringify(r));
       assert.ok(Math.abs((r.subtitle.left + r.subtitle.right) / 2 - 960) < 2, JSON.stringify(r));
+      // 16:9 TV'de HDMI penceresi eskisi gibi tek '100%' çağrısı.
+      assert.deepEqual(r.rects, [['0', '0', '100%', '100%']]);
     });
 
     await t.test('telefon ve Android uygulamasının paketleri de aynı görünümü yazar', () => {

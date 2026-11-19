@@ -6,11 +6,11 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.31';
+  var APP_VERSION = '0.9.32';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
-  var KEY = { RED: 403, GREEN: 404, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
+  var KEY = { RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
 
   var server = null;
   var eventSource = null;
@@ -1767,7 +1767,10 @@
   // "1–4: HDMI girişi · 0: …" satırını tuş başına bir satıra böler; tuş adı vurgu renginde.
   function formatKeys() {
     var el = $('keys');
-    var parts = el.textContent.split(' · ');
+    var text = el.textContent;
+    // Geniş ekranlı Samsung'da (21:9, 32:9) Sarı tuş HDMI görüntüsünü sığdırır ya da ekranı doldurur (#304).
+    if (pictureModes()) text += ' · ' + t('keyPicture');
+    var parts = text.split(' · ');
     el.innerHTML = '';
     for (var i = 0; i < parts.length; i++) {
       var colon = parts[i].indexOf(':');
@@ -1779,6 +1782,17 @@
       row.appendChild(document.createTextNode(colon > 0 ? parts[i].slice(colon + 1).trim() : parts[i]));
       el.appendChild(row);
     }
+  }
+
+  function pictureModes() {
+    try { return typeof platform.pictureModes === 'function' ? platform.pictureModes() : null; } catch (e) { return null; }
+  }
+
+  // Sarı: geniş ekranda HDMI görüntüsü 16:9 tam yükseklik (yanlarda siyah) ya da ekranın tamamı (gerilmiş).
+  function togglePicture() {
+    if (!pictureModes()) return;
+    var mode = platform.togglePicture();
+    showSubtitle(t(mode === 'fill' ? 'pictureFill' : 'pictureFit'), 3000);
   }
 
   // Panel açıkken bekleme kutusu kapanır: ikisi üst üste binince yazılar okunmuyor.
@@ -1886,6 +1900,8 @@
       showSubtitle(t('localTest'), 4000);
     } else if (code === KEY.GREEN) {
       togglePanel();
+    } else if (code === KEY.YELLOW) {
+      togglePicture();
     } else if (code === KEY.BLUE) {
       if (demoRunning()) stopDemo(); else startDemo();
     } else if (code === KEY.OK && $('waiting').className !== 'hidden') {

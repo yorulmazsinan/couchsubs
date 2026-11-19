@@ -6,6 +6,7 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
+- **Samsung ultra geniş monitörde PS5 görüntüsü ortada küçük kalmıyor (TV uygulaması 0.9.32, #304):** Odyssey G8 gibi 21:9/32:9 Samsung monitörlerde konsol görüntüsü ekranın ortasında, dört yanında siyah boşlukla küçük bir kutuda çıkıyordu. Görüntü artık ekranın tam yüksekliğini kullanıyor (16:9, yanlarda siyah); kumandadaki Sarı tuş ekranı tamamen dolduran (gerilmiş) görünüme geçirir. 16:9 TV'lerde bir şey değişmez.
 - **PS5 kapatılınca yeniden açılmıyor, "bağlı" görünmüyor (Windows, Mac, iPhone, Android, #509):** PS5'i kapattığınızda (dinlenme modu) uygulama yeniden bağlanmaya çalışırken konsolu uyandırıp yeniden açıyordu; TV kapalı olduğu için konsol kapalı sanılırken uygulama "bağlı" görünüyordu. Kapatılan PS5 artık yeniden bağlanma sırasında uyandırılmıyor, uygulama da konsolu bağlı göstermiyor.
 - **GTA 6'da "yalnız altyazıyı çevir" Mac'te (#496):** GTA 6'ya özel "yalnız altyazıyı çevir" seçeneği Mac'te düzgün çalışmıyordu; düzeldi. Katkı: Berkovant.
 - **Eski LG TV'ler bulunuyor, TV adresi elle eklenebiliyor (Windows, Mac, iPhone, Android, #498, #513):** webOS 3.x çalıştıran eski LG TV'ler aramada çıkmıyordu; artık bulunuyor. Windows ve Mac'te TV adımında TV'nin IP adresini elle de yazabiliyorsunuz.
