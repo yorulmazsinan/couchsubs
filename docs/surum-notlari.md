@@ -6,10 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6'da görev yazısında altyazının takılı kalması düzeltildi (Mac, Windows, Android, #394):** Ekranın altındaki görev yazısı ("Follow…", "Get in…") konuşma altyazısının hemen altında uzun süre durduğu için çeviri eski konuşmada takılı kalıyor, görev yazısının yanında gelen kısa konuşmalar ("Okay.") hiç çevrilmiyordu. Artık uzun süre ekranda kalan görev/HUD satırı ayrılıyor; konuşma altyazısı her zamanki gibi akıyor, konuşma bitince TV'deki çeviri kalkıyor. Aynı düzen başka oyunlarda da (ekranda sabit kalan ipucu ya da görev satırı) geçerli.
-- **GTA 6 Türkçe paketi:** Grand Theft Auto VI için hazır Türkçe paket yayında ve oyuncular oynadıkça her gece genişliyor (topluluk katkısı: [lones8888](https://github.com/lones8888), #387). Paket uygulama güncellemesi beklemeden kendiliğinden iner.
-- **Windows'ta oyun kapağı seçimi (#363):** Oyun kartında kare kapak görseli seçilebiliyor; görsel bilgisayarda güvenli biçimde saklanıyor. Katkı: [erenbati](https://github.com/erenbati).
-- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.56, görev yazısı düzeltmesiyle). TV uygulaması 0.9.24'te kaldı.
+- **GTA 6'da kısa etkileşim yazıları artık çevrilmiyor (Mac, Windows, Android, #404, #406):** "TAKE AMMO PACK", "SIT", "CLOSE", "TURN ON" gibi büyük harfli kısa yazılar altyazı sanılıp çevriliyor, aynı anda gelen konuşma kaçabiliyordu. Tek satırlık, küçük harfsiz, en çok üç sözcüklük noktalamasız yazılar artık altyazı sayılmıyor; "Yes.", "Okay." gibi kısa konuşmalar etkilenmiyor. Günlüğüyle bildiren: emiraliarif.
+- **TV'den kaldırılan Android TV uygulaması yeniden kuruluyor (Mac, Windows, #407):** TV'den CouchSubs TV silinince bilgisayar onu hâlâ kurulu sanıyor, "TV uygulaması bekleniyor"da kalıyordu. Artık TV'ye bakılıyor, uygulama yoksa yeniden kuruluyor. TV uygulaması bağlı değilken Samsung ve Android TV'de **TV uygulamasını yeniden kur** düğmesi var; Google TV'de Play sayfası açılırsa "Yükle'ye basın" yazıyor.
+- **TV uygulaması 0.9.25:** Samsung'da birden çok HDMI bağlıyken konsolun girişi soruluyor ve hatırlanıyor (#360, #381; bilgisayar da TV'ye bağlıyken Xbox yerine bilgisayarın ekranı açılıyordu). Samsung'da bilgi panelinde HDMI görüntüsünün çözünürlüğü ve yenileme hızı görünüyor (#405). TV'deki uygulama kendiliğinden güncellenir.
+- **Windows'ta model indirme hatası günlükte (#391, #396):** Ücretsiz çeviri modeli inmezse asıl neden `hata.log`'a yazılıyor.
+- **GTA 6 paketi:** Oyuncular oynadıkça genişliyor (şu an 87 bin satır); uygulama güncellemesi beklemeden kendiliğinden iner.
+- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.57).
+
+**beta.49'da gelenler:** GTA 6'da görev yazısında altyazının takılı kalmasının giderilmesi, GTA 6 Türkçe paketi (topluluk katkısı: lones8888), Windows'ta oyun kapağı seçimi (katkı: erenbati).
 
 **beta.48'de gelenler:** Mac'te Android/Google TV seçince çökmenin giderilmesi, Samsung'da yanlış Host PC IP uyarısı, Windows'ta isteğe bağlı gelişmiş yazı tanıma (katkı: erayslyrt00), Mac'te konsolsuz deneme modu, telefonlarda TV IP alanı yardımı.
 
