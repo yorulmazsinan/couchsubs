@@ -1,20 +1,53 @@
 {
   "version": 1,
   "popup": {
-    "id": "enmera-commerce-1",
-    "active": false,
+    "id": "enmera-commerce-demo-1",
+    "active": true,
     "image": "https://couchsubs.enmeraapps.com/promo/popup.webp",
-    "imageWide": "https://couchsubs.enmeraapps.com/promo/popup-wide.webp",
-    "link": "https://enmera.com.tr",
-    "alt": "Enmera Commerce: süper zekâlı e-ticaret yazılımı",
+    "link": "https://enmera.com.tr/urunler/enmera-commerce?utm_source=couchsubs&utm_medium=app&utm_campaign=popup",
+    "alt": "Enmera Commerce: Ücretsiz demo",
     "everyHours": 24,
-    "targets": ["site", "ios", "android"]
+    "targets": [
+      "ios",
+      "android"
+    ]
+  },
+  "sitePopup": {
+    "id": "enmera-kampanya-2027-1",
+    "active": true,
+    "image": "https://couchsubs.enmeraapps.com/promo/site-popup.webp",
+    "link": "https://enmera.com.tr/urunler/enmera-commerce?utm_source=couchsubs&utm_medium=site&utm_campaign=popup",
+    "alt": "Enmera Commerce: Yıl sonuna kadar ödeme yok",
+    "everyHours": 24
   },
   "sponsors": [
-    {"name": "Enmera", "logo": "https://couchsubs.enmeraapps.com/promo/logos/enmera.png", "url": "https://enmera.com.tr"},
-    {"name": "Searvia", "logo": "https://couchsubs.enmeraapps.com/promo/logos/searvia.png", "url": "https://searvia.com"},
-    {"name": "Cebbin", "logo": "https://couchsubs.enmeraapps.com/promo/logos/cebbin.png", "url": "https://apps.apple.com/tr/app/cebbin-expense-tracker/id6761289792", "android": ""},
-    {"name": "Gramla", "logo": "https://couchsubs.enmeraapps.com/promo/logos/gramla.png", "url": "https://apps.apple.com/tr/app/gramla-nutrition-fitness/id6815593927", "android": "https://play.google.com/store/apps/details?id=com.enmera.gramla"},
-    {"name": "Bakkal", "logo": "https://couchsubs.enmeraapps.com/promo/logos/bakkal.png", "url": "https://apps.apple.com/tr/app/bakkal-mini-market-game/id6822638855", "android": "https://play.google.com/store/apps/details?id=com.enmera.bakkal"}
+    {
+      "name": "Enmera",
+      "logo": "https://couchsubs.enmeraapps.com/promo/logos/enmera.png",
+      "url": "https://enmera.com.tr"
+    },
+    {
+      "name": "Searvia",
+      "logo": "https://couchsubs.enmeraapps.com/promo/logos/searvia.png",
+      "url": "https://searvia.com"
+    },
+    {
+      "name": "Cebbin",
+      "logo": "https://couchsubs.enmeraapps.com/promo/logos/cebbin.png",
+      "url": "https://apps.apple.com/tr/app/cebbin-expense-tracker/id6761289792",
+      "android": ""
+    },
+    {
+      "name": "Gramla",
+      "logo": "https://couchsubs.enmeraapps.com/promo/logos/gramla.png",
+      "url": "https://apps.apple.com/tr/app/gramla-nutrition-fitness/id6815593927",
+      "android": "https://play.google.com/store/apps/details?id=com.enmera.gramla"
+    },
+    {
+      "name": "Bakkal",
+      "logo": "https://couchsubs.enmeraapps.com/promo/logos/bakkal.png",
+      "url": "https://apps.apple.com/tr/app/bakkal-mini-market-game/id6822638855",
+      "android": "https://play.google.com/store/apps/details?id=com.enmera.bakkal"
+    }
   ]
 }

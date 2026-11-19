@@ -258,17 +258,17 @@ section.has-bg > .wrap{position:relative}
 :root[data-theme="light"] .sp-list .on-light{display:block} :root[data-theme="light"] .sp-list .on-dark{display:none}
 footer .sp-foot{flex-basis:100%}
 
-/* Tanıtım penceresi (promo.json, günde bir) */
-.promo{padding:0; border:0; background:transparent; max-width:92vw; max-height:92vh; overflow:visible}
-.promo::backdrop{background:rgba(10,10,12,.74); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px)}
+/* Tanıtım penceresi (promo.json "sitePopup", günde bir) */
+.promo{padding:0; border:0; background:transparent; max-width:96vw; max-height:none; overflow:visible; margin:auto}
+.promo::backdrop{background:rgba(0,0,0,.75); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px)}
 .promo[open]{animation:promo-in .22s ease-out}
 @keyframes promo-in{from{opacity:0; transform:translateY(8px) scale(.98)}}
-.promo-link{display:block; border-radius:16px; overflow:hidden; background:var(--night-2); box-shadow:0 24px 80px rgba(0,0,0,.55)}
-.promo-link img{width:auto; height:auto; max-width:min(92vw, 960px); max-height:86vh}
-.promo-x{position:absolute; top:10px; right:10px; width:44px; height:44px; display:grid; place-items:center; border:0; border-radius:999px; background:var(--cream); color:var(--on-amber); cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.promo-link{display:block; border-radius:24px; overflow:hidden; background:var(--night-2); box-shadow:0 24px 80px rgba(0,0,0,.55)}
+.promo-link img{display:block; width:auto; height:auto; max-width:min(92vw, 720px); max-height:80vh; object-fit:contain}
+.promo-x{position:absolute; bottom:calc(100% + 10px); right:0; width:48px; height:48px; display:grid; place-items:center; border:0; border-radius:999px; background:var(--cream); color:var(--on-amber); cursor:pointer}
 .promo-x:hover{background:#fff}
-.promo-x svg{width:20px; height:20px}
-.promo-tag{position:absolute; top:12px; left:12px; padding:5px 8px; border-radius:6px; background:rgba(20,21,24,.72); color:var(--cream); font:500 12px/1 var(--text); pointer-events:none}
+.promo-x svg{width:22px; height:22px}
+.promo-tag{position:absolute; bottom:calc(100% + 22px); left:0; padding:4px 8px; border-radius:6px; background:rgba(255,255,255,.14); color:var(--cream); font:500 11px/1 var(--text); pointer-events:none}
 @media (prefers-reduced-motion:reduce){ .promo[open]{animation:none} }
 
 footer{border-top:1px solid var(--line); padding:48px 0 64px; color:var(--muted); font-size:14px}
@@ -741,7 +741,7 @@ footer a{color:var(--cream)}
   function store(fn){ try { return fn(window.localStorage); } catch (e) { return null; } }
 
   function showPopup(p){
-    var src = (matchMedia('(min-width:768px)').matches && p.imageWide) || p.image || p.imageWide;
+    var src = p.image;
     if (!src || !p.link) return;
     var key = 'promo:' + p.id;
     var img = new Image();
@@ -792,14 +792,13 @@ footer a{color:var(--cream)}
           });
         });
         storeLinks();
-        var p = j.popup;
-        if (!p || !p.id || (!p.active && !preview)) return;
-        if (p.targets && p.targets.indexOf('site') < 0) return;
+        var p = j.sitePopup;
+        if (!p || !p.id || !p.active) return;
         if (!preview) {
           var last = +store(function(s){ return s.getItem('promo:' + p.id); }) || 0;
           if (Date.now() - last < (p.everyHours || 24) * 3600e3) return;
         }
-        setTimeout(function(){ showPopup(p); }, 2000);
+        setTimeout(function(){ showPopup(p); }, 10000);
       }).catch(function(){});
   }
   if (document.readyState === 'complete') start(); else addEventListener('load', start);
