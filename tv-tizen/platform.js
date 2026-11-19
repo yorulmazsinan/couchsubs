@@ -5,6 +5,9 @@
   'use strict';
 
   var KEYS = ['0', '1', '2', '3', '4', 'ColorF0Red', 'ColorF1Green', 'ColorF3Blue'];
+  // Çözünürlük değişikliği dinleyicisi (bir kez kurulur) ve güncel değeri alan işlev.
+  var resolutionListener = null;
+  var resolutionCallback = null;
 
   function hdmiSources(callback) {
     try {
@@ -125,6 +128,30 @@
         }
         callback(pick ? pick.number : null, pick ? 'HDMI ' + pick.number : null, connected.length);
       });
+    },
+
+    // HDMI görüntüsünün çözünürlüğü ve yenileme hızı (TVWindow API: getVideoResolution). İlk değer hemen, sonrakiler
+    // değiştikçe callback'e gelir; dinleyici bir kez kurulur. API yoksa ya da hata verirse callback(null): gösterilmez.
+    videoResolution: function (callback) {
+      resolutionCallback = callback;
+      var report = function (info) {
+        if (resolutionCallback) resolutionCallback(info || null);
+      };
+      var fail = function () { report(null); };
+      try {
+        var result = tizen.tvwindow.getVideoResolution(report, fail, 'MAIN');
+        // Eski sürümler sonucu doğrudan döndürür.
+        if (result && result.width) report(result);
+      } catch (e) {
+        fail();
+      }
+      if (resolutionListener === null) {
+        try {
+          resolutionListener = tizen.tvwindow.addVideoResolutionChangeListener(report, 'MAIN');
+        } catch (e) {
+          resolutionListener = false;
+        }
+      }
     },
 
     exit: function () {

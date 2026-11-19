@@ -60,7 +60,8 @@ function element() {
 
 // alive: CouchSubs'ın çalıştığı adresler ("http://ip:8787"). localIp: TV'nin söylediği kendi adresi (yoksa null).
 // consolePort: platform.findConsolePort'un yanıtı ([port, ad, bağlı HDMI sayısı]); savedHdmi: kayıtlı giriş.
-function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdmi }) {
+// resolution: verilirse platform videoResolution bildirir (Samsung gibi); her çağrıda bu değer callback'e gelir.
+function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdmi, resolution }) {
   const clock = makeClock();
   const storage = new Map();
   if (saved) storage.set('couchsubs.server', saved);
@@ -123,6 +124,10 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
     showHdmi(port, host, onStatus) { clock.setTimeout(() => onStatus('playing'), 30); },
     findConsolePort(cb) { clock.setTimeout(() => cb.apply(null, consolePort || [1, 'PS5']), 20); }
   };
+  let resolutionCallback = null;
+  if (resolution !== undefined) {
+    platform.videoResolution = (cb) => { resolutionCallback = cb; clock.setTimeout(() => cb(resolution), 5); };
+  }
   if (hasLocalAddress) platform.localAddress = (cb) => clock.setTimeout(() => cb(localIp || null), 10);
 
   const document = {
@@ -180,6 +185,8 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
     },
     server: () => elements.get('st-server') && elements.get('st-server').textContent,
     savedHdmi: () => storage.get('couchsubs.hdmi'),
+    // TV çözünürlük değişikliği bildirir (Samsung addVideoResolutionChangeListener).
+    changeResolution(info) { resolutionCallback(info); },
     // Kumanda tuşu.
     key(keyCode) {
       for (const fn of documentListeners.keydown || []) fn({ keyCode, preventDefault() {} });
@@ -331,4 +338,55 @@ test('0 tuşu kaydı unutup konsolu yeniden arar; birden çok HDMI bağlıysa gi
   tv.key(50);
   assert.strictEqual(tv.savedHdmi(), '2');
   assert.strictEqual(tv.element('no-picture').className, 'hidden');
+});
+
+// Samsung uygulama içinde PS5 görüntüsünü 1080p'ye düşürüyor mu: panel TV'nin bildirdiği çözünürlüğü gösterir.
+test('Samsung: panelde HDMI görüntüsünün çözünürlüğü ve yenileme hızı görünür, değişince güncellenir', () => {
+  const tv = startTv({ alive: new Set(), hasLocalAddress: false, savedHdmi: 1,
+    resolution: { width: 3840, height: 2160, frequency: 60, aspectRatio: '16x9' } });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.element('row-resolution').style.display, '');
+  assert.strictEqual(tv.element('st-resolution').textContent, '3840×2160 · 60 Hz');
+  tv.changeResolution({ width: 1920, height: 1080, frequency: 59.94 });
+  assert.strictEqual(tv.element('st-resolution').textContent, '1920×1080 · 59.94 Hz');
+  tv.changeResolution({ width: 1920, height: 1080 });
+  assert.strictEqual(tv.element('st-resolution').textContent, '1920×1080');
+});
+
+test('çözünürlük bildirmeyen ya da hata veren platformda satır gizli kalır', () => {
+  for (const resolution of [undefined, null, { width: 0, height: 0, frequency: 0 }]) {
+    const tv = startTv({ alive: new Set(), hasLocalAddress: false, savedHdmi: 1, resolution });
+    tv.clock.advance(1000);
+    assert.notStrictEqual(tv.element('row-resolution').style.display, '');
+  }
+});
+
+// tv-tizen/platform.js: TVWindow API'si sahte tizen nesnesiyle çalıştırılır.
+function tizenPlatform(tvwindow) {
+  const context = { window: {}, tizen: { tvwindow }, JSON };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'tv-tizen', 'platform.js'), 'utf8'), context);
+  return context.window.COUCHSUBS_PLATFORM;
+}
+
+test('Tizen: getVideoResolution değeri iletilir, değişiklik dinleyicisi bir kez kurulur', () => {
+  let listeners = 0, change = null;
+  const platform = tizenPlatform({
+    getVideoResolution(ok) { ok({ width: 1920, height: 1080, frequency: 60 }); },
+    addVideoResolutionChangeListener(fn) { listeners++; change = fn; return listeners; }
+  });
+  const seen = [];
+  platform.videoResolution((info) => seen.push(info && info.width));
+  platform.videoResolution((info) => seen.push(info && info.width));
+  change({ width: 3840, height: 2160, frequency: 60 });
+  assert.deepStrictEqual(seen, [1920, 1920, 3840]);
+  assert.strictEqual(listeners, 1);
+});
+
+test('Tizen: TVWindow API yoksa ya da hata verirse çözünürlük null gelir, hata fırlatılmaz', () => {
+  for (const tvwindow of [{}, { getVideoResolution(ok, fail) { fail(new Error('x')); } }]) {
+    const seen = [];
+    tizenPlatform(tvwindow).videoResolution((info) => seen.push(info));
+    assert.deepStrictEqual(seen, [null]);
+  }
 });

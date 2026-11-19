@@ -19,8 +19,8 @@ android {
         minSdk 24
         targetSdk 35
         // Masaüstü uygulamaları beklenen TV sürümünü buradan alır (scripts/bundle-android-apk.sh, APK adı).
-        versionCode 27
-        versionName '0.9.24'
+        versionCode 28
+        versionName '0.9.25'
     }
     buildFeatures { buildConfig true }
     signingConfigs {

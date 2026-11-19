@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.24';
+  var APP_VERSION = '0.9.25';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -131,8 +131,32 @@
     watchPicture(port);
     platform.showHdmi(port, $('video-host'), function (kind) {
       setStatus('st-video', t(statuses[kind][0]), statuses[kind][1]);
+      // Giriş değişince çözünürlük de değişir; görüntü gelince yeniden okunur.
+      if (kind === 'playing') watchResolution();
       notePicture(port, kind);
     });
+  }
+
+  // --- HDMI görüntüsünün çözünürlüğü ---
+  // TV'nin bildirdiği giriş çözünürlüğü ve yenileme hızı panelde gösterilir ("3840×2160 · 60 Hz"): uygulama içinde
+  // PS5 görüntüsünün 1080p'ye düştüğü bildirimlerini doğrulamak için. Yalnız bildiren platformlarda (Samsung) görünür.
+  function formatResolution(info) {
+    if (!info || !(info.width > 0) || !(info.height > 0)) return '';
+    var text = Math.round(info.width) + '×' + Math.round(info.height);
+    var hz = Number(info.frequency);
+    if (hz > 0) text += ' · ' + (Math.abs(hz - Math.round(hz)) < 0.05 ? Math.round(hz) : hz.toFixed(2)) + ' Hz';
+    return text;
+  }
+
+  function showResolution(info) {
+    var text = formatResolution(info);
+    $('row-resolution').style.display = text ? '' : 'none';
+    if (text) setStatus('st-resolution', text, 'muted');
+  }
+
+  function watchResolution() {
+    if (typeof platform.videoResolution !== 'function') return;
+    try { platform.videoResolution(showResolution); } catch (e) {}
   }
 
   // --- HDMI görüntüsü gelmiyor ---
