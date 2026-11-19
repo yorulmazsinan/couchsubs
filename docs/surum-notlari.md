@@ -15,6 +15,7 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 - **Samsung soundbar TV sanılmıyor (Mac, iPhone, #386):** Aynı ağda Samsung soundbar varsa uygulama onu TV sanıp "TV yanıt vermedi" hatası veriyordu; artık yalnız gerçek TV seçiliyor, TV ağ aramasına yanıt vermese de bulunuyor. Katkı: ismkdc.
 - **OBS katmanında altyazı satırları (Windows, Mac):** Çeviri İngilizce satırı örterken OBS tarayıcı kaynağında 3-4 satıra bölünmüyor; uygulamanın penceresindeki gibi en çok 2-3 dengeli satırda kalıyor ve ekranın kenarından taşmıyor.
 - **Ana ekranda "Görüntü kaynağı" (Windows, Mac, #479):** Ana ekrandaki bilgi kutusunda seçili görüntü kaynağı gösteriliyor; dokununca Ayarlar › Görüntü kaynağı açılıyor.
+- **iPhone'dan LG TV'ye kurulum (#483, #490):** iPhone'dan yapılan LG kurulumu "TV anahtarları yeniden değiştirmek istedi (desteklenmiyor)" hatasıyla duruyordu; düzeldi.
 - **iPhone arka plan uyarısı (#481):** Çeviri sürerken uygulama arka plana alınır ya da ekran kilitlenirse "Altyazı duraklatıldı" bildirimi geliyor (iOS arka plandaki uygulamayı durduruyor); uygulamaya dönünce bağlantı kendiliğinden kuruluyor.
 - **Telefonlarda tanıtım penceresi (iPhone, Android, #482):** Ana ekranda ara sıra kendi ürünlerimizi tanıtan küçük bir pencere çıkabiliyor; çeviri, bağlanma ve kurulum ekranlarında hiç çıkmıyor, köşedeki çarpıyla kapanıyor.
 - **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.60).
