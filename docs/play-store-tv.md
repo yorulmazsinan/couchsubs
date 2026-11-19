@@ -167,6 +167,8 @@ almanız önerilir: `adb exec-out screencap -p > demo.png` (demo açıkken).
 
 **Reklam:** Hayır, reklam içermez.
 
+> **Not (19 Kas 2026):** TV uygulamasında tanıtım penceresi yok; mobil tanıtım penceresi yayına girince Play "Reklam içerir" beyanı (mobil uygulama için) yeniden değerlendirilecek.
+
 **İçerik derecelendirmesi (IARC):** Kategori "Yardımcı program, verimlilik, iletişim veya diğer". Şiddet, cinsellik,
 küfür, uyuşturucu, kumar: hayır. Kullanıcılar arası etkileşim ya da içerik paylaşımı: hayır. Konum paylaşımı: hayır.
 Dijital satın alma: hayır. Sınırsız internet/tarayıcı: hayır. (Ekrandaki altyazı, kullanıcının kendi oyununun metnidir;

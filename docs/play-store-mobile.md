@@ -224,6 +224,8 @@ URL: `https://couchsubs.enmeraapps.com/gizlilik` (canlı, HTTP 200). Sayfada And
 `ACCESS_ADSERVICES_AD_ID` ve `ACCESS_ADSERVICES_ATTRIBUTION` izinleri manifestte `tools:node="remove"` ile çıkarılıyor.
 Meta App Events reklam göstermez; bkz. §4.6.)
 
+> **Not (19 Kas 2026):** Mobil tanıtım penceresi (Enmera'nın kendi ürünleri ve sponsor bağlantıları, `promo.json`) yayına girince Play'deki "Reklam içerir" beyanı yeniden değerlendirilecek.
+
 ### 4.3 Uygulama erişimi
 
 Seçim: **"Tüm işlevler veya bazı işlevler kısıtlanmış"**. Giriş bilgisi verilemez (giriş, inceleyicinin kendi Sony PSN

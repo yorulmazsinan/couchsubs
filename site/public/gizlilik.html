@@ -41,9 +41,9 @@ hr{border:0;border-top:1px solid var(--line);margin:56px 0 24px}
 <div class="wrap">
 <header><a href="/"><img src="img/logo.svg" alt="" width="32" height="32">CouchSubs</a></header>
 <h1>Gizlilik</h1>
-<p class="meta">Son güncelleme: 15 Kasım 2026</p>
+<p class="meta">Son güncelleme: 19 Kasım 2026</p>
 
-<p>CouchSubs, Enmera tarafından yayınlanan, ücretsiz ve açık kaynaklı bir uygulamadır. Hesap açmanızı istemez, reklam göstermez, uygulama içi satın alma yoktur. Aşağıda hangi verinin cihazınızda kaldığını ve hangisinin nereye gittiğini tek tek yazdık.</p>
+<p>CouchSubs, Enmera tarafından yayınlanan, ücretsiz ve açık kaynaklı bir uygulamadır. Hesap açmanızı istemez, uygulama içi satın alma yoktur. CouchSubs üçüncü taraf reklam ağı ya da reklam SDK'sı kullanmaz, reklam kimliğini (IDFA/AAID) toplamaz ve sizi uygulamalar arasında izlemez. Uygulamada ve sitede yalnızca geliştiricinin (Enmera) kendi ürünlerinin tanıtımı ve sponsor bağlantıları gösterilebilir; bu görseller sunucumuzdan (couchsubs.enmeraapps.com/promo.json) yüklenir, gösterim sıklığı yalnızca cihazda tutulur, tıklama bağlantıyı tarayıcıda açar. Aşağıda hangi verinin cihazınızda kaldığını ve hangisinin nereye gittiğini tek tek yazdık.</p>
 
 <h2>Cihazınızda kalanlar</h2>
 <ul>
@@ -64,14 +64,14 @@ hr{border:0;border-top:1px solid var(--line);margin:56px 0 24px}
 
 <h2>iPhone uygulaması</h2>
 <ul>
-  <li>iPhone uygulamasında reklam yoktur ve sizi uygulamalar arasında izlemeyiz; Apple'ın izleme izni istenmez.</li>
+  <li>iPhone uygulamasında üçüncü taraf reklam yoktur ve sizi uygulamalar arasında izlemeyiz; Apple'ın izleme izni istenmez. Yalnız Enmera'nın kendi ürünlerinin tanıtımı gösterilebilir (yukarıya bakın).</li>
   <li>Uygulamanın nasıl kullanıldığını anlamak için Google Firebase Analytics ve Meta (Facebook) SDK'sı anonim kullanım istatistikleri toplar: çevirinin başlaması ve süresi, altyazının TV'de mi telefonda mı gösterildiği, ekran açılışları gibi olaylar, cihaza özgü rastgele bir uygulama kimliği ve IP adresinden çıkarılan yaklaşık konum (ülke, şehir). Uygulama çökerse Firebase Crashlytics çökme raporu gönderir. Profil'deki "Kullanım verisi" anahtarıyla bu ölçümü kapatabilirsiniz. Bu veriler adınızla, e-postanızla ya da PSN hesabınızla ilişkilendirilmez; reklam kimliği (IDFA) toplanmaz. Google ve Meta'nın kendi gizlilik koşulları geçerlidir.</li>
   <li>Altyazı metni, oyun görüntüsü ve PSN bilgisi bu istatistiklere eklenmez.</li>
 </ul>
 
 <h2 id="android">Android telefon uygulaması</h2>
 <ul>
-  <li><strong>Reklam yok, hesap yok.</strong> Uygulamada reklam gösterilmez; reklam kimliği (Android Advertising ID) toplanmaz, ilgili izinler uygulamada yoktur.</li>
+  <li><strong>Üçüncü taraf reklam yok, hesap yok.</strong> Uygulamada reklam ağı gösterilmez, yalnız Enmera'nın kendi ürünlerinin tanıtımı gösterilebilir; reklam kimliği (Android Advertising ID) toplanmaz, ilgili izinler uygulamada yoktur.</li>
   <li><strong>PS5 bağlantısı yalnız ev ağında:</strong> telefon PS5'e Uzaktan Oynatma (Remote Play) ile aynı Wi-Fi üzerinden bağlanır. Gelen oyun görüntüsü yalnız altyazıyı okumak için telefonun belleğinde, cihaz üstünde (Google ML Kit yazı tanıma) işlenir; kaydedilmez, hiçbir yere gönderilmez. Çeviri sürerken ekranda kalıcı bir bildirim görünür.</li>
   <li><strong>PSN girişi</strong> uygulama içinde açılan Sony'nin kendi sayfasında yapılır; şifreniz yalnız Sony'ye gider. Sony'den yalnız sayısal hesap kimliği alınır, oturum anahtarı saklanmaz. Hesap kimliği, PS5 eşleme anahtarları ve girdiğiniz çeviri anahtarları yalnız telefonda, Android Keystore anahtarıyla şifrelenmiş olarak saklanır; uygulama silinince gider, yedeğe alınmaz.</li>
   <li><strong>Ücretsiz çeviri</strong> telefonun içinde Google ML Kit ile yapılır; Türkçe dil modeli ilk kullanımda Google'dan bir kez indirilir. Google ML Kit kendi çalışmasıyla ilgili performans ve kullanım ölçümlerini Google'a gönderebilir; altyazı metni ya da görüntü bunlara dahil değildir.</li>
