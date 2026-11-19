@@ -256,7 +256,6 @@ public static class ScreenTranslation
         SubtitleStabilizer.EndsSentence(previous) ||
         (char.IsUpper(line[0]) && WordCount(previous) <= 3 && !previous.EndsWith(','));
 
-    /// <summary>En az iki harfi ve iki harfli bir sözcüğü olan satır yazıdır; geri kalanı sayı ve simgedir.</summary>
     /// <summary>
     /// Oyun menüsünün bir satırı: en çok <see cref="MenuLabelWords"/> sözcük, küçük harf yok ("HAIR", "MAYBE LATER",
     /// "NECKLACE ($475)"). Bilgi kutusu ve konuşma büyük-küçük harf karışıktır; onlar bölünmez.
@@ -266,6 +265,7 @@ public static class ScreenTranslation
 
     internal const int MenuLabelWords = 5;
 
+    /// <summary>En az iki harfi ve iki harfli bir sözcüğü olan satır yazıdır; geri kalanı sayı ve simgedir.</summary>
     internal static bool IsWords(string text) =>
         text.Count(char.IsLetter) >= 2 &&
         text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Any(word => word.Count(char.IsLetter) >= 2);
