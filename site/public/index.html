@@ -264,11 +264,14 @@ footer .sp-foot{flex-basis:100%}
 .promo[open]{animation:promo-in .22s ease-out}
 @keyframes promo-in{from{opacity:0; transform:translateY(8px) scale(.98)}}
 .promo-link{display:block; border-radius:24px; overflow:hidden; background:var(--night-2); box-shadow:0 24px 80px rgba(0,0,0,.55)}
-.promo-link img{display:block; width:auto; height:auto; max-width:min(92vw, 720px); max-height:80vh; object-fit:contain}
-.promo-x{position:absolute; bottom:calc(100% + 10px); right:0; width:48px; height:48px; display:grid; place-items:center; border:0; border-radius:999px; background:var(--cream); color:var(--on-amber); cursor:pointer}
-.promo-x:hover{background:#fff}
-.promo-x svg{width:22px; height:22px}
-.promo-tag{position:absolute; bottom:calc(100% + 22px); left:0; padding:4px 8px; border-radius:6px; background:rgba(255,255,255,.14); color:var(--cream); font:500 11px/1 var(--text); pointer-events:none}
+.promo-link img{display:block; width:auto; height:auto; max-width:min(88vw, 720px); max-height:80vh; object-fit:contain}
+.promo-x{position:absolute; top:0; right:0; transform:translate(50%,-50%); width:44px; height:44px; display:grid; place-items:center; border:0; padding:0; background:transparent; color:var(--on-amber); cursor:pointer; z-index:1; -webkit-tap-highlight-color:transparent}
+.promo-x::before{content:''; position:absolute; inset:3px; border-radius:999px; background:var(--cream); box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.promo-x:hover::before{background:#fff}
+.promo-x:focus{outline:none}
+.promo-x:focus-visible::before{outline:3px solid var(--amber, #f5b83d); outline-offset:2px}
+.promo-x svg{position:relative; width:18px; height:18px}
+.promo-tag{position:absolute; bottom:calc(100% + 14px); left:50%; transform:translateX(-50%); padding:6px 14px; border-radius:8px; background:rgba(255,255,255,.14); color:var(--cream); font:500 12px/1 var(--text); white-space:nowrap; pointer-events:none}
 @media (prefers-reduced-motion:reduce){ .promo[open]{animation:none} }
 
 footer{border-top:1px solid var(--line); padding:48px 0 64px; color:var(--muted); font-size:14px}
@@ -773,7 +776,7 @@ footer a{color:var(--cream)}
         else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); first.focus(); }
       });
       if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
-      x.focus();
+      try { x.focus({focusVisible:false, preventScroll:true}); } catch (e) { x.focus(); }
       store(function(s){ s.setItem(key, String(Date.now())); });
       window.dataLayer.push({event:'promo_gosterim', promo:p.id});
     };
