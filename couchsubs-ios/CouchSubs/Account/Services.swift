@@ -5,6 +5,7 @@
 import Foundation
 
 /// Ölçülen olaylar (Firebase Analytics ve Meta App Events'e aynı anda gider).
+/// Firebase ayrılmış adları (session_start…) düşürür; okuma oturumu Android ile aynı "subtitle_session_start/stop" adını taşır.
 enum AnalyticsEvent: Equatable, Sendable {
     case packHit(packId: String?)
     case sessionStart(output: String)
@@ -15,8 +16,8 @@ enum AnalyticsEvent: Equatable, Sendable {
     var name: String {
         switch self {
         case .packHit: "pack_hit"
-        case .sessionStart: "session_start"
-        case .sessionStop: "session_stop"
+        case .sessionStart: "subtitle_session_start"
+        case .sessionStop: "subtitle_session_stop"
         case .tvConnected: "tv_connected"
         case .packsUpdated: "packs_updated"
         }
