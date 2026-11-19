@@ -279,7 +279,7 @@ struct SettingsScreen: View {
                     Text("Picture mode (Android TV)").font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
                     SegmentedTabs(options: [TVDisplayMode.inApp: "Inside the app", .overlay: "Overlay"],
                                   selection: $model.settings.style.displayMode)
-                    Text("If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If no picture arrives, the TV app first lists its HDMI inputs and switches to Overlay where it can. The TV app from Google Play has no Overlay mode: there this choice is not applied and the TV says so on screen.")
+                    Text("If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If no picture arrives, the TV app first lists its HDMI inputs and switches to Overlay where it can. Overlay also helps if the TV changes its picture mode or drops Game mode or HDR while the TV app is open: inside the app the TV handles the PS5 picture as an app, not as its HDMI input. The TV app from Google Play has no Overlay mode: there this choice is not applied and the TV says so on screen.")
                         .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
                 }
             }

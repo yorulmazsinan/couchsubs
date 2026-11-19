@@ -217,6 +217,17 @@ Menü adları markaya göre biraz değişebilir.
 
 Kurulumdan sonra hata ayıklamayı kapatabilirsiniz; yeni sürümleri kurmak için CouchSubs onu yeniden açmanızı ister.
 
+### Görüntü modu değişiyor, oyun modu ya da HDR kayboluyorsa
+
+TV uygulaması PS5 görüntüsünü kendi içinde gösterir ("Uygulama içinde" modu). Bazı TV'ler (ör. Sony Bravia) bu
+görüntüyü HDMI girişi olarak değil uygulama olarak işler: uygulama açıkken görüntü modu değişebilir, oyun modu ya da
+HDR kapanabilir. Bu durumda bilgisayarda ya da telefonda Ayarlar'daki **Görüntü modu**'ndan **Katman**'ı seçin:
+TV, PS5'i kendi HDMI girişinde (kendi görüntü ayarları, oyun modu ve HDR ile) gösterir, altyazı görüntünün üstünde
+çıkar. Katman, bilgisayarın ya da telefonun kurduğu TV uygulamasında vardır; Google Play'den kurulan kopyada yoktur.
+
+LG (webOS) ve Samsung (Tizen) TV uygulamaları HDMI'yi her zaman kendi içinde gösterir, bu TV'lerde Katman modu yoktur;
+oyun modu ya da HDR'nin kapanması bu TV'lerin uygulamalara koyduğu bir sınırdır.
+
 ### USB bellekle kurulum
 
 CouchSubs TV'yi ağda bulamazsa (bazı TV'ler ağdan hata ayıklamaya izin vermez):

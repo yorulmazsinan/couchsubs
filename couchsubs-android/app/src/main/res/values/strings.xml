@@ -155,7 +155,7 @@
     <string name="settings_display_mode">Görüntü modu (Android TV)</string>
     <string name="settings_display_mode_in_app">Uygulama içinde</string>
     <string name="settings_display_mode_overlay">Katman</string>
-    <string name="settings_display_mode_note">PS5 görüntüsü CouchSubs TV uygulamasının içinde siyah kalıyorsa Katman\'ı seçin: TV, PS5\'i kendi HDMI girişinde gösterir, altyazı görüntünün üstünde çıkar. Görüntü gelmezse TV uygulaması önce HDMI girişlerini gösterir, Katman varsa ona geçer. Google Play\'den kurulan TV uygulamasında Katman yok: orada bu seçim uygulanmaz, TV bunu ekranda söyler.</string>
+    <string name="settings_display_mode_note">PS5 görüntüsü CouchSubs TV uygulamasının içinde siyah kalıyorsa Katman\'ı seçin: TV, PS5\'i kendi HDMI girişinde gösterir, altyazı görüntünün üstünde çıkar. Görüntü gelmezse TV uygulaması önce HDMI girişlerini gösterir, Katman varsa ona geçer. TV uygulaması açıkken TV\'nin görüntü modu değişiyor, oyun modu ya da HDR kayboluyorsa da Katman\'ı seçin: uygulamanın içinde TV, PS5 görüntüsünü HDMI girişi olarak değil uygulama olarak işler. Google Play\'den kurulan TV uygulamasında Katman yok: orada bu seçim uygulanmaz, TV bunu ekranda söyler.</string>
     <string name="settings_screen_on">Ekranı açık tut</string>
     <string name="close">Kapat</string>
     <!-- Kendi ürünlerimizin tanıtım popup'ı (promo.json) -->

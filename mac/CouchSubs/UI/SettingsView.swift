@@ -903,7 +903,7 @@ private struct AndroidDisplayModePicker: View {
             Text("Inside the app").tag(TVDisplayMode.inApp)
             Text("Overlay (for a black screen)").tag(TVDisplayMode.overlay)
         }
-        HintText(text: "If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If the picture never arrives, the TV app switches to Overlay by itself.")
+        HintText(text: "If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If the picture never arrives, the TV app switches to Overlay by itself. Overlay also helps if the TV changes its picture mode or drops Game mode or HDR while the TV app is open: inside the app the TV handles the PS5 picture as an app, not as its HDMI input.")
     }
 }
 
