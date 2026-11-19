@@ -597,8 +597,11 @@ public interface IAppServices
     Task<bool> IsAndroidDebugOnAsync(string host);
     /// <summary>Ağda ADB'si açık cihazlar.</summary>
     Task<IReadOnlyList<string>> ScanAndroidTvsAsync();
-    /// <summary>Eksikse ya da eskiyse kurar; TV'deki sürümü döner.</summary>
-    Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent);
+    /// <summary>
+    /// Eksikse ya da eskiyse kurar; TV'deki sürümü döner. <paramref name="openIfInstalled"/>: uygulama güncelse de TV'de
+    /// açılır ("TV uygulamasını yeniden kur").
+    /// </summary>
+    Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent);
     /// <summary>Oyun dili için yazı tanıyıcı; bilgisayarda hiç OCR dili yoksa null.</summary>
     ITextReader? MakeReader(string language);
     /// <summary>
@@ -671,7 +674,8 @@ public sealed record TvInstallEvent(TvInstallEventKind Kind, Uri? Url = null, st
 /// SignIn: Samsung sertifikası için tarayıcıda Samsung hesabıyla giriş bekleniyor. ApproveOnTv: Android TV ekranında
 /// hata ayıklama izni bekleniyor.
 /// </summary>
-public enum TvAppKind { Unknown, Working, UpToDate, DevModeOff, NeedsPassphrase, Failed, SignIn, ApproveOnTv }
+/// <summary><c>PressInstallOnTv</c>: Android TV'de Google Play sayfası açıldı, kullanıcı TV'de Yükle'ye basmalı.</summary>
+public enum TvAppKind { Unknown, Working, UpToDate, DevModeOff, NeedsPassphrase, Failed, SignIn, ApproveOnTv, PressInstallOnTv }
 
 /// <summary>TV uygulamasının kurulum durumu.</summary>
 /// <param name="HostPcIp">HostPcMismatch'te TV'deki "Host PC IP".</param>

@@ -93,6 +93,38 @@ class AndroidTvTest {
         assertFalse(AndroidTvInstaller.streamInstallUnsupported("Success"))
     }
 
+    // #352, #389: TV'den kaldırılan uygulamanın kaydı kalmış; dumpsys sürümü söylüyor ama hiçbir kullanıcıda kurulu değil.
+    @Test
+    fun leftoverRecordOfAnUninstalledAppCountsAsNotInstalled() {
+        val installed = "    versionName=0.9.18\n    User 0: ceDataInode=1 installed=true hidden=false\n"
+        val leftover = installed.replace("installed=true", "installed=false")
+        assertFalse(AndroidTvInstaller.isLeftover(installed))
+        assertEquals("0.9.18", AndroidTvInstaller.installedVersionFromDumpsys(installed))
+        assertTrue(AndroidTvInstaller.isLeftover(leftover))
+        assertNull(AndroidTvInstaller.installedVersionFromDumpsys(leftover))
+        // Başka bir profilde kuruluysa kalıntı değildir; kullanıcı satırı olmayan eski çıktı da öyle.
+        assertFalse(AndroidTvInstaller.isLeftover(leftover + "    User 10: ceDataInode=2 installed=true\n"))
+        assertFalse(AndroidTvInstaller.isLeftover("    versionName=0.9.18\n"))
+    }
+
+    @Test
+    fun leftoverRecordIsInstalledAgain() {
+        val key = tempKey()
+        var installed = false
+        val adbd = FakeAdbd(services = { service, _ ->
+            when {
+                service.startsWith("shell:dumpsys") ->
+                    "    versionName=0.9.18\n    User 0: ceDataInode=1 installed=$installed hidden=false\n"
+                service.startsWith("exec:cmd package install") -> { installed = true; "Success\n" }
+                else -> ""
+            }
+        }).start()
+        val result = installer(adbd, key, mutableListOf()).ensureInstalled({ apk }, "0.9.18")
+        assertEquals(AndroidTvInstaller.Result("0.9.18", true), result)
+        assertTrue(adbd.opened.any { it.startsWith("exec:cmd package install") })
+        adbd.join()
+    }
+
     @Test
     fun firstConnectionAsksApprovalThenInstallsGrantsOverlayAndLaunches() {
         val key = tempKey()

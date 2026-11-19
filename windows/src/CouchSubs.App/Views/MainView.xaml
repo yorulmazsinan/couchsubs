@@ -119,6 +119,9 @@
                                 <c:StatusRow Title="TV" Glyph="{x:Static c:Glyphs.Tv}" Value="{Binding TvStatusText}" Tone="{Binding TvTone}" />
                                 <Button Content="{t:T 'Connect a TV'}" HorizontalAlignment="Left" Margin="0,12,0,0" Padding="16,0" Click="OnConnectTv"
                                         Visibility="{Binding NeedsTv, Converter={StaticResource VisibleIf}}" />
+                                <!-- TV uygulaması bağlanmıyor (ör. TV'den kaldırıldı): TV adımı açılır, uygulama yeniden kurulur ya da açılır. -->
+                                <Button Content="{t:T 'Reinstall the TV app'}" HorizontalAlignment="Left" Margin="0,12,0,0" Padding="16,0" Click="OnReinstallTvApp"
+                                        Visibility="{Binding CanReinstallTvApp, Converter={StaticResource VisibleIf}}" />
                             </StackPanel>
                         </c:Card>
 

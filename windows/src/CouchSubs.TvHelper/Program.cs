@@ -54,14 +54,17 @@ try
 
         case "android-install":
         {
+            void Approve() => Emit("approve");
             var installer = new AndroidTvInstaller(Option("--host"), Option("--key-dir"))
             {
-                OnApprovalNeeded = () => Emit("approve"),
+                OnApprovalNeeded = Approve,
                 // CouchSubs TV Play'de ve TV'de Play Store varsa TV'de Play sayfası açılır.
                 PlayListed = AndroidTvInstaller.IsListedOnPlayAsync,
                 OnPlayOpened = () => Emit("progress", ("step", "play")),
             };
-            var (version, installed) = await installer.EnsureInstalledAsync(Option("--package"), Option("--version"), cancel.Token);
+            // TV'den kaldırılıp kaydı kalan uygulama da kurulur; --open: güncel uygulama da açılır ("yeniden kur").
+            var (version, installed) = await AndroidTvApp.EnsureInstalledAsync(installer, Option("--host"), Option("--key-dir"),
+                Option("--package"), Option("--version"), args.Contains("--open"), Approve, log.Write, cancel.Token);
             Emit("done", ("version", version), ("installed", installed));
             return 0;
         }
@@ -93,7 +96,7 @@ try
             return 0;
 
         default:
-            Console.Error.WriteLine("kullanım: couchsubs-tv-helper android-scan | android-install --host IP --package APK --version V --key-dir DİZİN | samsung-install --host IP --package WGT --version V --profiles DİZİN [--log DOSYA] | self-test");
+            Console.Error.WriteLine("kullanım: couchsubs-tv-helper android-scan | android-install --host IP --package APK --version V --key-dir DİZİN [--open] | samsung-install --host IP --package WGT --version V --profiles DİZİN [--log DOSYA] | self-test");
             return 2;
     }
 }

@@ -282,18 +282,22 @@ public sealed class LiveServices : IAppServices
 
     public Task<IReadOnlyList<string>> ScanAndroidTvsAsync() => AndroidTvInstaller.ScanAsync();
 
-    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent)
+    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
     {
+        void Approve() => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv));
         var installer = new AndroidTvInstaller(host, DataDirectory("adb"))
         {
-            OnApprovalNeeded = () => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv)),
+            OnApprovalNeeded = Approve,
             // CouchSubs TV Play'de ve TV'de Play Store varsa TV'de Play sayfası açılır (PlayStoreRedirect.cs).
             PlayListed = AndroidTvInstaller.IsListedOnPlayAsync,
             OnPlayOpened = () => onEvent(new TvInstallEvent(TvInstallEventKind.Progress, Step: "play")),
         };
         try
         {
-            var (version, _) = await Task.Run(() => installer.EnsureInstalledAsync(app.Path, app.Version));
+            // TV'den kaldırılıp kaydı kalan uygulama da kurulur (AndroidTvApp.cs); "yeniden kur"da güncel uygulama açılır.
+            var log = new TvInstall.InstallLog(TvInstallLogPath);
+            var (version, _) = await Task.Run(() => TvInstall.AndroidTvApp.EnsureInstalledAsync(installer, host, DataDirectory("adb"), app.Path,
+                app.Version, openIfInstalled, Approve, log.Write));
             return version;
         }
         catch (AndroidInstallException error)

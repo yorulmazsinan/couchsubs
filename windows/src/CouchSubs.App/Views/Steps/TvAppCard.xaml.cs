@@ -44,7 +44,8 @@ public partial class TvAppCard : UserControl
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Tv: TV adresi değişince Samsung adımındaki "Host PC IP" de yeniden seçilir.
-        if (e.PropertyName is nameof(AppController.TvApp) or nameof(AppController.DevModeHoursLeft) or nameof(AppController.Tv))
+        if (e.PropertyName is nameof(AppController.TvApp) or nameof(AppController.DevModeHoursLeft) or nameof(AppController.Tv)
+            or nameof(AppController.CanReinstallTvApp))
             Dispatcher.Invoke(() => Show(controller!.TvApp));
     }
 
@@ -73,6 +74,8 @@ public partial class TvAppCard : UserControl
         OpenAgain.Visibility = Visible(state.Kind == TvAppKind.SignIn);
         if (state.Kind != TvAppKind.SignIn) CopyLink.Content = text["Copy the link"];
         Retry.Visibility = Visible(state.Kind == TvAppKind.Failed);
+        // Uygulama "hazır" görünüp TV'de yoksa ya da açılmıyorsa (TV uygulaması bağlı değil) yeniden kurulabilir.
+        Reinstall.Visibility = Visible(state.Kind == TvAppKind.UpToDate && controller?.CanReinstallTvApp == true);
         SamsungHostStep.Text = text["3. Turn Developer mode On, type this computer's address as Host PC IP: %@ and press OK."]
             .Replace("%@", controller?.ComputerAddress ?? "?");
 
@@ -89,6 +92,7 @@ public partial class TvAppCard : UserControl
             TvAppKind.NeedsPassphrase => text["Developer Mode is on. One last step to install the TV app:"],
             TvAppKind.SignIn => text["The Samsung account page opened in your browser. Finish signing in there. If you do not see it, switch to the browser or press Open the page again."],
             TvAppKind.ApproveOnTv => text["Look at the TV: it asks whether to allow debugging from this computer."],
+            TvAppKind.PressInstallOnTv => text["The Google Play page opened on the TV: press Install (or Update) with the TV remote. The app opens by itself once it is installed."],
             _ => "",
         };
         Detail.Text = state.Kind switch
@@ -118,6 +122,11 @@ public partial class TvAppCard : UserControl
     private async void OnRetry(object sender, RoutedEventArgs e)
     {
         if (controller is not null) await controller.RefreshTvAppAsync();
+    }
+
+    private async void OnReinstall(object sender, RoutedEventArgs e)
+    {
+        if (controller is not null) await controller.ReinstallTvAppAsync();
     }
 
     private void OnOpenAgain(object sender, RoutedEventArgs e)

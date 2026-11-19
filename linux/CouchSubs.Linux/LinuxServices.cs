@@ -237,15 +237,15 @@ public sealed class LinuxServices : IAppServices
 
     public Task<IReadOnlyList<string>> ScanAndroidTvsAsync() => AndroidTvInstaller.ScanAsync();
 
-    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent)
+    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
     {
-        var installer = new AndroidTvInstaller(host, AppPaths.Folder("adb"))
-        {
-            OnApprovalNeeded = () => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv)),
-        };
+        void Approve() => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv));
+        var installer = new AndroidTvInstaller(host, AppPaths.Folder("adb")) { OnApprovalNeeded = Approve };
         try
         {
-            var (version, _) = await Task.Run(() => installer.EnsureInstalledAsync(app.Path, app.Version));
+            // TV'den kaldırılıp kaydı kalan uygulama da kurulur; "yeniden kur"da güncel uygulama açılır (AndroidTvApp.cs).
+            var (version, _) = await Task.Run(() => CouchSubs.TvInstall.AndroidTvApp.EnsureInstalledAsync(installer, host, AppPaths.Folder("adb"),
+                app.Path, app.Version, openIfInstalled, Approve, message => Log.Write("tv", message)));
             return version;
         }
         catch (AndroidInstallException error)

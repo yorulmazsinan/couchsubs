@@ -35,6 +35,18 @@ struct TVAppCard: View {
                     } else if brand == .samsung {
                         HintText(text: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
                     }
+                    // Uygulama "hazır" görünüp TV'de yoksa ya da açılmıyorsa (TV uygulaması bağlı değil) yeniden kurulabilir (#352, #389).
+                    if model.canReinstallTVApp {
+                        Button("Reinstall the TV app") { Task { await model.reinstallTVApp() } }.buttonStyle(.secondary)
+                    }
+                }
+            case .pressInstallOnTV:
+                Card(title: "CouchSubs TV app") {
+                    Text("The Google Play page opened on the TV: press Install (or Update) with the TV remote. The app opens by itself once it is installed.")
+                    HStack(spacing: Theme.space("s")) {
+                        ProgressView().controlSize(.small)
+                        Text("Waiting for the TV…").foregroundStyle(Color.csSecondary)
+                    }
                 }
             case .devModeOff:
                 devModeSteps

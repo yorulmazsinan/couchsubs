@@ -45,6 +45,23 @@ class AndroidTvInstaller(
 
         fun versionFromDumpsys(output: String): String? = versionName.find(output)?.groupValues?.get(1)
 
+        private val userInstalled = Regex("""^\s*User \d+:.*?\binstalled=(true|false)\b""", RegexOption.MULTILINE)
+
+        /**
+         * dumpsys sürüm söylüyor ama uygulama hiçbir kullanıcıda kurulu değil (kullanıcı satırlarının hepsi installed=false):
+         * TV'den kaldırılan uygulamanın kaydı kalmış (veri saklanarak kaldırma, arşivleme). Önceden "kurulu" sayılıyor,
+         * kurulum atlanıyordu (#352, #389). Kullanıcı satırı yoksa (eski Android) kalıntı sayılmaz.
+         * Masaüstündeki AndroidTvApp.IsLeftover ile aynıdır.
+         */
+        fun isLeftover(output: String): Boolean {
+            if (versionFromDumpsys(output) == null) return false
+            val users = userInstalled.findAll(output).map { it.groupValues[1] }.toList()
+            return users.isNotEmpty() && users.all { it == "false" }
+        }
+
+        /** TV'de kurulu CouchSubs sürümü; yoksa ya da yalnız kaydı kalmışsa null. */
+        fun installedVersionFromDumpsys(output: String): String? = versionFromDumpsys(output)?.takeUnless { isLeftover(output) }
+
         const val PLAY_URL = "https://play.google.com/store/apps/details?id=$PACKAGE_NAME"
         const val OPEN_PLAY_COMMAND = "shell:am start -a android.intent.action.VIEW -d market://details?id=$PACKAGE_NAME"
 
@@ -141,7 +158,7 @@ class AndroidTvInstaller(
     fun installedVersion(): String? {
         val key = adbKey()
         return connector(key) { throw AndroidInstallException(AndroidInstallError.NOT_APPROVED, "denetimde onay beklenmez") }.use { adb ->
-            versionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
+            installedVersionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
         }
     }
 
@@ -160,8 +177,9 @@ class AndroidTvInstaller(
             log.write("ADB bağlantısı kuruldu (${if (adb.secure) "TLS" else "düz"}, en çok ${adb.maxData} bayt).")
             progress(InstallStep.READING)
             val dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
-            val installed = versionFromDumpsys(dumpsys)
+            val installed = installedVersionFromDumpsys(dumpsys)
             val fromPlay = installedFromPlay(dumpsys)
+            if (isLeftover(dumpsys)) log.write("TV'de CouchSubs'ın kaydı kalmış ama uygulama kurulu değil; yeniden kuruluyor.")
             log.write("TV'deki CouchSubs: ${installed ?: "yok"}${if (fromPlay) " (Google Play'den)" else ""}")
             if (installed != null && version != null && !SamsungDiagnostics.isNewer(version, installed)) {
                 grantOverlay(adb, log)
@@ -188,7 +206,7 @@ class AndroidTvInstaller(
                 throw AndroidInstallException(error, output.trim().ifEmpty { "TV yanıt vermedi" })
             }
             grantOverlay(adb, log)
-            val after = versionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
+            val after = installedVersionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
             launch(adb)
             return Result(after ?: version ?: "", true)
         }
@@ -211,7 +229,7 @@ class AndroidTvInstaller(
         val deadline = System.currentTimeMillis() + playWaitMs
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(playPollMs)
-            val now = versionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
+            val now = installedVersionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
             if (now != null && now != before) {
                 log.write("Play'den kuruldu: $now")
                 grantOverlay(adb, log)

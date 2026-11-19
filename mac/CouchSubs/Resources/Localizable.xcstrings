@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Reinstall the TV app": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Reinstall the TV app"}},"tr":{"stringUnit":{"state":"translated","value":"TV uygulamasını yeniden kur"}}}},
     "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds)."}},"tr":{"stringUnit":{"state":"translated","value":"TV'deki Host PC IP %1$@, bu bilgisayarın adresi %2$@. TV'de Geliştirici modu penceresinde Host PC IP'yi %2$@ yapıp TV'yi tam yeniden başlatın (güç tuşunu 2 sn basılı tutun)."}}}},
     "TV's IP address (on the TV under Settings › Network)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"TV's IP address (on the TV under Settings › Network)"}},"tr":{"stringUnit":{"state":"translated","value":"TV'nin IP adresi (TV'de Ayarlar › Ağ'da yazar)"}}}},
     "e.g. 192.168.1.100": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"e.g. 192.168.1.100"}},"tr":{"stringUnit":{"state":"translated","value":"örn. 192.168.1.100"}}}},

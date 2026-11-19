@@ -189,9 +189,20 @@ private struct TVStatusTile: View {
 
     var body: some View {
         if model.hasTV {
-            StatusTile(symbol: "tv", title: "TV",
-                       value: model.tvClients > 0 ? String(localized: "Connected") : String(localized: "Waiting for the TV app"),
-                       tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning))
+            if model.canReinstallTVApp {
+                // TV uygulaması bağlanmıyor (ör. TV'den kaldırıldı): TV adımı açılır, uygulama yeniden kurulur ya da açılır.
+                StatusTile(symbol: "tv", title: "TV", value: String(localized: "Waiting for the TV app"),
+                           tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
+                    Button("Reinstall the TV app") {
+                        model.step = .tv
+                        Task { await model.reinstallTVApp() }
+                    }.buttonStyle(.secondary)
+                }
+            } else {
+                StatusTile(symbol: "tv", title: "TV",
+                           value: model.tvClients > 0 ? String(localized: "Connected") : String(localized: "Waiting for the TV app"),
+                           tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning))
+            }
         } else {
             StatusTile(symbol: "tv", title: "TV", value: String(localized: "Not set up")) {
                 Button("Connect a TV") { model.step = .tv }.buttonStyle(.secondary)

@@ -79,8 +79,8 @@ protocol AppServices: AnyObject {
     func isAndroidDebugOn(host: String) async -> Bool
     /// Ağda ADB'si açık cihazlar.
     func scanAndroidTVs() async -> [String]
-    /// Eksikse ya da eskiyse kurar; TV'deki sürümü döner.
-    func installAndroidApp(host: String, app: BundledTVApp, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String
+    /// Eksikse ya da eskiyse kurar; TV'deki sürümü döner. `open`: uygulama güncelse de TV'de açılır ("yeniden kur").
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String
 }
 
 struct BundledTVApp: Equatable {
@@ -296,9 +296,10 @@ final class LiveServices: AppServices {
         (try? await TVHelper.run(["android-scan"]).hosts) ?? []
     }
 
-    func installAndroidApp(host: String, app: BundledTVApp, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
         let result = try await TVHelper.run(["android-install", "--host", host, "--package", app.url.path, "--version", app.version,
-                                             "--key-dir", TVHelper.dataDirectory.appendingPathComponent("adb").path], onEvent: onEvent)
+                                             "--key-dir", TVHelper.dataDirectory.appendingPathComponent("adb").path] + (open ? ["--open"] : []),
+                                            onEvent: onEvent)
         return result.version ?? app.version
     }
 
@@ -414,6 +415,8 @@ enum TVAppState: Equatable {
     case signIn(URL)
     /// Android TV: TV ekranında hata ayıklama izni bekleniyor.
     case approveOnTV
+    /// Android TV: TV'de Google Play sayfası açıldı; kullanıcı TV'de Yükle'ye basmalı.
+    case pressInstallOnTV
     /// Samsung: TV'deki Host PC IP (`tvIp`) bu Mac'in adresi (`computer`) değil; sdb denenmedi (#343).
     case hostPcMismatch(tvIp: String, computer: String)
 }
@@ -459,6 +462,8 @@ final class AppModel: ObservableObject {
     @Published private var tvAppMissing = false
     /// TV uygulaması denetimi sürüyor (bekleme ekranı ve çeviri başlangıcı aynı anda çağırabilir).
     @Published private var refreshingTVApp = false
+    /// "TV uygulamasını yeniden kur"a basıldı: Android TV'de uygulama kuruluysa da TV'de açılır.
+    private var openTVAppAfterCheck = false
     /// Samsung kurulumu ya da sürüm denetimi sürüyor: olaylar (giriş, kurulum adımı) kartı değiştirebilir.
     @Published private var samsungCheckRunning = false
     @Published var settings: UserSettings {
@@ -1111,8 +1116,10 @@ final class AppModel: ObservableObject {
         var host = tv.host
         let reachable = host.isEmpty ? false : await services.isAndroidDebugOn(host: host)
         if !reachable {
-            // Uygulama kuruluysa ve TV'de hata ayıklama kapalıysa yapılacak bir şey yok.
-            if !needsInstall(bundled) {
+            // Bu Mac'in kurduğu sürüm kayıtlıysa ve TV'de hata ayıklama kapalıysa yapılacak bir şey yok. Ama kayda ancak
+            // TV'nin adresi biliniyorsa ya da TV uygulaması şu an bağlıysa güvenilir: TV sihirbazda yeniden seçilince adres
+            // boşalıyor, kayıt kalıyordu; TV'den kaldırılan uygulama "hazır" görünüyor, kurulum denenmiyordu (#352, #389).
+            if !needsInstall(bundled), !tv.host.isEmpty || tvClients > 0 {
                 tvApp = .upToDate(installedAppVersion ?? bundled.version)
                 return
             }
@@ -1123,8 +1130,10 @@ final class AppModel: ObservableObject {
             host = found
         }
         tvApp = .working
+        let open = openTVAppAfterCheck
+        openTVAppAfterCheck = false
         do {
-            let version = try await services.installAndroidApp(host: host, app: bundled) { [weak self] event in
+            let version = try await services.installAndroidApp(host: host, app: bundled, open: open) { [weak self] event in
                 Task { @MainActor in self?.installEvent(event) }
             }
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
@@ -1141,10 +1150,14 @@ final class AppModel: ObservableObject {
     private func installEvent(_ event: TVInstallEvent) {
         // Kurulum bittikten sonra gelen geç olay sonucu ezmesin.
         switch tvApp {
-        case .working, .signIn, .approveOnTV: break
+        case .working, .signIn, .approveOnTV, .pressInstallOnTV: break
         default: if !samsungCheckRunning { return }
         }
         switch event {
+        // Android TV'de Google Play sayfası açıldı: kart TV'de Yükle'ye basılmasını söyler. Önceden yalnız "kuruluyor"
+        // görünüyordu; TV'deki sayfayı görmeyen kullanıcı dört dakika boyunca bir şey olmuyor sanıyordu.
+        case .progress("play"):
+            tvApp = .pressInstallOnTV
         case .signIn(let url):
             tvApp = .signIn(url)
             openInBrowser(url)
@@ -1158,6 +1171,23 @@ final class AppModel: ObservableObject {
                 tvApp = .working
             }
         }
+    }
+
+    /// Samsung ve Android TV'de TV uygulaması bağlı değilken "TV uygulamasını yeniden kur" görünür (ana ekran ve TV kartı).
+    /// TV'den kaldırılan uygulama bu Mac'in kaydında "kurulu" kalıyordu (#352, #389).
+    var canReinstallTVApp: Bool {
+        guard let tv, tv.brand == .samsung || tv.brand == .androidTV else { return false }
+        return canInstallTVApp && tvClients == 0
+    }
+
+    /// Kurulan sürüm kaydını unutur ve TV'ye yeniden bakar: uygulama TV'de yoksa kurulur, Android TV'de varsa açılır.
+    /// TV'ye ulaşılamazsa kart geliştirici modu / hata ayıklama adımlarını gösterir.
+    func reinstallTVApp() async {
+        guard tv != nil else { return }
+        store.remove(StoreKey.tvAppVersion)
+        openTVAppAfterCheck = true
+        tvApp = .unknown
+        await refreshTVApp()
     }
 
     /// Seçili TV'ye uygulamayı CouchSubs kurabilir mi (paket uygulamayla geldi mi)?

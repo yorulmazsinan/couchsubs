@@ -216,6 +216,7 @@ function tvApp(s) {
       (a.reason ? '<p class="muted">' + esc(a.reason) + '</p>' : '') + btn('tvRefresh', t('Yeniden dene', 'Try again')); break;
     case 'SignIn': body = '<p>' + t('Samsung hesabınızla giriş yapın:', 'Sign in with your Samsung account:') + '</p><a class="button primary" target="_blank" rel="noopener" href="' + esc(a.url) + '">' + t('Samsung girişini aç', 'Open Samsung sign-in') + '</a>'; break;
     case 'ApproveOnTv': body = '<p class="warn">' + t('TV ekranındaki "hata ayıklamaya izin ver" sorusunu onaylayın.', 'Approve the "allow debugging" prompt on the TV.') + '</p>'; break;
+    case 'PressInstallOnTv': body = '<p class="warn">' + t('TV\'de Google Play sayfası açıldı: TV kumandasıyla Yükle\'ye (ya da Güncelle\'ye) basın. Kurulunca uygulama kendiliğinden açılır.', 'The Google Play page opened on the TV: press Install (or Update) with the TV remote. The app opens by itself once it is installed.') + '</p>'; break;
     default: body = '<p class="muted">' + t('TV uygulamasının durumu henüz bilinmiyor.', 'The TV app state is not known yet.') + '</p>' + btn('tvRefresh', t('Denetle', 'Check'));
   }
   return '<div class="card"><h2>' + t('TV uygulaması', 'TV app') + '</h2>' + body + err('tvInstall') + err('tvRefresh') + '</div>';
@@ -306,7 +307,7 @@ function onlineState(code) {
 }
 function tvAppLine(s) {
   var a = s.tvApp;
-  if (a.kind === 'NeedsPassphrase' || a.kind === 'DevModeOff' || a.kind === 'Failed' || a.kind === 'Working' || a.kind === 'SignIn' || a.kind === 'ApproveOnTv') return tvApp(s);
+  if (a.kind === 'NeedsPassphrase' || a.kind === 'DevModeOff' || a.kind === 'Failed' || a.kind === 'Working' || a.kind === 'SignIn' || a.kind === 'ApproveOnTv' || a.kind === 'PressInstallOnTv') return tvApp(s);
   return a.kind === 'UpToDate' ? '<p class="muted">' + t('TV uygulaması: ', 'TV app: ') + esc(a.version || '') + (s.devModeHoursLeft != null ? ' · ' + t('geliştirici modu ', 'developer mode ') + s.devModeHoursLeft + t(' saat', ' h') : '') + '</p>' : '';
 }
 function range(side, label, value) {

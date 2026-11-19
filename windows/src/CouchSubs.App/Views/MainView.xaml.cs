@@ -218,6 +218,13 @@ public partial class MainView : UserControl
     /// <summary>TV'siz kurulmuş uygulamada TV'yi sonradan bağlamak için sihirbazın TV adımı açılır.</summary>
     private void OnConnectTv(object sender, RoutedEventArgs e) => controller.Step = OnboardingStep.Tv;
 
+    /// <summary>TV adımı açılır (kurulum kartı orada görünür) ve TV'ye yeniden bakılır.</summary>
+    private async void OnReinstallTvApp(object sender, RoutedEventArgs e)
+    {
+        controller.Step = OnboardingStep.Tv;
+        await controller.ReinstallTvAppAsync();
+    }
+
     private void OnDownload(object sender, RoutedEventArgs e) => controller.StartModelDownload();
 
     /// <summary>

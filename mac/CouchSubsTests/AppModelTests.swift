@@ -137,7 +137,10 @@ final class FakeServices: AppServices {
     }
     func isAndroidDebugOn(host: String) async -> Bool { androidHosts.contains(host) }
     func scanAndroidTVs() async -> [String] { androidHosts }
-    func installAndroidApp(host: String, app: BundledTVApp, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
+    /// Her Android kurulumunda "güncelse de aç" istendi mi.
+    var androidOpenRequests: [Bool] = []
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
+        androidOpenRequests.append(open)
         events.forEach(onEvent)
         if let installError { throw installError }
         brandInstalls.append((.androidTV, host))
@@ -1265,6 +1268,73 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertEqual(model.tvApp, .upToDate("0.7.0"))
         XCTAssertEqual(model.tv?.host, "192.168.1.40")
         XCTAssertEqual(store.load(LGTV.self, for: StoreKey.tv)?.host, "192.168.1.40")
+    }
+
+    // #352, #389: TV'den kaldırılan uygulama; TV sihirbazda yeniden seçilince adres boşalıyor, kayıtlı sürüm kalıyordu.
+    // Kart "hazır" diyor, ağda TV aranmıyor, kurulum hiç denenmiyordu.
+    func testReselectedAndroidTVWithARememberedVersionIsCheckedOnTheTV() async {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        services.androidHosts = ["192.168.1.40"]
+        let store = MemoryStore()
+        store.save("0.7.0", for: StoreKey.tvAppVersion)
+        let model = model(services, store: store)
+        model.tv = LGTV(name: "Android TV", host: "", brand: .androidTV)
+        await model.refreshTVApp()
+        XCTAssertEqual(services.brandInstalls.map { $0.host }, ["192.168.1.40"])
+        XCTAssertEqual(model.tvApp, .upToDate("0.7.0"))
+    }
+
+    func testReselectedAndroidTVThatCannotBeFoundShowsTheDebuggingSteps() async {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        let store = MemoryStore()
+        store.save("0.7.0", for: StoreKey.tvAppVersion)
+        let model = model(services, store: store)
+        model.tv = LGTV(name: "Android TV", host: "", brand: .androidTV)
+        await model.refreshTVApp()
+        XCTAssertEqual(model.tvApp, .devModeOff)
+    }
+
+    func testReinstallForgetsTheVersionChecksTheTVAndOpensTheApp() async {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        services.androidHosts = ["192.168.1.40"]
+        let store = MemoryStore()
+        store.save("0.7.0", for: StoreKey.tvAppVersion)
+        let model = model(services, store: store)
+        model.tv = LGTV(name: "Android TV", host: "192.168.1.40", brand: .androidTV)
+        XCTAssertTrue(model.canReinstallTVApp)
+        await model.reinstallTVApp()
+        XCTAssertEqual(services.androidOpenRequests, [true])
+        XCTAssertEqual(model.tvApp, .upToDate("0.7.0"))
+        // "Açılsın" isteği bir kerelik.
+        await model.refreshTVApp()
+        XCTAssertEqual(services.androidOpenRequests, [true, false])
+    }
+
+    func testReinstallWithoutDebuggingShowsTheDebuggingSteps() async {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        let store = MemoryStore()
+        store.save("0.7.0", for: StoreKey.tvAppVersion)
+        let model = model(services, store: store)
+        model.tv = LGTV(name: "Android TV", host: "192.168.1.40", brand: .androidTV)
+        await model.reinstallTVApp()
+        XCTAssertNil(store.load(String.self, for: StoreKey.tvAppVersion))
+        XCTAssertEqual(model.tvApp, .devModeOff)
+    }
+
+    func testReinstallIsOfferedOnlyForSamsungAndAndroidTV() {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        let model = model(services)
+        model.tv = LGTV(name: "LG TV", host: "192.168.1.153")
+        XCTAssertFalse(model.canReinstallTVApp)
+        model.tv = LGTV(name: "Android TV", host: "", brand: .androidTV)
+        XCTAssertTrue(model.canReinstallTVApp)
+        model.tvClients = 1
+        XCTAssertFalse(model.canReinstallTVApp)
     }
 
     func testInstalledAndroidAppNeedsNothingWhenDebuggingIsOff() async {

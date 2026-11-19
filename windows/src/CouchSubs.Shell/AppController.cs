@@ -44,6 +44,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private bool tvAppMissing;
     /// <summary>TV uygulaması denetimi sürüyor (bekleme ekranı ve çeviri başlangıcı aynı anda çağırabilir).</summary>
     private bool refreshingTvApp;
+    /// <summary>"TV uygulamasını yeniden kur"a basıldı: Android TV'de uygulama kuruluysa da TV'de açılır.</summary>
+    private bool openTvAppAfterCheck;
     private int? devModeHoursLeft;
     private UserSettings settings;
     private bool isRunning;
@@ -328,7 +330,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         _ => text["Retrying the Xbox connection…"],
     };
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
-    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText)]); }
+    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText), nameof(CanReinstallTvApp)]); }
     public StatusTone TvTone => HasTv ? TvToneFor(tvClients, isRunning) : StatusTone.Idle;
     public string TvStatusText => !HasTv ? text["Not set up"] : tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
     /// <summary>Eşleşmiş bir TV var.</summary>
@@ -698,7 +700,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         tvAppMissing = !pairing.Launched;
         // Daha önce "TV'm yok" seçildiyse TV bağlanınca altyazı TV'ye gider.
         if (settings.Output == SubtitleOutput.Computer) Settings = settings with { Output = SubtitleOutput.Tv };
-        Changed(nameof(Tv), nameof(CanAdvance), nameof(CanInstallTvApp), nameof(HasTv), nameof(NeedsTv), nameof(CanStart),
+        Changed(nameof(Tv), nameof(CanAdvance), nameof(CanInstallTvApp), nameof(CanReinstallTvApp), nameof(HasTv), nameof(NeedsTv), nameof(CanStart),
             nameof(TvStatusText), nameof(TvTone));
         if (target.Brand == TvBrand.Lg) await RefreshTvAppAsync();
         // Samsung girişi ya da Android onayı dakikalar sürebilir; eşleşme beklemesin.
@@ -864,8 +866,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var host = target.Host;
         if (host.Length == 0 || !await services.IsAndroidDebugOnAsync(host))
         {
-            // Uygulama kuruluysa ve TV'de hata ayıklama kapalıysa yapılacak bir şey yok.
-            if (!NeedsInstall(bundled))
+            // Bu bilgisayarın kurduğu sürüm kayıtlıysa ve TV'de hata ayıklama kapalıysa yapılacak bir şey yok. Ama kayda
+            // ancak TV'nin adresi biliniyorsa ya da TV uygulaması şu an bağlıysa güvenilir: TV sihirbazda yeniden seçilince
+            // adres boşalıyor, kayıt kalıyordu; TV'den kaldırılan uygulama "hazır" görünüyor, ağda TV hiç aranmıyor ve
+            // kurulum denenmiyordu (#352, #389).
+            if (!NeedsInstall(bundled) && (target.Host.Length > 0 || tvClients > 0))
             {
                 TvApp = new TvAppState(TvAppKind.UpToDate, InstalledAppVersion ?? bundled.Version);
                 return;
@@ -878,9 +883,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             host = found;
         }
         TvApp = new TvAppState(TvAppKind.Working);
+        var open = openTvAppAfterCheck;
+        openTvAppAfterCheck = false;
         try
         {
-            var version = await services.InstallAndroidAppAsync(host, bundled, e => post(() => InstallEvent(e)));
+            var version = await services.InstallAndroidAppAsync(host, bundled, open, e => post(() => InstallEvent(e)));
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
             var located = target with { Host = host };
             tv = located;
@@ -898,9 +905,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private void InstallEvent(TvInstallEvent e)
     {
         // Kurulum bittikten sonra gelen geç olay sonucu ezmesin.
-        if (!samsungCheckRunning && TvApp.Kind is not (TvAppKind.Working or TvAppKind.SignIn or TvAppKind.ApproveOnTv)) return;
+        if (!samsungCheckRunning && TvApp.Kind is not (TvAppKind.Working or TvAppKind.SignIn or TvAppKind.ApproveOnTv or TvAppKind.PressInstallOnTv)) return;
         switch (e.Kind)
         {
+            // Android TV'de Google Play sayfası açıldı: kullanıcı TV'de Yükle'ye basmalı. Önceden kart yalnız "kuruluyor"
+            // diyordu; TV'deki sayfayı görmeyen kullanıcı dört dakika boyunca bir şey olmuyor sanıyordu.
+            case TvInstallEventKind.Progress when e.Step == "play":
+                TvApp = new TvAppState(TvAppKind.PressInstallOnTv);
+                break;
             case TvInstallEventKind.SignIn when e.Url is { } url:
                 TvApp = new TvAppState(TvAppKind.SignIn, Url: url);
                 OpenInBrowser(url);
@@ -916,6 +928,25 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 TvApp = new TvAppState(TvAppKind.Working);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Samsung ve Android TV'de TV uygulaması bağlı değilken "TV uygulamasını yeniden kur" görünür (ana ekran ve TV kartı).
+    /// TV'den kaldırılan uygulama bu bilgisayarın kaydında "kurulu" kalıyordu (#352, #389).
+    /// </summary>
+    public bool CanReinstallTvApp => tv is { Brand: TvBrand.Samsung or TvBrand.AndroidTv } && CanInstallTvApp && tvClients == 0;
+
+    /// <summary>
+    /// Kurulan sürüm kaydını unutur ve TV'ye yeniden bakar: uygulama TV'de yoksa kurulur, Android TV'de varsa açılır.
+    /// TV'ye ulaşılamazsa kart geliştirici modu / hata ayıklama adımlarını gösterir.
+    /// </summary>
+    public async Task ReinstallTvAppAsync()
+    {
+        if (tv is null) return;
+        store.Remove(StoreKeys.TvAppVersion);
+        openTvAppAfterCheck = true;
+        TvApp = TvAppState.Unknown;
+        await RefreshTvAppAsync();
     }
 
     /// <summary>Key Server'dan anahtarı alır (TV ekranındaki parolayla) ve uygulamayı kurar.</summary>
@@ -1284,7 +1315,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         TvApp = TvAppState.Unknown;
         Step = OnboardingStep.Welcome;
         Changed(nameof(HasAccount), nameof(Console), nameof(ConsoleKind), nameof(ConsoleKindLocked), nameof(IsXbox), nameof(ConsoleTitle), nameof(HasXboxAccount),
-            nameof(SelectedXboxConsole), nameof(StepCount), nameof(StepNumber), nameof(Ps5StatusText), nameof(Tv), nameof(HasTv), nameof(NeedsTv), nameof(CanStart), nameof(HasLoginPasscode));
+            nameof(SelectedXboxConsole), nameof(StepCount), nameof(StepNumber), nameof(Ps5StatusText), nameof(Tv), nameof(CanReinstallTvApp), nameof(HasTv), nameof(NeedsTv), nameof(CanStart), nameof(HasLoginPasscode));
     }
 
     /// <summary>İkinci hesabın PS5 giriş şifresi şifreli depoda kayıtlı mı (şifrenin kendisi arayüze dönmez).</summary>
