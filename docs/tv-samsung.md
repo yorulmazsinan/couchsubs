@@ -13,9 +13,12 @@ adımları: [tv-kurulum.md](tv-kurulum.md#samsung-tv).
 
 Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
 
-- `config.xml`'de `required_version="3.0"` (önceden 5.0'dı; TV, paketin istediğinden eski sürümde kurulumu reddeder).
+- `config.xml`'de `required_version="2.4"` (önce 5.0, sonra 3.0 idi; #71; TV, paketin istediğinden eski sürümde kurulumu reddeder).
   Yeni TV'ler daha düşük isteyen paketi de kurar (Jellyfin'in Tizen paketi de düşük sürüm ister). İzinlerin hepsi
-  `public` düzeyinde: `tv.window`, `tv.inputdevice`, `application.launch`, `internet`, `network.get`;
+  `public` düzeyinde: `tv.window`, `tv.inputdevice`, `application.launch`, `internet`, `network.get`,
+  `network.public` (Samsung, `webapis.network.getIp`). Samsung TV'nin izin listesinde olmayan izin eklenmez: Tizen 2.4
+  böyle paketi sebep yazmadan `install failed[118]` ile reddeder (#497'de `power`; Power API TV'de yok).
+  `scripts/tv-tizen.test.js` izinleri bu listeye göre denetler;
   `<access origin="*">` ve `tizen:allow-navigation` zaten vardı.
 - Sayfa ES5 ile yazılıdır (Tizen 3.0'ın tarayıcısı Chromium 47'dir; Tizen 4.0: 56). `acorn` ile `ecmaVersion: 5`
   ayrıştırmasından geçer; CSS'te değişken, grid, `gap`, `inset` yoktur. M47'de olmayan söz döndüren `play()` ve

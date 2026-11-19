@@ -110,11 +110,6 @@
       try {
         webapis.appcommon.setScreenSaver(webapis.appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF);
       } catch (e) {}
-      // Ekranın kararmasını ve TV'nin boşta sanıp kapanmasını Tizen'in güç API'siyle de engeller (izin: power).
-      // Uygulama kapanınca istek kendiliğinden düşer. API ya da izin yoksa sessizce geçilir.
-      try {
-        tizen.power.request('SCREEN', 'SCREEN_NORMAL');
-      } catch (e) {}
     },
 
     launchParams: requestedParams,

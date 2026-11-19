@@ -29,7 +29,9 @@
     <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/network.get"/>
-    <tizen:privilege name="http://tizen.org/privilege/power"/>
+    <!-- "http://tizen.org/privilege/power" yok: Samsung TV'lerde Tizen Power API'si bulunmaz, izin TV'nin izin listesinde
+         değildir. Tizen 2.4 (2016 TV'ler) tanımadığı izni içeren paketi "install failed[118]" ile reddeder (#497); yeni
+         TV'ler yok sayar. İzin eklerken scripts/tv-tizen.test.js'teki TV listesine bakın. -->
     <!-- Samsung ağ API'si (webapis.network.getIp): Tizen sistem bilgisi adres vermezse TV kendi ağını bilsin. -->
     <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
     <tizen:profile name="tv-samsung"/>

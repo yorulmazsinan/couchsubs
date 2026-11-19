@@ -125,3 +125,41 @@ test('localAddress: hiçbir yol adres vermezse null (app.js yaygın ev ağların
   assert.equal(addressOf(loadNetwork({ samsung: new Error('SecurityError') })), null);
   assert.equal(loadNetwork({}).samsungIp(), null);
 });
+
+// Samsung TV'nin tanıdığı izinler ve hangi Tizen sürümünden beri olduğu (Samsung Smart TV API belgeleri: Tizen Web
+// Device API, Samsung Product API, W3C). Tizen 2.4 (2016 TV'ler) listede olmayan ya da kendinden yeni izni içeren paketi
+// sebep yazmadan "install failed[118]" ile reddeder (#497: http://tizen.org/privilege/power, Power API TV'de yok).
+const TV_PRIVILEGES = {
+  'http://tizen.org/privilege/tv.window': '2.3',
+  'http://tizen.org/privilege/tv.inputdevice': '2.3',
+  'http://tizen.org/privilege/tv.audio': '2.3',
+  'http://tizen.org/privilege/tv.display': '2.3',
+  'http://tizen.org/privilege/application.launch': '2.3',
+  'http://tizen.org/privilege/internet': '2.3',
+  'http://tizen.org/privilege/network.get': '2.3',
+  'http://developer.samsung.com/privilege/network.public': '2.3',
+};
+
+function versionNumber(v) {
+  const [major, minor = '0'] = v.split('.');
+  return Number(major) * 100 + Number(minor);
+}
+
+test('config.xml: her izin Samsung TV\'de var ve paketin en düşük Tizen sürümünde de tanınıyor (#497)', () => {
+  const config = fs.readFileSync(path.join(tizenDir, 'config.xml'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  const required = (config.match(/required_version="([0-9.]+)"/) || [])[1];
+  assert.equal(required, '2.4', '2016 Samsung TV\'ler (Tizen 2.4) kurabilmeli');
+  const privileges = [...config.matchAll(/<tizen:privilege name="([^"]+)"\/>/g)].map((m) => m[1]);
+  assert.ok(privileges.length > 0);
+  for (const name of privileges) {
+    assert.ok(name in TV_PRIVILEGES, `${name} Samsung TV izin listesinde yok; Tizen 2.4 paketi reddeder`);
+    assert.ok(versionNumber(TV_PRIVILEGES[name]) <= versionNumber(required), `${name} Tizen ${required}'te yok`);
+  }
+  assert.ok(!privileges.includes('http://tizen.org/privilege/power'));
+  // Ağ adresi yedeği (webapis.network.getIp) için gereken izin duruyor.
+  assert.ok(privileges.includes('http://developer.samsung.com/privilege/network.public'));
+});
+
+test('platform.js: Samsung TV\'de olmayan Tizen Power API\'si çağrılmıyor (#497)', () => {
+  assert.doesNotMatch(code, /tizen\.power/);
+});
