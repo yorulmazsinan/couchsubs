@@ -4,7 +4,7 @@
     "id": "enmera-commerce-demo-1",
     "active": true,
     "image": "https://couchsubs.enmeraapps.com/promo/popup.webp",
-    "link": "https://enmera.com.tr/urunler/enmera-commerce?utm_source=couchsubs&utm_medium=app&utm_campaign=popup",
+    "link": "https://enmera.com.tr/demo-talebi?utm_source=couchsubs&utm_medium=app&utm_campaign=popup",
     "alt": "Enmera Commerce: Ücretsiz demo",
     "everyHours": 24,
     "targets": [
@@ -16,7 +16,7 @@
     "id": "enmera-kampanya-2027-1",
     "active": true,
     "image": "https://couchsubs.enmeraapps.com/promo/site-popup.webp",
-    "link": "https://enmera.com.tr/urunler/enmera-commerce?utm_source=couchsubs&utm_medium=site&utm_campaign=popup",
+    "link": "https://enmera.com.tr/kampanyalar/2027ye-kadar-odeme-yok?utm_source=couchsubs&utm_medium=site&utm_campaign=popup",
     "alt": "Enmera Commerce: Yıl sonuna kadar ödeme yok",
     "everyHours": 24
   },
