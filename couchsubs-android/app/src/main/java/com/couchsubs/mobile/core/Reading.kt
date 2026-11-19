@@ -101,17 +101,18 @@ class Reading(lines: List<TextLine>) {
     /**
      * Alandaki altyazı bloğu: satırlar yerlerine göre bloklara ayrılır; ortalanmış ve menü olmayan en alttaki blok
      * altyazıdır. Ortalanmış blok yoksa en az üç sözcüklü, menü olmayan en alttaki blok alınır. Satırların yeri
-     * bilinmiyorsa okuma olduğu gibi kalır. [area]: okunan alanın karedeki yeri.
+     * bilinmiyorsa okuma olduğu gibi kalır. [area]: okunan alanın karedeki yeri. Tek satırlık etkileşim/HUD etiketi
+     * ("TAKE AMMO PACK (0/3)", [ButtonPrompts.isActionLabel]) altyazı bloğu sayılmaz.
      */
     fun subtitleBlock(area: TextBox): Reading {
-        if (lines.isEmpty() || lines.any { it.box == null }) return this
+        if (lines.isEmpty() || lines.any { it.box == null }) return if (isActionLabel) Empty else this
         val blocks = mutableListOf<MutableList<TextLine>>()
         for (line in lines.sortedBy { it.box!!.top }) {
             val placed = line.box!!.placedIn(area)
             val index = blocks.indexOfLast { belongs(placed, it, area) }
             if (index >= 0) blocks[index].add(line) else blocks.add(mutableListOf(line))
         }
-        val candidates = blocks.map { Reading(it) }.filter { !it.isMenu }
+        val candidates = blocks.map { Reading(it) }.filter { !it.isMenu && !it.isActionLabel }
         val centered = candidates.filter { reading ->
             val placed = reading.box!!.placedIn(area)
             abs((placed.left + placed.right) / 2 - 0.5) <= 0.12
@@ -132,6 +133,10 @@ class Reading(lines: List<TextLine>) {
     /** Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil. */
     internal val isMenu: Boolean
         get() = lines.size >= 3 && lines.all { wordCount(it.text) <= 3 && !SubtitleStabilizer.endsSentence(it.text) }
+
+    /** Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK"). */
+    internal val isActionLabel: Boolean
+        get() = lines.size == 1 && ButtonPrompts.isActionLabel(lines[0].text)
 }
 
 /** Oyunların kumanda ipuçlarını tanır: "R2 Swing", "L1 + R1 Spartan Rage", "△ Pick up", "Press ✕ to jump". */
@@ -159,5 +164,18 @@ object ButtonPrompts {
             return true
         if (first.lowercase() in verbs && tokens.size in 2..10) return isButton(tokens[1]) || tokens[1] in lookalikes
         return false
+    }
+
+    /**
+     * Etkileşim/HUD etiketi: en çok üç sözcük, hiç küçük harf yok (en az bir büyük harf var), cümle sonu noktalaması
+     * yok. GTA 6'nın etkileşim yazıları ("TAKE AMMO PACK (0/3)", "• ADD TO TRUNK", "TURN ON") ve ekipman yazıları
+     * ("BENCH PRESS") altyazı gibi çevriliyordu (#404). Konuşma küçük harf içerir ya da noktalamayla biter ("Yes.",
+     * "OKAY.", "WHAT?"); büyük/küçük harfi olmayan yazılara dokunulmaz. Yalnız tek başına okunan satıra uygulanır
+     * (Mac: ButtonPrompts.isActionLabel, Windows: ButtonPrompts.IsActionLabel).
+     */
+    fun isActionLabel(line: String): Boolean {
+        val words = line.split(Regex("\\s+")).count { word -> word.any { it.isLetter() } }
+        return words in 1..3 && line.any { it.isUpperCase() } && line.none { it.isLowerCase() } &&
+            !SubtitleStabilizer.endsSentence(line)
     }
 }

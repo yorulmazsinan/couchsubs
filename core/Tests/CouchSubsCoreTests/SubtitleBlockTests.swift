@@ -60,4 +60,32 @@ final class SubtitleBlockTests: XCTestCase {
         XCTAssertEqual(OcrNoise.clean("23m CESARE: It's here! Shoot him!"), "CESARE: It's here! Shoot him!")
         XCTAssertEqual(OcrNoise.clean("100 men came"), "100 men came")
     }
+
+    /// GTA 6 (#404): etkileşim ve ekipman yazıları tek başına okununca altyazı sayılmaz; kısa konuşma kalır.
+    func testActionLabelsAreNotSubtitles() {
+        for label in ["TAKE AMMO PACK (0/3)", "SIT", "CLOSE", "FRIDGE", "FRESHEN UP", "• ADD TO TRUNK", "> REMOVE FROM TRUNK",
+                      "D STASH", "A TURN ON", "TURN ON", "BEAST", "EASY", "BENCH PRESS", "DEADLIFTS"] {
+            XCTAssertTrue(ButtonPrompts.isActionLabel(label), label)
+            XCTAssertEqual(Reading(lines: [line(label, 0.4, 0.8, 0.6)]).subtitleBlock(in: area), .empty, label)
+            XCTAssertEqual(Reading(text: label).subtitleBlock(in: area), .empty, label)
+        }
+        for speech in ["Yes.", "Okay.", "Why?", "OKAY.", "WHAT?", "Same.", "Talk to Andy", "Follow Andy",
+                       "EXCLUSIVE: LEONIDA'S TOP SPOTS FOR A DECENT CATCH", "はい", "Mommy..."] {
+            XCTAssertFalse(ButtonPrompts.isActionLabel(speech), speech)
+            XCTAssertEqual(Reading(lines: [line(speech, 0.4, 0.8, 0.6)]).subtitleBlock(in: area).text, speech)
+        }
+    }
+
+    func testActionLabelBelowSubtitleDoesNotHideIt() {
+        let reading = Reading(lines: [
+            line("Hey. Looking for Andy.", 0.35, 0.7, 0.65),
+            line("TAKE AMMO PACK (0/3)", 0.42, 0.9, 0.58),
+        ])
+        XCTAssertEqual(reading.subtitleBlock(in: area).text, "Hey. Looking for Andy.")
+    }
+
+    func testWrappedAllCapsSubtitleStaysTogether() {
+        let reading = Reading(lines: [line("I TOLD YOU", 0.42, 0.7, 0.58), line("NOT TO GO THERE.", 0.4, 0.78, 0.6)])
+        XCTAssertEqual(reading.subtitleBlock(in: area).text, "I TOLD YOU\nNOT TO GO THERE.")
+    }
 }

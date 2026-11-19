@@ -126,8 +126,9 @@ public struct Reading: Equatable, Sendable {
     /// gösteriliyordu. Satırlar yerlerine göre bloklara ayrılır; ortalanmış ve menü olmayan en alttaki blok altyazıdır.
     /// Ortalanmış blok yoksa en az üç sözcüklü, menü olmayan en alttaki blok alınır. Satırların yeri bilinmiyorsa
     /// okuma olduğu gibi kalır. `area`, okunan alanın karedeki yeridir (ortalanmışlık karenin ortasına göre ölçülür).
+    /// Tek satırlık etkileşim/HUD etiketi ("TAKE AMMO PACK (0/3)", `ButtonPrompts.isActionLabel`) altyazı bloğu sayılmaz.
     public func subtitleBlock(in area: TextBox) -> Reading {
-        guard !lines.isEmpty, lines.allSatisfy({ $0.box != nil }) else { return self }
+        guard !lines.isEmpty, lines.allSatisfy({ $0.box != nil }) else { return isActionLabel ? .empty : self }
         var blocks: [[TextLine]] = []
         for line in lines.sorted(by: { $0.box!.top < $1.box!.top }) {
             let box = line.box!.placed(in: area)
@@ -137,7 +138,7 @@ public struct Reading: Equatable, Sendable {
                 blocks.append([line])
             }
         }
-        let candidates = blocks.map { Reading(lines: $0) }.filter { !$0.isMenu }
+        let candidates = blocks.map { Reading(lines: $0) }.filter { !$0.isMenu && !$0.isActionLabel }
         let centered = candidates.filter { reading in
             guard let box = reading.box?.placed(in: area) else { return false }
             return abs((box.left + box.right) / 2 - 0.5) <= 0.12
@@ -164,6 +165,9 @@ public struct Reading: Equatable, Sendable {
             line.text.split(whereSeparator: \.isWhitespace).count <= 3 && !SubtitleStabilizer.endsSentence(line.text)
         }
     }
+
+    /// Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").
+    var isActionLabel: Bool { lines.count == 1 && ButtonPrompts.isActionLabel(lines[0].text) }
 
     /// Satır kutularını `area` içindeki oranlardan dış çerçevenin oranlarına taşır.
     public func placed(in area: TextBox) -> Reading {
@@ -209,5 +213,17 @@ public enum ButtonPrompts {
             return isButton(second) || lookalikes.contains(second)
         }
         return false
+    }
+
+    /// Etkileşim/HUD etiketi: en çok üç sözcük, hiç küçük harf yok (en az bir büyük harf var), cümle sonu noktalaması
+    /// yok. GTA 6'nın etkileşim yazıları ("TAKE AMMO PACK (0/3)", "• ADD TO TRUNK", "TURN ON") ve ekipman yazıları
+    /// ("BENCH PRESS") simgeleri harfe dönüşerek okunuyor, altyazı gibi çevriliyordu (#404). Konuşma altyazısı küçük
+    /// harf içerir ya da noktalamayla biter ("Yes.", "OKAY.", "WHAT?"); büyük/küçük harfi olmayan yazılara
+    /// (Japonca) dokunulmaz. Yalnız tek başına okunan satıra uygulanır: tümü büyük harfli altyazının sarılmış
+    /// satırı ("I TOLD YOU" / "NOT TO GO THERE.") bozulmaz (Windows: ButtonPrompts.IsActionLabel, Android: isActionLabel).
+    public static func isActionLabel(_ line: String) -> Bool {
+        let words = line.split(whereSeparator: \.isWhitespace).filter { $0.contains(where: \.isLetter) }
+        return (1...3).contains(words.count) && line.contains(where: \.isUppercase)
+            && !line.contains(where: \.isLowercase) && !SubtitleStabilizer.endsSentence(line)
     }
 }

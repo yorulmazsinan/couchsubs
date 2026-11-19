@@ -70,4 +70,56 @@ public class SubtitleBlockTests
     [InlineData("23m CESARE: It's here! Shoot him!", "CESARE: It's here! Shoot him!")]
     [InlineData("100 men came", "100 men came")]
     public void GaugeNumberStuckToLineIsDropped(string line, string clean) => Assert.Equal(clean, OcrNoise.Clean(line));
+
+    /// <summary>GTA 6 (#404): etkileşim ve ekipman yazıları tek başına okununca altyazı sayılmaz.</summary>
+    [Theory]
+    [InlineData("TAKE AMMO PACK (0/3)")]
+    [InlineData("SIT")]
+    [InlineData("CLOSE")]
+    [InlineData("FRESHEN UP")]
+    [InlineData("• ADD TO TRUNK")]
+    [InlineData("> REMOVE FROM TRUNK")]
+    [InlineData("D STASH")]
+    [InlineData("A TURN ON")]
+    [InlineData("BEAST")]
+    [InlineData("BENCH PRESS")]
+    public void ActionLabelIsNotASubtitle(string label)
+    {
+        Assert.True(ButtonPrompts.IsActionLabel(label));
+        Assert.Empty(new Reading([Line(label, 0.4, 0.8, 0.6)]).SubtitleBlock(Area).Lines);
+        Assert.Empty(Reading.FromText(label).SubtitleBlock(Area).Lines);
+    }
+
+    /// <summary>Kısa gerçek konuşma ve görev yazısı kalır.</summary>
+    [Theory]
+    [InlineData("Yes.")]
+    [InlineData("Okay.")]
+    [InlineData("Why?")]
+    [InlineData("OKAY.")]
+    [InlineData("WHAT?")]
+    [InlineData("Talk to Andy")]
+    [InlineData("EXCLUSIVE: LEONIDA'S TOP SPOTS FOR A DECENT CATCH")]
+    [InlineData("はい")]
+    public void ShortSpeechIsKept(string speech)
+    {
+        Assert.False(ButtonPrompts.IsActionLabel(speech));
+        Assert.Equal(speech, new Reading([Line(speech, 0.4, 0.8, 0.6)]).SubtitleBlock(Area).Text);
+    }
+
+    [Fact]
+    public void ActionLabelBelowSubtitleDoesNotHideIt()
+    {
+        var reading = new Reading([
+            Line("Hey. Looking for Andy.", 0.35, 0.7, 0.65),
+            Line("TAKE AMMO PACK (0/3)", 0.42, 0.9, 0.58),
+        ]);
+        Assert.Equal("Hey. Looking for Andy.", reading.SubtitleBlock(Area).Text);
+    }
+
+    [Fact]
+    public void WrappedAllCapsSubtitleStaysTogether()
+    {
+        var reading = new Reading([Line("I TOLD YOU", 0.42, 0.7, 0.58), Line("NOT TO GO THERE.", 0.4, 0.78, 0.6)]);
+        Assert.Equal("I TOLD YOU\nNOT TO GO THERE.", reading.SubtitleBlock(Area).Text);
+    }
 }

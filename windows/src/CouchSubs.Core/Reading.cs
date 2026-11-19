@@ -131,10 +131,12 @@ public sealed class Reading
     /// gösteriliyordu. Satırlar yerlerine göre bloklara ayrılır; ortalanmış ve menü olmayan en alttaki blok altyazıdır.
     /// Ortalanmış blok yoksa en az üç sözcüklü, menü olmayan en alttaki blok alınır. Satırların yeri bilinmiyorsa
     /// okuma olduğu gibi kalır. <paramref name="area"/>, okunan alanın karedeki yeridir (Mac: Reading.subtitleBlock).
+    /// Tek satırlık etkileşim/HUD etiketi ("TAKE AMMO PACK (0/3)", <see cref="ButtonPrompts.IsActionLabel"/>) altyazı
+    /// bloğu sayılmaz.
     /// </summary>
     public Reading SubtitleBlock(TextBox area)
     {
-        if (Lines.Count == 0 || Lines.Any(line => line.Box is null)) return this;
+        if (Lines.Count == 0 || Lines.Any(line => line.Box is null)) return IsActionLabel ? Empty : this;
         var blocks = new List<List<TextLine>>();
         foreach (var line in Lines.OrderBy(line => line.Box!.Value.Top))
         {
@@ -143,7 +145,7 @@ public sealed class Reading
             if (index >= 0) blocks[index].Add(line);
             else blocks.Add([line]);
         }
-        var candidates = blocks.Select(block => new Reading(block)).Where(reading => !reading.IsMenu).ToList();
+        var candidates = blocks.Select(block => new Reading(block)).Where(reading => !reading.IsMenu && !reading.IsActionLabel).ToList();
         var centered = candidates.Where(reading =>
         {
             var box = reading.Box!.Value.PlacedIn(area);
@@ -167,6 +169,9 @@ public sealed class Reading
     /// <summary>Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil.</summary>
     internal bool IsMenu => Lines.Count >= 3 &&
         Lines.All(line => WordCount(line.Text) <= 3 && !SubtitleStabilizer.EndsSentence(line.Text));
+
+    /// <summary>Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").</summary>
+    internal bool IsActionLabel => Lines.Count == 1 && ButtonPrompts.IsActionLabel(Lines[0].Text);
 
     private static int WordCount(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
@@ -220,5 +225,20 @@ public static class ButtonPrompts
         if (Verbs.Contains(first) && tokens.Count is >= 2 and <= 10)
             return Buttons.Contains(tokens[1]) || Lookalikes.Contains(tokens[1]);
         return false;
+    }
+
+    /// <summary>
+    /// Etkileşim/HUD etiketi: en çok üç sözcük, hiç küçük harf yok (en az bir büyük harf var), cümle sonu noktalaması
+    /// yok. GTA 6'nın etkileşim yazıları ("TAKE AMMO PACK (0/3)", "• ADD TO TRUNK", "TURN ON") ve ekipman yazıları
+    /// ("BENCH PRESS") simgeleri harfe dönüşerek okunuyor, altyazı gibi çevriliyordu (#404). Konuşma altyazısı küçük
+    /// harf içerir ya da noktalamayla biter ("Yes.", "OKAY.", "WHAT?"); büyük/küçük harfi olmayan yazılara
+    /// (Japonca) dokunulmaz. Yalnız tek başına okunan satıra uygulanır: tümü büyük harfli altyazının sarılmış
+    /// satırı ("I TOLD YOU" / "NOT TO GO THERE.") bozulmaz (Mac: ButtonPrompts.isActionLabel).
+    /// </summary>
+    public static bool IsActionLabel(string line)
+    {
+        var words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Count(word => word.Any(char.IsLetter));
+        return words is >= 1 and <= 3 && line.Any(char.IsUpper) && !line.Any(char.IsLower) &&
+            !SubtitleStabilizer.EndsSentence(line);
     }
 }

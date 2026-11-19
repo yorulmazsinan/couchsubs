@@ -321,6 +321,34 @@ class OcrNoiseTest {
         assertTrue(ButtonPrompts.isPrompt("Press ✕ to jump"))
         assertFalse(ButtonPrompts.isPrompt("We go now, boy."))
     }
+
+    /** GTA 6 (#404): etkileşim ve ekipman yazıları tek başına okununca altyazı sayılmaz; kısa konuşma kalır. */
+    @Test
+    fun actionLabelsAreNotSubtitles() {
+        val area = TextBox(0.0, 0.6, 1.0, 1.0)
+        fun alone(text: String) = Reading(listOf(TextLine(text, TextBox(0.4, 0.8, 0.6, 0.87))))
+        for (label in listOf("TAKE AMMO PACK (0/3)", "SIT", "FRESHEN UP", "• ADD TO TRUNK", "> REMOVE FROM TRUNK",
+            "D STASH", "A TURN ON", "BEAST", "BENCH PRESS")) {
+            assertTrue(label, ButtonPrompts.isActionLabel(label))
+            assertEquals(label, "", alone(label).subtitleBlock(area).text)
+            assertEquals(label, "", Reading(listOf(TextLine(label))).subtitleBlock(area).text)
+        }
+        for (speech in listOf("Yes.", "Okay.", "Why?", "OKAY.", "WHAT?", "Talk to Andy", "はい",
+            "EXCLUSIVE: LEONIDA'S TOP SPOTS FOR A DECENT CATCH")) {
+            assertFalse(speech, ButtonPrompts.isActionLabel(speech))
+            assertEquals(speech, alone(speech).subtitleBlock(area).text)
+        }
+        val withSubtitle = Reading(listOf(
+            TextLine("Hey. Looking for Andy.", TextBox(0.35, 0.7, 0.65, 0.77)),
+            TextLine("TAKE AMMO PACK (0/3)", TextBox(0.42, 0.9, 0.58, 0.97)),
+        ))
+        assertEquals("Hey. Looking for Andy.", withSubtitle.subtitleBlock(area).text)
+        val wrapped = Reading(listOf(
+            TextLine("I TOLD YOU", TextBox(0.42, 0.7, 0.58, 0.77)),
+            TextLine("NOT TO GO THERE.", TextBox(0.4, 0.78, 0.6, 0.85)),
+        ))
+        assertEquals("I TOLD YOU\nNOT TO GO THERE.", wrapped.subtitleBlock(area).text)
+    }
 }
 
 /** Okuma hattı: paket satırı beklemeden gösterilir, motor yalnız paketsiz satırda çağrılır. */
