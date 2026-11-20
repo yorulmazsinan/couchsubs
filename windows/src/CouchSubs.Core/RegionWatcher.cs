@@ -537,24 +537,38 @@ public sealed partial class RegionWatcher
     /// </summary>
     private static List<ScreenTranslation.Group> AutoGroups(List<TextLine> lines, bool menuRows, bool menu = false)
     {
-        var shortLines = lines.Where(IsLabelLine).ToList();
-        var prose = lines.Where(line => !IsLabelLine(line)).ToList();
-        var groups = prose.Count == 0 ? [] : ScreenTranslation.GroupsFromLines(prose, menuRows).ToList();
-        // Arayüz yazısı perspektifsizdir: menü dışında satır yükseklikleri ±%15'ten çok farklı paragraf (eğik ya da
-        // ölçekli dünya yazısı: poster, tabela) çevrilmez.
-        if (!menu)
-            groups.RemoveAll(group =>
-            {
-                var heights = prose.Where(line => Inside(line.Box!.Value, group.Box)).Select(line => line.Box!.Value.Bottom - line.Box!.Value.Top).ToList();
-                return heights.Count >= 2 && heights.Max() > heights.Min() * (1.15 / 0.85);
-            });
-        foreach (var line in shortLines)
+        // Gruplar önce birlikte kurulur. Bütün satırları kısa etiket olan grup (menü, tuş çubuğu) satır satır blok olur;
+        // uzun satırı olan grup paragraf kalır, baştaki BÜYÜK HARF başlığı ayrı blok olur ("ROB VICKI'S BOSS" + gövde; gövdenin
+        // kısa son satırı "cash. Meet her at Delights." ayrı çevrilmiyordu).
+        var result = new List<ScreenTranslation.Group>();
+        static ScreenTranslation.Group Single(TextLine line)
         {
             var icons = ScreenTranslation.ParagraphIcons([line]);
-            groups.Add(new ScreenTranslation.Group(ScreenTranslation.Paragraphs([line]), line.Box!.Value,
-                line.Box!.Value.Bottom - line.Box!.Value.Top, icons.Any(list => list.Count > 0) ? icons : null));
+            return new ScreenTranslation.Group(ScreenTranslation.Paragraphs([line]), line.Box!.Value,
+                line.Box!.Value.Bottom - line.Box!.Value.Top, icons.Any(list => list.Count > 0) ? icons : null);
         }
-        return [.. groups.OrderBy(group => group.Box.Top).ThenBy(group => group.Box.Left)];
+        foreach (var group in ScreenTranslation.GroupsFromLines(lines, menuRows))
+        {
+            var members = lines.Where(line => Inside(line.Box!.Value, group.Box)).OrderBy(line => line.Box!.Value.Top).ToList();
+            if (members.Count == 0) { result.Add(group); continue; }
+            if (members.All(IsLabelLine))
+            {
+                result.AddRange(members.Select(Single));
+                continue;
+            }
+            var body = members;
+            if (members.Count >= 2 && IsLabelLine(members[0]) && TextStyleSampler.IsUpper(members[0].Text))
+            {
+                result.Add(Single(members[0]));
+                body = members.Skip(1).ToList();
+            }
+            // Arayüz yazısı perspektifsizdir: menü dışında satır yükseklikleri ±%15'ten çok farklı paragraf (eğik ya da
+            // ölçekli dünya yazısı: poster, tabela) çevrilmez.
+            var heights = body.Select(line => line.Box!.Value.Bottom - line.Box!.Value.Top).ToList();
+            if (!menu && heights.Count >= 2 && heights.Max() > heights.Min() * (1.15 / 0.85)) continue;
+            result.AddRange(body.Count == members.Count ? [group] : ScreenTranslation.GroupsFromLines(body, menuRows));
+        }
+        return [.. result.OrderBy(group => group.Box.Top).ThenBy(group => group.Box.Left)];
     }
 
     private static bool IsLabelLine(TextLine line) =>

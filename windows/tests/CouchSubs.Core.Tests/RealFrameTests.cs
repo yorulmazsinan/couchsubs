@@ -98,6 +98,8 @@ public class RealFrameTests(ITestOutputHelper output)
         foreach (var (label, sequence) in variants)
         {
             var detector = new ScreenTextDetector();
+            var lastDiagnosis = "";
+            detector.Diagnose = text => lastDiagnosis = text;
             var reader = new VisionReader();
             var translator = new Prefixed();
             var recorder = new Recorder();
@@ -128,6 +130,7 @@ public class RealFrameTests(ITestOutputHelper output)
             await File.WriteAllTextAsync(file, "[" + string.Join(",\n", recorder.Events.Select(item =>
                 $"{{\"event\":\"{item.Event}\",\"data\":{SubtitleServer.Json(item.Data)}}}")) + "]");
             report.AppendLine($"== {name}{label}: alanlar {string.Join(", ", detector.Areas.Select(area => $"{area.Id}{(area.Menu ? "(menü)" : "")} {Fmt(area.Region)}"))}");
+            report.AppendLine($"   bileşenler (son örnek): {lastDiagnosis}");
             report.AppendLine($"   okuma {reader.Reads}, çeviri isteği {translator.Requests} (ilk oturuşta {requestsAtSettle}), olay {recorder.Events.Count} (ilk oturuşta {settled})");
             foreach (var (ev, data) in recorder.Events)
                 report.AppendLine($"   {ev} {(data.TryGetValue("id", out var id) ? id : "")}: {(data.TryGetValue("text", out var text) ? ((string)text).Replace("\n", " ⏎ ") : "")}");

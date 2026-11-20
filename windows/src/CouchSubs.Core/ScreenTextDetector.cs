@@ -112,6 +112,11 @@ public sealed class ScreenTextDetector
     private int counter;
     private bool menu;
 
+    /// <summary>Tanı: her örnekte bileşenler, bölgeleri ve kanıtları (gerçek kare doğrulaması günlüğe yazar).</summary>
+    internal Action<string>? Diagnose { get; set; }
+
+    private static string Fmt(CropRegion r) => FormattableString.Invariant($"[{r.Left:0.00}-{r.Right:0.00} x {r.Top:0.00}-{r.Bottom:0.00}]");
+
     /// <summary>Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).</summary>
     public bool InMenu
     {
@@ -167,7 +172,18 @@ public sealed class ScreenTextDetector
             var all = Components(candidate);
             // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
             // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez.
-            var components = inMenu ? all : [.. all.Where(item => item.Tiles.Count >= 2 && IsInterface(item.Cells, item.Tiles, now))];
+            List<(Cells Cells, List<int> Tiles)> components;
+            if (inMenu) components = all;
+            else
+            {
+                // Bölgeleri kesişen bileşenler tek alan (tuş çubuğu iki alana bölünüp kesik okunuyordu); sütunda hizalı en az üç
+                // etiket (tuş çubuğu) dokulu zeminde de arayüzdür.
+                var (merged, aligned) = Merge([.. all.Where(item => item.Tiles.Count >= 2)]);
+                Diagnose?.Invoke(string.Join(", ", merged.Select((item, index) =>
+                    $"{Fmt(Region(item.Cells))}{(aligned[index] || RowsAligned(item.Tiles) ? " hizalı" : "")}{(IsInterface(item.Cells, item.Tiles, now) ? " panel" : "")}")));
+                components = [.. merged.Where((item, index) => IsInterface(item.Cells, item.Tiles, now)
+                                                             || ((aligned[index] || RowsAligned(item.Tiles)) && item.Tiles.All(tile => now - tiles[tile].StableSince >= UiStableMs)))];
+            }
             Update([.. components.OrderByDescending(item => item.Tiles.Count).Take(inMenu ? MenuMaxAreas : MaxAreas)], candidate, now, inMenu);
             return !before.SequenceEqual(Current());
         }
@@ -318,6 +334,91 @@ public sealed class ScreenTextDetector
             result.Add((cells, list));
         }
         return result;
+    }
+
+    /// <summary>
+    /// Tek bileşen içinde hizalı etiket sütunu: en az üç satırda karoların sağ (ya da sol) ucu aynı (±1 karo), öbür ucu
+    /// dağınık (etiketler farklı uzunlukta: tuş çubuğu "RECENTER / 3D VIEW / ADD MARKER"). Dokulu zeminde de arayüzdür.
+    /// </summary>
+    private static bool RowsAligned(List<int> component)
+    {
+        var rows = component.GroupBy(index => index / Columns)
+            .Select(row => (Left: row.Min(index => index % Columns), Right: row.Max(index => index % Columns))).ToList();
+        if (rows.Count < 3) return false;
+        int Spread(Func<(int Left, int Right), int> edge) => rows.Max(edge) - rows.Min(edge);
+        return (Spread(row => row.Right) <= 1 && Spread(row => row.Left) >= 2)
+            || (Spread(row => row.Left) <= 1 && Spread(row => row.Right) >= 2);
+    }
+
+    /// <summary>
+    /// Bileşenleri birleştirir: (1) bölgeleri kesişenler (yatayda en çok iki, dikeyde hiç boş karo arası), (2) sağ ya da
+    /// sol kenarı hizalı, aralarında en çok iki boş satır olan en az üç bileşen (sütundaki etiketler: tuş çubuğu). Birleşen
+    /// alan ekranın %35'ini aşarsa birleşmez. <c>Aligned</c>: hizalı etiket sütunu (arayüz kanıtı).
+    /// </summary>
+    private static (List<(Cells Cells, List<int> Tiles)> Components, List<bool> Aligned) Merge(List<(Cells Cells, List<int> Tiles)> input)
+    {
+        var items = input.Select(item => (item.Cells, Tiles: new List<int>(item.Tiles), Aligned: false)).ToList();
+        static Cells Join(Cells a, Cells b) => new(Math.Min(a.Left, b.Left), Math.Min(a.Top, b.Top), Math.Max(a.Right, b.Right), Math.Max(a.Bottom, b.Bottom));
+        bool Small(Cells cells) => cells.Area <= MaxShare * Columns * Rows;
+        for (var changed = true; changed;)
+        {
+            changed = false;
+            for (var i = 0; i < items.Count && !changed; i++)
+                for (var j = i + 1; j < items.Count && !changed; j++)
+                {
+                    var (a, b) = (items[i].Cells, items[j].Cells);
+                    var horizontal = Math.Max(a.Left, b.Left) - Math.Min(a.Right, b.Right) - 1;
+                    var vertical = Math.Max(a.Top, b.Top) - Math.Min(a.Bottom, b.Bottom) - 1;
+                    if (horizontal > 2 || vertical > 0 || !Small(Join(a, b))) continue;
+                    items[i] = (Join(a, b), [.. items[i].Tiles, .. items[j].Tiles], items[i].Aligned || items[j].Aligned);
+                    items.RemoveAt(j);
+                    changed = true;
+                }
+        }
+        // Hizalı etiket sütunları: sağ ya da sol kenarı aynı (±1 karo), üst üste dizili (aralarında en çok 2 boş satır).
+        foreach (var right in new[] { true, false })
+        {
+            var ordered = items.Select((item, index) => (item, index)).OrderBy(pair => pair.item.Cells.Top).ToList();
+            var used = new HashSet<int>();
+            foreach (var (start, startIndex) in ordered)
+            {
+                if (used.Contains(startIndex)) continue;
+                var stack = new List<int> { startIndex };
+                var last = start.Cells;
+                var edge = right ? start.Cells.Right : start.Cells.Left;
+                foreach (var (next, nextIndex) in ordered)
+                {
+                    if (nextIndex == startIndex || used.Contains(nextIndex) || next.Cells.Top <= last.Bottom) continue;
+                    if (next.Cells.Top - last.Bottom - 1 > 2) break;
+                    if (Math.Abs((right ? next.Cells.Right : next.Cells.Left) - edge) > 1) continue;
+                    stack.Add(nextIndex);
+                    last = next.Cells;
+                }
+                if (stack.Count < 3) continue;
+                var cells = stack.Select(index => items[index].Cells).Aggregate(Join);
+                if (!Small(cells)) continue;
+                foreach (var index in stack) used.Add(index);
+            }
+            if (used.Count == 0) continue;
+            // Her yığın tek alan olur.
+            var groups = new List<List<int>>();
+            foreach (var index in used.OrderBy(index => items[index].Cells.Top))
+            {
+                var group = groups.FirstOrDefault(list =>
+                {
+                    var bottom = list.Max(member => items[member].Cells.Bottom);
+                    var edge = right ? items[list[0]].Cells.Right : items[list[0]].Cells.Left;
+                    return items[index].Cells.Top - bottom - 1 <= 2 && Math.Abs((right ? items[index].Cells.Right : items[index].Cells.Left) - edge) <= 1;
+                });
+                if (group is null) groups.Add([index]);
+                else group.Add(index);
+            }
+            var next0 = items.Where((_, index) => !used.Contains(index)).ToList();
+            foreach (var group in groups)
+                next0.Add((group.Select(index => items[index].Cells).Aggregate(Join), [.. group.SelectMany(index => items[index].Tiles)], group.Count >= 3));
+            items = next0;
+        }
+        return ([.. items.Select(item => (item.Cells, item.Tiles))], [.. items.Select(item => item.Aligned)]);
     }
 
     /// <summary>
