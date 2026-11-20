@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "The language pack could not be downloaded (%@). Try again, or download it in Settings › Apps › Translate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The language pack could not be downloaded (%@). Try again, or download it in Settings › Apps › Translate."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dil paketi indirilemedi (%@). Yeniden deneyin ya da Ayarlar › Uygulamalar › Çeviri'den indirin."
+          }
+        }
+      }
+    },
     "Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).": {
       "localizations": {
         "en": {
