@@ -236,6 +236,28 @@ public final class RegionWatcher {
             }
             return
         }
+        if GameAreaPresets.isPreset(area.id), !UiPanel.hasText(crop) {
+            // Hazır alanda arayüz kutusu yok (PS5 ana ekranı, başka oyun, oyun dünyası): OCR çalışmaz, gösterilen kutu kalkar.
+            state.candidate = nil
+            state.lastRead = nil
+            let wasShown = !state.shown.isEmpty
+            state.shown = ""
+            state.shownText = ""
+            state.shownIcons = 0
+            state.renderedKey = nil
+            state.renderedText = nil
+            state.renderedIcons = nil
+            state.renderedBox = nil
+            state.renderedLineHeight = nil
+            state.renderedLayout = nil
+            state.renderedBlocks = nil
+            states[area.id] = state
+            if wasShown {
+                server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+                onLog?("ek alan \(area.name): arayüz kutusu yok, kaldırıldı")
+            }
+            return
+        }
         let started = now()
         let reader = self.reader
         let reading = try? await ReadQueue.shared.run { try reader.readLines(crop, deep: false) }
