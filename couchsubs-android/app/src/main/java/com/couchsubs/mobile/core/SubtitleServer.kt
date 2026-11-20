@@ -142,6 +142,7 @@ class SubtitleServer(
             id: String, text: String, box: TextBox?, lineHeight: Double?, icons: List<IconPlacement>? = null,
             blocks: List<ScreenTranslation.Item>? = null,
         ): String {
+            val (text, blocks) = guarded(text, box, blocks)
             val json = mutableMapOf<String, Any?>("id" to id, "text" to text)
             if (!icons.isNullOrEmpty()) json["icons"] = iconsJson(icons)
             // Alanda ayrı duran yazı gruplarının çevirileri kendi yerleriyle; eski TV uygulamaları birleşik `text`'i gösterir.
@@ -156,7 +157,33 @@ class SubtitleServer(
          * çok parçalıysa `paragraphs` ile gider (Mac/iPhone `screen` olayı ile aynı). TV öncekinin yerine bunları koyar.
          */
         fun screenFrame(items: List<ScreenTranslation.Item>, durationMs: Int): String {
-            return frame("screen", mapOf("duration" to durationMs, "items" to items.map { itemJson(it) }))
+            val kept = items.filter { area(it.box) <= MAX_BOX_AREA }
+            return frame("screen", mapOf("duration" to durationMs, "items" to kept.map { itemJson(it) }))
+        }
+
+        /**
+         * Ekranın bu oranından büyük çeviri kutusu gönderilmez. TV ve OBS kutuyu opak zeminle çizer; yanlış bir algılamanın
+         * (otomatik ekran yazısı) ekranın büyük kısmını kaplayan kutusu oyun görüntüsünü kapatıyordu (LG'de "siyah ekran,
+         * ses var"). Windows: SubtitleServer.MaxBoxArea, Mac/iPhone: SubtitleServer.maxBoxArea.
+         */
+        const val MAX_BOX_AREA = 0.4
+
+        fun area(box: TextBox) = maxOf(0.0, box.right - box.left) * maxOf(0.0, box.bottom - box.top)
+
+        /**
+         * Büyük kutu koruması: alanı [MAX_BOX_AREA]'dan büyük bloklar atılır; blokların toplamı da sınırı aşıyorsa ya da
+         * bloksuz alanın kutusu sınırdan büyükse alan boş gönderilir (TV kutuyu kaldırır).
+         */
+        fun guarded(text: String, box: TextBox?, blocks: List<ScreenTranslation.Item>?): Pair<String, List<ScreenTranslation.Item>?> {
+            if (text.isEmpty()) return text to blocks
+            var rest = blocks
+            if (!blocks.isNullOrEmpty()) {
+                val kept = blocks.filter { area(it.box) <= MAX_BOX_AREA }
+                if (kept.sumOf { area(it.box) } > MAX_BOX_AREA) return "" to null
+                if (kept.isNotEmpty()) return text to kept
+                rest = null
+            }
+            return if (box != null && area(box) > MAX_BOX_AREA) "" to null else text to rest
         }
 
         /** Yeriyle bir çeviri ("Ekranı çevir" öğesi ya da ek alan bloğu). */

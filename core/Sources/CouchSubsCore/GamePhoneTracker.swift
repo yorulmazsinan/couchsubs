@@ -16,11 +16,31 @@ public final class GamePhoneTracker {
     public func sample(_ image: CGImage, now: Int) -> (sampled: Bool, pose: GamePhoneGeometry.Pose?) {
         if let lastTime, now >= lastTime, now - lastTime < Self.intervalMs { return (false, shown) }
         lastTime = now
-        let found = locate(image)
+        // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (menüde ya da koyu ekranda yanlış
+        // eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı (Windows ile aynı).
+        var found = locate(image)
+        if let pose = found, !Self.plausible(pose.bounds, width: image.width, height: image.height) { found = nil }
         if let found, let previous, found.bounds.isClose(to: previous.bounds, tolerance: 0.035) { shown = found }
         else { shown = nil }
         previous = found
         return (true, shown)
+    }
+
+    /// Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı.
+    static let minArea = 0.04, maxArea = 0.35
+
+    /// Telefon kutusu akla yatkın mı: alanı karenin %4–%35'i, piksel olarak dikey (yükseklik/genişlik 0,9–2,6; eğik
+    /// telefonun sınır kutusu dikey telefondan geniştir), yüksekliği karenin en çok %85'i, genişliği en çok yarısı, merkezi karenin sol kenarında ya da üst üçte birinde değil.
+    static func plausible(_ region: CropRegion, width: Int, height: Int) -> Bool {
+        let w = region.right - region.left, h = region.bottom - region.top
+        guard w > 0, h > 0, h <= 0.85, w <= 0.5 else { return false }
+        let area = w * h
+        guard area >= minArea, area <= maxArea else { return false }
+        if width >= 64 {
+            let aspect = h * Double(max(1, height)) / (w * Double(max(1, width)))
+            guard aspect >= 0.9, aspect <= 2.6 else { return false }
+        }
+        return (region.left + region.right) / 2 >= 0.35 && (region.top + region.bottom) / 2 >= 1.0 / 3
     }
 
     public func reset() {

@@ -323,6 +323,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// </summary>
     public void SendScreen(IReadOnlyList<ScreenTranslation.Item> items, int durationMs)
     {
+        items = [.. items.Where(item => Area(item.Box) <= MaxBoxArea)];
         var list = items.Select(item => ItemJson(item, phone: false)).ToList();
         Broadcast(Frame("screen", new SortedDictionary<string, object> { ["duration"] = durationMs, ["items"] = list }), subtitle: true);
         // Altyazı yalnız bilgisayardaysa (TV yok) çeviriler başka hiçbir yere gitmiyordu: tuşa basınca yalnız
@@ -355,9 +356,37 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     public void SendRegion(string id, string text, TextBox? box, double? lineHeight, IReadOnlyList<IconPlacement>? icons,
                            IReadOnlyList<ScreenTranslation.Item>? blocks)
     {
+        (text, blocks) = Guard(text, box, blocks);
         Broadcast(Frame("region", RegionData(id, text, box, lineHeight, icons, blocks)), subtitle: true);
         EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Region, text, Id: id, Box: box,
                                             Blocks: blocks is { Count: > 0 } && text.Length > 0 ? blocks : null));
+    }
+
+    /// <summary>
+    /// Ekranın bu oranından büyük çeviri kutusu gönderilmez. TV ve OBS kutuyu opak zeminle çizer; yanlış bir algılamanın
+    /// (oyun telefonu, otomatik ekran yazısı) ekranın büyük kısmını kaplayan kutusu oyun görüntüsünü kapatıyordu
+    /// (LG'de "siyah ekran, ses var").
+    /// </summary>
+    internal const double MaxBoxArea = 0.4;
+
+    internal static double Area(TextBox box) => Math.Max(0, box.Right - box.Left) * Math.Max(0, box.Bottom - box.Top);
+
+    /// <summary>
+    /// Büyük kutu koruması: alanı <see cref="MaxBoxArea"/>'dan büyük bloklar atılır; blokların toplamı da sınırı aşıyorsa
+    /// ya da bloksuz alanın kutusu sınırdan büyükse alan boş gönderilir (TV kutuyu kaldırır).
+    /// </summary>
+    internal static (string Text, IReadOnlyList<ScreenTranslation.Item>? Blocks) Guard(string text, TextBox? box,
+        IReadOnlyList<ScreenTranslation.Item>? blocks)
+    {
+        if (text.Length == 0) return (text, blocks);
+        if (blocks is { Count: > 0 })
+        {
+            var kept = blocks.Where(item => Area(item.Box) <= MaxBoxArea).ToList();
+            if (kept.Sum(item => Area(item.Box)) > MaxBoxArea) return ("", null);
+            if (kept.Count > 0) return (text, kept.Count == blocks.Count ? blocks : kept);
+            blocks = null;
+        }
+        return box is { } b && Area(b) > MaxBoxArea ? ("", null) : (text, blocks);
     }
 
     /// <summary><c>region</c> olayının verisi (TV'ye gidenin aynısı; gerçek kare doğrulaması da bunu döker).</summary>

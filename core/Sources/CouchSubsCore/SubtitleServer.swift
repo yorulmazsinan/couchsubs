@@ -371,6 +371,7 @@ public final class SubtitleServer: @unchecked Sendable {
     /// kumanda simgeleri varsa `icons` her simgenin düz metindeki yerini (`at`) ve PNG'sini (`src`) taşır; eski TV
     /// uygulamaları alanı yok sayıp düz metni gösterir (Windows ile aynı).
     public func sendScreen(_ items: [ScreenTranslation.Item], durationMs: Int) {
+        let items = items.filter { Self.area($0.box) <= Self.maxBoxArea }
         broadcast(event: "screen", json: ["duration": durationMs, "items": items.map { Self.json($0) }])
         // Altyazı yalnız bilgisayardaysa (TV yok) çeviriler başka hiçbir yere gitmiyordu: tuşa basınca yalnız
         // "Ekran çevriliyor…" görünüyordu.
@@ -395,6 +396,7 @@ public final class SubtitleServer: @unchecked Sendable {
     /// uygulamaları birleşik `text`'i tek kutuda gösterir (Windows ile aynı).
     public func sendRegion(id: String, text: String, box: TextBox?, lineHeight: Double?, icons: [IconPlacement]?,
                            blocks: [ScreenTranslation.Item]?) {
+        let (text, blocks) = Self.guarded(text: text, box: box, blocks: blocks)
         var json: [String: Any] = ["id": id, "text": text]
         if let icons, !icons.isEmpty { json["icons"] = Self.json(icons) }
         if let blocks, !blocks.isEmpty, !text.isEmpty { json["blocks"] = blocks.map { Self.json($0, phone: id == "game-phone") } }
@@ -405,6 +407,28 @@ public final class SubtitleServer: @unchecked Sendable {
         else if let blocks, !blocks.isEmpty, !text.isEmpty, blocks.contains(where: { $0.look != nil }) {
             onEvent?(.screenText(id: id, items: blocks))
         } else { onEvent?(.region(id: id, text: text, box: box)) }
+    }
+
+    /// Ekranın bu oranından büyük çeviri kutusu gönderilmez. TV ve OBS kutuyu opak zeminle çizer; yanlış bir algılamanın
+    /// (oyun telefonu, otomatik ekran yazısı) ekranın büyük kısmını kaplayan kutusu oyun görüntüsünü kapatıyordu
+    /// (LG'de "siyah ekran, ses var"). Windows: SubtitleServer.MaxBoxArea, Android: SubtitleServer.MAX_BOX_AREA.
+    public static let maxBoxArea = 0.4
+
+    static func area(_ box: TextBox) -> Double { max(0, box.right - box.left) * max(0, box.bottom - box.top) }
+
+    /// Büyük kutu koruması: alanı `maxBoxArea`'dan büyük bloklar atılır; blokların toplamı da sınırı aşıyorsa ya da
+    /// bloksuz alanın kutusu sınırdan büyükse alan boş gönderilir (TV kutuyu kaldırır).
+    static func guarded(text: String, box: TextBox?, blocks: [ScreenTranslation.Item]?) -> (String, [ScreenTranslation.Item]?) {
+        guard !text.isEmpty else { return (text, blocks) }
+        var blocks = blocks
+        if let all = blocks, !all.isEmpty {
+            let kept = all.filter { area($0.box) <= maxBoxArea }
+            if kept.reduce(0, { $0 + area($1.box) }) > maxBoxArea { return ("", nil) }
+            if !kept.isEmpty { return (text, kept) }
+            blocks = nil
+        }
+        if let box, area(box) > maxBoxArea { return ("", nil) }
+        return (text, blocks)
     }
 
     /// Bütün ek alan kutularını kaldırır.

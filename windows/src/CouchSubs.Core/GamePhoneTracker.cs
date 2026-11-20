@@ -30,6 +30,9 @@ public sealed class GamePhoneTracker
             pose = GamePhoneGeometry.TryLocate(frame, out var found) ? found : null;
             candidate = pose?.Bounds;
         }
+        // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (ör. menüde ya da koyu ekranda
+        // yanlış eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı.
+        if (candidate is not null && !Plausible(candidate, frame)) candidate = null;
         shown = candidate is not null && previous is not null && candidate.IsClose(previous, 0.035)
             ? candidate : null;
         shownPose = shown is null ? null : pose;
@@ -39,6 +42,26 @@ public sealed class GamePhoneTracker
     }
 
     public WatchedArea WithPose(WatchedArea area) => area with { PhonePose = shownPose };
+
+    /// <summary>Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı.</summary>
+    internal const double MinArea = 0.04, MaxArea = 0.35;
+
+    /// <summary>
+    /// Telefon kutusu akla yatkın mı: alanı karenin %4–%35'i, piksel olarak dikey (yükseklik/genişlik 0,9–2,6; eğik
+    /// telefonun sınır kutusu dikey telefondan geniştir), yüksekliği karenin en çok %85'i, genişliği en çok yarısı, merkezi karenin sol kenarında ya da üst üçte birinde değil.
+    /// </summary>
+    internal static bool Plausible(CropRegion region, Frame frame)
+    {
+        double width = region.Right - region.Left, height = region.Bottom - region.Top;
+        if (width <= 0 || height <= 0 || height > 0.85 || width > 0.5) return false;
+        double area = width * height;
+        if (area < MinArea || area > MaxArea) return false;
+        double aspect = height * Math.Max(1, frame.Height) / (width * Math.Max(1, frame.Width));
+        // Test karelerinde (2x2) en-boy anlamsız; gerçek kare 16:9'dur.
+        if (frame.Width >= 64 && (aspect < 0.9 || aspect > 2.6)) return false;
+        double centerX = (region.Left + region.Right) / 2, centerY = (region.Top + region.Bottom) / 2;
+        return centerX >= 0.35 && centerY >= 1.0 / 3;
+    }
 
     public void Reset()
     {

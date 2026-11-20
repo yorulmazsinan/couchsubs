@@ -222,7 +222,7 @@ public class RealFrameTests(ITestOutputHelper output)
     }
 
     /// <summary>En küçük PNG okuyucu (8 bit RGB/RGBA, taramasız): BGRA kare.</summary>
-    private static class Png
+    internal static class Png
     {
         public static Frame Load(string path)
         {

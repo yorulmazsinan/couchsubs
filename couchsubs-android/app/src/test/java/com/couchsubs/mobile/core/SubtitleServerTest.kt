@@ -115,4 +115,18 @@ class SubtitleServerTest {
         server.clear()
         assertEquals(listOf(SubtitleEvent.Subtitle("Merhaba", 1000), SubtitleEvent.Cleared), events)
     }
+
+    /** Ekranın büyük kısmını kaplayan opak kutu TV'ye gitmez (LG'de "siyah ekran"; Windows/Mac ile aynı kural). */
+    @Test
+    fun dropsBoxesCoveringMostOfTheScreen() {
+        fun item(box: TextBox) = ScreenTranslation.Item("Hi", "Selam", box, 0.03)
+        val small = item(TextBox(0.5, 0.5, 0.6, 0.55))
+        val huge = item(TextBox(0.0, 0.0, 1.0, 0.9))
+        assertEquals("Selam" to listOf(small), SubtitleServer.guarded("Selam", TextBox(0.0, 0.0, 1.0, 0.9), listOf(small, huge)))
+        assertEquals("", SubtitleServer.guarded("Selam", TextBox(0.0, 0.0, 1.0, 1.0), null).first)
+        val many = (0 until 10).map { item(TextBox(0.0, it * 0.1, 0.5, it * 0.1 + 0.1)) }
+        assertEquals("", SubtitleServer.guarded("y", TextBox(0.0, 0.0, 0.5, 1.0), many).first)
+        assertEquals("Görev" to null, SubtitleServer.guarded("Görev", TextBox(0.7, 0.05, 0.95, 0.1), null))
+        assertFalse(SubtitleServer.regionFrame("auto-1", "Selam", TextBox(0.0, 0.0, 1.0, 1.0), 0.03).contains("Selam"))
+    }
 }
