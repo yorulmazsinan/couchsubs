@@ -83,6 +83,8 @@ data class ExtraArea(
     val id: String = UUID.randomUUID().toString(), val name: String, val region: CropRegion, val enabled: Boolean = true,
     /** Ekran yazısı bulucusunun ([ScreenTextDetector]) geçici alanı; kaydedilmez, gürültüsü elenir, sık okunur. */
     val auto: Boolean = false,
+    /** Otomatik alan menü durumunda bulundu: kısa etiketler de çevrilir ([ScreenTextNoise]). */
+    val menu: Boolean = false,
 ) {
     companion object {
         /** En çok bu kadar ek alan tanımlanır (her biri saniyede bir okunur). */
@@ -266,6 +268,9 @@ class RegionWatcher(
         /** Otomatik ekran yazısı alanı varken iki tur arasındaki en uzun süre. */
         const val AUTO_INTERVAL_MS = 500L
 
+        /** Oturum terim sözlüğünde en çok bu kadar etiket tutulur. */
+        private const val SESSION_TERMS = 2000
+
         /**
          * Ekrandakinden yalnız biraz farklı (ya da eksik) kararlı okuma en çok bu kadar tur bekletilir; o hâlde kalırsa
          * gerçekten değişmiş sayılır ve gösterilir (görevin tek sözcüğü değişebilir: "Go to the barn" → "Go to the bank").
@@ -326,8 +331,10 @@ class RegionWatcher(
          * Okumadan çevrilecek parçalar, kutusu (kareye oranla) ve satır yüksekliği. Yazının içindeki kumanda simgeleri
          * [frame]'den (okunan alan) kesilir; çeviride yerleri korunur.
          */
-        fun candidate(reading: Reading, region: CropRegion, frame: GrayFrame? = null): Candidate {
-            val lines = reading.withButtonIcons().withoutButtonPrompts().withoutOcrNoise().lines
+        fun candidate(reading: Reading, region: CropRegion, frame: GrayFrame? = null, keepPrompts: Boolean = false): Candidate {
+            val marked = reading.withButtonIcons()
+            // Menüdeki tuş etiketleri ("HOLSTER (L1)", "SELECT ✕") menü durumunda çevrilir; başka yerde kısa ipucu atılır.
+            val lines = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
                 .filter { ScreenText.isWords(it.text) }
                 .sortedBy { it.box?.top ?: 0.0 }
             var paragraphs = ScreenText.paragraphs(lines)
@@ -343,7 +350,7 @@ class RegionWatcher(
             // satır varsa) eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar
             // yeniden kurulur.
             var blocks: List<Block>? = null
-            val groups = if (lines.size > 1 && boxes.size == lines.size) ScreenTranslation.groups(reading) else emptyList()
+            val groups = if (lines.size > 1 && boxes.size == lines.size) ScreenTranslation.groups(reading, keepPrompts) else emptyList()
             if (groups.size > 1 && groups.size < ScreenTranslation.MAX_GROUPS) {
                 paragraphs = groups.flatMap { it.paragraphs }
                 icons = groups.flatMap { group -> group.icons ?: group.paragraphs.map { emptyList<IconSlot>() } }
@@ -369,7 +376,7 @@ class RegionWatcher(
          */
         internal fun styled(candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?): Candidate {
             if (frame == null) return candidate
-            val blocks = candidate.blocks ?: run {
+            val groups = candidate.blocks ?: run {
                 val box = candidate.box ?: return candidate
                 val line = candidate.lineHeight ?: return candidate
                 listOf(Block(0, candidate.paragraphs.size, box, line))
@@ -377,21 +384,59 @@ class RegionWatcher(
             val width = region.right - region.left
             val height = region.bottom - region.top
             if (width <= 0 || height <= 0) return candidate
-            val lines = reading.lines.mapNotNull { line -> line.box?.placedIn(region.box) }
-            val styles = blocks.map { block ->
+            val lines = reading.lines.mapNotNull { line -> line.box?.placedIn(region.box) }.sortedBy { it.top }
+            fun inside(line: TextBox, box: TextBox) =
+                (line.top + line.bottom) / 2 in box.top..box.bottom && (line.left + line.right) / 2 in box.left..box.right
+            val blocks = mutableListOf<Block>()
+            val aligns = mutableListOf<String?>()
+            for (group in groups) {
+                val own = lines.filter { inside(it, group.box) }
+                // Hizalama grubun satırlarından (sağa yaslı kontrol etiketleri, ortalı başlık).
+                val align = if (own.size >= 2) TextStyleSampler.align(own.map { it.left to it.right })
+                    else own.singleOrNull()?.let { columnAlign(it, lines) }
+                if (group.count > 1 && own.size == group.count) {
+                    // Her satır bir parça (menü listesi): stil satır başına çıkarılır, seçili satır ters renkli olabilir.
+                    own.forEachIndexed { i, line ->
+                        blocks.add(Block(group.start + i, 1, line, line.bottom - line.top))
+                        aligns.add(align)
+                    }
+                } else {
+                    blocks.add(group)
+                    aligns.add(align)
+                }
+            }
+            val styles = blocks.mapIndexed { index, block ->
                 val box = block.box
                 val source = (block.start until block.start + block.count).joinToString("\n") { IconText.plain(candidate.paragraphs[it]) }
-                val edges = lines.filter { (it.top + it.bottom) / 2 in box.top..box.bottom && (it.left + it.right) / 2 in box.left..box.right }
-                    .map { it.left to it.right }
+                val edges = lines.filter { inside(it, box) }.map { it.left to it.right }
                 TextStyleSampler.sample(
                     frame,
                     ((box.left - region.left) / width * frame.width).toInt(), ((box.top - region.top) / height * frame.height).toInt(),
                     kotlin.math.ceil((box.right - region.left) / width * frame.width).toInt(),
                     kotlin.math.ceil((box.bottom - region.top) / height * frame.height).toInt(),
                     block.lineHeight / height * frame.height, source, edges,
-                )
+                )?.let { style -> aligns[index]?.let { style.copy(look = style.look.copy(align = it)) } ?: style }
             }
             return candidate.copy(blocks = blocks, styles = styles)
+        }
+
+        /**
+         * Tek satırlık etiketin hizası, aynı sütundaki komşularından: sağ kenarları aynı olan etiketler sağa yaslıdır
+         * (kontrol şemasında kol resminin solu), sol kenarları aynı olanlar sola, ortaları aynı olanlar ortalıdır.
+         */
+        private fun columnAlign(line: TextBox, lines: List<TextBox>): String? {
+            val tolerance = 0.005
+            val others = lines.filter { it != line }
+            fun count(edge: (TextBox) -> Double) = others.count { abs(edge(it) - edge(line)) <= tolerance }
+            val lefts = count { it.left }
+            val rights = count { it.right }
+            val centers = count { (it.left + it.right) / 2 }
+            return when {
+                lefts == 0 && rights == 0 && centers == 0 -> null
+                rights > lefts && rights >= centers -> "right"
+                centers > lefts -> "center"
+                else -> "left"
+            }
         }
 
         internal fun renderBlocks(
@@ -428,6 +473,8 @@ class RegionWatcher(
         val icons: List<List<IconSlot>>? = null, val blocks: List<Block>? = null, val text: String = "",
         /** Otomatik ekran yazısında her bloğun özgün görünüşü ([styled]); diğer alanlarda null. */
         val styles: List<TextStyleSampler.Style?>? = null,
+        /** Otomatik ekran yazısı: kısa etiketler sözlük, oturum terimleri ve toplu istekle çevrilir ([translateAuto]). */
+        val auto: Boolean = false,
     )
 
     private class State {
@@ -452,6 +499,8 @@ class RegionWatcher(
         var renderedLayout: List<Block>? = null
         /** Gönderilen bloklar ve her birinin [Candidate.blocks] içindeki sırası. */
         var renderedBlocks: List<Pair<Int, ScreenTranslation.Item>>? = null
+        /** Gönderilen blokların özgün görünüşü; seçim gezince yalnız renkler yeniden gönderilir. */
+        var renderedStyles: List<TextStyleSampler.Style?>? = null
     }
 
     private val lock = Any()
@@ -557,16 +606,16 @@ class RegionWatcher(
         }
         if (started != session) return
         reads++
-        var candidate = candidate(reading, area.region, crop.frame)
+        var candidate = candidate(reading, area.region, crop.frame, keepPrompts = area.menu)
         if (area.auto) {
-            if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) })) {
+            if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) }, area.menu)) {
                 // Sayaç, harita, kısa etiket ya da yazısız kutu: çevrilmez; alan bir sonraki turda listeden çıkar.
                 state.candidate = null
                 state.lastRead = null
                 onAutoRejected?.invoke(area.id)
                 return
             }
-            candidate = styled(candidate, reading, area.region, crop.frame)
+            candidate = styled(candidate, reading, area.region, crop.frame).copy(auto = true)
         }
         if (state.lastRead == candidate.key) {
             state.candidate = null
@@ -624,17 +673,21 @@ class RegionWatcher(
             val text = state.renderedText
             if (state.renderedKey != candidate.key || text.isNullOrEmpty()) return
             if (state.renderedBox == candidate.box && state.renderedLineHeight == candidate.lineHeight &&
-                state.renderedLayout == candidate.blocks) return
+                state.renderedLayout == candidate.blocks && state.renderedStyles == candidate.styles) return
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
+            // Menüde seçim gezince (satırın zemini ve yazı rengi değişti) çeviri yeniden istenmez, yalnız renkler gider.
             val current = candidate.blocks
             val moved = if (current == null) null else state.renderedBlocks?.map { (group, item) ->
-                group to item.copy(box = current[group].box, lineHeight = current[group].lineHeight)
+                val style = candidate.styles?.getOrNull(group)
+                group to item.copy(box = current[group].box, lineHeight = current[group].lineHeight,
+                    surface = style?.surface ?: item.surface, look = style?.look ?: item.look)
             }
             send { sender.sendRegion(area.id, text, candidate.box, candidate.lineHeight, state.renderedIcons, moved?.map { it.second }) }
             state.renderedBox = candidate.box
             state.renderedLineHeight = candidate.lineHeight
             state.renderedLayout = candidate.blocks
             state.renderedBlocks = moved
+            state.renderedStyles = candidate.styles
             return
         }
         if (shouldHold(candidate, state)) {
@@ -714,6 +767,7 @@ class RegionWatcher(
             state.renderedLineHeight = candidate.lineHeight
             state.renderedLayout = candidate.blocks
             state.renderedBlocks = blocks
+            state.renderedStyles = candidate.styles
         }
         state.renderedKey = candidate.key
     }
@@ -743,7 +797,7 @@ class RegionWatcher(
         // Aynı çevirmen örneğinin bağlamına iki iş parçacığı birden yazmasın.
         val engine = if (speculative) prefetchTranslator else translator
         val task = Pending(Callable {
-            synchronized(engine) { translateNow(key, engine, started) }
+            synchronized(engine) { if (candidate.auto) translateAuto(key, engine, started) else translateNow(key, engine, started) }
         }) { failed ->
             synchronized(translations) { if (translations[key] === failed) translations.remove(key) }
         }
@@ -760,6 +814,61 @@ class RegionWatcher(
             packLookup?.invoke(IconText.plain(paragraph))?.text
                 ?: if (skipsTurkish && TurkishText.isSure(paragraph)) paragraph else engine.translate(prepared[i].text)
         }
+    }
+
+    /**
+     * Oturum terim sözlüğü (korunmuş kaynak → çeviri): aynı kısa etiket hep aynı çeviriyle gösterilir ("MAP" iki yerde
+     * de "HARİTA"), aynı menüye dönüşte çevirmene gidilmez. Oyun değişince de korunur (aynı çeviri oturumu).
+     */
+    private val sessionTerms = LinkedHashMap<String, String>()
+
+    /** Sayaç ("1 / 3", "5 / 9", "100%") ya da tuş adı (L1, R3, △): çevrilmez, olduğu gibi kalır. */
+    private val untouched = Regex("^(?:[LR][123]?|[△□○✕×]|[\\p{N}\\p{P}\\p{S}\\s]+)$")
+
+    /**
+     * Otomatik ekran yazısının çevirisi (yoğun menüler: kontrol şeması, duraklatma menüsü). " / " ile ayrılan etiket
+     * parça parça çevrilir; sayaçlar ve tuş adları dokunulmaz kalır. Her parça önce arayüz sözlüğü ([UiCommands]),
+     * oturum terimleri ve oyun paketinde aranır; kalanların hepsi TEK toplu istekle ([TextTranslator.translateAll])
+     * çevrilir.
+     */
+    private fun translateAuto(paragraphs: List<String>, engine: TextTranslator, started: Int): List<String> {
+        val prepared = paragraphs.map { IconText.protect(it) }
+        class Piece(val text: String, val names: List<String>, var result: String? = null)
+        val pieces = prepared.map { protected ->
+            protected.text.split(" / ").map { part ->
+                Piece(part, protected.names.filter { part.contains(it) }.sortedBy { part.indexOf(it) })
+            }
+        }
+        val missing = mutableListOf<Piece>()
+        for (piece in pieces.flatten()) {
+            val marked = piece.names.fold(piece.text) { text, name -> text.replace(name, ButtonIcons.MARKER.toString()) }
+            val plain = IconText.plain(marked).trim()
+            piece.result = when {
+                plain.isEmpty() || untouched.matches(plain) -> piece.text
+                else -> UiCommands.translate(marked)?.let { ui ->
+                    // Sözlük çevirisindeki simge imleri yeniden adlara döner (çevirinin simge yerleri korunur).
+                    var k = 0
+                    buildString { for (c in ui) if (c == ButtonIcons.MARKER && k < piece.names.size) append(piece.names[k++]) else append(c) }
+                } ?: synchronized(sessionTerms) { sessionTerms[piece.text] }
+                    ?: packLookup?.invoke(plain)?.text
+                    ?: if (skipsTurkish && TurkishText.isSure(plain)) piece.text else null
+            }
+            if (piece.result == null) missing.add(piece)
+        }
+        if (missing.isNotEmpty()) {
+            if (started != session) throw CancellationException()
+            val unique = missing.map { it.text }.distinct()
+            val translated = if (unique.size == 1) listOf(engine.translate(unique[0])) else engine.translateAll(unique)
+            val found = unique.zip(translated).toMap()
+            synchronized(sessionTerms) {
+                for ((source, target) in found) {
+                    sessionTerms[source] = target
+                    if (sessionTerms.size > SESSION_TERMS) sessionTerms.remove(sessionTerms.keys.first())
+                }
+            }
+            missing.forEach { it.result = found[it.text] ?: it.text }
+        }
+        return pieces.map { parts -> parts.joinToString(" / ") { it.result!! } }
     }
 
     /** Çeviri durdu: süren tur bırakılır, TV'deki ek alan kutuları kalkar. */

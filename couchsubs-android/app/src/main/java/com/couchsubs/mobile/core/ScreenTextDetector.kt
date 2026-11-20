@@ -30,6 +30,14 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         const val MAX_AREAS = 4
         const val MAX_COVER = 0.35
         const val NAME = "Screen text"
+        /** Menü durumu: en az bu kadar bileşen aynı 300 ms içinde belirip duruyor. */
+        const val MENU_COMPONENTS = 3
+        /** Menü durumu: bileşenlerin dışındaki karoların en az bu kadarı bulanık/karartılmış (düşük sapmalı). */
+        const val MENU_CALM_SHARE = 0.60
+        /** Bulanık karo: noktalarının parlaklık sapması bundan küçük. */
+        const val CALM_DEVIATION = 18.0
+        /** Menüde en çok bu kadar alan (tekerlek menüde 8 etiket, başlık ve alt başlık). */
+        const val MAX_MENU_AREAS = 12
         private const val WORDS = 3 // 144 bit maske: 3 × 64
         private const val TILES = COLUMNS * ROWS
 
@@ -50,7 +58,7 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     }
 
     /** Bir karenin karo izleri: maskeler (karo başına 3 Long), açık ve koyu nokta sayıları. */
-    class Sample internal constructor(val masks: LongArray, val bright: IntArray, val dark: IntArray)
+    class Sample internal constructor(val masks: LongArray, val bright: IntArray, val dark: IntArray, val deviation: FloatArray)
 
     private class Tile {
         val last = LongArray(WORDS)
@@ -59,7 +67,7 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         var rejected: LongArray? = null
     }
 
-    private class Auto(val id: String, var region: CropRegion, var seen: Long, val tiles: MutableSet<Int>)
+    private class Auto(val id: String, var region: CropRegion, var seen: Long, val tiles: MutableSet<Int>, var menu: Boolean = false)
 
     private val lock = Any()
     private val tiles = Array(TILES) { Tile() }
@@ -70,7 +78,13 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
 
     /** Şu an önerilen otomatik alanlar. */
     val areas: List<ExtraArea>
-        get() = synchronized(lock) { autos.map { ExtraArea(it.id, NAME, it.region, auto = true) } }
+        get() = synchronized(lock) { autos.map { it.area() } }
+
+    /** Son örnekte menü durumu vardı (tekerlek ya da duraklatma menüsü: kısa etiketler de çevrilir). */
+    var menu = false
+        private set
+
+    private fun Auto.area() = ExtraArea(id, NAME, region, auto = true, menu = menu)
 
     /**
      * Örnek alma zamanı geldiyse (son örnekten 100 ms geçti ve önceki örnek bitti) true; çağıran örneği alıp
@@ -94,16 +108,21 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         val masks = LongArray(TILES * WORDS)
         val bright = IntArray(TILES)
         val dark = IntArray(TILES)
-        if (width <= 0 || height <= 0) return Sample(masks, bright, dark)
+        val deviation = FloatArray(TILES)
+        if (width <= 0 || height <= 0) return Sample(masks, bright, dark, deviation)
         val xs = IntArray(COLUMNS * POINTS) { ((it + 0.5) * width / (COLUMNS * POINTS)).toInt().coerceIn(0, width - 1) }
         val ys = IntArray(ROWS * POINTS) { ((it + 0.5) * height / (ROWS * POINTS)).toInt().coerceIn(0, height - 1) }
         for (row in 0 until ROWS) for (column in 0 until COLUMNS) {
             val tile = row * COLUMNS + column
             var bit = 0
+            var sum = 0L
+            var squares = 0L
             for (py in 0 until POINTS) {
                 val y = ys[row * POINTS + py]
                 for (px in 0 until POINTS) {
                     val value = luma(xs[column * POINTS + px], y)
+                    sum += value
+                    squares += value.toLong() * value
                     if (value >= BRIGHT) {
                         masks[tile * WORDS + (bit shr 6)] = masks[tile * WORDS + (bit shr 6)] or (1L shl (bit and 63))
                         bright[tile]++
@@ -113,8 +132,11 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
                     bit++
                 }
             }
+            val count = (POINTS * POINTS).toDouble()
+            val mean = sum / count
+            deviation[tile] = kotlin.math.sqrt(maxOf(0.0, squares / count - mean * mean)).toFloat()
         }
-        return Sample(masks, bright, dark)
+        return Sample(masks, bright, dark, deviation)
     }
 
     /**
@@ -138,13 +160,19 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             if (excluded.any { x >= it.left && x <= it.right && y >= it.top && y <= it.bottom }) continue
             candidate[index] = true
         }
-        // Mevcut alanlar: karolarından biri hâlâ adaysa görülmüş sayılır; 700 ms görülmeyen çıkar.
+        val all = components(candidate)
+        menu = isMenu(all, sample)
+        // Mevcut alanlar: karolarından biri hâlâ adaysa görülmüş sayılır; 700 ms görülmeyen çıkar. Menü kapanınca menü
+        // alanı, karoları aday olmaktan çıktığı ilk örnekte hemen kalkar.
         for (auto in autos) if (auto.tiles.any { candidate[it] }) auto.seen = now
-        autos.removeAll { now - it.seen >= GONE_MS }
-        val components = components(candidate)
-            .filter { it.size >= 2 }
+        // Menüde gezinirken (seçim çerçevesi kayınca) alanlar 700 ms kuralıyla korunur, kutular yanıp sönmez.
+        autos.removeAll { now - it.seen >= GONE_MS || (it.menu && !menu && it.seen != now) }
+        // Menüde tek karoluk kısa etiketler ("OFF", "ON") de alan olur.
+        val components = all
+            .filter { it.size >= if (menu) 1 else 2 }
             .mapNotNull { tilesOf -> regionOf(tilesOf)?.let { tilesOf to it } }
             .sortedByDescending { it.first.size }
+        val limit = if (menu) MAX_MENU_AREAS else MAX_AREAS
         for ((members, region) in components) {
             val match = autos.firstOrNull { overlap(it.region, region) >= 0.30 }
             if (match != null) {
@@ -152,11 +180,12 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
                 match.tiles.clear()
                 match.tiles.addAll(members)
                 match.seen = now
-            } else if (autos.size < MAX_AREAS) {
-                autos.add(Auto("auto-${++counter}", region, now, members.toMutableSet()))
+                match.menu = menu
+            } else if (autos.size < limit) {
+                autos.add(Auto("auto-${++counter}", region, now, members.toMutableSet(), menu))
             }
         }
-        autos.map { ExtraArea(it.id, NAME, it.region, auto = true) }
+        autos.map { it.area() }
     }
 
     /**
@@ -180,8 +209,30 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     fun reset(): Unit = synchronized(lock) {
         for (index in 0 until TILES) tiles[index] = Tile()
         autos.clear()
+        menu = false
         lastSample = null
         busy = false
+    }
+
+    /**
+     * Menü durumu: en az [MENU_COMPONENTS] aday bileşen aynı 300 ms içinde belirip duruyor ve bileşenlerin dışındaki
+     * karoların en az %60'ı bulanık/karartılmış (menü arkasındaki oyun sahnesi). Net, hareketli sahnede kısa etiketler
+     * gürültü sayılmaya devam eder.
+     */
+    private fun isMenu(components: List<List<Int>>, sample: Sample): Boolean {
+        if (components.size < MENU_COMPONENTS) return false
+        val settled = components.map { members -> members.maxOf { tiles[it].stableSince } }.sorted()
+        val together = (0..settled.size - MENU_COMPONENTS).any { settled[it + MENU_COMPONENTS - 1] - settled[it] <= STABLE_MS }
+        if (!together) return false
+        val inside = BooleanArray(TILES)
+        components.forEach { members -> members.forEach { inside[it] = true } }
+        var outside = 0
+        var calm = 0
+        for (index in 0 until TILES) if (!inside[index]) {
+            outside++
+            if (sample.deviation[index] < CALM_DEVIATION) calm++
+        }
+        return outside > 0 && calm >= MENU_CALM_SHARE * outside
     }
 
     private fun moved(old: CropRegion, new: CropRegion): Boolean {
@@ -239,9 +290,14 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
 
 /** Otomatik alanda okunan yazı gürültü mü (sayaç, saat, para, tek sözcüklük etiket). Windows ve Mac ile aynı kurallar. */
 object ScreenTextNoise {
-    fun isNoise(text: String): Boolean {
+    /**
+     * [menu]: menü durumunda kısa etiketler ("OFF", "Map") de çevrilir; yalnız sayı/simge/noktalama olan etiketler
+     * ("40", "0", "x3", "100%") her durumda gürültüdür.
+     */
+    fun isNoise(text: String, menu: Boolean = false): Boolean {
         val plain = text.filter { it != ButtonIcons.MARKER }
         val letters = plain.count { it.isLetter() }
+        if (menu) return letters == 0 || (letters <= 1 && plain.any { it.isDigit() })
         if (letters < 8) return true
         if (plain.count { it.isDigit() } > letters / 2) return true
         val words = plain.split(Regex("\\s+")).count { token -> token.count { it.isLetter() } >= 2 }

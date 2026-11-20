@@ -129,8 +129,9 @@ object ScreenTranslation {
      * biniyorsa ve yazı boyu benziyorsa o gruba katılır; küçük harfle başlayan satır üstteki bitmemiş cümleye katılır
      * ([continues]). Gruplar yukarıdan aşağı; en çok [MAX_GROUPS], en çok yazısı olanlar.
      */
-    fun groups(reading: Reading): List<Group> {
-        val lines = reading.withButtonIcons().withoutButtonPrompts().withoutOcrNoise().lines
+    fun groups(reading: Reading, keepPrompts: Boolean = false): List<Group> {
+        val marked = reading.withButtonIcons()
+        val lines = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
             .filter { it.box != null && ScreenText.isWords(it.text) }
             .sortedBy { it.box!!.top }
         val groups = mutableListOf<MutableList<TextLine>>()
