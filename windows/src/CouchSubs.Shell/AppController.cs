@@ -1187,7 +1187,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             var running = server;
             temporary = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey),
-                new Dictionary<string, string> { ["server"] = ServerAddress(target) }, () => running.ConnectedClients > 0,
+                new Dictionary<string, string> { ["server"] = ServerAddress(target), ["key"] = running.AccessKey }, () => running.ConnectedClients > 0,
                 moved => post(() => TvMoved(moved)), key => post(() => store.Save(StoreKeys.TvKey, key)));
             temporary.Start(TimeSpan.FromSeconds(5));
         }

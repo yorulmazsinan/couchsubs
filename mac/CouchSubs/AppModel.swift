@@ -1422,7 +1422,7 @@ final class AppModel: ObservableObject {
             keeper.reconnect()
         } else {
             let server = self.server
-            let made = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv)],
+            let made = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv), "key": server.accessKey],
                                            appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
                 Task { @MainActor in self?.tvMoved(to: moved) }
             }, onKey: { [weak self] key in
