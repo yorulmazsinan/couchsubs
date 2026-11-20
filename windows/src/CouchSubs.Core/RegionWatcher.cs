@@ -119,7 +119,8 @@ public sealed partial class RegionWatcher
 
     /// <summary>Alanda ayrı duran bir yazı grubu: <see cref="Candidate.Paragraphs"/> içinde <paramref name="Start"/>'tan
     /// başlayan <paramref name="Count"/> parça, karedeki yeri ve satır yüksekliği (kareye oranla).</summary>
-    internal sealed record Block(int Start, int Count, TextBox Box, double LineHeight, PhoneTextStyle? Style = null);
+    /// <param name="Look">Otomatik ekran yazısında özgün yazının görünüşü (<see cref="TextStyleSampler"/>); diğerlerinde null.</param>
+    internal sealed record Block(int Start, int Count, TextBox Box, double LineHeight, PhoneTextStyle? Style = null, TextLook? Look = null);
 
     /// <param name="Icons">Her parçadaki kumanda simgeleri (kareden kesilmiş), parçadaki sırasıyla.</param>
     /// <param name="Blocks">Alanda birden çok ayrı yazı grubu varsa grupları; tek grupta null (tek kutu).</param>
@@ -403,7 +404,7 @@ public sealed partial class RegionWatcher
         state.LastReadCrop = crop;
         state.LastFullCheck = now();
         state.Lines = [.. reading.Lines.Where(line => line.Box.HasValue).Take(32).Select(line => line.Box!.Value)];
-        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()));
+        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto);
     }
 
     private static int IconCount(Candidate candidate) =>
@@ -467,7 +468,9 @@ public sealed partial class RegionWatcher
     /// yukarıdan aşağı parçalara toplanır. Yazının içindeki kumanda simgeleri <paramref name="frame"/>'den (okunan alan)
     /// kesilir; çeviride yerleri korunur.
     /// </summary>
-    internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false)
+    /// <param name="auto">Otomatik bulunmuş alan: her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.</param>
+    internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
+                                            bool auto = false)
     {
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame);
         var lines = marked.WithoutButtonPrompts().WithoutOcrNoise(phone).Lines
@@ -487,9 +490,9 @@ public sealed partial class RegionWatcher
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         IReadOnlyList<Block>? blocks = null;
         var key = TextKey(paragraphs);
-        var groups = (phone || lines.Count > 1) && boxes.Count == lines.Count
+        var groups = (phone || auto || lines.Count > 1) && boxes.Count == lines.Count
             ? (phone ? GamePhoneText.Groups(reading) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
-        if ((phone && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
+        if (((phone || auto) && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
         {
             paragraphs = [.. groups.SelectMany(group => group.Paragraphs)];
             icons = [.. groups.SelectMany(group => group.Icons
@@ -499,7 +502,14 @@ public sealed partial class RegionWatcher
             foreach (var group in groups)
             {
                 var style = phone && frame is not null ? GamePhonePalette.Sample(frame, group.Box) : null;
-                list.Add(new Block(start, group.Paragraphs.Count, group.Box.PlacedIn(place), group.LineHeight * height, style));
+                TextLook? look = null;
+                if (auto && !phone && frame is not null)
+                {
+                    // Çeviri özgün yazının stilinde çizilsin: renkler, kalınlık, dar aile, hiza, büyük harf.
+                    var own = lines.Where(line => Inside(line.Box!.Value, group.Box)).ToList();
+                    (style, look) = TextStyleSampler.Sample(frame, group.Box, own, string.Join(' ', group.Paragraphs));
+                }
+                list.Add(new Block(start, group.Paragraphs.Count, group.Box.PlacedIn(place), group.LineHeight * height, style, look));
                 start += group.Paragraphs.Count;
             }
             blocks = list;
@@ -510,6 +520,13 @@ public sealed partial class RegionWatcher
         if (phone && paragraphs.Count > 0)
             key = string.Join('\n', paragraphs) + (blocks is null ? "" : "|" + string.Join(',', blocks.Select(block => block.Count)));
         return new Candidate(paragraphs, box, lineHeight, key, cut, blocks) { Text = TextKey(paragraphs) };
+    }
+
+    private static bool Inside(TextBox line, TextBox group)
+    {
+        var x = (line.Left + line.Right) / 2;
+        var y = (line.Top + line.Bottom) / 2;
+        return x >= group.Left - 1e-6 && x <= group.Right + 1e-6 && y >= group.Top - 1e-6 && y <= group.Bottom + 1e-6;
     }
 
     private static bool SameLayout(IReadOnlyList<Block>? a, IReadOnlyList<Block>? b) =>
@@ -745,10 +762,13 @@ public sealed partial class RegionWatcher
             var block = layout[g];
             var range = Enumerable.Range(block.Start, block.Count).ToList();
             if (range.All(i => similar[i])) continue;
-            var (translation, icons) = IconText.Render(string.Join('\n', range.Select(i => text[i])), slots);
+            var joined = string.Join('\n', range.Select(i => text[i]));
+            // Özgün yazı BÜYÜK HARF: çeviri de Türkçe kurallarıyla büyük harf (simge imleri harf değildir, korunur).
+            if (block.Look is { Upper: true }) joined = TextStyleSampler.TurkishUpper(joined);
+            var (translation, icons) = IconText.Render(joined, slots);
             var source = string.Join('\n', range.Select(i => IconText.Plain(candidate.Paragraphs[i])));
             result.Add((g, new ScreenTranslation.Item(source, translation, block.Box, block.LineHeight,
-                                                      icons.Count > 0 ? icons : null) { Style = block.Style }));
+                                                      icons.Count > 0 ? icons : null) { Style = block.Style, Look = block.Look }));
         }
         return result;
     }

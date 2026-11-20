@@ -157,7 +157,7 @@ public sealed partial class SubtitleOverlayWindow : Window
             case SubtitleEventKind.Region:
                 if (e.Id is null) break;
                 regions.Remove(e.Id);
-                if (e.Text.Length > 0) regions[e.Id] = (e.Text, e.Box);
+                if (e.Text.Length > 0) regions[e.Id] = (e.Text, e.Box, e.Blocks);
                 break;
             case SubtitleEventKind.RegionClear:
                 regions.Clear();
@@ -173,7 +173,7 @@ public sealed partial class SubtitleOverlayWindow : Window
     private double screenUntil;
 
     /// <summary>Ek alanların penceredeki çevirileri (kimlik → metin ve oyundaki yeri).</summary>
-    private readonly Dictionary<string, (string Text, CouchSubs.Core.TextBox? Box)> regions = [];
+    private readonly Dictionary<string, (string Text, CouchSubs.Core.TextBox? Box, IReadOnlyList<ScreenTranslation.Item>? Blocks)> regions = [];
 
     private void OnHidden() => Guard("gizleme", () =>
     {
@@ -291,11 +291,13 @@ public sealed partial class SubtitleOverlayWindow : Window
     }
 
     /// <summary>Ek alanın çevirisi: altyazıdan küçük, koyu zeminli kutu; oyundaki yazının bulunduğu yana yaslı.</summary>
-    private Border MakeRegionBox(string text, CouchSubs.Core.TextBox? area)
+    private Border MakeRegionBox(string text, CouchSubs.Core.TextBox? area, IReadOnlyList<ScreenTranslation.Item>? blocks)
     {
         var style = controller.Settings.Style;
         var scale = Scale;
         var size = Math.Max(12, OverlayPlacement.FontSize(style.FontSize) * scale * 0.55);
+        // Otomatik bulunan ekran yazısı: çeviri özgün yazının stilinde.
+        if (StyledRegionBox.Make(blocks, size, scale, translucent: true) is { } styled) return styled;
         var middle = area is { } box ? (box.Left + box.Right) / 2 : 0.5;
         return new Border
         {

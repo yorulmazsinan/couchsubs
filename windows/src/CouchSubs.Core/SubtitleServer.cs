@@ -94,8 +94,9 @@ public enum SubtitleEventKind { Subtitle, Clear, Screen, ScreenClear, Region, Re
 /// <param name="Replaces">Satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.</param>
 /// <param name="Id">Ek alan olayında alanın kimliği (<see cref="SubtitleEventKind.Region"/>; metin boşsa kutu kalkar).</param>
 /// <param name="Box">Ek alan olayında yazının karedeki yeri.</param>
+/// <param name="Blocks">Ek alan olayında ayrı yazı gruplarının çevirileri (otomatik ekran yazısında stilleriyle).</param>
 public sealed record SubtitleEvent(SubtitleEventKind Kind, string Text = "", int DurationMs = 0, bool Paragraphs = false, bool Replaces = false,
-                                   string? Id = null, TextBox? Box = null)
+                                   string? Id = null, TextBox? Box = null, IReadOnlyList<ScreenTranslation.Item>? Blocks = null)
 {
     public static readonly SubtitleEvent Cleared = new(SubtitleEventKind.Clear);
 }
@@ -357,7 +358,8 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (box is { } b) json["box"] = BoxJson(b);
         if (lineHeight is { } line) json["line"] = Round(line);
         Broadcast(Frame("region", json), subtitle: true);
-        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Region, text, Id: id, Box: box));
+        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Region, text, Id: id, Box: box,
+                                            Blocks: blocks is { Count: > 0 } && text.Length > 0 ? blocks : null));
     }
 
     /// <summary>Bütün ek alan kutularını kaldırır.</summary>
@@ -385,8 +387,18 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         };
         if (item.Paragraphs) json["paragraphs"] = true;
         if (item.Icons is { Count: > 0 } icons) json["icons"] = IconsJson(icons);
-        if (phone && item.Style is { } style && IsRgb(style.Background) && IsRgb(style.Foreground))
-            json["surface"] = new { background = style.Background, foreground = style.Foreground };
+        if ((phone || item.Look is not null) && item.Style is { } style && IsRgb(style.Background) && IsRgb(style.Foreground))
+        {
+            json["surface"] = item.Look is { } flat
+                ? new SortedDictionary<string, object> { ["background"] = style.Background, ["foreground"] = style.Foreground, ["flat"] = flat.Flat }
+                : new SortedDictionary<string, object> { ["background"] = style.Background, ["foreground"] = style.Foreground };
+        }
+        // Otomatik ekran yazısı: özgün yazının görünüşü (eski TV yok sayar).
+        if (item.Look is { } look)
+            json["style"] = new SortedDictionary<string, object>
+            {
+                ["align"] = look.Align, ["bold"] = look.Bold, ["condensed"] = look.Condensed, ["upper"] = look.Upper,
+            };
         return json;
     }
 

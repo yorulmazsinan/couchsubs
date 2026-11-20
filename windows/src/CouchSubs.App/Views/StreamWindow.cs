@@ -30,7 +30,7 @@ public sealed class StreamWindow : Window
     private readonly StackPanel linesPanel = new() { VerticalAlignment = VerticalAlignment.Bottom };
     /// <summary>Ek alanların (görev, telefon mesajı, bildirim) çevirileri; saydam penceredeki gibi üstte, alanın yanına yaslı.</summary>
     private readonly DesktopRegionsPanel regionsPanel;
-    private readonly Dictionary<string, (string Text, CouchSubs.Core.TextBox? Box)> regions = [];
+    private readonly Dictionary<string, (string Text, CouchSubs.Core.TextBox? Box, IReadOnlyList<ScreenTranslation.Item>? Blocks)> regions = [];
     private readonly Border linesHost;
     private readonly Dictionary<int, Border> boxes = [];
     private double screenUntil;
@@ -146,7 +146,7 @@ public sealed class StreamWindow : Window
             case SubtitleEventKind.Region:
                 if (e.Id is null) break;
                 regions.Remove(e.Id);
-                if (e.Text.Length > 0) regions[e.Id] = (e.Text, e.Box);
+                if (e.Text.Length > 0) regions[e.Id] = (e.Text, e.Box, e.Blocks);
                 break;
             case SubtitleEventKind.RegionClear:
                 regions.Clear();
@@ -233,11 +233,13 @@ public sealed class StreamWindow : Window
     }
 
     /// <summary>Ek alanın çevirisi: altyazıdan küçük, tam koyu kutu (düz zeminde chroma key bozulmasın); alanın yanına yaslı.</summary>
-    private Border MakeRegionBox(string text, CouchSubs.Core.TextBox? area)
+    private Border MakeRegionBox(string text, CouchSubs.Core.TextBox? area, IReadOnlyList<ScreenTranslation.Item>? blocks)
     {
         var style = controller.Settings.Style;
         var scale = Scale;
         var size = Math.Max(12, OverlayPlacement.FontSize(style.FontSize) * scale * 0.55);
+        // Otomatik bulunan ekran yazısı: çeviri özgün yazının stilinde.
+        if (StyledRegionBox.Make(blocks, size, scale, translucent: false) is { } styled) return styled;
         var middle = area is { } box ? (box.Left + box.Right) / 2 : 0.5;
         return new Border
         {

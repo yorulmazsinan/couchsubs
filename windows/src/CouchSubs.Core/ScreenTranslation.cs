@@ -23,6 +23,8 @@ public static class ScreenTranslation
                               IReadOnlyList<IconPlacement>? Icons = null)
     {
         public PhoneTextStyle? Style { get; init; }
+        /// <summary>Otomatik ekran yazısında özgün yazının görünüşü; TV ve masaüstü çeviriyi bu stilde çizer.</summary>
+        public TextLook? Look { get; init; }
         /// <summary>Birden çok parça var: TV satır satır, sola yaslı gösterir.</summary>
         public bool Paragraphs => Translation.Contains('\n');
     }

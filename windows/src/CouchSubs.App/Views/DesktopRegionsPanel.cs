@@ -27,13 +27,14 @@ internal sealed class DesktopRegionsPanel : DockPanel
         Children.Add(phone);
     }
 
-    public void ShowRegions(Dictionary<string, (string Text, RegionBox? Box)> regions, Func<string, RegionBox?, Border> makeBox)
+    public void ShowRegions(Dictionary<string, (string Text, RegionBox? Box, IReadOnlyList<CouchSubs.Core.ScreenTranslation.Item>? Blocks)> regions,
+                            Func<string, RegionBox?, IReadOnlyList<CouchSubs.Core.ScreenTranslation.Item>?, Border> makeBox)
     {
         hud.Children.Clear();
         phone.Child = null;
         foreach (var (id, region) in regions.OrderBy(pair => pair.Value.Box?.Top ?? 0))
         {
-            var box = makeBox(region.Text, region.Box);
+            var box = makeBox(region.Text, region.Box, region.Blocks);
             if (id == "game-phone")
             {
                 box.VerticalAlignment = VerticalAlignment.Top;

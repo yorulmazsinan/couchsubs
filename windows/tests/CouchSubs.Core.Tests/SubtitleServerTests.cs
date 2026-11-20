@@ -187,6 +187,29 @@ public class SubtitleServerTests
         Assert.DoesNotContain("surface", events[2]);
     }
 
+    /// Otomatik ekran yazısı blokları özgün stili taşır: surface (flat ile) ve style.
+    [Fact]
+    public async Task AutoScreenTextBlocksCarrySurfaceAndStyle()
+    {
+        using var server = new SubtitleServer(0);
+        var port = await server.StartAsync();
+        using var response = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        await WaitUntil(() => server.ConnectedClients == 1);
+        var box = new TextBox(0.02, 0.05, 0.3, 0.1);
+        var item = new ScreenTranslation.Item("ROB VICKI'S BOSS", "VİCKİ'NİN PATRONUNU SOY", box, 0.03)
+        {
+            Style = new("#14161E", "#F0F0F0"),
+            Look = new TextLook(Bold: true, Condensed: true, Align: "left", Upper: true, Flat: true),
+        };
+        server.SendRegion("auto-1", item.Translation, box, 0.03, null, [item]);
+        server.ClearRegions();
+
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
+        var data = Assert.Single((await ReadLines(reader, "event: region-clear")).Where(l => l.StartsWith("data: ") && l.Contains("\"blocks\"")));
+        Assert.Contains("\"surface\":{\"background\":\"#14161E\",\"flat\":true,\"foreground\":\"#F0F0F0\"}", data);
+        Assert.Contains("\"style\":{\"align\":\"left\",\"bold\":true,\"condensed\":true,\"upper\":true}", data);
+    }
+
     /// <summary>Eşleştirilmiş TV anahtarlı bağlantıda da ek alan bloklarını (<c>blocks</c>) aynen alır; eski (anahtarsız)
     /// bağlantılar kapalıyken anahtarsız istek reddedilir.</summary>
     [Fact]
