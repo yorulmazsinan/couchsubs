@@ -1,0 +1,1 @@
+0.9.46: On-screen text boxes (such as objectives) and subtitles no longer overlap; the subtitle never moves, the overlapping box does. Single-line titles stay on one line in Turkish; short menu labels are no longer cut off and fully cover the original text.

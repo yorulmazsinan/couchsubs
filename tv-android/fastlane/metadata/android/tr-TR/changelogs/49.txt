@@ -1,0 +1,1 @@
+0.9.46: Görev/ekran yazısı kutusu ile altyazı üst üste binmiyor; altyazının yeri hiç değişmiyor, çakışan ekran yazısı kutusu kayıyor. Özgün tek satırlık başlıkların Türkçesi de tek satırda kalıyor; menüdeki kısa etiketler kesilmiyor, özgün yazının üstünü tam örtüyor.
