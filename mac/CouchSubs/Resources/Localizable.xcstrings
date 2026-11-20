@@ -13983,6 +13983,38 @@
         }
       }
     },
+    "Color by speaker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color by speaker"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konuşana göre renk"
+          }
+        }
+      }
+    },
+    "Each speaker's name and line keep their own color.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each speaker's name and line keep their own color."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Her konuşanın adı ve satırı kendi renginde görünür."
+          }
+        }
+      }
+    },
     "Ask which game I'm playing": {
       "localizations": {
         "en": {

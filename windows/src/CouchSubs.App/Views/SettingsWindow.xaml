@@ -354,6 +354,16 @@
                                                Text="{t:T 'Keeps the character\'s name in front of the translation (ARTHUR: …). The name itself is never translated.'}" />
                                 </StackPanel>
                             </DockPanel>
+                            <Separator Margin="0" />
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="SpeakerColors" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Color by speaker'}" Checked="OnSpeakerColors" Unchecked="OnSpeakerColors" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{t:T 'Color by speaker'}" Style="{StaticResource HeadlineText}" />
+                                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="{t:T 'Each speaker\'s name and line keep their own color.'}" />
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </c:Card>
                 </StackPanel>

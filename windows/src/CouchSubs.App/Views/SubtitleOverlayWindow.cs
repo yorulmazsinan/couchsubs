@@ -268,7 +268,6 @@ public sealed partial class SubtitleOverlayWindow : Window
         var band = style.BackgroundShape == SubtitleBackgroundShape.Band;
         var text = new TextBlock
         {
-            Text = wrapped.Text,
             FontSize = size,
             FontWeight = style.Bold ? FontWeights.Bold : FontWeights.SemiBold,
             Foreground = style.TextColor == SubtitleTextColor.Yellow ? new SolidColorBrush(Color.FromRgb(0xFF, 0xE1, 0x35)) : Brushes.White,
@@ -277,6 +276,8 @@ public sealed partial class SubtitleOverlayWindow : Window
             LineHeight = size * 1.3,
             Effect = new DropShadowEffect { Color = Colors.Black, ShadowDepth = 2 * scale, BlurRadius = 4 * scale, Opacity = 1, Direction = 270 },
         };
+        // Konuşana göre renk: "Ad: …" satırı o konuşanın renginde (ayar kapalıysa düz metin).
+        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors);
         return new Border
         {
             Background = new SolidColorBrush(Color.FromArgb((byte)Math.Round(alpha * 255), 0, 0, 0)),

@@ -194,6 +194,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         server.LegacyClientConnected += OnLegacyClient;
         server.PairingRequested += OnPairingRequest;
         server.SendsToTv = settings.Output.ShowsOnTv();
+        server.SpeakerColors = settings.SpeakerColors;
     }
 
     private void DetachServer()
@@ -476,6 +477,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (old.GamePacks != value.GamePacks && pipeline is not null) ConnectPacks(pipeline);
             if (pipeline is not null) pipeline.ShowSpeakerNames = value.ShowSpeakerNames;
+            server.SpeakerColors = value.SpeakerColors;
             if ((old.MisreadWaitMs != value.MisreadWaitMs || old.PartialWaitMs != value.PartialWaitMs) && pipeline is not null) ApplyWaits(pipeline);
             if (old.SharePool != value.SharePool) services.Pool?.SetEnabled(value.SharePool);
             if (old.TranslationDevice != value.TranslationDevice)

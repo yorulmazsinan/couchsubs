@@ -151,6 +151,15 @@ public class AreaPresetSettingsTests
     }
 
     [Fact]
+    public void SpeakerColorsAreOnByDefaultAndInOldSettings()
+    {
+        Assert.True(new UserSettings().SpeakerColors);
+        Assert.True(JsonSerializer.Deserialize<UserSettings>("""{"SourceLanguage":"en"}""")!.SpeakerColors);
+        var off = JsonSerializer.Serialize(new UserSettings() with { SpeakerColors = false });
+        Assert.False(JsonSerializer.Deserialize<UserSettings>(off)!.SpeakerColors);
+    }
+
+    [Fact]
     public void KeepCenteredIsKeptByTheController()
     {
         var store = new MemorySettings();

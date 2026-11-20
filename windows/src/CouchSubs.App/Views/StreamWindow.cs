@@ -211,7 +211,6 @@ public sealed class StreamWindow : Window
         if (boxed) color.A = (byte)Math.Round(dim * 255);
         var text = new TextBlock
         {
-            Text = wrapped.Text,
             FontSize = size,
             FontWeight = style.Bold ? FontWeights.Bold : FontWeights.SemiBold,
             Foreground = new SolidColorBrush(color),
@@ -220,6 +219,8 @@ public sealed class StreamWindow : Window
             LineHeight = size * 1.3,
             Effect = boxed ? null : new DropShadowEffect { Color = Colors.Black, ShadowDepth = 2 * scale, BlurRadius = 4 * scale, Opacity = 1, Direction = 270 },
         };
+        // Konuşana göre renk: "Ad: …" satırı o konuşanın renginde (ayar kapalıysa düz metin).
+        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors, color.A);
         return new Border
         {
             Background = boxed ? Brushes.Black : Brushes.Transparent,

@@ -208,6 +208,13 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// <summary>false ise altyazı olayları TV'lere gitmez (altyazı yalnız bilgisayar ekranında); OBS katmanı almaya devam eder.</summary>
     public bool SendsToTv { get; set; } = true;
 
+    /// <summary>
+    /// Konuşana göre renk: açıkken <c>subtitle</c> olayı satır başındaki konuşan adlarını ve renklerini <c>speakers</c>
+    /// alanında taşır (<see cref="Core.SpeakerColors"/>); kapalıyken ya da metinde ad yoksa alan yazılmaz. Eski TV
+    /// uygulamaları alanı yok sayar.
+    /// </summary>
+    public bool SpeakerColors { get; set; }
+
     public int ConnectedClients
     {
         get { lock (gate) return TvCount(); }
@@ -270,6 +277,8 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (paragraphs) json["paragraphs"] = true;
         if (replaces) json["replace"] = true;
         if (box is { } b) json["box"] = BoxJson(b);
+        if (SpeakerColors && Core.SpeakerColors.Speakers(text) is { Count: > 0 } speakers)
+            json["speakers"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = Core.SpeakerColors.Color(name) }).ToList();
         Broadcast(Frame("subtitle", json), subtitle: true);
         EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Subtitle, text, durationMs, paragraphs, replaces));
     }

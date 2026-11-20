@@ -56,6 +56,28 @@ public class SubtitleServerTests
         Assert.Contains(lines, l => l.StartsWith("data:") && l.Contains("\"text\":\"Merhaba dostum\"") && l.Contains("\"replace\":true"));
     }
 
+    /// Konuşana göre renk açıkken adlı satır "speakers" alanını taşır; kapalıyken ve adsız satırda alan yoktur.
+    [Fact]
+    public async Task SubtitleCarriesSpeakerColorsOnlyWhenEnabled()
+    {
+        using var server = new SubtitleServer(0);
+        var port = await server.StartAsync();
+        using var response = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        await WaitUntil(() => server.ConnectedClients == 1);
+        server.SendSubtitle("Mattia: Kapat.", 4000);
+        server.SpeakerColors = true;
+        server.SendSubtitle("Mattia: Gel.\nLucia: Hayır.", 4000);
+        server.SendSubtitle("Adsız satır.", 4000);
+        server.Clear();
+
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
+        var lines = await ReadLines(reader, "event: clear");
+        Assert.Contains(lines, l => l.Contains("Kapat.") && !l.Contains("speakers"));
+        Assert.Contains(lines, l => l.Contains("Lucia: Hayır.")
+            && l.Contains("\"speakers\":[{\"color\":\"#90CAF9\",\"name\":\"Mattia\"},{\"color\":\"#F06292\",\"name\":\"Lucia\"}]"));
+        Assert.Contains(lines, l => l.Contains("Adsız satır.") && !l.Contains("speakers"));
+    }
+
     /// TV yarı açık bağlantıyı adlı "ping" olayının gelmemesinden anlar; yorum satırını EventSource görmez.
     [Fact]
     public async Task PingIsSentAsNamedEvent()
