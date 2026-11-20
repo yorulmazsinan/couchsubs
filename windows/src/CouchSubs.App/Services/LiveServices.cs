@@ -187,23 +187,27 @@ public sealed class LiveServices : IAppServices
 
     public Task<bool> IsDevModeOnAsync(string host) => DevModeInstaller.IsDevModeOnAsync(host);
 
+    // LG kurulumunun adımları da tvinstall.log'a telefonlardaki satırlarla yazılır (LgInstallLog); önceden yalnız Samsung
+    // ve Android TV kurulumu günlük tutuyordu.
+    private static LgInstallLog LgLog => new(new TvInstall.InstallLog(TvInstallLogPath).Write);
+
     public Task<string> FetchDevKeyAsync(string host, string passphrase) =>
-        DevModeInstaller.FetchKeyAsync(host, passphrase, new ProcessRunner(), DevModeTools.ForThisSystem());
+        LgLog.KeyAsync(host, () => DevModeInstaller.FetchKeyAsync(host, passphrase, new ProcessRunner(), DevModeTools.ForThisSystem()));
 
     public Task<string?> InstalledTvAppVersionAsync(string host, string devKey) =>
-        WithKeyFileAsync(devKey, file => Installer(host, file).InstalledVersionAsync());
+        LgLog.InstalledVersionAsync(host, BundledTvAppVersion, () => WithKeyFileAsync(devKey, file => Installer(host, file).InstalledVersionAsync()));
 
     public async Task InstallTvAppAsync(string host, string devKey)
     {
         try
         {
-            await WithKeyFileAsync<object?>(devKey, async file =>
+            await LgLog.InstallAsync(() => WithKeyFileAsync<object?>(devKey, async file =>
             {
                 if (BundledTvPackage is not { } package || BundledTvAppVersion is not { } version)
                     throw new DevModeException(DevModeError.InstallFailed, "uygulamanın yanında LG paketi (tv-app/*.ipk) yok");
                 await Installer(host, file).InstallAsync(package, version);
                 return null;
-            });
+            }));
         }
         catch (DevModeException error)
         {
@@ -316,7 +320,7 @@ public sealed class LiveServices : IAppServices
         }
     }
 
-    /// <summary>Samsung kurulum günlüğü: %LOCALAPPDATA%\CouchSubs\tvinstall.log (hata iletisinde de yazar).</summary>
+    /// <summary>TV kurulum günlüğü (LG, Samsung, Android TV): %LOCALAPPDATA%\CouchSubs\tvinstall.log (hata iletisinde de yazar).</summary>
     public static string TvInstallLogPath => DataDirectory("tvinstall.log");
 
     internal static DevModeError SamsungError(SamsungInstallError error) => error switch

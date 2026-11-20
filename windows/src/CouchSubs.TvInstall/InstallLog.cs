@@ -15,6 +15,25 @@ public sealed class InstallLog(string? path)
     /// <summary>Yol yoksa (testler) hiçbir şey yazılmaz.</summary>
     public string? Path { get; } = path;
 
+    /// <summary>"Günlüğü kopyala" için günlüğün sonu (telefonlardaki "Kurulum günlüğünü paylaş" gibi en çok 60.000
+    /// karakter); dosya yoksa ya da okunamazsa boş.</summary>
+    public const int TailLength = 60_000;
+
+    public static string ReadTail(string? path, int maxLength = TailLength)
+    {
+        if (path is null) return "";
+        try
+        {
+            string text;
+            lock (Gate) text = File.Exists(path) ? File.ReadAllText(path) : "";
+            return text.Length <= maxLength ? text : text[^maxLength..];
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return "";
+        }
+    }
+
     public void Write(string message)
     {
         if (Path is null) return;

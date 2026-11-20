@@ -26,7 +26,10 @@ public static class TvAppMessages
     /// <summary>Bu bilgisayarın Host PC IP için gösterilenden başka ev ağı adresleri varsa (Wi-Fi ve Ethernet ikisi de bağlı).</summary>
     public const string OtherAddressesLine = "If the TV does not accept this address, try one of this computer's other addresses: %@";
 
-    /// <param name="samsungLog">Samsung kurulum günlüğünün yolu; Samsung hatalarında metnin sonunda yazar.</param>
+    /// <summary>Hata iletisinin sonunda günlük dosyasını söyleyen satır.</summary>
+    public const string SendLogLine = "If this keeps happening, send us this file: %@";
+
+    /// <param name="samsungLog">Kurulum günlüğünün yolu; üç markanın hatalarında da metnin sonunda yazar (önceden yalnız Samsung).</param>
     /// <param name="computerAddress">TV'nin göreceği bu bilgisayar adresi; Samsung "TV kabul etmedi" hatasında yazılır.</param>
     public static string Problem(TvAppState state, TvBrand brand, Localizer text, string samsungLog, string? computerAddress = null)
     {
@@ -39,7 +42,7 @@ public static class TvAppMessages
             result += "\n\n" + text.Format(ComputerAddressLine, computerAddress);
         if (state.Reason is { } reason)
             result += $"\n\n{text[samsung ? "Details:" : "TV says:"]} {reason}";
-        if (!samsung) return result;
+        if (!samsung) return result + "\n\n" + text.Format(SendLogLine, samsungLog);
         if (error is DevModeError.InstallFailed or DevModeError.CertificateRejected)
             result += "\n\n" + text["If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again."];
         // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
@@ -48,7 +51,7 @@ public static class TvAppMessages
         // TV kurulum sırasında HDMI-CEC yüzünden başka kaynağa geçerse bağlantı kopar.
         if (error is DevModeError.ConnectionLost)
             result += "\n\n" + text[SourceSwitchTip];
-        return result + "\n\n" + text.Format("If this keeps happening, send us this file: %@", samsungLog);
+        return result + "\n\n" + text.Format(SendLogLine, samsungLog);
     }
 
     /// <summary>

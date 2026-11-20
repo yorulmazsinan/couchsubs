@@ -55,15 +55,50 @@ public static partial class AndroidTvApp
         string keyDirectory, string apkPath, string version, bool openIfInstalled, Action? onApprovalNeeded, Action<string>? log,
         CancellationToken cancellationToken = default)
     {
-        await RemoveLeftoverAsync(host, keyDirectory, onApprovalNeeded, log, cancellationToken);
-        var result = await installer.EnsureInstalledAsync(apkPath, version, cancellationToken);
-        if (!result.Installed && openIfInstalled)
+        return await LoggedAsync($"TV {host}:{AndroidTvInstaller.DefaultPort}, paket {version}", log, async () =>
         {
-            await using var adb = await ConnectAsync(host, keyDirectory, onApprovalNeeded, cancellationToken);
-            var started = await adb.RunAsync(AndroidTvInstaller.StartCommand(installer.LaunchParams), cancellationToken: cancellationToken);
-            log?.Invoke($"Android TV: uygulama güncel ({result.Version}), açıldı: {started.Trim()}");
+            await RemoveLeftoverAsync(host, keyDirectory, onApprovalNeeded, log, cancellationToken);
+            var result = await installer.EnsureInstalledAsync(apkPath, version, cancellationToken);
+            if (!result.Installed && openIfInstalled)
+            {
+                await using var adb = await ConnectAsync(host, keyDirectory, onApprovalNeeded, cancellationToken);
+                var started = await adb.RunAsync(AndroidTvInstaller.StartCommand(installer.LaunchParams), cancellationToken: cancellationToken);
+                log?.Invoke($"Android TV: uygulama güncel ({result.Version}), açıldı: {started.Trim()}");
+            }
+            return result;
+        });
+    }
+
+    /// <summary>
+    /// Kurulumun başı, sonucu ve hatası günlüğe telefonlardaki satırlarla yazılır ("--- Android TV kurulumu … başlıyor",
+    /// "Kurulum tamam.", "HATA …"). Önceden masaüstünde Android TV kurulumu yalnız kalıntı temizliğini yazıyordu; hata
+    /// olunca gönderilecek günlükte kurulumun izi yoktu.
+    /// </summary>
+    internal static async Task<(string Version, bool Installed)> LoggedAsync(string target, Action<string>? log,
+        Func<Task<(string Version, bool Installed)>> install)
+    {
+        log?.Invoke($"--- Android TV kurulumu başlıyor: {target}");
+        try
+        {
+            var result = await install();
+            log?.Invoke(result.Installed ? "Kurulum tamam." : $"TV'de {result.Version} sürümü var; kurulum gerekmedi.");
+            return result;
         }
-        return result;
+        catch (AndroidInstallException error)
+        {
+            log?.Invoke($"HATA {error.Message}");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            log?.Invoke("Kurulum iptal edildi.");
+            throw;
+        }
+        catch (Exception error)
+        {
+            log?.Invoke($"Beklenmeyen hata: {error}");
+            throw;
+        }
     }
 
     private static async Task RemoveLeftoverAsync(string host, string keyDirectory, Action? onApprovalNeeded, Action<string>? log,

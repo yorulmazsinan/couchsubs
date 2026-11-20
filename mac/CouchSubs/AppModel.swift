@@ -346,7 +346,8 @@ final class LiveServices: AppServices {
 
     func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
         let result = try await TVHelper.run(["android-install", "--host", host, "--package", app.url.path, "--version", app.version,
-                                             "--key-dir", TVHelper.dataDirectory.appendingPathComponent("adb").path] + (open ? ["--open"] : []),
+                                             "--key-dir", TVHelper.dataDirectory.appendingPathComponent("adb").path,
+                                             "--log", TVInstallLog.file.path] + (open ? ["--open"] : []),
                                             onEvent: onEvent)
         return result.version ?? app.version
     }
@@ -1370,37 +1371,48 @@ final class AppModel: ObservableObject {
         guard let tv, let bundled = services.bundledTVAppVersion else { return }
         tvApp = .working
         do {
+            TVInstallLog.lgKeyRequest(host: tv.host)
             let devKey = try await services.fetchDevKey(host: tv.host, passphrase: passphrase.trimmingCharacters(in: .whitespacesAndNewlines))
+            TVInstallLog.write("Key Server'dan anahtar alındı.")
             store.save(devKey, for: StoreKey.tvDevKey)
             await install(tv: tv, devKey: devKey, bundled: bundled)
         } catch {
-            tvApp = .needsPassphrase(error: error as? DevModeError ?? .installFailed)
+            TVInstallLog.failure(error)
+            tvApp = .needsPassphrase(error: (error as? DevModeFailure)?.error ?? error as? DevModeError ?? .installFailed)
         }
     }
 
     private func install(tv: LGTV, devKey: String, bundled: String) async {
         tvApp = .working
+        // LG kurulumunun adımları da kurulum günlüğüne yazılır (telefonlardaki satırlar); önceden yalnız Samsung ve
+        // Android TV kurulumu günlük tutuyordu, LG hatasında gönderilecek bir şey yoktu.
+        TVInstallLog.lgStart(host: tv.host, package: bundled)
         do {
             let installed = try await services.installedTVAppVersion(host: tv.host, devKey: devKey)
+            TVInstallLog.write("TV'deki CouchSubs: \(installed ?? "yok")")
             if let installed, !DevModeInstaller.isNewer(bundled, than: installed) {
                 tvApp = .upToDate(installed)
                 await renewDevSessionIfDue(tv: tv, devKey: devKey)
                 return
             }
             try await services.installTVApp(host: tv.host, devKey: devKey)
+            TVInstallLog.write("Kurulum tamam.")
             tvApp = .upToDate(bundled)
             tvAppMissing = false
             await renewDevSessionIfDue(tv: tv, devKey: devKey)
             await openTVAppAfterInstall(tv)
         } catch DevModeError.keyRefused {
             // Geliştirici modu yeniden açılınca TV yeni anahtar üretir; eskisi işe yaramaz.
+            TVInstallLog.write("Kayıtlı anahtar reddedildi; bırakıldı.")
             store.remove(StoreKey.tvDevKey)
             tvApp = .needsPassphrase(error: nil)
         } catch let failure as DevModeFailure {
+            TVInstallLog.failure(failure)
             // Genel mesaj tek başına sorunu bulmaya yetmiyordu; TV'nin verdiği sebep de gösterilir.
             let reason = failure.detail.trimmingCharacters(in: .whitespacesAndNewlines)
             tvApp = .failed(failure.error, reason: reason.isEmpty ? nil : reason)
         } catch {
+            TVInstallLog.failure(error)
             tvApp = .failed(error as? DevModeError ?? .installFailed)
         }
     }

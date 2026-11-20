@@ -14,8 +14,9 @@ enum TVInstallEvent: Equatable, Sendable {
 }
 
 /// TV kurulum günlüğü: ~/Library/Logs/CouchSubs/tvinstall.log (Windows'ta %LOCALAPPDATA%\CouchSubs\tvinstall.log).
-/// Samsung kurulumunun her adımını yardımcı yazar; yardımcı açılamaz ya da sonuç vermeden kapanırsa uygulama da buraya
-/// yazar. Kurulum olmazsa kullanıcı bu dosyayı gönderir.
+/// Samsung ve Android TV kurulumunun her adımını yardımcı, LG kurulumununkileri uygulama yazar; yardımcı açılamaz ya da
+/// sonuç vermeden kapanırsa uygulama da buraya yazar. Kurulum olmazsa kullanıcı bu dosyayı gönderir (hata kartındaki
+/// "Kurulum günlüğünü göster" ve "Günlüğü kopyala").
 enum TVInstallLog {
     /// Kullanıcıya hata iletisinde gösterilen yol (sandbox'ta kapsayıcının içindeki yol).
     static var displayPath: String { RemotePlayLog.userPath(file) }
@@ -26,6 +27,35 @@ enum TVInstallLog {
     }
 
     private static let lock = NSLock()
+
+    /// "Günlüğü kopyala" için günlüğün sonu (telefonlardaki "Kurulum günlüğünü paylaş" gibi en çok 60.000 karakter);
+    /// dosya yoksa ya da okunamazsa boş.
+    static let tailLength = 60_000
+
+    static func tail(of file: URL = file, limit: Int = tailLength) -> String {
+        let text = lock.withLock { (try? String(contentsOf: file, encoding: .utf8)) ?? "" }
+        return String(text.suffix(limit))
+    }
+
+    /// LG kurulumunun adımları (uygulama yazar): telefonlardaki satırlarla aynı.
+    static func lgStart(host: String, package: String?, to file: URL = file) {
+        write("--- LG kurulumu başlıyor: TV \(host), paket \(package ?? "?")", to: file)
+    }
+
+    static func lgKeyRequest(host: String, to file: URL = file) {
+        write("--- LG kurulumu başlıyor: TV \(host), Key Server'dan anahtar isteniyor", to: file)
+    }
+
+    /// Hata satırı: "HATA installFailed: TV'nin verdiği sebep".
+    static func failure(_ error: Error, to file: URL = file) {
+        if let failure = error as? DevModeFailure {
+            write("HATA \(failure.error): \(failure.detail)", to: file)
+        } else if let error = error as? DevModeError {
+            write("HATA \(error)", to: file)
+        } else {
+            write("Beklenmeyen hata: \(error)", to: file)
+        }
+    }
 
     static func write(_ line: String, to file: URL = file) {
         let formatter = DateFormatter()

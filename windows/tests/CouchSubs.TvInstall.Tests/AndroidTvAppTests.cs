@@ -48,4 +48,30 @@ public class AndroidTvAppTests
         Assert.False(AndroidTvApp.IsLeftover("Unable to find package: com.couchsubs.tv"));
         Assert.False(AndroidTvApp.IsLeftover("    versionName=0.9.18\n"));
     }
+
+    /// Masaüstünde Android TV kurulumunun başı, sonucu ve hatası günlüğe telefonlardaki satırlarla yazılır.
+    [Fact]
+    public async Task InstallIsWrittenToTheLogWithItsResult()
+    {
+        var lines = new List<string>();
+        var result = await AndroidTvApp.LoggedAsync("TV 192.168.1.30:5555, paket 0.9.43", lines.Add, () => Task.FromResult(("0.9.43", true)));
+        Assert.Equal(("0.9.43", true), result);
+        Assert.Equal(new[] { "--- Android TV kurulumu başlıyor: TV 192.168.1.30:5555, paket 0.9.43", "Kurulum tamam." }, lines);
+
+        lines.Clear();
+        await AndroidTvApp.LoggedAsync("TV x", lines.Add, () => Task.FromResult(("0.9.43", false)));
+        Assert.Equal("TV'de 0.9.43 sürümü var; kurulum gerekmedi.", lines[^1]);
+    }
+
+    [Fact]
+    public async Task InstallFailureIsWrittenToTheLogAndRethrown()
+    {
+        var lines = new List<string>();
+        var error = await Assert.ThrowsAsync<Android.AndroidInstallException>(() => AndroidTvApp.LoggedAsync("TV x", lines.Add,
+            () => throw new Android.AndroidInstallException(Android.AndroidInstallError.NotApproved, "TV'de izin verilmedi")));
+        Assert.Equal(Android.AndroidInstallError.NotApproved, error.Error);
+        Assert.Equal("HATA NotApproved: TV'de izin verilmedi", lines[^1]);
+        // Günlük verilmese de (null) kurulum aynı çalışır.
+        Assert.Equal(("1.0", true), await AndroidTvApp.LoggedAsync("TV x", null, () => Task.FromResult(("1.0", true))));
+    }
 }

@@ -1020,7 +1020,7 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertEqual(model.tvApp, .failed(.installFailed, reason: "Invalid package (errorCode -5)"))
         // Boş alan yalnız TV öyle dediğinde suçlanır.
         XCTAssertFalse(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").contains("free space"))
-        XCTAssertTrue(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").hasSuffix("Invalid package"))
+        XCTAssertTrue(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").contains(String(localized: "TV says:") + " Invalid package"))
     }
 
     /// Samsung kısa basışta tam kapanmaz: "yeniden başlatın" diyen hatada güç tuşunun basılı tutulacağı yazar. Kurulum
@@ -1242,9 +1242,14 @@ final class TVAppInstallTests: XCTestCase {
         for error in [DevModeError.certificateMismatch, .certificateRejected, .tvClockWrong, .packageBlocked, .connectionLost] {
             XCTAssertNotEqual(TVAppCard.message(for: error, brand: .samsung), generic, "\(error)")
         }
-        // Ayrıntısı olmasa da Samsung hatası günlük dosyasını söyler; LG'de değişiklik yok.
+        // Ayrıntısı olmasa da Samsung hatası günlük dosyasını söyler. LG ve Android TV hatası da söyler (önceden yalnız
+        // Samsung); Samsung'a özgü ipuçları onlara eklenmez.
         XCTAssertTrue(TVAppCard.message(for: .signInFailed, brand: .samsung, reason: nil).contains(TVInstallLog.displayPath))
-        XCTAssertFalse(TVAppCard.message(for: .installFailed, brand: .lg, reason: nil).contains(TVInstallLog.displayPath))
+        for brand in [TVBrand.lg, .androidTV] {
+            let text = TVAppCard.message(for: .installFailed, brand: brand, reason: "Invalid package")
+            XCTAssertTrue(text.hasSuffix(TVInstallLog.displayPath), "\(brand)")
+            XCTAssertFalse(text.contains("Samsung"), "\(brand)")
+        }
     }
 
     func testSamsungPairingSaysWhetherThePermissionBoxWasMissedOrRefused() {
@@ -1296,6 +1301,32 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertTrue(text.contains("] bir\n"))
         XCTAssertTrue(text.contains("] iki\n"))
         XCTAssertEqual(TVInstallLog.displayPath, "~/Library/Logs/CouchSubs/tvinstall.log")
+    }
+
+    /// "Günlüğü kopyala": günlüğün sonu panoya gider (telefonlardaki "Kurulum günlüğünü paylaş" gibi).
+    func testLogTailIsTheEndOfTheLog() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("tvinstall.log")
+        XCTAssertEqual(TVInstallLog.tail(of: file), "", "Dosya yoksa boş")
+        TVInstallLog.write("bir", to: file)
+        TVInstallLog.write("iki", to: file)
+        XCTAssertEqual(TVInstallLog.tail(of: file), try String(contentsOf: file, encoding: .utf8))
+        XCTAssertEqual(TVInstallLog.tail(of: file, limit: 6), "] iki\n")
+    }
+
+    /// LG kurulumunun adımları ve hatası günlüğe telefonlardaki satırlarla yazılır.
+    func testLGInstallLinesMatchThePhones() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("tvinstall.log")
+        TVInstallLog.lgKeyRequest(host: "192.168.1.20", to: file)
+        TVInstallLog.lgStart(host: "192.168.1.20", package: "0.9.43", to: file)
+        TVInstallLog.failure(DevModeFailure(.installFailed, detail: "FAILED_IPKG_INSTALL"), to: file)
+        TVInstallLog.failure(DevModeError.wrongPassphrase, to: file)
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { String($0.drop { $0 != "]" }.dropFirst(2)) }
+        XCTAssertEqual(lines, [
+            "--- LG kurulumu başlıyor: TV 192.168.1.20, Key Server'dan anahtar isteniyor",
+            "--- LG kurulumu başlıyor: TV 192.168.1.20, paket 0.9.43",
+            "HATA installFailed: FAILED_IPKG_INSTALL",
+            "HATA wrongPassphrase",
+        ])
     }
 
     func testAndroidTVIsFoundOnTheNetworkAndRemembered() async {

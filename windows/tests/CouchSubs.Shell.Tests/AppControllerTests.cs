@@ -2157,12 +2157,47 @@ public class TvAppInstallTests
         Assert.EndsWith("(timeout)", TvAppMessages.PairingProblem(new SsapException("timeout"), TvBrand.Lg, Localizer.ForLanguage("en")));
     }
 
-    [Fact]
-    public void LgFailureKeepsItsShortForm()
+    /// LG ve Android TV hatasında da gönderilecek günlük dosyası yazar (önceden yalnız Samsung'da); Samsung'a özgü
+    /// ipuçları eklenmez.
+    [Theory]
+    [InlineData(TvBrand.Lg)]
+    [InlineData(TvBrand.AndroidTv)]
+    public void LgAndAndroidFailuresNameTheLogFileToo(TvBrand brand)
     {
         var state = new TvAppState(TvAppKind.Failed, Error: DevModeError.InstallFailed, Reason: "Invalid package");
-        var text = TvAppMessages.Problem(state, TvBrand.Lg, Localizer.ForLanguage("en"), "x.log");
-        Assert.EndsWith("TV says: Invalid package", text);
+        var text = TvAppMessages.Problem(state, brand, Localizer.ForLanguage("en"), @"C:\CouchSubs\tvinstall.log");
+        Assert.Contains("TV says: Invalid package", text);
+        Assert.EndsWith(@"send us this file: C:\CouchSubs\tvinstall.log", text);
+        Assert.DoesNotContain("Samsung", text);
+    }
+
+    /// LG kurulumunun adımları günlüğe telefonlardaki satırlarla yazılır; hata da sebebiyle yazılır.
+    [Fact]
+    public async Task LgInstallStepsAreWrittenToTheInstallLog()
+    {
+        var lines = new List<string>();
+        var log = new LgInstallLog(lines.Add);
+        Assert.Equal("anahtar", await log.KeyAsync("192.168.1.20", () => Task.FromResult("anahtar")));
+        Assert.Null(await log.InstalledVersionAsync("192.168.1.20", "0.9.43", () => Task.FromResult<string?>(null)));
+        await log.InstallAsync(() => Task.CompletedTask);
+        Assert.Equal(new[]
+        {
+            "--- LG kurulumu başlıyor: TV 192.168.1.20, Key Server'dan anahtar isteniyor",
+            "Key Server'dan anahtar alındı.",
+            "--- LG kurulumu başlıyor: TV 192.168.1.20, paket 0.9.43",
+            "TV'deki CouchSubs: yok",
+            "Kurulum tamam.",
+        }, lines);
+
+        lines.Clear();
+        var error = await Assert.ThrowsAsync<DevModeException>(() =>
+            log.InstallAsync(() => throw new DevModeException(DevModeError.InstallFailed, "FAILED_IPKG_INSTALL")));
+        Assert.Equal(DevModeError.InstallFailed, error.Error);
+        Assert.Equal(new[] { "HATA InstallFailed: FAILED_IPKG_INSTALL" }, lines);
+
+        lines.Clear();
+        await Assert.ThrowsAsync<DevModeException>(() => log.KeyAsync("192.168.1.20", () => throw new DevModeException(DevModeError.WrongPassphrase)));
+        Assert.Equal("HATA WrongPassphrase: ", lines[^1]);
     }
 
     /// Samsung kısa basışta tam kapanmaz: "yeniden başlatın" diyen hatada güç tuşunun basılı tutulacağı yazar.

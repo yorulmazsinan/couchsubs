@@ -91,6 +91,9 @@ public partial class TvAppCard : UserControl
         OpenAgain.Visibility = Visible(state.Kind == TvAppKind.SignIn);
         if (state.Kind != TvAppKind.SignIn) CopyLink.Content = text["Copy the link"];
         Retry.Visibility = Visible(state.Kind == TvAppKind.Failed);
+        // Hata varken (LG'nin parola adımındaki hata dahil) günlük gösterilip kopyalanabilir.
+        LogActions.Visibility = Visible(state.Error is not null);
+        if (state.Error is null) CopyLog.Content = text["Copy the log"];
         // Uygulama "hazır" görünüp TV'de yoksa ya da açılmıyorsa (TV uygulaması bağlı değil) yeniden kurulabilir.
         Reinstall.Visibility = Visible(state.Kind == TvAppKind.UpToDate && controller?.CanReinstallTvApp == true);
         SamsungHostStep.Text = text["3. Turn Developer mode On, type this computer's address as Host PC IP: %@ and press OK."]
@@ -162,6 +165,28 @@ public partial class TvAppCard : UserControl
         try { Clipboard.SetText(url.AbsoluteUri); }
         catch (System.Runtime.InteropServices.COMException) { return; } // pano başka bir uygulamada kilitli
         CopyLink.Content = Localizer.Current["Copied"];
+    }
+
+    /// <summary>Kurulum günlüğünü Explorer'da seçili gösterir; dosya henüz yoksa klasörünü açar.</summary>
+    private void OnShowLog(object sender, RoutedEventArgs e)
+    {
+        var path = Services.LiveServices.TvInstallLogPath;
+        try
+        {
+            if (System.IO.File.Exists(path)) Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            else Process.Start(new ProcessStartInfo(System.IO.Path.GetDirectoryName(path)!) { UseShellExecute = true });
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+    }
+
+    /// <summary>Günlüğün sonunu panoya kopyalar (GitHub'a ya da iletiye yapıştırmak için).</summary>
+    private void OnCopyLog(object sender, RoutedEventArgs e)
+    {
+        var log = TvInstall.InstallLog.ReadTail(Services.LiveServices.TvInstallLogPath);
+        if (log.Length == 0) return;
+        try { Clipboard.SetText(log); }
+        catch (System.Runtime.InteropServices.COMException) { return; } // pano başka bir uygulamada kilitli
+        CopyLog.Content = Localizer.Current["Copied"];
     }
 
     private void OnGuide(object sender, RoutedEventArgs e) =>

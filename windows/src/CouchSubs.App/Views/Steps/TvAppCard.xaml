@@ -59,6 +59,12 @@
             </StackPanel>
             <TextBlock x:Name="Problem" Style="{StaticResource ErrorText}" Margin="0,8,0,0" />
             <Button x:Name="Retry" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{t:T 'Try again'}" Click="OnRetry" />
+            <!-- Kurulum hatasında günlük (tvinstall.log) üç markada da Explorer'da gösterilir ya da panoya kopyalanır
+                 (telefonlardaki "Kurulum günlüğünü paylaş"ın karşılığı). -->
+            <StackPanel x:Name="LogActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,8,0,0">
+                <Button Content="{t:T 'Show the install log'}" Click="OnShowLog" />
+                <Button x:Name="CopyLog" Margin="8,0,0,0" Content="{t:T 'Copy the log'}" Click="OnCopyLog" />
+            </StackPanel>
             <!-- TV'den kaldırılan uygulama bu bilgisayarın kaydında "kurulu" kalıyordu (#352, #389): kaydı unutup TV'ye yeniden bakar. -->
             <Button x:Name="Reinstall" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{t:T 'Reinstall the TV app'}" Click="OnReinstall" />
         </StackPanel>

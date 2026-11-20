@@ -82,7 +82,9 @@ TV'sine kurmak mümkün değildir. Mac ve Windows uygulamaları bunu kullanıcı
    denemede yenisi alınır. Hata kodlarının anlamı `SamsungInstallDiagnostics.cs`'te.
 
 Her adım ve TV'nin, Samsung'un bütün yanıtları `tvinstall.log`'a yazılır (Mac: `~/Library/Logs/CouchSubs/`,
-Windows: `%LOCALAPPDATA%\CouchSubs\`); hata iletisi bu dosyayı da söyler.
+Windows: `%LOCALAPPDATA%\CouchSubs\`); hata iletisi bu dosyayı da söyler. LG ve Android TV kurulumu da aynı dosyaya
+yazar. Kurulum hatasında kart, üç markada da **Kurulum günlüğünü göster** (Finder / Explorer) ve **Günlüğü kopyala**
+düğmelerini gösterir (telefonlardaki **Kurulum günlüğünü paylaş**ın karşılığı).
 
 Uç noktalar belgesizdir ve Apps2Samsung'dan alınmıştır; Samsung değiştirirse burası güncellenir. Herkes için kalıcı
 yol yine mağaza yayınıdır (`docs/magaza.md`).

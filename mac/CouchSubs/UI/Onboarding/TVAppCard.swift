@@ -8,6 +8,7 @@ import SwiftUI
 struct TVAppCard: View {
     @EnvironmentObject private var model: AppModel
     @State private var passphrase = ""
+    @State private var logCopied = false
 
     private var brand: TVBrand { model.tv?.brand ?? .lg }
 
@@ -97,6 +98,7 @@ struct TVAppCard: View {
                         otherAddresses
                     }
                     Button("Try again") { Task { await model.refreshTVApp() } }.buttonStyle(.secondary)
+                    logActions
                 }
             case .chooseAndroidTV(let hosts):
                 // Aynı ağda iki Android TV: izin sorusu yanlış odadaki TV'de çıkmasın diye TV sorulur (#425).
@@ -129,6 +131,33 @@ struct TVAppCard: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Kurulum hatasında günlük (tvinstall.log) üç markada da Finder'da gösterilir ya da panoya kopyalanır
+    /// (telefonlardaki "Kurulum günlüğünü paylaş"ın karşılığı).
+    private var logActions: some View {
+        HStack(spacing: Theme.space("s")) {
+            Button("Show the install log") { Self.showLogInFinder() }.buttonStyle(.secondary)
+            Button(logCopied ? "Copied" : "Copy the log") {
+                let log = TVInstallLog.tail()
+                guard !log.isEmpty else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(log, forType: .string)
+                logCopied = true
+            }.buttonStyle(.secondary)
+        }
+    }
+
+    /// Günlük dosyasını Finder'da seçili gösterir; dosya henüz yoksa klasörünü açar.
+    static func showLogInFinder() {
+        let file = TVInstallLog.file
+        if FileManager.default.fileExists(atPath: file.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([file])
+        } else {
+            let folder = file.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(folder)
         }
     }
 
@@ -202,10 +231,12 @@ struct TVAppCard: View {
                 .disabled(passphrase.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         ErrorText(error: error.map { Self.message(for: $0, brand: .lg) })
+        if error != nil { logActions }
     }
 
     /// `reason`: TV'nin verdiği sebep; varsa mesajın altına eklenir. Samsung'da ayrıntı (TV'nin kurulum çıktısı,
-    /// Samsung'un yanıtı) ve gönderilecek günlük dosyası da yazılır: hiçbir hata genel mesajda kalmasın.
+    /// Samsung'un yanıtı) da yazılır: hiçbir hata genel mesajda kalmasın. Gönderilecek günlük dosyası üç markada da
+    /// yazılır (önceden yalnız Samsung'da).
     static func message(for error: DevModeError, brand: TVBrand, reason: String?) -> String {
         var text = message(for: error, brand: brand, hasReason: reason != nil)
         let samsung = brand == .samsung
@@ -218,7 +249,8 @@ struct TVAppCard: View {
         if Distribution.isAppStore, error == .installFailed {
             text += "\n\n" + String(localized: "If the Mac App Store version cannot install the TV app, install it once with the GitHub (DMG) version of CouchSubs. After that, this version is enough.")
         }
-        guard samsung else { return text }
+        let send = String(format: String(localized: "If this keeps happening, send us this file: %@"), TVInstallLog.displayPath)
+        guard samsung else { return text + "\n\n" + send }
         if error == .installFailed || error == .certificateRejected {
             text += "\n\n" + String(localized: "If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again.")
         }
@@ -230,7 +262,6 @@ struct TVAppCard: View {
         if error == .connectionLost {
             text += "\n\n" + String(localized: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
         }
-        let send = String(format: String(localized: "If this keeps happening, send us this file: %@"), TVInstallLog.displayPath)
         return text + "\n\n" + send
     }
 
