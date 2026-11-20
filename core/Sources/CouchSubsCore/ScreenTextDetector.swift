@@ -56,6 +56,8 @@ public final class ScreenTextDetector: @unchecked Sendable {
         var rejected = Mask()
         var isRejected = false
         var quiet = false
+        // Zemin (koyu) örneklerinin toplamları: panel zemini kanıtı için.
+        var darkSum = 0, darkSquares = 0, darkCount = 0
     }
 
     /// Karo dikdörtgeni (sütun/satır, iki uç dahil).
@@ -120,9 +122,10 @@ public final class ScreenTextDetector: @unchecked Sendable {
             for row in 0..<Self.rows {
                 for column in 0..<Self.columns {
                     let index = row * Self.columns + column
-                    let (mask, bright, dark, deviation) = measured[index]
+                    let (mask, bright, dark, deviation, darkSum, darkSquares) = measured[index]
                     var tile = tiles[index]
                     tile.quiet = deviation < Self.quietDeviation
+                    (tile.darkSum, tile.darkSquares, tile.darkCount) = (darkSum, darkSquares, dark)
                     if !tile.hasLast || tile.last.distance(mask) > Self.maskChange { tile.stableSince = now }
                     tile.last = mask
                     tile.hasLast = true
@@ -138,7 +141,9 @@ public final class ScreenTextDetector: @unchecked Sendable {
             let all = Self.components(candidate)
             let inMenu = isMenu(all, now: now)
             // Menü dışında tek karoluk bileşen (kısa etiket, simge) alan olmaz.
-            let components = inMenu ? all : all.filter { $0.tiles.count >= 2 }
+            // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
+            // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez (Windows ile aynı).
+            let components = inMenu ? all : all.filter { $0.tiles.count >= 2 && isInterface($0.cells, $0.tiles, now: now) }
             let ranked = components.enumerated()
                 .sorted { ($0.element.tiles.count, -$0.offset) > ($1.element.tiles.count, -$1.offset) }
                 .map(\.element).prefix(inMenu ? Self.menuMaxAreas : Self.maxAreas)
@@ -170,13 +175,13 @@ public final class ScreenTextDetector: @unchecked Sendable {
         }
     }
 
-    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int, Double)] {
-        var result = [(Mask, Int, Int, Double)](repeating: (Mask(), 0, 0, 0), count: columns * rows)
+    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int, Double, Int, Int)] {
+        var result = [(Mask, Int, Int, Double, Int, Int)](repeating: (Mask(), 0, 0, 0, 0, 0), count: columns * rows)
         pixels.bytes.withUnsafeBufferPointer { bytes in
             for row in 0..<rows {
                 for column in 0..<columns {
                     var mask = Mask()
-                    var bright = 0, dark = 0, bit = 0, sum = 0, squares = 0
+                    var bright = 0, dark = 0, bit = 0, sum = 0, squares = 0, darkSum = 0, darkSquares = 0
                     for sy in 0..<samples {
                         let line = (row * samples + sy) * pixels.width * 4
                         for sx in 0..<samples {
@@ -189,6 +194,8 @@ public final class ScreenTextDetector: @unchecked Sendable {
                                 mask.words[bit / 64] |= 1 << UInt64(bit % 64)
                             } else if luma <= Self.dark {
                                 dark += 1
+                                darkSum += luma
+                                darkSquares += luma * luma
                             }
                             bit += 1
                         }
@@ -196,7 +203,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
                     let count = Double(samples * samples)
                     let mean = Double(sum) / count
                     let deviation = max(0, Double(squares) / count - mean * mean).squareRoot()
-                    result[row * columns + column] = (mask, bright, dark, deviation)
+                    result[row * columns + column] = (mask, bright, dark, deviation, darkSum, darkSquares)
                 }
             }
         }
@@ -278,6 +285,39 @@ public final class ScreenTextDetector: @unchecked Sendable {
     /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya
     /// da karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
     /// menüde gezinirken (seçim çerçevesi değişince) durum korunur.
+    /// Arayüz kanıtı: zemin örneklerinin parlaklık sapması en çok bu kadar (düz ya da yarı saydam düz panel).
+    public static let groundDeviation = 22.0
+    /// Zemin karolarının en az bu kadarı aynı tonda (±`groundTone`).
+    public static let groundShare = 0.7
+    public static let groundTone = 20.0
+    /// Arayüz kanıtı: bileşen en az bu kadar yerinde sabit kalmış olmalı.
+    public static let uiStableMs = 600
+
+    /// Bileşen bir arayüz kutusu mu: kutusundaki zemin (koyu) örneklerinin parlaklık sapması en çok `groundDeviation` ve
+    /// zemin karolarının en az %70'i aynı tonda (düz ya da yarı saydam düz panel); karoları en az `uiStableMs` yerinde sabit.
+    private func isInterface(_ cells: Cells, _ component: [Int], now: Int) -> Bool {
+        if component.contains(where: { now - tiles[$0].stableSince < Self.uiStableMs }) { return false }
+        var sum = 0, squares = 0, count = 0
+        var means: [Double] = []
+        let points = Self.samples * Self.samples
+        for row in cells.top...cells.bottom {
+            for column in cells.left...cells.right {
+                let tile = tiles[row * Self.columns + column]
+                guard tile.darkCount > 0 else { continue }
+                sum += tile.darkSum
+                squares += tile.darkSquares
+                count += tile.darkCount
+                if tile.darkCount >= points / 10 { means.append(Double(tile.darkSum) / Double(tile.darkCount)) }
+            }
+        }
+        guard count > 0, !means.isEmpty else { return false }
+        let mean = Double(sum) / Double(count)
+        let deviation = max(0, Double(squares) / Double(count) - mean * mean).squareRoot()
+        guard deviation <= Self.groundDeviation else { return false }
+        let median = means.sorted()[means.count / 2]
+        return Double(means.filter { abs($0 - median) <= Self.groundTone }.count) >= Self.groundShare * Double(means.count)
+    }
+
     private func isMenu(_ components: [(cells: Cells, tiles: [Int])], now: Int) -> Bool {
         guard components.count >= Self.menuComponents else { return false }
         let inside = Set(components.flatMap(\.tiles))

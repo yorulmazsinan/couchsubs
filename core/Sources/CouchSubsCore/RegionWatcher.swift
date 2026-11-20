@@ -251,7 +251,7 @@ public final class RegionWatcher {
         }
         reads += 1
         onReadMs?(now() - started)
-        let candidate = Self.candidate(reading, in: region, frame: crop, auto: area.auto)
+        let candidate = Self.candidate(reading, in: region, frame: crop, auto: area.auto, menu: area.menu)
         if state.lastRead == candidate.key {
             state.candidate = nil
             states[area.id] = state
@@ -321,7 +321,9 @@ public final class RegionWatcher {
     /// satırlar yukarıdan aşağı parçalara toplanır (başlık, cümle, madde). Yazının içindeki kumanda simgeleri `frame`'den
     /// (okunan alan) kesilir; çeviride yerleri korunur.
     /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
-    static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false) -> Candidate {
+    /// `menu`: otomatik alan menüde; satır yükseklikleri farklı olabilir (başlık, etiket).
+    static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
+                          menu: Bool = false) -> Candidate {
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         let marked = reading.withButtonIcons(frame: frame, monochrome: auto)
         let lines = (auto ? marked : marked.withoutButtonPrompts()).withoutOcrNoise().lines
@@ -344,7 +346,7 @@ public final class RegionWatcher {
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         var blocks: [Block]?
         let groups = (auto || lines.count > 1) && !lines.isEmpty && boxes.count == lines.count
-            ? (auto ? autoGroups(lines) : ScreenTranslation.groups(from: lines)) : []
+            ? (auto ? autoGroups(lines, menu: menu) : ScreenTranslation.groups(from: lines)) : []
         if (auto && !groups.isEmpty) || (groups.count > 1 && groups.count < ScreenTranslation.maxGroups) {
             paragraphs = groups.flatMap(\.paragraphs)
             icons = groups.flatMap { $0.icons ?? $0.paragraphs.map { _ in [IconSlot]() } }
@@ -379,7 +381,7 @@ public final class RegionWatcher {
 
     /// Otomatik alanın grupları: kısa etiket satırları (menü satırı, tuş etiketi) her biri kendi bloğudur; stili (seçili
     /// satırın ters rengi) satır başına çıkarılır. Uzun yazı satırları eskisi gibi paragraflara toplanır.
-    static func autoGroups(_ lines: [TextLine]) -> [ScreenTranslation.Group] {
+    static func autoGroups(_ lines: [TextLine], menu: Bool = false) -> [ScreenTranslation.Group] {
         func isLabel(_ line: TextLine) -> Bool { line.text.split(whereSeparator: \.isWhitespace).count <= labelWords }
         func isTitle(_ line: TextLine) -> Bool { line.text.contains(where: \.isLetter) && !line.text.contains(where: \.isLowercase) }
         func single(_ line: TextLine) -> ScreenTranslation.Group {
@@ -398,6 +400,10 @@ public final class RegionWatcher {
                 groups += own.map(single)
                 continue
             }
+            // Arayüz yazısı perspektifsizdir: menü dışında satır yükseklikleri ±%15'ten çok farklı paragraf (eğik ya da ölçekli
+            // dünya yazısı: poster, tabela) çevrilmez (Windows ile aynı).
+            let heights = own.filter { !isLabel($0) }.map { $0.box!.bottom - $0.box!.top }
+            if !menu, heights.count >= 2, heights.max()! > heights.min()! * (1.15 / 0.85) { continue }
             let titles = Array(own.prefix { isTitle($0) && isLabel($0) })
             groups += titles.map(single)
             if titles.isEmpty { groups.append(group) }
@@ -443,7 +449,8 @@ public final class RegionWatcher {
     /// Kararlı yazı: öncekinden farklıysa çevrilip gönderilir, boşsa kutu kalkar.
     private func commit(_ candidate: Candidate, area: ExtraArea) async {
         guard var state = states[area.id] else { return }
-        if area.auto, candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: area.menu) {
+        if area.auto, candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: area.menu)
+            || (!area.menu && isWorldText(candidate)) {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
             if !state.shown.isEmpty || !(state.renderedText ?? "").isEmpty {
@@ -634,6 +641,34 @@ public final class RegionWatcher {
         return Translation(result: result, readyCount: readyCount)
     }
 
+    /// Dünya yazısı listesinde kalma süresi (oturum içinde).
+    static let worldTextMs = 10 * 60 * 1000
+    private var autoSeen: [String: (box: TextBox, at: Int)] = [:]
+    private var worldText: [String: Int] = [:]
+
+    /// Kamera hareket ederken kayan ya da ölçeklenen yazı (aynı metin başka yerde ya da boyda yeniden okundu) oyun
+    /// dünyasındadır (poster, plaka, tabela): metni 10 dk dünya yazısı listesine girer, çevrilmez. Arayüz yazısı yerinde durur.
+    private func isWorldText(_ candidate: Candidate) -> Bool {
+        let key = candidate.text
+        guard !key.isEmpty else { return false }
+        let time = now()
+        if let until = worldText[key], until > time { return true }
+        guard let box = candidate.box else { return false }
+        if let seen = autoSeen[key] {
+            let moved = abs((box.left + box.right) / 2 - (seen.box.left + seen.box.right) / 2) > 0.02
+                || abs((box.top + box.bottom) / 2 - (seen.box.top + seen.box.bottom) / 2) > 0.02
+            let height = box.bottom - box.top, before = seen.box.bottom - seen.box.top
+            if moved || max(height, before) > 1.15 * min(height, before) {
+                if worldText.count > 512 { worldText.removeAll() }
+                worldText[key] = time + Self.worldTextMs
+                return true
+            }
+        }
+        if autoSeen.count > 512 { autoSeen.removeAll() }
+        autoSeen[key] = (box, time)
+        return false
+    }
+
     /// Oturum terim sözlüğü: otomatik alanlarda çevrilen etiket ve parçalar (kaynak → çeviri).
     private var terms: [String: String] = [:]
     private static let termLimit = 4096
@@ -741,6 +776,8 @@ public final class RegionWatcher {
         lastPass = nil
         translations.removeAll()
         terms.removeAll()
+        worldText.removeAll()
+        autoSeen.removeAll()
         let anyShown = states.values.contains { !$0.shown.isEmpty }
         states.removeAll()
         if anyShown { server.clearRegions() }

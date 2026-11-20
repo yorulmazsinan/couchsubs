@@ -69,9 +69,9 @@ final class ScreenTextDetectorTests: XCTestCase {
 
     func testBoxThatStaysStillIsProposedAfterItSettles() throws {
         let detector = ScreenTextDetector()
-        run(detector, 0, 200) { Self.scene($0, box: self.topLeft) }
+        run(detector, 0, 500) { Self.scene($0, box: self.topLeft) }
         XCTAssertTrue(detector.areas.isEmpty)
-        run(detector, 300, 400) { Self.scene($0, box: self.topLeft) }
+        run(detector, 600, 700) { Self.scene($0, box: self.topLeft) }
         XCTAssertEqual(detector.areas.count, 1)
         let area = try XCTUnwrap(detector.areas.first)
         XCTAssertTrue(area.auto)
@@ -100,39 +100,39 @@ final class ScreenTextDetectorTests: XCTestCase {
         run(detector, 0, 1000, excluded: [CropRegion()]) { Self.scene($0, box: (200, 260, 240, 60)) }
         XCTAssertTrue(detector.areas.isEmpty)
         // Aynı kutu altyazı alanı dışında sayılırsa önerilir.
-        run(detector, 1100, 1600) { Self.scene($0, box: (200, 260, 240, 60)) }
+        run(detector, 1100, 1900) { Self.scene($0, box: (200, 260, 240, 60)) }
         XCTAssertEqual(detector.areas.count, 1)
     }
 
     func testRejectedAreaIsNotProposedAgainUntilItChanges() throws {
         let detector = ScreenTextDetector()
-        run(detector, 0, 400) { Self.scene($0, box: self.topLeft) }
+        run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }
         let id = try XCTUnwrap(detector.areas.first).id
         detector.reject(id)
         XCTAssertTrue(detector.areas.isEmpty)
-        run(detector, 500, 2000) { Self.scene($0, box: self.topLeft) }
+        run(detector, 800, 2300) { Self.scene($0, box: self.topLeft) }
         XCTAssertTrue(detector.areas.isEmpty)
         // Kutunun içeriği değişti (yeni yazı): yeniden önerilir, yeni kimlikle.
-        run(detector, 2100, 2600) { Self.scene($0, box: (20, 25, 160, 60)) }
+        run(detector, 2400, 3200) { Self.scene($0, box: (20, 25, 160, 60)) }
         XCTAssertEqual(detector.areas.count, 1)
         XCTAssertNotEqual(detector.areas.first?.id, id)
     }
 
     func testAreaLeavesSevenHundredMillisecondsAfterTheBoxIsGone() throws {
         let detector = ScreenTextDetector()
-        run(detector, 0, 400) { Self.scene($0, box: self.topLeft) }
+        run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }
         let id = try XCTUnwrap(detector.areas.first).id
-        run(detector, 500, 1000) { Self.scene($0) }
+        run(detector, 800, 1300) { Self.scene($0) }
         XCTAssertEqual(detector.areas.map(\.id), [id])
-        run(detector, 1100, 1100) { Self.scene($0) }
+        run(detector, 1400, 1400) { Self.scene($0) }
         XCTAssertTrue(detector.areas.isEmpty)
     }
 
     func testAreaKeepsItsIdWhileTheBoxGrows() throws {
         let detector = ScreenTextDetector()
-        run(detector, 0, 400) { Self.scene($0, box: self.topLeft) }
+        run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }
         let first = try XCTUnwrap(detector.areas.first)
-        run(detector, 500, 1000) { Self.scene($0, box: (20, 20, 160, 100)) }
+        run(detector, 800, 1700) { Self.scene($0, box: (20, 20, 160, 100)) }
         XCTAssertEqual(detector.areas.count, 1)
         let grown = try XCTUnwrap(detector.areas.first)
         XCTAssertEqual(grown.id, first.id)
@@ -147,7 +147,7 @@ final class ScreenTextDetectorTests: XCTestCase {
 
     func testResetForgetsAreas() {
         let detector = ScreenTextDetector()
-        run(detector, 0, 400) { Self.scene($0, box: self.topLeft) }
+        run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }
         XCTAssertEqual(detector.areas.count, 1)
         detector.reset()
         XCTAssertTrue(detector.areas.isEmpty)
