@@ -24,15 +24,21 @@ public sealed class StickyRows
     /// ucunda duran, yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan
     /// çıkarılır. Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok
     /// gönderiliyor ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu.
-    /// Yazı yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+    /// Yazı yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez. Yaş satırın son
+    /// büyümesinden sayılır (yazı yazılır gibi beliren üst satır alt satır gelene dek büyür) ve üst uçtaki satırın altındaki
+    /// satır onun devamıysa (<see cref="Reading.Continues"/>: cümle bitmemiş, alttaki küçük harfle başlıyor ya da kısa) üst
+    /// satır çıkarılmaz: iki satırlı altyazının alt satırı geç belirince üst satır atılıyor, yalnız alttaki 1-2 sözcük
+    /// çevriliyordu (GitHub #715).
     /// </summary>
     public const int LingerMs = 1200;
 
     private sealed class Row(string text, long since)
     {
-        public string Text { get; } = text;
+        public string Text { get; set; } = text;
         public long Since { get; } = since;
         public long LastSeen { get; set; } = since;
+        /// <summary>Satırın en son büyüdüğü an (yazı yazılır gibi beliren satır).</summary>
+        public long Grown { get; set; } = since;
         public bool Sticky { get; set; }
     }
 
@@ -56,6 +62,12 @@ public sealed class StickyRows
             if (text.Length < 3) { matched.Add(null); continue; }
             var row = rows.FirstOrDefault(r => !used.Contains(r) && TextMatch.IsSimilar(text, r.Text));
             if (row is null) { row = new Row(text, time); rows.Add(row); }
+            else if (text.Length >= row.Text.Length + 3)
+            {
+                // Satır büyüdü (yazı yazılır gibi): yaşı yeniden başlar; okuma sapmaları (kısalıp uzama) saymaz.
+                row.Text = text;
+                row.Grown = time;
+            }
             row.LastSeen = time;
             used.Add(row);
             matched.Add(row);
@@ -89,9 +101,14 @@ public sealed class StickyRows
         var live = Enumerable.Range(0, count).Where(i => matched[i] is { Sticky: false }).ToList();
         if (live.Count < 2) return result;
         var youngest = live.Max(i => matched[i]!.Since);
-        bool Old(int i) => youngest - matched[i]!.Since >= LingerMs && SpeakerPrefix.Parse(reading.Lines[i].Text) is null;
+        bool Old(int i) => youngest - matched[i]!.Grown >= LingerMs && SpeakerPrefix.Parse(reading.Lines[i].Text) is null;
         // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
-        for (var k = 0; k < live.Count && Old(live[k]); k++) result[live[k]] = true;
+        // Üstteki eski satırın altındaki satır onun devamıysa ikisi aynı cümledir: üst satır kalır.
+        for (var k = 0; k < live.Count && Old(live[k]); k++)
+        {
+            if (k + 1 < live.Count && Reading.Continues(reading.Lines[live[k]].Text, reading.Lines[live[k + 1]].Text)) break;
+            result[live[k]] = true;
+        }
         for (var k = live.Count - 1; k >= 0 && Old(live[k]); k--) result[live[k]] = true;
         return result;
     }

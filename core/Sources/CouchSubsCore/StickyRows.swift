@@ -22,13 +22,18 @@ public struct StickyRows {
     /// yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan çıkarılır.
     /// Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok gönderiliyor
     /// ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu. Yazı yazılır gibi beliren
-    /// ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+    /// ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez. Yaş satırın son büyümesinden sayılır (yazı
+    /// yazılır gibi beliren üst satır alt satır gelene dek büyür) ve üst uçtaki satırın altındaki satır onun devamıysa
+    /// (`Reading.continues`: cümle bitmemiş, alttaki küçük harfle başlıyor ya da kısa) üst satır çıkarılmaz: iki satırlı
+    /// altyazının alt satırı geç belirince üst satır atılıyor, yalnız alttaki 1-2 sözcük çevriliyordu (GitHub #715).
     public static let lingerMs = 1200
 
     private struct Row {
         var text: String
         var since: Int
         var lastSeen: Int
+        /// Satırın en son büyüdüğü an (yazı yazılır gibi beliren satır).
+        var grown: Int
         var sticky = false
     }
 
@@ -50,10 +55,15 @@ public struct StickyRows {
             guard text.count >= 3 else { matched.append(nil); continue }
             if let index = rows.indices.first(where: { !used.contains($0) && TextMatch.isSimilar(text, rows[$0].text) }) {
                 rows[index].lastSeen = time
+                if text.count >= rows[index].text.count + 3 {
+                    // Satır büyüdü (yazı yazılır gibi): yaşı yeniden başlar; okuma sapmaları (kısalıp uzama) saymaz.
+                    rows[index].text = text
+                    rows[index].grown = time
+                }
                 used.insert(index)
                 matched.append(index)
             } else {
-                rows.append(Row(text: text, since: time, lastSeen: time))
+                rows.append(Row(text: text, since: time, lastSeen: time, grown: time))
                 used.insert(rows.count - 1)
                 matched.append(rows.count - 1)
             }
@@ -85,11 +95,17 @@ public struct StickyRows {
         let live = matched.indices.filter { matched[$0].map { !rows[$0].sticky } ?? false }
         guard live.count >= 2, let youngest = live.map({ rows[matched[$0]!].since }).max() else { return result }
         func old(_ position: Int) -> Bool {
-            youngest - rows[matched[position]!].since >= Self.lingerMs
+            youngest - rows[matched[position]!].grown >= Self.lingerMs
                 && SpeakerPrefix.split(reading.lines[position].text) == nil
         }
         // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
-        for position in live { if old(position) { result[position] = true } else { break } }
+        // Üstteki eski satırın altındaki satır onun devamıysa ikisi aynı cümledir: üst satır kalır.
+        for (k, position) in live.enumerated() {
+            guard old(position) else { break }
+            if k + 1 < live.count,
+               Reading.continues(reading.lines[position].text, with: reading.lines[live[k + 1]].text) { break }
+            result[position] = true
+        }
         for position in live.reversed() { if old(position) { result[position] = true } else { break } }
         return result
     }

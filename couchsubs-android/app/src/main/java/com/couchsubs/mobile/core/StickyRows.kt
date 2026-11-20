@@ -23,13 +23,19 @@ class StickyRows {
          * duran, yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan çıkarılır.
          * Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok
          * gönderiliyor ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu. Yazı
-         * yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+         * yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez. Yaş satırın son
+         * büyümesinden sayılır (yazı yazılır gibi beliren üst satır alt satır gelene dek büyür) ve üst uçtaki satırın
+         * altındaki satır onun devamıysa ([Reading.continues]: cümle bitmemiş, alttaki küçük harfle başlıyor ya da kısa)
+         * üst satır çıkarılmaz: iki satırlı altyazının alt satırı geç belirince üst satır atılıyor, yalnız alttaki 1-2
+         * sözcük çevriliyordu (GitHub #715).
          */
         const val LINGER_MS = 1200L
     }
 
-    private class Row(val text: String, val since: Long) {
+    private class Row(var text: String, val since: Long) {
         var lastSeen = since
+        /** Satırın en son büyüdüğü an (yazı yazılır gibi beliren satır). */
+        var grown = since
         var sticky = false
     }
 
@@ -49,6 +55,11 @@ class StickyRows {
             if (text.length < 3) { matched.add(null); continue }
             val row = rows.firstOrNull { it !in used && TextMatch.isSimilar(text, it.text) }
                 ?: Row(text, time).also { rows.add(it) }
+            if (text.length >= row.text.length + 3) {
+                // Satır büyüdü (yazı yazılır gibi): yaşı yeniden başlar; okuma sapmaları (kısalıp uzama) saymaz.
+                row.text = text
+                row.grown = time
+            }
             row.lastSeen = time
             used.add(row)
             matched.add(row)
@@ -77,9 +88,14 @@ class StickyRows {
         val live = matched.indices.filter { matched[it]?.sticky == false }
         if (live.size < 2) return result
         val youngest = live.maxOf { matched[it]!!.since }
-        fun old(i: Int) = youngest - matched[i]!!.since >= LINGER_MS && SpeakerPrefix.split(reading.lines[i].text) == null
+        fun old(i: Int) = youngest - matched[i]!!.grown >= LINGER_MS && SpeakerPrefix.split(reading.lines[i].text) == null
         // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
-        for (i in live) if (old(i)) result[i] = true else break
+        // Üstteki eski satırın altındaki satır onun devamıysa ikisi aynı cümledir: üst satır kalır.
+        for ((k, i) in live.withIndex()) {
+            if (!old(i)) break
+            if (k + 1 < live.size && Reading.continues(reading.lines[i].text, reading.lines[live[k + 1]].text)) break
+            result[i] = true
+        }
         for (i in live.asReversed()) if (old(i)) result[i] = true else break
         return result
     }

@@ -177,7 +177,7 @@ public struct Reading: Equatable, Sendable {
         var blocks: [[TextLine]] = []
         for line in lines.sorted(by: { $0.box!.top < $1.box!.top }) {
             let box = line.box!.placed(in: area)
-            if let index = blocks.lastIndex(where: { Self.belongs(box, to: $0, in: area) }) {
+            if let index = blocks.lastIndex(where: { Self.belongs(box, line.text, to: $0, in: area) }) {
                 blocks[index].append(line)
             } else {
                 blocks.append([line])
@@ -198,16 +198,34 @@ public struct Reading: Equatable, Sendable {
 
     /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
     /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
-    /// satırı ayrılır; Windows ile aynı).
-    private static func belongs(_ box: TextBox, to block: [TextLine], in area: TextBox) -> Bool {
+    /// satırı ayrılır; Windows ile aynı). Yazı boyu yalnız iki satır da en az üç sözcükken karşılaştırılır ve alttaki satır
+    /// üsttekinin devamıysa (`continues`) hiç karşılaştırılmaz: satır kutusu harflere göre ölçülür, "now." gibi kısa ve
+    /// büyük harfsiz/kuyruksuz satırın kutusu daha alçak çıkıyor, cümlenin devamı ayrı blok sayılıp tek başına
+    /// çevriliyordu (GitHub #715).
+    private static func belongs(_ box: TextBox, _ text: String, to block: [TextLine], in area: TextBox) -> Bool {
         let last = block.last!.box!.placed(in: area)
         let own = box.bottom - box.top, previous = last.bottom - last.top
         let height = max(own, previous)
         guard box.top - last.bottom <= height * 0.6, box.top >= last.top else { return false }
-        guard max(own, previous) <= 1.25 * min(own, previous) else { return false }
+        let comparable = wordCount(text) >= 3 && wordCount(block.last!.text) >= 3 && !continues(block.last!.text, with: text)
+        guard !comparable || max(own, previous) <= 1.25 * min(own, previous) else { return false }
         let overlap = min(box.right, last.right) - max(box.left, last.left)
         let narrower = min(box.right - box.left, last.right - last.left)
         return overlap > 0 && overlap >= narrower * 0.5
+    }
+
+    private static func wordCount(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
+
+    /// `next` satırı `upper`'ın devamı mı: üstteki cümle bitmemiş (nokta, ünlem, soru işaretiyle bitmiyor) ve alttaki
+    /// küçük harfle başlıyor ya da üstteki virgül/tireyle bitiyor ya da alttaki en çok üç sözcük. Konuşan adlı alt satır
+    /// ("Lucia: …") yeni konuşmadır, devam sayılmaz (Windows: Reading.Continues, Android: Reading.continues).
+    static func continues(_ upper: String, with next: String) -> Bool {
+        let top = upper.trimmingCharacters(in: .whitespacesAndNewlines)
+        let below = next.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !top.isEmpty, !below.isEmpty, !SubtitleStabilizer.endsSentence(top) else { return false }
+        guard SpeakerPrefix.split(below) == nil else { return false }
+        if let first = below.first(where: \.isLetter), first.isLowercase { return true }
+        return top.hasSuffix(",") || top.hasSuffix("-") || top.hasSuffix("—") || wordCount(below) <= 3
     }
 
     /// Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil.

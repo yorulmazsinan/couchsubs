@@ -69,6 +69,21 @@ class Reading(lines: List<TextLine>) {
             gap > lineHeight * 4 && gap > imageWidth * 0.12
 
         private fun wordCount(text: String) = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+
+        /**
+         * [next] satırı [upper]'ın devamı mı: üstteki cümle bitmemiş (nokta, ünlem, soru işaretiyle bitmiyor) ve alttaki
+         * küçük harfle başlıyor ya da üstteki virgül/tireyle bitiyor ya da alttaki en çok üç sözcük. Konuşan adlı alt satır
+         * ("Lucia: …") yeni konuşmadır, devam sayılmaz (Windows: Reading.Continues, Mac: Reading.continues).
+         */
+        fun continues(upper: String, next: String): Boolean {
+            val top = upper.trim()
+            val below = next.trim()
+            if (top.isEmpty() || below.isEmpty() || SubtitleStabilizer.endsSentence(top)) return false
+            if (SpeakerPrefix.split(below) != null) return false
+            val first = below.firstOrNull { it.isLetter() }
+            return (first != null && first.isLowerCase()) || top.endsWith(",") || top.endsWith("-") || top.endsWith("—") ||
+                wordCount(below) <= 3
+        }
     }
 
     val text: String get() = lines.joinToString("\n") { it.text }

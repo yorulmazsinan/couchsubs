@@ -166,7 +166,7 @@ public sealed class Reading
         foreach (var line in Lines.OrderBy(line => line.Box!.Value.Top))
         {
             var box = line.Box!.Value.PlacedIn(area);
-            var index = blocks.FindLastIndex(block => Belongs(box, block, area));
+            var index = blocks.FindLastIndex(block => Belongs(box, block, area, line.Text));
             if (index >= 0) blocks[index].Add(line);
             else blocks.Add([line]);
         }
@@ -186,18 +186,38 @@ public sealed class Reading
     /// <summary>
     /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
     /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
-    /// satırı ayrılır).
+    /// satırı ayrılır). Yazı boyu yalnız iki satır da en az üç sözcükken karşılaştırılır ve alttaki satır üsttekinin
+    /// devamıysa (<see cref="Continues"/>) hiç karşılaştırılmaz: satır kutusu harflere göre ölçülür, "now." gibi kısa ve
+    /// büyük harfsiz/kuyruksuz satırın kutusu daha alçak çıkıyor, cümlenin devamı ayrı blok sayılıp tek başına
+    /// çevriliyordu (GitHub #715).
     /// </summary>
-    private static bool Belongs(TextBox box, List<TextLine> block, TextBox area)
+    private static bool Belongs(TextBox box, List<TextLine> block, TextBox area, string text)
     {
         var last = block[^1].Box!.Value.PlacedIn(area);
         double own = box.Bottom - box.Top, previous = last.Bottom - last.Top;
         var height = Math.Max(own, previous);
         if (box.Top - last.Bottom > height * 0.6 || box.Top < last.Top) return false;
-        if (Math.Max(own, previous) > 1.25 * Math.Min(own, previous)) return false;
+        var comparable = WordCount(text) >= 3 && WordCount(block[^1].Text) >= 3 && !Continues(block[^1].Text, text);
+        if (comparable && Math.Max(own, previous) > 1.25 * Math.Min(own, previous)) return false;
         var overlap = Math.Min(box.Right, last.Right) - Math.Max(box.Left, last.Left);
         var narrower = Math.Min(box.Right - box.Left, last.Right - last.Left);
         return overlap > 0 && overlap >= narrower * 0.5;
+    }
+
+    /// <summary>
+    /// <paramref name="next"/> satırı <paramref name="upper"/>'ın devamı mı: üstteki cümle bitmemiş (nokta, ünlem, soru
+    /// işaretiyle bitmiyor) ve alttaki küçük harfle başlıyor ya da üstteki virgül/tireyle bitiyor ya da alttaki en çok üç
+    /// sözcük. Konuşan adlı alt satır ("Lucia: …") yeni konuşmadır, devam sayılmaz (Mac/Android: aynı kural).
+    /// </summary>
+    internal static bool Continues(string upper, string next)
+    {
+        var top = upper.Trim();
+        var below = next.Trim();
+        if (top.Length == 0 || below.Length == 0 || SubtitleStabilizer.EndsSentence(top)) return false;
+        if (SpeakerPrefix.Parse(below) is not null) return false;
+        var first = below.FirstOrDefault(char.IsLetter);
+        return (first != default && char.IsLower(first)) || top.EndsWith(',') || top.EndsWith('-') || top.EndsWith('—')
+               || WordCount(below) <= 3;
     }
 
     /// <summary>Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil.</summary>
