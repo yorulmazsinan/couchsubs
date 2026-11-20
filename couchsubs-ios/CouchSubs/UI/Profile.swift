@@ -15,6 +15,7 @@ struct ProfileScreen: View {
     @AppStorage("notifyPackUpdates") private var notifyPackUpdates = true
     @AppStorage(PhoneModel.notifyDisconnectKey) private var notifyDisconnect = true
     @AppStorage(UsageData.key) private var usageData = true
+    @State private var confirmPSNSignOut = false
 
     var body: some View {
         MobileScreen {
@@ -56,6 +57,12 @@ struct ProfileScreen: View {
                 if model.isXbox && model.xboxSignedIn {
                     RowDivider()
                     Button { model.signOutXbox() } label: { ListRow(symbol: "person.crop.circle.badge.xmark", title: "Sign out of Microsoft") }
+                }
+                if !model.isXbox && (model.accountId != nil || model.console != nil) {
+                    RowDivider()
+                    Button { confirmPSNSignOut = true } label: {
+                        ListRow(symbol: "person.crop.circle.badge.xmark", title: "Sign out of PSN and reset the account")
+                    }
                 }
                 RowDivider()
                 NavigationLink(value: Route.target) { ListRow(symbol: "tv", title: "Subtitle target", detail: targetName) }
@@ -105,6 +112,11 @@ struct ProfileScreen: View {
         // Bağlantı bildirimi açılınca izin hemen istenir (yoksa ilk çeviride).
         .onChange(of: notifyDisconnect) { value in if value { model.requestNotificationPermission() } }
         .onAppear { app.analytics.screen("profile") }
+        .confirmationDialog("Sign out of PSN?", isPresented: $confirmPSNSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { model.signOutPSN() }
+        } message: {
+            Text("The second PSN account and the PS5 pairing are removed from this phone. To translate again, sign in with Sony and pair the PS5 again.")
+        }
     }
 
     private var devicesText: String {

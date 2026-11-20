@@ -287,6 +287,17 @@ final class PhoneModel: ObservableObject {
         xboxSignedIn = false
     }
 
+    /// PSN'den çıkış: ikinci hesabın kimliği ve PS5 eşleşmesi (PS5 o hesaba bağlıdır) bu telefondan silinir. Eskiden
+    /// yanlış hesapla girenin kurulumu baştan almaktan başka yolu yoktu (TestFlight). TV ve çeviri ayarları kalır.
+    func signOutPSN() {
+        stop()
+        [StoreKey.accountId, StoreKey.console, StoreKey.loginPasscode].forEach(store.remove)
+        accountId = nil
+        console = nil
+        hasLoginPasscode = false
+        RemotePlayLog.write("PSN hesabından çıkıldı; PS5 eşleşmesi silindi")
+    }
+
     var isXbox: Bool { platform == .xbox }
 
     /// Ayarlardaki paket listesi; paketler güncellenince yeniden okunur.

@@ -1,6 +1,70 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Sign out of PSN and reset the account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out of PSN and reset the account"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PSN'den çıkış yap ve hesabı sıfırla"
+          }
+        }
+      }
+    },
+    "Sign out of PSN?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out of PSN?"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PSN'den çıkış yapılsın mı?"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Çıkış yap"
+          }
+        }
+      }
+    },
+    "The second PSN account and the PS5 pairing are removed from this phone. To translate again, sign in with Sony and pair the PS5 again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The second PSN account and the PS5 pairing are removed from this phone. To translate again, sign in with Sony and pair the PS5 again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İkinci PSN hesabı ve PS5 eşleşmesi bu telefondan silinir. Yeniden çeviri yapmak için Sony ile giriş yapıp PS5'i yeniden eşleyin."
+          }
+        }
+      }
+    },
     "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again.": {
       "localizations": {
         "en": {
