@@ -1,0 +1,1 @@
+0.9.43: Altyazıda konuşanın adı ve cümlesi o karaktere özgü renkte gösterilir (bilgisayarda/telefonda "Konuşana göre renk" açıkken). Otomatik bulunan ekran yazılarının çevirisi özgün yazının zemin rengi, yazı rengi, kalınlığı ve hizasıyla çizilir; menü şeridindeki kısa etiketler şeride sığar.

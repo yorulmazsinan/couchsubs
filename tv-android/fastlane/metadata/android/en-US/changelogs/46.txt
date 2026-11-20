@@ -1,0 +1,1 @@
+0.9.43: Each speaker's name and line appear in that character's own color (when "Color by speaker" is on in the computer/phone app). Translations of automatically found on-screen text use the original text's background, text color, weight and alignment; short labels in menu strips fit their strip.
