@@ -70,7 +70,7 @@ object Backend {
      * raporlar (bkz. [ExitReport]). [lastSeen] son raporlanan kapanışın anı; dönen değer yenisi. [duringTranslation]:
      * en son kapanış çeviri sürerken mi oldu. Ağır değil ama IPC'dir; ana iş parçacığında çağrılmamalı.
      */
-    fun reportPreviousExits(context: Context, lastSeen: Long, duringTranslation: Boolean): Long {
+    fun reportPreviousExits(context: Context, lastSeen: Long, duringTranslation: Boolean, lastHealth: String? = null): Long {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return lastSeen
         val records = try {
             context.getSystemService(ActivityManager::class.java).getHistoricalProcessExitReasons(null, 0, 10).map {
@@ -84,12 +84,13 @@ object Backend {
         val newest = reportable.lastOrNull()
         for (record in reportable) {
             val translating = duringTranslation && record === newest
-            Log.w(TAG, "önceki kapanış: ${ExitReport.message(record, translating)}")
+            val message = ExitReport.message(record, translating, lastHealth)
+            Log.w(TAG, "önceki kapanış: $message")
             if (available && flagsAllowCrashReports) {
                 val crashlytics = FirebaseCrashlytics.getInstance()
                 crashlytics.setCustomKey("exit_reason", ExitReport.reasonName(record.reason))
                 crashlytics.setCustomKey("exit_during_translation", translating)
-                crashlytics.recordException(PreviousExitException(ExitReport.message(record, translating)))
+                crashlytics.recordException(PreviousExitException(message))
             }
             Telemetry.event("app_exit", "reason" to ExitReport.reasonName(record.reason), "during_translation" to translating)
         }

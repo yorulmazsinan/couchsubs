@@ -43,7 +43,27 @@ class ExitReportTest {
     @Test
     fun messageNamesReasonTranslationAndMemory() {
         val message = ExitReport.message(record(ExitReport.REASON_LOW_MEMORY, 1, "lmk"), duringTranslation = true)
-        assertEquals("low_memory (çeviri sürerken): lmk importance=125 pss=300MB rss=400MB", message)
+        assertEquals("low_memory (çeviri sürerken): lmk importance=125 pss=300MB rss=400MB; son durum: ilk 10 dk içinde", message)
         assertEquals("crash_native: - importance=125 pss=300MB rss=400MB", ExitReport.message(record(ExitReport.REASON_CRASH_NATIVE, 1), false))
+    }
+    /** Uzun oyunda (40-45 dk) kapanma bildirimi: kapanış raporunda oturum süresi, bellek ve ısı da görünür. */
+    @Test
+    fun translationExitCarriesLastHealthLine() {
+        val record = record(ExitReport.REASON_LOW_MEMORY, 1, "lmk")
+        assertEquals("low_memory (çeviri sürerken): lmk importance=125 pss=300MB rss=400MB; son durum: oturum 40 dk; bellek 812 MB",
+            ExitReport.message(record, duringTranslation = true, lastHealth = "oturum 40 dk; bellek 812 MB"))
+        assertEquals("low_memory (çeviri sürerken): lmk importance=125 pss=300MB rss=400MB; son durum: ilk 10 dk içinde",
+            ExitReport.message(record, duringTranslation = true, lastHealth = null))
+        // Çeviri dışındaki kapanışa eski satır eklenmez.
+        assertEquals("low_memory: lmk importance=125 pss=300MB rss=400MB", ExitReport.message(record, false, "oturum 40 dk"))
+    }
+
+    @Test
+    fun healthLineMatchesIphoneFormat() {
+        assertEquals("oturum 40 dk; bellek 812 MB (boş 310 MB); bellek uyarısı 2; ısı yüksek",
+            SessionHealth.line(40, 812, 310, 2, thermal = 2))
+        assertEquals("oturum 0 dk; bellek 300 MB; bellek uyarısı 0; ısı normal", SessionHealth.line(-1, 300, null, 0, 0))
+        // PowerManager.THERMAL_STATUS_*: 0 yok, 1-2 hafif/orta, 3 ciddi, 4+ kritik.
+        assertEquals(listOf(0, 1, 1, 2, 3, 3, 3), (0..6).map(SessionHealth::thermalLevel))
     }
 }

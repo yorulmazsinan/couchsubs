@@ -49,6 +49,10 @@ struct CouchSubsApp: App {
             model.onConnectionLost = { ConnectionAlert.post() }
             model.onPausedInBackground = { ConnectionAlert.schedulePausedInBackground() }
             model.onResumedFromBackground = { ConnectionAlert.clearPausedInBackground() }
+            // Uzun oturum tanısı: önceki oturum durdurulmadan bittiyse (bellek, çökme) raporlanır.
+            CrashNotes.enabled = firebase
+            model.onDiagnostic = { CrashNotes.log($0) }
+            if let ended = model.takeUnexpectedEnd() { CrashNotes.record(ended) }
         }
         // Çevrilen son satırlar ("Geçmiş"); testlerde dosyaya dokunulmaz.
         if !testing { model.loadHistory() }
@@ -99,6 +103,10 @@ struct CouchSubsApp: App {
                     ApplicationDelegate.shared.application(UIApplication.shared, open: url, sourceApplication: nil, annotation: nil)
                 }
                 .task { await app.start() }
+                // Uzun oturum tanısı: iOS'un bellek uyarısı günlüğe yazılır (kapanmadan önceki son iz).
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+                    model.receivedMemoryWarning()
+                }
                 // Soğuk açılışta promo.json'a arka planda bakılır (ön plana dönüşler aşağıda).
                 .task { await promo.refresh(setupDone: promoSetupDone) }
         }

@@ -383,8 +383,10 @@ struct TargetScreen: View {
                     Button { Task { await pair(tv) } } label: { tvRow(tv) }.buttonStyle(.plain).disabled(working != nil)
                 }
                 if allTVs.isEmpty {
+                    // Bulunamayınca ne yapılacağı da söylenir: TV uygulaması kurulu değilse buradan kurulur; monitör ya da
+                    // akıllı olmayan TV'de altyazı bu telefonda gösterilir (kullanıcı monitörde "Ağda TV bulunamadı"da kalmıştı).
                     HStack(spacing: Mobile.Space.gap) {
-                        Text(searching ? "Looking for the TV on the network…" : "No TV found on the network.")
+                        Text(searching ? "Looking for the TV on the network…" : "No TV found on the network. If the CouchSubs app is not on the TV, install it from this phone below. Using a monitor or a non-smart TV? Choose On this phone.")
                             .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
                         Spacer()
                         SearchAgainButton(searching: searching) { Task { await search() } }

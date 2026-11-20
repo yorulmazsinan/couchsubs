@@ -151,7 +151,13 @@ final class PhoneModel: ObservableObject {
     var onGameStarted: () -> Void = {}
     /// Çeviri başlarken bildirim izni istenir (tercih açıksa; iOS yalnız ilk seferde sorar). Testlerde boş.
     var requestNotificationPermission: () -> Void = {}
+    /// Uzun oturum tanısı (SessionHealth): satır çökme raporunun izine de yazılır (Crashlytics). Testlerde boş.
+    var onDiagnostic: (String) -> Void = { _ in }
     private var startedAt: Date?
+    /// On dakikada bir sağlık satırı yazan iş; çeviri sürerken var.
+    private var healthTask: Task<Void, Never>?
+    /// Bu oturumda iOS'un gönderdiği bellek uyarıları.
+    private var memoryWarnings = 0
 
     private let services: PhoneServices
     private let store: AppStore
@@ -534,6 +540,7 @@ final class PhoneModel: ObservableObject {
         sessionPackLines = 0
         packInUse = nil
         keepScreenAwake(true)
+        startHealth()
         if notifiesDisconnect { requestNotificationPermission() }
         onAnalytics(.sessionStart(output: settings.output.rawValue))
     }
@@ -545,6 +552,9 @@ final class PhoneModel: ObservableObject {
             defaults.set(seconds, forKey: "lastSessionSeconds")
             self.startedAt = nil
         }
+        healthTask?.cancel()
+        healthTask = nil
+        SessionHealth.saveMark(nil, defaults)
         runningSince = nil
         packInUse = nil
         gameChoice.stop()
@@ -575,6 +585,7 @@ final class PhoneModel: ObservableObject {
     func becameActive(afterBackground: Bool = true) {
         if afterBackground { onResumedFromBackground() }
         guard isRunning else { return }
+        if afterBackground { markBackground(false) }
         if afterBackground || !Self.isLive(sessionState) { session?.reconnectNow() }
         keeper?.reconnect()
     }
@@ -583,8 +594,62 @@ final class PhoneModel: ObservableObject {
     /// kullanıcı uyarılır: iPhone'da altyazı yalnız CouchSubs ekranı açıkken sürer (iOS arka planda yerel ağ bağlantısını ve
     /// görüntü okumayı durdurur). Deneme modunda PS5 yok, uyarı da yok.
     func enteredBackground() {
+        if isRunning { markBackground(true) }
         guard isRunning, !demoMode, notifiesDisconnect else { return }
         onPausedInBackground()
+    }
+
+    // MARK: - Uzun oturum tanısı
+
+    /// Telefon uygulaması uzun oyunda (40-45 dk) kendiliğinden kapanıyordu, iz kalmıyordu: belleği yetmeyen uygulamayı
+    /// iOS çökme raporu bırakmadan kapatır. Çeviri sürerken on dakikada bir bellek, ısı ve süre remoteplay.log'a ve
+    /// Crashlytics izine yazılır; oturum durdurulmadan biterse bir sonraki açılışta raporlanır (Android ile aynı).
+    private func startHealth() {
+        guard let startedAt else { return }
+        memoryWarnings = 0
+        SessionHealth.saveMark(SessionHealth.Mark(startedAt: startedAt), defaults)
+        healthTask?.cancel()
+        healthTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(SessionHealth.interval * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                self?.writeHealth()
+            }
+        }
+    }
+
+    private func writeHealth(note: String? = nil) {
+        guard let startedAt else { return }
+        let line = SessionHealth.line(minutes: Int(Date().timeIntervalSince(startedAt) / 60), memoryMB: SessionHealth.footprintMB(),
+                                      availableMB: SessionHealth.availableMB(), memoryWarnings: memoryWarnings,
+                                      thermal: ProcessInfo.processInfo.thermalState.rawValue)
+        let text = note.map { "\($0); \(line)" } ?? line
+        RemotePlayLog.write("Sağlık: \(text)")
+        onDiagnostic(text)
+        var mark = SessionHealth.loadMark(defaults) ?? SessionHealth.Mark(startedAt: startedAt)
+        mark.lastLine = text
+        SessionHealth.saveMark(mark, defaults)
+    }
+
+    private func markBackground(_ background: Bool) {
+        guard var mark = SessionHealth.loadMark(defaults) else { return }
+        mark.background = background
+        SessionHealth.saveMark(mark, defaults)
+    }
+
+    /// iOS bellek uyarısı gönderdi (UIApplication.didReceiveMemoryWarningNotification): çeviri sürüyorsa hemen yazılır.
+    func receivedMemoryWarning() {
+        guard isRunning else { return }
+        memoryWarnings += 1
+        writeHealth(note: "iOS bellek uyarısı")
+    }
+
+    /// Açılışta: önceki oturum durdurulmadan bittiyse rapor satırı (bir kez; iz silinir).
+    func takeUnexpectedEnd() -> String? {
+        let message = SessionHealth.unexpectedEnd(SessionHealth.loadMark(defaults))
+        SessionHealth.saveMark(nil, defaults)
+        if let message { RemotePlayLog.write(message) }
+        return message
     }
 
     /// Bağlı ya da bağlanıyor; yeniden bağlanmaya gerek yok.

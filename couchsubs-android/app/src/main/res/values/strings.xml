@@ -97,6 +97,7 @@
     <string name="target_tv_body">CouchSubs TV uygulaması açılınca bu telefonu kendisi bulur. TV uygulamasını Ayarlar\'dan bu telefonla kurabilirsin; bilgisayar gerekmez.</string>
     <string name="target_phone">Bu telefonda</string>
     <string name="target_tvs_none">Ağda TV görülmedi (TV kapalı olabilir; sorun değil).</string>
+    <string name="target_tvs_none_help">Ağda TV görülmedi. TV açık ve aynı Wi-Fi\'da mı? TV\'de CouchSubs uygulaması yoksa aşağıdaki “TV uygulamasını bu telefondan kur”a dokun. Monitör ya da akıllı olmayan TV kullanıyorsan “Bu telefonda”yı seç.</string>
 
     <string name="main_phone_view">Altyazı ekranı</string>
     <string name="main_target">Altyazı</string>

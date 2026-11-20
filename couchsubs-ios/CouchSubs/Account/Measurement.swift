@@ -55,6 +55,25 @@ final class AppAnalytics: AnalyticsLogging {
     }
 }
 
+/// Crashlytics izi ve ölümcül olmayan hata (uzun oturum tanısı, SessionHealth). Firebase yoksa hiçbir şey yapmaz;
+/// Kullanım verisi kapalıysa Crashlytics toplamayı zaten kapatmıştır.
+@MainActor
+enum CrashNotes {
+    static var enabled = false
+
+    static func log(_ line: String) {
+        guard enabled else { return }
+        Crashlytics.crashlytics().log(line)
+    }
+
+    /// Önceki oturumun durdurulmadan bitmesi: jetsam ve arka planda kapatma çökme raporu bırakmaz, burada görünür.
+    static func record(_ message: String) {
+        guard enabled else { return }
+        Crashlytics.crashlytics().record(error: NSError(domain: "CouchSubs.PreviousSession", code: 1,
+                                                        userInfo: [NSLocalizedDescriptionKey: message]))
+    }
+}
+
 /// Uygulama açılışındaki SDK kurulumu; her parça yalnız anahtarı/dosyası varsa kurulur.
 @MainActor
 enum Integrations {

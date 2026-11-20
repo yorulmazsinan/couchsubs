@@ -18,6 +18,7 @@ import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.account.Backend
+import com.couchsubs.mobile.account.SessionHealth
 import com.couchsubs.mobile.account.Telemetry
 import com.couchsubs.mobile.core.CropRegion
 import com.couchsubs.mobile.core.DemoTranslator
@@ -257,6 +258,7 @@ class TranslationService : Service() {
             return
         }
         acquireLocks()
+        settings.lastHealth = null
         settings.translating = true
         Backend.breadcrumb("çeviri: başlıyor (${settings.target.name}, ${settings.engine.name}, paketler ${settings.packsEnabled})")
         startedAt = System.currentTimeMillis()
@@ -489,6 +491,54 @@ class TranslationService : Service() {
         background.scheduleWithFixedDelay({
             session?.let { s -> LiveState.update { it.copy(framesReceived = s.framesReceived) } }
         }, 2, 2, TimeUnit.SECONDS)
+        background.scheduleWithFixedDelay({ writeHealth() }, SessionHealth.INTERVAL_MS, SessionHealth.INTERVAL_MS, TimeUnit.MILLISECONDS)
+    }
+
+    // --- Uzun oturum tanısı ---
+
+    /** Bu oturumda sistemin gönderdiği bellek uyarıları (onTrimMemory/onLowMemory). */
+    @Volatile private var memoryWarnings = 0
+
+    /**
+     * Telefon uygulaması uzun oyunda (40-45 dk) kendiliğinden kapanıyordu, iz kalmıyordu. On dakikada bir (ve bellek
+     * uyarısında) bellek, ısı ve süre Crashlytics izine yazılır ve saklanır; süreç ölürse sonraki açılışta kapanış
+     * nedeniyle birlikte raporlanır (iPhone ile aynı).
+     */
+    private fun writeHealth(note: String? = null) {
+        if (startedAt <= 0 || destroyed) return
+        try {
+            val memory = android.app.ActivityManager.MemoryInfo()
+            getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(memory)
+            val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                SessionHealth.thermalLevel(getSystemService(PowerManager::class.java).currentThermalStatus) else 0
+            val runtime = Runtime.getRuntime()
+            val line = SessionHealth.line((System.currentTimeMillis() - startedAt) / 60_000, android.os.Debug.getPss() / 1024,
+                memory.availMem / 1_048_576, memoryWarnings, thermal) +
+                "; java ${(runtime.totalMemory() - runtime.freeMemory()) / 1_048_576}/${runtime.maxMemory() / 1_048_576} MB" +
+                "; yerel ${android.os.Debug.getNativeHeapAllocatedSize() / 1_048_576} MB"
+            val text = note?.let { "$it; $line" } ?: line
+            Backend.breadcrumb("sağlık: $text")
+            settings.lastHealth = text
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "health", error)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Ön plan hizmeti için RUNNING_LOW ve üstü: sistemin belleği azalıyor (arka plan uygulamaları kapatılıyor).
+        if (level >= TRIM_MEMORY_RUNNING_LOW && level < TRIM_MEMORY_UI_HIDDEN || level >= TRIM_MEMORY_COMPLETE) {
+            memoryWarnings++
+            // Hizmet kapanırken zamanlayıcı durmuş olabilir.
+            runCatching { background.execute { writeHealth("Android bellek uyarısı ($level)") } }
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        memoryWarnings++
+        runCatching { background.execute { writeHealth("Android bellek az") } }
     }
 
     // --- Ekranı çevir ---

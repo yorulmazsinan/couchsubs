@@ -414,6 +414,11 @@ class AppSettings(context: Context) : AreaStore {
         get() = prefs.getLong("lastSessionMs", 0)
         set(value) = prefs.edit().putLong("lastSessionMs", value).apply()
 
+    /** Çeviri sürerken son yazılan sağlık satırı (SessionHealth); süreç ölürse kapanış raporuna eklenir. */
+    var lastHealth: String?
+        get() = prefs.getString("lastHealth", null)
+        set(value) = prefs.edit().putString("lastHealth", value).apply()
+
     /** Çeviri hizmeti çalışıyor mu; süreç ölünce true kalır, sonraki açılışta kapanışın çeviri sırasında olduğu anlaşılır. */
     var translating: Boolean
         get() = prefs.getBoolean("translating", false)

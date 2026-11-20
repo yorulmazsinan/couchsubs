@@ -57,10 +57,43 @@ object ExitReport {
         else -> "reason_$reason"
     }
 
-    /** Crashlytics'te kümelenecek hata satırı: neden başlıkta, ayrıntı iletide. */
-    fun message(record: ExitRecord, duringTranslation: Boolean): String =
+    /**
+     * Crashlytics'te kümelenecek hata satırı: neden başlıkta, ayrıntı iletide. Çeviri sürerken kapandıysa son sağlık
+     * satırı ([SessionHealth]; oturum süresi, bellek, ısı) da eklenir.
+     */
+    fun message(record: ExitRecord, duringTranslation: Boolean, lastHealth: String? = null): String =
         "${reasonName(record.reason)}${if (duringTranslation) " (çeviri sürerken)" else ""}: ${record.description ?: "-"}" +
-            " importance=${record.importance} pss=${record.pssKb / 1024}MB rss=${record.rssKb / 1024}MB"
+            " importance=${record.importance} pss=${record.pssKb / 1024}MB rss=${record.rssKb / 1024}MB" +
+            if (duringTranslation) "; son durum: ${lastHealth ?: "ilk 10 dk içinde"}" else ""
+}
+
+/**
+ * Uzun oturumun sağlık satırı. Telefon uygulamasının uzun oyunda (40-45 dk) kendiliğinden kapandığı bildirildi; çeviri
+ * sürerken on dakikada bir bellek, ısı ve oturum süresi Crashlytics izine yazılır ve saklanır, süreç ölürse bir sonraki
+ * açılışta kapanış nedeniyle birlikte raporlanır ([ExitReport.message]). iPhone'daki SessionHealth ile aynı biçim.
+ */
+object SessionHealth {
+    const val INTERVAL_MS = 10 * 60 * 1000L
+
+    /** PowerManager.THERMAL_STATUS_* (0 yok … 6 kapanma) iPhone'un dört basamağına (normal, orta, yüksek, kritik). */
+    fun thermalLevel(status: Int): Int = when {
+        status <= 0 -> 0
+        status <= 2 -> 1
+        status == 3 -> 2
+        else -> 3
+    }
+
+    fun thermalName(level: Int): String = when {
+        level < 1 -> "normal"
+        level == 1 -> "orta"
+        level == 2 -> "yüksek"
+        else -> "kritik"
+    }
+
+    /** "oturum 40 dk; bellek 812 MB (boş 310 MB); bellek uyarısı 2; ısı yüksek" */
+    fun line(minutes: Long, memoryMb: Long, availableMb: Long?, memoryWarnings: Int, thermal: Int): String =
+        "oturum ${maxOf(0L, minutes)} dk; bellek $memoryMb MB" + (availableMb?.let { " (boş $it MB)" } ?: "") +
+            "; bellek uyarısı $memoryWarnings; ısı ${thermalName(thermal)}"
 }
 
 /** Önceki kapanış; Crashlytics'te ölümcül olmayan hata olarak görünür (yığın izi yok, neden iletide). */

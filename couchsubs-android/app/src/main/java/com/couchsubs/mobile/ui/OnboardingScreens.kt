@@ -260,7 +260,10 @@ fun TargetScreen(onBack: (() -> Unit)? = null, onTvInstall: (() -> Unit)? = null
             }
             when (val found = tvs) {
                 null -> Text(stringResource(R.string.target_searching), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-                else -> if (found.isEmpty()) Text(stringResource(R.string.target_tvs_none), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+                // Bulunamayınca ne yapılacağı da söylenir: TV uygulaması yoksa buradan kurulur; monitör ya da akıllı olmayan
+                // TV'de "Bu telefonda" seçilir (iPhone'daki gibi; kullanıcı monitörde "Ağda TV bulunamadı"da kalmıştı).
+                else -> if (found.isEmpty()) Text(stringResource(if (onTvInstall != null) R.string.target_tvs_none_help else R.string.target_tvs_none),
+                    style = Tokens.Type.caption, color = Tokens.Color.secondary)
                 else found.forEach { tv ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {

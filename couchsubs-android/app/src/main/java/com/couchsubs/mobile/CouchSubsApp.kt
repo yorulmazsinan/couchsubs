@@ -103,9 +103,10 @@ object Services {
      */
     private fun reportPreviousExits(app: Application) {
         val duringTranslation = settings.translating
+        val lastHealth = settings.lastHealth
         settings.translating = false
         scope.launch(Dispatchers.IO) {
-            settings.lastExitReportAt = Backend.reportPreviousExits(app, settings.lastExitReportAt, duringTranslation)
+            settings.lastExitReportAt = Backend.reportPreviousExits(app, settings.lastExitReportAt, duringTranslation, lastHealth)
         }
     }
 

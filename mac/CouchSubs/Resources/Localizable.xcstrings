@@ -10116,18 +10116,18 @@
         }
       }
     },
-    "No TV found on the network.": {
+    "No TV found on the network. If the CouchSubs app is not on the TV, install it from this phone below. Using a monitor or a non-smart TV? Choose On this phone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No TV found on the network."
+            "value": "No TV found on the network. If the CouchSubs app is not on the TV, install it from this phone below. Using a monitor or a non-smart TV? Choose On this phone."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ağda TV bulunamadı."
+            "value": "Ağda TV bulunamadı. TV'de CouchSubs uygulaması yoksa aşağıdan bu telefonla kurun. Monitör ya da akıllı olmayan TV kullanıyorsanız ‘Bu telefonda’yı seçin."
           }
         }
       }

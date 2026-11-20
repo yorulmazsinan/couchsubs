@@ -95,6 +95,7 @@
     <string name="target_tv_body">The CouchSubs TV app finds this phone by itself when opened. You can install the TV app from this phone in Settings; no computer needed.</string>
     <string name="target_phone">On this phone</string>
     <string name="target_tvs_none">No TV seen on the network (it may be off; that\'s fine).</string>
+    <string name="target_tvs_none_help">No TV seen on the network. Is the TV on and on the same Wi-Fi? If the CouchSubs app is not on the TV, tap “Install the TV app from this phone” below. Using a monitor or a non-smart TV? Choose “On this phone”.</string>
 
     <string name="main_phone_view">Subtitle screen</string>
     <string name="main_target">Subtitles</string>
