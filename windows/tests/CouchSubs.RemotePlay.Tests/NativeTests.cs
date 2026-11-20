@@ -20,7 +20,9 @@ public class NativeTests
     public async Task RegistrationWithUnreachableConsoleFails()
     {
         var error = await Assert.ThrowsAsync<RegistrationException>(() => Registration.RegisterAsync("127.0.0.1", new byte[8], 12345678));
-        Assert.Equal(RegistrationFailure.NoAnswer, error.Failure);
+        // Kimsenin dinlemediği adres aramayı ICMP "port kapalı" ile reddeder; eşleştirme ekranı kapalı PS5 de böyle
+        // davranır, bu yüzden #604'ten beri PairingClosed sayılır. Yanıt hiç gelmezse NoAnswer olur.
+        Assert.Contains(error.Failure, new[] { RegistrationFailure.PairingClosed, RegistrationFailure.NoAnswer });
     }
 
     /// <summary>Bağlanamayan bir adreste yeniden deneme beklerken durdurup bırakmak çökmemeli ve bloklamamalı.</summary>
