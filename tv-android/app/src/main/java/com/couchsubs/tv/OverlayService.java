@@ -18,6 +18,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.WindowManager;
@@ -51,6 +52,8 @@ public class OverlayService extends Service implements TvPage.Host {
     private int tunedPort;
     private int pendingPort;
     private final Runnable switchInput = () -> switchInput(pendingPort);
+    /** WebView işleminin gidişleri (bkz. pageGone): kısa sürede çok giderse katman bırakılır. */
+    private final PageRestarts restarts = new PageRestarts();
 
     /**
      * Servisi başlatır; başlatılamadıysa false döner ve çağıran uygulama içinde kalır. Android 12+ arka plandan ön plan
@@ -188,6 +191,34 @@ public class OverlayService extends Service implements TvPage.Host {
 
     @Override
     public void exit() { stopSelf(); }
+
+    /**
+     * Katmandaki WebView işlemi çöktü ya da sistem kapattı (#616: Philips Android 8'de HDMI girişi açılınca). Eskiden
+     * Android bunu ele alınmadı sayıp uygulamayı kapatıyordu, katman sessizce kayboluyordu. Sayfa yeniden kurulur; kısa
+     * sürede birkaç kez yinelenirse katman bırakılır ve uygulama nedeni söyleyerek açılır.
+     */
+    @Override
+    public void pageGone(boolean crashed) {
+        String params = page == null ? "" : page.launchParams();
+        if (page != null) {
+            try { windows.removeView(page.webView); } catch (RuntimeException ignored) { /* pencere zaten yok */ }
+            page.destroy();
+            page = null;
+        }
+        if (!restarts.allow(SystemClock.elapsedRealtime())) {
+            Log.w(TAG, "overlay page keeps dying; leaving overlay mode");
+            stopSelf();
+            openApp(DisplayMode.FAILED_RENDERER);
+            return;
+        }
+        ui.postDelayed(() -> {
+            if (!running || page != null) return;
+            if (!showWindow(params == null ? "" : params)) {
+                stopSelf();
+                openApp(DisplayMode.FAILED_WINDOW);
+            }
+        }, PageRestarts.DELAY_MS);
+    }
 
     /**
      * Konsolun girişi bulunamadı: TV HDMI 1'e geçirilmez (#367), olduğu girişte kalır. Katmanda kumanda yok, seçici

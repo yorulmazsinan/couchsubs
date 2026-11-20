@@ -1,1 +1,1 @@
-0.9.41: Windows’ta deneysel GTA 6 telefon çevirisi açıkken mesajlar ve yanıt seçenekleri, telefon ekranından alınan renklerle özgün yazının üzerinde gösterilir.
+0.9.41: Windows’ta deneysel GTA 6 telefon çevirisi açıkken mesajlar ve yanıt seçenekleri, telefon ekranından alınan renklerle özgün yazının üzerinde gösterilir. Altyazı sayfasının web görünümü kapanınca uygulama kapanmıyor, sayfa yeniden açılıyor.

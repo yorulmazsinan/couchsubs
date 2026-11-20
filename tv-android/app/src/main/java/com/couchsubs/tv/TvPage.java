@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.tv;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -36,7 +41,15 @@ final class TvPage {
 
         /** Bilgisayar görüntü modunu değiştirdi (yeni mod kaydedildikten sonra çağrılır). */
         void displayModeChanged(String mode);
+
+        /**
+         * Sayfanın WebView işlemi (renderer) çöktü ya da sistem onu kapattı. Bu sayfa artık kullanılamaz: kaldırılıp yenisi
+         * kurulmalı. Android 8+ bunu bildirir; ele alınmazsa uygulamanın tamamı kapanır (#616).
+         */
+        void pageGone(boolean crashed);
     }
+
+    private static final String TAG = "CouchSubsPage";
 
     private static final String PREFS = "couchsubs";
     private static final String KEY_DISPLAY_MODE = "displayMode";
@@ -71,6 +84,31 @@ final class TvPage {
         // Ölçek fiziksel piksel başına yüzde: 1920 CSS pikseli ekranın tam genişliğine sığar (1080p'de %100).
         webView.setInitialScale(fitScalePercent());
         webView.addJavascriptInterface(new Bridge(), "AndroidTV");
+        webView.setWebViewClient(new PageClient());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Altyazı katmanı görünmese de (TV'nin HDMI ekranı öndeyken) WebView işlemi önemli sayılsın; düşük bellekli
+            // TV'lerde sistem onu ilk kapatılacaklar arasına koymasın.
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+    }
+
+    /** WebView işlemi giderse uygulama kapanmasın diye bildirimi üstlenir (bkz. Host.pageGone). */
+    private final class PageClient extends WebViewClient {
+        private boolean gone;
+
+        @TargetApi(Build.VERSION_CODES.O)
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            boolean crashed = detail.didCrash();
+            Log.w(TAG, "WebView renderer gone: crashed=" + crashed + " priorityAtExit=" + detail.rendererPriorityAtExit()
+                    + " overlay=" + overlay);
+            if (!gone) {
+                gone = true;
+                ui.removeCallbacksAndMessages(null);
+                host.pageGone(crashed);
+            }
+            return true;
+        }
     }
 
     void load() {

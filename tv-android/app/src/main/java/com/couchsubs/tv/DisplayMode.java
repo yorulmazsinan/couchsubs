@@ -56,6 +56,8 @@ final class DisplayMode {
     static final String FAILED_PERMISSION = "permission";
     static final String FAILED_WINDOW = "window";
     static final String FAILED_FOREGROUND = "foreground";
+    /** Katmandaki WebView işlemi kısa sürede tekrar tekrar gitti (#616). */
+    static final String FAILED_RENDERER = "renderer";
 
     private DisplayMode() {}
 

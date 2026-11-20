@@ -20,6 +20,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -84,6 +85,8 @@ public class MainActivity extends Activity implements TvPage.Host {
     private boolean resumed;
     private final Runnable watchTick = this::checkFallback;
     private final Runnable hideHelpTask = this::hideHelp;
+    /** Sayfanın WebView işleminin gidişleri (bkz. pageGone). */
+    private final PageRestarts pageRestarts = new PageRestarts();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -114,7 +117,9 @@ public class MainActivity extends Activity implements TvPage.Host {
         }
         showInApp();
         if (start == DisplayMode.Start.IN_APP_NEEDS_PERMISSION) showPermissionHelp(R.string.overlay_permission_needed);
-        else if (start == DisplayMode.Start.IN_APP_OVERLAY_FAILED) showOverlayFailed();
+        else if (start == DisplayMode.Start.IN_APP_OVERLAY_FAILED)
+            showOverlayFailed(DisplayMode.FAILED_RENDERER.equals(intent.getStringExtra(EXTRA_OVERLAY_FAILED))
+                    ? R.string.page_renderer_failed : R.string.overlay_failed);
     }
 
     /** Katman açılabilir mi: bu derlemede var (Play paketinde yok) ve "Diğer uygulamaların üzerinde göster" izni verilmiş. */
@@ -258,12 +263,16 @@ public class MainActivity extends Activity implements TvPage.Host {
 
     /** Katman açılamadı (TV pencereye ya da arka plan servisine izin vermedi): uygulama içinde kalınır, neden gösterilir. */
     private void showOverlayFailed() {
+        showOverlayFailed(R.string.overlay_failed);
+    }
+
+    private void showOverlayFailed(int message) {
         if (help == null) return;
         if (pickerShown) {
-            Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show();
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
             return;
         }
-        help.setText(R.string.overlay_failed);
+        help.setText(message);
         choices.setVisibility(View.GONE);
         helpBox.setVisibility(View.VISIBLE);
         handler.removeCallbacks(hideHelpTask);
@@ -543,7 +552,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         String params = paramsOf(intent);
         if (!params.isEmpty()) {
             launchParams = params;
-            page.relaunch(params);
+            if (page != null) page.relaunch(params);
         }
     }
 
@@ -660,6 +669,33 @@ public class MainActivity extends Activity implements TvPage.Host {
         tvView.tune(id, TvContract.buildChannelUriForPassthroughInput(id));
         // Görüntü gelene kadar izlenir; hiç gelmezse katmana geçilir.
         trouble();
+    }
+
+    /**
+     * Ekrandaki WebView işlemi çöktü ya da sistem kapattı (#616). Eskiden Android uygulamayı kapatıyordu. Sayfa aynı
+     * yerde yeniden kurulur; kısa sürede birkaç kez yinelenirse yeniden kurulmaz, nedeni ekranda yazar.
+     */
+    @Override
+    public void pageGone(boolean crashed) {
+        if (page == null) return;
+        ViewGroup parent = (ViewGroup) page.webView.getParent();
+        int index = parent == null ? -1 : parent.indexOfChild(page.webView);
+        String params = page.launchParams();
+        if (parent != null) parent.removeView(page.webView);
+        page.destroy();
+        page = null;
+        if (parent == null || isFinishing() || !pageRestarts.allow(SystemClock.elapsedRealtime())) {
+            showOverlayFailed(R.string.page_renderer_failed);
+            return;
+        }
+        handler.postDelayed(() -> {
+            if (page != null || isFinishing() || isDestroyed()) return;
+            page = new TvPage(this, this, params, false);
+            parent.addView(page.webView, Math.min(index, parent.getChildCount()));
+            page.load();
+            if (!pickerShown) page.webView.requestFocus();
+            if (!resumed) page.background(true);
+        }, PageRestarts.DELAY_MS);
     }
 
     @Override

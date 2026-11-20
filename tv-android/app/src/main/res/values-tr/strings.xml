@@ -24,4 +24,5 @@
     <string name="overlay_switch">Katman\'a geç</string>
     <string name="overlay_started_manual_input">Katman açık, CouchSubs arka planda çalışıyor. Bu TV girişi uygulamalara değiştirtmiyor: TV\'yi kumandadan PS5\'in HDMI girişine alın, altyazı görüntünün üstünde çıkar. HDMI girişinde altyazı görünmüyorsa bu cihaz HDMI görüntüsünü Android\'in dışında gösteriyordur (bazı projeksiyonlar): uygulamalar onun üstüne yazamaz, altyazıyı telefon ekranından izleyin. Katmanı kapatmak için CouchSubs\'ı yeniden açın.</string>
     <string name="overlay_failed">Katman açılamadı: bu TV, CouchSubs\'ın altyazıyı başka uygulamaların üstünde göstermesine izin vermedi. CouchSubs açık kalıyor; altyazıyı telefon ekranından izleyebilirsiniz.</string>
+    <string name="page_renderer_failed">Bu TV\'nin web görünümü (Android System WebView) altyazı sayfasını art arda kapattı. TV\'yi yeniden başlatıp yeniden deneyin; o zamana kadar altyazıyı telefon ekranından izleyebilirsiniz.</string>
 </resources>

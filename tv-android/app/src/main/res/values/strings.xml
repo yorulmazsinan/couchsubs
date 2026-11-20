@@ -25,4 +25,5 @@
     <string name="overlay_switch">Switch to overlay</string>
     <string name="overlay_started_manual_input">Overlay is on and CouchSubs keeps running in the background. This TV does not let apps change its input: switch the TV to the PS5\'s HDMI input with the remote, and subtitles appear on top. If they do not show on the HDMI input, this device draws HDMI outside Android (some projectors) and no app can draw over it: read the subtitles on your phone. Open CouchSubs again to turn the overlay off.</string>
     <string name="overlay_failed">Overlay could not start: this TV did not let CouchSubs show subtitles over other apps. CouchSubs stays open; you can read the subtitles on your phone.</string>
+    <string name="page_renderer_failed">The subtitle page was closed by this TV\'s web view (Android System WebView) several times in a row. Restart the TV and try again; until then you can read the subtitles on your phone.</string>
 </resources>
