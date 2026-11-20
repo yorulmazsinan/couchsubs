@@ -159,25 +159,44 @@ object Services {
     fun refreshPacks(force: Boolean, maxAgeMs: Long = PackStore.REFRESH_INTERVAL_MS, onChanged: (() -> Unit)? = null) {
         if (BuildConfig.PACKS_URL.isBlank()) return
         if (force) packStatus.value = PackStatus.DOWNLOADING
-        scope.launch(Dispatchers.IO) {
-            try {
-                val result = packStore.refresh(force, maxAgeMs)
-                if (result.downloaded.isNotEmpty() || result.removed.isNotEmpty()) onChanged?.invoke()
-                if (!result.skipped) {
-                    packStatus.value = packStatus(result)
-                    if (result.failed.isNotEmpty()) Log.w(TAG, "paketler inemedi: ${result.failed}")
-                    packsVersion.value++
-                }
-            } catch (error: Throwable) {
-                // Exception değil Throwable: bellek yetmezse (OutOfMemoryError) durum "güncelleniyor"da kalıyor, düğme bir
-                // daha basılamıyordu.
-                Log.w(TAG, "paketler", error)
-                packStatus.value = packStatus(error)
-                // Ekran yeniden okusun: sunucudaki liste alınamadıysa yalnız bu telefondakiler görünür.
+        scope.launch(Dispatchers.IO) { runRefresh(force, maxAgeMs, onChanged) }
+    }
+
+    /**
+     * Oyun paketleri › "Paketleri güncelle": süresine bakmadan listeyi sunucudan (önbelleksiz, gerekirse yedek adresten)
+     * alır, değişen paketleri indirir ve neyin geldiğini özetler. [before]: ekrandaki kurulu paketler (kimlik → satır).
+     * Paket sunucusu yapılandırılmamışsa null.
+     */
+    suspend fun updatePacksNow(before: List<Pair<String, Int>>): com.couchsubs.mobile.packs.PackUpdateOutcome? {
+        if (BuildConfig.PACKS_URL.isBlank()) return null
+        packStatus.value = PackStatus.DOWNLOADING
+        val (result, error) = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            // Çalışan çeviri hizmeti de yeni paketleri okusun (TranslationService'teki yenilemede olduğu gibi).
+            runRefresh(force = true, maxAgeMs = 0, onChanged = { onLocalPacksChanged?.invoke() })
+        }
+        return com.couchsubs.mobile.packs.PackUpdateOutcome.of(before, result, error)
+    }
+
+    /** Yenilemeyi şimdi yapar (bloklar); durumu ve ekranın sürümünü günceller. Sonuç ya da hata döner. */
+    private fun runRefresh(force: Boolean, maxAgeMs: Long, onChanged: (() -> Unit)?): Pair<PackStore.Refresh?, Throwable?> =
+        try {
+            val result = packStore.refresh(force, maxAgeMs)
+            if (result.downloaded.isNotEmpty() || result.removed.isNotEmpty()) onChanged?.invoke()
+            if (!result.skipped) {
+                packStatus.value = packStatus(result)
+                if (result.failed.isNotEmpty()) Log.w(TAG, "paketler inemedi: ${result.failed}")
                 packsVersion.value++
             }
+            result to null
+        } catch (error: Throwable) {
+            // Exception değil Throwable: bellek yetmezse (OutOfMemoryError) durum "güncelleniyor"da kalıyor, düğme bir
+            // daha basılamıyordu.
+            Log.w(TAG, "paketler", error)
+            packStatus.value = packStatus(error)
+            // Ekran yeniden okusun: sunucudaki liste alınamadıysa yalnız bu telefondakiler görünür.
+            packsVersion.value++
+            null to error
         }
-    }
 
     /** Paket ekranında gösterilen oyun; [installed] false ise sunucuda var ama henüz inmedi. */
     data class CatalogEntry(val id: String, val title: String, val entries: Int, val installed: Boolean)

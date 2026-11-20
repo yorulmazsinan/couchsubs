@@ -128,6 +128,28 @@
     <string name="packs_updating">Paketler güncelleniyor…</string>
     <string name="packs_offline">Paket sunucusuna ulaşılamadı. Bu telefondaki paketler kullanılıyor; internete bağlıyken Paketleri güncelle\'ye bas.</string>
     <string name="packs_failed">Bazı oyun paketleri güncellenemedi. Bu telefondaki paketler kullanılıyor; biraz sonra yeniden dene.</string>
+    <!-- "Paketleri güncelle" sonrası uyarı (iPhone'daki PacksScreen.UpdateAlert ile aynı) -->
+    <string name="packs_updating_short">Güncelleniyor…</string>
+    <string name="packs_result_current_title">Paketler güncel</string>
+    <string name="packs_result_current">Paketler zaten güncel.</string>
+    <string name="packs_result_updated_title">Paketler güncellendi</string>
+    <string name="packs_result_failed_title">Paketler güncellenemedi</string>
+    <string name="packs_result_still_used">Bu telefondaki paketler kullanılmaya devam ediyor.</string>
+    <string name="packs_result_updated_one">1 paket güncellendi: %1$s.</string>
+    <string name="packs_result_updated_many">%1$d paket güncellendi: %2$s.</string>
+    <string name="packs_result_added_one">1 paket eklendi: %1$s.</string>
+    <string name="packs_result_added_many">%1$d paket eklendi: %2$s.</string>
+    <string name="packs_result_item_lines">%1$s (%2$s satır)</string>
+    <string name="packs_result_item_more">%1$s (+%2$s satır)</string>
+    <string name="packs_result_item_fewer">%1$s (%2$s satır azaldı)</string>
+    <string name="packs_result_item_revised">%1$s (çeviriler düzeltildi)</string>
+    <string name="packs_result_total">Toplam %1$s yeni satır.</string>
+    <string name="packs_error_offline">İnternet bağlantısı yok ya da paket sunucusuna ulaşılamadı.</string>
+    <string name="packs_error_rate">Çok sık denendi. Birkaç dakika bekleyip yeniden dene.</string>
+    <string name="packs_error_server">Paket sunucusu yanıt vermedi (HTTP %1$d).</string>
+    <string name="packs_error_partial">Bazı paketler indirilemedi ya da doğrulanamadı; eksik inmiş olabilir.</string>
+    <string name="packs_error_unknown">Paketler güncellenirken beklenmeyen bir hata oldu.</string>
+    <string name="packs_retry">Yeniden dene</string>
 
     <string name="packs_loading">Paketler yükleniyor…</string>
     <string name="packs_imported_title">İçe aktarılan paketler</string>

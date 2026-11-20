@@ -107,6 +107,8 @@ actor PackStore {
 
     /// Son yenilemede indirilen paket sayısı; yenileme bir paket yüzünden hata verse de inenler kitaplığa alınsın diye.
     private(set) var lastDownloadCount = 0
+    /// Son yenilemede inen paketler (sunucudaki başlık ve satır sayısıyla); "Paketleri şimdi güncelle" özeti için.
+    private(set) var lastDownloaded: [PackManifest.Entry] = []
 
     /// Listeyi alır, eksik ya da değişmiş paketleri indirir, listede olmayanları siler. `force` false ise son bakıştan
     /// `maxAge` geçmeden hiçbir şey yapmaz. Dönen değer: indirilen (yeni ya da güncellenen) paket sayısı.
@@ -114,7 +116,10 @@ actor PackStore {
     func refresh(force: Bool = false, maxAge: TimeInterval = PackStore.refreshInterval) async throws -> Int {
         guard force || needsRefresh(maxAge: maxAge) else { return 0 }
         lastDownloadCount = 0
-        let manifest: PackManifest = try await fetch(path: "v1/packs").decoded()
+        lastDownloaded = []
+        // Liste her bakışta sunucudan alınır: sunucu onu `max-age=300` ile gönderiyor, URLSession'ın önbelleği "Paketleri
+        // şimdi güncelle"de son beş dakikadaki eski listeyi döndürüyor, yeni sürüm inmiyordu (bkz. PackMirrors.get).
+        let manifest: PackManifest = try await fetch(path: "v1/packs", cachePolicy: .reloadIgnoringLocalCacheData).decoded()
         let manager = FileManager.default
         try manager.createDirectory(at: filesDirectory, withIntermediateDirectories: true)
         let previous = cachedManifest()
@@ -136,6 +141,7 @@ actor PackStore {
                 guard Self.sha256(data) == entry.sha256.lowercased() else { throw Failure.badChecksum(entry.id) }
                 try data.write(to: file, options: .atomic)
                 downloaded += 1
+                lastDownloaded.append(entry)
                 saved.append(entry)
             } catch {
                 firstFailure = firstFailure ?? (error as? Failure) ?? .badResponse
@@ -168,9 +174,9 @@ actor PackStore {
         return filesDirectory.appendingPathComponent("\(safe).json.gz")
     }
 
-    private func fetch(path: String) async throws -> Data {
+    private func fetch(path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         let session = self.session
-        switch await mirrors.get(path, timeout: 30, fetch: { try await session.data(for: $0) }) {
+        switch await mirrors.get(path, timeout: 30, cachePolicy: cachePolicy, fetch: { try await session.data(for: $0) }) {
         case let .success(data): return data
         case .failure(.network): throw Failure.network
         case .failure(.badResponse): throw Failure.badResponse

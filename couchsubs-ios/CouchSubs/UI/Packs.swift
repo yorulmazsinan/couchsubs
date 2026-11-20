@@ -7,6 +7,10 @@ import SwiftUI
 struct PacksScreen: View {
     @EnvironmentObject private var model: PhoneModel
     @EnvironmentObject private var app: AppModel
+    /// "Paketleri şimdi güncelle"ye basıldı, sonuç bekleniyor: sayfa bulanıklaşır, ortada gösterge döner.
+    @State private var updating = false
+    @State private var result: UpdateAlert?
+    @State private var showResult = false
 
     var body: some View {
         MobileScreen {
@@ -55,11 +59,110 @@ struct PacksScreen: View {
                 }
             }
         } bottom: {
-            Button("Update the packs now") { Task { await app.refreshPacks(force: true) } }
-                .buttonStyle(.mobileSecondary)
-                .disabled(app.packStatus == .downloading || AppConfig.packsBaseURL == nil)
+            Button(action: updateNow) {
+                if busy { Text("Updating…") } else { Text("Update the packs now") }
+            }
+            .buttonStyle(.mobileSecondary)
+            .disabled(busy || AppConfig.packsBaseURL == nil)
+        }
+        .overlay {
+            if updating {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+                    VStack(spacing: Mobile.Space.gap) {
+                        ProgressView().controlSize(.large).tint(Mobile.Palette.pro)
+                        Text("Updating the packs…").font(Mobile.TypeScale.headline).foregroundStyle(Mobile.Palette.text)
+                    }
+                    .padding(Mobile.Space.tile * 1.5)
+                    .background(Mobile.Palette.surface2.opacity(0.9), in: RoundedRectangle(cornerRadius: Mobile.Radius.tile))
+                    .accessibilityElement(children: .combine)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: updating)
+        .alert(result?.title ?? "", isPresented: $showResult, presenting: result) { alert in
+            if alert.retry {
+                Button("Try again", action: updateNow)
+                Button("Close", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: { alert in
+            Text(verbatim: alert.message)
         }
         .onAppear { app.analytics.screen("packs") }
+    }
+
+    /// Elle ya da açılıştaki güncelleme sürüyor.
+    private var busy: Bool { updating || app.packStatus == .downloading }
+
+    private func updateNow() {
+        guard !updating else { return }
+        updating = true
+        Task {
+            let outcome = await app.updatePacksNow()
+            updating = false
+            guard let outcome else { return }
+            result = UpdateAlert(outcome)
+            showResult = true
+        }
+    }
+
+    /// Güncellemenin sonucu: başlık, metin ve (hatada) "Yeniden dene".
+    struct UpdateAlert {
+        let title: String
+        let message: String
+        let retry: Bool
+
+        init(_ outcome: AppModel.PackUpdateOutcome) {
+            switch outcome {
+            case .upToDate:
+                title = String(localized: "Packs are up to date")
+                message = String(localized: "The packs are already up to date.")
+                retry = false
+            case let .updated(summary):
+                title = String(localized: "Packs updated")
+                message = Self.describe(summary)
+                retry = false
+            case let .failed(reason, summary):
+                title = String(localized: "The packs could not be updated")
+                message = ([reason, String(localized: "The packs on this phone are still used.")]
+                           + (summary.isEmpty ? [] : [Self.describe(summary)])).joined(separator: "\n\n")
+                retry = true
+            }
+        }
+
+        /// "2 paket güncellendi: Grand Theft Auto VI (+12.300 satır), Red Dead Redemption 2 (+800 satır)."
+        static func describe(_ summary: PackUpdateSummary) -> String {
+            var parts: [String] = []
+            let updated = summary.updated, added = summary.added
+            if !updated.isEmpty {
+                let list = updated.map(Self.updatedItem).joined(separator: ", ")
+                parts.append(updated.count == 1 ? String(format: String(localized: "1 pack updated: %@."), list)
+                             : String(format: String(localized: "%lld packs updated: %@."), updated.count, list))
+            }
+            if !added.isEmpty {
+                let list = added.map { String(format: String(localized: "%1$@ (%2$@ lines)"), $0.title, $0.lines.formatted()) }
+                    .joined(separator: ", ")
+                parts.append(added.count == 1 ? String(format: String(localized: "1 pack added: %@."), list)
+                             : String(format: String(localized: "%lld packs added: %@."), added.count, list))
+            }
+            if summary.newLines > 0 {
+                parts.append(String(format: String(localized: "%@ new lines in total."), summary.newLines.formatted()))
+            }
+            return parts.joined(separator: "\n")
+        }
+
+        private static func updatedItem(_ change: PackUpdateSummary.Change) -> String {
+            if change.lineDelta > 0 {
+                return String(format: String(localized: "%1$@ (+%2$@ lines)"), change.title, change.lineDelta.formatted())
+            }
+            if change.lineDelta < 0 {
+                return String(format: String(localized: "%1$@ (%2$@ fewer lines)"), change.title, (-change.lineDelta).formatted())
+            }
+            return String(format: String(localized: "%@ (translations revised)"), change.title)
+        }
     }
 
     /// Paket karosu: dokununca paket açılır ya da kapanır (Android ile aynı). Kapalıysa soluk ve "Kapalı"; son satırı

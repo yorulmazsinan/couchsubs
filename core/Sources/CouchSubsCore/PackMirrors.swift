@@ -47,13 +47,18 @@ public final class PackMirrors: @unchecked Sendable {
     public var preferredIndex: Int { lock.withLock { preferred } }
 
     /// `path` (ör. "v1/packs") her adreste sırayla, son çalışandan başlayarak istenir; 2xx gövdesi ya da son hata döner.
-    public func get(_ path: String, timeout: TimeInterval, fetch: Fetch) async -> Result<Data, Failure> {
+    /// `cachePolicy`: liste için `.reloadIgnoringLocalCacheData` verilir. Sunucu listeyi `max-age=300` ile gönderiyor;
+    /// varsayılan önbellek kuralıyla "Paketleri şimdi güncelle" son beş dakikada alınmış eski listeyi diskten okuyor, yeni
+    /// çıkan sürümü görmüyordu.
+    public func get(_ path: String, timeout: TimeInterval, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
+                    fetch: Fetch) async -> Result<Data, Failure> {
         guard !urls.isEmpty else { return .failure(.network) }
         let start = min(preferredIndex, urls.count - 1)
         var last = Failure.network
         for step in 0..<urls.count {
             let index = (start + step) % urls.count
-            var request = URLRequest(url: urls[index].appendingPathComponent(path), timeoutInterval: timeout)
+            var request = URLRequest(url: urls[index].appendingPathComponent(path), cachePolicy: cachePolicy,
+                                     timeoutInterval: timeout)
             request.httpMethod = "GET"
             let outcome: Result<Data, Failure>
             do {

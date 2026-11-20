@@ -46,8 +46,10 @@ final class AppModel: ObservableObject {
 
     /// Paketleri sunucudan indirir (son bakış `maxAge`'den eskiyse; `force` ile hemen). Sunucu yoksa ya da ulaşılamazsa
     /// uygulamayla gelen paketler kullanılmaya devam eder.
-    func refreshPacks(force: Bool, maxAge: TimeInterval = PackStore.refreshInterval) async {
-        guard let packStore else { return }
+    /// Dönen değer: hata olduysa uyarıda gösterilecek Türkçe neden (başarıda nil).
+    @discardableResult
+    func refreshPacks(force: Bool, maxAge: TimeInterval = PackStore.refreshInterval) async -> String? {
+        guard let packStore else { return nil }
         packStatus = .downloading
         do {
             let downloaded = try await packStore.refresh(force: force, maxAge: maxAge)
@@ -57,12 +59,51 @@ final class AppModel: ObservableObject {
                 onPacksChanged?()
             }
             packStatus = .ready
+            return nil
         } catch let failure as PackStore.Failure {
             await packsArrivedDespite(packStore)
             packStatus = .failed(Self.describe(failure))
+            return Self.reason(failure)
         } catch {
             await packsArrivedDespite(packStore)
             packStatus = .failed(error.localizedDescription)
+            return error.localizedDescription
+        }
+    }
+
+    /// "Paketleri şimdi güncelle"nin sonucu (ekranda uyarı olarak gösterilir).
+    enum PackUpdateOutcome: Equatable {
+        case upToDate
+        case updated(PackUpdateSummary)
+        /// Neden ve hataya rağmen inen paketler.
+        case failed(String, PackUpdateSummary)
+    }
+
+    /// Elle güncelleme: süresine bakmadan listeyi sunucudan (yerel önbelleği atlayarak, gerekirse yedek adresten) alır,
+    /// değişen paketleri indirir ve neyin geldiğini özetler. Paket sunucusu yapılandırılmamışsa nil.
+    func updatePacksNow() async -> PackUpdateOutcome? {
+        guard let packStore else { return nil }
+        let before = library.packs.map { (id: $0.id, lines: $0.entries) }
+        let failure = await refreshPacks(force: true)
+        let after = library.packs
+        let downloaded = await packStore.lastDownloaded.map { entry in
+            // Satır sayısı yeniden okunan kitaplıktan (gerçekte yüklenen), yoksa sunucudaki listeden.
+            PackUpdateSummary.Downloaded(id: entry.id, title: entry.title,
+                                         lines: after.last { $0.id == entry.id }?.entries ?? entry.entries ?? 0)
+        }
+        let summary = PackUpdateSummary(before: before, downloaded: downloaded)
+        if let failure { return .failed(failure, summary) }
+        return summary.isEmpty ? .upToDate : .updated(summary)
+    }
+
+    /// Uyarıdaki hata nedeni.
+    static func reason(_ failure: PackStore.Failure) -> String {
+        switch failure {
+        case .network: String(localized: "No internet connection, or the pack server could not be reached.")
+        case .server(429): String(localized: "Too many attempts. Wait a few minutes and try again.")
+        case let .server(code): String(format: String(localized: "The pack server did not respond (HTTP %lld)."), code)
+        case .badChecksum: String(localized: "A downloaded pack could not be verified; it may have arrived incomplete.")
+        case .badResponse: String(localized: "The response from the pack server could not be read.")
         }
     }
 

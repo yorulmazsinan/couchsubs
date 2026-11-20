@@ -32,7 +32,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +45,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,12 +73,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
+import com.couchsubs.mobile.packs.PackUpdateOutcome
+import com.couchsubs.mobile.packs.PackUpdateSummary
 import com.couchsubs.mobile.service.FramePreview
 import com.couchsubs.mobile.service.LiveStatus
 import com.couchsubs.mobile.settings.SubtitleTarget
 import com.couchsubs.mobile.tv.InstalledTv
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Turda vurgulanan öğeler (TASARIM-MOBIL.md §10, tuval Telefon-Tur); [radius] öğenin köşesi (delik ona göre çizilir). */
@@ -402,59 +409,166 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
     LaunchedEffect(version) { catalog = withContext(Dispatchers.IO) { Services.catalog(context) } }
     val unlocked = packsOn
     val list = catalog.orEmpty()
-    ScreenScaffold(top = {
-        TopBar(stringResource(R.string.packs_title), onBack = onBack) {
-            Pill(if (list.isEmpty()) stringResource(R.string.packs_free) else stringResource(R.string.packs_free_count, list.size))
-        }
-    }, bottom = {
-        SecondaryButton(stringResource(if (status == Services.PackStatus.DOWNLOADING) R.string.packs_updating else R.string.packs_refresh),
-            enabled = status != Services.PackStatus.DOWNLOADING) { Services.refreshPacks(force = true) }
-    }) {
-        Text(stringResource(R.string.packs_auto), style = Tokens.Type.body, color = Tokens.Color.secondary)
-        RowList(listOf({
-            RowItem(stringResource(R.string.settings_packs), stringResource(R.string.packs_switch_note)) {
-                androidx.compose.material3.Switch(packsOn, { packsOn = it; settings.packsEnabled = it })
+    // "Paketleri güncelle"ye basıldı, sonuç bekleniyor: sayfa bulanıklaşır (Android 12+; öncesinde koyu perde), ortada
+    // gösterge döner; bitince ne geldiği uyarıda yazar (iPhone ile aynı).
+    var updating by remember { mutableStateOf(false) }
+    var outcome by remember { mutableStateOf<PackUpdateOutcome?>(null) }
+    val scope = rememberCoroutineScope()
+    val busy = updating || status == Services.PackStatus.DOWNLOADING
+    fun updateNow() {
+        if (updating) return
+        updating = true
+        outcome = null
+        scope.launch {
+            val before = withContext(Dispatchers.IO) {
+                catalog?.filter { it.installed }?.map { it.id to it.entries }
+                    ?: Services.packLibrary(context).infos.map { it.id to it.entries }
             }
-        }))
-        // Güncelleme hatası sessizce yutulmaz (iPhone'daki gibi): ulaşılamazsa telefondaki paketlerin kullanıldığı yazar.
-        when (status) {
-            Services.PackStatus.DOWNLOADING -> Text(stringResource(R.string.packs_updating), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-            Services.PackStatus.OFFLINE -> NoteTile(stringResource(R.string.packs_offline))
-            Services.PackStatus.FAILED -> NoteTile(stringResource(R.string.packs_failed))
-            else -> {}
-        }
-        if (catalog == null) Text(stringResource(R.string.packs_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
-        else if (list.isEmpty()) NoteTile(stringResource(R.string.packs_none_yet), Tokens.Color.secondary)
-        list.chunked(2).forEach { row ->
-            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                row.forEach { entry ->
-                    val (code, short) = packShort(entry.id, entry.title)
-                    val on = entry.id !in disabled
-                    val playing = packInUse != null && packInUse == entry.title
-                    PackTile(code, short, linesText(context, entry.entries), Modifier.weight(1f).fillMaxHeight(),
-                        style = if (playing) TileStyle.ACTIVE else TileStyle.NORMAL, dim = !unlocked || !on,
-                        corner = { if (playing) StatusLabel(stringResource(R.string.packs_now)) else if (unlocked && !on) Pill(stringResource(R.string.packs_off)) },
-                        // Karo paketin anahtarıdır: ekran okuyucu "açık/kapalı" diye okur.
-                        toggled = on,
-                        onClick = {
-                            disabled = if (on) disabled + entry.id else disabled - entry.id
-                            settings.disabledPacks = disabled
-                        })
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+            val result = try {
+                Services.updatePacksNow(before)
+            } finally {
+                updating = false
             }
-        }
-        ImportedPacksSection()
-        Tile(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
-                TileIcon(Icons.Filled.Refresh)
-                Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
-                    Text(stringResource(R.string.packs_next), style = Tokens.Type.headline, color = Tokens.Color.text)
-                    Text(stringResource(R.string.packs_next_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
-                }
-            }
+            outcome = result
         }
     }
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().then(if (updating) Modifier.blur(12.dp) else Modifier)) {
+            ScreenScaffold(top = {
+                TopBar(stringResource(R.string.packs_title), onBack = onBack) {
+                    Pill(if (list.isEmpty()) stringResource(R.string.packs_free) else stringResource(R.string.packs_free_count, list.size))
+                }
+            }, bottom = {
+                SecondaryButton(stringResource(if (busy) R.string.packs_updating_short else R.string.packs_refresh),
+                    enabled = !busy) { updateNow() }
+            }) {
+                Text(stringResource(R.string.packs_auto), style = Tokens.Type.body, color = Tokens.Color.secondary)
+                RowList(listOf({
+                    RowItem(stringResource(R.string.settings_packs), stringResource(R.string.packs_switch_note)) {
+                        androidx.compose.material3.Switch(packsOn, { packsOn = it; settings.packsEnabled = it })
+                    }
+                }))
+                // Güncelleme hatası sessizce yutulmaz (iPhone'daki gibi): ulaşılamazsa telefondaki paketlerin kullanıldığı yazar.
+                when (status) {
+                    Services.PackStatus.DOWNLOADING -> Text(stringResource(R.string.packs_updating), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+                    Services.PackStatus.OFFLINE -> NoteTile(stringResource(R.string.packs_offline))
+                    Services.PackStatus.FAILED -> NoteTile(stringResource(R.string.packs_failed))
+                    else -> {}
+                }
+                if (catalog == null) Text(stringResource(R.string.packs_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
+                else if (list.isEmpty()) NoteTile(stringResource(R.string.packs_none_yet), Tokens.Color.secondary)
+                list.chunked(2).forEach { row ->
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+                        row.forEach { entry ->
+                            val (code, short) = packShort(entry.id, entry.title)
+                            val on = entry.id !in disabled
+                            val playing = packInUse != null && packInUse == entry.title
+                            PackTile(code, short, linesText(context, entry.entries), Modifier.weight(1f).fillMaxHeight(),
+                                style = if (playing) TileStyle.ACTIVE else TileStyle.NORMAL, dim = !unlocked || !on,
+                                corner = { if (playing) StatusLabel(stringResource(R.string.packs_now)) else if (unlocked && !on) Pill(stringResource(R.string.packs_off)) },
+                                // Karo paketin anahtarıdır: ekran okuyucu "açık/kapalı" diye okur.
+                                toggled = on,
+                                onClick = {
+                                    disabled = if (on) disabled + entry.id else disabled - entry.id
+                                    settings.disabledPacks = disabled
+                                })
+                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+                ImportedPacksSection()
+                Tile(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+                        TileIcon(Icons.Filled.Refresh)
+                        Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair)) {
+                            Text(stringResource(R.string.packs_next), style = Tokens.Type.headline, color = Tokens.Color.text)
+                            Text(stringResource(R.string.packs_next_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        if (updating) PacksUpdatingOverlay()
+    }
+    outcome?.let { shown ->
+        val failed = shown is PackUpdateOutcome.Failed
+        AlertDialog(
+            onDismissRequest = { outcome = null },
+            title = { Text(stringResource(when (shown) {
+                PackUpdateOutcome.UpToDate -> R.string.packs_result_current_title
+                is PackUpdateOutcome.Updated -> R.string.packs_result_updated_title
+                is PackUpdateOutcome.Failed -> R.string.packs_result_failed_title
+            })) },
+            text = { Text(packUpdateMessage(context, shown)) },
+            confirmButton = {
+                TextButton({
+                    outcome = null
+                    if (failed) updateNow()
+                }) { Text(stringResource(if (failed) R.string.packs_retry else R.string.ok)) }
+            },
+            dismissButton = if (failed) ({ TextButton({ outcome = null }) { Text(stringResource(R.string.close)) } }) else null,
+            containerColor = Tokens.Color.surface2,
+        )
+    }
+}
+
+/** Güncelleme sürerken sayfanın üstündeki perde: dokunuş ve Geri tuşu geçmez, ortada gösterge ve "Paketler güncelleniyor…". */
+@Composable
+private fun PacksUpdatingOverlay() {
+    BackHandler { }
+    // Bulanıklık Android 12'den önce çalışmaz; orada perde daha koyu.
+    val scrim = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) 0.45f else 0.7f
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrim)).pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.Center) {
+        Column(Modifier.background(Tokens.Color.surface2, RoundedCornerShape(Tokens.Radius.tile)).padding(Tokens.Space.tile),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap)) {
+            CircularProgressIndicator(color = Tokens.Color.pro)
+            Text(stringResource(R.string.packs_updating), style = Tokens.Type.headline, color = Tokens.Color.text)
+        }
+    }
+}
+
+/** "2 paket güncellendi: Grand Theft Auto VI (+12.300 satır), Red Dead Redemption 2 (+800 satır)." */
+fun packUpdateMessage(context: Context, outcome: PackUpdateOutcome): String = when (outcome) {
+    PackUpdateOutcome.UpToDate -> context.getString(R.string.packs_result_current)
+    is PackUpdateOutcome.Updated -> packSummaryText(context, outcome.summary)
+    is PackUpdateOutcome.Failed -> {
+        val reason = when (outcome.reason) {
+            PackUpdateOutcome.Reason.OFFLINE -> context.getString(R.string.packs_error_offline)
+            PackUpdateOutcome.Reason.RATE_LIMITED -> context.getString(R.string.packs_error_rate)
+            PackUpdateOutcome.Reason.SERVER -> context.getString(R.string.packs_error_server, outcome.status ?: 0)
+            PackUpdateOutcome.Reason.PARTIAL -> context.getString(R.string.packs_error_partial)
+            PackUpdateOutcome.Reason.UNKNOWN -> context.getString(R.string.packs_error_unknown)
+        }
+        (listOf(reason, context.getString(R.string.packs_result_still_used)) +
+            listOfNotNull(packSummaryText(context, outcome.summary).takeIf { it.isNotEmpty() })).joinToString("\n\n")
+    }
+}
+
+private fun packSummaryText(context: Context, summary: PackUpdateSummary): String {
+    val locale = context.resources.configuration.locales[0]
+    val number = { value: Int -> java.text.NumberFormat.getIntegerInstance(locale).format(value) }
+    val parts = mutableListOf<String>()
+    val updated = summary.updated
+    if (updated.isNotEmpty()) {
+        val items = updated.joinToString(", ") { change ->
+            when {
+                change.lineDelta > 0 -> context.getString(R.string.packs_result_item_more, change.title, number(change.lineDelta))
+                change.lineDelta < 0 -> context.getString(R.string.packs_result_item_fewer, change.title, number(-change.lineDelta))
+                else -> context.getString(R.string.packs_result_item_revised, change.title)
+            }
+        }
+        parts += if (updated.size == 1) context.getString(R.string.packs_result_updated_one, items)
+        else context.getString(R.string.packs_result_updated_many, updated.size, items)
+    }
+    val added = summary.added
+    if (added.isNotEmpty()) {
+        val items = added.joinToString(", ") { context.getString(R.string.packs_result_item_lines, it.title, number(it.lines)) }
+        parts += if (added.size == 1) context.getString(R.string.packs_result_added_one, items)
+        else context.getString(R.string.packs_result_added_many, added.size, items)
+    }
+    if (summary.newLines > 0) parts += context.getString(R.string.packs_result_total, number(summary.newLines))
+    return parts.joinToString("\n")
 }
 
 /** Tur deliğinin öğeden taşma payı. */

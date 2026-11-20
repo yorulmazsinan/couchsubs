@@ -61,6 +61,8 @@ class PackStore(
         val skipped: Boolean = false,
         val failed: List<String> = emptyList(),
         val offline: Boolean = false,
+        /** İnen paketler (sunucudaki başlık ve satır sayısıyla); "Paketleri güncelle" özeti için ([PackUpdateSummary]). */
+        val downloadedPacks: List<RemotePack> = emptyList(),
     )
 
     private val lock = Any()
@@ -87,6 +89,7 @@ class PackStore(
         directory.mkdirs()
         val kept = mutableListOf<Local>()
         val downloaded = mutableListOf<String>()
+        val downloadedPacks = mutableListOf<RemotePack>()
         val failed = mutableListOf<String>()
         var networkFailures = 0
         var retry = false
@@ -129,12 +132,14 @@ class PackStore(
             }
             kept.add(Local(pack.id, pack.title, pack.version, pack.sha256.lowercase()))
             downloaded.add(pack.id)
+            downloadedPacks.add(pack)
         }
         val removed = current.map { it.id }.filter { id -> remote.none { it.id == id } }
         removed.forEach { packFile(it).delete() }
         // Başarısız indirme ya da checksum doğrulaması sonraki yenilemede yeniden denensin diye kontrol zamanı ilerletilmez.
         writeManifest(if (retry) checked else clock(), kept)
-        Refresh(downloaded, removed, failed = failed, offline = failed.isNotEmpty() && networkFailures == failed.size)
+        Refresh(downloaded, removed, failed = failed, offline = failed.isNotEmpty() && networkFailures == failed.size,
+            downloadedPacks = downloadedPacks)
     }
 
     /** Ayarlardan "indirilen paketleri sil". */
@@ -239,6 +244,10 @@ private fun httpGet(url: String): ByteArray {
     try {
         connection.connectTimeout = 15_000
         connection.readTimeout = 60_000
+        // Liste sunucudan `max-age=300` ile geliyor: bir HTTP önbelleği kurulsa bile "Paketleri güncelle" eski listeyi
+        // okumasın, her bakışta sunucuya gidilsin (iPhone'da da liste önbelleği atlar).
+        connection.useCaches = false
+        connection.setRequestProperty("Cache-Control", "no-cache")
         val status = connection.responseCode
         if (status !in 200..299) throw PackDownloadException(status, "HTTP $status")
         return connection.inputStream.use { it.readBytes() }

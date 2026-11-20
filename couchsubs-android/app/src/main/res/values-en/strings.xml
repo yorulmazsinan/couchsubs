@@ -126,6 +126,27 @@
     <string name="packs_updating">Updating packs…</string>
     <string name="packs_offline">The pack server could not be reached. The packs on this phone are used; while online, tap Update packs.</string>
     <string name="packs_failed">Some game packs could not be updated. The packs on this phone are used; try again in a little while.</string>
+    <string name="packs_updating_short">Updating…</string>
+    <string name="packs_result_current_title">Packs are up to date</string>
+    <string name="packs_result_current">The packs are already up to date.</string>
+    <string name="packs_result_updated_title">Packs updated</string>
+    <string name="packs_result_failed_title">The packs could not be updated</string>
+    <string name="packs_result_still_used">The packs on this phone are still used.</string>
+    <string name="packs_result_updated_one">1 pack updated: %1$s.</string>
+    <string name="packs_result_updated_many">%1$d packs updated: %2$s.</string>
+    <string name="packs_result_added_one">1 pack added: %1$s.</string>
+    <string name="packs_result_added_many">%1$d packs added: %2$s.</string>
+    <string name="packs_result_item_lines">%1$s (%2$s lines)</string>
+    <string name="packs_result_item_more">%1$s (+%2$s lines)</string>
+    <string name="packs_result_item_fewer">%1$s (%2$s fewer lines)</string>
+    <string name="packs_result_item_revised">%1$s (translations revised)</string>
+    <string name="packs_result_total">%1$s new lines in total.</string>
+    <string name="packs_error_offline">No internet connection, or the pack server could not be reached.</string>
+    <string name="packs_error_rate">Too many attempts. Wait a few minutes and try again.</string>
+    <string name="packs_error_server">The pack server did not respond (HTTP %1$d).</string>
+    <string name="packs_error_partial">Some packs could not be downloaded or verified; they may have arrived incomplete.</string>
+    <string name="packs_error_unknown">Something unexpected went wrong while updating the packs.</string>
+    <string name="packs_retry">Try again</string>
 
     <string name="packs_loading">Loading packs…</string>
     <string name="packs_imported_title">Imported packs</string>

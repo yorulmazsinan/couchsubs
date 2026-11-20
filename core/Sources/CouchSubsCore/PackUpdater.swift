@@ -204,7 +204,8 @@ public actor PackUpdater {
     // MARK: - Ağ
 
     private func list() async -> [RemotePack]? {
-        guard let data = await get("v1/packs") else { return nil }
+        // Liste her bakışta sunucudan (yerel önbellek değil): yeni çıkan sürüm hemen görünsün (bkz. PackMirrors.get).
+        guard let data = await get("v1/packs", cachePolicy: .reloadIgnoringLocalCacheData) else { return nil }
         return (try? JSONDecoder().decode(Listing.self, from: data))?.packs
     }
 
@@ -214,8 +215,8 @@ public actor PackUpdater {
         return data
     }
 
-    private func get(_ path: String) async -> Data? {
-        try? await mirrors.get(path, timeout: 60, fetch: fetch).get()
+    private func get(_ path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async -> Data? {
+        try? await mirrors.get(path, timeout: 60, cachePolicy: cachePolicy, fetch: fetch).get()
     }
 
     // MARK: - Disk

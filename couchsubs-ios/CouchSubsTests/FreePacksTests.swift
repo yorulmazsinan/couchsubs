@@ -71,6 +71,25 @@ final class FreePacksTests: XCTestCase {
         XCTAssertEqual(library.match("Hello there, my friend.")?.text, "Merhaba dostum.")
     }
 
+    /// "Paketleri şimdi güncelle": ilk basışta paket eklendi, hemen ikinci basışta zaten güncel, sunucu düşünce Türkçe neden.
+    func testUpdateNowSummarizesWhatArrived() async {
+        let sha = PackStore.sha256(pack)
+        StubProtocol.responses["/v1/packs"] = (200, Data(#"{"packs":[{"id":"demo","title":"Demo","version":2,"sha256":"\#(sha)","size":10,"entries":1}]}"#.utf8))
+        StubProtocol.responses["/v1/packs/demo"] = (200, pack)
+        let library = GamePackLibrary(bundled: nil, user: PackStore.filesDirectory(in: directory))
+        let app = makeApp(analytics: RecordingAnalytics(), library: library)
+        guard case let .updated(summary) = await app.updatePacksNow() else { return XCTFail("paket eklenmeli") }
+        XCTAssertEqual(summary.added.map(\.title), ["Demo"])
+        XCTAssertEqual(summary.newLines, 1)
+        // Liste yerel önbellekten değil sunucudan (sunucu `max-age=300` gönderiyor).
+        XCTAssertEqual(StubProtocol.requests.first { $0.url?.path == "/v1/packs" }?.cachePolicy, .reloadIgnoringLocalCacheData)
+        let again = await app.updatePacksNow()
+        XCTAssertEqual(again, .upToDate)
+        StubProtocol.responses["/v1/packs"] = (503, Data())
+        guard case let .failed(reason, _) = await app.updatePacksNow() else { return XCTFail("hata bildirilmeli") }
+        XCTAssertEqual(reason, AppModel.reason(.server(503)))
+    }
+
     func testNoServerConfiguredDoesNothing() async {
         let app = AppModel(analytics: RecordingAnalytics(), packStore: nil, library: GamePackLibrary(bundled: nil, user: nil),
                            defaults: UserDefaults(suiteName: UUID().uuidString)!)
