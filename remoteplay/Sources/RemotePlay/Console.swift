@@ -51,8 +51,42 @@ public enum Console {
         let lock = NSLock()
     }
 
+    /// Aramada her adrese ayrı paket gider (ağ başına ~1000 adres, yarım saniyede bir); boştaki adreslere gönderim
+    /// "Discovery failed to send: Host is down" gibi hatayla döner ve her biri günlüğe yazılınca remoteplay.log saniyede
+    /// yüzlerce satır büyüyordu. Aynı gönderim hatası bir aramada yalnız ilk kez yazılır, kaç kez tekrarlandığı arama
+    /// sonunda tek satırda söylenir. Başka satırlara (ve başka gönderim hatalarına) dokunulmaz.
+    final class SendErrorDigest {
+        static let prefix = "Discovery failed to send"
+        private let lock = NSLock()
+        private var counts: [String: Int] = [:]
+        private var order: [String] = []
+
+        /// Satır günlüğe yazılsın mı: gönderim hatası değilse ya da bu aramada ilk kez görülüyorsa evet.
+        func admit(_ text: String) -> Bool {
+            guard text.hasPrefix(Self.prefix) else { return true }
+            lock.lock()
+            defer { lock.unlock() }
+            let count = (counts[text] ?? 0) + 1
+            counts[text] = count
+            if count == 1 { order.append(text) }
+            return count == 1
+        }
+
+        /// Tekrarlanan hataların özeti (ilk kez yazılan satır dışında kaç kez daha geldiği); tekrar yoksa boş.
+        func summary(targets: Int) -> [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return order.compactMap { text in
+                guard let count = counts[text], count > 1 else { return nil }
+                return "[chiaki error] \(text) (bu PS5 aramasında toplam \(count) kez, \(targets) adrese soruldu)"
+            }
+        }
+    }
+
     static func search(timeout: Duration, host: String?) -> [ConsoleInfo] {
         let logger = ChiakiLogger()
+        let sendErrors = SendErrorDigest()
+        logger.shouldWrite = { sendErrors.admit($0) }
         // İlk defer en son çalışır: günlük, aşağıdaki chiaki_discovery_fini de dahil her C çağrısından sonra bırakılır.
         defer { withExtendedLifetime(logger) {} }
         let discovery = UnsafeMutablePointer<ChiakiDiscovery>.allocate(capacity: 1)
@@ -105,6 +139,7 @@ public enum Console {
             Thread.sleep(forTimeInterval: 0.5)
         }
         chiaki_discovery_thread_stop(thread)
+        for line in sendErrors.summary(targets: targets.count) { RemotePlayLog.write(line) }
 
         collector.lock.lock()
         defer { collector.lock.unlock() }
