@@ -993,8 +993,9 @@
           el.style.backgroundColor = surface.background;
           el.style.color = surface.foreground;
         }
-      } else if (regionId && (regionId.indexOf('auto-') === 0 || (item.style && typeof item.style === 'object'))) {
+      } else if (setApart && regionId && (regionId.indexOf('auto-') === 0 || (item.style && typeof item.style === 'object'))) {
         // Yalnız özgün görünüşü taşıyan bloklar: elle tanımlanmış ek alanların kutusu eskisi gibi siyah kalır.
+        // "Ekran yazılarını altyazıdan ayır" kapalıysa (setApart: false) bunlar da altyazı gibi siyah kutuda.
         styled = applyLook(el, item);
       }
       fillText(el, item.text, item.icons);
@@ -1016,7 +1017,10 @@
       // yine sığmazsa kutu aşağı uzar.
       // Menü şeridindeki kısa etiket ("OFF" → "KAPALI", en çok iki sözcük) tek satır kalır, şeridin dışına taşmaz: gerekirse
       // yazı en çok %40 küçülür.
-      var label = styled && item.text.indexOf('\n') < 0 && item.text.split(/\s+/).length <= 2;
+      // Özgün yazı tek satırsa ("ROB VICKI'S BOSS" başlığı) Türkçesi de önce tek satırda tutulur, sığmazsa küçülür; en
+      // küçük boyda da sığmıyorsa satır kırılır.
+      var singleOriginal = boxHeight <= line * 1.6 + 2 * pad * height;
+      var label = styled && item.text.indexOf('\n') < 0 && (item.text.split(/\s+/).length <= 2 || singleOriginal);
       if (styled) floor = Math.max(label ? 10 : SCREEN_MIN_FONT, Math.round(size * (label ? STYLED_LABEL_MIN_SCALE : STYLED_MIN_SCALE)));
       if (label) el.style.whiteSpace = 'nowrap';
       el.style.fontSize = size + 'px';
@@ -1024,6 +1028,17 @@
       while (label && el.scrollWidth > el.clientWidth && size > floor) {
         size = Math.max(floor, size - 1);
         el.style.fontSize = size + 'px';
+      }
+      if (label && el.scrollWidth > el.clientWidth + 1 && item.text.split(/\s+/).length > 2) el.style.whiteSpace = '';
+      // En küçük boyda da sığmayan kısa etiket kesilmez: kutu hizasına göre (ortalıysa iki yana, sağa yaslıysa sola)
+      // gerektiği kadar genişler; özgün zemin rengiyle şeridin üstünde durur.
+      if (label && el.style.whiteSpace === 'nowrap' && el.scrollWidth > el.clientWidth + 1) {
+        var extra = el.scrollWidth - el.clientWidth + 2;
+        var align = item.style && item.style.align;
+        var shift = align === 'right' ? extra : align === 'left' ? 0 : extra / 2;
+        var newLeft = Math.max(0, Math.min(width - itemWidth - extra, left * width - shift));
+        el.style.left = newLeft + 'px';
+        el.style.width = (itemWidth + extra) + 'px';
       }
       // Türkçe çoğu zaman İngilizceden uzundur: kutu biraz uzayabilir, daha fazlası için yazı küçülür.
       var limit = Math.min(available, phone || styled ? boxHeight + 1 : Math.max(boxHeight * 1.5, line * 2.6));
@@ -1091,6 +1106,7 @@
     $('regions').className = '';
     if (kind === 'region-blocks') {
       placeItems(el, blocks, id);
+      avoidRegions();
       return;
     }
     if (tooBig(box)) return hideRegion(id);
@@ -1124,6 +1140,7 @@
       size = Math.max(SCREEN_MIN_FONT, size - 2);
       el.style.fontSize = size + 'px';
     }
+    avoidRegions();
   }
 
   function hideRegion(id) {
@@ -1131,6 +1148,67 @@
     if (!el) return;
     delete regionBoxes[id];
     $('regions').removeChild(el);
+    avoidRegions();
+  }
+
+  // --- Ekran yazısı ile altyazının ayrımı ---
+  // Görev/hedef satırı çoğu oyunda altyazıya bitişik (ikisi de altta ortada). Ek alan ve ekran yazısı kutuları kendi
+  // yerinde durur; altyazı kutusu onlarla üst üste binecekse yalnız gerektiği kadar (aradaki küçük boşlukla) yukarı ya da
+  // aşağı kaydırılır. Kaydırma ekranı aşacaksa ekranın içinde kalan en yakın yere kadar kayar.
+  var AVOID_GAP = 0.006;
+  var setApart = true;
+
+  function setShift(el, dy) {
+    var value = dy ? 'translateY(' + Math.round(dy) + 'px)' : '';
+    el.style.webkitTransform = value;
+    el.style.transform = value;
+  }
+
+  function regionRects() {
+    var rects = [];
+    for (var id in regionBoxes) {
+      // Oyun telefonu bilerek altyazının altında kalır; altyazıyı kaydırmaz.
+      if (!Object.prototype.hasOwnProperty.call(regionBoxes, id) || id === 'game-phone') continue;
+      var host = regionBoxes[id];
+      var parts = host.className === 'region-blocks' ? host.children : [host];
+      for (var i = 0; i < parts.length; i++) {
+        var r = parts[i].getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) rects.push(r);
+      }
+    }
+    return rects;
+  }
+
+  function avoidRegions() {
+    var el = $('subtitle');
+    if (!el || !$('subtitle-text')) return;
+    setShift(el, 0);
+    if (el.className === 'hidden') return;
+    var sub = $('subtitle-text').getBoundingClientRect();
+    if (!(sub.height > 0)) return;
+    var rects = regionRects();
+    if (!rects.length) return;
+    var height = document.documentElement.clientHeight || window.innerHeight || 1080;
+    var gap = Math.max(4, Math.round(height * AVOID_GAP));
+    var dy = 0;
+    for (var pass = 0; pass < 6; pass++) {
+      var top = sub.top + dy;
+      var bottom = sub.bottom + dy;
+      var hit = null;
+      for (var i = 0; i < rects.length; i++) {
+        var r = rects[i];
+        if (r.right <= sub.left || r.left >= sub.right) continue;
+        if (r.bottom + gap <= top || r.top - gap >= bottom) continue;
+        hit = r;
+        break;
+      }
+      if (!hit) break;
+      // Kutu altyazının altındaysa altyazı yukarı, üstündeyse aşağı kayar.
+      if ((hit.top + hit.bottom) / 2 >= (top + bottom) / 2) dy -= bottom - (hit.top - gap);
+      else dy += (hit.bottom + gap) - top;
+    }
+    dy = Math.max(-sub.top, Math.min(height - sub.bottom, dy));
+    setShift(el, dy);
   }
 
   function hideRegions() {
@@ -1139,6 +1217,7 @@
     }
     regionBoxes = {};
     $('regions').className = 'hidden';
+    avoidRegions();
   }
 
   // Konum hem CouchSubs uygulamasından hem kumandanın oklarıyla ayarlanır. Kumandayla
@@ -1165,7 +1244,7 @@
     cover.className = 'hidden';
     $('subtitle-text').style.background = textBackground;
     // Altyazı yokken (ör. ayar değişince yeniden yerleşirken) örtü tek başına boş siyah kutu olarak kalmasın.
-    if (!box || el.className === 'hidden') return;
+    if (!box || el.className === 'hidden') return avoidRegions();
 
     var height = document.documentElement.clientHeight || window.innerHeight || 1080;
     var gap = Math.round(height * 0.012);
@@ -1194,6 +1273,7 @@
       el.style.top = Math.round(box.bottom * height + gap) + 'px';
     }
     keepOnScreen(el, cover);
+    avoidRegions();
   }
 
   // Örtü İngilizce satırın kutusunu (biraz paylı) kaplar. Türkçe daha uzun ya da daha çok satırsa örtü çevirinin
@@ -1299,6 +1379,8 @@
     }
     if (PLACEMENTS[style.placement]) placement = style.placement;
     bandShape = style.backgroundShape === 'band';
+    // "Ekran yazılarını altyazıdan ayır" (alanı göndermeyen eski bilgisayarda açık).
+    setApart = style.setApart !== false;
     setBodyClass('band', bandShape);
     if (typeof style.background === 'number') {
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;

@@ -79,7 +79,13 @@ function render(width, height) {
     result.legacy = regions.lastElementChild.className + ' ' + regions.lastElementChild.textContent;
     fire('region', {id:'game-phone', text:''});
     result.afterPhone = regions.textContent;
+    // Görev kutusu altyazıyı kendi yerinden kaydırır (üst üste binmesin); telefon katman sırasını ayrı sına.
     fire('style', {fontSize:48, placement:'cover', backgroundShape:'box'});
+    fire('subtitle', {text:'Konuşma sürüyor.', duration:8000, box:box});
+    var lineBox = document.getElementById('line').getBoundingClientRect();
+    var missionBox = regions.querySelector('.region').getBoundingClientRect();
+    result.apart = lineBox.bottom <= missionBox.top || lineBox.top >= missionBox.bottom;
+    fire('region', {id:'mission', text:''});
     fire('subtitle', {text:'Konuşma sürüyor.', duration:8000, box:box});
     var line = document.getElementById('line');
     // Saydam yayında tıklama kapalıdır. Yalnız testte metinleri hedeflenebilir yapıp gerçek çizim sırasını oku.
@@ -170,13 +176,15 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
       assert.ok(Math.abs(next.width - .032 * width) < 1);
       assert.ok(reply.bottom <= next.top);
       assert.equal(r.mission, 'Görev');
+      assert.equal(r.apart, true, 'görev kutusu ile altyazı üst üste binmemeli');
       assert.equal(r.legacy, 'region Eski olay');
       assert.equal(r.afterPhone, 'Görev');
     });
     await t.test('çakışan telefon yazısı ana altyazının altında kalır', () => {
-      assert.deepEqual(r.phoneLayers, ['Görev', 'Konuşma sürüyor.', 'Yanıt']);
-      assert.deepEqual(r.legacyLayers, ['Görev', 'Konuşma sürüyor.', 'Eski telefon']);
-      assert.deepEqual(r.closedLayers, ['Görev', 'Konuşma sürüyor.']);
+      // Görev kutusu kaldırıldı (altyazıyı kaydırmasın); telefon altyazının altında kalır.
+      assert.deepEqual(r.phoneLayers, ['Konuşma sürüyor.', 'Yanıt']);
+      assert.deepEqual(r.legacyLayers, ['Konuşma sürüyor.', 'Eski telefon']);
+      assert.deepEqual(r.closedLayers, ['Konuşma sürüyor.']);
     });
   });
 }

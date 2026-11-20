@@ -60,6 +60,8 @@
     white-space: pre-line; overflow-wrap: anywhere; text-align: left;
   }
   .phone .icon { height: 1.1em; vertical-align: -0.2em; }
+  /* Otomatik bulunan ekran yazısı: özgün yazının zemini, rengi, kalınlığı ve hizasıyla kendi yerinde (TV ile aynı). */
+  .phone-blocks .phone.auto { padding: 1px 4px; border-radius: 3px; font-weight: 500; text-align: center; }
 </style>
 </head>
 <body>
@@ -225,6 +227,8 @@
   function apply(style) {
     style = style || {};
     lastStyle = style;
+    // "Ekran yazılarını altyazıdan ayır" (alanı göndermeyen eski uygulamada açık).
+    setApart = style.setApart !== false;
     var size = Number(fixed.size || style.fontSize || 48);
     if (size > 0) { baseSize = size; line.style.fontSize = pixels(size * textScale); }
     hintBox.style.fontSize = pixels(Math.max(20, Math.round((size > 0 ? size : 48) * 0.6)));
@@ -271,6 +275,7 @@
     var node = regions[id];
     if (!text) {
       if (node) { regionsBox.removeChild(node); delete regions[id]; }
+      avoidRegions();
       return;
     }
     hideHint();
@@ -280,20 +285,23 @@
       regionsBox.appendChild(node);
       regions[id] = node;
     }
-    if (id === 'game-phone' && Array.isArray(blocks) && blocks.length) {
+    var auto = setApart && id.indexOf('auto-') === 0;
+    if ((id === 'game-phone' || auto) && Array.isArray(blocks) && blocks.length) {
       node.textContent = '';
       node.style.cssText = '';
       node.className = 'phone-blocks';
-      for (var i = 0; i < blocks.length; i++) placePhoneBlock(node, blocks[i]);
+      for (var i = 0; i < blocks.length; i++) placePhoneBlock(node, blocks[i], auto);
+      avoidRegions();
       if (node.firstChild) return;
     }
     node.className = 'region';
     node.textContent = text;
     node.box = box || null;
     styleRegion(node);
+    avoidRegions();
   }
 
-  function placePhoneBlock(host, item) {
+  function placePhoneBlock(host, item, auto) {
     var b = item && item.box;
     if (!b || typeof item.text !== 'string' || !item.text ||
         ![b.left, b.top, b.right, b.bottom].every(function (n) { return typeof n === 'number' && n >= 0 && n <= 1; }) ||
@@ -303,8 +311,18 @@
     var surface = item.surface;
     function rgb(value) { return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value); }
     if (surface && rgb(surface.background) && rgb(surface.foreground)) {
-      el.style.backgroundColor = surface.background;
+      el.style.backgroundColor = auto && surface.flat === false ? surface.background + 'd9' : surface.background;
       el.style.color = surface.foreground;
+    }
+    var look = auto && item.style && typeof item.style === 'object' ? item.style : null;
+    if (auto) {
+      el.className = 'phone auto';
+      if (look && look.bold === true) el.style.fontWeight = '700';
+      if (look && look.condensed === true) {
+        el.style.fontFamily = '"Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif';
+        el.style.fontStretch = 'condensed';
+      }
+      if (look && (look.align === 'left' || look.align === 'center' || look.align === 'right')) el.style.textAlign = look.align;
     }
     var at = 0;
     (Array.isArray(item.icons) ? item.icons : []).forEach(function (icon) {
@@ -325,10 +343,46 @@
     var lineHeight = typeof item.line === 'number' && item.line > 0 ? item.line * h : height;
     var floor = Math.max(10, Math.round(12 * h / 1080));
     var size = Math.max(floor, Math.min(96, Math.round(lineHeight * 0.95)));
+    // Otomatik yazı: özgün tek satırsa ya da kısa etiketse Türkçe de tek satır kalır, en çok %40 küçülür; uzun yazı en çok
+    // %20 küçülüp sonra aşağı uzar (TV ile aynı).
+    var single = auto && item.text.indexOf('\n') < 0 &&
+      (item.text.split(/\s+/).length <= 2 || height <= lineHeight * 1.6 + 2 * pad * h);
+    if (auto) floor = Math.max(10, Math.round(size * (single ? 0.6 : 0.8)));
+    if (single) el.style.whiteSpace = 'nowrap';
     el.style.fontSize = size + 'px'; host.appendChild(el);
-    while (el.scrollHeight > height + 1 && size > floor) {
+    while (single && el.scrollWidth > el.clientWidth && size > floor) {
+      size = Math.max(floor, size - 1); el.style.fontSize = size + 'px';
+    }
+    if (single && el.scrollWidth > el.clientWidth + 1 && item.text.split(/\s+/).length > 2) el.style.whiteSpace = '';
+    while (!auto && el.scrollHeight > height + 1 && size > floor) {
       size = Math.max(floor, size - 2); el.style.fontSize = size + 'px';
     }
+  }
+
+  // Ekran yazısı (görev satırı, ek alan) ile altyazı üst üste binmesin: altyazı yalnız gerektiği kadar, aralarında küçük
+  // bir boşlukla kayar (TV: avoidRegions). Oyun telefonu bilerek altyazının altında kalır, kaydırmaz.
+  var setApart = true;
+  function avoidRegions() {
+    wrap.style.transform = '';
+    if (!line.classList.contains('on')) return;
+    var sub = line.getBoundingClientRect();
+    if (!(sub.height > 0)) return;
+    var h = window.innerHeight || 1080, gap = Math.max(4, Math.round(h * 0.006)), dy = 0;
+    var parts = Array.prototype.slice.call(regionsBox.querySelectorAll('.region:not(#phone-region), .phone.auto'));
+    for (var pass = 0; pass < 6; pass++) {
+      var top = sub.top + dy, bottom = sub.bottom + dy, hit = null;
+      for (var i = 0; i < parts.length; i++) {
+        var r = parts[i].getBoundingClientRect();
+        if (!(r.width > 0) || r.right <= sub.left || r.left >= sub.right) continue;
+        if (r.bottom + gap <= top || r.top - gap >= bottom) continue;
+        hit = r; break;
+      }
+      if (!hit) break;
+      if ((hit.top + hit.bottom) / 2 >= (top + bottom) / 2) dy -= bottom - (hit.top - gap);
+      else dy += (hit.bottom + gap) - top;
+    }
+    dy = Math.max(-sub.top, Math.min(h - sub.bottom, dy));
+    if (dy) wrap.style.transform = 'translateY(' + Math.round(dy) + 'px)';
   }
 
   function clearRegions() {
@@ -484,6 +538,7 @@
         if (bottom >= 0 && bottom <= 85) wrap.style.bottom = bottom + '%';
       }
     }
+    avoidRegions();
     timer = setTimeout(hide, Math.max(1000, duration || 8000));
   }
 
