@@ -102,32 +102,54 @@ actor PackStore {
         return now().timeIntervalSince(lastRefresh) >= maxAge
     }
 
+    /// Son yenilemede indirilen paket sayısı; yenileme bir paket yüzünden hata verse de inenler kitaplığa alınsın diye.
+    private(set) var lastDownloadCount = 0
+
     /// Listeyi alır, eksik ya da değişmiş paketleri indirir, listede olmayanları siler. `force` false ise son bakıştan
     /// `maxAge` geçmeden hiçbir şey yapmaz. Dönen değer: indirilen (yeni ya da güncellenen) paket sayısı.
     @discardableResult
     func refresh(force: Bool = false, maxAge: TimeInterval = PackStore.refreshInterval) async throws -> Int {
         guard force || needsRefresh(maxAge: maxAge) else { return 0 }
+        lastDownloadCount = 0
         let manifest: PackManifest = try await fetch(path: "v1/packs").decoded()
         let manager = FileManager.default
         try manager.createDirectory(at: filesDirectory, withIntermediateDirectories: true)
         let previous = cachedManifest()
         var downloaded = 0
+        // Bir paket inmeyince (ağ, 429, SHA-256) ötekiler yine iner; eskiden ilk hatada bütün yenileme bırakılıyor, liste
+        // kaydedilmediği için her açılışta hepsi baştan indiriliyor ve sıradaki paketler (ör. gta-6) hiç gelmiyordu.
+        var saved: [PackManifest.Entry] = []
+        var firstFailure: Failure?
         for entry in manifest.packs {
             let file = packFile(entry.id)
-            let unchanged = previous?.packs.first { $0.id == entry.id }?.sha256 == entry.sha256 && manager.fileExists(atPath: file.path)
-            if unchanged { continue }
-            let data = try await fetch(path: "v1/packs/\(entry.id)")
-            guard Self.sha256(data) == entry.sha256.lowercased() else { throw Failure.badChecksum(entry.id) }
-            try data.write(to: file, options: .atomic)
-            downloaded += 1
+            let old = previous?.packs.first { $0.id == entry.id }
+            let unchanged = old?.sha256 == entry.sha256 && manager.fileExists(atPath: file.path)
+            if unchanged {
+                saved.append(entry)
+                continue
+            }
+            do {
+                let data = try await fetch(path: "v1/packs/\(entry.id)")
+                guard Self.sha256(data) == entry.sha256.lowercased() else { throw Failure.badChecksum(entry.id) }
+                try data.write(to: file, options: .atomic)
+                downloaded += 1
+                saved.append(entry)
+            } catch {
+                firstFailure = firstFailure ?? (error as? Failure) ?? .badResponse
+                // Eski sürüm diskte kaldıysa eski kaydıyla tutulur; sonraki yenilemede yeni sürüm yeniden denenir.
+                if let old, manager.fileExists(atPath: file.path) { saved.append(old) }
+            }
         }
+        lastDownloadCount = downloaded
         // Sunucudan kalkan paket önbellekte de kalmasın.
         let wanted = Set(manifest.packs.map { packFile($0.id).lastPathComponent })
         for file in (try? manager.contentsOfDirectory(at: filesDirectory, includingPropertiesForKeys: nil)) ?? []
         where !wanted.contains(file.lastPathComponent) {
             try? manager.removeItem(at: file)
         }
-        try JSONEncoder().encode(manifest).write(to: manifestFile, options: .atomic)
+        try JSONEncoder().encode(PackManifest(packs: saved)).write(to: manifestFile, options: .atomic)
+        // Yenileme zamanı yalnız hepsi inince ilerler: inemeyen paket bir sonraki açılışta yeniden denenir.
+        if let firstFailure { throw firstFailure }
         if !manager.createFile(atPath: refreshedFile.path, contents: Data()) { throw Failure.badResponse }
         try manager.setAttributes([.modificationDate: now()], ofItemAtPath: refreshedFile.path)
         return downloaded

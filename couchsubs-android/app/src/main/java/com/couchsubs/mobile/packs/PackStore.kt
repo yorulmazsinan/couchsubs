@@ -45,8 +45,17 @@ class PackStore(
 
     data class Local(val id: String, val title: String, val version: Long, val sha256: String)
 
-    /** Yenilemenin sonucu: indirilen ve silinen paketler; [skipped] true ise süresi gelmediği için bakılmadı. */
-    data class Refresh(val downloaded: List<String> = emptyList(), val removed: List<String> = emptyList(), val skipped: Boolean = false)
+    /**
+     * Yenilemenin sonucu: indirilen ve silinen paketler; [skipped] true ise süresi gelmediği için bakılmadı. [failed]: inemeyen
+     * ya da doğrulanamayan paketler (sonraki yenilemede yeniden denenir); [offline] true ise hepsi ağ hatasıyla inemedi.
+     */
+    data class Refresh(
+        val downloaded: List<String> = emptyList(),
+        val removed: List<String> = emptyList(),
+        val skipped: Boolean = false,
+        val failed: List<String> = emptyList(),
+        val offline: Boolean = false,
+    )
 
     private val lock = Any()
 
@@ -70,6 +79,8 @@ class PackStore(
         directory.mkdirs()
         val kept = mutableListOf<Local>()
         val downloaded = mutableListOf<String>()
+        val failed = mutableListOf<String>()
+        var networkFailures = 0
         var retry = false
         for (pack in remote) {
             val existing = current.firstOrNull { it.id == pack.id }
@@ -85,11 +96,14 @@ class PackStore(
             } catch (error: PackDownloadException) {
                 // Bu paket şimdi inmedi: eski sürümü varsa o kalır, sonraki yenilemede yeniden denenir.
                 retry = true
+                failed.add(pack.id)
+                if (error.status == null) networkFailures++
                 if (existing != null && file.isFile) kept.add(existing.copy(version = -1))
                 continue
             }
             if (!sha256(data).equals(pack.sha256, ignoreCase = true)) {
                 retry = true
+                failed.add(pack.id)
                 if (existing != null && file.isFile) kept.add(existing.copy(version = -1))
                 continue
             }
@@ -106,7 +120,7 @@ class PackStore(
         removed.forEach { packFile(it).delete() }
         // Başarısız indirme ya da checksum doğrulaması sonraki yenilemede yeniden denensin diye kontrol zamanı ilerletilmez.
         writeManifest(if (retry) checked else clock(), kept)
-        Refresh(downloaded, removed)
+        Refresh(downloaded, removed, failed = failed, offline = failed.isNotEmpty() && networkFailures == failed.size)
     }
 
     /** Ayarlardan "indirilen paketleri sil". */

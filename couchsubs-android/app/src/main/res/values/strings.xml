@@ -118,6 +118,9 @@
     <string name="packs_title">Oyun paketleri</string>
     <string name="packs_none_yet">Paket bulunamadı. İnternete bağlıyken Paketleri güncelle\'ye bas.</string>
     <string name="packs_refresh">Paketleri güncelle</string>
+    <string name="packs_updating">Paketler güncelleniyor…</string>
+    <string name="packs_offline">Paket sunucusuna ulaşılamadı. Bu telefondaki paketler kullanılıyor; internete bağlıyken Paketleri güncelle\'ye bas.</string>
+    <string name="packs_failed">Bazı oyun paketleri güncellenemedi. Bu telefondaki paketler kullanılıyor; biraz sonra yeniden dene.</string>
 
     <string name="packs_loading">Paketler yükleniyor…</string>
     <string name="packs_imported_title">İçe aktarılan paketler</string>

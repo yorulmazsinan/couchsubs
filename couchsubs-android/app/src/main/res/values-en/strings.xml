@@ -116,6 +116,9 @@
     <string name="packs_title">Game packs</string>
     <string name="packs_none_yet">No packs found. While online, tap Update packs.</string>
     <string name="packs_refresh">Update packs</string>
+    <string name="packs_updating">Updating packs…</string>
+    <string name="packs_offline">The pack server could not be reached. The packs on this phone are used; while online, tap Update packs.</string>
+    <string name="packs_failed">Some game packs could not be updated. The packs on this phone are used; try again in a little while.</string>
 
     <string name="packs_loading">Loading packs…</string>
     <string name="packs_imported_title">Imported packs</string>

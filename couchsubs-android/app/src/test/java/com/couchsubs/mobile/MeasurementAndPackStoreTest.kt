@@ -187,4 +187,47 @@ class PackStoreTest {
         assertEquals(listOf("test-game"), library.infos.map { it.id })
         assertEquals("Yere yat!", library.find("Get Down!"))
     }
+
+    @Test
+    fun failedDownloadsAreReportedNotSwallowed() {
+        // "Paketleri güncelle" hata verince ekranda yazsın diye: hangi paketin inmediği ve ağ hatası olup olmadığı döner.
+        val dir = Files.createTempDirectory("packs").toFile()
+        val server = FakeServer(listOf(remote("gta-6", gta), remote("gta-v", rdr)), mutableMapOf("gta-v" to rdr))
+        val store = PackStore(dir, server)
+        val missing = store.refresh(force = true)
+        assertEquals(listOf("gta-v"), missing.downloaded)
+        assertEquals(listOf("gta-6"), missing.failed)
+        assertFalse(missing.offline)
+        assertEquals(Services.PackStatus.FAILED, Services.packStatus(missing))
+
+        val offline = object : PackServer {
+            override fun list() = server.packs
+            override fun download(id: String): ByteArray = throw PackDownloadException(null, "network")
+        }
+        val result = PackStore(Files.createTempDirectory("packs").toFile(), offline).refresh(force = true)
+        assertEquals(listOf("gta-6", "gta-v"), result.failed)
+        assertTrue(result.offline)
+        assertEquals(Services.PackStatus.OFFLINE, Services.packStatus(result))
+
+        server.files["gta-6"] = gta
+        val fixed = store.refresh(force = true)
+        assertEquals(listOf("gta-6"), fixed.downloaded)
+        assertEquals(Services.PackStatus.READY, Services.packStatus(fixed))
+    }
+
+    @Test
+    fun packListErrorsMapToStatus() {
+        assertEquals(Services.PackStatus.OFFLINE, Services.packStatus(PackDownloadException(null, "network")))
+        assertEquals(Services.PackStatus.FAILED, Services.packStatus(PackDownloadException(503, "HTTP 503")))
+        assertEquals(Services.PackStatus.FAILED, Services.packStatus(IllegalStateException("bad")))
+    }
+
+    @Test
+    fun catalogShowsServerPacksNotYetDownloaded() {
+        val local = listOf(com.couchsubs.mobile.core.GamePackLibrary.Info("gta-v", "Grand Theft Auto V", 190_566, true))
+        val remote = listOf(RemotePack("gta-6", "Grand Theft Auto VI", 5, "a".repeat(64), 4_073_079, 86_973),
+            RemotePack("gta-v", "Grand Theft Auto V", 1, "b".repeat(64), 8_165_110, 190_566))
+        val catalog = Services.merge(local, remote)
+        assertEquals(listOf("gta-v" to true, "gta-6" to false), catalog.map { it.id to it.installed })
+    }
 }

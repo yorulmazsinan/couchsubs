@@ -42,6 +42,22 @@ object Services {
     /** Paket listesi değişince (indirme) artar; ekranlar yeniden okur. */
     val packsVersion = MutableStateFlow(0)
 
+    /** Paket güncellemesinin durumu (iPhone'daki AppModel.PackStatus): Oyun paketleri ekranı gösterir. */
+    enum class PackStatus { IDLE, DOWNLOADING, READY, OFFLINE, FAILED }
+
+    /** Son paket güncellemesinin durumu; hata sessizce yutulmaz, ekranda yazar ("Paketleri güncelle" işe yaramıyor sanılıyordu). */
+    val packStatus = MutableStateFlow(PackStatus.IDLE)
+
+    /** Ağ hatası mı (ulaşılamadı) yoksa sunucu/doğrulama hatası mı. */
+    fun packStatus(error: Throwable): PackStatus =
+        if (error is com.couchsubs.mobile.packs.PackDownloadException && error.status == null) PackStatus.OFFLINE else PackStatus.FAILED
+
+    fun packStatus(result: PackStore.Refresh): PackStatus = when {
+        result.failed.isEmpty() -> PackStatus.READY
+        result.offline -> PackStatus.OFFLINE
+        else -> PackStatus.FAILED
+    }
+
     /** Xbox (Beta) Microsoft girişi ve jetonları: kullanıcı jetonu her yenilendiğinde Keystore'a yazılır. */
     val xboxAuth: com.couchsubs.mobile.xbox.XboxAuth by lazy {
         com.couchsubs.mobile.xbox.XboxAuth(userToken = com.couchsubs.mobile.xbox.XboxUserToken.parse(settings.xboxUserToken),
@@ -128,13 +144,21 @@ object Services {
      */
     fun refreshPacks(force: Boolean, maxAgeMs: Long = PackStore.REFRESH_INTERVAL_MS, onChanged: (() -> Unit)? = null) {
         if (BuildConfig.PACKS_URL.isBlank()) return
+        if (force) packStatus.value = PackStatus.DOWNLOADING
         scope.launch(Dispatchers.IO) {
             try {
                 val result = packStore.refresh(force, maxAgeMs)
                 if (result.downloaded.isNotEmpty() || result.removed.isNotEmpty()) onChanged?.invoke()
-                if (!result.skipped) packsVersion.value++
+                if (!result.skipped) {
+                    packStatus.value = packStatus(result)
+                    if (result.failed.isNotEmpty()) Log.w(TAG, "paketler inemedi: ${result.failed}")
+                    packsVersion.value++
+                }
             } catch (error: Exception) {
                 Log.w(TAG, "paketler", error)
+                packStatus.value = packStatus(error)
+                // Ekran yeniden okusun: sunucudaki liste alınamadıysa yalnız bu telefondakiler görünür.
+                packsVersion.value++
             }
         }
     }
@@ -142,14 +166,24 @@ object Services {
     /** Paket ekranında gösterilen oyun; [installed] false ise sunucuda var ama henüz inmedi. */
     data class CatalogEntry(val id: String, val title: String, val entries: Int, val installed: Boolean)
 
-    /** Bu telefondaki paketler ve sunucuda olup henüz inmemiş olanlar (bloklar). */
+    /** Bu telefondaki paketler ve sunucuda olup henüz inmemiş olanlar (bloklar). Sunucu listesi alınamazsa durum yazılır. */
     fun catalog(context: Context): List<CatalogEntry> {
         val local = packLibrary(context).infos
         val remote = if (BuildConfig.PACKS_URL.isBlank()) emptyList()
-        else runCatching { HttpPackServer(BuildConfig.PACKS_URL.trimEnd('/')).list() }.getOrDefault(emptyList())
-        return local.map { CatalogEntry(it.id, it.title, it.entries, true) } +
-            remote.filter { pack -> local.none { it.id == pack.id } }.map { CatalogEntry(it.id, it.title, it.entries, false) }
+        else try {
+            HttpPackServer(BuildConfig.PACKS_URL.trimEnd('/')).list()
+        } catch (error: Exception) {
+            Log.w(TAG, "paket listesi", error)
+            if (packStatus.value != PackStatus.DOWNLOADING) packStatus.value = packStatus(error)
+            emptyList()
+        }
+        return merge(local, remote)
     }
+
+    /** Kurulu paketler, ardından sunucuda olup henüz inmemiş olanlar (aynı kimlik bir kez). */
+    fun merge(local: List<GamePackLibrary.Info>, remote: List<com.couchsubs.mobile.packs.RemotePack>): List<CatalogEntry> =
+        local.map { CatalogEntry(it.id, it.title, it.entries, true) } +
+            remote.filter { pack -> local.none { it.id == pack.id } }.map { CatalogEntry(it.id, it.title, it.entries, false) }
 
     /**
      * Okuma hattının paket kitaplığı: uygulamayla gelen paketler, üstüne sunucudan inmiş yeni ya da güncel sürümler

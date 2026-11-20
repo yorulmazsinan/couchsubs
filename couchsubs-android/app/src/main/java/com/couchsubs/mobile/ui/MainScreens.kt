@@ -391,6 +391,7 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
     val context = LocalContext.current
     val settings = Services.settings
     val version by Services.packsVersion.collectAsState()
+    val status by Services.packStatus.collectAsState()
     var catalog by remember { mutableStateOf<List<Services.CatalogEntry>?>(null) }
     var disabled by remember { mutableStateOf(settings.disabledPacks) }
     var packsOn by remember { mutableStateOf(settings.packsEnabled) }
@@ -402,7 +403,8 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
             Pill(if (list.isEmpty()) stringResource(R.string.packs_free) else stringResource(R.string.packs_free_count, list.size))
         }
     }, bottom = {
-        SecondaryButton(stringResource(R.string.packs_refresh)) { Services.refreshPacks(force = true) }
+        SecondaryButton(stringResource(if (status == Services.PackStatus.DOWNLOADING) R.string.packs_updating else R.string.packs_refresh),
+            enabled = status != Services.PackStatus.DOWNLOADING) { Services.refreshPacks(force = true) }
     }) {
         Text(stringResource(R.string.packs_auto), style = Tokens.Type.body, color = Tokens.Color.secondary)
         RowList(listOf({
@@ -410,6 +412,13 @@ fun PacksScreen(onBack: () -> Unit, packInUse: String?) {
                 androidx.compose.material3.Switch(packsOn, { packsOn = it; settings.packsEnabled = it })
             }
         }))
+        // Güncelleme hatası sessizce yutulmaz (iPhone'daki gibi): ulaşılamazsa telefondaki paketlerin kullanıldığı yazar.
+        when (status) {
+            Services.PackStatus.DOWNLOADING -> Text(stringResource(R.string.packs_updating), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+            Services.PackStatus.OFFLINE -> NoteTile(stringResource(R.string.packs_offline))
+            Services.PackStatus.FAILED -> NoteTile(stringResource(R.string.packs_failed))
+            else -> {}
+        }
         if (catalog == null) Text(stringResource(R.string.packs_loading), style = Tokens.Type.body, color = Tokens.Color.secondary)
         else if (list.isEmpty()) NoteTile(stringResource(R.string.packs_none_yet), Tokens.Color.secondary)
         list.chunked(2).forEach { row ->

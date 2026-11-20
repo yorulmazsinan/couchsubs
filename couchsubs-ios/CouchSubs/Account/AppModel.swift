@@ -58,10 +58,21 @@ final class AppModel: ObservableObject {
             }
             packStatus = .ready
         } catch let failure as PackStore.Failure {
+            await packsArrivedDespite(packStore)
             packStatus = .failed(Self.describe(failure))
         } catch {
+            await packsArrivedDespite(packStore)
             packStatus = .failed(error.localizedDescription)
         }
+    }
+
+    /// Bir paket inemese de inenler hemen kullanılsın (Android'deki gibi).
+    private func packsArrivedDespite(_ packStore: PackStore) async {
+        let downloaded = await packStore.lastDownloadCount
+        guard downloaded > 0 else { return }
+        library.reload()
+        analytics.log(.packsUpdated(count: downloaded))
+        onPacksChanged?()
     }
 
     static func describe(_ failure: PackStore.Failure) -> String {
