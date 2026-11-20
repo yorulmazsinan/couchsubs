@@ -132,10 +132,12 @@ struct StreamWindowView: View {
         let textOpacity: Double = alpha > 0 ? opacity : 1
         let shadowRadius: CGFloat = alpha > 0 ? 0 : 2 * scale
         let shown: Double = line.fading ? 0 : 1
-        let text = Text(verbatim: wrapped.text)
+        let colored = model.settings.speakerColors && !line.paragraphs
+        let text = SubtitleOverlayView.subtitleText(wrapped.text, colored: colored,
+                                                    base: SubtitleOverlayView.color(style.textColor))
             .font(.system(size: size, weight: weight))
-            .foregroundStyle(SubtitleOverlayView.color(style.textColor).opacity(textOpacity))
         return text
+            .opacity(textOpacity)
             .multilineTextAlignment(alignment)
             .lineSpacing(size * 0.3)
             .shadow(color: .black, radius: shadowRadius, x: 0, y: shadowRadius)

@@ -379,10 +379,12 @@ struct SubtitleScreen: View {
                 ForEach(Array(model.phoneLines.enumerated()), id: \.element.id) { index, line in
                     // Uzun çeviri en çok 3 satıra dengeli bölünür; sığmazsa yazı biraz küçülür (bkz. SubtitleWrap).
                     let wrapped = line.wrapped
-                    Text(verbatim: wrapped.text)
+                    // Önceki satır soldurulmaz, ikincil yazı renginde olur (TASARIM.md › Yazı). Konuşana göre renk
+                    // açıksa güncel satırdaki "Mattia: …" o konuşanın renginde (bkz. SpeakerColors).
+                    let previous = index < model.phoneLines.count - 1
+                    Self.subtitleText(wrapped.text, colored: model.settings.speakerColors && !previous && !line.paragraphs,
+                                      base: previous ? Mobile.Palette.secondary : textColor)
                         .font(Mobile.TypeScale.subtitle(landscape: true, scale: scale * CGFloat(wrapped.scale)))
-                        // Önceki satır soldurulmaz, ikincil yazı renginde olur (TASARIM.md › Yazı).
-                        .foregroundStyle(index < model.phoneLines.count - 1 ? Mobile.Palette.secondary : textColor)
                         .opacity(line.fading ? 0.4 : 1)
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.5)
@@ -477,6 +479,16 @@ struct SubtitleScreen: View {
         switch model.settings.style.textColor {
         case .yellow: Mobile.Palette.accent
         case .white: Mobile.Palette.text
+        }
+    }
+
+    /// Konuşana göre renkli altyazı: adlı satır (bölünmüş devamıyla) konuşanın renginde, diğerleri `base` renginde.
+    private static func subtitleText(_ text: String, colored: Bool, base: Color) -> Text {
+        guard colored else { return Text(verbatim: text).foregroundColor(base) }
+        return SpeakerColors.segments(in: text).reduce(Text(verbatim: "")) { result, segment in
+            let rgb = segment.color.flatMap(SpeakerColors.rgb)
+            let color = rgb.map { Color(.sRGB, red: $0.red, green: $0.green, blue: $0.blue) } ?? base
+            return result + Text(verbatim: segment.text).foregroundColor(color)
         }
     }
 

@@ -708,6 +708,9 @@ private struct GamePacksPage: View {
             Divider().overlay(Color.csBorder)
             SwitchRow(title: "Show speaker name", isOn: $model.settings.showSpeakerNames)
             HintText(text: "Keeps the character's name in front of the translation (ARTHUR: …). The name itself is never translated.")
+            Divider().overlay(Color.csBorder)
+            SwitchRow(title: "Color by speaker", isOn: $model.settings.speakerColors)
+            HintText(text: "Each speaker's name and line keep their own color.")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .tile()

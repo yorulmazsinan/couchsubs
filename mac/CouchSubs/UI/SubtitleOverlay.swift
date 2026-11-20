@@ -289,9 +289,9 @@ struct SubtitleOverlayView: View {
         let band = style.backgroundShape == .band
         let corner: CGFloat = band ? 0 : 10 * scale
         let shown: Double = line.fading ? 0 : opacity
-        let text = Text(verbatim: wrapped.text)
+        let colored = model.settings.speakerColors && !line.paragraphs
+        let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor))
             .font(.system(size: size, weight: weight))
-            .foregroundStyle(Self.color(style.textColor))
         return text
             .multilineTextAlignment(alignment)
             .lineSpacing(size * 0.3)
@@ -327,6 +327,21 @@ struct SubtitleOverlayView: View {
             .frame(maxWidth: .infinity, alignment: alignment)
             .contentShape(Rectangle())
             .gesture(moveGesture)
+    }
+
+    /// Altyazı yazısı. Konuşana göre renk açıksa "Mattia: …" satırı (bölünmüş devamıyla) o konuşanın renginde
+    /// (bkz. `SpeakerColors`); adsız satırlar ve görev paneli gibi paragraflar `base` renginde kalır.
+    static func subtitleText(_ text: String, colored: Bool, base: Color) -> Text {
+        guard colored else { return Text(verbatim: text).foregroundColor(base) }
+        return SpeakerColors.segments(in: text).reduce(Text(verbatim: "")) { result, segment in
+            let color = segment.color.flatMap(speakerColor) ?? base
+            return result + Text(verbatim: segment.text).foregroundColor(color)
+        }
+    }
+
+    private static func speakerColor(_ hex: String) -> Color? {
+        guard let (r, g, b) = SpeakerColors.rgb(hex) else { return nil }
+        return Color(.sRGB, red: r, green: g, blue: b)
     }
 
     /// TV uygulamasındaki renklerle aynı (beyaz, #FFE135).

@@ -149,6 +149,8 @@ public struct UserSettings: Codable, Equatable {
     public var askGame = true
     /// Altyazıdaki konuşan adı ("ARTHUR: …") çeviride gösterilir; kapalıysa yalnız Türkçe cümle görünür.
     public var showSpeakerNames = true
+    /// Konuşana göre renk: "Mattia: …" satırında ad ve satır o konuşanın sabit renginde görünür (bkz. `SpeakerColors`).
+    public var speakerColors = true
     /// Mac'te değişmeyen altyazı bölgesini en fazla iki kare yeniden kullan; varsayılan kapalı.
     public var fastSubtitleDetection = false
     /// Yalnız GTA 6'nın lacivert altyazı zemini üstündeki yazıyı oku. Varsayılan kapalı.
@@ -202,6 +204,7 @@ public struct UserSettings: Codable, Equatable {
         sharePool = try values.decodeIfPresent(Bool.self, forKey: .sharePool) ?? defaults.sharePool
         askGame = try values.decodeIfPresent(Bool.self, forKey: .askGame) ?? defaults.askGame
         showSpeakerNames = try values.decodeIfPresent(Bool.self, forKey: .showSpeakerNames) ?? defaults.showSpeakerNames
+        speakerColors = try values.decodeIfPresent(Bool.self, forKey: .speakerColors) ?? defaults.speakerColors
         fastSubtitleDetection = try values.decodeIfPresent(Bool.self, forKey: .fastSubtitleDetection) ?? defaults.fastSubtitleDetection
         watchSubtitleBackground = try values.decodeIfPresent(Bool.self, forKey: .watchSubtitleBackground) ?? defaults.watchSubtitleBackground
         autoReadGamePhone = try values.decodeIfPresent(Bool.self, forKey: .autoReadGamePhone) ?? defaults.autoReadGamePhone

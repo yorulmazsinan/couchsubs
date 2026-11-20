@@ -536,6 +536,7 @@ final class AppModel: ObservableObject {
             if settings.dubbing != oldValue.dubbing { dubbingSettingsChanged(from: oldValue.dubbing) }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
+            server.speakerColors = settings.speakerColors
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
             if settings.frameSource != oldValue.frameSource || windowAppChanged, isRunning {
@@ -902,6 +903,7 @@ final class AppModel: ObservableObject {
 
         server.onClientsChanged = { [weak self] count in self?.tvClients = count }
         server.sendsToTV = settings.output.showsOnTV
+        server.speakerColors = settings.speakerColors
         server.onEvent = { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.overlayReceive(event) } }
         }

@@ -81,6 +81,9 @@ struct ProfileScreen: View {
                 toggleRow("Show speaker name", "Keeps the character's name in front of the translation (ARTHUR: …). The name itself is never translated.",
                           isOn: $model.settings.showSpeakerNames)
                 RowDivider()
+                toggleRow("Color by speaker", "Each speaker's name and line keep their own color.",
+                          isOn: $model.settings.speakerColors)
+                RowDivider()
                 toggleRow("Check unchanged subtitle areas more often",
                           "When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.",
                           isOn: $model.settings.fastSubtitleDetection)

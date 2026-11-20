@@ -48,6 +48,7 @@ final class PhoneModel: ObservableObject {
             if settings.output != oldValue.output { outputChanged() }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
+            server.speakerColors = settings.speakerColors
             if settings.sharePool != oldValue.sharePool {
                 let (pool, enabled) = (pool, settings.sharePool)
                 Task { await pool.setEnabled(enabled) }
@@ -373,6 +374,7 @@ final class PhoneModel: ObservableObject {
             Task { @MainActor [weak self] in self?.serverDropped(reason) }
         }
         server.sendsToTV = settings.output.showsOnTV
+        server.speakerColors = settings.speakerColors
         server.onEvent = { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.phoneReceive(event) } }
         }

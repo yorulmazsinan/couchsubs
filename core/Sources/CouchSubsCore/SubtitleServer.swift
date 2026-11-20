@@ -161,6 +161,14 @@ public final class SubtitleServer: @unchecked Sendable {
     }
     private var tvEnabled = true
 
+    /// Konuşana göre renk: açıksa adlı satırları olan `subtitle` olayına `speakers` alanı ([{name, color}]) eklenir;
+    /// TV o adla başlayan satırı o renkte gösterir. Alanı tanımayan eski TV uygulaması yok sayar.
+    public var speakerColors: Bool {
+        get { queue.sync { colorsEnabled } }
+        set { queue.sync { colorsEnabled = newValue } }
+    }
+    private var colorsEnabled = false
+
     /// Bağlantı canlı tutma çerçevesi: yorum satırını EventSource görmez; adlı "ping" olayını TV görür ve
     /// bir süre gelmezse yarı açık kalmış bağlantıyı kapatıp yeniden bağlanır (Windows ile aynı).
     static let pingFrame = ": ping\n\nevent: ping\ndata: {}\n\n"
@@ -289,6 +297,10 @@ public final class SubtitleServer: @unchecked Sendable {
         var json: [String: Any] = ["text": text, "duration": durationMs, "at": at]
         if let box { json["box"] = Self.json(box) }
         if replaces { json["replace"] = true }
+        if speakerColors {
+            let speakers = SpeakerColors.speakers(in: text)
+            if !speakers.isEmpty { json["speakers"] = speakers.map { ["name": $0.name, "color": $0.color] } }
+        }
         broadcast(event: "subtitle", json: json)
         onEvent?(.subtitle(text: text, durationMs: durationMs, paragraphs: false, replaces: replaces))
     }

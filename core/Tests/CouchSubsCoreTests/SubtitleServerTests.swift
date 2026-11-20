@@ -45,6 +45,28 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("data:") && $0.contains("\"text\":\"Merhaba dostum\"") && $0.contains("\"replace\":true") })
     }
 
+    /// Konuşana göre renk açıkken adlı satır `speakers` alanını taşır; adsız satırda ve ayar kapalıyken alan yoktur.
+    func testSubtitleCarriesSpeakerColorsWhenEnabled() async throws {
+        let server = SubtitleServer(port: 0)
+        let port = try await server.start()
+        defer { server.stop() }
+        let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
+        try await waitUntil { server.connectedClients == 1 }
+        server.sendSubtitle("Mattia: Gidelim.", durationMs: 4000)
+        server.speakerColors = true
+        server.sendSubtitle("Mattia: Gidelim.\nLucia: Tamam.", durationMs: 4000)
+        server.sendSubtitle("Adsız satır", durationMs: 4000)
+        server.clear()
+
+        let data = try await readLines(bytes, until: "event: clear").filter { $0.hasPrefix("data:") && $0.contains("\"text\"") }
+        XCTAssertEqual(data.count, 3)
+        XCTAssertFalse(data[0].contains("speakers"))
+        XCTAssertTrue(data[1].contains("\"speakers\":[{"))
+        XCTAssertTrue(data[1].contains("\"name\":\"Mattia\"") && data[1].contains("#90CAF9"))
+        XCTAssertTrue(data[1].contains("\"name\":\"Lucia\"") && data[1].contains("#F06292"))
+        XCTAssertFalse(data[2].contains("speakers"))
+    }
+
     /// Telefon, sunucu düştüyse (iOS arka planda dinleyiciyi kapatır) bunu `isListening` ile anlar ve aynı nesneyi
     /// yeniden başlatır; yeniden başlatılan sunucu yine bağlantı kabul eder.
     func testIsListeningFollowsStartStopAndRestart() async throws {
