@@ -2,10 +2,10 @@
 name: tv-screen-tests
 on:
   pull_request:
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', '.github/workflows/tv-screen-tests.yml']
   push:
     branches: [main]
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', '.github/workflows/tv-screen-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,3 +38,5 @@ jobs:
         run: node --test scripts/obs-overlay.test.js
       - name: Altyazı kutusu yazıya oturur (TV)
         run: node --test scripts/tv-subtitle-box.test.js
+      - name: Konuşana göre renk testleri (TV ve OBS)
+        run: node --test scripts/tv-speakers.test.js

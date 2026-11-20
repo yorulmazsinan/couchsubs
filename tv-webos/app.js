@@ -444,6 +444,72 @@
     if (position < text.length) el.appendChild(document.createTextNode(text.slice(position)));
   }
 
+  // --- Konuşan rengi ---
+  // Bilgisayar altyazıdaki konuşan adlarını ve renklerini gönderir: speakers = [{name, color}] ("Konuşana göre renk"
+  // ayarı açıksa; eski bilgisayar alanı göndermez, yazı eskisi gibi tek renk kalır). Satır başındaki "Ad:" ile o
+  // konuşanın cümlesi, bir sonraki konuşanın adına dek o renkte yazılır. Renk bilgisayarda addan hesaplanır: aynı
+  // karakter her cihazda hep aynı renktir.
+  function speakerMap(list) {
+    if (!list || typeof list.length !== 'number') return null;
+    var map = null;
+    for (var i = 0; i < list.length && i < 16; i++) {
+      var item = list[i];
+      if (!item || typeof item.name !== 'string' || !item.name || item.name.length > 40) continue;
+      if (typeof item.color !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(item.color)) continue;
+      map = map || {};
+      map[item.name] = item.color;
+    }
+    return map;
+  }
+
+  // Metnin renkli parçaları: [{text, color}] (renksiz parçada color null). Ad yalnız satır başında aranır; bölünmüş
+  // satırda ("ARTHUR: Gitmeliyiz\nhemen.") renk sonraki satıra da sürer.
+  function speakerSegments(text, map) {
+    if (!map) return [{ text: text, color: null }];
+    var segments = [];
+    var color = null;
+    var start = 0;
+    var lineStart = 0;
+    while (lineStart <= text.length) {
+      var found = null;
+      for (var name in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+        var after = text.charAt(lineStart + name.length);
+        if (text.substr(lineStart, name.length) === name && (after === ':' || after === '\uFF1A' ||
+            (after === ' ' && /[:\uFF1A]/.test(text.charAt(lineStart + name.length + 1))))) {
+          if (!found || name.length > found.length) found = name;
+        }
+      }
+      if (found && map[found] !== color) {
+        if (lineStart > start) segments.push({ text: text.slice(start, lineStart), color: color });
+        start = lineStart;
+        color = map[found];
+      }
+      var next = text.indexOf('\n', lineStart);
+      if (next < 0) break;
+      lineStart = next + 1;
+    }
+    if (start < text.length || !segments.length) segments.push({ text: text.slice(start), color: color });
+    return segments;
+  }
+
+  function paintSpeakers(el, text, map) {
+    var segments = speakerSegments(text, map);
+    if (segments.length === 1 && !segments[0].color) return;
+    el.textContent = '';
+    for (var i = 0; i < segments.length; i++) {
+      if (!segments[i].color) {
+        el.appendChild(document.createTextNode(segments[i].text));
+        continue;
+      }
+      var span = document.createElement('span');
+      span.className = 'speaker';
+      span.style.color = segments[i].color;
+      span.textContent = segments[i].text;
+      el.appendChild(span);
+    }
+  }
+
   // --- Uzun çeviriyi bölme ---
   // Uzun çeviri en çok 3 satıra, kelime sınırından ve dengeli bölünür; 3 satıra sığmazsa yazı biraz küçülür (en çok
   // %75'e kadar). Konuşan adı ("ARTHUR:") sonraki sözcükle birleşik kalır, hep ilk satırdadır. Satır sınırı TV'de
@@ -592,11 +658,13 @@
   }
 
   // Satırı yazar. Sayfadaki metin bölünmüş hâlidir; karşılaştırmalar için özgün metin elementte kalır.
-  function setLineText(textId, text, paragraphs, baseSize) {
+  function setLineText(textId, text, paragraphs, baseSize, speakers) {
     var el = $(textId);
     var wrapped = paragraphs ? { text: text, scale: 1 } : wrapSubtitle(text, el, baseSize, coverSize(textId));
     el.rawText = text;
+    el.speakers = speakers || null;
     el.textContent = wrapped.text;
+    paintSpeakers(el, wrapped.text, el.speakers);
     el.style.whiteSpace = 'pre-line';
     var size = Math.round(baseSize * wrapped.scale);
     el.style.fontSize = size + 'px';
@@ -659,7 +727,7 @@
 
   // paragraphs: görev paneli gibi başlık ve maddeli yazılar satır satır, sola yaslı gösterilir.
   // replaces: bilgisayar bu satırı öncekinin uzamış ya da düzelmiş okuması saydı (bkz. replacesCurrent).
-  function showSubtitle(text, duration, box, paragraphs, replaces) {
+  function showSubtitle(text, duration, box, paragraphs, replaces, speakers) {
     var now = Date.now();
     var current = rawText('subtitle-text');
     // Önceki satır kısa göründüyse yeni satırın üstünde kalır. Aynı cümlenin başka bir okunuşu (ya da yeniden gelen
@@ -668,7 +736,7 @@
       // Üstteki daha eski satırlar olduğu gibi kalır.
     } else if (stackPrevious && $('subtitle').className !== 'hidden' && current && now - shownAt < STACK_WITHIN_MS &&
         !paragraphs && !shownParagraphs && !sameLine(current, text)) {
-      showPrevious(current);
+      showPrevious(current, $('subtitle-text').speakers);
     } else {
       hidePrevious();
     }
@@ -676,7 +744,7 @@
     shownParagraphs = !!paragraphs;
     holdUntil = shownAt + Math.min(HOLD_MAX_MS, 2000 + text.length * 60);
     currentBox = validBox(box);
-    setLineText('subtitle-text', text, paragraphs, fontBase);
+    setLineText('subtitle-text', text, paragraphs, fontBase, speakers);
     $('subtitle-text').style.textAlign = paragraphs ? 'left' : '';
     $('subtitle').className = '';
     layout();
@@ -727,22 +795,22 @@
   }
 
   // Önceki satır üste çıkar. Orada hâlâ görünen bir satır varsa o da bir üst sıraya (iki önceki) kayar; en çok üç satır.
-  function showPrevious(text) {
+  function showPrevious(text, speakers) {
     var older = $('subtitle-prev');
     var olderText = rawText('subtitle-prev-text');
     if (older.className === '' && olderText && !sameLine(olderText, text)) {
-      showSlot('subtitle-prev2', olderText);
+      showSlot('subtitle-prev2', olderText, $('subtitle-prev-text').speakers);
     } else {
       hideSlot('subtitle-prev2');
     }
-    showSlot('subtitle-prev', text);
+    showSlot('subtitle-prev', text, speakers);
   }
 
-  function showSlot(id, text) {
+  function showSlot(id, text, speakers) {
     var timers = previousTimers[id];
     clearTimeout(timers[0]);
     clearTimeout(timers[1]);
-    setLineText(id + '-text', text, false, Math.round(fontBase * 0.8));
+    setLineText(id + '-text', text, false, Math.round(fontBase * 0.8), speakers);
     $(id).className = '';
     fitBox($(id + '-text'));
     timers[0] = setTimeout(function () {
@@ -1149,7 +1217,7 @@
     }
     // Ekrandaki yazı yeni ayarlarla yeniden bölünür: yazı boyu, kalınlık, yerleşim ve bant bölmeyi değiştirir.
     var shown = rawText('subtitle-text');
-    if ($('subtitle-text').rawText !== undefined && shown) setLineText('subtitle-text', shown, !!shownParagraphs, fontBase);
+    if ($('subtitle-text').rawText !== undefined && shown) setLineText('subtitle-text', shown, !!shownParagraphs, fontBase, $('subtitle-text').speakers);
     layout();
     if (style.bottomPercent >= 0 && String(style.bottomPercent) !== load('appBottom')) {
       save('appBottom', style.bottomPercent);
@@ -1358,7 +1426,8 @@
     onEvent('subtitle', function (data) {
       diag.subtitles++;
       renderDiag();
-      if (data.text) showSubtitle(data.text, data.duration, data.box, data.paragraphs === true, data.replace === true);
+      if (data.text) showSubtitle(data.text, data.duration, data.box, data.paragraphs === true, data.replace === true,
+        speakerMap(data.speakers));
     });
     onEvent('clear', onClear);
     onEvent('screen', function (data) { showScreen(data.items, data.duration); });
