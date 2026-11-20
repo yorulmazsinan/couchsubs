@@ -349,6 +349,9 @@ struct SettingsScreen: View {
             }
             DeveloperSignature()
         } bottom: {
+            if model.settings.output.showsOnTV, model.testTVNotConnected, model.tvClients == 0 {
+                MobileNote(text: String(localized: "The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don't type it anywhere: approve it in the “Pair this TV?” window that opens on this phone, then test again."))
+            }
             Button("Send test subtitle") { model.sendTestSubtitle() }.buttonStyle(.mobileSecondary)
         }
         .onAppear { app.analytics.screen("settings") }

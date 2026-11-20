@@ -85,6 +85,10 @@
                             </Style>
                         </Button.Style>
                     </Button>
+                    <!-- Deneme yazısı TV'ye gitmediyse: TV'deki 6 haneli kod bir yere yazılmaz, bu bilgisayarda onaylanır. -->
+                    <TextBlock Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="{t:T 'The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don\'t type it anywhere: approve it in the “Pair this TV?” window that opens on this computer, then test again.'}"
+                               Visibility="{Binding ShowTestTvHint, Converter={StaticResource VisibleIf}}" />
 
                     <!-- Durum karoları -->
                     <Grid Margin="0,12,0,0">

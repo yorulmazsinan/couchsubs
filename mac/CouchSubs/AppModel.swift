@@ -1436,8 +1436,14 @@ final class AppModel: ObservableObject {
             }
             openingTVAppForTest = false
         }
+        // Beklemeden sonra da TV bağlı değilse deneme yazısı TV'ye gitmez: TV'deki 6 haneli kodun nereye yazılacağı
+        // aranıyordu (kod yazılmaz, bu bilgisayarda açılan pencerede onaylanır). Ana ekran bunu söyler.
+        testTVNotConnected = settings.output.showsOnTV && hasTV && server.connectedClients == 0
         sendTestSubtitle()
     }
+
+    /// Son "TV'de test et"te TV uygulaması bağlanmadı (ana ekran eşleştirme yönergesini gösterir; TV bağlanınca kalkar).
+    @Published private(set) var testTVNotConnected = false
 
     /// "TV'de test et"te TV uygulamasının açılıp bağlanması için en çok bu kadar beklenir.
     var testTVWait: Duration = .seconds(20)

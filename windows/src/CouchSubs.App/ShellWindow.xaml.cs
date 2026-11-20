@@ -61,7 +61,7 @@ public partial class ShellWindow : Window
     private void OnTvPairing(SubtitlePairing.Ticket ticket)
     {
         var text = Localizer.Current;
-        var message = text.Format("TV code: %@. Approve only if this code is shown on your TV.", ticket.Code);
+        var message = text.Format("TV code: %@. You don't type this code anywhere: if your TV shows the same code, approve it here.", ticket.Code);
         var approved = MessageBox.Show(this, message, text["Pair this TV?"], MessageBoxButton.YesNo,
             MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
         if (!controller.ResolveTvPairing(ticket.Id, approved) && approved)

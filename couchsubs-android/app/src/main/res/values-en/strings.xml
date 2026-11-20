@@ -530,6 +530,7 @@
     <string name="metrics_delay">Delay %1$d ms</string>
     <string name="settings_test_subtitle">Test on TV</string>
     <string name="settings_test_needs_start">Start translation first; the test subtitle shows once the TV app connects to the phone.</string>
+    <string name="settings_test_tv_not_connected">The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don\'t type it anywhere: approve it in the “Pair this TV?” window that opens on this phone, then test again.</string>
     <string name="test_subtitle_text">This is a test subtitle. Can you see it on top of the game?</string>
     <!-- Xbox (Beta) -->
     <string name="error_xbox_not_ready">Sign in with your Microsoft account and choose your Xbox first.</string>
@@ -585,7 +586,7 @@
     <string name="demo_mode_body">Demo mode shows the whole app with sample pictures built into the app. No console, account or TV is needed.</string>
     <string name="demo_mode_frame_note">Sample game picture: the app reads the English subtitle in it, translates it and shows it below and on the phone screen.</string>
     <string name="tv_pair_title">Pair this TV?</string>
-    <string name="tv_pair_code">TV code: %1$s. Approve only if this code is shown on your TV.</string>
+    <string name="tv_pair_code">TV code: %1$s. You don\'t type this code anywhere: if your TV shows the same code, approve it here.</string>
     <string name="tv_pair_approve">Approve</string>
     <string name="tv_pair_reject">Reject</string>
     <string name="tv_key_renew">Renew access key</string>

@@ -50,7 +50,7 @@ struct MainView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .alert(item: $model.tvPairingRequest) { ticket in
             Alert(title: Text("Pair this TV?"),
-                  message: Text(String(format: String(localized: "TV code: %@. Approve only if this code is shown on your TV."), ticket.code)),
+                  message: Text(String(format: String(localized: "TV code: %@. You don't type this code anywhere: if your TV shows the same code, approve it here."), ticket.code)),
                   primaryButton: .default(Text("Approve")) { model.resolveTVPairing(ticket, accept: true) },
                   secondaryButton: .cancel(Text("Reject")) { model.resolveTVPairing(ticket, accept: false) })
         }
@@ -113,6 +113,9 @@ struct MainControls: View {
             HStack(spacing: Theme.space("m")) {
                 StartStopButton()
                 TestSubtitleButton()
+            }
+            if model.testTVNotConnected && model.tvClients == 0 {
+                HintText(text: "The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don't type it anywhere: approve it in the “Pair this TV?” window that opens on this computer, then test again.")
             }
             HStack(alignment: .top, spacing: Theme.space("gap")) {
                 if model.demoMode {

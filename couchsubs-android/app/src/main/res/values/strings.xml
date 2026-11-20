@@ -539,6 +539,7 @@
     <string name="metrics_delay">Gecikme %1$d ms</string>
     <string name="settings_test_subtitle">TV\'de test et</string>
     <string name="settings_test_needs_start">Deneme altyazısı için önce çeviriyi başlatın; TV uygulaması telefona bağlanınca yazı görünür.</string>
+    <string name="settings_test_tv_not_connected">Deneme yazısı TV\'ye gitmedi, çünkü TV uygulaması bağlı değil. TV\'de CouchSubs\'ı açın. TV\'de 6 haneli bir kod çıkarsa onu bir yere yazmayın: bu telefonda açılan “Bu TV eşleşsin mi?” penceresinde onaylayın, sonra yeniden deneyin.</string>
     <string name="test_subtitle_text">Bu bir deneme altyazısı. Oyunun üstünde görüyor musunuz?</string>
     <!-- Xbox (Beta) -->
     <string name="error_xbox_not_ready">Önce Microsoft hesabıyla giriş yapıp Xbox\'unuzu seçin.</string>
@@ -594,7 +595,7 @@
     <string name="demo_mode_body">Deneme modu, uygulamanın tamamını içindeki örnek görüntülerle gösterir. Konsol, hesap ya da TV gerekmez.</string>
     <string name="demo_mode_frame_note">Örnek oyun görüntüsü: uygulama içindeki İngilizce altyazıyı okur, çevirir; çeviri aşağıda ve telefon ekranında görünür.</string>
     <string name="tv_pair_title">Bu TV eşleşsin mi?</string>
-    <string name="tv_pair_code">TV kodu: %1$s. Yalnız bu kod TV ekranınızda görünüyorsa onaylayın.</string>
+    <string name="tv_pair_code">TV kodu: %1$s. Bu kod bir yere yazılmaz: TV ekranınızdaki kod aynıysa burada onaylayın.</string>
     <string name="tv_pair_approve">Onayla</string>
     <string name="tv_pair_reject">Reddet</string>
     <string name="tv_key_renew">Erişim anahtarını yenile</string>

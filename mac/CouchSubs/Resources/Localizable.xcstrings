@@ -361,12 +361,32 @@
         }
       }
     },
-    "TV code: %@. Approve only if this code is shown on your TV." : {
+    "TV code: %@. You don't type this code anywhere: if your TV shows the same code, approve it here." : {
       "localizations": {
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV kodu: %@. Yalnız bu kod TV ekranınızda görünüyorsa onaylayın."
+            "value": "TV kodu: %@. Bu kod bir yere yazılmaz: TV ekranınızdaki kod aynıysa burada onaylayın."
+          }
+        }
+      }
+    },
+    "The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don't type it anywhere: approve it in the “Pair this TV?” window that opens on this computer, then test again." : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deneme yazısı TV'ye gitmedi, çünkü TV uygulaması bağlı değil. TV'de CouchSubs'ı açın. TV'de 6 haneli bir kod çıkarsa onu bir yere yazmayın: bu bilgisayarda açılan “Bu TV eşleşsin mi?” penceresinde onaylayın, sonra yeniden deneyin."
+          }
+        }
+      }
+    },
+    "The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don't type it anywhere: approve it in the “Pair this TV?” window that opens on this phone, then test again." : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deneme yazısı TV'ye gitmedi, çünkü TV uygulaması bağlı değil. TV'de CouchSubs'ı açın. TV'de 6 haneli bir kod çıkarsa onu bir yere yazmayın: bu telefonda açılan “Bu TV eşleşsin mi?” penceresinde onaylayın, sonra yeniden deneyin."
           }
         }
       }

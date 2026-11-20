@@ -74,6 +74,11 @@ final class PhoneModel: ObservableObject {
     @Published private(set) var tvWaitingLong = false
     private var tvWaitTask: Task<Void, Never>?
     static let tvWaitLimit: Duration = .seconds(30)
+    /// "Test on TV"da TV uygulaması bağlı değil (ya da beklemeden sonra da bağlanmadı): eşleştirme yönergesi gösterilir.
+    @Published private(set) var testTVNotConnected = false
+    /// "Test on TV"da TV'nin bağlanması (gerekirse eşleştirme onayı) en çok bu kadar beklenir (Mac ile aynı).
+    var testPairWait: Duration = .seconds(30)
+    private var testWaitTask: Task<Void, Never>?
     @Published private(set) var lastSource = ""
     @Published private(set) var lastTranslation = ""
     /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json; "Geçmiş" ekranı).
@@ -1188,6 +1193,26 @@ final class PhoneModel: ObservableObject {
             if !isRunning { server.pairing.open() }
             server.sendStyle(settings.style)
             server.sendSubtitle(String(localized: "This is a test subtitle. Can you see it on top of the game?"), durationMs: 8000)
+            // TV bağlı değilse yazı TV'ye gitmiyordu ve TV'deki 6 haneli kodun nereye yazılacağı aranıyordu (kod yazılmaz,
+            // bu telefonda açılan pencerede onaylanır). Yönerge gösterilir; TV onaylanıp bağlanınca yazı bir kez daha gider.
+            testWaitTask?.cancel()
+            guard settings.output.showsOnTV, server.connectedClients == 0 else {
+                testTVNotConnected = false
+                return
+            }
+            testTVNotConnected = true
+            testWaitTask = Task { [weak self] in
+                guard let self else { return }
+                let deadline = ContinuousClock.now + self.testPairWait
+                while self.server.connectedClients == 0, ContinuousClock.now < deadline {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    if Task.isCancelled { return }
+                }
+                guard self.server.connectedClients > 0 else { return }
+                self.testTVNotConnected = false
+                self.server.sendStyle(self.settings.style)
+                self.server.sendSubtitle(String(localized: "This is a test subtitle. Can you see it on top of the game?"), durationMs: 8000)
+            }
         }
     }
 

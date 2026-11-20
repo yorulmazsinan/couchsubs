@@ -354,8 +354,13 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
         // Deneme altyazısı: TV'de (ya da telefon ekranında) yazının nasıl göründüğü; iPhone ile aynı.
         var testNote by remember { mutableStateOf<String?>(null) }
         SecondaryButton(stringResource(R.string.settings_test_subtitle)) {
-            testNote = if (TranslationService.sendTestSubtitle(context.getString(R.string.test_subtitle_text))) null
-                else context.getString(R.string.settings_test_needs_start)
+            testNote = if (!TranslationService.sendTestSubtitle(context.getString(R.string.test_subtitle_text)))
+                context.getString(R.string.settings_test_needs_start)
+            // TV bağlı değilse yazı TV'ye gitmiyordu; TV'deki 6 haneli kodun nereye yazılacağı aranıyordu (kod yazılmaz,
+            // bu telefonda açılan "Bu TV eşleşsin mi?" penceresinde onaylanır).
+            else if (settings.target == SubtitleTarget.TV && TranslationService.connectedTvs() == 0)
+                context.getString(R.string.settings_test_tv_not_connected)
+            else null
         }
         AnimatedNote(testNote, Tokens.Color.secondary)
         Text(stringResource(R.string.settings_copyright), style = Tokens.Type.caption, color = Tokens.Color.secondary,

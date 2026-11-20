@@ -146,6 +146,9 @@ class TranslationService : Service() {
             server.sendSubtitle(text, 8000)
             return true
         }
+
+        /** Altyazı sunucusuna bağlı TV sayısı (telefonun kendi altyazı ekranı sayılmaz); çeviri çalışmıyorsa 0. */
+        fun connectedTvs(): Int = liveServer?.connectedClients ?: 0
     }
 
     @Volatile private var subtitlePort = 8787

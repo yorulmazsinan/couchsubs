@@ -383,7 +383,17 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         _ => text["Retrying the Xbox connection…"],
     };
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
-    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText), nameof(CanReinstallTvApp)]); }
+    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText), nameof(CanReinstallTvApp), nameof(ShowTestTvHint)]); }
+
+    /// <summary>
+    /// Son "TV'de test et"te TV uygulaması bağlanmadı ve hâlâ bağlı değil: ana ekran eşleştirme yönergesini gösterir. TV'deki
+    /// 6 haneli kodun nereye yazılacağı aranıyordu; kod yazılmaz, bu bilgisayarda açılan pencerede onaylanır.
+    /// </summary>
+    public bool ShowTestTvHint => testTvNotConnected && tvClients == 0;
+
+    private bool TestTvNotConnected { get => testTvNotConnected; set => Set(ref testTvNotConnected, value, [nameof(ShowTestTvHint)]); }
+
+    private bool testTvNotConnected;
     public StatusTone TvTone => HasTv ? TvToneFor(tvClients, isRunning) : StatusTone.Idle;
     public string TvStatusText => !HasTv ? text["Not set up"] : tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
     /// <summary>Eşleşmiş bir TV var.</summary>
@@ -1204,6 +1214,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // Android TV uygulaması bilgisayarı kendisi bulur; eşleştirme onayı da gerekebilir. Yazı TV bağlanınca gitsin.
         else if (ShowsOnTv && HasTv && tv is { Brand: TvBrand.AndroidTv } && server.ConnectedClients == 0)
             await WaitForTvForTestAsync(TestPairWait);
+        TestTvNotConnected = ShowsOnTv && HasTv && server.ConnectedClients == 0;
         SendTestSubtitle();
     }
 
