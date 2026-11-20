@@ -149,6 +149,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public bool SkipsTurkish { get; set; } = true;
     /// <summary>Yalnız GTA 6 altyazı renginin üstündeki OCR satırlarını oku.</summary>
     public bool WatchSubtitleBackground { get; set; }
+    /// <summary>true dönerse (GTA) küçük harfsiz, noktalamasız ekran yazısı satırları çevrilmez (<see cref="ScreenText"/>).</summary>
+    public Func<bool>? DropsScreenText { get; set; }
 
     /// <summary>Paket önce adlı satırla, bulunmazsa adsız cümleyle aranır (paket anahtarları çoğu zaman adsızdır).</summary>
     private PackMatch? FindPack(string source)
@@ -265,7 +267,10 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // Alandaki menü ve köşe göstergeleri de altyazı değildir; yalnız altyazı bloğu çevrilir ve kutusu ona göre olur.
         var area = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
         // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
-        var rows = raw.WithoutButtonPrompts().WithoutOcrNoise().JoiningRows();
+        var cleaned = raw.WithoutButtonPrompts().WithoutOcrNoise();
+        // GTA ekran yazısı (silah adı, plaka, tabela, menü) altyazı değildir; konuşmaya yapışsa da çevrilmez.
+        if (DropsScreenText?.Invoke() == true) cleaned = cleaned.WithoutScreenText();
+        var rows = cleaned.JoiningRows();
         lock (gate)
         {
             rows = stickyRows.Filter(rows, now());

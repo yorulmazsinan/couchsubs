@@ -93,6 +93,8 @@ public static class PackKey
         return output.ToString();
     }
 
+    private static bool IsNoncharacter(int value) => (value & 0xFFFE) == 0xFFFE || value is >= 0xFDD0 and <= 0xFDEF;
+
     /// <summary>Bozuk UTF-16 (tek başına vekil karakter) normalleştirmeyi durdurmasın.</summary>
     private static string Normalize(string text, NormalizationForm form)
     {
@@ -100,7 +102,10 @@ public static class PackKey
         catch (ArgumentException)
         {
             var clean = new StringBuilder(text.Length);
-            foreach (var rune in text.EnumerateRunes()) clean.Append(rune.ToString());
+            // Karakter olmayan kod noktaları (U+FFFE, U+FFFF, U+FDD0–U+FDEF) da normalleştirmeyi durdurur; OCR bunları
+            // seyrek de olsa üretebiliyor (Mac okumasında ~2 milyon karakterde bir) ve arama istisnayla çöküyordu.
+            foreach (var rune in text.EnumerateRunes())
+                if (!IsNoncharacter(rune.Value)) clean.Append(rune.ToString());
             return clean.ToString().Normalize(form);
         }
     }

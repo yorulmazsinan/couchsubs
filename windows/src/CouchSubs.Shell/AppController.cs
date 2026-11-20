@@ -2188,6 +2188,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             ShowSpeakerNames = settings.ShowSpeakerNames,
             SkipsTurkish = settings.TargetLanguage == "tr",
             WatchSubtitleBackground = settings.WatchSubtitleBackground,
+            DropsScreenText = () => ScreenText.IsGta(gameSense.Current?.Name),
         };
         built.MetricsReady += metrics => post(() => MetricsText = metrics.Summary(text));
         built.PairShown += (source, translation) =>
