@@ -6,13 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **LG TV'de siyah ekran (TV uygulaması 0.9.44):** Oyun görüntüsü düşerse TV uygulaması bunu fark edip görüntüyü kendiliğinden yeniden kuruyor; ekranın büyük bölümünü kaplayan hatalı bir çeviri kutusu artık çizilmiyor. Kumandada açık girişin numarasına basmak görüntüyü baştan kurar. Bilgi panelinde görüntünün durumu, TV modeli ve webOS sürümü yazıyor.
-- **Görev yazısı ekrandayken altyazılar (Windows, Mac, iPhone, Android, #675):** Oyun altta "şuraya git" gibi bir görev yazısı gösterirken konuşma altyazıları artık çevrilmeye devam ediyor. Windows'ta görev satırı altyazıdan ayrı, kendi yerinde gösteriliyor.
-- **Art arda gelen altyazıda yazı küçülmüyor (TV uygulaması 0.9.44):** Bir önceki TV sürümünde altyazı kutusu daraldıktan sonra yeni satırın gereksiz küçülmesi düzeltildi.
-- **Ekran yazıları ve menüler (deneysel; Windows, Mac):** Görev kutusu, yardım yazısı, menü ve ayar ekranlarındaki yazılar yerinde, özgün rengi ve boyutuyla çevriliyor; gerçek oyun karelerinde bulunan kusurlar giderildi. Ayarlar › "Ekran yazılarını otomatik çevir" ile kapatılabilir.
-- **Altyazı konuşana göre renkli (TV'de de):** Konuşanın adı TV'deki altyazıda da kendi renginde; aynı kişi oturum boyunca aynı renkte kalıyor.
-- **2016 Samsung TV'lere kurulum (Windows, Mac, #638):** Tizen 2.4 TV'ler artık bilgisayardan da deneniyor (deneysel); paket bu TV'lerin kabul ettiği biçimde hazırlanıyor.
-- **LG eşleşmişken "TV'ye bağlan" (Windows, Mac, #662):** TV uygulaması bağlı değilken ana ekrandaki TV kutusunda düğme çıkıyor. Mac, eski webOS TV'lerin bağlantı yöntemlerini de kabul ediyor.
+- **Android TV'de altyazı yeniden görünüyor (TV uygulaması 0.9.45):** Bir önceki TV sürümünden sonra Philips, Toshiba ve benzeri Android TV'lerde katman modunda altyazının görünmemesi ("uygulama açılıyor, 2 saniye sonra oyuna dönüyor, altyazı gelmiyor") düzeltildi. Uygulamadan çıkınca HDMI girişi tümüyle bırakılıyor; kesilen görüntü bir kez yeniden açılıyor.
+- **Ekran yazılarını otomatik çevirme artık varsayılan kapalı (deneysel; Windows, Mac, iPhone, Android):** Oyun dünyasındaki poster, plaka ve tabelalar çevrilmiyor; bulunan ekran yazıları altyazı penceresine karışmıyor. İsteyen Ayarlar'dan açabilir.
+- **Samsung TV'de uygulamanın açılması (Windows, Mac, iPhone, Android, #685):** CouchSubs'ın kurulu olduğu bilinen TV'de uygulama eskisi gibi doğrudan açılıyor; "Sunucu bakım altında" uyarısını önleyen denetim yalnız hiç kurulmamış TV'de çalışıyor.
+- **LG TV sürekli CouchSubs'a dönmüyor (Windows, Mac, iPhone, #688):** TV'de bilerek başka bir girişe geçip orada kalırsanız CouchSubs TV uygulamasını zorla öne getirmeyi bırakıyor.
+- **Büyük çeviri kutuları TV'ye gönderilmiyor (#691):** Ekranın büyük bölümünü kaplayıp oyun görüntüsünü örtebilecek kutular kaynağında eleniyor.
+- **PSN girişinde "Tarayıcıda giriş yap" Mac ve iPhone'da da var (#683):** Uygulama içi giriş sayfası açılmazsa girişi tarayıcıda yapıp adresi yapıştırabilirsiniz.
+- **Kurulum günlüğü (Windows, Mac, #686):** TV kurulumu hata verirse günlük tek düğmeyle gösterilip kopyalanıyor; LG ve Android TV kurulumu da günlük tutuyor.
+
+**beta.64'te gelenler:** LG TV'de düşen oyun görüntüsünün kendiliğinden yeniden kurulması (TV uygulaması 0.9.44), görev yazısı ekrandayken altyazıların çevrilmesi (#675), art arda altyazıda yazının küçülmemesi, ekran yazıları ve menülerin yerinde çevrilmesi (deneysel), TV'de konuşana göre renk, 2016 Samsung TV'lere bilgisayardan kurulum (#638), LG eşleşmişken "TV'ye bağlan" (#662).
 
 **beta.63'te gelenler:** Android TV'de katman modunda siyah ekran döngüsünün giderilmesi (TV uygulaması 0.9.42, #643), konuşana göre renkli altyazı, GTA 6'da hazır ek alanlar, altyazı kutusunun yazıya oturması, Samsung "Sunucu bakım altında (1544007)" (#637, #511), "TV'de test et" yönergeleri (#645).
 
