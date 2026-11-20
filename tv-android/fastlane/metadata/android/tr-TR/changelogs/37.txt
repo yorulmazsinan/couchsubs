@@ -1,0 +1,1 @@
+0.9.34: TV ilk kez bağlanırken ekranda altı haneli bir kod gösterir; aynı kodu telefonda ya da bilgisayarda onaylayınca eşleşir. Altyazı bağlantısı artık erişim anahtarıyla korunuyor.
