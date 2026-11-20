@@ -102,6 +102,11 @@ if [[ -n "$DEVELOPER_ID" ]]; then
 fi
 [[ -x "$APP/Contents/MacOS/couchsubs-tv-helper" ]] || { echo "TV kurulum yardımcısı pakette yok."; exit 1; }
 [[ -x "$APP/Contents/MacOS/pocket-tts" ]] || { echo "Dublaj ses motoru (pocket-tts) pakette yok."; exit 1; }
+# LG ve Samsung paketleri uygulamada yoksa TV kurulumu sessizce gizlenir (AppModel.bundledTVPackage); eksik paket çıkmasın.
+IPKS=("$APP"/Contents/Resources/tv-app/*.ipk(N))
+(( ${#IPKS} > 0 )) || { echo "LG TV paketi (ipk) uygulamada yok."; exit 1; }
+WGTS=("$APP"/Contents/Resources/tv-app/*.wgt(N))
+(( ${#WGTS} > 0 )) || { echo "Samsung TV paketi (wgt) uygulamada yok."; exit 1; }
 # package-tv.sh dist/tv-app'i baştan kurar; APK yalnız ANDROID_APK verilince geri eklenir. Yerel deneme derlemesi için
 # ALLOW_NO_APK=1 ile atlanır.
 APKS=("$APP"/Contents/Resources/tv-app/*.apk(N))

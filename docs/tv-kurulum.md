@@ -175,6 +175,8 @@ denenmedi; sonucu [Issues](https://github.com/yorulmazsinan/couchsubs/issues) sa
 desteği netleştiririz.
 
 - İlk açılışta **bağlantı hatası** görünürse TV'yi güç tuşunu basılı tutarak yeniden başlatın; o kullanıcıda böyle düzeldi.
+- 2016 modellerinde (Tizen 2.4) kurulumu şimdilik yalnız telefon uygulamaları (Android telefon ve iPhone) dener; Mac ve
+  Windows uygulaması bu TV'lerde "TV çok eski" der (2017 ve sonrası modellere kurar).
 - 2015 ve önceki Samsung TV'ler (Tizen 2.3 ve eskisi, Orsay) desteklenmez; CouchSubs bunu kurulumda söyler.
 
 ### TV kendiliğinden HDMI'ya geçiyorsa

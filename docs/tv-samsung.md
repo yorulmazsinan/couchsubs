@@ -9,7 +9,8 @@ adımları: [tv-kurulum.md](tv-kurulum.md#samsung-tv).
 |---|---|---|
 | 5.0 ve üstü | 2019+ | Desteklenir, gerçek TV'de denendi |
 | 3.0–4.0 | 2017–2018 | Deneysel (bkz. aşağı) |
-| 2.x ve Orsay | 2016 ve öncesi | Desteklenmez: kurulum `TooOld` ile durur |
+| 2.4 | 2016 | Deneysel, yalnız telefondan: Android telefon ve iPhone kurulumu dener (en eski sürüm 2.4). Mac ve Windows kurulumu Tizen 3.0'dan eskisini `TooOld` ile durdurur |
+| 2.3 ve eskisi, Orsay | 2015 ve öncesi | Desteklenmez: kurulum `TooOld` ile durur |
 
 Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
 
@@ -26,7 +27,10 @@ Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
 - `tizen.*` ve `webapis.*` çağrılarının hepsi `try/catch` içindedir; API yoksa sessizce geçilir (`tizen` nesnesi
   olmadan sayfa hatasız açılıyor, başsız Chrome'da denendi). `webapis.js` yüklenemezse yalnız ekran koruyucuyu
   kapatma çalışmaz.
-- Kurulum: `SamsungTvInstaller` Tizen 3.0'dan eskisini reddeder. Tizen 3.0–4.0'da, Apps2Samsung'un
+- Kurulum: Mac ve Windows'taki `SamsungTvInstaller` Tizen 3.0'dan eskisini reddeder (`MinimumTizen`). Telefonlar
+  2.4'ü de dener (Android `SamsungInstaller.MINIMUM_TIZEN`, iPhone `SamsungInstaller.minimumTizen`); Android ayrıca
+  Tizen 2.x'te paketin `config.xml`'ini #71'de çalışan hâle döndürür (`LegacyTizenPackage`, #621), iPhone'da bu
+  uyarlama henüz yok. Tizen 3.0–4.0'da, Apps2Samsung'un
   `TizenPermitInstall`'ı gibi, sertifika alınırken saklanan `device-profile.xml`'i kurulumdan önce TV'nin
   `sdk_toolpath` klasörüne gönderir. Sertifika aynı uç noktalardan, aynı `public` düzeyle alınır.
 - **Gerçek TV'de doğrulanan:** bir kullanıcı (UE43MU7000U, Tizen 3.0) paketi Tizen Studio sertifikası ve Apps2Samsung

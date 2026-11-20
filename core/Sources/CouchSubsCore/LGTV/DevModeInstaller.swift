@@ -329,17 +329,43 @@ public struct DevModeInstaller: Sendable {
         return Int(response[found].split(separator: ":")[0])
     }
 
-    private func ssh(_ command: String, input: URL? = nil) async throws -> CommandResult {
-        let result = try await runner.run("/usr/bin/ssh", [
-            "-p", String(Self.port), "-i", keyFile.path,
+    /// Eski webOS sürümlerinin SSH sunucusu (dropbear) yalnız bu anahtar değişimlerini bilir; macOS'un ssh'ı bunları
+    /// kendiliğinden önermez ve bağlantı "no matching key exchange method" ile kurulmaz. iPhone (SshClient), Android
+    /// (JschShell) ve Windows (SSH.NET) aynı yöntemleri zaten kabul ediyor.
+    static let legacyKex = "KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1"
+
+    /// `ssh`'a verilen seçenekler ve hedef (komut hariç).
+    static func sshArguments(host: String, keyFile: URL, legacyKex: Bool = true) -> [String] {
+        var arguments = [
+            "-p", String(port), "-i", keyFile.path,
             "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6", "-o", "LogLevel=ERROR",
             // TV'nin anahtarı her fabrika ayarında değişir ve eski türdedir.
             "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
             "-o", "HostKeyAlgorithms=+ssh-rsa", "-o", "PubkeyAcceptedAlgorithms=+ssh-rsa",
-            "prisoner@\(host)", command,
-        ], input: input)
+        ]
+        if legacyKex { arguments += ["-o", Self.legacyKex] }
+        return arguments + ["prisoner@\(host)"]
+    }
+
+    /// ssh bu seçeneği tanımadı mı (ileride bir macOS bu yöntemleri derlemeden çıkarırsa)? O zaman seçeneksiz denenir.
+    static func rejectsLegacyKex(_ result: CommandResult) -> Bool {
+        result.status == 255 && result.output.contains("KexAlgorithms")
+    }
+
+    /// TV yanıt verdi ama iki taraf ortak bir yöntemde anlaşamadı mı? "TV yanıt vermedi" demek yanıltır; sebep gösterilir.
+    static func isNegotiationProblem(_ output: String) -> Bool {
+        output.contains("no matching") || output.contains("Unable to negotiate")
+    }
+
+    private func ssh(_ command: String, input: URL? = nil) async throws -> CommandResult {
+        var result = try await runner.run("/usr/bin/ssh", Self.sshArguments(host: host, keyFile: keyFile) + [command], input: input)
+        if Self.rejectsLegacyKex(result) {
+            result = try await runner.run("/usr/bin/ssh", Self.sshArguments(host: host, keyFile: keyFile, legacyKex: false) + [command], input: input)
+        }
         if result.status == 255 {
-            throw result.output.contains("Permission denied") ? DevModeError.keyRefused : DevModeError.unreachable
+            if result.output.contains("Permission denied") { throw DevModeError.keyRefused }
+            if Self.isNegotiationProblem(result.output) { throw DevModeFailure(.unreachable, detail: Self.short(result.output)) }
+            throw DevModeError.unreachable
         }
         return result
     }

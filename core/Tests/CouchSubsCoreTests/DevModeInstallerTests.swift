@@ -197,7 +197,53 @@ final class DevModeInstallerTests: XCTestCase {
         XCTAssertTrue(arguments.contains("BatchMode=yes"))
         XCTAssertTrue(arguments.contains("PubkeyAcceptedAlgorithms=+ssh-rsa"))
         XCTAssertTrue(arguments.contains("prisoner@192.168.1.230"))
+        // Eski webOS (dropbear) yalnız bu anahtar değişimlerini bilir; iPhone, Android ve Windows da kabul ediyor.
+        XCTAssertTrue(arguments.contains("KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1"))
     }
+
+    func testSshRetriesWithoutTheOldKeyExchangesWhenSshDoesNotKnowThem() async throws {
+        let runner = FakeRunner()
+        runner.answers = [{ line in
+            line.contains("KexAlgorithms=")
+                ? CommandResult(status: 255, output: "command-line line 0: Bad SSH2 KexAlgorithms '+diffie-hellman-group1-sha1'.")
+                : CommandResult(status: 0, output: "\"version\": \"0.6.1\"")
+        }]
+        let version = try await installer(runner).installedVersion()
+        XCTAssertEqual(version, "0.6.1")
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertFalse(runner.calls[1].arguments.contains { $0.hasPrefix("KexAlgorithms") })
+        XCTAssertEqual(runner.calls[1].arguments.last, runner.calls[0].arguments.last)
+    }
+
+    func testFailedNegotiationCarriesTheReasonInsteadOfATimeout() async {
+        let runner = FakeRunner()
+        let reply = "Unable to negotiate with 192.168.1.230 port 9922: no matching cipher found. Their offer: aes128-cbc,3des-cbc"
+        runner.answers = [{ _ in CommandResult(status: 255, output: reply) }]
+        do {
+            _ = try await installer(runner).installedVersion()
+            XCTFail("Hata bekleniyordu")
+        } catch {
+            XCTAssertEqual(error as? DevModeFailure, DevModeFailure(.unreachable, detail: reply))
+        }
+    }
+
+    #if os(macOS)
+    /// Gerçek /usr/bin/ssh seçenekleri kabul ediyor ve eski yöntemleri öneriyor mu (`ssh -G` yalnız ayarı yazar,
+    /// bağlanmaz)? macOS'un ssh'ı bu yöntemleri kendiliğinden önermez; seçenek yanlış yazılırsa ssh hiç çalışmaz.
+    func testTheSystemSshAcceptsTheOptionsAndOffersTheOldAlgorithms() async throws {
+        let arguments = DevModeInstaller.sshArguments(host: "192.0.2.1", keyFile: URL(fileURLWithPath: "/tmp/key"))
+        let result = try await ProcessRunner().run("/usr/bin/ssh", ["-G"] + arguments, input: nil)
+        XCTAssertEqual(result.status, 0, result.output)
+        let lines = result.output.split(separator: "\n").map { $0.lowercased() }
+        let kex = try XCTUnwrap(lines.first { $0.hasPrefix("kexalgorithms ") })
+        XCTAssertTrue(kex.contains("diffie-hellman-group14-sha1"), kex)
+        XCTAssertTrue(kex.contains("diffie-hellman-group1-sha1"), kex)
+        XCTAssertTrue(kex.contains("curve25519-sha256"), kex)
+        XCTAssertTrue(try XCTUnwrap(lines.first { $0.hasPrefix("hostkeyalgorithms ") }).contains("ssh-rsa"))
+        XCTAssertTrue(lines.contains("port 9922"))
+        XCTAssertTrue(lines.contains("user prisoner"))
+    }
+    #endif
 
     func testRemainingSessionTimeIsReadFromLGsReply() {
         XCTAssertEqual(DevModeInstaller.remainingHours(#"{"result":"success","errorCode":"200","errorMsg":"999:58:40"}"#), 999)
