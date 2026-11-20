@@ -36,6 +36,26 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertEqual(meta["server"] as? String, "http://1.2.3.4:8787")
     }
 
+    /// #637, #511: kurulu olmayan uygulamaya DEEP_LINK gidince Smart Hub "Sunucu bakım altında (1544007)" diyor; önce TV'nin
+    /// kurulu uygulama listesine bakılır.
+    func testInstalledAppListDecidesLaunch() throws {
+        let request = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(SamsungMessages.installedAppsRequest.utf8)) as? [String: Any])
+        XCTAssertEqual((request["params"] as? [String: Any])?["event"] as? String, "ed.installedApp.get")
+
+        let listed = #"{"data":{"data":[{"appId":"111299001912","app_type":2,"name":"YouTube"},{"appId":"CouchSubsT.CouchSubs","app_type":2,"name":"CouchSubs"}]},"event":"ed.installedApp.get","from":"host"}"#
+        XCTAssertEqual(SamsungMessages.installedApp(listed, appId: "CouchSubsT.CouchSubs"), .installed(appType: 2))
+        XCTAssertEqual(SamsungMessages.installedApp(listed.replacingOccurrences(of: "CouchSubsT.CouchSubs", with: "Baska.App"),
+                                                    appId: "CouchSubsT.CouchSubs"), .missing)
+        XCTAssertNil(SamsungMessages.installedApp(#"{"event":"ed.edenTV.update","data":{}}"#, appId: "CouchSubsT.CouchSubs"))
+        XCTAssertNil(SamsungMessages.installedApp("not json", appId: "CouchSubsT.CouchSubs"))
+
+        XCTAssertEqual(SamsungMessages.actionType(appType: 2), "DEEP_LINK")
+        XCTAssertEqual(SamsungMessages.actionType(appType: nil), "DEEP_LINK")
+        XCTAssertEqual(SamsungMessages.actionType(appType: 4), "NATIVE_LAUNCH")
+        let native = try XCTUnwrap(JSONSerialization.jsonObject(with: SamsungMessages.launch(appId: "A.B", params: [:], actionType: "NATIVE_LAUNCH")) as? [String: Any])
+        XCTAssertEqual(((native["params"] as? [String: Any])?["data"] as? [String: Any])?["action_type"] as? String, "NATIVE_LAUNCH")
+    }
+
     func testApprovedConnectionGivesToken() throws {
         XCTAssertEqual(try SamsungMessages.connectResult(#"{"event":"ms.channel.connect","data":{"token":"55"}}"#), "55")
         XCTAssertEqual(try SamsungMessages.connectResult(#"{"event":"ms.channel.connect","data":{}}"#), "")

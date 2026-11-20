@@ -28,6 +28,30 @@ public class SamsungTvTests
         Assert.Equal("http://1.2.3.4:8787", JsonNode.Parse(data["metaTag"]!.GetValue<string>())!["server"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// #637, #511: kurulu olmayan uygulamaya DEEP_LINK gidince Smart Hub "Sunucu bakım altında (1544007)" diyor; önce
+    /// TV'nin kurulu uygulama listesine bakılır.
+    /// </summary>
+    [Fact]
+    public void InstalledAppListDecidesLaunch()
+    {
+        var request = JsonNode.Parse(SamsungMessages.InstalledAppsRequest)!;
+        Assert.Equal("ed.installedApp.get", request["params"]!["event"]!.GetValue<string>());
+
+        const string listed = "{\"data\":{\"data\":[{\"appId\":\"111299001912\",\"app_type\":2,\"name\":\"YouTube\"}," +
+                              "{\"appId\":\"CouchSubsT.CouchSubs\",\"app_type\":2,\"name\":\"CouchSubs\"}]},\"event\":\"ed.installedApp.get\",\"from\":\"host\"}";
+        Assert.Equal(SamsungAppPresence.Installed(2), SamsungMessages.InstalledApp(listed, "CouchSubsT.CouchSubs"));
+        Assert.Equal(SamsungAppPresence.Missing, SamsungMessages.InstalledApp(listed.Replace("CouchSubsT.CouchSubs", "Baska.App"), "CouchSubsT.CouchSubs"));
+        Assert.Null(SamsungMessages.InstalledApp("{\"event\":\"ed.edenTV.update\",\"data\":{}}", "CouchSubsT.CouchSubs"));
+        Assert.Null(SamsungMessages.InstalledApp("not json", "CouchSubsT.CouchSubs"));
+
+        Assert.Equal("DEEP_LINK", SamsungMessages.ActionType(2));
+        Assert.Equal("DEEP_LINK", SamsungMessages.ActionType(null));
+        Assert.Equal("NATIVE_LAUNCH", SamsungMessages.ActionType(4));
+        var native = JsonNode.Parse(SamsungMessages.Launch("A.B", new Dictionary<string, string>(), "NATIVE_LAUNCH"))!;
+        Assert.Equal("NATIVE_LAUNCH", native["params"]!["data"]!["action_type"]!.GetValue<string>());
+    }
+
     [Fact]
     public void ConnectionResults()
     {

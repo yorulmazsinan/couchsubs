@@ -12,16 +12,34 @@ enum SamsungMessages {
         return URL(string: text)
     }
 
-    /// TV uygulaması parametreleri `PAYLOAD` içinde alır (bkz. tv-tizen/platform.js).
-    static func launch(appId: String, params: [String: Any]) -> Data {
+    /// TV uygulaması parametreleri `PAYLOAD` içinde alır (bkz. tv-tizen/platform.js). `actionType` TV'nin uygulama
+    /// listesinde bildirdiği türe göre seçilir (`actionType(appType:)`); bilinmiyorsa DEEP_LINK.
+    static func launch(appId: String, params: [String: Any], actionType: String = "DEEP_LINK") -> Data {
         let meta = (try? JSONSerialization.data(withJSONObject: params)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
         let message: [String: Any] = [
             "method": "ms.channel.emit",
             "params": ["event": "ed.apps.launch", "to": "host",
-                       "data": ["appId": appId, "action_type": "DEEP_LINK", "metaTag": meta]],
+                       "data": ["appId": appId, "action_type": actionType, "metaTag": meta]],
         ]
         return (try? JSONSerialization.data(withJSONObject: message)) ?? Data()
     }
+
+    /// TV'de kurulu uygulamaların listesini ister. Yanıt aynı olay adıyla gelir; listede geliştirici modunda kurulan
+    /// (mağazada olmayan) uygulamalar da bulunur.
+    static let installedAppsRequest = #"{"method":"ms.channel.emit","params":{"event":"ed.installedApp.get","to":"host"}}"#
+
+    /// Kurulu uygulama listesi yanıtında `appId` var mı. Yanıt bu değilse nil; varsa TV'nin bildirdiği `app_type` ile.
+    static func installedApp(_ text: String, appId: String) -> SamsungAppPresence? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              object["event"] as? String == "ed.installedApp.get",
+              let apps = (object["data"] as? [String: Any])?["data"] as? [[String: Any]] else { return nil }
+        guard let app = apps.first(where: { $0["appId"] as? String == appId }) else { return .missing }
+        return .installed(appType: app["app_type"] as? Int)
+    }
+
+    /// `ed.apps.launch` açılış türü: TV'nin listesinde `app_type` 4 (yerel Tizen uygulaması) NATIVE_LAUNCH, 2 (web
+    /// uygulaması; CouchSubs .wgt paketi) ve bilinmeyen DEEP_LINK.
+    static func actionType(appType: Int?) -> String { appType == 4 ? "NATIVE_LAUNCH" : "DEEP_LINK" }
 
     /// Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), reddedildiyse ya da soru zaman aşımına uğradıysa hata.
     static func connectResult(_ text: String) throws -> String? {
@@ -63,6 +81,30 @@ enum SamsungMessages {
               let device = object["device"] as? [String: Any], let raw = device[name] else { return nil }
         let text = (raw as? String ?? "\(raw)").trimmingCharacters(in: .whitespaces)
         return text.isEmpty ? nil : text
+    }
+}
+
+/// TV'nin kurulu uygulama listesine göre CouchSubs TV uygulamasının durumu.
+enum SamsungAppPresence: Equatable, Sendable {
+    case missing
+    case installed(appType: Int?)
+}
+
+/// Bir sürekliliği yalnız bir kez sürdürür (okuma ile zaman aşımı yarışır).
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<SamsungAppPresence?, Never>?
+
+    init(_ continuation: CheckedContinuation<SamsungAppPresence?, Never>) { self.continuation = continuation }
+
+    var done: Bool { lock.withLock { continuation == nil } }
+
+    func resume(_ value: SamsungAppPresence?) {
+        let pending: CheckedContinuation<SamsungAppPresence?, Never>? = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(returning: value)
     }
 }
 
@@ -163,7 +205,8 @@ public final class SamsungTokenHolder: @unchecked Sendable {
 
 /// Samsung TV ile uzaktan kumanda WebSocket'i üzerinden konuşur. İlk bağlantıda TV izin sorar.
 public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @unchecked Sendable {
-    public enum SamsungError: Error { case cannotConnect, rejected }
+    /// `notInstalled`: TV'nin kurulu uygulama listesinde CouchSubs yok; açma komutu gönderilmedi.
+    public enum SamsungError: Error { case cannotConnect, rejected, notInstalled }
 
     private let url: URL?
     private let approvalTimeout: Duration
@@ -219,9 +262,52 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
         session.invalidateAndCancel()
     }
 
+    /// TV uygulamasını uzaktan kumanda bağlantısıyla açar. Açma yolları (bekçide geliştirici bağlantısı önce denenir):
+    /// 1. sdb `0 was_execute` (Mac'te `samsung-open` yardımcısı): Tizen 2.4 ve sonrası (2016 K serisinden bu yana),
+    ///    geliştirici modu açık ve Host PC IP bu cihazsa. Smart Hub'dan geçmez, mağaza denetimi yok; PAYLOAD taşımaz, TV
+    ///    uygulaması bilgisayarı kendisi bulur.
+    /// 2. Bu yöntem: önce `ed.installedApp.get` ile uygulamanın kurulu olduğuna bakılır, sonra `ed.apps.launch` TV'nin
+    ///    bildirdiği türle (web uygulamasında DEEP_LINK) gönderilir; 2016 ve sonrası Tizen TV'lerde çalışır. Uygulama
+    ///    kurulu değilken DEEP_LINK gönderilirse Smart Hub appId'yi mağazada arıyor ve mağazada olmayan CouchSubs için TV'de
+    ///    "Sunucu bakım altında (1544007)" çıkıyordu (#402'de kurulum 118 hatasıyla düşmüştü; #511, #637). Bu yüzden
+    ///    listede yoksa hiçbir şey gönderilmez. Liste 3 saniyede gelmezse (bazı yazılımlar yanıtlamıyor) eski yol, DEEP_LINK.
+    /// REST `POST http://TV:8001/api/v2/applications/<id>` kullanılmaz: PAYLOAD taşımaz ve 2019 sonrası yazılımlarda
+    /// izinsiz istekleri reddediyor.
     public func launch(appId: String, params: [String: Any]) async throws {
         guard let socket else { throw SamsungError.cannotConnect }
-        try await socket.send(.string(String(decoding: SamsungMessages.launch(appId: appId, params: params), as: UTF8.self)))
+        let presence = await installedApp(appId: appId, socket: socket)
+        if presence == .missing { throw SamsungError.notInstalled }
+        var appType: Int?
+        if case .installed(let type) = presence { appType = type }
+        let message = SamsungMessages.launch(appId: appId, params: params, actionType: SamsungMessages.actionType(appType: appType))
+        try await socket.send(.string(String(decoding: message, as: UTF8.self)))
+    }
+
+    /// TV'nin kurulu uygulama listesine göre durum; TV 3 saniyede yanıtlamazsa nil.
+    private func installedApp(appId: String, socket: URLSessionWebSocketTask) async -> SamsungAppPresence? {
+        guard (try? await socket.send(.string(SamsungMessages.installedAppsRequest))) != nil else { return nil }
+        // Okuma görevi zaman aşımında iptal edilemez (URLSessionWebSocketTask.receive iptali dinlemez); sonucu ilk gelen
+        // belirler, geride kalan okuma bağlantı kapanınca biter.
+        return await withCheckedContinuation { (continuation: CheckedContinuation<SamsungAppPresence?, Never>) in
+            let once = ResumeOnce(continuation)
+            Task {
+                while true {
+                    guard let message = try? await socket.receive() else { once.resume(nil); return }
+                    let text: String
+                    switch message {
+                    case .string(let value): text = value
+                    case .data(let value): text = String(decoding: value, as: UTF8.self)
+                    @unknown default: continue
+                    }
+                    if let presence = SamsungMessages.installedApp(text, appId: appId) { once.resume(presence); return }
+                    if once.done { return }
+                }
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                once.resume(nil)
+            }
+        }
     }
 
     /// Samsung önplandaki uygulamayı söylemez; bağlantı ayakta mı diye bakılır, boş döner.

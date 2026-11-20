@@ -140,6 +140,8 @@ struct TVStep: View {
                 return String(localized: "The TV refused the connection. Allow CouchSubs in Settings › General › External Device Manager › Device Connection Manager › Device List on the TV, then press Connect again.")
             case .cannotConnect:
                 return String(localized: "The TV's permission box was not accepted within 60 seconds. If no box appeared, open the TV's home screen and press Connect again. If CouchSubs was denied before, allow it in Settings › General › External Device Manager › Device Connection Manager › Device List.")
+            case .notInstalled:
+                break
             }
         }
         return String(localized: "The TV did not respond. Make sure it is on and on the same network.")

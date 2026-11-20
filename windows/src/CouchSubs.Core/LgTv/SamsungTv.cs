@@ -18,8 +18,11 @@ public static class SamsungMessages
         return new Uri(text);
     }
 
-    /// <summary>TV uygulaması parametreleri <c>PAYLOAD</c> içinde alır (bkz. tv-tizen/platform.js).</summary>
-    public static string Launch(string appId, IReadOnlyDictionary<string, string> parameters) => new JsonObject
+    /// <summary>
+    /// TV uygulaması parametreleri <c>PAYLOAD</c> içinde alır (bkz. tv-tizen/platform.js). <paramref name="actionType"/>
+    /// TV'nin uygulama listesinde bildirdiği türe göre seçilir (<see cref="ActionType"/>); bilinmiyorsa DEEP_LINK.
+    /// </summary>
+    public static string Launch(string appId, IReadOnlyDictionary<string, string> parameters, string actionType = "DEEP_LINK") => new JsonObject
     {
         ["method"] = "ms.channel.emit",
         ["params"] = new JsonObject
@@ -29,11 +32,47 @@ public static class SamsungMessages
             ["data"] = new JsonObject
             {
                 ["appId"] = appId,
-                ["action_type"] = "DEEP_LINK",
+                ["action_type"] = actionType,
                 ["metaTag"] = JsonSerializer.Serialize(parameters),
             },
         },
     }.ToJsonString();
+
+    /// <summary>
+    /// TV'de kurulu uygulamaların listesini ister. Yanıt aynı olay adıyla gelir; listede geliştirici modunda kurulan
+    /// (mağazada olmayan) uygulamalar da bulunur.
+    /// </summary>
+    public const string InstalledAppsRequest =
+        "{\"method\":\"ms.channel.emit\",\"params\":{\"event\":\"ed.installedApp.get\",\"to\":\"host\"}}";
+
+    /// <summary>
+    /// Kurulu uygulama listesi yanıtında <paramref name="appId"/> var mı. Yanıt bu değilse null; uygulama listede yoksa
+    /// <see cref="SamsungAppPresence.Missing"/>, varsa TV'nin bildirdiği <c>app_type</c> ile <see cref="SamsungAppPresence.Installed"/>.
+    /// </summary>
+    public static SamsungAppPresence? InstalledApp(string text, string appId)
+    {
+        try
+        {
+            var node = JsonNode.Parse(text);
+            if (node?["event"]?.GetValue<string>() != "ed.installedApp.get") return null;
+            if (node["data"]?["data"] is not JsonArray apps) return null;
+            foreach (var app in apps)
+            {
+                if (app?["appId"] is not JsonValue id || !id.TryGetValue<string>(out var value) || value != appId) continue;
+                var type = app["app_type"] is JsonValue raw && raw.TryGetValue<int>(out var number) ? number : (int?)null;
+                return SamsungAppPresence.Installed(type);
+            }
+            return SamsungAppPresence.Missing;
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException) { return null; }
+    }
+
+    /// <summary>
+    /// <c>ed.apps.launch</c> açılış türü: TV'nin listesinde <c>app_type</c> 4 (yerel Tizen uygulaması) NATIVE_LAUNCH,
+    /// 2 (web uygulaması; CouchSubs .wgt paketi) ve bilinmeyen DEEP_LINK. Yanlış tür verilince Smart Hub uygulamayı
+    /// mağazada aramaya kalkıyor.
+    /// </summary>
+    public static string ActionType(int? appType) => appType == 4 ? "NATIVE_LAUNCH" : "DEEP_LINK";
 
     /// <summary>
     /// Bağlantı sonucu: onaylandıysa jeton (TV vermediyse boş), başka iletiyse null. Reddedildiyse ya da TV'deki izin
@@ -94,6 +133,13 @@ public static class SamsungMessages
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException) { return null; }
     }
+}
+
+/// <summary>TV'nin kurulu uygulama listesine göre CouchSubs TV uygulamasının durumu.</summary>
+public sealed record SamsungAppPresence(bool IsInstalled, int? AppType)
+{
+    public static readonly SamsungAppPresence Missing = new(false, null);
+    public static SamsungAppPresence Installed(int? appType) => new(true, appType);
 }
 
 /// <summary>Samsung TV'nin 8001 yanıtındaki geliştirici modu bilgisi.</summary>
@@ -176,11 +222,65 @@ public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : I
         }
     }
 
+    /// <summary>
+    /// TV uygulamasını uzaktan kumanda bağlantısıyla açar. Açma yolları (bekçide geliştirici bağlantısı önce denenir):
+    /// <list type="number">
+    /// <item>sdb <c>0 was_execute</c> (SamsungTvInstaller.OpenAsync): Tizen 2.4 ve sonrası (2016 K serisinden bu yana),
+    /// geliştirici modu açık ve Host PC IP bu cihazsa. Smart Hub'dan geçmez, mağaza denetimi yok; PAYLOAD taşımaz, TV
+    /// uygulaması bilgisayarı kendisi bulur.</item>
+    /// <item>Bu yöntem: önce <c>ed.installedApp.get</c> ile uygulamanın kurulu olduğuna bakılır, sonra
+    /// <c>ed.apps.launch</c> TV'nin bildirdiği türle (web uygulamasında DEEP_LINK) gönderilir. 2016 ve sonrası Tizen
+    /// TV'lerde çalışır. Uygulama kurulu değilken DEEP_LINK gönderilirse Smart Hub appId'yi mağazada arıyor ve mağazada
+    /// olmayan CouchSubs için TV'de "Sunucu bakım altında (1544007)" çıkıyordu (#402'de kurulum 118 hatasıyla düşmüştü;
+    /// #511, #637). Bu yüzden listede yoksa hiçbir şey gönderilmez. Liste 3 saniyede gelmezse (bazı yazılımlar
+    /// yanıtlamıyor) eski yol, DEEP_LINK denenir.</item>
+    /// </list>
+    /// REST <c>POST http://TV:8001/api/v2/applications/&lt;id&gt;</c> kullanılmaz: PAYLOAD taşımaz ve 2019 sonrası
+    /// yazılımlarda izinsiz istekleri reddediyor.
+    /// </summary>
     public async Task LaunchAsync(string appId, IReadOnlyDictionary<string, string> parameters, CancellationToken cancellationToken = default)
     {
         if (socket is null) throw new SsapException("cannot connect");
-        var data = Encoding.UTF8.GetBytes(SamsungMessages.Launch(appId, parameters));
+        var presence = await InstalledAppAsync(socket, appId, cancellationToken);
+        if (presence is { IsInstalled: false }) throw new SsapException("not installed");
+        if (socket.State != WebSocketState.Open)
+        {
+            // Zaman aşımında iptal edilen okuma ClientWebSocket'i kapatır; DEEP_LINK yeni bağlantıyla gider (jeton aynı,
+            // TV yeniden sormaz).
+            socket.Dispose();
+            socket = null;
+            await ConnectAsync(cancellationToken);
+            if (socket is null) throw new SsapException("cannot connect");
+        }
+        var data = Encoding.UTF8.GetBytes(SamsungMessages.Launch(appId, parameters, SamsungMessages.ActionType(presence?.AppType)));
         await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken);
+    }
+
+    /// <summary>TV'nin kurulu uygulama listesine göre durum; TV <paramref name="timeout"/> içinde yanıtlamazsa null.</summary>
+    private static async Task<SamsungAppPresence?> InstalledAppAsync(ClientWebSocket socket, string appId, CancellationToken cancellationToken,
+                                                                    TimeSpan? timeout = null)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout ?? TimeSpan.FromSeconds(3));
+        try
+        {
+            await socket.SendAsync(Encoding.UTF8.GetBytes(SamsungMessages.InstalledAppsRequest), WebSocketMessageType.Text, true, limit.Token);
+            var buffer = new byte[65536];
+            while (true)
+            {
+                using var text = new MemoryStream();
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(buffer, limit.Token);
+                    if (result.MessageType == WebSocketMessageType.Close) return null;
+                    text.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
+                if (SamsungMessages.InstalledApp(Encoding.UTF8.GetString(text.ToArray()), appId) is { } presence) return presence;
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return null; }
+        catch (WebSocketException) { return null; }
     }
 
     /// <summary>Samsung önplandaki uygulamayı söylemez; bağlantı ayakta mı diye bakılır, boş döner.</summary>
