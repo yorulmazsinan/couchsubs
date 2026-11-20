@@ -16,6 +16,18 @@ enum Route: Hashable {
     case tvInstall, tvUpdate
 }
 
+extension Array where Element == Route {
+    /// Yığının tepesindeki ekran `route` ise onu kapatır; kapattıysa `true` döner. `removeLast()` yerine kullanılır:
+    /// kapanma animasyonu sürerken düğmeye ikinci kez dokunulunca (ya da geri kaydırmayla aynı anda) yığın çoktan
+    /// boşalmış olur; `removeLast()` boş yığında uygulamayı kapatır, tepede başka ekran varsa onu da kapatırdı.
+    @discardableResult
+    mutating func pop(_ route: Route) -> Bool {
+        guard last == route else { return false }
+        removeLast()
+        return true
+    }
+}
+
 /// Turun vurguladığı öğeler.
 enum TourTarget: Int, CaseIterable {
     case start, target, packs, profile

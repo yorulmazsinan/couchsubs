@@ -172,11 +172,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Routes.PACKS) {
-                        PacksScreen(onBack = { navigation.popBackStack() }, packInUse = status.packInUse)
+                        PacksScreen(onBack = { pop(navigation) }, packInUse = status.packInUse)
                     }
                     composable(Routes.PROFILE) {
                         ProfileScreen(
-                            onBack = { navigation.popBackStack() },
+                            onBack = { pop(navigation) },
                             onSettings = { navigation.navigate(Routes.SETTINGS) },
                             onPairing = { pairing(navigation) },
                             onTarget = { navigation.navigate(Routes.TARGET) },
@@ -184,17 +184,17 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Routes.SETTINGS) {
-                        SettingsScreen(onBack = { navigation.popBackStack() }, onPacks = { navigation.navigate(Routes.PACKS) },
+                        SettingsScreen(onBack = { pop(navigation) }, onPacks = { navigation.navigate(Routes.PACKS) },
                             onTarget = { navigation.navigate(Routes.TARGET) }, onPairing = { pairing(navigation) },
                             onTvInstall = { navigation.navigate(Routes.TV_INSTALL) },
                             onPlatform = { navigation.navigate(Routes.PLATFORM) }, onDemo = { startDemo(navigation) })
                     }
-                    composable(Routes.HISTORY) { HistoryScreen(onBack = { navigation.popBackStack() }) }
+                    composable(Routes.HISTORY) { HistoryScreen(onBack = { pop(navigation) }) }
                     composable(Routes.TV_INSTALL) {
                         // Kurulum bitince "Ana ekrana geç": kurulumun 3. adımından gelindiyse kurulum biter (TvAppUpdate.installed).
-                        TvInstallScreen(onBack = { navigation.popBackStack() }) {
+                        TvInstallScreen(onBack = { pop(navigation) }) {
                             if (Routes.next() == Routes.MAIN) navigation.navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
-                            else navigation.popBackStack()
+                            else pop(navigation)
                         }
                     }
                 }
@@ -214,15 +214,24 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (next == Routes.MAIN && navigation.previousBackStackEntry != null) {
-            navigation.popBackStack()
+            pop(navigation)
             return
         }
         navigation.navigate(next) { popUpTo(0) { inclusive = true } }
     }
 
+    /**
+     * Bir ekran geri döner; yığında önceki ekran yoksa hiçbir şey yapmaz. Kapanma animasyonu sürerken geri düğmesine
+     * ikinci kez dokunulunca düz `popBackStack()` ana ekranı da yığından atar, ekran boş kalırdı (iPhone'daki
+     * `Route` yığınının `pop`'uyla aynı kural).
+     */
+    private fun pop(navigation: NavHostController) {
+        if (navigation.previousBackStackEntry != null) navigation.popBackStack()
+    }
+
     /** Ana ekrandan açılmış adımda geri düğmesi; kurulumda (yığında önceki ekran yok) düğme görünmez. */
     private fun back(navigation: NavHostController): (() -> Unit)? =
-        if (navigation.previousBackStackEntry != null) ({ navigation.popBackStack() }) else null
+        if (navigation.previousBackStackEntry != null) ({ pop(navigation) }) else null
 
     /** Kurulumda (yığında önceki ekran yok) "Şimdilik geç": PSN ve PS5 adımları atlanır, PS5'siz ana ekrana geçilir. */
     private fun skip(navigation: NavHostController): (() -> Unit)? =

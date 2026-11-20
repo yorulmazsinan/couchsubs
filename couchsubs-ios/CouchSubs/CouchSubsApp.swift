@@ -252,32 +252,31 @@ struct RootView: View {
                 if model.isRunning { RunningScreen(path: $path) } else { HomeScreen(path: $path) }
             }
             .navigationDestination(for: Route.self) { route in
+                // Ekranlar yığını `removeLast()` ile değil `pop(route)` ile kapatır: kapanma animasyonu sürerken ikinci
+                // dokunuşta yığın boşalmış olur ve `removeLast()` uygulamayı kapatırdı (TestFlight çökmesi, yapı 18).
                 switch route {
                 case .settings: SettingsScreen(path: $path)
                 case .profile: ProfileScreen(path: $path)
                 case .packs: PacksScreen()
-                case .target: TargetScreen(setup: false) { path.removeLast() }
+                case .target: TargetScreen(setup: false) { path.pop(route) }
                 // Kurulum atlandıysa PSN girişi yoktur: PS5 eşlemeden önce giriş yapılır, ardından eşlemeye geçilir.
                 case .platform:
-                    PlatformScreen(onBack: { path.removeLast() }) {
-                        path.removeLast()
-                        if model.isXbox && (!model.xboxSignedIn || model.xboxConsole == nil) { path.append(.ps5) }
+                    PlatformScreen(onBack: { path.pop(route) }) {
+                        if path.pop(route), model.isXbox && (!model.xboxSignedIn || model.xboxConsole == nil) { path.append(.ps5) }
                     }
                 // Xbox (Beta): giriş yoksa önce Microsoft girişi, ardından Xbox seçimi.
                 case .ps5 where model.isXbox && !model.xboxSignedIn:
-                    XboxLoginScreen(onBack: { path.removeLast() }, onDone: {
-                        path.removeLast()
-                        path.append(.ps5)
+                    XboxLoginScreen(onBack: { path.pop(route) }, onDone: {
+                        if path.pop(route) { path.append(.ps5) }
                     })
                 case .ps5 where model.isXbox:
-                    XboxConsoleScreen(onBack: { path.removeLast() }, onSignIn: { model.signOutXbox() }, onDone: { path.removeLast() })
+                    XboxConsoleScreen(onBack: { path.pop(route) }, onSignIn: { model.signOutXbox() }, onDone: { path.pop(route) })
                 case .ps5 where model.accountId == nil:
-                    PSNScreen(onBack: { path.removeLast() }, onDone: {
-                        path.removeLast()
-                        path.append(.ps5)
+                    PSNScreen(onBack: { path.pop(route) }, onDone: {
+                        if path.pop(route) { path.append(.ps5) }
                     })
-                case .ps5: PS5PairScreen(onBack: { path.removeLast() }, onDone: { path.removeLast() })
-                case .psn: PSNScreen(onBack: { path.removeLast() }, onDone: { path.removeLast() })
+                case .ps5: PS5PairScreen(onBack: { path.pop(route) }, onDone: { path.pop(route) })
+                case .psn: PSNScreen(onBack: { path.pop(route) }, onDone: { path.pop(route) })
                 case .about: AboutScreen()
                 case .history: HistoryScreen()
                 case .tvInstall: TVInstallScreen(onDone: { path.removeAll() })
