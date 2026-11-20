@@ -22,6 +22,16 @@ public final class ScreenTextDetector: @unchecked Sendable {
     public static let expireMs = 700
     /// En çok bu kadar otomatik alan.
     public static let maxAreas = 4
+    /// Menü durumunda en çok bu kadar otomatik alan (tekerlek menünün etiketleri, başlık, alt başlık).
+    public static let menuMaxAreas = 12
+    /// Menü durumu için en az bu kadar ayrı bileşen birlikte belirmeli.
+    public static let menuComponents = 3
+    /// Menünün bileşenleri en çok bu kadar arayla belirmiş olmalı.
+    public static let menuTogetherMs = 300
+    /// Bileşen dışındaki karoların en az bu kadarı düşük kenar enerjili (bulanık/karartılmış zemin) olmalı.
+    public static let menuQuietShare = 0.6
+    /// Karo içi parlaklık sapması bundan küçükse karo düşük kenar enerjilidir.
+    public static let quietDeviation = 18.0
     public static let areaName = "Screen text"
 
     private static let bright = 160
@@ -44,6 +54,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
         var stableSince = 0
         var rejected = Mask()
         var isRejected = false
+        var quiet = false
     }
 
     /// Karo dikdörtgeni (sütun/satır, iki uç dahil).
@@ -62,6 +73,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
         var cells: Cells
         var tiles: [Int]
         var seen: Int
+        var menu = false
         init(id: String, cells: Cells, tiles: [Int], seen: Int) {
             self.id = id
             self.cells = cells
@@ -75,8 +87,12 @@ public final class ScreenTextDetector: @unchecked Sendable {
     private var tracked: [Tracked] = []
     private var lastSample: Int?
     private var counter = 0
+    private var menu = false
 
     public init() {}
+
+    /// Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).
+    public var inMenu: Bool { lock.withLock { menu } }
 
     /// Şu an önerilen otomatik alanlar.
     public var areas: [ExtraArea] { lock.withLock { current() } }
@@ -103,8 +119,9 @@ public final class ScreenTextDetector: @unchecked Sendable {
             for row in 0..<Self.rows {
                 for column in 0..<Self.columns {
                     let index = row * Self.columns + column
-                    let (mask, bright, dark) = measured[index]
+                    let (mask, bright, dark, deviation) = measured[index]
                     var tile = tiles[index]
+                    tile.quiet = deviation < Self.quietDeviation
                     if !tile.hasLast || tile.last.distance(mask) > Self.maskChange { tile.stableSince = now }
                     tile.last = mask
                     tile.hasLast = true
@@ -115,7 +132,14 @@ public final class ScreenTextDetector: @unchecked Sendable {
                         && !Self.excluded(column, row, excluded)
                 }
             }
-            update(Self.components(candidate), candidate: candidate, now: now)
+            let all = Self.components(candidate)
+            let inMenu = isMenu(all, now: now)
+            // Menü dışında tek karoluk bileşen (kısa etiket, simge) alan olmaz.
+            let components = inMenu ? all : all.filter { $0.tiles.count >= 2 }
+            let ranked = components.enumerated()
+                .sorted { ($0.element.tiles.count, -$0.offset) > ($1.element.tiles.count, -$1.offset) }
+                .map(\.element).prefix(inMenu ? Self.menuMaxAreas : Self.maxAreas)
+            update(Array(ranked), candidate: candidate, now: now, inMenu: inMenu)
             return before != current()
         }
     }
@@ -139,21 +163,24 @@ public final class ScreenTextDetector: @unchecked Sendable {
             tiles = [Tile](repeating: Tile(), count: tiles.count)
             tracked.removeAll()
             lastSample = nil
+            menu = false
         }
     }
 
-    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int)] {
-        var result = [(Mask, Int, Int)](repeating: (Mask(), 0, 0), count: columns * rows)
+    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int, Double)] {
+        var result = [(Mask, Int, Int, Double)](repeating: (Mask(), 0, 0, 0), count: columns * rows)
         pixels.bytes.withUnsafeBufferPointer { bytes in
             for row in 0..<rows {
                 for column in 0..<columns {
                     var mask = Mask()
-                    var bright = 0, dark = 0, bit = 0
+                    var bright = 0, dark = 0, bit = 0, sum = 0, squares = 0
                     for sy in 0..<samples {
                         let line = (row * samples + sy) * pixels.width * 4
                         for sx in 0..<samples {
                             let p = line + (column * samples + sx) * 4
                             let luma = (299 * Int(bytes[p]) + 587 * Int(bytes[p + 1]) + 114 * Int(bytes[p + 2])) / 1000
+                            sum += luma
+                            squares += luma * luma
                             if luma >= Self.bright {
                                 bright += 1
                                 if bit < 64 { mask.a |= 1 << UInt64(bit) }
@@ -165,7 +192,10 @@ public final class ScreenTextDetector: @unchecked Sendable {
                             bit += 1
                         }
                     }
-                    result[row * columns + column] = (mask, bright, dark)
+                    let count = Double(samples * samples)
+                    let mean = Double(sum) / count
+                    let deviation = max(0, Double(squares) / count - mean * mean).squareRoot()
+                    result[row * columns + column] = (mask, bright, dark, deviation)
                 }
             }
         }
@@ -209,24 +239,39 @@ public final class ScreenTextDetector: @unchecked Sendable {
         var result: [(cells: Cells, tiles: [Int])] = []
         for root in order {
             let list = groups[root]!
-            guard list.count >= 2 else { continue }
             let cells = Cells(left: list.map { $0 % columns }.min()!, top: list.map { $0 / columns }.min()!,
                               right: list.map { $0 % columns }.max()!, bottom: list.map { $0 / columns }.max()!)
             // Ekranın büyük bölümünü kaplayan bileşen yazı kutusu değil, sahne dokusudur.
             if Double(cells.area) > maxShare * Double(columns * rows) { continue }
             result.append((cells, list))
         }
-        // Eşit karoda ilk bulunan (yukarıda, solda) önce gelir.
-        return Array(result.enumerated().sorted { ($0.element.tiles.count, -$0.offset) > ($1.element.tiles.count, -$1.offset) }
-            .map(\.element).prefix(maxAreas))
+        return result
     }
 
-    private func update(_ components: [(cells: Cells, tiles: [Int])], candidate: [Bool], now: Int) {
+    /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya
+    /// da karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
+    /// menüde gezinirken (seçim çerçevesi değişince) durum korunur.
+    private func isMenu(_ components: [(cells: Cells, tiles: [Int])], now: Int) -> Bool {
+        guard components.count >= Self.menuComponents else { return false }
+        let inside = Set(components.flatMap(\.tiles))
+        let outside = tiles.indices.filter { !inside.contains($0) }
+        guard !outside.isEmpty,
+              Double(outside.filter { tiles[$0].quiet }.count) >= Self.menuQuietShare * Double(outside.count) else { return false }
+        if menu { return true }
+        let appeared = components.map { $0.tiles.map { tiles[$0].stableSince }.max()! }
+        return appeared.max()! - appeared.min()! <= Self.menuTogetherMs
+    }
+
+    private func update(_ components: [(cells: Cells, tiles: [Int])], candidate: [Bool], now: Int, inMenu: Bool) {
+        let closed = menu && !inMenu
+        menu = inMenu
+        // Menü kapandı: menüde bulunan bütün alanlar hemen kalkar (700 ms beklemez).
+        if closed { tracked.removeAll(where: \.menu) }
         var matched = Set<ObjectIdentifier>()
         for (cells, list) in components {
             var existing = tracked.first { !matched.contains(ObjectIdentifier($0)) && $0.cells.overlap(cells) >= Self.keepOverlap }
             if existing == nil {
-                guard tracked.count < Self.maxAreas else { continue }
+                guard tracked.count < (inMenu ? Self.menuMaxAreas : Self.maxAreas) else { continue }
                 counter += 1
                 let made = Tracked(id: "auto-\(counter)", cells: cells, tiles: list, seen: now)
                 tracked.append(made)
@@ -237,6 +282,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
             area.cells = cells
             area.tiles = list
             area.seen = now
+            area.menu = inMenu
             matched.insert(ObjectIdentifier(area))
         }
         for area in tracked where !matched.contains(ObjectIdentifier(area)) && area.tiles.contains(where: { candidate[$0] }) {
@@ -246,7 +292,11 @@ public final class ScreenTextDetector: @unchecked Sendable {
     }
 
     private func current() -> [ExtraArea] {
-        tracked.map { ExtraArea(id: $0.id, name: Self.areaName, region: Self.region($0.cells), auto: true) }
+        tracked.map {
+            var area = ExtraArea(id: $0.id, name: Self.areaName, region: Self.region($0.cells), auto: true)
+            area.menu = $0.menu
+            return area
+        }
     }
 
     /// Karo dikdörtgeni her yandan yarım karo genişletilmiş, 0..1'e kırpılmış bölge.
@@ -261,11 +311,15 @@ public final class ScreenTextDetector: @unchecked Sendable {
 /// Otomatik bulunan alanda okunan yazı çevrilmeye değer mi: sayaç, saat, para, tek sözcüklük etiket ya da büyük harfli
 /// kısa tabela gürültüdür (Windows/Android: ScreenTextNoise ile aynı kurallar). Yalnız otomatik alanlarda uygulanır.
 public enum ScreenTextNoise {
-    public static func isNoise(_ text: String) -> Bool {
+    /// `menu`: menü durumunda (`ExtraArea.menu`) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz
+    /// (sayı, simge, noktalama: "40", "100%") ve sayısı ağır basan ("x3") etiketler gürültüdür.
+    public static func isNoise(_ text: String, menu: Bool = false) -> Bool {
         let plain = IconText.plain(text)
         let letters = plain.filter(\.isLetter).count
         let digits = plain.filter(\.isNumber).count
-        if letters < 8 || digits * 2 > letters { return true }
+        if letters == 0 || digits * 2 > letters { return true }
+        if menu { return false }
+        if letters < 8 { return true }
         let words = plain.split(whereSeparator: \.isWhitespace).filter { $0.filter(\.isLetter).count >= 2 }.count
         if words < 2 { return true }
         return !plain.contains(where: \.isLowercase) && words < 3

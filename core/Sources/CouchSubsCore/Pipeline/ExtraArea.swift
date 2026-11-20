@@ -20,6 +20,8 @@ public struct ExtraArea: Codable, Equatable, Identifiable, Sendable {
     /// çevrilmez, yazısız ya da gürültülü okuma `RegionWatcher.onAutoRejected` ile bildirilir; okuma aralığı en çok
     /// 500 ms. Ayarlara yazılmaz.
     public var auto = false
+    /// Otomatik alan ekrandaki bir menüde (`ScreenTextDetector.inMenu`): kısa etiketler de çevrilir.
+    public var menu = false
 
     public init(id: String = UUID().uuidString, name: String, region: CropRegion, enabled: Bool = true, auto: Bool = false) {
         self.id = id

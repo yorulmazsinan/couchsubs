@@ -322,7 +322,9 @@ public final class RegionWatcher {
     /// (okunan alan) kesilir; çeviride yerleri korunur.
     /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false) -> Candidate {
-        let lines = reading.withButtonIcons(frame: frame).withoutButtonPrompts().withoutOcrNoise().lines
+        // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
+        let marked = reading.withButtonIcons(frame: frame)
+        let lines = (auto ? marked : marked.withoutButtonPrompts()).withoutOcrNoise().lines
             .filter { ScreenTranslation.isWords($0.text) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
         var paragraphs = ScreenTranslation.paragraphs(lines)
@@ -339,7 +341,7 @@ public final class RegionWatcher {
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         var blocks: [Block]?
         let groups = (auto || lines.count > 1) && !lines.isEmpty && boxes.count == lines.count
-            ? ScreenTranslation.groups(from: lines) : []
+            ? (auto ? autoGroups(lines) : ScreenTranslation.groups(from: lines)) : []
         if (auto && !groups.isEmpty) || (groups.count > 1 && groups.count < ScreenTranslation.maxGroups) {
             paragraphs = groups.flatMap(\.paragraphs)
             icons = groups.flatMap { $0.icons ?? $0.paragraphs.map { _ in [IconSlot]() } }
@@ -358,7 +360,7 @@ public final class RegionWatcher {
                                   lineHeight: group.lineHeight * height, style: style, look: look))
                 start += group.paragraphs.count
             }
-            blocks = list
+            blocks = auto ? alignByNeighbours(list) : list
             key = textKey(paragraphs) + "|" + list.map { String($0.count) }.joined(separator: ",")
         }
         var cut: [[IconSlot]]?
@@ -369,6 +371,47 @@ public final class RegionWatcher {
                          text: textKey(paragraphs))
     }
 
+    /// Kısa etiket satırı (menü satırı, tuş etiketi): en çok bu kadar sözcük (Windows: ScreenTranslation.MenuLabelWords).
+    static let labelWords = 5
+
+    /// Otomatik alanın grupları: kısa etiket satırları (menü satırı, tuş etiketi) her biri kendi bloğudur; stili (seçili
+    /// satırın ters rengi) satır başına çıkarılır. Uzun yazı satırları eskisi gibi paragraflara toplanır.
+    static func autoGroups(_ lines: [TextLine]) -> [ScreenTranslation.Group] {
+        func isLabel(_ line: TextLine) -> Bool { line.text.split(whereSeparator: \.isWhitespace).count <= labelWords }
+        let prose = lines.filter { !isLabel($0) }
+        var groups = prose.isEmpty ? [] : ScreenTranslation.groups(from: prose)
+        for line in lines where isLabel(line) {
+            let icons = ScreenTranslation.paragraphIcons([line])
+            let box = line.box!
+            groups.append(ScreenTranslation.Group(paragraphs: ScreenTranslation.paragraphs([line]), box: box,
+                                                  lineHeight: box.bottom - box.top,
+                                                  icons: icons.contains { !$0.isEmpty } ? icons : nil))
+        }
+        return groups.enumerated().sorted {
+            ($0.element.box.top, $0.element.box.left, $0.offset) < ($1.element.box.top, $1.element.box.left, $1.offset)
+        }.map(\.element)
+    }
+
+    /// Tek satırlık etiketin hizası komşularından: sağ kenarı başka etiketlerle hizalıysa (kol resminin solundaki tuş
+    /// etiketleri) sağa, sol kenarı hizalıysa sola, ortası hizalıysa ortaya yaslıdır.
+    static func alignByNeighbours(_ blocks: [Block]) -> [Block] {
+        let tolerance = 0.012
+        return blocks.enumerated().map { index, block in
+            guard var look = block.look, block.count == 1 else { return block }
+            let others = blocks.enumerated().filter { $0.offset != index }.map(\.element)
+            let left = others.filter { abs($0.box.left - block.box.left) < tolerance }.count
+            let right = others.filter { abs($0.box.right - block.box.right) < tolerance }.count
+            let middle = (block.box.left + block.box.right) / 2
+            let center = others.filter { abs(($0.box.left + $0.box.right) / 2 - middle) < tolerance }.count
+            if right > left && right >= center { look.align = .right }
+            else if center > left && center > right { look.align = .center }
+            else if left > 0 { look.align = .left }
+            var aligned = block
+            aligned.look = look
+            return aligned
+        }
+    }
+
     private static func inside(_ line: TextBox, _ group: TextBox) -> Bool {
         let x = (line.left + line.right) / 2, y = (line.top + line.bottom) / 2
         return x >= group.left - 1e-6 && x <= group.right + 1e-6 && y >= group.top - 1e-6 && y <= group.bottom + 1e-6
@@ -377,7 +420,7 @@ public final class RegionWatcher {
     /// Kararlı yazı: öncekinden farklıysa çevrilip gönderilir, boşsa kutu kalkar.
     private func commit(_ candidate: Candidate, area: ExtraArea) async {
         guard var state = states[area.id] else { return }
-        if area.auto, candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " ")) {
+        if area.auto, candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: area.menu) {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
             if !state.shown.isEmpty || !(state.renderedText ?? "").isEmpty {
@@ -405,6 +448,9 @@ public final class RegionWatcher {
                     var item = block.item
                     item.box = current[block.group].box
                     item.lineHeight = current[block.group].lineHeight
+                    // Seçim gezince yalnız renkler değişir: çeviri yeniden istenmez, zemin/yazı rengi güncellenir.
+                    item.style = current[block.group].style ?? item.style
+                    item.look = current[block.group].look ?? item.look
                     return (block.group, item)
                 }
             }
@@ -453,7 +499,7 @@ public final class RegionWatcher {
         let translation: Translation
         do {
             if let cached { translation = cached }
-            else { translation = try await translate(candidate.paragraphs) }
+            else { translation = try await (area.auto ? translateLabels(candidate.paragraphs) : translate(candidate.paragraphs)) }
         } catch {
             guard session == self.session else { return }
             if states[area.id]?.shown == candidate.key {
@@ -565,6 +611,89 @@ public final class RegionWatcher {
         return Translation(result: result, readyCount: readyCount)
     }
 
+    /// Oturum terim sözlüğü: otomatik alanlarda çevrilen etiket ve parçalar (kaynak → çeviri).
+    private var terms: [String: String] = [:]
+    private static let termLimit = 4096
+
+    private static let keyPrefix = try! NSRegularExpression(pattern: #"^(?:(?:\((?:[LR][1-3]?|[△□○✕])\)|[△□○✕]|[LR][1-3](?=\s))\s*)+"#)
+    private static let keySuffix = try! NSRegularExpression(pattern: #"(?:\s*(?:\((?:[LR][1-3]?|[△□○✕])\)|[△□○✕]|(?<=\s)[LR][1-3]))+$"#)
+    private static let counter = try! NSRegularExpression(pattern: #"\s+\d+\s*/\s*\d+$"#)
+
+    private static func match(_ regex: NSRegularExpression, _ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let found = regex.firstMatch(in: text, range: range), let match = Range(found.range, in: text) else { return "" }
+        return String(text[match])
+    }
+
+    struct LabelPart: Equatable {
+        var prefix: String
+        var core: String
+        var suffix: String
+    }
+
+    /// Etiketin çevrilecek parçaları: " / " ile ayrılan her parça; önündeki ve ardındaki tuş adları ("(L1)", "(△)") ve
+    /// sondaki sayaç ("Default 1 / 3") olduğu gibi kalır.
+    static func splitLabel(_ paragraph: String) -> [LabelPart] {
+        // Simgesi kareden kesilmiş parça bölünmez (simge imleri çeviride korunur).
+        if paragraph.contains(ButtonIcons.marker) { return [LabelPart(prefix: "", core: paragraph, suffix: "")] }
+        // Sondaki sayaç dokunulmaz; " / " yalnız iki yanında harf varsa ayırıcıdır.
+        let count = match(counter, paragraph)
+        let body = String(paragraph.dropLast(count.count))
+        var pieces = body.components(separatedBy: " / ")
+        if pieces.contains(where: { !$0.contains(where: \.isLetter) }) { pieces = [body] }
+        var result = pieces.map { part -> LabelPart in
+            let prefix = match(keyPrefix, part)
+            let rest = String(part.dropFirst(prefix.count))
+            let suffix = match(keySuffix, rest)
+            return LabelPart(prefix: prefix, core: String(rest.dropLast(suffix.count)), suffix: suffix)
+        }
+        if !count.isEmpty { result[result.count - 1].suffix += count }
+        return result
+    }
+
+    /// Otomatik alanın çevirisi (yoğun menüler): her paragraf " / " ayırıcısından parçalara bölünür, tuş adları ve
+    /// sayaçlar olduğu gibi kalır. Parçalar önce oturum terim sözlüğünden, arayüz sözlüğünden ve paketten; kalanların
+    /// hepsi tek toplu istekte motordan çevrilir ve terim sözlüğüne yazılır (aynı ekrana dönüşte anında, aynı etiket hep
+    /// aynı). Kısa etiketin biçimi korunur ("OFF" → "KAPALI", "Off" → "Kapalı").
+    private func translateLabels(_ paragraphs: [String]) async throws -> Translation {
+        let parts = paragraphs.map(Self.splitLabel)
+        var known: [String: String] = [:]
+        var pending: [String] = []
+        for part in parts.joined() {
+            let core = part.core.trimmingCharacters(in: .whitespaces)
+            guard core.contains(where: \.isLetter), known[core] == nil, !pending.contains(core) else { continue }
+            if let found = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabel(core) : nil)
+                ?? packLookup?(IconText.plain(core))?.text ?? (skipsTurkish && TurkishText.isSure(core) ? core : nil) {
+                known[core] = found
+            } else {
+                pending.append(core)
+            }
+        }
+        if !pending.isEmpty {
+            let prepared = pending.map { IconText.protect($0).text }
+            let translated = translator.translatesTogether ? try await translator.translateAll(prepared)
+                : try await sequential(prepared)
+            if terms.count + pending.count > Self.termLimit { terms.removeAll() }
+            for (source, text) in zip(pending, translated) {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                terms[source] = trimmed
+                known[source] = trimmed
+            }
+        }
+        let result: [String?] = parts.map { list in
+            var pieces: [String] = []
+            for part in list {
+                let core = part.core.trimmingCharacters(in: .whitespaces)
+                guard let translation = core.contains(where: \.isLetter) ? known[core] : part.core else { return nil }
+                pieces.append(part.prefix + translation + part.suffix)
+            }
+            return pieces.joined(separator: " / ")
+        }
+        let readyCount = parts.filter { list in list.allSatisfy { !pending.contains($0.core.trimmingCharacters(in: .whitespaces)) } }.count
+        return Translation(result: result, readyCount: readyCount)
+    }
+
     private func sequential(_ texts: [String]) async throws -> [String] {
         var result: [String] = []
         for text in texts {
@@ -588,6 +717,7 @@ public final class RegionWatcher {
         running = nil
         lastPass = nil
         translations.removeAll()
+        terms.removeAll()
         let anyShown = states.values.contains { !$0.shown.isEmpty }
         states.removeAll()
         if anyShown { server.clearRegions() }

@@ -232,9 +232,12 @@ struct ScreenTextBlocks: View {
                     let line = max(1, item.lineHeight * proxy.size.height)
                     let pad = line * 0.15
                     let width = max(0, item.box.right - item.box.left) * proxy.size.width + 2 * pad
+                    // Kısa etiket (en çok iki sözcük; menü şeridi) tek satırdır, gerekirse en çok %40 küçülür, taşmaz.
+                    let short = !item.source.contains("\n") && item.source.split(separator: " ").count <= 2
                     StyledScreenText.label(item, size: line * 0.85)
-                        .minimumScaleFactor(0.8)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(short ? 1 : nil)
+                        .minimumScaleFactor(short ? 0.6 : 0.8)
+                        .fixedSize(horizontal: false, vertical: !short)
                         .frame(width: width, alignment: StyledScreenText.frameAlignment(item))
                         .padding(.vertical, pad)
                         .background(StyledScreenText.background(item))

@@ -61,4 +61,30 @@ enum UiCommands {
         guard found else { return nil }
         return translated.joined(separator: " \(marker) ").split(separator: " ").joined(separator: " ")
     }
+
+    /// Menülerin kısa etiketleri (ayar değerleri, sekme ve düğme adları). `commands`'ta olan bir etiketin orada kayıtlı
+    /// Türkçesi kullanılır; bunlar yalnız orada olmayanlardır (Windows/Android: UiCommands ile aynı).
+    private static let labels: [String: String] = [
+        "ON": "Açık", "OFF": "Kapalı", "LOAD": "Yükle", "SETTINGS": "Ayarlar", "MAP": "Harita",
+        "RESUME": "Sürdür", "QUIT": "Çık", "NEXT": "İleri", "PREVIOUS": "Önceki", "ALL": "Tümü",
+        "NONE": "Hiçbiri", "DEFAULT": "Varsayılan", "APPLY": "Uygula", "RESET": "Sıfırla",
+        "INVENTORY": "Envanter", "OUTFITS": "Kıyafetler", "OUTFIT": "Kıyafet", "WEAPONS": "Silahlar",
+        "STATS": "İstatistikler",
+    ]
+
+    /// Menüdeki kısa etiketin Türkçesi ("OFF" → "KAPALI", "Off" → "Kapalı", "off" → "kapalı"): etiketin tamamı sözlükte
+    /// olmalı (büyük/küçük harf fark etmez); biçimi Türkçe kurallarıyla korunur (i → İ). Sözlükte yoksa nil.
+    static func translateLabel(_ label: String) -> String? {
+        let words = label.trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,:!?"))
+            .trimmingCharacters(in: .whitespaces)
+        guard words.contains(where: \.isLetter) else { return nil }
+        let key = words.uppercased(with: Locale(identifier: "en_US_POSIX"))
+        guard let turkish = commands[key] ?? labels[key] else { return nil }
+        let letters = words.filter(\.isLetter)
+        let turkishLocale = Locale(identifier: "tr_TR")
+        if letters.allSatisfy(\.isUppercase) { return turkish.uppercased(with: turkishLocale) }
+        if letters.allSatisfy(\.isLowercase) { return turkish.lowercased(with: turkishLocale) }
+        return turkish
+    }
 }
