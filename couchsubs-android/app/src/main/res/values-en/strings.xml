@@ -343,7 +343,7 @@
     <string name="tvinstall_step1">1. On the TV, open Apps.</string>
     <string name="tvinstall_step2">2. Press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer mode window opens. On some new models this works on Apps › App Settings.</string>
     <string name="tvinstall_step3">3. Turn Developer mode On, type this phone\'s address as Host PC IP and press OK:</string>
-    <string name="tvinstall_step4">4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. A short press only puts it on standby.</string>
+    <string name="tvinstall_step4">4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds.</string>
     <string name="tvinstall_phone_ip_unknown">Could not find this phone\'s address; is it on Wi-Fi?</string>
     <string name="tvinstall_signin_note">The first install asks you to sign in once with a free Samsung account: Samsung only accepts the app signed with a certificate made for your TV. If the phone\'s address changes, repeat the Host PC IP step.</string>
     <string name="tvinstall_button">Install and open</string>
@@ -366,7 +366,10 @@
     <string name="tvinstall_signin_title">Samsung sign-in</string>
     <string name="tvinstall_signin_browser">Open in browser</string>
     <string name="tvinstall_maintenance">If the TV shows “Server under maintenance”, it cannot reach Samsung\'s servers: check the TV\'s internet connection and its date and time, restart the TV and try again.</string>
-    <string name="tvinstall_err_unreachable">The TV did not accept this phone. In the TV\'s Developer mode window, check that Host PC IP is this phone\'s address (%1$s), then restart the TV (hold the power button for about 2 seconds).</string>
+    <string name="tvinstall_err_unreachable">The TV did not accept this phone. In the TV\'s Developer mode window, check that Host PC IP is this phone\'s address (%1$s), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds.</string>
+    <string name="tvinstall_err_not_restarted">The TV\'s settings are right (Developer mode on, Host PC IP %1$s), but the TV has not fully restarted since then, so it does not accept the phone yet. Hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug the TV for 30 seconds, then try again.</string>
+    <string name="tvinstall_err_other_ip">The TV\'s Host PC IP is %1$s, but this phone\'s address is %2$s. In the TV\'s Developer mode window, set Host PC IP to %2$s, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).</string>
+    <string name="tvinstall_err_dev_off">Developer mode is off on the TV. Turn it on with the steps above, type this phone\'s address (%1$s) as Host PC IP, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).</string>
     <string name="tvinstall_err_too_old">This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported).</string>
     <string name="tvinstall_err_login">Samsung sign-in did not complete. Try again and finish signing in on the page that opens.</string>
     <string name="tvinstall_err_certificate">Samsung did not issue the signing certificate. Try again in a few minutes.</string>

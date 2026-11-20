@@ -32,8 +32,9 @@ Samsung requires apps to be signed for each TV. CouchSubs does this for you; you
 account. Tested on a 75" Neo QLED.
 
 1. In the TV's **Apps** screen press `1 2 3 4 5`, turn **Developer mode** on, enter your computer's address as
-   **Host PC IP** (CouchSubs shows it) and restart the TV: hold the remote's power button for about 2 seconds until
-   the TV turns off, then turn it on. A short press only puts a Samsung TV on standby.
+   **Host PC IP** (CouchSubs shows it) and restart the TV: hold the remote's power button until the TV turns off and
+   comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only
+   puts a Samsung TV on standby, and the developer mode setting does not apply.
 2. In the TV step of CouchSubs, pick your Samsung TV and press **Connect**.
 3. CouchSubs opens Samsung's sign-in page in your browser. Sign in (or create a free account there). If the browser asks to
    allow access to devices on your network, allow it.

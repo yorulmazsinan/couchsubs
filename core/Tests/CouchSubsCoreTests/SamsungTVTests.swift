@@ -102,6 +102,17 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertFalse(SamsungDeveloperInfo.hostPcIpMismatch(developerIp: "192.168.1.50", computer: nil))
     }
 
+    /// #524: TV "geliştirici modu açık, Host PC IP bu telefon" diyor ama 26101 reddediliyor: TV tam yeniden başlamamış.
+    func testRefusalCauseComesFromTheTVsOwnDeveloperState() {
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.1.6", device: "192.168.1.6"), .notRestarted)
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.0.26", device: "192.168.1.103"),
+                       .otherHostIp("192.168.0.26"))
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: false, developerIp: nil, device: "192.168.1.6"), .developerModeOff)
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: nil, device: "192.168.1.6"), .unknown)
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.1.6", device: nil), .unknown)
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: nil, developerIp: nil, device: "192.168.1.6"), .unknown)
+    }
+
     func testBrandDefaultsToLGForSavedTVs() throws {
         let saved = Data(#"{"name":"LG TV","host":"192.168.1.230"}"#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(LGTV.self, from: saved).brand, .lg)

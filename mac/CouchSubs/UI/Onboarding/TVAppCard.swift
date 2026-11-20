@@ -113,12 +113,12 @@ struct TVAppCard: View {
                 }
             case .hostPcMismatch(let tvIp, let computer):
                 Card(title: "CouchSubs TV app") {
-                    ErrorText(error: String(format: String(localized: "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds)."), tvIp, computer))
+                    ErrorText(error: String(format: String(localized: "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."), tvIp, computer))
                     HintText(text: "1. On the TV, open Apps and scroll to the very bottom of the page.")
                     HintText(text: "2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.")
                     HintText(text: "3. Turn Developer mode On, type this computer's address as Host PC IP: \(computer) and press OK.")
                     otherAddresses
-                    HintText(text: "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself.")
+                    HintText(text: "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself.")
                     Button("Try again") { Task { await model.refreshTVApp() } }.buttonStyle(.secondary)
                 }
                 // Host PC IP düzeltilip TV yeniden başlayınca kendiliğinden devam eder.
@@ -161,7 +161,7 @@ struct TVAppCard: View {
                 HintText(text: "2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.")
                 HintText(text: "3. Turn Developer mode On, type this computer's address as Host PC IP: \(model.computerAddress ?? "?") and press OK.")
                 otherAddresses
-                HintText(text: "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself.")
+                HintText(text: "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself.")
                 HintText(text: "Later you sign in once with a free Samsung account; Samsung needs it to sign the app for your TV.")
                 HintText(text: "If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.")
             }
@@ -222,7 +222,7 @@ struct TVAppCard: View {
         }
         // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
         if error == .unreachable || error == .installFailed || error == .certificateRejected {
-            text += "\n\n" + String(localized: "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.")
+            text += "\n\n" + String(localized: "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby.")
         }
         // TV kurulum sırasında HDMI-CEC yüzünden başka kaynağa geçerse bağlantı kopar.
         if error == .connectionLost {

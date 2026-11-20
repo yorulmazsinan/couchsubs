@@ -132,7 +132,8 @@ yalnız altyazıyı okumak için kullanır. Siz oyunu HDMI'dan, gecikmesiz oynam
   uygulamayı uzun süre kullanmazsanız TV'deki Developer Mode uygulamasından **EXTEND** ile uzatın.
 - Samsung'da TV, CouchSubs TV uygulaması açıkken sürekli HDMI 1'e ya da başka bir kaynağa geçiyorsa TV'de
   **Ayarlar › Tüm Ayarlar › Bağlantı › Harici Cihaz Yöneticisi** altında **Anynet+ (HDMI-CEC)** ve **Otomatik Kaynak
-  Değiştirme**'yi kapatın. Samsung TV'yi yeniden başlatmak için güç tuşunu yaklaşık 2 saniye basılı tutun; kısa basınca
+  Değiştirme**'yi kapatın. Samsung TV'yi yeniden başlatmak için güç tuşunu TV kapanıp Samsung logosuyla
+  yeniden açılana kadar (yaklaşık 5 saniye) basılı tutun ya da fişini 30 saniye çekin; TV kapanınca bırakırsanız
   yalnız bekleme moduna geçer.
 - Altyazı, oyunda altyazı açıksa okunabilir. Bölgeyi **Ayarlar › Altyazı alanı**'ndan oyuna göre ayarlayabilirsiniz.
 - **Kısayollar** (yalnız çeviri sürerken, CouchSubs arka plandayken de çalışır): Windows'ta **Num 9** ya da

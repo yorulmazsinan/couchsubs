@@ -112,8 +112,10 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
    Bazı yeni modellerde (ör. 2025 QN90F) bu, **Uygulamalar › Uygulama Ayarları** ekranında çalışır.
 3. **Developer mode**'u **On** yapın.
 4. **Host PC IP** alanına bilgisayarınızın adresini yazıp **OK**'e basın. Adresi CouchSubs TV adımında gösterir.
-5. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun, sonra açın. Kısa
-   basınca Samsung TV yalnız bekleme moduna geçer, tam kapanmaz. Uygulamalar ekranında **Develop Mode** yazısı görünür.
+5. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5
+   saniye) bırakmadan basılı tutun. TV kapanınca bırakırsanız Samsung TV yalnız bekleme moduna geçer ve geliştirici
+   modu ayarı uygulanmaz (TV "geliştirici modu açık" der ama 26101 bağlantıyı reddeder, #524, #484). Logo görünmezse TV'nin
+   fişini 30 saniye çekin. Uygulamalar ekranında **Develop Mode** yazısı görünür.
 
 ### 2. CouchSubs kursun
 
@@ -123,7 +125,9 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
 3. CouchSubs TV'nize özel sertifikayı alır, uygulamayı imzalar, kurar ve açar. Giriş yalnız ilk kurulumda istenir.
 
 **TV bilgisayarı kabul etmedi** uyarısı çıkarsa geliştirici modu penceresindeki **Host PC IP**'nin bilgisayarınızın
-şu anki adresi olduğunu kontrol edin ve TV'yi yeniden başlatın. Bilgisayarın adresi değişirse bu adım yinelenir.
+şu anki adresi olduğunu kontrol edin ve TV'yi yukarıdaki gibi tam yeniden başlatın. Bilgisayarın adresi değişirse bu
+adım yinelenir. Telefondan kurulumda uygulama hatadan sonra TV'ye geliştirici modunu yeniden sorar: ayar doğruysa TV'nin
+tam yeniden başlamadığını, Host PC IP başka bir cihazınsa hangi adresin yazılacağını söyler.
 
 **Sorun çıkarsa** (75" Neo QLED'de denendi):
 

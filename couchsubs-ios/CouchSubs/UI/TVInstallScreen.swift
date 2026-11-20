@@ -335,16 +335,31 @@ struct SamsungInstallSection: View {
                 phase = .done(version: result.version, installed: result.installed)
                 await model.tvAppInstalled(brand: .samsung, host: target, port: nil, version: result.version)
             } catch let failure as SamsungInstallFailure {
-                phase = .failed(text: failureText(failure, phone: phoneAddress(near: target)))
+                let phone = phoneAddress(near: target)
+                // TV'ye 26101 kapalıysa 8001'den geliştirici modu yeniden sorulur: neden ayar mı, yeniden başlatma mı (#524).
+                let refusal: SamsungRefusal
+                if failure.error == .unreachable, let info = await SamsungTvInfo.fetch(host: target) {
+                    refusal = SamsungDeveloperInfo.refusal(developerMode: info.developerMode, developerIp: info.developerIp, device: phone)
+                    InstallLog.shared.write("TV 8001: developerMode=\(info.developerMode.map { $0 ? "1" : "0" } ?? "?"), developerIP=\(info.developerIp ?? "?"), telefon=\(phone ?? "?") → \(refusal)")
+                } else {
+                    refusal = .unknown
+                }
+                phase = .failed(text: failureText(failure, phone: phone, refusal: refusal))
             } catch {
                 phase = .failed(text: TVText.errFailed + "\n\n" + TVText.details("\(error)"))
             }
         }
     }
 
-    private func failureText(_ failure: SamsungInstallFailure, phone: String?) -> String {
+    private func failureText(_ failure: SamsungInstallFailure, phone: String?, refusal: SamsungRefusal = .unknown) -> String {
         var text: String = switch failure.error {
-        case .unreachable: TVText.errUnreachable(phone ?? "?")
+        case .unreachable:
+            switch refusal {
+            case .notRestarted: TVText.errNotRestarted(phone ?? "?")
+            case .otherHostIp(let ip): TVText.errOtherIp(ip, phone ?? "?")
+            case .developerModeOff: TVText.errDevOff(phone ?? "?")
+            case .unknown: TVText.errUnreachable(phone ?? "?")
+            }
         case .tooOld: TVText.errTooOld
         case .loginFailed: TVText.errLogin
         case .certificateFailed: TVText.errCertificate

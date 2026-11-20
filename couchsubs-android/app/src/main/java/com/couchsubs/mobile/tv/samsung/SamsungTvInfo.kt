@@ -10,6 +10,25 @@ import java.net.URL
  * ekranı buna bakarak TV'de neyin eksik olduğunu söyler; yanıt yoksa yine kurulum denenebilir.
  */
 data class SamsungTvInfo(val name: String?, val model: String?, val developerMode: Boolean?, val developerIp: String?) {
+    /**
+     * sdb (26101) bağlantısı reddedilince TV'nin kendi söylediğine göre neden (Mac/iPhone'daki SamsungDeveloperInfo.refusal):
+     * geliştirici modu kapalı, Host PC IP başka cihazın ya da ayar doğru ama TV o zamandan beri tam yeniden başlamamış.
+     * sdb sunucusu yalnız açılışta başlar; TV kapanınca güç tuşunu bırakmak yalnız bekleme moduna geçirir (#524, #484).
+     */
+    fun refusal(phoneIp: String?): SamsungRefusal {
+        val ip = developerIp?.trim()?.takeIf { it.isNotEmpty() }
+        val phone = phoneIp?.trim()?.takeIf { it.isNotEmpty() }
+        return when (developerMode) {
+            false -> SamsungRefusal.DeveloperModeOff
+            true -> when {
+                ip != null && phone != null && ip != phone -> SamsungRefusal.OtherHostIp(ip)
+                ip != null && ip == phone -> SamsungRefusal.NotRestarted
+                else -> SamsungRefusal.Unknown
+            }
+            null -> SamsungRefusal.Unknown
+        }
+    }
+
     companion object {
         fun parse(json: String): SamsungTvInfo? = try {
             val device = JSONObject(json).optJSONObject("device") ?: throw IllegalArgumentException()
@@ -38,4 +57,13 @@ data class SamsungTvInfo(val name: String?, val model: String?, val developerMod
             null
         }
     }
+}
+
+/** Samsung TV'nin sdb bağlantısını neden reddettiği (8001'deki geliştirici modu bilgisine göre). */
+sealed interface SamsungRefusal {
+    data object DeveloperModeOff : SamsungRefusal
+    data class OtherHostIp(val ip: String) : SamsungRefusal
+    /** Geliştirici modu açık ve Host PC IP bu telefon; TV ayardan sonra tam yeniden başlamamış. */
+    data object NotRestarted : SamsungRefusal
+    data object Unknown : SamsungRefusal
 }

@@ -1004,7 +1004,7 @@ final class TVAppInstallTests: XCTestCase {
     /// sırasında bağlantı koparsa HDMI-CEC (Anynet+) ve otomatik kaynak değiştirme anlatılır.
     func testSamsungFailureExplainsRestartAndSourceSwitching() {
         // Bilgisayarın diline göre İngilizce ya da Türkçe gelir; ipucu metni de aynı dilde aranır.
-        let restart = String(localized: "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.")
+        let restart = String(localized: "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby.")
         let unreachable = TVAppCard.message(for: .unreachable, brand: .samsung, reason: nil)
         XCTAssertTrue(unreachable.contains(restart))
         XCTAssertFalse(unreachable.contains("Anynet+"))

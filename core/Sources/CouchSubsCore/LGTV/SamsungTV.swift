@@ -83,6 +83,32 @@ public struct SamsungDeveloperInfo: Equatable, Sendable {
               let mine = computer?.trimmingCharacters(in: .whitespaces), !mine.isEmpty else { return false }
         return ip != mine
     }
+
+    /// sdb (26101) bağlantısı reddedilince TV'nin kendi söylediği duruma göre neden: geliştirici modu kapalı, Host PC IP
+    /// başka bir cihazın, ya da ayar doğru olduğu hâlde TV o zamandan beri tam yeniden başlamamış (sdb sunucusu yalnız
+    /// açılışta başlar; TV kapanınca güç tuşunu bırakmak yalnız bekleme moduna geçirir, #524, #484).
+    public static func refusal(developerMode: Bool?, developerIp: String?, device: String?) -> SamsungRefusal {
+        switch developerMode {
+        case false?: return .developerModeOff
+        case true?:
+            if hostPcIpMismatch(developerIp: developerIp, computer: device), let ip = developerIp {
+                return .otherHostIp(ip.trimmingCharacters(in: .whitespaces))
+            }
+            let ip = developerIp?.trimmingCharacters(in: .whitespaces)
+            let mine = device?.trimmingCharacters(in: .whitespaces)
+            return ip != nil && ip == mine ? .notRestarted : .unknown
+        case nil: return .unknown
+        }
+    }
+}
+
+/// Samsung TV'nin sdb bağlantısını neden reddettiği (8001'deki geliştirici modu bilgisine göre).
+public enum SamsungRefusal: Equatable, Sendable {
+    case developerModeOff
+    case otherHostIp(String)
+    /// Geliştirici modu açık ve Host PC IP bu cihaz; TV ayardan sonra tam yeniden başlamamış.
+    case notRestarted
+    case unknown
 }
 
 /// Bekçinin (TVKeeper) Samsung bağlantılarında kullandığı jeton. TV yeni jeton verirse bir sonraki bağlantı onu kullanır

@@ -212,6 +212,18 @@ class SamsungInstallerTest {
         throw IllegalStateException()
     }
 
+    /** #524: TV "geliştirici modu açık, Host PC IP bu telefon" diyor ama 26101 reddediliyor: TV tam yeniden başlamamış. */
+    @Test
+    fun refusalCauseComesFromTheTvsOwnDeveloperState() {
+        fun info(mode: Boolean?, ip: String?) = SamsungTvInfo(null, null, mode, ip)
+        assertEquals(SamsungRefusal.NotRestarted, info(true, "192.168.1.6").refusal("192.168.1.6"))
+        assertEquals(SamsungRefusal.OtherHostIp("192.168.0.26"), info(true, "192.168.0.26").refusal("192.168.1.103"))
+        assertEquals(SamsungRefusal.DeveloperModeOff, info(false, null).refusal("192.168.1.6"))
+        assertEquals(SamsungRefusal.Unknown, info(true, null).refusal("192.168.1.6"))
+        assertEquals(SamsungRefusal.Unknown, info(true, "192.168.1.6").refusal(null))
+        assertEquals(SamsungRefusal.Unknown, info(null, null).refusal("192.168.1.6"))
+    }
+
     @Test
     fun tvInfoTellsDeveloperModeAndHostIp() {
         val json = """{"device":{"developerIP":"192.168.1.20","developerMode":"1","modelName":"QE65QN90F","name":"[TV] Salon &quot;Q&quot;","OS":"Tizen"},"type":"Samsung SmartTV"}"""

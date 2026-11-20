@@ -24,7 +24,7 @@ enum TVText {
     static var step1: String { String(localized: "1. On the TV, open Apps.") }
     static var step2: String { String(localized: "2. Press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer mode window opens. On some new models this works on Apps › App Settings.") }
     static var step3: String { String(localized: "3. Turn Developer mode On, type this phone's address as Host PC IP and press OK:") }
-    static var step4: String { String(localized: "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. A short press only puts it on standby.") }
+    static var step4: String { String(localized: "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds.") }
     static var phoneIpUnknown: String { String(localized: "Could not find this phone's address; is it on Wi-Fi?") }
     static var signinNote: String { String(localized: "The first install asks you to sign in once with a free Samsung account: Samsung only accepts the app signed with a certificate made for your TV. If the phone's address changes, repeat the Host PC IP step.") }
     static var button: String { String(localized: "Install and open") }
@@ -46,7 +46,11 @@ enum TVText {
     static var shareLog: String { String(localized: "Share the install log") }
     static var signinTitle: String { String(localized: "Samsung sign-in") }
     static var maintenance: String { String(localized: "If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again.") }
-    static func errUnreachable(_ a0: String) -> String { String(format: String(localized: "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV (hold the power button for about 2 seconds)."), a0) }
+    static func errUnreachable(_ a0: String) -> String { String(format: String(localized: "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds."), a0) }
+    // 26101 reddedilince TV'nin 8001'de söylediği duruma göre (#524, #484).
+    static func errNotRestarted(_ a0: String) -> String { String(format: String(localized: "The TV's settings are right (Developer mode on, Host PC IP %@), but the TV has not fully restarted since then, so it does not accept the phone yet. Hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug the TV for 30 seconds, then try again."), a0) }
+    static func errOtherIp(_ a0: String, _ a1: String) -> String { String(format: String(localized: "The TV's Host PC IP is %1$@, but this phone's address is %2$@. In the TV's Developer mode window, set Host PC IP to %2$@, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."), a0, a1) }
+    static func errDevOff(_ a0: String) -> String { String(format: String(localized: "Developer mode is off on the TV. Turn it on with the steps above, type this phone's address (%@) as Host PC IP, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."), a0) }
     static var errTooOld: String { String(localized: "This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported).") }
     static var errLogin: String { String(localized: "Samsung sign-in did not complete. Try again and finish signing in on the page that opens.") }
     static var errCertificate: String { String(localized: "Samsung did not issue the signing certificate. Try again in a few minutes.") }

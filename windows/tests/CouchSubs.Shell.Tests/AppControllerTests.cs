@@ -1940,7 +1940,7 @@ public class TvAppInstallTests
         var tr = TvAppMessages.Problem(controller.TvApp, TvBrand.Samsung, Localizer.ForLanguage("tr"), "x.log");
         Assert.Contains("192.168.1.50", tr);
         Assert.Contains("192.168.1.34", tr);
-        Assert.Contains("2 sn", tr);
+        Assert.Contains("Samsung logosu", tr);
         var en = TvAppMessages.Problem(controller.TvApp, TvBrand.Samsung, Localizer.ForLanguage("en"), "x.log");
         Assert.StartsWith("The TV's Host PC IP is 192.168.1.50, but this computer's address is 192.168.1.34.", en);
 
@@ -2059,7 +2059,7 @@ public class TvAppInstallTests
     {
         var text = Localizer.ForLanguage("tr");
         var unreachable = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable), TvBrand.Samsung, text, "x.log");
-        Assert.Contains("2 saniye", unreachable);
+        Assert.Contains("Samsung logosuyla", unreachable);
         Assert.DoesNotContain("Anynet+", unreachable);
         var dropped = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.ConnectionLost), TvBrand.Samsung, text, "x.log");
         Assert.Contains("Anynet+ (HDMI-CEC)", dropped);
@@ -2069,7 +2069,7 @@ public class TvAppInstallTests
         Assert.NotEqual(TvAppMessages.RestartTip, text[TvAppMessages.RestartTip]);
         // LG'de Samsung'a özgü ipucu çıkmaz.
         var lg = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable), TvBrand.Lg, text, "x.log");
-        Assert.DoesNotContain("2 saniye", lg);
+        Assert.DoesNotContain("Samsung logosu", lg);
     }
 
     [Fact]

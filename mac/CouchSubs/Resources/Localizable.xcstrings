@@ -38,7 +38,7 @@
     "Install on the TV at %@": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Install on the TV at %@"}},"tr":{"stringUnit":{"state":"translated","value":"%@ adresindeki TV'ye kur"}}}},
     "If the TV does not accept this address, try one of this computer's other addresses: %@": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"If the TV does not accept this address, try one of this computer's other addresses: %@"}},"tr":{"stringUnit":{"state":"translated","value":"TV bu adresi kabul etmezse bu bilgisayarın diğer adreslerinden birini deneyin: %@"}}}},
     "Reinstall the TV app": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Reinstall the TV app"}},"tr":{"stringUnit":{"state":"translated","value":"TV uygulamasını yeniden kur"}}}},
-    "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds)."}},"tr":{"stringUnit":{"state":"translated","value":"TV'deki Host PC IP %1$@, bu bilgisayarın adresi %2$@. TV'de Geliştirici modu penceresinde Host PC IP'yi %2$@ yapıp TV'yi tam yeniden başlatın (güç tuşunu 2 sn basılı tutun)."}}}},
+    "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."}},"tr":{"stringUnit":{"state":"translated","value":"TV'deki Host PC IP %1$@, bu bilgisayarın adresi %2$@. TV'de Geliştirici modu penceresinde Host PC IP'yi %2$@ yapıp TV'yi tam yeniden başlatın (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tutun)."}}}},
     "TV's IP address (on the TV under Settings › Network)": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"TV's IP address (on the TV under Settings › Network)"}},"tr":{"stringUnit":{"state":"translated","value":"TV'nin IP adresi (TV'de Ayarlar › Ağ'da yazar)"}}}},
     "e.g. 192.168.1.100": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"e.g. 192.168.1.100"}},"tr":{"stringUnit":{"state":"translated","value":"örn. 192.168.1.100"}}}},
     "Not this phone's address. This phone's address: %@": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Not this phone's address. This phone's address: %@"}},"tr":{"stringUnit":{"state":"translated","value":"Bu telefonun adresi değil. Bu telefonun adresi: %@"}}}},
@@ -852,18 +852,18 @@
         }
       }
     },
-    "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself.": {
+    "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. This screen continues by itself."
+            "value": "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun, sonra yeniden açın. Bu ekran kendiliğinden devam eder."
+            "value": "4. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) bırakmadan basılı tutun; TV kapanınca bırakırsanız yalnız bekleme moduna geçer. Logo görünmezse TV'nin fişini 30 saniye çekin. Bu ekran kendiliğinden devam eder."
           }
         }
       }
@@ -1172,18 +1172,18 @@
         }
       }
     },
-    "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.": {
+    "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby."
+            "value": "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Samsung TV'yi tam yeniden başlatmak için kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun; kısa basınca TV yalnız bekleme moduna geçer."
+            "value": "Samsung TV'yi tam yeniden başlatmak için kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) basılı tutun ya da TV'nin fişini 30 saniye çekin. TV kapanınca bırakırsanız yalnız bekleme moduna geçer."
           }
         }
       }
@@ -12092,6 +12092,9 @@
         }
       }
     },
+    "The TV's settings are right (Developer mode on, Host PC IP %@), but the TV has not fully restarted since then, so it does not accept the phone yet. Hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug the TV for 30 seconds, then try again.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The TV's settings are right (Developer mode on, Host PC IP %@), but the TV has not fully restarted since then, so it does not accept the phone yet. Hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug the TV for 30 seconds, then try again."}},"tr":{"stringUnit":{"state":"translated","value":"TV'deki ayar doğru (Geliştirici modu açık, Host PC IP %@), ama TV o zamandan beri tam yeniden başlamadığı için telefonu henüz kabul etmiyor. Kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) basılı tutun ya da TV'nin fişini 30 saniye çekin, sonra tekrar deneyin."}}}},
+    "The TV's Host PC IP is %1$@, but this phone's address is %2$@. In the TV's Developer mode window, set Host PC IP to %2$@, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The TV's Host PC IP is %1$@, but this phone's address is %2$@. In the TV's Developer mode window, set Host PC IP to %2$@, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."}},"tr":{"stringUnit":{"state":"translated","value":"TV'deki Host PC IP %1$@, bu telefonun adresi %2$@. TV'deki geliştirici modu penceresinde Host PC IP'yi %2$@ yapın, sonra TV'yi tam yeniden başlatın (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tutun)."}}}},
+    "Developer mode is off on the TV. Turn it on with the steps above, type this phone's address (%@) as Host PC IP, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer mode is off on the TV. Turn it on with the steps above, type this phone's address (%@) as Host PC IP, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds)."}},"tr":{"stringUnit":{"state":"translated","value":"TV'de geliştirici modu kapalı. Yukarıdaki adımlarla açın, Host PC IP olarak bu telefonun adresini (%@) yazın, sonra TV'yi tam yeniden başlatın (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tutun)."}}}},
     "Host PC IP belongs to another device: %@": {
       "localizations": {
         "en": {
@@ -12156,18 +12159,18 @@
         }
       }
     },
-    "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. A short press only puts it on standby.": {
+    "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. Restart the TV: hold the power button on the remote for about 2 seconds until the TV turns off, then turn it on again. A short press only puts it on standby."
+            "value": "4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "4. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanana kadar yaklaşık 2 saniye basılı tutun, sonra yeniden açın. Kısa basınca TV yalnız bekleme moduna geçer."
+            "value": "4. TV'yi yeniden başlatın: kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) bırakmadan basılı tutun; TV kapanınca bırakırsanız yalnız bekleme moduna geçer. Logo görünmezse TV'nin fişini 30 saniye çekin."
           }
         }
       }
@@ -12444,18 +12447,18 @@
         }
       }
     },
-    "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV (hold the power button for about 2 seconds).": {
+    "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV (hold the power button for about 2 seconds)."
+            "value": "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "TV bu telefonu kabul etmedi. TV'deki geliştirici modu penceresinde Host PC IP'nin bu telefonun adresi (%@) olduğunu kontrol edin ve TV'yi yeniden başlatın (güç tuşunu yaklaşık 2 saniye basılı tutun)."
+            "value": "TV bu telefonu kabul etmedi. TV'deki geliştirici modu penceresinde Host PC IP'nin bu telefonun adresi (%@) olduğunu kontrol edin ve TV'yi tam yeniden başlatın: güç tuşunu Samsung logosu görünene kadar (yaklaşık 5 saniye) basılı tutun ya da TV'nin fişini 30 saniye çekin."
           }
         }
       }

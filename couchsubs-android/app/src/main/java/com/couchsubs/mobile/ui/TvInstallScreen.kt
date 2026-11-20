@@ -61,6 +61,7 @@ import com.couchsubs.mobile.tv.samsung.SamsungInstallError
 import com.couchsubs.mobile.tv.samsung.SamsungInstallException
 import com.couchsubs.mobile.tv.samsung.SamsungInstaller
 import com.couchsubs.mobile.tv.samsung.SamsungLogin
+import com.couchsubs.mobile.tv.samsung.SamsungRefusal
 import com.couchsubs.mobile.tv.samsung.SamsungTvInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -82,7 +83,7 @@ private sealed interface InstallState {
     data object Idle : InstallState
     data class Working(val step: InstallStep) : InstallState
     data class Done(val version: String, val installed: Boolean) : InstallState
-    data class Failed(val error: SamsungInstallError?, val detail: String?) : InstallState
+    data class Failed(val error: SamsungInstallError?, val detail: String?, val refusal: SamsungRefusal = SamsungRefusal.Unknown) : InstallState
 }
 
 /**
@@ -199,7 +200,16 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
                 TvAppUpdate.installed(InstalledTv(TvBrand.SAMSUNG, target, version = result.version))
                 InstallState.Done(result.version, result.installed)
             } catch (error: SamsungInstallException) {
-                InstallState.Failed(error.error, error.detail)
+                // TV'de 26101 kapalıysa 8001'den geliştirici modu yeniden sorulur: neden ayar mı, yeniden başlatma mı (#524).
+                val refusal = if (error.error != SamsungInstallError.UNREACHABLE) SamsungRefusal.Unknown else withContext(Dispatchers.IO) {
+                    SamsungTvInfo.fetch(target)?.let { info ->
+                        info.refusal(phoneIp).also {
+                            InstallLog(logFile).write("TV 8001: developerMode=${info.developerMode?.let { on -> if (on) "1" else "0" } ?: "?"}, " +
+                                "developerIP=${info.developerIp ?: "?"}, telefon=${phoneIp ?: "?"} → $it")
+                        }
+                    } ?: SamsungRefusal.Unknown
+                }
+                InstallState.Failed(error.error, error.detail, refusal)
             } catch (error: Exception) {
                 Log.w(TAG, "TV kurulumu başarısız", error)
                 InstallState.Failed(null, error.message ?: error.javaClass.simpleName)
@@ -361,7 +371,12 @@ internal fun stepText(step: InstallStep) = stringResource(when (step) {
 private fun failureText(failure: InstallState.Failed, phoneIp: String?): String {
     val context = LocalContext.current
     val advice = when (failure.error) {
-        SamsungInstallError.UNREACHABLE -> context.getString(R.string.tvinstall_err_unreachable, phoneIp ?: "?")
+        SamsungInstallError.UNREACHABLE -> when (val refusal = failure.refusal) {
+            SamsungRefusal.NotRestarted -> context.getString(R.string.tvinstall_err_not_restarted, phoneIp ?: "?")
+            is SamsungRefusal.OtherHostIp -> context.getString(R.string.tvinstall_err_other_ip, refusal.ip, phoneIp ?: "?")
+            SamsungRefusal.DeveloperModeOff -> context.getString(R.string.tvinstall_err_dev_off, phoneIp ?: "?")
+            SamsungRefusal.Unknown -> context.getString(R.string.tvinstall_err_unreachable, phoneIp ?: "?")
+        }
         SamsungInstallError.TOO_OLD -> context.getString(R.string.tvinstall_err_too_old)
         SamsungInstallError.LOGIN_FAILED -> context.getString(R.string.tvinstall_err_login)
         SamsungInstallError.CERTIFICATE_FAILED -> context.getString(R.string.tvinstall_err_certificate)

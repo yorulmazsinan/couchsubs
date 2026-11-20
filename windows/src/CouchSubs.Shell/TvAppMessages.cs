@@ -8,9 +8,10 @@ namespace CouchSubs.Shell;
 /// <summary>TV uygulaması kurulamayınca gösterilen metin: ne yapılacağı, ayrıntı ve (Samsung'da) gönderilecek günlük.</summary>
 public static class TvAppMessages
 {
-    /// <summary>Samsung'u tam yeniden başlatma: güç tuşu yaklaşık 2 saniye basılı tutulur.</summary>
+    /// <summary>Samsung'u tam yeniden başlatma: güç tuşu TV Samsung logosuyla yeniden açılana kadar basılı tutulur; TV kapanınca
+    /// bırakılırsa yalnız bekleme moduna geçer ve sdb açılmaz (#524, #484).</summary>
     public const string RestartTip =
-        "To restart a Samsung TV fully, hold the power button on the remote for about 2 seconds until it turns off; a short press only puts it on standby.";
+        "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby.";
 
     /// <summary>TV uygulaması açıkken Samsung kendi kendine başka kaynağa geçiyorsa (HDMI-CEC).</summary>
     public const string SourceSwitchTip =
@@ -18,7 +19,7 @@ public static class TvAppMessages
 
     /// <summary>TV'deki Host PC IP bu bilgisayarınki değil: iki adres ve ne yapılacağı (#343).</summary>
     public const string HostPcMismatchMessage =
-        "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button for about 2 seconds).";
+        "The TV's Host PC IP is %1$@, but this computer's address is %2$@. In the TV's Developer Mode window, set Host PC IP to %2$@ and restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).";
 
     /// <summary>Samsung bağlantı hatalarında Host PC IP'ye yazılacak adres.</summary>
     public const string ComputerAddressLine = "This computer's address (Host PC IP): %@";
