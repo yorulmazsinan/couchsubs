@@ -371,6 +371,8 @@ class TranslationService : Service() {
         subtitleServer.onLegacyClient = { LiveState.update { it.copy(legacyTv = true) }; Log.i(TAG, "TV uygulamasını güncelleyin; geçiş bağlantısı.") }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
         subtitleServer.speakerColors = settings.speakerColors
+        // Konuşan renkleri oturum boyunca sabittir; yeni oturum yeni defterle başlar.
+        com.couchsubs.mobile.core.SpeakerColors.session.reset()
         subtitleServer.onClientsChanged = { count ->
             val before = LiveState.status.value.connectedTvs
             LiveState.update { it.copy(connectedTvs = count) }
