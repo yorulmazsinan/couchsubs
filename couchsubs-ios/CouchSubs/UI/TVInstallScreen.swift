@@ -186,7 +186,8 @@ struct TVAddressField: View {
     let label: String
     @Binding var text: String
     var placeholder: String? = TVText.addressExample
-    var keyboard: UIKeyboardType = .decimalPad
+    // .decimalPad Türkçe telefonda nokta yerine virgül gösteriyor; adreste nokta yazılamıyordu (TestFlight).
+    var keyboard: UIKeyboardType = .numbersAndPunctuation
 
     var body: some View {
         let phone = phoneAddress(near: nil)
@@ -264,7 +265,7 @@ struct SamsungInstallSection: View {
             ProgressView().tint(Mobile.Palette.accent)
         }
         if manual {
-            TVAddressField(label: TVText.address, text: $host, keyboard: .decimalPad)
+            TVAddressField(label: TVText.address, text: $host)
         } else if !phase.isWorking {
             Button(TVText.notFound) { manual = true }.buttonStyle(.mobileGhost)
         }
@@ -312,7 +313,9 @@ struct SamsungInstallSection: View {
     }
 
     private func install() {
-        let target = host.trimmingCharacters(in: .whitespaces)
+        // Virgüllü yazım ("192,168,1,5"), "http://…" ya da port temizlenir (LG ve Mac'teki gibi).
+        let typed = host.trimmingCharacters(in: .whitespaces)
+        let target = ManualAddress.normalize(typed) ?? typed.replacingOccurrences(of: ",", with: ".")
         guard !target.isEmpty else { return }
         phase = .working(.connecting)
         working = true

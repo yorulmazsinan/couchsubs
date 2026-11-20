@@ -320,7 +320,8 @@ final class AndroidTvInstaller {
 
     /// "192.168.1.5:37123" → (adres, port); port yoksa `defaultPort`.
     static func parseAddress(_ text: String, defaultPort: UInt16 = AdbConnection.defaultPort) -> (String, UInt16)? {
-        let value = text.trimmingCharacters(in: .whitespaces)
+        // Türkçe klavyeyle yazılan virgüller ("192,168,1,20:41235") noktaya döner; port korunur.
+        let value = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
         guard !value.isEmpty else { return nil }
         guard let colon = value.lastIndex(of: ":") else { return (value, defaultPort) }
         guard let port = UInt16(value[value.index(after: colon)...]), port > 0 else { return nil }

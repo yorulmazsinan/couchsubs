@@ -227,7 +227,8 @@ struct PS5PairScreen: View {
 
     private var host: String {
         let typed = manualHost.trimmingCharacters(in: .whitespaces)
-        return typed.isEmpty ? consoles.first?.host ?? "" : typed
+        // Virgüllü yazım ("192,168,1,20"), "http://…" ya da port temizlenir.
+        return typed.isEmpty ? consoles.first?.host ?? "" : ManualAddress.normalize(typed) ?? typed.replacingOccurrences(of: ",", with: ".")
     }
 
     var body: some View {
@@ -313,7 +314,9 @@ struct PS5PairScreen: View {
                             message: "Make sure the PS5 is on (not in rest mode) and on the same Wi-Fi, and that CouchSubs is allowed in Settings › Privacy & Security › Local Network. You can also type the PS5's IP address (PS5: Settings › Network › Connection Status).")
                 TextField("IP address, e.g. 192.168.1.20", text: $manualHost)
                     .textFieldStyle(MobileFieldStyle())
-                    .keyboardType(.decimalPad)
+                    .keyboardType(.numbersAndPunctuation)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                 Button("Search again") { Task { await search() } }.buttonStyle(.mobileSecondary)
                 Button("Done") { showManual = false }.buttonStyle(.mobilePrimary)
             }
@@ -473,7 +476,9 @@ struct TargetScreen: View {
             if manualBrand != .androidTV {
                 TextField("IP address, e.g. 192.168.1.20", text: $manualHost)
                     .textFieldStyle(MobileFieldStyle())
-                    .keyboardType(.decimalPad)
+                    .keyboardType(.numbersAndPunctuation)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
             }
             if manualBrand != .androidTV, let manualError { MobileNote(text: manualError) }
             Link("Supported TVs", destination: AppIdentity.tvGuideURL).font(Mobile.TypeScale.caption).tint(Mobile.Palette.accent)
