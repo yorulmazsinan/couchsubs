@@ -227,6 +227,70 @@ public class LinePoolTests
         Assert.Empty(pool.Queued);
     }
 
+    private static Func<HttpResponseMessage> SaturatedReply(params string[] keys) => () => new HttpResponseMessage(HttpStatusCode.OK)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(new { accepted = 1, recorded = 0, saturated = keys })),
+    };
+
+    [Fact]
+    public async Task SaturatedKeysAreRememberedAndNotSentAgain()
+    {
+        var key = PackKey.Key("Don Torrisi wants you.")!;
+        server.Replies.Enqueue(SaturatedReply(key.ToUpperInvariant()));
+        var pool = MakePool();
+        pool.Offer("Don Torrisi wants you.");
+        pool.Offer("Who is that over there?");
+        await pool.FlushAsync();
+        // Doymuş satır bir daha kuyruğa girmez; öteki de gönderildi sayılır.
+        pool.Offer("Don Torrisi wants you.");
+        pool.Offer("Who is that over there?");
+        Assert.Empty(pool.Queued);
+        // Yeniden başlatınca da hatırlanır.
+        var reopened = MakePool();
+        reopened.Offer("Don Torrisi wants you.");
+        Assert.Empty(reopened.Queued);
+    }
+
+    [Fact]
+    public async Task SaturatedKeysDropTheSameLinesStillWaitingInTheQueue()
+    {
+        // 201 satır: ilk parça (200) gider; sunucu ikinci parçadaki satırı doymuş bildirirse o satır atılır.
+        var lines = Enumerable.Range(0, 201).Select(i => $"Get in the car number {i}, Lucia.").ToList();
+        server.Replies.Enqueue(SaturatedReply(PackKey.Key(lines[200])!));
+        var pool = MakePool();
+        foreach (var line in lines) pool.Offer(line);
+        await pool.FlushAsync();
+        Assert.Single(server.Received);
+        Assert.Empty(pool.Queued);
+    }
+
+    [Fact]
+    public async Task MalformedSaturatedListIsIgnored()
+    {
+        server.Replies.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"saturated\":[\"zz\",\"123\",5]}") });
+        var pool = MakePool();
+        pool.Offer("Don Torrisi wants you.");
+        await pool.FlushAsync();
+        server.Replies.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"saturated\":3}") });
+        pool.Offer("Who is that over there?");
+        await pool.FlushAsync();
+        Assert.Empty(pool.Queued);
+        Assert.Empty(LinePool.SaturatedKeys("not json"));
+        Assert.Equal(["abcdef0123456789"], LinePool.SaturatedKeys("{\"saturated\":[\"zz\",\"ABCDEF0123456789\"]}"));
+    }
+
+    [Fact]
+    public async Task RejectedBatchIsRememberedSoItIsNotSentAgain()
+    {
+        server.Replies.Enqueue(() => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        var pool = MakePool();
+        pool.Offer("Don Torrisi wants you.");
+        await pool.FlushAsync();
+        pool.Offer("Don Torrisi wants you.");
+        Assert.Empty(pool.Queued);
+        Assert.Single(server.Received);
+    }
+
     [Fact]
     public void QueueKeepsTheNewestFiveThousand()
     {

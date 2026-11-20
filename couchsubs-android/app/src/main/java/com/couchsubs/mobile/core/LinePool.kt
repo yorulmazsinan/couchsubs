@@ -27,10 +27,21 @@ class LinePool(
     private val platform: String = "android",
     enabled: Boolean = ENABLED_BY_DEFAULT,
     private val clock: () -> Long = System::currentTimeMillis,
-    /** HTTP katmanı (gövde → durum kodu ve Retry-After saniyesi); testlerde sahtesi verilir. */
-    private val post: ((URL, String) -> Pair<Int, Long?>)? = null,
+    /** HTTP katmanı (gövde → durum kodu, Retry-After saniyesi, yanıt gövdesi); testlerde sahtesi verilir. */
+    private val post: ((URL, String) -> Triple<Int, Long?, String>)? = null,
 ) {
     companion object {
+        /** Yanıttaki `saturated` listesinden geçerli (16 onaltılık) anahtarlar; alan yoksa ya da bozuksa boş. */
+        fun saturatedKeys(json: String): List<String> {
+            val list = try { JSONObject(json).optJSONArray("saturated") } catch (error: JSONException) { null } ?: return emptyList()
+            val out = ArrayList<String>()
+            for (i in 0 until list.length()) {
+                val key = list.opt(i) as? String ?: continue
+                if (key.length == 16 && key.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) out.add(key.lowercase())
+            }
+            return out
+        }
+
         const val ENABLED_BY_DEFAULT = true
         const val DEFAULT_ENDPOINT = "https://couchsubs-pool.enmera.workers.dev/v1/lines"
         const val BATCH_SIZE = 200
@@ -130,7 +141,7 @@ class LinePool(
                     batch = queue.take(BATCH_SIZE)
                     body = payload(batch)
                 }
-                val (status, retrySeconds) = try {
+                val (status, retrySeconds, reply) = try {
                     (post ?: ::httpPost)(endpoint, body)
                 } catch (error: IOException) {
                     return
@@ -140,6 +151,9 @@ class LinePool(
                         status in 200..299 -> {
                             retryAfter = null
                             remove(batch, sent = true)
+                            // Sunucu doymuş ("saturated") bildirdiği satırı bir daha istemez: kuyrukta bekleyenler atılır,
+                            // hepsi "gönderildi" sayılır (eski sunucuda alan yok; yok sayılır).
+                            markSaturated(saturatedKeys(reply))
                         }
                         status == 429 -> {
                             val delay = (retrySeconds ?: 60L).coerceIn(1L, 86400L)
@@ -147,8 +161,8 @@ class LinePool(
                             dirty = true
                             return
                         }
-                        // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez.
-                        status in 400..499 -> remove(batch, sent = false)
+                        // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez, aynı satırlar bir daha gitmesin.
+                        status in 400..499 -> remove(batch, sent = true)
                         else -> return
                     }
                 }
@@ -173,6 +187,17 @@ class LinePool(
             line.titleId?.let { put("titleId", it) }
             line.game?.let { put("game", it) }
         }
+
+    /** Doymuş anahtarlar "gönderildi"ye yazılır ve kuyruktaki aynıları atılır. */
+    private fun markSaturated(keys: List<String>) {
+        if (keys.isEmpty()) return
+        val set = keys.toSet()
+        queue.removeAll { it.key in set }
+        queuedKeys.removeAll(set)
+        for (key in keys) if (sentKeys.add(key)) sent.addLast(key)
+        while (sent.size > REMEMBERED_SENT) sentKeys.remove(sent.removeFirst())
+        dirty = true
+    }
 
     private fun remove(batch: List<Line>, sent: Boolean) {
         val keys = batch.map { it.key }.toSet()
@@ -230,7 +255,7 @@ class LinePool(
         if (state.has("retryAfter")) retryAfter = state.optDouble("retryAfter")
     }
 
-    private fun httpPost(url: URL, body: String): Pair<Int, Long?> {
+    private fun httpPost(url: URL, body: String): Triple<Int, Long?, String> {
         val connection = url.openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -241,7 +266,11 @@ class LinePool(
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             val retry = connection.getHeaderField("Retry-After")?.trim()?.toLongOrNull()
-            return status to retry
+            // Yalnız başarılı yanıtın (küçük) gövdesi okunur; hata gövdesi gerekmez.
+            val reply = if (status in 200..299) {
+                try { connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) } } catch (error: IOException) { "" }
+            } else ""
+            return Triple(status, retry, reply)
         } finally {
             connection.disconnect()
         }

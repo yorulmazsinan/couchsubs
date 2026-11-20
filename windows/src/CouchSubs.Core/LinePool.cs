@@ -173,12 +173,21 @@ public sealed class LinePool : IDisposable
                 using (response)
                 {
                     var status = (int)response.StatusCode;
+                    var saturated = Array.Empty<string>();
+                    if (status is >= 200 and < 300)
+                    {
+                        try { saturated = SaturatedKeys(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)); }
+                        catch (Exception error) when (error is HttpRequestException or IOException or TaskCanceledException) { }
+                    }
                     lock (gate)
                     {
                         if (status is >= 200 and < 300)
                         {
                             state.RetryAfter = null;
                             Remove(batch, sent: true);
+                            // Sunucu doymuş ("saturated") bildirdiği satırı bir daha istemez: kuyrukta bekleyenler atılır,
+                            // hepsi "gönderildi" sayılır (eski sunucuda alan yok; yok sayılır).
+                            MarkSaturated(saturated);
                         }
                         else if (status == (int)HttpStatusCode.TooManyRequests)
                         {
@@ -189,8 +198,8 @@ public sealed class LinePool : IDisposable
                         }
                         else if (status is >= 400 and < 500)
                         {
-                            // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez.
-                            Remove(batch, sent: false);
+                            // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez, aynı satırlar bir daha gitmesin.
+                            Remove(batch, sent: true);
                         }
                         else
                         {
@@ -229,6 +238,44 @@ public sealed class LinePool : IDisposable
         lastSave = clock();
     }
 
+    /// <summary>Yanıttaki <c>saturated</c> listesinden geçerli (16 onaltılık) anahtarlar; alan yoksa ya da bozuksa boş.</summary>
+    internal static string[] SaturatedKeys(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("saturated", out var list)
+                || list.ValueKind != JsonValueKind.Array) return [];
+            return [.. list.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .Where(key => key.Length == 16 && key.All(Uri.IsHexDigit))
+                .Select(key => key.ToLowerInvariant())];
+        }
+        catch (JsonException) { return []; }
+    }
+
+    /// <summary>Doymuş anahtarlar "gönderildi"ye yazılır ve kuyruktaki aynıları atılır.</summary>
+    private void MarkSaturated(string[] keys)
+    {
+        if (keys.Length == 0) return;
+        var set = keys.ToHashSet();
+        state.Queue.RemoveAll(line => set.Contains(line.Key));
+        queuedKeys.ExceptWith(set);
+        foreach (var key in keys) if (sentKeys.Add(key)) state.Sent.Add(key);
+        TrimSent();
+        dirty = true;
+    }
+
+    private void TrimSent()
+    {
+        if (state.Sent.Count <= RememberedSent) return;
+        var dropped = state.Sent.Count - RememberedSent;
+        sentKeys.ExceptWith(state.Sent.Take(dropped));
+        state.Sent.RemoveRange(0, dropped);
+    }
+
     private void Remove(List<Line> batch, bool sent)
     {
         var keys = batch.Select(line => line.Key).ToHashSet();
@@ -236,14 +283,8 @@ public sealed class LinePool : IDisposable
         queuedKeys.ExceptWith(keys);
         if (sent)
         {
-            state.Sent.AddRange(batch.Select(line => line.Key));
-            sentKeys.UnionWith(keys);
-            if (state.Sent.Count > RememberedSent)
-            {
-                var dropped = state.Sent.Count - RememberedSent;
-                sentKeys.ExceptWith(state.Sent.Take(dropped));
-                state.Sent.RemoveRange(0, dropped);
-            }
+            foreach (var key in batch.Select(line => line.Key)) if (sentKeys.Add(key)) state.Sent.Add(key);
+            TrimSent();
         }
         dirty = true;
     }

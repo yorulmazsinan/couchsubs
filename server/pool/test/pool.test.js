@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accepts } from "../src/filter.js";
-import worker, { resetStatsCache, STATS_KEY, gameName, titleId, unavailableFor, ownApp, QUOTA_BLOCK, SATURATED } from "../src/index.js";
+import worker, { key, resetStatsCache, STATS_KEY, gameName, titleId, unavailableFor, ownApp, QUOTA_BLOCK, SATURATED } from "../src/index.js";
 import { GENERAL, jobPackId, nameJobs, runAutopack } from "../src/autopack.js";
 import { gameKey, gameSlug } from "../src/games.js";
 
@@ -123,6 +123,7 @@ function fakeDB() {
   return db;
 }
 
+const keyOf = (text) => key(text);
 const install = (n) => `00000000-0000-4000-8000-00000000000${n}`;
 const post = (env, who, texts) => worker.fetch(new Request("https://pool.test/v1/lines", {
   method: "POST",
@@ -133,7 +134,7 @@ test("gönderim süzer; tek kurulumun satırı havuza yazılmaz, ikinci kurulumd
   const DB = fakeDB();
   const env = { DB };
   const reply = await post(env, install(1), ["Oturum Açtı", "Get down!", "Get down!", "Who is that over there?"]);
-  assert.deepEqual(await reply.json(), { accepted: 2, recorded: 2 });
+  assert.deepEqual(await reply.json(), { accepted: 2, recorded: 2, saturated: [] });
   // İki görülme + iki koşullu UPSERT + bir kota rezervasyonu; ilk kurulumda lines'a kayıt girmez.
   assert.equal(DB.lines.size, 0);
 
@@ -166,7 +167,7 @@ test("yeterince kurulumun doğruladığı ya da çeviriye alınmış satırın y
 
   DB.writes = 0;
   const reply = await post(env, install(SATURATED + 1), ["Get down!"]);
-  assert.deepEqual(await reply.json(), { accepted: 1, recorded: 0 });
+  assert.deepEqual(await reply.json(), { accepted: 1, recorded: 0, saturated: [await keyOf("Get down!")] });
   assert.equal(DB.writes, 1, "yalnız yeni kurulumun günlük kota payı yazılır");
   assert.deepEqual([...DB.lines.values()].map((l) => l.installs), [SATURATED]);
 
@@ -250,7 +251,7 @@ test("eşzamanlı gönderimler günlük kota sınırını aşamaz", async () => 
 
   assert.deepEqual(replies.map((reply) => reply.status).sort(), [200, 429]);
   const accepted = replies.find((reply) => reply.status === 200);
-  assert.deepEqual(await accepted.json(), { accepted: 10, recorded: 10 });
+  assert.deepEqual(await accepted.json(), { accepted: 10, recorded: 10, saturated: [] });
   assert.equal(DB.quotas.get(`${who}\u001f${day}`), 5000);
   assert.equal(DB.lines.size, 0); // tek kurulumun gördüğü satırlar havuza girmez
 });
@@ -305,7 +306,7 @@ test("satırın oyunu havuza giren (ikinci) kurulumdan alınır; ilk bilinen oyu
     { text: "Who is that over there?" },
     { text: "Keep your head down.", titleId: "bogus", game: "" },
   ]);
-  assert.deepEqual(await reply.json(), { accepted: 3, recorded: 3 });
+  assert.deepEqual(await reply.json(), { accepted: 3, recorded: 3, saturated: [] });
   assert.equal(DB.lines.size, 0);
 
   await postLines(env, install(2), [{ text: "Get in the car, Lucia.", titleId: "PPSA12345", game: "GTA VI" }]);
@@ -632,7 +633,7 @@ test("anahtarlı uygulama aynı süzgeç ve eşikle kabul edilir, uygulama adıy
   try {
     const first = await postApp(env, install(1), [{ text: "Oturum Açtı" }, { text: "Get down!" }], { key: APP_KEY });
     assert.equal(first.status, 200);
-    assert.deepEqual(await first.json(), { accepted: 1, recorded: 1 });
+    assert.deepEqual(await first.json(), { accepted: 1, recorded: 1, saturated: [] });
     assert.equal(DB.lines.size, 0, "tek kurulum havuza girmez");
     await postApp(env, install(2), [{ text: "Get down!" }], { key: APP_KEY });
     assert.deepEqual([...DB.lines.values()].map((l) => l.installs), [2]);
@@ -648,9 +649,9 @@ test("uygulamanın günlük toplam sınırı kurulum sınırına ek olarak uygul
   const day = new Date().toISOString().slice(0, 10);
   const lines = (n, tag) => Array.from({ length: n }, (_, j) => ({ text: `Hold the line ${tag} ${j} please.` }));
   const a = await postApp(env, install(1), lines(10, "a"), { key: APP_KEY });
-  assert.deepEqual(await a.json(), { accepted: 10, recorded: 10 });
+  assert.deepEqual(await a.json(), { accepted: 10, recorded: 10, saturated: [] });
   const b = await postApp(env, install(2), lines(10, "b"), { key: APP_KEY });
-  assert.deepEqual(await b.json(), { accepted: 5, recorded: 5 });
+  assert.deepEqual(await b.json(), { accepted: 5, recorded: 5, saturated: [] });
   const c = await postApp(env, install(3), lines(10, "c"), { key: APP_KEY });
   assert.equal(c.status, 429);
   assert.deepEqual(await c.json(), { error: "app_quota" });

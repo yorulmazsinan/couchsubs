@@ -17,6 +17,7 @@ import com.couchsubs.mobile.translation.DeepLTranslator
 import com.couchsubs.mobile.translation.Http
 import com.couchsubs.mobile.translation.OnlineKeyState
 import com.couchsubs.mobile.translation.RequestBudget
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -350,7 +351,7 @@ class LinePoolTest {
         val file = File(Files.createTempDirectory("pool").toFile(), "pool.json")
         val bodies = mutableListOf<String>()
         var status = 503
-        val post = { _: URL, body: String -> bodies.add(body); status to null }
+        val post = { _: URL, body: String -> bodies.add(body); Triple(status, null, "") }
         val pool = LinePool(file, "test", post = post, clock = { 1_700_000_000_000 })
         pool.offer("Get in the car, Enzo.")
         pool.offer("Get in the car, Enzo.")
@@ -378,7 +379,7 @@ class LinePoolTest {
         val file = File(Files.createTempDirectory("pool").toFile(), "pool.json")
         val bodies = mutableListOf<String>()
         var status = 503
-        val post = { _: URL, body: String -> bodies.add(body); status to null }
+        val post = { _: URL, body: String -> bodies.add(body); Triple(status, null, "") }
         val pool = LinePool(file, "test", post = post, clock = { 1_700_000_000_000 })
         pool.offer("Who is that over there?")
         pool.setGame(RunningGame.create("ppsa12345", "  Grand Theft Auto VI\n"))
@@ -396,6 +397,61 @@ class LinePoolTest {
         assertEquals("PPSA12345", lines.getJSONObject(1).getString("titleId"))
         assertEquals("Grand Theft Auto VI", lines.getJSONObject(1).getString("game"))
         assertFalse(lines.getJSONObject(2).has("game"))
+    }
+
+    private fun saturatedReply(vararg keys: String) =
+        JSONObject().put("accepted", 1).put("recorded", 0).put("saturated", JSONArray(keys.toList())).toString()
+
+    @Test
+    fun saturatedKeysAreRememberedAndNotSentAgain() {
+        val file = File(Files.createTempDirectory("pool").toFile(), "pool.json")
+        val key = PackKey.key("Get in the car, Enzo.")!!
+        val post = { _: URL, _: String -> Triple(200, null, saturatedReply(key.uppercase())) }
+        val pool = LinePool(file, "test", post = post, clock = { 1_700_000_000_000 })
+        pool.offer("Get in the car, Enzo.")
+        pool.offer("Who is that man?")
+        pool.flush()
+        // Doymuş satır bir daha kuyruğa girmez; öteki de gönderildi sayılır.
+        pool.offer("Get in the car, Enzo.")
+        pool.offer("Who is that man?")
+        assertEquals(0, pool.queued.size)
+        // Yeniden başlatınca da hatırlanır.
+        val reopened = LinePool(file, "test", post = post, clock = { 1_700_000_000_000 })
+        reopened.offer("Get in the car, Enzo.")
+        assertEquals(0, reopened.queued.size)
+    }
+
+    @Test
+    fun saturatedKeysDropTheSameLinesStillWaitingInTheQueue() {
+        // 201 satır: ilk parça (200) gider; sunucu ikinci parçadaki satırı doymuş bildirirse o satır atılır.
+        val lines = (0 until 201).map { "Get in the car number $it, Lucia." }
+        var posts = 0
+        val post = { _: URL, _: String -> posts++; Triple(200, null, saturatedReply(PackKey.key(lines[200])!!)) }
+        val pool = LinePool(File(Files.createTempDirectory("pool").toFile(), "pool.json"), "test", post = post, clock = { 1_700_000_000_000 })
+        for (line in lines) pool.offer(line)
+        pool.flush()
+        assertEquals(1, posts)
+        assertEquals(0, pool.queued.size)
+    }
+
+    @Test
+    fun malformedSaturatedListIsIgnored() {
+        assertEquals(emptyList<String>(), LinePool.saturatedKeys("not json"))
+        assertEquals(emptyList<String>(), LinePool.saturatedKeys("{\"saturated\": 3}"))
+        assertEquals(emptyList<String>(), LinePool.saturatedKeys("{\"saturated\":[\"zz\",\"123\",5]}"))
+        assertEquals(listOf("abcdef0123456789"), LinePool.saturatedKeys("{\"saturated\":[\"zz\",\"ABCDEF0123456789\"]}"))
+    }
+
+    @Test
+    fun rejectedBatchIsRememberedSoItIsNotSentAgain() {
+        var posts = 0
+        val post = { _: URL, _: String -> posts++; Triple(400, null, "") }
+        val pool = LinePool(File(Files.createTempDirectory("pool").toFile(), "pool.json"), "test", post = post, clock = { 1_700_000_000_000 })
+        pool.offer("Get in the car, Enzo.")
+        pool.flush()
+        pool.offer("Get in the car, Enzo.")
+        assertEquals(0, pool.queued.size)
+        assertEquals(1, posts)
     }
 
     @Test

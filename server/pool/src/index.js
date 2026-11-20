@@ -261,6 +261,7 @@ async function submit(req, env) {
   const fresh = new Map();
   let entries = [];
   let recorded = 0;
+  let saturated = [];
   try {
     // Türkçe, PS5 sistem yazısı ve yarım okumalar hiç yazılmaz (eski sürümler süzmeden gönderiyor).
     // Aynı istekteki yinelenen anahtar bir kez sayılır.
@@ -286,6 +287,8 @@ async function submit(req, env) {
     // Toplu okuma ucuzdur ve yazım kotasına girmez.
     const settled = await settledKeys(env, entries.map(([k]) => k));
     const pending = entries.filter(([k]) => !settled.has(k));
+    // İstemciye de bildirilir: doymuş satırı bir daha göndermesin (ek okuma yok, settledKeys zaten okudu).
+    saturated = [...settled];
     // Görülme ve satır güncellemesini tek D1 batch transaction'ında yap: ikinci adım hata
     // verirse yalnız sightings yazılı kalmamalı (yoksa tekrar göndermek satırı kalıcı olarak kaybettirir).
     // UPSERT, distinct sightings sayısına göre idempotenttir; aynı kurulum tekrar gönderince sayıyı artırmaz.
@@ -307,7 +310,7 @@ async function submit(req, env) {
     throw error;
   }
   await vote(env, install, entries);
-  return json({ accepted: fresh.size, recorded });
+  return json({ accepted: fresh.size, recorded, saturated });
 }
 
 /** Kimliksiz gelen oyun adları: kurulum başına bir oy (istekte birkaç oyun olsa da en çok üç yazma). Tek kişinin

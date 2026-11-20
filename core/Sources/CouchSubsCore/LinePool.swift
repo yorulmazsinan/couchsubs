@@ -151,13 +151,16 @@ public actor LinePool {
             case 200..<300:
                 state.retryAfter = nil
                 remove(batch, sent: true)
+                // Sunucu doymuş ("saturated") bildirdiği satırı bir daha istemez: kuyrukta bekleyenler atılır, hepsi
+                // "gönderildi" sayılır (eski sunucuda alan yok; yok sayılır).
+                markSaturated(Self.saturatedKeys(reply.0))
             case 429:
                 state.retryAfter = clock().addingTimeInterval(Self.retryDelay(http.value(forHTTPHeaderField: "Retry-After"), now: clock()))
                 dirty = true
                 return
             case 400..<500:
-                // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez.
-                remove(batch, sent: false)
+                // Sunucu bu parçayı kabul etmiyor; yeniden göndermek düzeltmez, aynı satırlar bir daha gitmesin.
+                remove(batch, sent: true)
             default:
                 return
             }
@@ -175,18 +178,38 @@ public actor LinePool {
         lastSave = clock()
     }
 
+    /// Yanıttaki `saturated` listesinden geçerli (16 onaltılık) anahtarlar; alan yoksa ya da bozuksa boş.
+    static func saturatedKeys(_ data: Data) -> [String] {
+        struct Reply: Decodable { let saturated: [String]? }
+        let list = (try? JSONDecoder().decode(Reply.self, from: data))?.saturated ?? []
+        return list.filter { $0.count == 16 && $0.allSatisfy(\.isHexDigit) }.map { $0.lowercased() }
+    }
+
+    /// Doymuş anahtarlar "gönderildi"ye yazılır ve kuyruktaki aynıları atılır.
+    private func markSaturated(_ keys: [String]) {
+        guard !keys.isEmpty else { return }
+        let set = Set(keys)
+        state.queue.removeAll { set.contains($0.key) }
+        queuedKeys.subtract(set)
+        for key in keys where sentKeys.insert(key).inserted { state.sent.append(key) }
+        trimSent()
+        dirty = true
+    }
+
+    private func trimSent() {
+        guard state.sent.count > Self.rememberedSent else { return }
+        let dropped = state.sent.prefix(state.sent.count - Self.rememberedSent)
+        sentKeys.subtract(dropped)
+        state.sent.removeFirst(dropped.count)
+    }
+
     private func remove(_ batch: [Line], sent: Bool) {
         let keys = Set(batch.map(\.key))
         state.queue.removeAll { keys.contains($0.key) }
         queuedKeys.subtract(keys)
         if sent {
-            state.sent += batch.map(\.key)
-            sentKeys.formUnion(keys)
-            if state.sent.count > Self.rememberedSent {
-                let dropped = state.sent.prefix(state.sent.count - Self.rememberedSent)
-                sentKeys.subtract(dropped)
-                state.sent.removeFirst(dropped.count)
-            }
+            for key in batch.map(\.key) where sentKeys.insert(key).inserted { state.sent.append(key) }
+            trimSent()
         }
         dirty = true
     }
