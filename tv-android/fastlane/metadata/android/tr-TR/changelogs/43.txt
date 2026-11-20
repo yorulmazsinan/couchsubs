@@ -1,0 +1,1 @@
+0.9.40: LG TV'lerde oyun sırasında saat ekranı (ekran koruyucu) açılmıyor; TV kapatılıp açıldıktan ya da uygulama güncellendikten sonra da.

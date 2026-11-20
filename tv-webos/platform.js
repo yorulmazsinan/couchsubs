@@ -33,30 +33,59 @@
     // (Kodi'nin webOS sürümünün yaptığı gibi). Servis yoksa ya da izin verilmezse sessizce geçilir. Bu istek belgeli
     // değildir ve yeni webOS'ta (25) saat ekran koruyucusu yine geliyordu (#230); appinfo.json'daki belgeli
     // screenSaverProperties.preferredType 2 (OLED, webOS 5+) görüntü üstünde yazı gösteren uygulamalar içindir: tam
-    // ekran görüntüde ekran koruyucu açılmaz, yalnız yazı alanı 30 dakikada yavaşça kısılır.
+    // ekran görüntüde ekran koruyucu açılmaz, yalnız yazı alanı 30 dakikada yavaşça kısılır. LCD'de (ör. 55UQ81,
+    // webOS 22) preferredType yok sayılır; orada ekran koruyucuyu yalnız bu erteleme durdurur (#555).
+    //
+    // tvpower kaydı sayfayla değil TV'nin süreciyle yaşar ve kapatılamaz: uygulama kapanıp yeniden açılınca (Hızlı
+    // Başlatma+ ile TV'yi kapatıp açmak, TV uygulamasının güncellenmesi) eski kayıt ölü kalır, aynı adla yeniden kayıt
+    // "already registered" (-3) hatası alır. Eskiden ad hep 'com.couchsubs.tv' idi: TV'nin sorusu yanıt vermeyen eski
+    // kayda gidiyor, ekran koruyucu yine açılıyordu (fişten çekince düzelip ertesi gün geri gelmesi buna uyuyor). Bu
+    // yüzden her açılışta yeni bir ad kullanılır; kayıt yine reddedilirse birkaç kez başka adla denenir.
     init: function () {
-      var CLIENT = 'com.couchsubs.tv';
-      try {
-        var register = new PalmServiceBridge();
-        register.onservicecallback = function (message) {
+      var BASE = 'com.couchsubs.tv';
+      var MAX_ATTEMPTS = 4;
+      var stamp = new Date().getTime().toString(36);
+      var attempt = 0;
+      // Köprü nesneleri çöpe gitmesin; abonelik uygulama açık kaldıkça sürer.
+      window.__screenSaverBridges = [];
+
+      function register() {
+        var client = BASE + '.' + stamp + (attempt ? '.' + attempt : '');
+        attempt++;
+        var bridge = new PalmServiceBridge();
+        var failed = false;
+        bridge.onservicecallback = function (message) {
           var request;
           try { request = JSON.parse(message); } catch (e) { return; }
           if (!request) return;
-          // Panelin tanı satırı için: servis izin vermediyse sebebi, verdiyse ertelenen istek sayısı.
-          if (request.returnValue === false) window.__screenSaverStatus = 'denied: ' + (request.errorText || request.errorCode);
-          if (request.timestamp === undefined) return;
+          // Panelin tanı satırı için: kayıt reddedildiyse sebebi, kabul edildiyse ertelenen istek sayısı.
+          if (request.returnValue === false) {
+            window.__screenSaverStatus = 'denied: ' + (request.errorText || request.errorCode) +
+              (attempt < MAX_ATTEMPTS ? ' (retry)' : '');
+            if (!failed && attempt < MAX_ATTEMPTS) {
+              failed = true;
+              setTimeout(function () { try { register(); } catch (e) {} }, 1000);
+            }
+            return;
+          }
+          if (request.timestamp === undefined) {
+            if (!window.__screenSaverCount) window.__screenSaverStatus = 'registered';
+            return;
+          }
           window.__screenSaverCount = (window.__screenSaverCount || 0) + 1;
           window.__screenSaverStatus = 'deferred ' + window.__screenSaverCount;
           var reply = new PalmServiceBridge();
           reply.call('luna://com.webos.service.tvpower/power/responseScreenSaverRequest',
-            JSON.stringify({ clientName: CLIENT, ack: false, timestamp: request.timestamp }));
+            JSON.stringify({ clientName: client, ack: false, timestamp: request.timestamp }));
           window.__screenSaverReply = reply;
         };
-        register.call('luna://com.webos.service.tvpower/power/registerScreenSaverRequest',
-          JSON.stringify({ subscribe: true, clientName: CLIENT }));
-        // Köprü nesnesi çöpe gitmesin; abonelik uygulama açık kaldıkça sürer.
-        window.__screenSaverBridge = register;
-      } catch (e) {}
+        bridge.call('luna://com.webos.service.tvpower/power/registerScreenSaverRequest',
+          JSON.stringify({ subscribe: true, clientName: client }));
+        window.__screenSaverBridges.push(bridge);
+        window.__screenSaverBridge = bridge;
+      }
+
+      try { register(); } catch (e) {}
     },
 
     launchParams: function () {

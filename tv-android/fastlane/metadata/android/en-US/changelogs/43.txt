@@ -1,0 +1,1 @@
+0.9.40: On LG TVs the clock screen saver no longer comes on during play, also after the TV is turned off and on or the app is updated.
