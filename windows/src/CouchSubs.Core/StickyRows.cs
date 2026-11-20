@@ -38,6 +38,9 @@ public sealed class StickyRows
 
     private readonly List<Row> rows = [];
 
+    /// <summary>Son <see cref="Filter"/> çağrısında okumadan çıkarılan satırlar (sabit ya da uçta bekleyen; görev satırı).</summary>
+    public IReadOnlyList<TextLine> Removed { get; private set; } = [];
+
     /// <summary>Son <see cref="Filter"/> çağrısında ilk kez sabit sayılan satırlar (günlük için).</summary>
     public IReadOnlyList<string> NewlySticky { get; private set; } = [];
 
@@ -70,6 +73,7 @@ public sealed class StickyRows
         NewlySticky = newly;
         var lingering = Lingering(reading, matched);
         var kept = reading.Lines.Where((_, i) => matched[i] is not { Sticky: true } && !lingering[i]).ToList();
+        Removed = [.. reading.Lines.Where((_, i) => matched[i] is { Sticky: true } || lingering[i])];
         rows.RemoveAll(r => time - r.LastSeen > ForgetAfterMs);
         return kept.Count == reading.Lines.Count ? reading : new Reading(kept);
     }
@@ -96,5 +100,6 @@ public sealed class StickyRows
     {
         rows.Clear();
         NewlySticky = [];
+        Removed = [];
     }
 }

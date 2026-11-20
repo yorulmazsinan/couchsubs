@@ -2258,6 +2258,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         built.PackMissed += OfferToPool;
         built.Log = SubtitleLog.Write;
         built.PackName = () => services.GamePacks?.SearchScope;
+        built.MissionChanged += OnMissionChanged;
         ConnectPacks(built);
         ApplyWaits(built);
         OnlineIssue = null;
@@ -2281,12 +2282,33 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<WatchedArea> presetAreas = [];
     private bool presetRunning;
     private int screenTextBusy;
+    /// <summary>Altyazıdan ayrılan görev satırının ek alanı (bkz. <see cref="MissionLine"/>); yoksa null.</summary>
+    private WatchedArea? missionArea;
+
+    /// <summary>
+    /// Altyazı hattı görev satırını altyazıdan ayırdı: bölgesi "auto-mission" ek alanı olur, çevirisi kendi yerinde ve özgün
+    /// stilinde görünür. Görev kalkınca alan çıkar (RegionWatcher kutusunu kaldırır). Otomatik ekran yazısı kapalıysa
+    /// görev yine altyazıya girmez ama ayrıca gösterilmez.
+    /// </summary>
+    private void OnMissionChanged(CropRegion? region)
+    {
+        var request = false;
+        lock (regionGate)
+        {
+            missionArea = region is null || !settings.AutoScreenText ? null
+                : new WatchedArea(MissionLine.AreaId, "Mission", region) { Auto = true };
+            ComposeWatchedAreas();
+            if (missionArea is not null && regionWatcher is null && !watcherRequested) request = watcherRequested = true;
+        }
+        if (request) post(UpdateRegionWatcher);
+    }
 
     // regionGate altında: kullanıcının ek alanları, otomatik bulunan ekran yazıları ve açık telefon.
     private void ComposeWatchedAreas()
     {
         presetAreas = presetRunning ? settings.PresetAreas(gameSense.Current?.Name, phoneArea is not null) : [];
-        watchedAreas = [.. savedWatchedAreas, .. presetAreas, .. autoAreas, .. phoneArea is null ? [] : new[] { phoneArea }];
+        watchedAreas = [.. savedWatchedAreas, .. presetAreas, .. autoAreas,
+                        .. missionArea is null ? [] : new[] { missionArea }, .. phoneArea is null ? [] : new[] { phoneArea }];
     }
 
     /// <summary>
@@ -2319,7 +2341,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             ComposeWatchedAreas();
             if (watchedAreas.Count == 0)
             {
-                if (phoneTracker is null && screenText is null)
+                if (phoneTracker is null && screenText is null && missionArea is null)
                 {
                     regionWatcher?.Reset();
                     regionWatcher = null;
@@ -2331,7 +2353,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (services.MakeReader(settings.SourceLanguage, settings.OcrEngine) is not { } reader)
                 {
                     // Okuyucu kurulamadıysa her örnekte tekrar açma. Yeni telefon veya ayar değişikliği yeniden dener.
-                    watcherRequested = phoneArea is not null || autoAreas.Count > 0;
+                    watcherRequested = phoneArea is not null || autoAreas.Count > 0 || missionArea is not null;
                     return;
                 }
                 regionWatcher = new RegionWatcher(reader, MakeTranslator(), server) { Log = SubtitleLog.Write };
@@ -2368,6 +2390,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             phoneTracker?.Reset();
             screenText?.Reset();
             autoAreas = [];
+            missionArea = null;
             ComposeWatchedAreas();
             regionWatcher?.Reset();
             if (discard) regionWatcher = null;

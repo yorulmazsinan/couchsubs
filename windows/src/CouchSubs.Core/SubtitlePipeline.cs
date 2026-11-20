@@ -176,6 +176,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private string Present(string translation, Request request) => SpeakerPrefix.Present(translation, request.Source, ShowSpeakerNames);
     /// <summary>Hiçbir pakette bulunmayan kararlı satır (ortak havuz için).</summary>
     public event Action<string>? PackMissed;
+
+    /// <summary>
+    /// Görev satırının bölgesi değişti (null: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
+    /// kendi yerinde ve özgün stilinde gösterilir (bkz. <see cref="MissionLine"/>). Okuma iş parçacığında çağrılır.
+    /// </summary>
+    public event Action<CropRegion?>? MissionChanged;
+
+    private readonly MissionLine mission = new();
     /// <summary>Son gösterilen çevirinin nereden geldiği: "paket" ya da "motor" (günlük ve sayım için).</summary>
     public string? LastOrigin { get; private set; }
     /// <summary>Bu hatta paketten gelen satır sayısı.</summary>
@@ -279,11 +287,20 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // GTA ekran yazısı (silah adı, plaka, tabela, menü) altyazı değildir; konuşmaya yapışsa da çevrilmez.
         if (DropsScreenText?.Invoke() == true) cleaned = cleaned.WithoutScreenText();
         var rows = cleaned.JoiningRows();
+        bool missionMoved;
+        CropRegion? missionRegion;
         lock (gate)
         {
             rows = stickyRows.Filter(rows, now());
             foreach (var row in stickyRows.NewlySticky)
                 Write($"sabit satır: {SubtitleLog.Excerpt(row)} görev/HUD yazısı sayıldı, çevrilmiyor");
+            missionMoved = mission.Observe(stickyRows.Removed, area, now());
+            missionRegion = mission.Region;
+        }
+        if (missionMoved)
+        {
+            Write(missionRegion is null ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor");
+            MissionChanged?.Invoke(missionRegion);
         }
         var reading = rows.SubtitleBlock(area);
 
@@ -989,6 +1006,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             currentRead = null;
             schedule.Reset();
             stickyRows.Reset();
+            mission.Reset();
             if (stabilizer.Reset() == StabilizerAction.Clear) sender.Clear();
         }
     }

@@ -176,16 +176,25 @@ public sealed class Reading
             var box = reading.Box!.Value.PlacedIn(area);
             return Math.Abs(((box.Left + box.Right) / 2) - 0.5) <= 0.12;
         }).ToList();
+        // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
+        // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
+        if (centered.FirstOrDefault(reading => SpeakerPrefix.Parse(reading.Lines[0].Text) is not null) is { } spoken) return spoken;
         if (centered.Count > 0) return centered.MaxBy(reading => reading.Box!.Value.Bottom)!;
         return candidates.Where(reading => WordCount(reading.Text) >= 3).MaxBy(reading => reading.Box!.Value.Bottom) ?? Empty;
     }
 
-    /// <summary>Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir.</summary>
+    /// <summary>
+    /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
+    /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
+    /// satırı ayrılır).
+    /// </summary>
     private static bool Belongs(TextBox box, List<TextLine> block, TextBox area)
     {
         var last = block[^1].Box!.Value.PlacedIn(area);
-        var height = Math.Max(box.Bottom - box.Top, last.Bottom - last.Top);
-        if (box.Top - last.Bottom >= height * 0.8 || box.Top < last.Top) return false;
+        double own = box.Bottom - box.Top, previous = last.Bottom - last.Top;
+        var height = Math.Max(own, previous);
+        if (box.Top - last.Bottom > height * 0.6 || box.Top < last.Top) return false;
+        if (Math.Max(own, previous) > 1.25 * Math.Min(own, previous)) return false;
         var overlap = Math.Min(box.Right, last.Right) - Math.Max(box.Left, last.Left);
         var narrower = Math.Min(box.Right - box.Left, last.Right - last.Left);
         return overlap > 0 && overlap >= narrower * 0.5;
