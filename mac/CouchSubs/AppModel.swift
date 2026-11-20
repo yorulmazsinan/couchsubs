@@ -2005,12 +2005,13 @@ final class AppModel: ObservableObject {
     }
 
     private func sessionStateChanged(_ state: SessionState) {
-        // Altyazı günlüğünde yalnız durumun türü (adres ve ayrıntı remoteplay.log'da).
+        // Altyazı günlüğünde durumun türü ve kopmanın nedeni (adres ve ayrıntı remoteplay.log'da). Neden eskiden
+        // yazılmıyordu; yalnız altyazi.log gönderen kullanıcının kopmaları teşhis edilemiyordu (GitHub #456).
         if state != sessionState {
             switch state {
             case .connecting: SubtitleLog.write("PS5: bağlanıyor")
             case .streaming: SubtitleLog.write("PS5: bağlandı")
-            case .disconnected: SubtitleLog.write("PS5: bağlantı yok")
+            case .disconnected(let reason): SubtitleLog.write("PS5: bağlantı yok (\(reason.logName))")
             }
             // PS5'in kendi tarafındaki çökme ayrıca yazılır: kullanıcının günlüğünde nedeni görünsün (GitHub #519).
             if state == .disconnected(.consoleRemotePlayCrashed) {

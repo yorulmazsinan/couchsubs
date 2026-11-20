@@ -2372,3 +2372,16 @@ internal sealed class FakeXbox(IReadOnlyList<XboxConsole> consoles) : IXboxServi
         return new FakeStream();
     }
 }
+
+public class DisconnectLogNameTests
+{
+    /// altyazi.log'a kopmanın nedeni yazılır, PS5'in adresi yazılmaz (GitHub #456).
+    [Fact]
+    public void ReasonIsLoggedWithoutAddress()
+    {
+        Assert.Equal("NotFound", AppController.DisconnectLogName(new DisconnectReason(DisconnectKind.NotFound, "192.168.1.5")));
+        Assert.Equal("Network", AppController.DisconnectLogName(new DisconnectReason(DisconnectKind.Network)));
+        Assert.Equal("Rejected: 0x80108b12", AppController.DisconnectLogName(new DisconnectReason(DisconnectKind.Rejected, "0x80108b12")));
+        Assert.Equal("?", AppController.DisconnectLogName(null));
+    }
+}

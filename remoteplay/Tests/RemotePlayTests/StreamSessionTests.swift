@@ -295,6 +295,10 @@ final class DisconnectReasonTests: XCTestCase {
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED), .refused)
         // TCP reddi eşleme sorunu değildir; yalnız PSN eşlemesinin reddi yeniden eşleme ister.
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_PSN_REGIST_FAILED), .registrationInvalid)
+        // altyazi.log'a adres yazılmaz, nedenin türü yazılır.
+        XCTAssertEqual(DisconnectReason.notFound("192.168.1.5").logName, "notFound")
+        XCTAssertEqual(DisconnectReason.rejected(0x80108b12).logName, "rejected 0x80108b12")
+        XCTAssertEqual(DisconnectReason.other("no picture from the PS5").logName, "other: no picture from the PS5")
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED), .network)
     }
 

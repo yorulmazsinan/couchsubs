@@ -2427,15 +2427,24 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         Changed(nameof(Console), nameof(Ps5StatusText));
     }
 
+    /// <summary>altyazi.log'a yazılan kopma nedeni: türü; adres (NotFound) yazılmaz, PS5'in kodu ve libchiaki metni yazılır.</summary>
+    public static string DisconnectLogName(DisconnectReason? reason) => reason switch
+    {
+        null => "?",
+        { Kind: DisconnectKind.Rejected or DisconnectKind.Other, Detail: { Length: > 0 } detail } => $"{reason.Kind}: {detail}",
+        _ => reason.Kind.ToString(),
+    };
+
     private void SessionStateChanged(SessionState state)
     {
-        // Altyazı günlüğünde yalnız durumun türü (adres ve ayrıntı remoteplay.log'da).
+        // Altyazı günlüğünde durumun türü ve kopmanın nedeni (adres remoteplay.log'da). Neden eskiden yazılmıyordu; GitHub
+        // #456'daki altyazi.log'da 30 kopmanın hiçbirinin nedeni görünmüyordu.
         if (state.Phase != SessionState.Phase)
             SubtitleLog.Write(state.Phase switch
             {
                 SessionPhase.Connecting => $"{ConsoleTitle}: bağlanıyor",
                 SessionPhase.Streaming => $"{ConsoleTitle}: bağlandı",
-                _ => $"{ConsoleTitle}: bağlantı yok",
+                _ => $"{ConsoleTitle}: bağlantı yok ({DisconnectLogName(state.Reason)})",
             });
         // PS5'in kendi tarafındaki çökme ayrıca yazılır: kullanıcının günlüğünde nedeni görünsün (GitHub #519).
         if (state.Reason?.Kind == DisconnectKind.ConsoleRemotePlayCrashed && SessionState.Reason?.Kind != DisconnectKind.ConsoleRemotePlayCrashed)

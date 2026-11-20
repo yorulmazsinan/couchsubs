@@ -242,6 +242,26 @@ public enum DisconnectReason: Equatable, Sendable {
     case consoleRemotePlayCrashed
     case other(String)
 
+    /// Altyazı günlüğüne (altyazi.log) yazılan kısa neden: adres ve ayrıntı olmadan, yalnız türü. Kullanıcılar çoğu zaman
+    /// yalnız altyazi.log gönderiyor; GitHub #456'daki günlükte 30 kopmanın hiçbirinin nedeni görünmüyordu.
+    public var logName: String {
+        switch self {
+        case .stopped: "stopped"
+        case .consoleAsleep: "consoleAsleep"
+        case .inUse: "inUse"
+        case .refused: "refused"
+        case .network: "network"
+        case .loginPasscode: "loginPasscode"
+        case .loginPasscodeIncorrect: "loginPasscodeIncorrect"
+        case .registrationInvalid: "registrationInvalid"
+        case .noPicture: "noPicture"
+        case .notFound: "notFound"
+        case .rejected(let code): code.map { String(format: "rejected 0x%08x", $0) } ?? "rejected"
+        case .consoleRemotePlayCrashed: "consoleRemotePlayCrashed"
+        case .other(let text): text.isEmpty ? "other" : "other: \(text)"
+        }
+    }
+
     /// Oturum ağ hatasıyla düştüyse ve PS5 aramaya da yanıt vermediyse neden "bulunamadı"dır (eskiden yalnız
     /// "Yeniden bağlanılıyor…" görünüyordu).
     static func classify(_ reason: DisconnectReason, searchAnswered: Bool, host: String) -> DisconnectReason {
