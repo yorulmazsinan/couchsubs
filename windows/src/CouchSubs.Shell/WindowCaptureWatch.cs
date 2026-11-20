@@ -17,6 +17,13 @@ public sealed class WindowCaptureWatch
     public static readonly TimeSpan ReportInterval = TimeSpan.FromSeconds(30);
     /// <summary>Bir karenin kopyalanması bundan uzun sürüyorsa takılmış sayılır (normalde birkaç milisaniye).</summary>
     public static readonly TimeSpan StuckCopy = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// Yakalama başladıktan bu kadar sonra okumaya hâlâ kare verilmediyse yedek yakalamaya (PrintWindow) geçilir. #566'daki
+    /// Windows 10 bilgisayarda OBS projektörü, PS Remote Play ve chiaki-ng pencerelerinin hiçbirinden okumaya tek kare
+    /// gelmedi (altyazi.log'da hiçbir pencere oturumunda "ilk kare" yok, yalnız doğrudan PS5'te var); kullanıcı yalnız test
+    /// altyazısını görüyordu.
+    /// </summary>
+    public static readonly TimeSpan FallbackAfter = TimeSpan.FromSeconds(5);
 
     private readonly object gate = new();
     private int arrived;
@@ -66,6 +73,12 @@ public sealed class WindowCaptureWatch
             Delivered = true;
             return true;
         }
+    }
+
+    /// <summary>Windows'un yakalaması <see cref="FallbackAfter"/> içinde okumaya kare veremedi: yedek yakalamaya geçilmeli.</summary>
+    public bool ShouldFallBack(TimeSpan sinceStart)
+    {
+        lock (gate) return !Delivered && sinceStart >= FallbackAfter;
     }
 
     /// <param name="sinceStart">Yakalamanın başladığından bu yana geçen süre.</param>

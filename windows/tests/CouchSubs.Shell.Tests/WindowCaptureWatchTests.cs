@@ -59,6 +59,33 @@ public class WindowCaptureWatchTests
         Assert.Null(watch.Tick(S(60)));
     }
 
+    /// <summary>#566: Windows 10'da pencereden hiç kare gelmedi; beş saniye sonra yedek yakalamaya (PrintWindow) geçilir.</summary>
+    [Fact]
+    public void FallsBackWhenNoFrameReachesReadingWithinFiveSeconds()
+    {
+        var watch = new WindowCaptureWatch();
+        Assert.False(watch.ShouldFallBack(S(4.9)));
+        Assert.True(watch.ShouldFallBack(S(5)));
+    }
+
+    [Fact]
+    public void FallsBackWhenFramesArriveButNoneCanBeCopied()
+    {
+        var watch = new WindowCaptureWatch();
+        watch.Arrived();
+        watch.CopyStarted(S(0.5));
+        Assert.True(watch.ShouldFallBack(S(6)));
+    }
+
+    [Fact]
+    public void WorkingCaptureNeverFallsBack()
+    {
+        var watch = new WindowCaptureWatch();
+        watch.Arrived();
+        Assert.True(watch.FrameDelivered());
+        Assert.False(watch.ShouldFallBack(S(60)));
+    }
+
     [Fact]
     public void ClockJumpWritesOneReport()
     {
