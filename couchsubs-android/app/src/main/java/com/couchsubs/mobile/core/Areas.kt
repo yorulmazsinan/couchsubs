@@ -658,6 +658,29 @@ class RegionWatcher(
             }
             return
         }
+        val frame = crop.frame
+        if (GameAreaPresets.isPreset(area.id) && frame != null && !UiPanel.hasText(frame)) {
+            // Hazır alanda arayüz kutusu yok (PS5 ana ekranı, başka oyun, oyun dünyası): OCR çalışmaz, gösterilen kutu kalkar.
+            state.candidate = null
+            state.lastRead = null
+            state.held = null
+            state.holds = 0
+            if (state.shown.isNotEmpty()) {
+                state.shown = ""
+                state.shownText = ""
+                state.shownIcons = 0
+                state.renderedKey = null
+                state.renderedText = null
+                state.renderedIcons = null
+                state.renderedBox = null
+                state.renderedLineHeight = null
+                state.renderedLayout = null
+                state.renderedBlocks = null
+                state.renderedStyles = null
+                synchronized(lock) { if (started == session) sender.sendRegion(area.id, "", null, null) }
+            }
+            return
+        }
         val reading = try {
             read(crop)
         } catch (error: Exception) {

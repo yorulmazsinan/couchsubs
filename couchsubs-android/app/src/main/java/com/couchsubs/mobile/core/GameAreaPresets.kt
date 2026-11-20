@@ -21,6 +21,9 @@ object GameAreaPresets {
         ),
     )
 
+    /** Hazır alanın kimliği mi (bu alanlar ancak [UiPanel.hasText] kanıtıyla okunur). */
+    fun isPreset(id: String): Boolean = id == HELP_ID || id == PHONE_ID
+
     /** Oyunun hazır alanları ([GameName.key] ile aranır); tabloda yoksa boş. */
     fun areas(game: String?): List<ExtraArea> = game?.let { table[GameName.key(it)] } ?: emptyList()
 
