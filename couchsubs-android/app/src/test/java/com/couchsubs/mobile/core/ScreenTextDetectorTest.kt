@@ -35,8 +35,9 @@ class ScreenTextDetectorTest {
     @Test
     fun boxThatStaysIsProposedAfterItSettles() {
         val detector = ScreenTextDetector()
-        for (t in 0L..200L step 100) assertTrue(detector.step(frame(t.toInt(), quest), t).isEmpty())
-        val areas = detector.step(frame(300, quest), 300)
+        // Zemin her karede değişiyor (kamera hareketi): arayüz kutusu 600 ms yerinde kalınca önerilir.
+        for (t in 0L..500L step 100) assertTrue(detector.step(frame(t.toInt(), quest), t).isEmpty())
+        val areas = detector.step(frame(600, quest), 600)
         assertEquals(1, areas.size)
         val area = areas.single()
         assertTrue(area.auto)
@@ -48,7 +49,7 @@ class ScreenTextDetectorTest {
         assertEquals(0.5 / 18, area.region.top, 1e-9)
         assertEquals(4.5 / 18, area.region.bottom, 1e-9)
         // Sonraki örneklerde kimlik korunur.
-        assertEquals(area.id, detector.step(frame(400, quest), 400).single().id)
+        assertEquals(area.id, detector.step(frame(700, quest), 700).single().id)
     }
 
     @Test
@@ -72,23 +73,23 @@ class ScreenTextDetectorTest {
     fun rejectedAreaIsNotProposedAgainUntilItChanges() {
         val detector = ScreenTextDetector()
         var areas = emptyList<ExtraArea>()
-        for (t in 0L..300L step 100) areas = detector.step(frame(t.toInt(), quest), t)
+        for (t in 0L..600L step 100) areas = detector.step(frame(t.toInt(), quest), t)
         detector.rejected(areas.single().id)
         assertTrue(detector.areas.isEmpty())
-        for (t in 400L..2000L step 100) assertTrue(detector.step(frame(t.toInt(), quest), t).isEmpty())
+        for (t in 700L..2000L step 100) assertTrue(detector.step(frame(t.toInt(), quest), t).isEmpty())
         // Görüntü değişince (başka yazı) yeniden aday olur.
         val other = intArrayOf(20, 24, 180, 84)
         var again = emptyList<ExtraArea>()
-        for (t in 2100L..2500L step 100) again = detector.step(frame(t.toInt(), other), t)
+        for (t in 2100L..2800L step 100) again = detector.step(frame(t.toInt(), other), t)
         assertEquals(1, again.size)
     }
 
     @Test
     fun areaIsRemoved700msAfterTheBoxDisappears() {
         val detector = ScreenTextDetector()
-        for (t in 0L..300L step 100) detector.step(frame(t.toInt(), quest), t)
-        for (t in 400L..900L step 100) assertEquals("t=$t", 1, detector.step(frame(t.toInt()), t).size)
-        assertTrue(detector.step(frame(1000), 1000).isEmpty())
+        for (t in 0L..600L step 100) detector.step(frame(t.toInt(), quest), t)
+        for (t in 700L..1200L step 100) assertEquals("t=$t", 1, detector.step(frame(t.toInt()), t).size)
+        assertTrue(detector.step(frame(1300), 1300).isEmpty())
     }
 
     @Test
@@ -141,5 +142,95 @@ class ScreenTextDetectorTest {
         }
         println("ScreenTextDetector 1920x1080: ortalama %.3f ms, en kötü %.3f ms (100 örnek)".format(times.average(), times.max()))
         assertEquals(1, detector.areas.size)
+    }
+
+    // --- Dünya yazısı (poster, plaka, tabela): yanlış pozitif ölçümü ---
+
+    /** Sabit dünya dokusu (yüksek sapmalı), [shift] piksel kaydırılmış (kamera kaydırması). */
+    private fun world(shift: Int): ByteArray {
+        val pixels = ByteArray(width * height)
+        for (y in 0 until height) for (x in 0 until width) {
+            val wx = x + shift
+            val h = (wx * 73856093) xor (y * 19349663)
+            pixels[y * width + x] = (40 + (h ushr 8) % 180).toByte()
+        }
+        return pixels
+    }
+
+    /** Dünyada duran yazı: dokulu zemin üstünde açık harf çizgileri (zemin düz değil). */
+    private fun poster(pixels: ByteArray, x0: Int, y0: Int, x1: Int, y1: Int) {
+        for (y in y0 until y1) for (x in x0 until x1) {
+            if (x < 0 || x >= width) continue
+            val text = (y - y0) % 8 in 3..4 && x % 4 != 0
+            val h = (x * 2654435761L.toInt()) xor (y * 40503)
+            pixels[y * width + x] = (if (text) 235 else 10 + (h ushr 4) % 90).toByte()
+        }
+    }
+
+    @Test
+    fun worldTextIsNeverProposedHudIs() {
+        var falsePositives = 0
+        // 1) Kamera kayıyor: dünya ve üstündeki poster her karede 8 px kayar, HUD kutusu (düz koyu zemin) sabit.
+        run {
+            val detector = ScreenTextDetector()
+            detector.debug = { if (System.getenv("DBG") != null) println(it) }
+            var areas = emptyList<ExtraArea>()
+            for (i in 0 until 20) {
+                val pixels = world(i * 8)
+                poster(pixels, 300 - i * 8, 200, 460 - i * 8, 260)
+                drawBox(pixels, width, quest)
+                areas = detector.step(pixels, i * 100L)
+            }
+            falsePositives += areas.count { it.region.top > 0.4 }
+            assertEquals(1, areas.size)
+            assertTrue(areas.single().region.top < 0.1)
+        }
+        // 2) Kamera durgun: dokulu duvardaki yazı (zemin düz değil) arayüz kanıtı vermez.
+        run {
+            val detector = ScreenTextDetector()
+            var areas = emptyList<ExtraArea>()
+            for (i in 0 until 20) {
+                val pixels = world(0)
+                poster(pixels, 300, 200, 460, 260)
+                drawBox(pixels, width, quest)
+                areas = detector.step(pixels, i * 100L)
+            }
+            falsePositives += areas.count { it.region.top > 0.4 }
+            assertEquals(1, areas.size)
+        }
+        println("Dünya yazısı yanlış pozitif: $falsePositives (hedef 0)")
+        assertEquals(0, falsePositives)
+    }
+
+    @Test
+    fun tiltedLineIsWorldText() {
+        val words = listOf(TextWord("GRAND", TextBox(0.1, 0.10, 0.3, 0.20)), TextWord("OPENING", TextBox(0.32, 0.16, 0.6, 0.26)))
+        val tilted = TextLine("GRAND OPENING TODAY", TextBox(0.1, 0.1, 0.6, 0.26), words = words)
+        val straight = TextLine("Go to the Saloon now", TextBox(0.1, 0.4, 0.6, 0.5),
+            words = listOf(TextWord("Go", TextBox(0.1, 0.4, 0.2, 0.5)), TextWord("now", TextBox(0.5, 0.41, 0.6, 0.5))))
+        assertEquals(listOf("Go to the Saloon now"), AutoText.clean(Reading(listOf(tilted, straight)), menu = false).lines.map { it.text })
+    }
+
+    @Test
+    fun textSeenElsewhereIsWorldTextForTheSession() {
+        val sent = mutableListOf<String>()
+        val sender = object : RegionSender {
+            override fun sendRegion(id: String, text: String, box: TextBox?, lineHeight: Double?) { sent.add(text) }
+            override fun clearRegions() {}
+        }
+        var box = TextBox(0.1, 0.1, 0.6, 0.2)
+        val rejected = mutableListOf<String>()
+        val watcher = RegionWatcher({ Reading(listOf(TextLine("Grand opening of the Saloon", box))) }, { "Salonun açılışı" }, sender)
+        watcher.onAutoRejected = { rejected.add(it) }
+        val area = ExtraArea("auto-1", ScreenTextDetector.NAME, CropRegion(0.0, 1.0, 0.0, 1.0), auto = true)
+        fun pass(value: Int) = watcher.pass(setOf(area.id), listOf(area to RegionWatcher.Crop(Unit, ByteArray(RegionSignature.WIDTH * RegionSignature.HEIGHT) { value.toByte() })))
+        pass(1)
+        // Kamera döndü: aynı yazı başka yerde ve boyda okundu.
+        box = TextBox(0.3, 0.4, 0.9, 0.55)
+        pass(100)
+        assertEquals(listOf("auto-1"), rejected)
+        box = TextBox(0.1, 0.1, 0.6, 0.2)
+        pass(1)
+        assertEquals(listOf("auto-1", "auto-1"), rejected)
     }
 }

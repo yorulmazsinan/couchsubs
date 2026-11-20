@@ -142,7 +142,7 @@ class RealFramesTest {
             val watcher = RegionWatcher({ crop -> read(lines, crop.pixels as CropRegion) }, run.engine, run.events)
             watcher.onAutoRejected = { run.detector.rejected(it) }
             var last = ""
-            if (System.getenv("COUCHSUBS_REAL_GRID") != null) run.detector.debug = { last = it; if (name == System.getenv("COUCHSUBS_REAL_GRID")) report.append("t=${run.now} $it ${run.detector.areas.map { a -> a.id }}\n") }
+            if (System.getenv("COUCHSUBS_REAL_GRID") != null) run.detector.debug = { last = it; if (name == System.getenv("COUCHSUBS_REAL_GRID") && (run.now % 1000 == 0L || it.startsWith("panel"))) report.append("t=${run.now} $it\n") }
             // 3 sn aynı kare (her örnek ±2 gürültülü).
             repeat(30) { step(run, image.noisy(it), lines, watcher) }
             if (last.isNotEmpty()) report.append("$last\n")

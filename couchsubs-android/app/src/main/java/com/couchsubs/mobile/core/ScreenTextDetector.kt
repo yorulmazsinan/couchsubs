@@ -40,6 +40,16 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         const val CALM_DEVIATION = 18.0
         /** Menüde en çok bu kadar alan (tekerlek menüde 8 etiket, başlık ve alt başlık). */
         const val MAX_MENU_AREAS = 12
+        /** Dünya yazısı: kamera hareketi bu süre içinde değişen karolarla ölçülür; arayüz yazısı bu kadar sabit kalmalı. */
+        const val WORLD_STABLE_MS = 600L
+        /** Bileşenin dışındaki karoların en az bu kadarı değiştiyse kamera hareket ediyor. */
+        const val CAMERA_MOVING_SHARE = 0.30
+        /** Panel zemini: zemin noktalarının parlaklık sapması en çok bu kadar (çerçeve çizgisi varsa [PANEL_EDGE_DEVIATION]). */
+        const val PANEL_DEVIATION = 22.0
+        const val PANEL_EDGE_DEVIATION = 30.0
+        /** Panel zemini: karoların en az bu kadarının zemin tonu ortak tondan en çok [PANEL_TONE] uzakta. */
+        const val PANEL_SAME_TONE = 0.70
+        const val PANEL_TONE = 20.0
         private const val WORDS = POINTS * POINTS / 64 // 576 bit maske: 9 × 64
         private const val TILES = COLUMNS * ROWS
 
@@ -60,7 +70,13 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     }
 
     /** Bir karenin karo izleri: maskeler (karo başına 3 Long), açık ve koyu nokta sayıları. */
-    class Sample internal constructor(val masks: LongArray, val bright: IntArray, val dark: IntArray, val deviation: FloatArray)
+    class Sample internal constructor(
+        val masks: LongArray, val bright: IntArray, val dark: IntArray, val deviation: FloatArray,
+        /** Koyu (<= 100) ve açık (>= 160) noktaların parlaklık toplamları ve kare toplamları (panel zemini kanıtı için). */
+        val darkSum: LongArray = LongArray(0), val darkSquares: LongArray = LongArray(0),
+        val brightSum: LongArray = LongArray(0), val brightSquares: LongArray = LongArray(0),
+        val mean: FloatArray = FloatArray(0),
+    )
 
     private class Tile {
         val last = LongArray(WORDS)
@@ -114,7 +130,12 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         val bright = IntArray(TILES)
         val dark = IntArray(TILES)
         val deviation = FloatArray(TILES)
-        if (width <= 0 || height <= 0) return Sample(masks, bright, dark, deviation)
+        val darkSum = LongArray(TILES)
+        val darkSquares = LongArray(TILES)
+        val brightSum = LongArray(TILES)
+        val brightSquares = LongArray(TILES)
+        val means = FloatArray(TILES)
+        if (width <= 0 || height <= 0) return Sample(masks, bright, dark, deviation, darkSum, darkSquares, brightSum, brightSquares, means)
         val xs = IntArray(COLUMNS * POINTS) { ((it + 0.5) * width / (COLUMNS * POINTS)).toInt().coerceIn(0, width - 1) }
         val ys = IntArray(ROWS * POINTS) { ((it + 0.5) * height / (ROWS * POINTS)).toInt().coerceIn(0, height - 1) }
         for (row in 0 until ROWS) for (column in 0 until COLUMNS) {
@@ -131,8 +152,12 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
                     if (value >= BRIGHT) {
                         masks[tile * WORDS + (bit shr 6)] = masks[tile * WORDS + (bit shr 6)] or (1L shl (bit and 63))
                         bright[tile]++
+                        brightSum[tile] += value
+                        brightSquares[tile] += value.toLong() * value
                     } else if (value <= DARK) {
                         dark[tile]++
+                        darkSum[tile] += value
+                        darkSquares[tile] += value.toLong() * value
                     }
                     bit++
                 }
@@ -140,8 +165,9 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             val count = (POINTS * POINTS).toDouble()
             val mean = sum / count
             deviation[tile] = kotlin.math.sqrt(maxOf(0.0, squares / count - mean * mean)).toFloat()
+            means[tile] = mean.toFloat()
         }
-        return Sample(masks, bright, dark, deviation)
+        return Sample(masks, bright, dark, deviation, darkSum, darkSquares, brightSum, brightSquares, means)
     }
 
     /**
@@ -175,9 +201,23 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         // Açık zeminli karolar (seçili satır) büyük açık nesneleri (kumanda resmi) etiketlerle birleştirip bileşeni
         // %35'i aşırırsa o bileşen yalnız koyu zeminli karolarıyla yeniden kurulur: etiketler kaybolmaz.
         // Ayrılan parçalardan bölgeleri kesişenler yeniden birleşir (bir etiketin karoları tek alan olsun).
+        // Hâlâ büyükse (durgun dokulu sahne arayüz kutusuna değiyor) yalnız zemini düz karolarla kurulur.
+        fun flat(index: Int): Boolean {
+            val n = if (inverse[index]) sample.bright[index] else sample.dark[index]
+            if (n <= 0 || sample.darkSum.isEmpty()) return false
+            val sum = (if (inverse[index]) sample.brightSum[index] else sample.darkSum[index]).toDouble()
+            val squares = (if (inverse[index]) sample.brightSquares[index] else sample.darkSquares[index]).toDouble()
+            val mean = sum / n
+            // Ara tonlar (ne koyu ne açık) azsa karo yazılı düz zemindir; dokulu sahnede ara ton çoktur.
+            val middle = POINTS * POINTS - sample.bright[index] - sample.dark[index]
+            return middle <= 0.2 * POINTS * POINTS && kotlin.math.sqrt(maxOf(0.0, squares / n - mean * mean)) <= PANEL_DEVIATION
+        }
+        fun only(members: List<Int>, keep: (Int) -> Boolean) =
+            components(BooleanArray(TILES).also { mask -> members.forEach { if (keep(it)) mask[it] = true } })
         fun split(list: List<List<Int>>): List<List<Int>> = joined(list.flatMap { members ->
-            if (regionOf(members) != null || members.none { inverse[it] }) listOf(members)
-            else components(BooleanArray(TILES).also { mask -> members.forEach { if (!inverse[it]) mask[it] = true } })
+            if (regionOf(members) != null) return@flatMap listOf(members)
+            val normal = if (members.any { inverse[it] }) only(members) { !inverse[it] } else listOf(members)
+            normal.flatMap { part -> if (regionOf(part) != null) listOf(part) else only(part, ::flat) }
         })
         var all = split(components(candidate))
         debug?.invoke("bileşenler: " + all.map { m -> val c = m.map { it % COLUMNS }; val r = m.map { it / COLUMNS }
@@ -200,11 +240,28 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         // Menüde gezinirken (seçim çerçevesi kayınca) alanlar 700 ms kuralıyla korunur, kutular yanıp sönmez.
         autos.removeAll { now - it.seen >= GONE_MS || (it.menu && !menu && it.seen != now) }
         // Menüde tek karoluk kısa etiketler ("OFF", "ON") de alan olur.
-        val components = all
+        var components = all
             .filter { it.size >= if (menu) 1 else 2 }
             .mapNotNull { tilesOf -> regionOf(tilesOf)?.let { tilesOf to it } }
             .sortedByDescending { it.first.size }
         val limit = if (menu) MAX_MENU_AREAS else MAX_AREAS
+        // Dünya yazısı elemesi (poster, plaka, tabela): menü dışında bileşen ancak arayüz kanıtıyla alan olur.
+        if (!menu) {
+            val inside = BooleanArray(TILES)
+            components.forEach { (members, _) -> members.forEach { inside[it] = true } }
+            var outside = 0
+            var moving = 0
+            for (index in 0 until TILES) if (!inside[index]) {
+                outside++
+                if (now - tiles[index].stableSince < WORLD_STABLE_MS) moving++
+            }
+            val cameraMoving = outside > 0 && moving >= CAMERA_MOVING_SHARE * outside
+            components = components.filter { (members, _) ->
+                // Kamera hareket ederken yerinde kalan yazı arayüzdür; yeni beliren yazı 600 ms sabit kalmalı.
+                (!cameraMoving || members.all { now - tiles[it].stableSince >= WORLD_STABLE_MS }) &&
+                    panel(members, inverse, sample)
+            }
+        }
         // Her alan bir örnekte en çok bir bileşenle eşleşir: en çok ortak karosu olanla (bölge kesişimi yedek). Büyük bir
         // bileşen yanındaki küçük alanı ele geçirip kendi alanı açılamıyordu (kontrol şemasının orta sütunu).
         // Önce ortak karoyla, kalanlar bölge kesişimiyle eşleşir.
@@ -280,6 +337,44 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             if (sample.deviation[index] < CALM_DEVIATION) calm++
         }
         return outside > 0 && calm >= MENU_CALM_SHARE * outside
+    }
+
+    /**
+     * Arayüz kanıtı (panel zemini): bileşenin zemin noktaları (koyu zeminde koyu, açık zeminde açık noktalar) düz ya da
+     * yarı saydam düzdür: sapması <= 22 ve karoların %70'inin zemin tonu ortak tonun ±20'sinde. Bileşenin çevresi
+     * zeminden belirgin farklıysa (kutunun dikdörtgen kenarı) sapma eşiği 30'a gevşer. Doku, harita ya da sahne zemini
+     * üstündeki yazı (poster, tabela) kanıt değildir.
+     */
+    private fun panel(members: List<Int>, inverse: BooleanArray, sample: Sample): Boolean {
+        if (sample.mean.isEmpty()) return true
+        // Karo başına zemin noktaları: koyu zeminli karoda koyu, açık zeminlide açık noktalar.
+        class Ground(val n: Double, val sum: Double, val squares: Double) { val tone get() = sum / n }
+        val grounds = members.mapNotNull { index ->
+            val n = (if (inverse[index]) sample.bright[index] else sample.dark[index]).toDouble()
+            if (n <= 0) null else Ground(n,
+                (if (inverse[index]) sample.brightSum[index] else sample.darkSum[index]).toDouble(),
+                (if (inverse[index]) sample.brightSquares[index] else sample.darkSquares[index]).toDouble())
+        }
+        if (grounds.isEmpty()) return false
+        // Ortak ton: karoların ortanca tonu. Zemin kümesi bu tondaki karolardır (kutunun kenarına taşan harita ya da
+        // yer adı karoları kümeye girmez); sapma bu kümeden ölçülür.
+        val median = grounds.map { it.tone }.sorted()[grounds.size / 2]
+        val same = grounds.filter { kotlin.math.abs(it.tone - median) <= PANEL_TONE }
+        val sameTone = same.size >= PANEL_SAME_TONE * grounds.size
+        val count = same.sumOf { it.n }
+        val ground = same.sumOf { it.sum } / count
+        val deviation = kotlin.math.sqrt(maxOf(0.0, same.sumOf { it.squares } / count - ground * ground))
+        val set = members.toHashSet()
+        val ring = members.flatMap { index ->
+            val column = index % COLUMNS
+            listOfNotNull(
+                if (column > 0) index - 1 else null, if (column < COLUMNS - 1) index + 1 else null,
+                (index - COLUMNS).takeIf { it >= 0 }, (index + COLUMNS).takeIf { it < TILES },
+            )
+        }.filter { it !in set }.distinct()
+        val edge = ring.isNotEmpty() && ring.count { kotlin.math.abs(sample.mean[it] - ground) > 25 } >= 0.6 * ring.size
+        debug?.invoke("panel ${members.size}k zemin %.0f sapma %.1f aynıTon %d/%d kenar $edge".format(ground, deviation, same.size, grounds.size))
+        return sameTone && deviation <= if (edge) PANEL_EDGE_DEVIATION else PANEL_DEVIATION
     }
 
     /** Genişletilmiş bölgeleri kesişen bileşenler birleşir; birleşimi çok büyük olan ayrı kalır. */
@@ -411,6 +506,14 @@ object AutoText {
     private fun isLatin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĞğİıŞş"
 
     private fun line(line: TextLine): TextLine? {
+        // Eğik ya da perspektifli satır (sözcüklerin dikey ortaları kayıyor) oyun dünyasındadır (poster, tabela).
+        val words = line.words
+        if (words != null && words.size >= 2) {
+            val first = words.minBy { it.box.left }.box
+            val last = words.maxBy { it.box.right }.box
+            val height = words.map { it.box.bottom - it.box.top }.sorted()[words.size / 2]
+            if (height > 0 && kotlin.math.abs((first.top + first.bottom) / 2 - (last.top + last.bottom) / 2) > 0.15 * height) return null
+        }
         var text = line.text.map { homoglyphs[it] ?: it }.joinToString("")
         val letters = text.filter { it.isLetter() }
         if (letters.isNotEmpty() && letters.count { !isLatin(it) } > 0.3 * letters.length) return null

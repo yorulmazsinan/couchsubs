@@ -268,6 +268,9 @@ class RegionWatcher(
         /** Otomatik ekran yazısı alanı varken iki tur arasındaki en uzun süre. */
         const val AUTO_INTERVAL_MS = 500L
 
+        /** Dünya yazısı sayılan yazı bu kadar süre bir daha çevrilmez (10 dk). */
+        const val WORLD_TEXT_MS = 10 * 60 * 1000L
+
         /** Oturum terim sözlüğünde en çok bu kadar etiket tutulur. */
         private const val SESSION_TERMS = 2000
 
@@ -554,6 +557,32 @@ class RegionWatcher(
      */
     @Volatile var prefetchesTranslations = false
 
+    /**
+     * Dünya yazısı listesi (yazı anahtarı → ne zamana dek): kamera hareket ederken başka bir yerde ya da boyda yeniden
+     * okunan yazı (poster, plaka) oyun dünyasındadır; oturumda 10 dakika bir daha çevrilmez. Son görülen yerler de burada.
+     */
+    private val worldText = HashMap<String, Long>()
+    private val lastPlace = LinkedHashMap<String, TextBox>()
+
+    private fun isWorldText(candidate: Candidate): Boolean = synchronized(worldText) {
+        val now = clock()
+        val key = candidate.text
+        if ((worldText[key] ?: 0L) > now) return true
+        val box = candidate.box ?: return false
+        val last = lastPlace[key]
+        lastPlace[key] = box
+        if (lastPlace.size > 256) lastPlace.remove(lastPlace.keys.first())
+        if (last == null) return false
+        val height = box.bottom - box.top
+        val lastHeight = last.bottom - last.top
+        val moved = kotlin.math.abs((box.top + box.bottom) / 2 - (last.top + last.bottom) / 2) > lastHeight * 0.5 ||
+            kotlin.math.abs((box.left + box.right) / 2 - (last.left + last.right) / 2) > lastHeight
+        val scaled = lastHeight > 0 && (height / lastHeight > 1.2 || height / lastHeight < 1 / 1.2)
+        if (!moved && !scaled) return false
+        worldText[key] = now + WORLD_TEXT_MS
+        return true
+    }
+
     /** Otomatik alan okundu ama yazı yok ya da gürültü ([ScreenTextNoise]): bulucu o karoları reddeder. */
     @Volatile var onAutoRejected: ((String) -> Unit)? = null
 
@@ -644,7 +673,8 @@ class RegionWatcher(
         val text = if (area.auto) AutoText.clean(reading, area.menu) else reading
         var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu)
         if (area.auto) {
-            if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) }, area.menu)) {
+            if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) }, area.menu) ||
+                (!area.menu && isWorldText(candidate))) {
                 // Sayaç, harita, kısa etiket ya da yazısız kutu: çevrilmez; alan bir sonraki turda listeden çıkar.
                 state.candidate = null
                 state.lastRead = null
