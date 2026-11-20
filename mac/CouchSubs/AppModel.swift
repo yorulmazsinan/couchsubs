@@ -627,6 +627,8 @@ final class AppModel: ObservableObject {
     /// Çalışan okuma hattının dilleri.
     @Published private(set) var activeLanguages: (source: String, target: String)?
     private var server = SubtitleServer(port: AppIdentity.serverPort)
+    /// Oturumun konuşan renkleri (TV'ye gidenle aynı; bilgisayar ekranındaki pencereler buradan boyar).
+    var speakerBook: SpeakerColorBook { server.speakerBook }
     private var serverStarted = false
     /// Sunucunun gerçekten dinlediği port (8787 doluysa rastgele bir port).
     @Published private(set) var serverPort: UInt16 = AppIdentity.serverPort
@@ -1545,6 +1547,8 @@ final class AppModel: ObservableObject {
 
         makePipeline()
         sessionStartedAt = Date()
+        // Konuşan renkleri oturum başına: yeni oturumda kişiler yeniden sıralanır.
+        server.speakerBook.reset()
         lastMetrics = nil
         subtitleOffTip.reset()
         updateSubtitleOffTip()

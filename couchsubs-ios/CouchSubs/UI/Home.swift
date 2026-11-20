@@ -386,7 +386,7 @@ struct SubtitleScreen: View {
                     // açıksa güncel satırdaki "Mattia: …" o konuşanın renginde (bkz. SpeakerColors).
                     let previous = index < model.phoneLines.count - 1
                     Self.subtitleText(wrapped.text, colored: model.settings.speakerColors && !previous && !line.paragraphs,
-                                      base: previous ? Mobile.Palette.secondary : textColor)
+                                      base: previous ? Mobile.Palette.secondary : textColor, book: model.speakerBook)
                         .font(Mobile.TypeScale.subtitle(landscape: true, scale: scale * CGFloat(wrapped.scale)))
                         .opacity(line.fading ? 0.4 : 1)
                         .multilineTextAlignment(.center)
@@ -486,9 +486,9 @@ struct SubtitleScreen: View {
     }
 
     /// Konuşana göre renkli altyazı: adlı satır (bölünmüş devamıyla) konuşanın renginde, diğerleri `base` renginde.
-    private static func subtitleText(_ text: String, colored: Bool, base: Color) -> Text {
+    private static func subtitleText(_ text: String, colored: Bool, base: Color, book: SpeakerColorBook? = nil) -> Text {
         guard colored else { return Text(verbatim: text).foregroundColor(base) }
-        return SpeakerColors.segments(in: text).reduce(Text(verbatim: "")) { result, segment in
+        return SpeakerColors.segments(in: text, book: book).reduce(Text(verbatim: "")) { result, segment in
             let rgb = segment.color.flatMap(SpeakerColors.rgb)
             let color = rgb.map { Color(.sRGB, red: $0.red, green: $0.green, blue: $0.blue) } ?? base
             return result + Text(verbatim: segment.text).foregroundColor(color)

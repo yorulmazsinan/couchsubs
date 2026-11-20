@@ -137,7 +137,7 @@ struct StreamWindowView: View {
         let shown: Double = line.fading ? 0 : 1
         let colored = model.settings.speakerColors && !line.paragraphs
         let text = SubtitleOverlayView.subtitleText(wrapped.text, colored: colored,
-                                                    base: SubtitleOverlayView.color(style.textColor))
+                                                    base: SubtitleOverlayView.color(style.textColor), book: model.speakerBook)
             .font(.system(size: size, weight: weight))
         return text
             .opacity(textOpacity)

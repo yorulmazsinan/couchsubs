@@ -290,7 +290,7 @@ struct SubtitleOverlayView: View {
         let corner: CGFloat = band ? 0 : 10 * scale
         let shown: Double = line.fading ? 0 : opacity
         let colored = model.settings.speakerColors && !line.paragraphs
-        let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor))
+        let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor), book: model.speakerBook)
             .font(.system(size: size, weight: weight))
         return text
             .multilineTextAlignment(alignment)
@@ -352,9 +352,9 @@ struct SubtitleOverlayView: View {
 
     /// Altyazı yazısı. Konuşana göre renk açıksa "Mattia: …" satırı (bölünmüş devamıyla) o konuşanın renginde
     /// (bkz. `SpeakerColors`); adsız satırlar ve görev paneli gibi paragraflar `base` renginde kalır.
-    static func subtitleText(_ text: String, colored: Bool, base: Color) -> Text {
+    static func subtitleText(_ text: String, colored: Bool, base: Color, book: SpeakerColorBook? = nil) -> Text {
         guard colored else { return Text(verbatim: text).foregroundColor(base) }
-        return SpeakerColors.segments(in: text).reduce(Text(verbatim: "")) { result, segment in
+        return SpeakerColors.segments(in: text, book: book).reduce(Text(verbatim: "")) { result, segment in
             let color = segment.color.flatMap(speakerColor) ?? base
             return result + Text(verbatim: segment.text).foregroundColor(color)
         }

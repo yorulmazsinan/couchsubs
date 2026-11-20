@@ -177,6 +177,8 @@ final class PhoneModel: ObservableObject {
     private let store: AppStore
     private let defaults: UserDefaults
     private var server = SubtitleServer(port: AppIdentity.serverPort)
+    /// Oturumun konuşan renkleri (TV'ye gidenle aynı; telefondaki altyazı ekranı buradan boyar).
+    var speakerBook: SpeakerColorBook { server.speakerBook }
     private var serverStarted = false
     private var serverRestarting = false
     @Published private(set) var serverPort: UInt16 = AppIdentity.serverPort
@@ -530,6 +532,8 @@ final class PhoneModel: ObservableObject {
         // Eskiden hata try? ile yutuluyordu: sunucu açılamazsa çeviri "sürüyor" görünüp TV hiç bağlanamıyordu.
         await ensureServer()
         server.sendStyle(settings.style)
+        // Konuşan renkleri oturum başına: yeni oturumda kişiler yeniden sıralanır.
+        server.speakerBook.reset()
         makePipeline()
         let session: StreamControlling
         let consoleName: String

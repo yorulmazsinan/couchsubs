@@ -172,6 +172,9 @@ public final class SubtitleServer: @unchecked Sendable {
     }
     private var colorsEnabled = false
 
+    /// Oturumun konuşan renkleri (v2; çeviri başlayınca sıfırlanır). Bilgisayar ekranındaki pencereler de buradan boyar.
+    public let speakerBook = SpeakerColorBook()
+
     /// Bağlantı canlı tutma çerçevesi: yorum satırını EventSource görmez; adlı "ping" olayını TV görür ve
     /// bir süre gelmezse yarı açık kalmış bağlantıyı kapatıp yeniden bağlanır (Windows ile aynı).
     static let pingFrame = ": ping\n\nevent: ping\ndata: {}\n\n"
@@ -301,7 +304,7 @@ public final class SubtitleServer: @unchecked Sendable {
         if let box { json["box"] = Self.json(box) }
         if replaces { json["replace"] = true }
         if speakerColors {
-            let speakers = SpeakerColors.speakers(in: text)
+            let speakers = SpeakerColors.speakers(in: text, book: speakerBook)
             if !speakers.isEmpty { json["speakers"] = speakers.map { ["name": $0.name, "color": $0.color] } }
         }
         broadcast(event: "subtitle", json: json)

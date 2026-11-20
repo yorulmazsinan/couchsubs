@@ -12,12 +12,17 @@ public enum SpeakerColors {
 
     /// Konuşanın rengi ("#RRGGBB"): küçük harfli adın UTF-16 birimleri üzerinde FNV-1a (32 bit).
     public static func color(for name: String) -> String {
+        palette[Int(hash(name.trimmingCharacters(in: .whitespaces).lowercased()) % UInt32(palette.count))]
+    }
+
+    /// FNV-1a (32 bit), UTF-16 birimleri üzerinde.
+    static func hash(_ key: String) -> UInt32 {
         var hash: UInt32 = 2_166_136_261
-        for unit in name.trimmingCharacters(in: .whitespaces).lowercased().utf16 {
+        for unit in key.utf16 {
             hash ^= UInt32(unit)
             hash = hash &* 16_777_619
         }
-        return palette[Int(hash % UInt32(palette.count))]
+        return hash
     }
 
     /// "#RRGGBB" → 0–1 arası bileşenler; geçersizse nil.
@@ -31,18 +36,20 @@ public enum SpeakerColors {
         public var color: String
     }
 
-    /// Satır başlarındaki konuşan adları (tekrarsız, ilk görünüş sırasıyla) ve renkleri.
-    public static func speakers(in text: String) -> [Speaker] {
+    /// Satır başlarındaki konuşan adları (tekrarsız, ilk görünüş sırasıyla) ve renkleri. `book`: oturumun renk defteri
+    /// (v2); verilmezse addan hesaplanan renk.
+    public static func speakers(in text: String, book: SpeakerColorBook? = nil) -> [Speaker] {
         var seen = Set<String>()
         return text.components(separatedBy: "\n").compactMap { line in
             guard let name = speaker(line), seen.insert(name).inserted else { return nil }
-            return Speaker(name: name, color: color(for: name))
+            return Speaker(name: name, color: book?.color(name) ?? color(for: name))
         }
     }
 
     /// Çeviride ad gibi görünen Türkçe başlıklar ("Hedef: Arabaya bin."); konuşan sayılmaz, renklenmez (Android ile aynı).
     static let turkishHeadings: Set<String> = [
         "hedef", "görev", "not", "ipucu", "uyarı", "ödül", "ödüller", "konum", "bölüm", "güncelleme", "bilgi", "durum",
+        "soru", "cevap",
     ]
 
     /// Satırın baştaki konuşan adı; Türkçe başlıksa nil.
@@ -60,12 +67,12 @@ public enum SpeakerColors {
 
     /// Metnin renkli parçaları. Konuşan adıyla başlayan satır, sonraki adlı satıra kadar (bölünmüş devam satırları
     /// dahil) o konuşanın renginde; ilk adlı satırdan öncekiler renksiz. Parçalar birleşince metnin kendisi çıkar.
-    public static func segments(in text: String) -> [Segment] {
+    public static func segments(in text: String, book: SpeakerColorBook? = nil) -> [Segment] {
         var result: [Segment] = []
         var color: String?
         for (index, line) in text.components(separatedBy: "\n").enumerated() {
             if let name = speaker(line) {
-                color = self.color(for: name)
+                color = book?.color(name) ?? self.color(for: name)
             } else if SpeakerPrefix.split(line) != nil {
                 // Türkçe başlık ("Hedef: …") önceki konuşanın satırı değildir.
                 color = nil
