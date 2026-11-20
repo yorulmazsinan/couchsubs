@@ -6,13 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **PS5'e bağlanma ve eşleştirme daha güvenilir (Windows, Mac, iPhone, Android, #590):** Eşleştirmede PS5 yanıt verip bağlantı kopunca kısa aralıklarla yeniden deneniyor. "Network error" yerine sorunun asıl nedeni yazıyor: PS5'te eşleştirme ekranı açık değilse, VPN ya da güvenlik duvarı engelliyorsa ya da cihazda boş bağlantı noktası kalmadıysa ne yapacağınız ekranda çıkıyor.
-- **"PS5 bağlanmayı reddetti" ayrıldı (bütün uygulamalar):** PS5 yeni uyanmışsa ya da adresi değişmişse CouchSubs artık eşlemeyi yenilemenizi istemiyor; PS5'i ağda yeniden arayıp kendiliğinden bağlanıyor. Yalnız eşleme gerçekten bozulduğunda "yeniden eşleyin" yazıyor.
-- **LG TV'de ekran koruyucu (TV uygulaması 0.9.40, #555):** Bazı LG TV'lerde oyun sırasında açılan saat ekranı için TV uygulaması ekran koruyucu isteğine her açılışta yeniden kaydoluyor. Bilgisayardaki CouchSubs beta.60'a güncellenince TV uygulaması kendiliğinden 0.9.40'a güncellenir.
-- **Android telefonda bağlantı ve kilit ekranı (#553):** Telefon kilitlenince Wi-Fi güç tasarrufuna geçip çeviriyi durdurmuyor; pil kısıtlaması açıksa ana ekranda uyarı ve "Pil ayarını aç" düğmesi çıkıyor. PSN girişi takılırsa en geç 45 saniyede hata ve "Yeniden dene" görünüyor. Samsung TV kurulum ekranı bellek yetmeyince uygulamayı kapatmıyor, siyah ekranda kalmıyor. "Paketleri güncelle" uygulamada zaten olan paketleri yeniden indirmiyor, GTA 6 paketi daha çabuk iniyor.
-- **Ek alanlarda kontrolcü simgeleri ve kısa komutlar (Windows, Mac, iPhone, #573):** Tuş simgeleri korunuyor, sık geçen kısa komutlar hazır sözlükten anında Türkçeleşiyor. Katkı: erayslyrt00.
-- **Paket sunucusuna yedek adres (bütün uygulamalar, #589):** Bazı ağların ulaşamadığı ana adres yerine paketler yedek adresten iniyor.
-- **Mac:** Güncelleme imzası yenilendi. Mac'te uygulama içi güncelleme bu sürümü bulamazsa CouchSubs'ı bir kez siteden indirip üstüne kurun; sonraki güncellemeler yine kendiliğinden gelir. Mac'te PS5 arama günlüğü artık şişmiyor.
+- **GTA 6'da oyun telefonu çevirisi (deneysel, Windows ve Mac, #565, #600):** Oyundaki telefon açılınca mesajlar ve yanıt seçenekleri kendiliğinden çevriliyor; Türkçesi, telefon ekranından alınan renklerle özgün yazının üstünde görünüyor. Katkı: lones8888.
+- **GTA 6 için 39 bin satırlık topluluk çevirisi (#614):** Elle düzeltilmiş çeviriler pakete ekleniyor; Windows'ta GTA ekran yazıları kısmi eşleşmeyle ve kısa satırlarda benzerlikle de bulunuyor. Katkı: lones8888.
+- **Altyazı okunmuyorsa (#613):** Oyun penceresinden görüntü gelmezse CouchSubs yedek yakalamaya geçiyor; oyunun kendi altyazısı kapalıysa "oyunun altyazısını açın" ipucu çıkıyor.
+- **Paketleri şimdi güncelle (Android, #622):** Güncellerken sayfa bekleme perdesiyle örtülüyor, bitince kaç paketin kaç satırla güncellendiği ya da "Paketler zaten güncel" yazıyor. Liste her seferinde sunucudan taze geliyor.
+- **Android TV'de uygulamanın kapanması (TV uygulaması 0.9.41, #616):** Bazı TV'lerde (ör. Philips, Android 8) altyazı sayfasının web görünümü kapanınca uygulama artık kapanmıyor, sayfa kendiliğinden yeniden açılıyor.
+- **Linux sunucusu (#617):** Docker imajı derleniyor ve Android TV uygulamasını içeriyor; panelde Android TV seçilebiliyor, TV adresi elle yazılabiliyor, altyazı portu değiştirilebiliyor. Windows'ta 8787 portu doluysa Android TV yine bağlanıyor.
+
+**beta.60'ta gelenler:** PS5'e bağlanma ve eşleştirmenin daha güvenilir olması, "PS5 bağlanmayı reddetti"nin kendiliğinden yeniden bağlanması, LG TV'de ekran koruyucu (TV uygulaması 0.9.40), Android telefonda kilit ekranı ve PSN girişi düzeltmeleri, ek alanlarda kontrolcü simgeleri (katkı: erayslyrt00), paket sunucusuna yedek adres, Mac güncelleme imzasının yenilenmesi.
 
 **beta.59'da gelenler:** 4K Samsung TV'de PS5 görüntüsünün ekranı kaplaması (TV uygulaması 0.9.39), telefonda paket güncelleme hatasının görünmesi, ek alan çevirilerinin daha doğru olması (katkı: erayslyrt00), Windows güncelleme kartında sürüm notları (katkı: erayslyrt00), pencere yakalama tanısı, ortak havuzun daha az veri göndermesi.
 
