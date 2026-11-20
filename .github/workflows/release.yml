@@ -63,6 +63,9 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          # Mac yapı numarası commit sayısıdır (package-mac.sh); sığ klonda 1 çıkar ve Sparkle güncellemeyi eski sayar (#696).
+          fetch-depth: 0
 
       - name: chiaki-ng
         run: git submodule update --init --depth 1 third-party/chiaki-ng
