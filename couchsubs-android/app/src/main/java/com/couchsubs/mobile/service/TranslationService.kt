@@ -177,6 +177,12 @@ class TranslationService : Service() {
     private var reusedReads = 0
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLocks: List<WifiManager.WifiLock> = emptyList()
+    /**
+     * Oynanan oyunun hazır ek alanları ([com.couchsubs.mobile.core.GameAreaPresets]); kullanıcının kendi ek alanı yoksa
+     * sürekli okunanlara eklenir. Ayarlara yazılmaz; oyun ya da ayar değişince yeniden hesaplanır.
+     */
+    @Volatile private var presetAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
+    @Volatile private var playedGame: String? = null
     /** Altyazı bölgesi ve ek alanlar (Ayarlar › Altyazı alanı); çeviri sürerken değişirse hemen yenisi okunur. */
     @Volatile private var region = CropRegion()
     @Volatile private var extraAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
@@ -197,6 +203,12 @@ class TranslationService : Service() {
     @Volatile private var targetListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Hazır alanlar: ayar açık, oyunun tabloda satırı var, kullanıcının etkin ek alanı ve etkin alan profili yok. */
+    private fun refreshPresetAreas() {
+        presetAreas = com.couchsubs.mobile.core.GameAreaPresets.active(
+            settings.gameAreaPresets, playedGame, settings.areaPreset, settings.extraAreas, settings.activeAreaProfile != null)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -320,9 +332,11 @@ class TranslationService : Service() {
         targetListener = settings.onTargetChanged { server?.sendsToTv = settings.target == SubtitleTarget.TV }
         region = settings.region
         extraAreas = settings.extraAreas.watched(settings.areaPreset)
+        refreshPresetAreas()
         areasListener = settings.onAreasChanged {
             region = settings.region
             extraAreas = settings.extraAreas.watched(settings.areaPreset)
+            refreshPresetAreas()
         }
         try {
             subtitlePort = subtitleServer.start()
@@ -434,7 +448,7 @@ class TranslationService : Service() {
                 }
             }
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
-            regionWatcher?.offer(extraAreas, { r ->
+            regionWatcher?.offer(extraAreas + presetAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray)
                 }
@@ -457,6 +471,8 @@ class TranslationService : Service() {
             PlayedGame.packs = library
             PlayedGame.onChange = { game ->
                 regionWatcher?.reset()
+                playedGame = game?.name
+                refreshPresetAreas()
                 linePool.setGame(game)
                 // Yeni oyun: o oyunun (havuzdan otomatik) paketi sunucuda yeni çıkmış olabilir; inerse bu oturumun
                 // paketleri hemen yeniden okunur (iPhone'daki gibi).

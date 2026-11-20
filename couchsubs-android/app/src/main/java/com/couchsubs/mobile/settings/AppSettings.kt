@@ -168,6 +168,14 @@ class AppSettings(context: Context) : AreaStore {
         get() = prefs.getBoolean("showSpeakerNames", true)
         set(value) = prefs.edit().putBoolean("showSpeakerNames", value).apply()
 
+    /**
+     * "Bilinen oyunlarda hazır alanları kullan": tabloda satırı olan oyunda (GTA 6) yardım kutusu ve mesajlar
+     * kendiliğinden okunur ([com.couchsubs.mobile.core.GameAreaPresets]). Eski kayıtlarda yoktur; açık başlar.
+     */
+    var gameAreaPresets: Boolean
+        get() = prefs.getBoolean("gameAreaPresets", true)
+        set(value) = prefs.edit().putBoolean("gameAreaPresets", value).apply()
+
     /** "Konuşana göre renk": konuşan adlı satır (ad ve cümle) o konuşanın renginde görünür. Eski kayıtlarda yoktur; açık başlar. */
     var speakerColors: Boolean
         get() = prefs.getBoolean("speakerColors", true)
@@ -317,7 +325,7 @@ class AppSettings(context: Context) : AreaStore {
      */
     fun onAreasChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "region" || key == "areaPreset" || key == "extraAreas") action()
+            if (key == "region" || key == "areaPreset" || key == "extraAreas" || key == "activeAreaProfile" || key == "gameAreaPresets") action()
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return listener
