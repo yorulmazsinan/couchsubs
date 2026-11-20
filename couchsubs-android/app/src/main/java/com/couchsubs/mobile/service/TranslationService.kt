@@ -172,7 +172,7 @@ class TranslationService : Service() {
     private var lastOcrMs: Int? = null
     private var reusedReads = 0
     private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null
+    private var wifiLocks: List<WifiManager.WifiLock> = emptyList()
     /** Altyazı bölgesi ve ek alanlar (Ayarlar › Altyazı alanı); çeviri sürerken değişirse hemen yenisi okunur. */
     @Volatile private var region = CropRegion()
     @Volatile private var extraAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
@@ -741,9 +741,17 @@ class TranslationService : Service() {
     private fun acquireLocks() {
         // Ekran kapalıyken de Wi-Fi uyumasın ve işlemci kareleri işlemeye devam etsin.
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CouchSubs:translate").apply { acquire() }
-        @Suppress("DEPRECATION")
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).createWifiLock(mode, "CouchSubs").apply { acquire() }
+        wifiLocks = wifiLockModes(Build.VERSION.SDK_INT).mapNotNull { mode ->
+            try {
+                (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).createWifiLock(mode, "CouchSubs:$mode").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "Wi-Fi kilidi alınamadı ($mode)", error)
+                null
+            }
+        }
     }
 
     private val packsUsed = java.util.Collections.synchronizedSet(mutableSetOf<String>())
@@ -808,11 +816,25 @@ class TranslationService : Service() {
         screenReader = null
         if (current === this) current = null
         wakeLock?.takeIf { it.isHeld }?.release()
-        wifiLock?.takeIf { it.isHeld }?.release()
+        wifiLocks.forEach { lock -> runCatching { if (lock.isHeld) lock.release() } }
+        wifiLocks = emptyList()
         LiveState.update { it.copy(running = false, phase = "", streaming = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
         super.onDestroy()
     }
 }
+
+/**
+ * Çeviri sürerken tutulan Wi-Fi kilitleri. Android 10+'da yalnız WIFI_MODE_FULL_LOW_LATENCY tutuluyordu; bu kilit yalnız
+ * ekran açık ve uygulama ön plandayken etkilidir: telefon kilitlenince hiçbir kilit kalmıyor, Wi-Fi güç tasarrufuna
+ * geçiyor, PS5 görüntüsü takılıp bağlantı kopabiliyordu. WifiManager belgesindeki gibi ikisi birlikte tutulur: ekran
+ * açıkken düşük gecikme, kapalıyken ya da arka plandayken HIGH_PERF etkilidir. (Android 14 ve sonrası HIGH_PERF'i de düşük
+ * gecikme kısıtlarıyla uygulayabilir; orada ekran kapalıyken Wi-Fi'ın uykuya geçmesini uygulama önleyemez, bkz.
+ * settings_screen_on_note.)
+ */
+@Suppress("DEPRECATION")
+internal fun wifiLockModes(sdk: Int): List<Int> =
+    if (sdk >= Build.VERSION_CODES.Q) listOf(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WifiManager.WIFI_MODE_FULL_LOW_LATENCY)
+    else listOf(WifiManager.WIFI_MODE_FULL_HIGH_PERF)
 
 /**
  * Bu kurulumun kalıcı kimliği (`/hello` yanıtında; Mac ve Windows'taki gibi): ilk istekte rastgele üretilir ve saklanır.
