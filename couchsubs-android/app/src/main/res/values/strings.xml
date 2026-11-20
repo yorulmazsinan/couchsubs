@@ -456,7 +456,7 @@
     <string name="tvinstall_lg_step2">2. TV\'de LG Content Store\'dan Developer Mode uygulamasını kur, açıp hesabınla giriş yap ve Dev Mode Status\'u aç. TV yeniden başlar.</string>
     <string name="tvinstall_lg_step3">3. Developer Mode uygulamasını yeniden aç ve Key Server\'ı aç. Uygulamayı ekranda bırak; sol altta 6 karakterli Passphrase görünür.</string>
     <string name="tvinstall_lg_step4">4. Passphrase\'i yukarıya yaz ve Kur ve aç\'a bas. Parola yalnız ilk kurulumda gerekir.</string>
-    <string name="tvinstall_lg_session_note">Geliştirici modu en çok 1000 saat açık kalır. Telefon bu süreyi uzatmaz: süre dolmadan TV\'deki Developer Mode uygulamasında EXTEND\'e bas (bilgisayardaki CouchSubs bunu kendisi yapar). Süre dolarsa TV uygulaması silinir.</string>
+    <string name="tvinstall_lg_session_note">Geliştirici modu en çok 1000 saat açık kalır. Telefon TV\'ye ulaşabildiği sürece CouchSubs bunu günde bir kez kendisi uzatır.</string>
     <string name="tvinstall_lg_tv_says">TV\'nin yanıtı: %1$s</string>
     <string name="tvinstall_lg_err_unreachable">TV yanıt vermedi. TV\'nin açık ve bu telefonla aynı Wi-Fi\'da olduğundan, Developer Mode uygulamasında Dev Mode Status\'un açık olduğundan emin ol.</string>
     <string name="tvinstall_lg_err_key_server">Key Server kapalı. TV\'deki Developer Mode uygulamasında Key Server\'ı aç ve uygulamayı ekranda açık tut.</string>

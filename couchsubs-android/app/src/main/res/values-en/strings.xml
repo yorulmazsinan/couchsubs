@@ -447,7 +447,7 @@
     <string name="tvinstall_lg_step2">2. On the TV, install the Developer Mode app from the LG Content Store, open it, sign in with your account and turn on Dev Mode Status. The TV restarts.</string>
     <string name="tvinstall_lg_step3">3. Open the Developer Mode app again and turn on Key Server. Leave the app on screen; a 6-character Passphrase appears at the bottom left.</string>
     <string name="tvinstall_lg_step4">4. Type the Passphrase above and press Install and open. The passphrase is only needed for the first install.</string>
-    <string name="tvinstall_lg_session_note">Developer mode stays on for at most 1000 hours. The phone does not extend it: before it runs out, press EXTEND in the TV\'s Developer Mode app (CouchSubs on a computer does this by itself). If it runs out, the TV app is removed.</string>
+    <string name="tvinstall_lg_session_note">Developer mode stays on for at most 1000 hours. CouchSubs extends it by itself once a day while the phone can reach the TV.</string>
     <string name="tvinstall_lg_tv_says">TV says: %1$s</string>
     <string name="tvinstall_lg_err_unreachable">The TV did not respond. Make sure the TV is on and on the same Wi-Fi as this phone, and that Dev Mode Status is on in the Developer Mode app.</string>
     <string name="tvinstall_lg_err_key_server">Key Server is off. Turn it on in the Developer Mode app and keep the app on screen.</string>
