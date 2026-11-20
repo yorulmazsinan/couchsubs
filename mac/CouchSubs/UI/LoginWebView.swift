@@ -14,22 +14,31 @@ typealias PlatformViewRepresentable = UIViewRepresentable
 struct LoginWebView: PlatformViewRepresentable {
     let onRedirect: (URL) -> Void
     let onProblem: (String?) -> Void
+    /// Arttıkça sayfa baştan yüklenir ("Yeniden dene"); Mac kullanmaz.
+    var reloadToken = 0
 
     func makeCoordinator() -> Coordinator { Coordinator(onRedirect: onRedirect, onProblem: onProblem) }
 
     #if os(macOS)
     func makeNSView(context: Context) -> WKWebView { makeWebView(context) }
-    func updateNSView(_ view: WKWebView, context: Context) {}
+    func updateNSView(_ view: WKWebView, context: Context) { reloadIfAsked(view, context) }
     #else
     func makeUIView(context: Context) -> WKWebView { makeWebView(context) }
-    func updateUIView(_ view: WKWebView, context: Context) {}
+    func updateUIView(_ view: WKWebView, context: Context) { reloadIfAsked(view, context) }
     #endif
+
+    private func reloadIfAsked(_ view: WKWebView, _ context: Context) {
+        guard context.coordinator.reloadToken != reloadToken else { return }
+        context.coordinator.reloadToken = reloadToken
+        view.load(URLRequest(url: PSNAccount.authorizeURL))
+    }
 
     private func makeWebView(_ context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
+        context.coordinator.reloadToken = reloadToken
         view.load(URLRequest(url: PSNAccount.authorizeURL))
         return view
     }
@@ -38,6 +47,7 @@ struct LoginWebView: PlatformViewRepresentable {
         let onRedirect: (URL) -> Void
         let onProblem: (String?) -> Void
         private var redirected = false
+        var reloadToken = 0
 
         init(onRedirect: @escaping (URL) -> Void, onProblem: @escaping (String?) -> Void) {
             self.onRedirect = onRedirect
@@ -73,6 +83,18 @@ struct LoginWebView: PlatformViewRepresentable {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             report(error)
+        }
+
+        /// iPhone'da sayfanın içerik süreci arka planda (bellek baskısıyla) kapanınca sayfa beyaz kalıyordu (TestFlight):
+        /// sayfa yeniden yüklenir.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            guard !redirected else { return }
+            RemotePlayLog.write("PSN giriş sayfası: içerik süreci kapandı, yeniden yükleniyor")
+            if webView.url == nil {
+                webView.load(URLRequest(url: PSNAccount.authorizeURL))
+            } else {
+                webView.reload()
+            }
         }
 
         private func report(_ error: Error) {

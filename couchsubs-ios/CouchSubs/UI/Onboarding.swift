@@ -135,6 +135,9 @@ struct PSNScreen: View {
     @State private var redirected = false
     @State private var working = false
     @State private var error: String?
+    /// Giriş sayfası açılamadı ya da Sony hata kodu döndürdü; eskiden yok sayılıyor, sayfa beyaz kalıyordu (TestFlight).
+    @State private var pageProblem: String?
+    @State private var pageAttempt = 0
 
     var body: some View {
         MobileScreen {
@@ -158,6 +161,7 @@ struct PSNScreen: View {
             if model.accountId != nil {
                 Button("Sign in again") {
                     redirected = false
+                    pageProblem = nil
                     showLogin = true
                 }
                 .buttonStyle(.mobileSecondary)
@@ -165,6 +169,7 @@ struct PSNScreen: View {
             } else {
                 Button("Sign in with Sony") {
                     redirected = false
+                    pageProblem = nil
                     showLogin = true
                 }
                 .buttonStyle(.mobilePrimary)
@@ -172,13 +177,25 @@ struct PSNScreen: View {
             }
         }
         .sheet(isPresented: $showLogin, onDismiss: {
-            if !redirected { error = PhoneError.loginWindowClosed.localizedDescription }
+            guard !redirected else { return }
+            error = pageProblem.map { String(format: String(localized: "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again."), $0) }
+                ?? PhoneError.loginWindowClosed.localizedDescription
         }) {
             NavigationStack {
-                LoginWebView(onRedirect: received, onProblem: { _ in })
-                    .navigationTitle(Text(verbatim: "PlayStation Network"))
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showLogin = false } } }
+                ZStack {
+                    LoginWebView(onRedirect: received, onProblem: { pageProblem = $0 }, reloadToken: pageAttempt)
+                    if let pageProblem { loginProblem(pageProblem) }
+                }
+                .navigationTitle(Text(verbatim: "PlayStation Network"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showLogin = false } }
+                    // Sayfa boş kalırsa kullanıcı her zaman baştan yükleyebilir.
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { retryLogin() } label: { Image(systemName: "arrow.clockwise") }
+                            .accessibilityLabel(Text("Reload"))
+                    }
+                }
             }
             .presentationDragIndicator(.visible)
         }
@@ -192,6 +209,21 @@ struct PSNScreen: View {
             .fittedSheet()
             .sheetBackground(Mobile.Palette.surface)
         }
+    }
+
+    private func loginProblem(_ problem: String) -> some View {
+        VStack(alignment: .leading, spacing: Mobile.Space.gap) {
+            MobileNote(text: String(format: String(localized: "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again."), problem))
+            Button("Try again") { retryLogin() }.buttonStyle(.mobilePrimary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(Mobile.Space.screen)
+        .background(Mobile.Palette.surface)
+    }
+
+    private func retryLogin() {
+        pageProblem = nil
+        pageAttempt += 1
     }
 
     private func received(_ url: URL) {

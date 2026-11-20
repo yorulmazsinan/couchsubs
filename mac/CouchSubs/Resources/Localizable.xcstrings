@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sony'nin giriş sayfası açılamadı (%@). Telefonun internet bağlantısını kontrol edip yeniden deneyin."
+          }
+        }
+      }
+    },
+    "Reload": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yeniden yükle"
+          }
+        }
+      }
+    },
     "The language pack could not be downloaded (%@). Try again, or download it in Settings › Apps › Translate.": {
       "localizations": {
         "en": {
