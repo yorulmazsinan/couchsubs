@@ -44,9 +44,10 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void BoxThatStaysStillIsProposedAfterItSettles()
     {
         var detector = new ScreenTextDetector();
-        Run(detector, 0, 200, seed => Scene(seed, TopLeft));
+        // Arayüz kanıtı: düz panel zemini ve en az 600 ms yerinde sabitlik.
+        Run(detector, 0, 500, seed => Scene(seed, TopLeft));
         Assert.Empty(detector.Areas);
-        Run(detector, 300, 400, seed => Scene(seed, TopLeft));
+        Run(detector, 600, 700, seed => Scene(seed, TopLeft));
         var area = Assert.Single(detector.Areas);
         Assert.True(area.Auto);
         Assert.StartsWith("auto-", area.Id);
@@ -87,14 +88,14 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void RejectedAreaIsNotProposedAgainUntilItChanges()
     {
         var detector = new ScreenTextDetector();
-        Run(detector, 0, 400, seed => Scene(seed, TopLeft));
+        Run(detector, 0, 700, seed => Scene(seed, TopLeft));
         var id = Assert.Single(detector.Areas).Id;
         detector.Reject(id);
         Assert.Empty(detector.Areas);
-        Run(detector, 500, 2000, seed => Scene(seed, TopLeft));
+        Run(detector, 800, 2300, seed => Scene(seed, TopLeft));
         Assert.Empty(detector.Areas);
         // Kutunun içeriği değişti (yeni yazı): yeniden önerilir, yeni kimlikle.
-        Run(detector, 2100, 2600, seed => Scene(seed, (20, 25, 160, 60)));
+        Run(detector, 2400, 3200, seed => Scene(seed, (20, 25, 160, 60)));
         Assert.NotEqual(id, Assert.Single(detector.Areas).Id);
     }
 
@@ -102,11 +103,11 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void AreaLeavesSevenHundredMillisecondsAfterTheBoxIsGone()
     {
         var detector = new ScreenTextDetector();
-        Run(detector, 0, 400, seed => Scene(seed, TopLeft));
+        Run(detector, 0, 700, seed => Scene(seed, TopLeft));
         var id = Assert.Single(detector.Areas).Id;
-        Run(detector, 500, 1000, seed => Scene(seed));
+        Run(detector, 800, 1300, seed => Scene(seed));
         Assert.Equal(id, Assert.Single(detector.Areas).Id);
-        Run(detector, 1100, 1100, seed => Scene(seed));
+        Run(detector, 1400, 1400, seed => Scene(seed));
         Assert.Empty(detector.Areas);
     }
 
@@ -114,9 +115,9 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void AreaKeepsItsIdWhileTheBoxGrows()
     {
         var detector = new ScreenTextDetector();
-        Run(detector, 0, 400, seed => Scene(seed, TopLeft));
+        Run(detector, 0, 700, seed => Scene(seed, TopLeft));
         var first = Assert.Single(detector.Areas);
-        Run(detector, 500, 1000, seed => Scene(seed, (20, 20, 160, 100)));
+        Run(detector, 800, 1700, seed => Scene(seed, (20, 20, 160, 100)));
         var grown = Assert.Single(detector.Areas);
         Assert.Equal(first.Id, grown.Id);
         Assert.True(grown.Region.Bottom > first.Region.Bottom);
@@ -134,7 +135,7 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void ResetForgetsAreas()
     {
         var detector = new ScreenTextDetector();
-        Run(detector, 0, 400, seed => Scene(seed, TopLeft));
+        Run(detector, 0, 700, seed => Scene(seed, TopLeft));
         Assert.Single(detector.Areas);
         detector.Reset();
         Assert.Empty(detector.Areas);

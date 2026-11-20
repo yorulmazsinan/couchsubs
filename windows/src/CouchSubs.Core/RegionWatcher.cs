@@ -406,7 +406,7 @@ public sealed partial class RegionWatcher
         state.LastReadCrop = crop;
         state.LastFullCheck = now();
         state.Lines = [.. reading.Lines.Where(line => line.Box.HasValue).Take(32).Select(line => line.Box!.Value)];
-        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto);
+        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu);
     }
 
     private static int IconCount(Candidate candidate) =>
@@ -471,8 +471,9 @@ public sealed partial class RegionWatcher
     /// kesilir; çeviride yerleri korunur.
     /// </summary>
     /// <param name="auto">Otomatik bulunmuş alan: her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.</param>
+    /// <param name="menu">Otomatik alan menüde: satır yükseklikleri farklı olabilir (başlık, etiket).</param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
-                                            bool auto = false)
+                                            bool auto = false, bool menu = false)
     {
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame, monochrome: auto);
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
@@ -498,7 +499,7 @@ public sealed partial class RegionWatcher
         IReadOnlyList<Block>? blocks = null;
         var key = TextKey(paragraphs);
         var groups = (phone || auto || lines.Count > 1) && boxes.Count == lines.Count
-            ? (phone ? GamePhoneText.Groups(reading) : auto ? AutoGroups(lines, menuRows) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
+            ? (phone ? GamePhoneText.Groups(reading) : auto ? AutoGroups(lines, menuRows, menu) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
         if (((phone || auto) && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
         {
             paragraphs = [.. groups.SelectMany(group => group.Paragraphs)];
@@ -534,11 +535,19 @@ public sealed partial class RegionWatcher
     /// Otomatik alanın grupları: kısa etiket satırları (menü satırı, tuş etiketi) her biri kendi bloğudur; stili (seçili
     /// satırın ters rengi) satır başına çıkarılır. Uzun yazı satırları eskisi gibi paragraflara toplanır.
     /// </summary>
-    private static List<ScreenTranslation.Group> AutoGroups(List<TextLine> lines, bool menuRows)
+    private static List<ScreenTranslation.Group> AutoGroups(List<TextLine> lines, bool menuRows, bool menu = false)
     {
         var shortLines = lines.Where(IsLabelLine).ToList();
         var prose = lines.Where(line => !IsLabelLine(line)).ToList();
         var groups = prose.Count == 0 ? [] : ScreenTranslation.GroupsFromLines(prose, menuRows).ToList();
+        // Arayüz yazısı perspektifsizdir: menü dışında satır yükseklikleri ±%15'ten çok farklı paragraf (eğik ya da
+        // ölçekli dünya yazısı: poster, tabela) çevrilmez.
+        if (!menu)
+            groups.RemoveAll(group =>
+            {
+                var heights = prose.Where(line => Inside(line.Box!.Value, group.Box)).Select(line => line.Box!.Value.Bottom - line.Box!.Value.Top).ToList();
+                return heights.Count >= 2 && heights.Max() > heights.Min() * (1.15 / 0.85);
+            });
         foreach (var line in shortLines)
         {
             var icons = ScreenTranslation.ParagraphIcons([line]);
@@ -592,7 +601,8 @@ public sealed partial class RegionWatcher
 
     private async Task CommitAsync(Candidate candidate, WatchedArea area, State state, int started)
     {
-        if (area.Auto && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs), area.Menu)))
+        if (area.Auto && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs), area.Menu)
+                          || (!area.Menu && IsWorldText(candidate))))
         {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
@@ -873,6 +883,43 @@ public sealed partial class RegionWatcher
         return new Translation(result, readyCount);
     }
 
+    /// <summary>Dünya yazısı listesinde kalma süresi (oturum içinde).</summary>
+    internal const int WorldTextMs = 10 * 60 * 1000;
+    private readonly Dictionary<string, (TextBox Box, long At)> autoSeen = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> worldText = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Kamera hareket ederken kayan ya da ölçeklenen yazı (aynı metin başka yerde ya da boyda yeniden okundu) oyun
+    /// dünyasındadır (poster, plaka, tabela): metni 10 dk dünya yazısı listesine girer, çevrilmez. Arayüz yazısı yerinde durur.
+    /// </summary>
+    private bool IsWorldText(Candidate candidate)
+    {
+        var key = candidate.Text;
+        if (key.Length == 0) return false;
+        var time = now();
+        lock (worldText)
+        {
+            if (worldText.TryGetValue(key, out var until) && until > time) return true;
+            if (candidate.Box is not { } box) return false;
+            if (autoSeen.TryGetValue(key, out var seen))
+            {
+                var moved = Math.Abs((box.Left + box.Right) / 2 - (seen.Box.Left + seen.Box.Right) / 2) > 0.02
+                            || Math.Abs((box.Top + box.Bottom) / 2 - (seen.Box.Top + seen.Box.Bottom) / 2) > 0.02;
+                double height = box.Bottom - box.Top, before = seen.Box.Bottom - seen.Box.Top;
+                var scaled = Math.Max(height, before) > 1.15 * Math.Min(height, before);
+                if (moved || scaled)
+                {
+                    if (worldText.Count > 512) worldText.Clear();
+                    worldText[key] = time + WorldTextMs;
+                    return true;
+                }
+            }
+            if (autoSeen.Count > 512) autoSeen.Clear();
+            autoSeen[key] = (box, time);
+            return false;
+        }
+    }
+
     /// <summary>Oturum terim sözlüğü: otomatik alanlarda çevrilen etiket ve parçalar (kaynak → çeviri).</summary>
     private readonly Dictionary<string, string> terms = new(StringComparer.Ordinal);
     private const int TermLimit = 4096;
@@ -971,6 +1018,11 @@ public sealed partial class RegionWatcher
         }
         lock (translations) translations.Clear();
         lock (terms) terms.Clear();
+        lock (worldText)
+        {
+            worldText.Clear();
+            autoSeen.Clear();
+        }
         if (anyShown) server.ClearRegions();
     }
 }

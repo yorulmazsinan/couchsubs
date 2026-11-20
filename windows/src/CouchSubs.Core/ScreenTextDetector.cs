@@ -58,7 +58,18 @@ public sealed class ScreenTextDetector
         public long StableSince;
         public bool IsRejected;
         public bool Quiet;
+        // Zemin (koyu) örneklerinin toplamları: panel zemini kanıtı için.
+        public long DarkSum, DarkSquares;
+        public int DarkCount;
     }
+
+    /// <summary>Arayüz kanıtı: zemin örneklerinin parlaklık sapması en çok bu kadar (düz ya da yarı saydam düz panel).</summary>
+    public const double GroundDeviation = 22;
+    /// <summary>Zemin karolarının en az bu kadarı aynı tonda (±<see cref="GroundTone"/>).</summary>
+    public const double GroundShare = 0.7;
+    public const double GroundTone = 20;
+    /// <summary>Arayüz kanıtı: bileşen en az bu kadar yerinde sabit kalmış olmalı.</summary>
+    public const int UiStableMs = 600;
 
     // Karo maskeleri düz dizilerde (karo başına Words adet 64 bitlik sözcük): her örnekte ayırma yok.
     private readonly ulong[] lastMasks = new ulong[Columns * Rows * Words];
@@ -137,8 +148,9 @@ public sealed class ScreenTextDetector
                 for (var column = 0; column < Columns; column++)
                 {
                     var index = row * Columns + column;
-                    var (bright, dark, deviation) = Measure(frame, column, row, sampleMask);
+                    var (bright, dark, deviation, darkSum, darkSquares) = Measure(frame, column, row, sampleMask);
                     ref var tile = ref tiles[index];
+                    (tile.DarkSum, tile.DarkSquares, tile.DarkCount) = (darkSum, darkSquares, dark);
                     var previous = lastMasks.AsSpan(index * Words, Words);
                     tile.Quiet = deviation < QuietDeviation;
                     if (!tile.HasLast || Distance(previous, sampleMask) > MaskChange) tile.StableSince = now;
@@ -153,7 +165,9 @@ public sealed class ScreenTextDetector
             // Menüde altyazı alanındaki satırlar da menünün parçasıdır (alttaki seçenekler, tuş çubuğu).
             if (inMenu) candidate = anywhere;
             var all = Components(candidate);
-            var components = inMenu ? all : [.. all.Where(item => item.Tiles.Count >= 2)];
+            // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
+            // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez.
+            var components = inMenu ? all : [.. all.Where(item => item.Tiles.Count >= 2 && IsInterface(item.Cells, item.Tiles, now))];
             Update([.. components.OrderByDescending(item => item.Tiles.Count).Take(inMenu ? MenuMaxAreas : MaxAreas)], candidate, now, inMenu);
             return !before.SequenceEqual(Current());
         }
@@ -192,7 +206,35 @@ public sealed class ScreenTextDetector
         }
     }
 
-    private static (int Bright, int Dark, double Deviation) Measure(Frame frame, int column, int row, ulong[] mask)
+    /// <summary>
+    /// Bileşen bir arayüz kutusu mu: kutusundaki zemin (koyu) örneklerinin parlaklık sapması en çok
+    /// <see cref="GroundDeviation"/> ve zemin karolarının en az %70'i aynı tonda (düz ya da yarı saydam düz panel); karoları
+    /// en az <see cref="UiStableMs"/> yerinde sabit.
+    /// </summary>
+    private bool IsInterface(Cells cells, List<int> component, long now)
+    {
+        if (component.Any(index => now - tiles[index].StableSince < UiStableMs)) return false;
+        long sum = 0, squares = 0, count = 0;
+        var means = new List<double>();
+        for (var row = cells.Top; row <= cells.Bottom; row++)
+            for (var column = cells.Left; column <= cells.Right; column++)
+            {
+                ref var tile = ref tiles[row * Columns + column];
+                if (tile.DarkCount == 0) continue;
+                sum += tile.DarkSum;
+                squares += tile.DarkSquares;
+                count += tile.DarkCount;
+                if (tile.DarkCount >= Points / 10) means.Add((double)tile.DarkSum / tile.DarkCount);
+            }
+        if (count == 0 || means.Count == 0) return false;
+        var mean = (double)sum / count;
+        var deviation = Math.Sqrt(Math.Max(0, (double)squares / count - mean * mean));
+        if (deviation > GroundDeviation) return false;
+        var median = means.Order().ElementAt(means.Count / 2);
+        return means.Count(value => Math.Abs(value - median) <= GroundTone) >= GroundShare * means.Count;
+    }
+
+    private static (int Bright, int Dark, double Deviation, long DarkSum, long DarkSquares) Measure(Frame frame, int column, int row, ulong[] mask)
     {
         Array.Clear(mask);
         var x0 = (long)column * frame.Width / Columns;
@@ -201,7 +243,7 @@ public sealed class ScreenTextDetector
         var y1 = (long)(row + 1) * frame.Height / Rows;
         var pixels = frame.Pixels;
         int bright = 0, dark = 0, bit = 0;
-        long sum = 0, squares = 0;
+        long sum = 0, squares = 0, darkSum = 0, darkSquares = 0;
         for (var sy = 0; sy < Samples; sy++)
         {
             var y = (int)(y0 + (2 * sy + 1) * (y1 - y0) / (2 * Samples));
@@ -218,11 +260,16 @@ public sealed class ScreenTextDetector
                     bright++;
                     mask[bit >> 6] |= 1UL << (bit & 63);
                 }
-                else if (luma <= Dark) dark++;
+                else if (luma <= Dark)
+                {
+                    dark++;
+                    darkSum += luma;
+                    darkSquares += luma * luma;
+                }
             }
         }
         var mean = (double)sum / Points;
-        return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)));
+        return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)), darkSum, darkSquares);
     }
 
     private static bool Excluded(int column, int row, IReadOnlyList<CropRegion> excluded)

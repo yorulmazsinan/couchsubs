@@ -36,7 +36,7 @@ public class RealFrameThresholdTests
     public void AreaGrowsOneTileSideways()
     {
         var detector = new ScreenTextDetector();
-        for (var time = 0; time <= 400; time += 100) detector.Sample(Box(200, 100, 160, 60), time, []);
+        for (var time = 0; time <= 700; time += 100) detector.Sample(Box(200, 100, 160, 60), time, []);
         var region = Assert.Single(detector.Areas).Region;
         // Kutu 10..17. sütun (200-360 px): bölge bir karo önce (9.) başlar, bir karo sonra (18.) biter.
         Assert.Equal(9.0 / 32, region.Left, 3);
@@ -47,7 +47,7 @@ public class RealFrameThresholdTests
     public void SubtitleAreaIsSkippedOutsideAMenu()
     {
         var detector = new ScreenTextDetector();
-        for (var time = 0; time <= 400; time += 100) detector.Sample(Box(200, 260, 240, 60), time, [], new CropRegion());
+        for (var time = 0; time <= 700; time += 100) detector.Sample(Box(200, 260, 240, 60), time, [], new CropRegion());
         Assert.Empty(detector.Areas);
     }
 }
