@@ -102,6 +102,17 @@ function render(width, height) {
       result.afterPhone = $('regions').textContent;
       showRegion({id:'q', text:'Yanıt', box:phoneBox, blocks:[reply]});
       result.normalColor = getComputedStyle($('regions').querySelector('.item')).backgroundColor;
+      // Otomatik bulunan ekran yazısı özgün görünüşüyle: açık zemin + koyu kalın dar yazı, sağa yaslı; düz olmayan zemin %85.
+      showRegion({id:'auto-1', text:"VİCKİ'NİN PATRONUNU SOY", box:{left:.05,top:.1,right:.25,bottom:.14}, blocks:[
+        {text:"VİCKİ'NİN PATRONUNU SOY", box:{left:.05,top:.1,right:.25,bottom:.13}, line:.03,
+          surface:{background:'#f0f0f0', foreground:'#101010', flat:true}, style:{bold:true, condensed:true, align:'right', upper:true}},
+        {text:"Vicki patronunu soyup parayı paylaşmak istiyor. Onunla Delights'ta buluş.", box:{left:.05,top:.135,right:.25,bottom:.16}, line:.02,
+          surface:{background:'#1a1c20', foreground:'#ffffff', flat:false}, style:{bold:false, condensed:false, align:'left', upper:false}}]});
+      result.styled = Array.from($('regions').querySelectorAll('.item')).slice(-2).map(function (el) {
+        var cs = getComputedStyle(el), b = el.getBoundingClientRect();
+        return {background:cs.backgroundColor, color:cs.color, weight:cs.fontWeight, align:cs.textAlign,
+          family:cs.fontFamily, width:b.width, font:parseFloat(cs.fontSize)};
+      });
       var scenarios = ${JSON.stringify(scenarios)};
       for (var key in scenarios) {
         showScreen(scenarios[key], 10000);
@@ -260,6 +271,17 @@ test('TV ekran çevirisi: ' + width + '×' + height, {skip: !browser && 'Chrome/
     assert.ok(reply.bottom <= next.top);
     assert.equal(r.afterPhone, 'Ahıra git');
     assert.equal(r.normalColor, 'rgba(0, 0, 0, 0.97)');
+    const [title, body] = r.styled;
+    assert.equal(title.background, 'rgb(240, 240, 240)');
+    assert.equal(title.color, 'rgb(16, 16, 16)');
+    assert.equal(title.weight, '700');
+    assert.equal(title.align, 'right');
+    assert.match(title.family, /Condensed|Narrow/);
+    assert.equal(body.background, 'rgba(26, 28, 32, 0.85)');
+    assert.equal(body.weight, '400');
+    assert.equal(body.align, 'left');
+    // Özgün blok genişliğini aşmaz (en çok iç pay kadar).
+    assert.ok(body.width <= (.25 - .05 + 2 * .004) * r.viewport.width + 1, JSON.stringify(body));
   });
 });
 

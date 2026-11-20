@@ -862,6 +862,38 @@
     return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value);
   }
 
+  // Otomatik bulunan ekran yazısı (bilgisayar "auto-<n>" alanı) özgün yazının görünüşüyle gelir: surface {background,
+  // foreground, flat} zemin ve yazı rengi (flat değilse — harita, oyun dünyası — zemin %85 opak), style {bold,
+  // condensed, align, upper}. Büyük harf çeviriyi bilgisayar zaten büyütür. Alanları göndermeyen eski bilgisayarda
+  // kutu eskisi gibi siyah kalır.
+  var STYLED_MIN_SCALE = 0.8;
+  var CONDENSED_FONT = '"Roboto Condensed", "Arial Narrow", "Helvetica Neue Condensed", "LG Smart UI Condensed", sans-serif';
+
+  function hexAlpha(hex, alpha) {
+    return 'rgba(' + parseInt(hex.substr(1, 2), 16) + ', ' + parseInt(hex.substr(3, 2), 16) + ', ' +
+      parseInt(hex.substr(5, 2), 16) + ', ' + alpha + ')';
+  }
+
+  // Öğeye özgün yazının görünüşü uygulandı mı.
+  function applyLook(el, item) {
+    var surface = item.surface;
+    if (!surface || !phoneColor(surface.background) || !phoneColor(surface.foreground)) return false;
+    el.style.backgroundColor = surface.flat === false ? hexAlpha(surface.background, 0.85) : surface.background;
+    el.style.color = surface.foreground;
+    el.style.textShadow = 'none';
+    var style = item.style;
+    if (style && typeof style === 'object') {
+      if (style.bold === true) el.style.fontWeight = '700';
+      else if (style.bold === false) el.style.fontWeight = '400';
+      if (style.condensed === true) {
+        el.style.fontFamily = CONDENSED_FONT;
+        el.style.fontStretch = 'condensed';
+      }
+      if (style.align === 'left' || style.align === 'center' || style.align === 'right') el.style.textAlign = style.align;
+    }
+    return true;
+  }
+
   // Yalnız aşağıdaki bağımsız kutular büyümeyi sınırlar; kaynakta zaten üst üste olan
   // kutuların yerini değiştirmeyiz. Aynı hesap bütün sonuçlar için yapılır, sıra önemli değildir.
   function screenBottom(items, box, left, width, screenWidth, screenHeight, pad, minWidth) {
@@ -891,6 +923,7 @@
       if (!box || !item.text) continue;
       var el = document.createElement('div');
       el.className = item.paragraphs === true ? 'item paragraphs' : 'item';
+      var styled = false;
       if (phone) {
         el.className += ' phone';
         var surface = item.surface;
@@ -898,6 +931,9 @@
           el.style.backgroundColor = surface.background;
           el.style.color = surface.foreground;
         }
+      } else if (regionId && (regionId.indexOf('auto-') === 0 || (item.style && typeof item.style === 'object'))) {
+        // Yalnız özgün görünüşü taşıyan bloklar: elle tanımlanmış ek alanların kutusu eskisi gibi siyah kalır.
+        styled = applyLook(el, item);
       }
       fillText(el, item.text, item.icons);
       var left = Math.max(0, box.left - pad);
@@ -914,10 +950,13 @@
       var line = typeof item.line === 'number' && item.line > 0 ? item.line * height : box.bottom * height - box.top * height;
       var floor = phone ? Math.max(10, Math.round(12 * height / 1080)) : SCREEN_MIN_FONT;
       var size = Math.max(floor, Math.min(96, Math.round(line * 0.95)));
+      // Özgün görünüşlü yazı özgün genişlikte kalır: Türkçe uzunsa önce satır kırılır, sığmazsa yazı en çok %20 küçülür,
+      // yine sığmazsa kutu aşağı uzar.
+      if (styled) floor = Math.max(SCREEN_MIN_FONT, Math.round(size * STYLED_MIN_SCALE));
       el.style.fontSize = size + 'px';
       host.appendChild(el);
       // Türkçe çoğu zaman İngilizceden uzundur: kutu biraz uzayabilir, daha fazlası için yazı küçülür.
-      var limit = Math.min(available, phone ? boxHeight + 1 : Math.max(boxHeight * 1.5, line * 2.6));
+      var limit = Math.min(available, phone || styled ? boxHeight + 1 : Math.max(boxHeight * 1.5, line * 2.6));
       while (el.scrollHeight > limit && size > floor) {
         size = Math.max(floor, size - 2);
         el.style.fontSize = size + 'px';
