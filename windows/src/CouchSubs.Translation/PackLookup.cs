@@ -23,6 +23,42 @@ public static class PackLookup
         return Match(text, library.Find, line => asked.TryGetValue(line, out var known) ? known : asked[line] = library.Nearest(line));
     }
 
+    /// <summary>Kütüphanedeki paketlerde kısmi eşleşme (<see cref="MatchPartial(string, Func{string, string?}, Func{string, string?}?)"/>).</summary>
+    public static PackPartial? MatchPartial(GamePackLibrary library, string text)
+    {
+        var asked = new Dictionary<string, string?>();
+        return MatchPartial(text, library.Find, line => asked.TryGetValue(line, out var known) ? known : asked[line] = library.Nearest(line));
+    }
+
+    /// <summary>
+    /// Çok satırlı okumada (iki konuşma alt alta) satırların hepsi pakette değilse <see cref="Match(string, Func{string, string?}, Func{string, string?}?)"/>
+    /// okumanın tamamını motora bırakır. Burada satırlar tek tek aranır (önce tam, sonra <paramref name="nearest"/>): yalnız bir
+    /// satır bulunamadıysa bulunanlar paketten, o satır motordan çevrilsin diye satır satır sonuç döner. Bulunamayan köşe
+    /// yazısı (<see cref="IsOverlay"/>) atlanır. Tek satırlı okumada, hepsi bulunduğunda, hiçbiri bulunmadığında ya da birden
+    /// çok satır bulunamadığında null.
+    /// </summary>
+    public static PackPartial? MatchPartial(string text, Func<string, string?> find, Func<string, string?>? nearest = null)
+    {
+        var lines = text.Trim().Replace("\r\n", "\n").Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
+        if (lines.Count < 2) return null;
+        var result = new List<PackLine>(lines.Count);
+        var missing = 0;
+        foreach (var line in lines)
+        {
+            var found = Single(line, find) ?? (nearest is null ? null : Single(line, piece => find(piece) ?? nearest(piece)));
+            if (found is { } hit)
+            {
+                var match = Result(hit.Pieces, hit.Translations);
+                result.Add(new PackLine(line, match.Text, match.Spoken));
+                continue;
+            }
+            if (IsOverlay(line)) continue;
+            missing++;
+            result.Add(new PackLine(line, null, []));
+        }
+        return missing == 1 && result.Count > 1 ? new PackPartial(result) : null;
+    }
+
     /// <param name="find">Tek bir metnin (tamamının) paketteki Türkçesi.</param>
     /// <param name="nearest">Tam anahtar yoksa en benzer satırın Türkçesi (bulanık arama); verilmezse yapılmaz.</param>
     public static PackMatch? Match(string text, Func<string, string?> find, Func<string, string?>? nearest = null)

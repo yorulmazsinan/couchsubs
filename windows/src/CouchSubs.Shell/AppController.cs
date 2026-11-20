@@ -2145,7 +2145,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }, CancellationToken.None);
     }
 
-    private void ConnectPacks(SubtitlePipeline target) => target.PackLookup = PacksActive ? services.FindInPacks : null;
+    private void ConnectPacks(SubtitlePipeline target)
+    {
+        target.PackLookup = PacksActive ? services.FindInPacks : null;
+        // Kısmi eşleşme yalnız GTA'da denendi; öteki oyunlarda okumanın tamamı eskisi gibi motora gider.
+        target.PartialPackLookup = PacksActive ? text => ScreenText.IsGta(gameSense.Current?.Name) ? services.FindPartialInPacks(text) : null : null;
+    }
 
     /// <summary>Gelişmiş ayarlardaki bekleme süreleri (0–2 sn).</summary>
     private void ApplyWaits(SubtitlePipeline target)

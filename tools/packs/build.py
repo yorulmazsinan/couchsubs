@@ -57,4 +57,4 @@ for k in list(segments):
         del segments[k]
 print("demoted (taken by older packs)", sum(1 for k in segments if k in taken))
 c.write_pack(out, pack_id, title, source, entries, segments, english)
-print(pack_id, "entries", len(entries), "segments", len(segments), "signed", sum(1 for k in english if c.signature(english[k])))
+print(pack_id, "entries", len(entries), "segments", len(segments), "signed", sum(1 for k in english if c.signature(english[k], c.fuzzy_min_len(title))))

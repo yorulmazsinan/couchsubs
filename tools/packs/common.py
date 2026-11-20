@@ -35,6 +35,13 @@ def key(text):
 # ---- fuzzy ----
 FOLD = {"l": "i", "1": "i", "ı": "i", "j": "i", "0": "o", "5": "s", "æ": "a", "ø": "o", "œ": "o", "ß": "s"}
 MIN_LEN, MAX_BITS, BPG = 16, 256, 3
+# GTA paketinde kısa satırlara da imza (PackFuzzy.ShortMinLength ile aynı); öteki oyunlar MIN_LEN.
+SHORT_MIN_LEN = 8
+
+
+def fuzzy_min_len(title):
+    """Paket başlığına göre imzanın en kısa satırı: GTA'da SHORT_MIN_LEN (ScreenText.IsGta ile aynı adlar)."""
+    return SHORT_MIN_LEN if (title or "").strip().lower() in ("grand theft auto vi", "gta 6", "gta vi") else MIN_LEN
 
 
 def folded(text):
@@ -68,23 +75,23 @@ def bloom(hashes, bits):
     return words
 
 
-def signature(text):
+def signature(text, min_len=MIN_LEN):
     sc = folded(text)
-    if len(sc) < MIN_LEN:
+    if len(sc) < min_len:
         return None
     length = min(len(sc), 255)
     words = bloom(trigram_hashes(sc), bits_for(length))
     return length, b"".join(w.to_bytes(8, "little") for w in words)
 
 
-def fuzzy_index(order, english_of):
+def fuzzy_index(order, english_of, min_len=MIN_LEN):
     """order: sorted list of int keys (entries+segments). english_of: int key -> English text (or None)."""
     mask = bytearray((len(order) + 7) // 8)
     lengths = bytearray()
     blooms = bytearray()
     for i, k in enumerate(order):
         en = english_of.get(k)
-        sig = signature(en) if en else None
+        sig = signature(en, min_len) if en else None
         if not sig:
             continue
         mask[i >> 3] |= 1 << (i & 7)
@@ -136,7 +143,7 @@ def write_pack(path, pack_id, title, source, entries, segments, english):
     eng = {int(k, 16): v for k, v in english.items()}
     obj = {"format": 2, "id": pack_id, "title": title, "source": source,
            "entries": dict(sorted(entries.items())), "segments": dict(sorted(segments.items())),
-           "fuzzy": fuzzy_index(order, eng)}
+           "fuzzy": fuzzy_index(order, eng, fuzzy_min_len(title))}
     data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     with gzip.GzipFile(path, "wb", compresslevel=9, mtime=0) as f:
         f.write(data)
