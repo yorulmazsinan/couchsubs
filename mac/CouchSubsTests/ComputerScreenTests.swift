@@ -151,9 +151,28 @@ final class ComputerScreenTests: XCTestCase {
         XCTAssertEqual(model.overlayRegions.map(\.id), ["auto-1"])
         XCTAssertEqual(model.overlayRegions.first?.items, [item])
         XCTAssertEqual(model.overlayRegions.first?.box, item.box)
-        XCTAssertTrue(model.overlayVisible)
+        // #687: saydam altyazı penceresi yalnız altyazıyı gösterir; ekran yazısı blokları yayın penceresi için saklanır,
+        // saydam pencereyi tek başına açmaz.
+        XCTAssertFalse(model.overlayVisible)
         model.overlayReceive(.region(id: "auto-1", text: "", box: nil))
         XCTAssertTrue(model.overlayRegions.isEmpty)
+    }
+
+    /// Yayın penceresinde ekran yazısı kutusu altyazıyla çakışınca yalnız gerektiği kadar kayar; altyazı yerinde kalır.
+    func testScreenTextBoxMovesAwayFromTheSubtitle() {
+        let height: CGFloat = 1080
+        let subtitle = CGRect(x: 400, y: 900, width: 1120, height: 100)
+        let gap = height * 0.006
+        // Çakışmayan kutu yerinde.
+        XCTAssertEqual(ScreenTextBlocks.top(CGRect(x: 100, y: 100, width: 300, height: 40), avoiding: subtitle, height: height), 100)
+        // Altyazının üst kenarına binen kutu yukarı kayar (aşağısı daha uzak).
+        XCTAssertEqual(ScreenTextBlocks.top(CGRect(x: 600, y: 880, width: 300, height: 40), avoiding: subtitle, height: height),
+                       900 - gap - 40, accuracy: 0.001)
+        // Altyazının alt kenarına binen kutu aşağı kayar.
+        XCTAssertEqual(ScreenTextBlocks.top(CGRect(x: 600, y: 990, width: 300, height: 40), avoiding: subtitle, height: height),
+                       1000 + gap, accuracy: 0.001)
+        // Altyazı yoksa yerinde.
+        XCTAssertEqual(ScreenTextBlocks.top(CGRect(x: 600, y: 920, width: 300, height: 40), avoiding: nil, height: height), 920)
     }
 
     func testTestSubtitleAppearsInComputerWindow() async {
