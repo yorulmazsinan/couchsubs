@@ -115,6 +115,10 @@ public final class SubtitlePipeline {
     private var lastOcrReading = Reading.empty
     private var lastPanelReading = Reading.empty
     private var stickyRows = StickyRows()
+    private var mission = MissionLine()
+    /// Görev satırının bölgesi değişti (nil: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
+    /// kendi yerinde ve özgün stilinde gösterilir (bkz. `MissionLine`).
+    public var onMissionChanged: ((CropRegion?) -> Void)?
     /// Son yazı tanımanın süresi (ms); kare değişmeyip okuma yeniden kullanılınca da o okumanın süresi geçerlidir.
     private var lastReadMs: Int?
     /// İşlenen karenin okunması (satır kararlı olunca isteğe geçer).
@@ -254,6 +258,10 @@ public final class SubtitlePipeline {
         // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
         let rows = stickyRows.filter(visible.withoutButtonPrompts().withoutOcrNoise().joiningRows(), at: now())
         for row in stickyRows.newlySticky { log("sabit satır: \(SubtitleLog.excerpt(row)) görev/HUD yazısı sayıldı, çevrilmiyor") }
+        if mission.observe(stickyRows.removed, area: place, at: now()) {
+            log(mission.region == nil ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor")
+            onMissionChanged?(mission.region)
+        }
         let reading = rows.subtitleBlock(in: place)
         currentRead = ReadInfo(capturedAt: captured, ocrMs: lastReadMs, confidence: reading.confidence)
         let box = reading.box?.placed(in: place).centeredOnScreen()
@@ -708,6 +716,7 @@ public final class SubtitlePipeline {
         lastReadMs = nil
         scheduler.reset()
         stickyRows.reset()
+        mission.reset()
         if stabilizer.reset() == .clear { server.clear() }
     }
 }

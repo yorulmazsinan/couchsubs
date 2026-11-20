@@ -88,6 +88,10 @@ struct ProfileScreen: View {
                           "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.",
                           isOn: $model.settings.autoScreenText)
                 RowDivider()
+                toggleRow("Set on-screen text apart from subtitles",
+                          "On-screen text keeps its own colours and place, and never looks like the subtitle box.",
+                          isOn: $model.settings.setTextApart)
+                RowDivider()
                 toggleRow("Use ready areas for known games",
                           "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.",
                           isOn: $model.settings.gameAreaPresets)

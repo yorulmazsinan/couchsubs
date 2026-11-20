@@ -51,6 +51,10 @@ final class PhoneModel: ObservableObject {
             pipeline?.showSpeakerNames = settings.showSpeakerNames
             if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
             server.speakerColors = settings.speakerColors
+            if settings.setTextApart != oldValue.setTextApart {
+                server.setApart = settings.setTextApart
+                server.sendStyle(settings.style)
+            }
             if settings.sharePool != oldValue.sharePool {
                 let (pool, enabled) = (pool, settings.sharePool)
                 Task { await pool.setEnabled(enabled) }
@@ -195,6 +199,8 @@ final class PhoneModel: ObservableObject {
     /// Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var); örnek arka planda, tek uçuşta alınır.
     private var screenTextDetector: ScreenTextDetector?
     private var screenTextBusy = false
+    /// Altyazı hattının altyazıdan ayırdığı görev satırının bölgesi (bkz. `MissionLine`); yoksa nil.
+    private var missionRegion: CropRegion?
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur (Mac ile aynı).
     private var frameGate = FrameGate()
     private var savedKeys: Set<TranslationEngine> = []
@@ -398,6 +404,7 @@ final class PhoneModel: ObservableObject {
         }
         server.sendsToTV = settings.output.showsOnTV
         server.speakerColors = settings.speakerColors
+        server.setApart = settings.setTextApart
         server.onEvent = { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.phoneReceive(event) } }
         }
@@ -814,6 +821,10 @@ final class PhoneModel: ObservableObject {
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage), translator: makeTranslator(),
                                         server: server, scheduler: scheduler)
         pipeline.showSpeakerNames = settings.showSpeakerNames
+        // Görev satırı altyazıya girmez; otomatik ekran yazısı açıksa "auto-mission" ek alanı olarak kendi yerinde ve özgün
+        // stilinde gösterilir (Windows ile aynı). Kapalıysa ayrıca gösterilmez.
+        missionRegion = nil
+        pipeline.onMissionChanged = { [weak self] region in self?.missionRegion = region }
         pipeline.skipsTurkish = settings.targetLanguage == "tr"
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
             self?.lastSource = source
@@ -889,6 +900,9 @@ final class PhoneModel: ObservableObject {
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name)
+        if settings.autoScreenText, let missionRegion {
+            areas.append(ExtraArea(id: MissionLine.areaId, name: "Mission", region: missionRegion, auto: true))
+        }
         areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas)
         if regionWatcher == nil, !areas.isEmpty { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
         regionWatcher?.offer(frame, areas: areas)

@@ -104,12 +104,14 @@ struct StreamWindowView: View {
         }
         return Text(verbatim: region.text)
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(SubtitleOverlayView.color(style.textColor))
+            .foregroundStyle(model.settings.setTextApart ? .white : SubtitleOverlayView.color(style.textColor))
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 6 * scale)
             .padding(.horizontal, 14 * scale)
-            .background(Color.black, in: RoundedRectangle(cornerRadius: 8 * scale))
+            // Ayrık gösterim: altyazı kutusundan farklı, zeminsiz ve koyu gölgeli.
+            .background(Color.black.opacity(model.settings.setTextApart ? 0 : 1), in: RoundedRectangle(cornerRadius: 8 * scale))
+            .shadow(color: .black.opacity(model.settings.setTextApart ? 1 : 0), radius: 3 * scale)
             .frame(maxWidth: .infinity, alignment: alignment)
     }
 

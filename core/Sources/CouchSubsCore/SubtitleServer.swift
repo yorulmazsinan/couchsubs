@@ -175,6 +175,14 @@ public final class SubtitleServer: @unchecked Sendable {
     /// Oturumun konuşan renkleri (v2; çeviri başlayınca sıfırlanır). Bilgisayar ekranındaki pencereler de buradan boyar.
     public let speakerBook = SpeakerColorBook()
 
+    /// "Ekran yazılarını altyazıdan ayır": TV ek alan kutularını özgün renginde ve kendi yerinde, altyazı kutusundan farklı
+    /// zeminde çizer (`style` olayının `setApart` alanı; yoksa açık sayılır). Değişince `sendStyle` yeniden gönderilmeli.
+    public var setApart: Bool {
+        get { queue.sync { apart } }
+        set { queue.sync { apart = newValue } }
+    }
+    private var apart = true
+
     /// Bağlantı canlı tutma çerçevesi: yorum satırını EventSource görmez; adlı "ping" olayını TV görür ve
     /// bir süre gelmezse yarı açık kalmış bağlantıyı kapatıp yeniden bağlanır (Windows ile aynı).
     static let pingFrame = ": ping\n\nevent: ping\ndata: {}\n\n"
@@ -495,7 +503,9 @@ public final class SubtitleServer: @unchecked Sendable {
 
     public func sendStyle(_ style: SubtitleStyle) {
         queue.async { self.lastStyle = style }
-        broadcast(event: "style", json: style.json)
+        var json = style.json
+        json["setApart"] = setApart
+        broadcast(event: "style", json: json)
     }
 
     // MARK: - Bağlantılar
@@ -604,7 +614,9 @@ public final class SubtitleServer: @unchecked Sendable {
         head += cors + "\r\n"
         head += "retry: 2000\n\n"
         if let style = lastStyle {
-            head += Self.frame(event: "style", json: style.json)
+            var json = style.json
+            json["setApart"] = apart
+            head += Self.frame(event: "style", json: json)
         }
         connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
 

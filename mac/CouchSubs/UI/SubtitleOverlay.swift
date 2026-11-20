@@ -342,12 +342,15 @@ struct SubtitleOverlayView: View {
         let style = model.settings.style
         return Text(verbatim: region.text)
             .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(Self.color(style.textColor))
+            .foregroundStyle(model.settings.setTextApart ? .white : Self.color(style.textColor))
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 6 * scale)
             .padding(.horizontal, 14 * scale)
-            .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 8 * scale))
+            // "Ekran yazılarını altyazıdan ayır": stili bilinmeyen ek alan kutusu altyazı kutusuna benzemesin; zeminsiz,
+            // beyaz ve koyu gölgeli (Windows ile aynı).
+            .background(Color.black.opacity(model.settings.setTextApart ? 0 : 0.85), in: RoundedRectangle(cornerRadius: 8 * scale))
+            .shadow(color: .black.opacity(model.settings.setTextApart ? 1 : 0), radius: 3 * scale)
             .frame(maxWidth: .infinity, alignment: alignment)
             .contentShape(Rectangle())
             .gesture(moveGesture)

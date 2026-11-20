@@ -188,17 +188,23 @@ public struct Reading: Equatable, Sendable {
             guard let box = reading.box?.placed(in: area) else { return false }
             return abs((box.left + box.right) / 2 - 0.5) <= 0.12
         }
+        // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
+        // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
+        if let spoken = centered.first(where: { SpeakerPrefix.split($0.lines[0].text) != nil }) { return spoken }
         if let block = centered.max(by: { $0.box!.bottom < $1.box!.bottom }) { return block }
         return candidates.filter { $0.text.split(whereSeparator: \.isWhitespace).count >= 3 }
             .max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
     }
 
-    /// Bloğun son satırının hemen altında (arada bir satır yüksekliğinden az) ve yatayda onunla üst üste binen satır
-    /// o bloğa aittir.
+    /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
+    /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
+    /// satırı ayrılır; Windows ile aynı).
     private static func belongs(_ box: TextBox, to block: [TextLine], in area: TextBox) -> Bool {
         let last = block.last!.box!.placed(in: area)
-        let height = max(box.bottom - box.top, last.bottom - last.top)
-        guard box.top - last.bottom < height * 0.8, box.top >= last.top else { return false }
+        let own = box.bottom - box.top, previous = last.bottom - last.top
+        let height = max(own, previous)
+        guard box.top - last.bottom <= height * 0.6, box.top >= last.top else { return false }
+        guard max(own, previous) <= 1.25 * min(own, previous) else { return false }
         let overlap = min(box.right, last.right) - max(box.left, last.left)
         let narrower = min(box.right - box.left, last.right - last.left)
         return overlap > 0 && overlap >= narrower * 0.5

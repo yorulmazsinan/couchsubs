@@ -35,6 +35,8 @@ public struct StickyRows {
     private var rows: [Row] = []
     /// Son `filter` çağrısında ilk kez sabit sayılan satırlar (günlük için).
     public private(set) var newlySticky: [String] = []
+    /// Son `filter` çağrısında okumadan çıkarılan satırlar (sabit ya da uçta bekleyen; görev satırı).
+    public private(set) var removed: [TextLine] = []
 
     public init() {}
 
@@ -68,6 +70,9 @@ public struct StickyRows {
         let kept = zip(reading.lines, matched).enumerated()
             .filter { position, pair in !lingering[position] && (pair.1.map { !rows[$0].sticky } ?? true) }
             .map(\.element.0)
+        removed = zip(reading.lines, matched).enumerated()
+            .filter { position, pair in lingering[position] || (pair.1.map { rows[$0].sticky } ?? false) }
+            .map(\.element.0)
         // Kalkan satırlar unutulur (dizinler yukarıda kullanıldı; silme en sonda).
         rows.removeAll { time - $0.lastSeen > Self.forgetAfterMs }
         return kept.count == reading.lines.count ? reading : Reading(lines: kept)
@@ -92,5 +97,6 @@ public struct StickyRows {
     public mutating func reset() {
         rows.removeAll()
         newlySticky = []
+        removed = []
     }
 }

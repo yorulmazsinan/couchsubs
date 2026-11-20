@@ -159,6 +159,9 @@ public struct UserSettings: Codable, Equatable {
     public var autoReadGamePhone = false
     /// Bilinen oyunlarda hazır ek alanlar (bkz. `GameAreaPresets`); kullanıcının kendi ek alanı varsa o kullanılır.
     public var gameAreaPresets = true
+    /// "Ekran yazılarını altyazıdan ayır": ek alan ve otomatik ekran yazısı kutuları özgün rengini ve zeminini korur,
+    /// altyazı kutusuna benzemez (zemin yoksa zeminsiz, koyu gölgeli). Eski kayıtlarda yoktur; açık başlar.
+    public var setTextApart = true
     /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
     /// `ScreenTextDetector`). Altyazı alanı Tam ekranken çalışmaz. Deneysel: varsayılan kapalı (beta.63'te açık geliyordu;
     /// oyun dünyasındaki poster ve plakaları da çeviriyordu). Kullanıcı Ayarlar'dan açar.
@@ -217,6 +220,7 @@ public struct UserSettings: Codable, Equatable {
         watchSubtitleBackground = try values.decodeIfPresent(Bool.self, forKey: .watchSubtitleBackground) ?? defaults.watchSubtitleBackground
         autoReadGamePhone = try values.decodeIfPresent(Bool.self, forKey: .autoReadGamePhone) ?? defaults.autoReadGamePhone
         gameAreaPresets = try values.decodeIfPresent(Bool.self, forKey: .gameAreaPresets) ?? defaults.gameAreaPresets
+        setTextApart = try values.decodeIfPresent(Bool.self, forKey: .setTextApart) ?? defaults.setTextApart
         autoScreenText = try values.decodeIfPresent(Bool.self, forKey: .autoScreenText) ?? defaults.autoScreenText
         autoScreenTextReset = try values.decodeIfPresent(Bool.self, forKey: .autoScreenTextReset) ?? defaults.autoScreenTextReset
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice

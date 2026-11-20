@@ -423,6 +423,24 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertFalse(decoded.stackPrevious)
         XCTAssertTrue(try JSONDecoder().decode(SubtitleStyle.self, from: Data("{}".utf8)).stackPrevious)
     }
+
+    /// "Ekran yazılarını altyazıdan ayır": `style` olayı `setApart` alanını taşır (varsayılan açık); eski ayarlar açık gelir.
+    func testStyleCarriesSetApart() async throws {
+        let server = SubtitleServer(port: 0)
+        let port = try await server.start()
+        defer { server.stop() }
+        let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
+        try await waitUntil { server.connectedClients == 1 }
+        server.sendStyle(SubtitleStyle())
+        server.setApart = false
+        server.sendStyle(SubtitleStyle())
+        server.clear()
+        let styles = try await readLines(bytes, until: "event: clear").filter { $0.hasPrefix("data:") && $0.contains("fontSize") }
+        XCTAssertEqual(styles.count, 2)
+        XCTAssertTrue(styles[0].contains("\"setApart\":true"))
+        XCTAssertTrue(styles[1].contains("\"setApart\":false"))
+        XCTAssertTrue(try JSONDecoder().decode(UserSettings.self, from: Data("{}".utf8)).setTextApart)
+    }
 }
 
 private final class LockedEvents: @unchecked Sendable {

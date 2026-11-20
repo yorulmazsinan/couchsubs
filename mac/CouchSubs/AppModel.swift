@@ -540,6 +540,10 @@ final class AppModel: ObservableObject {
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
             server.speakerColors = settings.speakerColors
+            if settings.setTextApart != oldValue.setTextApart {
+                server.setApart = settings.setTextApart
+                server.sendStyle(settings.style)
+            }
             if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
@@ -649,6 +653,8 @@ final class AppModel: ObservableObject {
     /// Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var); örnek arka planda, tek uçuşta alınır.
     private var screenTextDetector: ScreenTextDetector?
     private var screenTextBusy = false
+    /// Altyazı hattının altyazıdan ayırdığı görev satırının bölgesi (bkz. `MissionLine`); yoksa nil.
+    private var missionRegion: CropRegion?
     /// Oyundaki altyazının son görüldüğü yer; deneme altyazısı TV'de oraya yerleşir.
     private var lastSubtitleBox: TextBox?
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur.
@@ -925,6 +931,7 @@ final class AppModel: ObservableObject {
         if let tv, tv.brand == .samsung, installedAppVersion != nil { SamsungAppKnowledge.shared.mark(host: tv.host) }
         server.sendsToTV = settings.output.showsOnTV
         server.speakerColors = settings.speakerColors
+        server.setApart = settings.setTextApart
         server.onEvent = { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.overlayReceive(event) } }
         }
@@ -1835,6 +1842,10 @@ final class AppModel: ObservableObject {
                                         translator: makeTranslator(),
                                         server: server, scheduler: scheduler)
         pipeline.showSpeakerNames = settings.showSpeakerNames
+        // Görev satırı altyazıya girmez; otomatik ekran yazısı açıksa "auto-mission" ek alanı olarak kendi yerinde ve özgün
+        // stilinde gösterilir (Windows ile aynı). Kapalıysa ayrıca gösterilmez.
+        missionRegion = nil
+        pipeline.onMissionChanged = { [weak self] region in self?.missionRegion = region }
         pipeline.skipsTurkish = settings.targetLanguage == "tr"
         pipeline.watchSubtitleBackground = settings.watchSubtitleBackground
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
@@ -2282,6 +2293,9 @@ final class AppModel: ObservableObject {
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         let pose = gamePhoneTracker?.sample(frame, now: capturedAt).pose
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
+        if settings.autoScreenText, let missionRegion {
+            areas.append(ExtraArea(id: MissionLine.areaId, name: "Mission", region: missionRegion, auto: true))
+        }
         areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: pose != nil)
         if regionWatcher == nil, !areas.isEmpty || pose != nil, let pipeline {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
