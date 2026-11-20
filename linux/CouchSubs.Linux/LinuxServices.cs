@@ -52,15 +52,15 @@ public sealed class LinuxServices : IAppServices
         }
     }
 
-    public async Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server)
+    public async Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server, string accessKey)
     {
-        // Sunucu Android TV'yi denetlemez; TV uygulaması sunucuyu kendisi bulur.
+        // Sunucu Android TV'yi denetlemez; TV uygulaması sunucuyu kendisi bulur ve paneldeki onayla eşleşir.
         if (tv.Brand == TvBrand.AndroidTv) return new TvPairing("", true);
         if (tv.Brand == TvBrand.Samsung)
         {
             using var samsung = new SamsungClient(tv, key);
             var token = await samsung.ConnectAsync();
-            try { await samsung.LaunchAsync(SamsungClient.AppId, new Dictionary<string, string> { ["server"] = server }); }
+            try { await samsung.LaunchAsync(SamsungClient.AppId, new Dictionary<string, string> { ["server"] = server, ["key"] = accessKey }); }
             catch (Exception) { /* TV uygulaması sunucuyu kendisi de bulabilir */ }
             return new TvPairing(token, true);
         }
@@ -68,7 +68,7 @@ public sealed class LinuxServices : IAppServices
         var newKey = await client.ConnectAsync();
         try
         {
-            await client.LaunchAsync(AppController.TvAppId, new Dictionary<string, string> { ["server"] = server });
+            await client.LaunchAsync(AppController.TvAppId, new Dictionary<string, string> { ["server"] = server, ["key"] = accessKey });
             return new TvPairing(newKey, true);
         }
         catch (Exception error)

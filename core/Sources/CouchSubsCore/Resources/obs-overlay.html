@@ -330,7 +330,9 @@
   window.addEventListener('resize', function () { apply(lastStyle); });
   showHint(TEXTS.waiting, 12);
   // "obs" parametresi uygulamaya bunun TV olmadığını söyler; "TV bağlı" sayısına katılmaz.
-  var events = new EventSource('/events?viewer=obs');
+  // Sayfa herkese açık bir kabuktur; anahtar yalnız kullanıcının verdiği URL'den gelir.
+  var key = new URLSearchParams(window.location.search).get('k');
+  var events = new EventSource('/events?viewer=obs' + (key !== null ? '&k=' + encodeURIComponent(key) : ''));
   var everOpen = false;
   events.onopen = function () { everOpen = true; };
   events.onerror = function () { if (!everOpen) showHint(TEXTS.offline, 12); };

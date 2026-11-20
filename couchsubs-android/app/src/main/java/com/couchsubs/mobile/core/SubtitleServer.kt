@@ -79,13 +79,32 @@ class SubtitleServer(
      * bilgisayarını adres değişse de bununla tanır; eskiden ağda ilk bulduğuna bağlanıyordu (GitHub #425).
      */
     val instanceId: String = "",
+    key: String = SubtitleAccess.createKey(),
+    private val allowLegacy: Boolean = SubtitleAccess.ALLOW_LEGACY_CLIENTS,
+    private val obsOverlay: String = "",
 ) : SubtitleSender, RegionSender {
+    @Volatile var accessKey: String = key
+        private set
+    val pairing = SubtitlePairing()
+    var onPairingRequest: ((SubtitlePairing.Ticket) -> Unit)? = null
+    @Volatile var hasLegacyClient = false
+        private set
+    var onLegacyClient: (() -> Unit)? = null
+    fun rotateKey(key: String) {
+        val closing = synchronized(lock) {
+            accessKey = key
+            pairing.reset()
+            clients.toList().also { clients.clear() }
+        }
+        closing.forEach { closeQuietly(it.socket) }
+        onClientsChanged?.invoke(0)
+    }
     companion object {
         const val DEFAULT_PORT = 8787
 
         /** `/hello` yanıtı: uygulama, kurulum kimliği ve bağlı TV sayısı (Mac ve Windows ile aynı biçim). */
         fun helloBody(id: String, tvs: Int): String =
-            "{\"app\":\"couchsubs\",\"id\":\"${id.filter { it.isLetterOrDigit() && it.code < 128 || it == '-' }}\",\"tvs\":${maxOf(0, tvs)}}"
+            "{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"${id.filter { it.isLetterOrDigit() && it.code < 128 || it == '-' }}\",\"tvs\":${maxOf(0, tvs)}}"
 
         /** Bağlantı canlı tutma: yorum satırını EventSource görmez; adlı "ping" olayını TV görür. */
         const val PING_FRAME = ": ping\n\nevent: ping\ndata: {}\n\n"
@@ -195,6 +214,7 @@ class SubtitleServer(
     }
 
     fun stop() {
+        pairing.setSession(false)
         pinger?.shutdownNow()
         pinger = null
         try {
@@ -261,6 +281,7 @@ class SubtitleServer(
             } catch (error: IOException) {
                 return
             }
+            if (!SubtitleAccess.isLocalPeer(client.inetAddress)) { closeQuietly(client); continue }
             thread(name = "CouchSubs SSE client", isDaemon = true) { serve(client) }
         }
     }
@@ -270,17 +291,50 @@ class SubtitleServer(
             // Sessizce kaybolan TV'ler TCP canlılık denetimiyle fark edilir; küçük çerçeveler beklemeden gider.
             socket.keepAlive = true
             socket.tcpNoDelay = true
-            val requestLine = readRequestLine(socket.getInputStream())
-            val parts = requestLine?.split(' ') ?: emptyList()
-            val method = parts.getOrElse(0) { "" }
-            val target = parts.getOrElse(1) { "" }
-            val path = target.substringBefore('?')
+            socket.soTimeout = 10_000
+            val request = readRequestLine(socket.getInputStream())?.let(SubtitleAccess::parse)
+            if (request == null) { respondAndClose(socket, "400 Bad Request"); return }
+            socket.soTimeout = 0
+            val checkedKey = accessKey
+            val access = SubtitleAccess.authorize(request, checkedKey, allowLegacy)
+            val cors = SubtitleAccess.cors(request)
+            if (access.status != 200) {
+                respondAndClose(socket, if (access.status == 403) "403 Forbidden" else "401 Unauthorized", cors = if (access.status == 403) "" else cors)
+                return
+            }
+            val method = request.method
+            val path = request.path
+            if (path == "/pair") {
+                if (method == "POST") {
+                    val ticket = pairing.begin()
+                    if (ticket == null) { respondAndClose(socket, "409 Conflict", cors = cors); return }
+                    onPairingRequest?.invoke(ticket)
+                    respondAndClose(socket, "200 OK", org.json.JSONObject().put("id", ticket.id).put("code", ticket.code).toString(), cors)
+                } else if (method == "GET") {
+                    val body = synchronized(lock) {
+                        val state = if (request.parameter("validate") == "1") {
+                            val check = request.copy(target = "/events?k=" + java.net.URLEncoder.encode(request.parameter("k") ?: "", "UTF-8"))
+                            if (SubtitleAccess.authorize(check, accessKey, false).status == 200) "valid" else "expired"
+                        } else pairing.poll(request.parameter("id") ?: "")
+                        org.json.JSONObject().put("state", state).apply { if (state == "approved") put("key", accessKey) }.toString()
+                    }
+                    respondAndClose(socket, "200 OK", body, cors)
+                } else respondAndClose(socket, "405 Method Not Allowed", cors = cors)
+                return
+            }
             when {
-                method == "OPTIONS" -> respondAndClose(socket, "204 No Content")
-                method == "GET" && path == "/events" -> openStream(socket, target.contains("viewer=obs"))
+                method == "OPTIONS" -> respondAndClose(socket, "204 No Content", cors = cors)
+                method == "GET" && path == "/events" -> {
+                    val obs = request.parameter("viewer") == "obs"
+                    // Anahtarsız OBS sayfası eski bir OBS adresidir; TV uygulamasının eski olduğu anlamına gelmez.
+                    val notify = synchronized(lock) { (access.legacy && !obs && !hasLegacyClient).also { if (it) hasLegacyClient = true } }
+                    if (notify) onLegacyClient?.invoke()
+                    openStream(socket, obs, cors, checkedKey)
+                }
                 // TV uygulaması ağdaki CouchSubs'ı bu yanıtla tanır.
-                method == "GET" && path == "/hello" -> respondAndClose(socket, "200 OK", helloBody(instanceId, connectedClients))
-                else -> respondAndClose(socket, "404 Not Found")
+                method == "GET" && path == "/obs" && obsOverlay.isNotEmpty() -> respondAndClose(socket, "200 OK", obsOverlay, cors, "text/html; charset=utf-8")
+                method == "GET" && path == "/hello" -> respondAndClose(socket, "200 OK", helloBody(instanceId, connectedClients), cors)
+                else -> respondAndClose(socket, "404 Not Found", cors = cors)
             }
         } catch (error: IOException) {
             closeQuietly(socket)
@@ -296,32 +350,31 @@ class SubtitleServer(
             if (count <= 0) return null
             head.write(buffer, 0, count)
             val text = head.toString(Charsets.ISO_8859_1.name())
-            if (text.contains("\r\n\r\n")) return text.substringBefore("\r\n")
+            if (text.contains("\r\n\r\n")) return text.substringBefore("\r\n\r\n")
         }
         return null
     }
 
-    private fun respondAndClose(socket: Socket, status: String, body: String = "") {
-        val head = "HTTP/1.1 $status\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body"
-        socket.getOutputStream().apply {
-            write(head.toByteArray(Charsets.US_ASCII))
-            flush()
-        }
+    private fun respondAndClose(socket: Socket, status: String, body: String = "", cors: String = "", type: String = "application/json") {
+        val data = body.toByteArray(Charsets.UTF_8)
+        val head = "HTTP/1.1 $status\r\n${cors}Content-Type: $type\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n"
+        socket.getOutputStream().apply { write(head.toByteArray(Charsets.US_ASCII)); write(data); flush() }
         closeQuietly(socket)
     }
 
-    private fun openStream(socket: Socket, viewer: Boolean) {
+    private fun openStream(socket: Socket, viewer: Boolean, cors: String, checkedKey: String) {
         val head = StringBuilder()
             .append("HTTP/1.1 200 OK\r\n")
             .append("Content-Type: text/event-stream; charset=utf-8\r\n")
             .append("Cache-Control: no-cache\r\n")
             .append("Connection: keep-alive\r\n")
-            .append("Access-Control-Allow-Origin: *\r\n\r\n")
+            .append(cors).append("\r\n")
             .append("retry: 2000\n\n")
         val client = Client(socket, viewer)
         // Başlık, listeye girdikten sonra gelebilecek ilk olaydan önce yazılır (istemci kilidi tutulurken eklenir).
         val count = synchronized(client) {
             val count = synchronized(lock) {
+                if (accessKey != checkedKey) { closeQuietly(socket); return }
                 lastStyle?.let { head.append(styleFrame(it)) }
                 clients.add(client)
                 clients.count { !it.viewer }

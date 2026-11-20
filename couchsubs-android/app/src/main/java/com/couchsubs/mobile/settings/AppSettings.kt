@@ -96,6 +96,17 @@ class AppSettings(context: Context) : AreaStore {
     private val prefs: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val secrets = SecretStore(context)
 
+    /** Kuruluma özel; sunucu durdurulup başlatılınca değişmez. */
+    val subtitleAccessKey: String
+        get() = synchronized(AppSettings::class.java) {
+            secrets.get("subtitleAccessKey")?.takeIf { it.isNotEmpty() }
+                ?: com.couchsubs.mobile.core.SubtitleAccess.createKey().also { secrets.put("subtitleAccessKey", it) }
+        }
+
+    fun renewSubtitleAccessKey(): String = synchronized(AppSettings::class.java) {
+        com.couchsubs.mobile.core.SubtitleAccess.createKey().also { secrets.put("subtitleAccessKey", it) }
+    }
+
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit().putBoolean("onboarded", value).apply()

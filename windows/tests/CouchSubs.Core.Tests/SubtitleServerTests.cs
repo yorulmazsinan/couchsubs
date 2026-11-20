@@ -38,7 +38,7 @@ public class SubtitleServerTests
 
         using var response = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("*", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
         Assert.StartsWith("text/event-stream", response.Content.Headers.ContentType?.ToString());
 
         await WaitUntil(() => server.ConnectedClients == 1);
@@ -135,6 +135,29 @@ public class SubtitleServerTests
                         "{\"box\":{\"bottom\":0.2,\"left\":0.6,\"right\":0.7,\"top\":0.15},\"line\":0.04,\"text\":\"Go\"}]," +
                         "\"box\":{\"bottom\":0.2,\"left\":0.6,\"right\":0.95,\"top\":0.05},\"id\":\"q\",\"line\":0.03,\"text\":\"Find\\nGo\"}", lines);
         Assert.Contains("data: {\"id\":\"q\",\"text\":\"\"}", lines);
+    }
+
+    /// <summary>Eşleştirilmiş TV anahtarlı bağlantıda da ek alan bloklarını (<c>blocks</c>) aynen alır; eski (anahtarsız)
+    /// bağlantılar kapalıyken anahtarsız istek reddedilir.</summary>
+    [Fact]
+    public async Task KeyedStreamCarriesRegionBlocks()
+    {
+        using var server = new SubtitleServer(0, allowLegacy: false);
+        var port = await server.StartAsync();
+        using var anonymous = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        using var response = await Http.GetAsync($"http://127.0.0.1:{port}/events?k={server.AccessKey}", HttpCompletionOption.ResponseHeadersRead);
+        await WaitUntil(() => server.ConnectedClients == 1);
+        server.SendRegion("q", "Find\nGo", new TextBox(0.6, 0.05, 0.95, 0.2), 0.03, null,
+                          [new ScreenTranslation.Item("Find", "Find", new TextBox(0.7, 0.05, 0.95, 0.08), 0.03),
+                           new ScreenTranslation.Item("Go", "Go", new TextBox(0.6, 0.15, 0.7, 0.2), 0.04)]);
+        server.ClearRegions();
+
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
+        var lines = await ReadLines(reader, "event: region-clear");
+        Assert.Contains("data: {\"blocks\":[{\"box\":{\"bottom\":0.08,\"left\":0.7,\"right\":0.95,\"top\":0.05},\"line\":0.03,\"text\":\"Find\"}," +
+                        "{\"box\":{\"bottom\":0.2,\"left\":0.6,\"right\":0.7,\"top\":0.15},\"line\":0.04,\"text\":\"Go\"}]," +
+                        "\"box\":{\"bottom\":0.2,\"left\":0.6,\"right\":0.95,\"top\":0.05},\"id\":\"q\",\"line\":0.03,\"text\":\"Find\\nGo\"}", lines);
     }
 
     [Fact]
@@ -279,7 +302,9 @@ public class SubtitleServerTests
         using var server = new SubtitleServer(0) { InstanceId = "3f2a-b9" };
         var port = await server.StartAsync();
         using var http = new HttpClient();
-        Assert.Equal("{\"app\":\"couchsubs\",\"id\":\"3f2a-b9\",\"tvs\":0}", await http.GetStringAsync($"http://127.0.0.1:{port}/hello"));
+        var body = await http.GetStringAsync($"http://127.0.0.1:{port}/hello");
+        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"3f2a-b9\",\"tvs\":0}", body);
+        Assert.DoesNotContain(server.AccessKey, body);
     }
 
     /// <summary>Kurulum kimliği kalıcıdır: aynı ağdaki iki CouchSubs'ı TV bununla ayırır (GitHub #425).</summary>
@@ -290,7 +315,7 @@ public class SubtitleServerTests
         using var second = new SubtitleServer(0);
         Assert.False(string.IsNullOrEmpty(first.InstanceId));
         Assert.Equal(first.InstanceId, second.InstanceId);
-        Assert.Equal("{\"app\":\"couchsubs\",\"id\":\"ab\",\"tvs\":2}", SubtitleServer.HelloBody("a\"b", 2));
+        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"ab\",\"tvs\":2}", SubtitleServer.HelloBody("a\"b", 2));
     }
 
     // Yeni tarayıcılı TV'ler (Tizen 9.0) yerel ağdaki sunucuya ön istekte izin başlığı ister.
@@ -300,12 +325,15 @@ public class SubtitleServerTests
         using var server = new SubtitleServer(0);
         var port = await server.StartAsync();
         using var http = new HttpClient();
-        using var request = new HttpRequestMessage(HttpMethod.Options, $"http://127.0.0.1:{port}/events");
+        // TV uygulamasının kökeni paketli uygulamadır (webOS/Tizen "null"); yabancı kökenlere izin verilmez.
+        using var request = new HttpRequestMessage(HttpMethod.Options, $"http://127.0.0.1:{port}/events?k={server.AccessKey}");
+        request.Headers.Add("Origin", "null");
         request.Headers.Add("Access-Control-Request-Private-Network", "true");
         using var response = await http.SendAsync(request);
         Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal("true", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Private-Network")));
-        Assert.Equal("*", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+        Assert.Equal("null", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+        Assert.Contains("POST", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Methods")));
     }
 
     [Fact]

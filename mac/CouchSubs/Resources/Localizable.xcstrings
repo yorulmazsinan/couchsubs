@@ -132,6 +132,96 @@
     "Height on screen": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Height on screen"}}, "tr": {"stringUnit": {"state": "translated", "value": "Ekrandaki yükseklik"}}}},
     "A sample subtitle appears on the TV when you let go of the slider. In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "A sample subtitle appears on the TV when you let go of the slider. In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote."}}, "tr": {"stringUnit": {"state": "translated", "value": "Kaydırıcıyı bırakınca TV'de örnek altyazı çıkar. Sabit yerdeyken altyazıyı TV kumandasının ▲ ve ▼ tuşlarıyla da taşıyabilirsiniz."}}}},
     "Cover: the translation hides the English subtitle in the game. Choose Above or Below to see the English subtitle too, with the translation right above or below it.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cover: the translation hides the English subtitle in the game. Choose Above or Below to see the English subtitle too, with the translation right above or below it."}}, "tr": {"stringUnit": {"state": "translated", "value": "Örtsün: çeviri oyundaki İngilizce altyazının üstünü kapatır. Üstünde ya da Altında seçerseniz İngilizce altyazı da görünür, çeviri onun hemen üstüne ya da altına gelir."}}}},
+    "Pair TV" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV eşleştir"
+          }
+        }
+      }
+    },
+    "Pair this TV?" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu TV eşleşsin mi?"
+          }
+        }
+      }
+    },
+    "TV code: %@. Approve only if this code is shown on your TV." : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV kodu: %@. Yalnız bu kod TV ekranınızda görünüyorsa onaylayın."
+          }
+        }
+      }
+    },
+    "Approve" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onayla"
+          }
+        }
+      }
+    },
+    "Reject" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reddet"
+          }
+        }
+      }
+    },
+    "The pairing request expired. Try again on the TV." : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleştirme isteğinin süresi doldu. TV’den yeniden deneyin."
+          }
+        }
+      }
+    },
+    "Renew access key" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erişim anahtarını yenile"
+          }
+        }
+      }
+    },
+    "The TV app is old. Update it." : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV uygulaması eski. Güncelleyin."
+          }
+        }
+      }
+    },
+    "Copy or share subtitle address" : {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altyazı adresini kopyala veya paylaş"
+          }
+        }
+      }
+    },
     "CouchSubs translates on this computer, without the internet. The English–Turkish model (about 475 MB) is downloaded once and kept on this computer.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "CouchSubs translates on this computer, without the internet. The English–Turkish model (about 475 MB) is downloaded once and kept on this computer."}}, "tr": {"stringUnit": {"state": "translated", "value": "CouchSubs çeviriyi bu bilgisayarda, internetsiz yapar. İngilizce–Türkçe model (yaklaşık 475 MB) bir kez indirilir ve bu bilgisayarda kalır."}}}},
     "CPU (default)": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "CPU (default)"}}, "tr": {"stringUnit": {"state": "translated", "value": "CPU (varsayılan)"}}}},
     "GPU (Beta) · NVIDIA CUDA": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "GPU (Beta) · NVIDIA CUDA"}}, "tr": {"stringUnit": {"state": "translated", "value": "GPU (Beta) · NVIDIA CUDA"}}}},

@@ -82,7 +82,7 @@ public sealed class LiveServices : IAppServices
         return [.. await lg, .. await samsung];
     }
 
-    public async Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server)
+    public async Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server, string accessKey)
     {
         // Bilgisayar Android TV'yi denetlemez; TV uygulaması bilgisayarı kendisi bulur.
         if (tv.Brand == TvBrand.AndroidTv) return new TvPairing("", true);
@@ -101,7 +101,7 @@ public sealed class LiveServices : IAppServices
                     $"Samsung uzaktan kumanda izni alınamadı ({error.GetType().Name}: {error.Message}); TV 8001'de yanıt verdi, eşleşme izinsiz sürdü.");
                 return new TvPairing(key ?? "", true);
             }
-            try { await samsung.LaunchAsync(SamsungClient.AppId, new Dictionary<string, string> { ["server"] = server }); }
+            try { await samsung.LaunchAsync(SamsungClient.AppId, new Dictionary<string, string> { ["server"] = server, ["key"] = accessKey }); }
             catch (Exception) { /* TV uygulaması bilgisayarı kendisi de bulabilir */ }
             return new TvPairing(token, true);
         }
@@ -109,7 +109,7 @@ public sealed class LiveServices : IAppServices
         var newKey = await client.ConnectAsync();
         try
         {
-            await client.LaunchAsync(AppController.TvAppId, new Dictionary<string, string> { ["server"] = server });
+            await client.LaunchAsync(AppController.TvAppId, new Dictionary<string, string> { ["server"] = server, ["key"] = accessKey });
             return new TvPairing(newKey, true);
         }
         catch (Exception)

@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 val navigation = rememberNavController()
                 val currentEntry by navigation.currentBackStackEntryAsState()
                 val status by LiveState.status.collectAsState()
+                TvPairingDialog(status.pairing)
                 LaunchedEffect(status.running) {
                     if (status.running && settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

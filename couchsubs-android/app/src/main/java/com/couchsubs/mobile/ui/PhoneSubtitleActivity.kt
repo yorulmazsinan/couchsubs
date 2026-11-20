@@ -62,6 +62,7 @@ class PhoneSubtitleActivity : ComponentActivity() {
         setContent {
             CouchSubsTheme {
                 val status by LiveState.status.collectAsState()
+                TvPairingDialog(status.pairing)
                 LaunchedEffect(Unit) {
                     delay(10_000)
                     window.attributes = window.attributes.apply { screenBrightness = 0.35f }

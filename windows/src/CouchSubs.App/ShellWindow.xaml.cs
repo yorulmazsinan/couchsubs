@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using CouchSubs.App.Services;
 using CouchSubs.App.Views;
 using CouchSubs.Shell;
+using CouchSubs.Core;
 using Microsoft.Win32;
 
 namespace CouchSubs.App;
@@ -22,6 +23,7 @@ public partial class ShellWindow : Window
         this.controller = controller;
         InitializeComponent();
         controller.PropertyChanged += OnChanged;
+        controller.TvPairingRequested += OnTvPairing;
         // Bilgisayar uykudan uyanınca bağlantılar hemen yenilenir.
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         // Kısayollar (varsayılan Num 0, 1, 2, 3, 5, 7, 8, 9 ve Ctrl+Shift+rakam; Ayarlar › Kısayollar'da değişir) yalnız
@@ -50,9 +52,20 @@ public partial class ShellWindow : Window
             overlay?.Detach();
             hotkeys?.Dispose();
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+            controller.TvPairingRequested -= OnTvPairing;
             controller.Dispose();
         };
         ShowScreen(force: true);
+    }
+
+    private void OnTvPairing(SubtitlePairing.Ticket ticket)
+    {
+        var text = Localizer.Current;
+        var message = text.Format("TV code: %@. Approve only if this code is shown on your TV.", ticket.Code);
+        var approved = MessageBox.Show(this, message, text["Pair this TV?"], MessageBoxButton.YesNo,
+            MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+        if (!controller.ResolveTvPairing(ticket.Id, approved) && approved)
+            MessageBox.Show(this, text["The pairing request expired. Try again on the TV."], "CouchSubs");
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)

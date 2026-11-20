@@ -184,6 +184,12 @@ struct RootView: View {
             }
         }
         .onChange(of: model.demoMode) { _ in path = [] }
+        .alert(item: $model.tvPairingRequest) { ticket in
+            Alert(title: Text("Pair this TV?"),
+                  message: Text(String(format: String(localized: "TV code: %@. Approve only if this code is shown on your TV."), ticket.code)),
+                  primaryButton: .default(Text("Approve")) { model.resolveTVPairing(ticket, accept: true) },
+                  secondaryButton: .cancel(Text("Reject")) { model.resolveTVPairing(ticket, accept: false) })
+        }
         .preferredColorScheme(.dark)
         .tint(Mobile.Palette.accent)
         // Yazılar Dinamik Yazı'yla büyür; en büyük erişilebilirlik boylarında karolar taşmasın diye üst sınır.

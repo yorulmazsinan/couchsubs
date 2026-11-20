@@ -63,7 +63,7 @@ protocol PhoneServices: AnyObject {
     func accountId(fromRedirect url: URL) async throws -> Data
     func register(host: String, accountId: Data, pin: UInt32) async throws -> RegisteredConsole
     func discoverTVs() async -> [LGTV]
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing
     /// `loginPasscode`: PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling
     /// `onKey`: TV bağlantıda yeni jeton verdi (Samsung); saklanır.
@@ -103,7 +103,7 @@ final class LivePhoneServices: PhoneServices {
         return await lg + samsung
     }
 
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing {
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing {
         switch tv.brand {
         case .androidTV:
             // Telefon bu TV'yi denetlemez; TV uygulaması altyazı sunucusunu ağda kendisi bulur.
@@ -112,13 +112,13 @@ final class LivePhoneServices: PhoneServices {
             let client = SamsungClient(tv: tv, token: key)
             defer { client.close() }
             let token = try await client.connect()
-            let launched = (try? await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server])) != nil
+            let launched = (try? await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server, "key": accessKey])) != nil
             return TVPairing(key: token, launched: launched)
         case .lg:
             let client = SSAPClient(tv: tv, clientKey: key)
             defer { client.close() }
             let newKey = try await client.connect()
-            let launched = (try? await client.launch(appId: AppIdentity.tvAppId, params: ["server": server])) != nil
+            let launched = (try? await client.launch(appId: AppIdentity.tvAppId, params: ["server": server, "key": accessKey])) != nil
             return TVPairing(key: newKey, launched: launched)
         }
     }

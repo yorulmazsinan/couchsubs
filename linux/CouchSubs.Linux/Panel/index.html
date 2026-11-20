@@ -59,6 +59,7 @@
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text2); flex: none; }
   .dot.Good { background: var(--success); } .dot.Warning { background: var(--warning); }
   .status b { min-width: 48px; }
+  .tv-code { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 4px; margin: 4px 0 12px; }
   .pair .src { color: var(--text2); font-size: 14px; } .pair .dst { font-size: 22px; font-weight: 600; }
   .preview { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
   .preview img { width: 100%; height: 100%; display: block; object-fit: contain; }
@@ -171,7 +172,7 @@ function wizard(s) {
         }).join('') + (lists.tvs && !lists.tvs.length ? '<p class="warn">' + t('TV bulunamadı. Adresini elle yazabilirsiniz.', 'No TV found. You can type its address.') + '</p>' : '') + '</div>' +
         input('tvHost', t('LG TV adresi (elle)', 'LG TV address (manual)'), 'placeholder="192.168.1.30" inputmode="decimal" autocomplete="off"') +
         '<div class="row" style="margin-top:12px">' + btn('pair', t('Bu adresle bağlan', 'Connect to this address')) + '</div>' + err('pair') + '</div>' +
-        (s.tv ? tvApp(s) : '');
+        (s.tv ? tvApp(s) : '') + pairingOpen();
       break;
     case 'Translation':
       body = '<h1>' + t('Çeviri modeli', 'Translation model') + '</h1>' +
@@ -250,6 +251,24 @@ function statusRow(name, st) {
   return '<div class="status"><span class="dot ' + esc(st.tone) + '"></span><b>' + esc(name) + '</b><span>' + esc(st.text) + '</span></div>';
 }
 
+// Güncel TV uygulaması anahtarı yalnız onayla alır. Panel yalnız TV'deki kodu gösterir; onay o kodla verilir.
+function pairingPrompt(s) {
+  if (!s.tvPairingCode) return '';
+  var code = 'data-code="' + esc(s.tvPairingCode) + '"';
+  return '<div class="card" role="alertdialog" aria-labelledby="pairTitle"><h2 id="pairTitle">' + t('Bu TV eşleştirilsin mi?', 'Pair this TV?') + '</h2>' +
+    '<p class="tv-code">' + esc(s.tvPairingCode) + '</p>' +
+    '<p class="muted">' + t('Yalnız TV\'de bu kod görünüyorsa onaylayın. İstek iki dakika sonra düşer.', 'Approve only if this code is shown on your TV. The request expires in two minutes.') + '</p>' +
+    '<div class="row">' + btn('pairAccept', t('Onayla', 'Approve'), 'primary', code) + btn('pairReject', t('Reddet', 'Reject'), '', code) + '</div>' +
+    err('pairAccept') + err('pairReject') + '</div>';
+}
+function pairingOpen() {
+  return '<div class="card"><h2>' + t('TV eşleştirme', 'TV pairing') + '</h2><p class="muted">' +
+    t('Android TV ve güncel TV uygulaması bağlanmak için onay ister. Çeviri sürerken istek kendiliğinden bu sayfaya gelir; çeviri kapalıyken eşleştirmeyi iki dakikalığına açın.',
+      'Android TV and the current TV app ask for approval to connect. While translating, the request shows up on this page on its own; otherwise open pairing for two minutes.') + '</p>' +
+    (extra.pairOpened ? '<p class="ok">' + t('Eşleştirme açık. TV uygulamasını şimdi açın.', 'Pairing is open. Open the TV app now.') + '</p>' : '') +
+    '<div class="row">' + btn('pairOpen', t('Eşleştirmeyi aç', 'Open pairing')) + '</div>' + err('pairOpen') + '</div>';
+}
+
 function home(s) {
   var r = s.settings.region, style = s.settings.style;
   return '<div class="card">' + statusRow('PS5', s.ps5) + (s.ps5.detail ? '<p class="muted">' + esc(s.ps5.detail) + '</p>' : '') + statusRow('TV', s.tvStatus) +
@@ -287,6 +306,7 @@ function home(s) {
     'PS5: ' + esc(s.console ? s.console.name + ' (' + s.console.host + ')' : '-') + ' · ' +
     'TV: ' + esc(s.tv ? s.tv.name + ' (' + s.tv.host + ')' : '-') + '</p>' +
     (s.tv ? tvAppLine(s) : '') + '<div class="row">' + btn('tvRefresh', t('TV uygulamasını denetle', 'Check the TV app')) + btn('reset', t('Kurulumu sıfırla', 'Reset setup')) + '</div>' + err('tvRefresh') + err('reset') + '</div>' +
+    pairingOpen() +
     '<div class="card"><details id="logBox"' + (extra.logOpen ? ' open' : '') + '><summary>' + t('Günlük', 'Log') + '</summary><pre id="log"></pre></details></div>';
 }
 // Çevrimiçi çeviri: Claude (sk-ant-…) ya da DeepL anahtarı. Ulaşılamazsa satır yerel modelle çevrilir.
@@ -322,7 +342,7 @@ function range(side, label, value) {
 // Durum değişmedikçe sayfa yeniden çizilmez; çizilirken yazılan metin ve odak korunur.
 function render(force) {
   if (!state) return;
-  var html = state.step === 'Done' ? home(state) : wizard(state);
+  var html = pairingPrompt(state) + (state.step === 'Done' ? home(state) : wizard(state));
   document.getElementById('meta').textContent = 'v' + state.version;
   if (!force && html === lastRendered) return;
   var active = document.activeElement, id = active && active.id, start = id && active.selectionStart;
@@ -389,6 +409,15 @@ document.addEventListener('click', function (e) {
       break;
     case 'onlineToggle': run('onlineToggle', 'POST', '/api/settings', { onlineTranslation: !state.settings.onlineTranslation }); break;
     case 'onlineRemove': delete extra.onlineCheck; run('onlineRemove', 'DELETE', '/api/deepl'); break;
+    case 'pairOpen':
+      clearTimeout(extra.pairTimer);
+      run('pairOpen', 'POST', '/api/tv-pairing/open', null, function () {
+        extra.pairOpened = true;
+        extra.pairTimer = setTimeout(function () { delete extra.pairOpened; render(true); }, 120000);
+      });
+      break;
+    case 'pairAccept': run('pairAccept', 'POST', '/api/tv-pairing', { code: el.dataset.code, accept: true }); break;
+    case 'pairReject': run('pairReject', 'POST', '/api/tv-pairing', { code: el.dataset.code, accept: false }); break;
     case 'reset': if (confirm(t('Kayıtlı hesap, PS5 ve TV bilgileri silinsin mi?', 'Delete the saved account, PS5 and TV?'))) run('reset', 'POST', '/api/reset'); break;
   }
 });

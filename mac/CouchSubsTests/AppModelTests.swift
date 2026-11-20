@@ -65,7 +65,7 @@ final class FakeServices: AppServices {
         return console
     }
     func discoverTVs() async -> [LGTV] { tvs }
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing {
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing {
         launchedServer = server
         pairCount += 1
         return TVPairing(key: pairKey, launched: appOnTV != nil)

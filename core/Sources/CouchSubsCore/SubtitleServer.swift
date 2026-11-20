@@ -126,6 +126,25 @@ public final class SubtitleServer: @unchecked Sendable {
     private var files: [String: (data: Data, type: String)] = [:]
     private var speechPaths: [String] = []
     private var speechNumber = 0
+    private var key: String
+    private let allowLegacy: Bool
+    public let pairing = SubtitlePairing()
+    public var onPairingRequest: (@Sendable (SubtitlePairing.Ticket) -> Void)?
+    private var legacySeen = false
+    public var onLegacyClient: (@Sendable () -> Void)?
+    public var accessKey: String { queue.sync { key } }
+    public var hasLegacyClient: Bool { queue.sync { legacySeen } }
+
+    public func rotateKey(_ key: String) {
+        queue.sync {
+            self.key = key
+            pairing.reset()
+            for connection in clients.values { connection.cancel() }
+            clients.removeAll()
+            viewers.removeAll()
+            notifyClientsChanged()
+        }
+    }
 
     public var onClientsChanged: ((Int) -> Void)?
 
@@ -149,9 +168,12 @@ public final class SubtitleServer: @unchecked Sendable {
     /// ya da telefonunu adres değişse de bununla tanır; eskiden ağda ilk bulduğuna bağlanıyordu (GitHub #425).
     public let instanceId: String
 
-    public init(port: UInt16 = 8787, pingInterval: TimeInterval = 15, instanceId: String = SubtitleServer.installationId) {
+    public init(port: UInt16 = 8787, pingInterval: TimeInterval = 15, key: String? = nil,
+                allowLegacy: Bool = SubtitleAccess.allowLegacyClients, instanceId: String = SubtitleServer.installationId) {
         requestedPort = port
         self.pingInterval = pingInterval
+        self.key = key ?? SubtitleAccess.createKey()
+        self.allowLegacy = allowLegacy
         self.instanceId = instanceId
     }
 
@@ -164,11 +186,12 @@ public final class SubtitleServer: @unchecked Sendable {
         return made
     }
 
-    /// `/hello` yanıtı: uygulama, kurulum kimliği ve bağlı TV sayısı (Windows ve Android ile aynı biçim). TV, ağda birden
-    /// çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si bağlı olmayanı seçer.
+    /// `/hello` yanıtı: uygulama, eşleştirme gerektiği (`auth`), kurulum kimliği ve bağlı TV sayısı (Windows ve Android ile
+    /// aynı biçim). Erişim anahtarını içermez. TV, ağda birden çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si bağlı
+    /// olmayanı seçer; onayladığı anahtarı da bu kimlikle eşler.
     static func helloBody(id: String, tvs: Int) -> String {
         let escaped = id.filter { $0.isLetter || $0.isNumber || $0 == "-" }
-        return #"{"app":"couchsubs","id":""# + escaped + #"","tvs":"# + String(max(0, tvs)) + "}"
+        return #"{"app":"couchsubs","auth":1,"id":""# + escaped + #"","tvs":"# + String(max(0, tvs)) + "}"
     }
 
     public var connectedClients: Int {
@@ -223,6 +246,7 @@ public final class SubtitleServer: @unchecked Sendable {
     private var startContinuation: CheckedContinuation<UInt16, Error>?
 
     public func stop() {
+        pairing.setSession(false)
         queue.sync {
             pingTimer?.cancel()
             pingTimer = nil
@@ -372,6 +396,10 @@ public final class SubtitleServer: @unchecked Sendable {
     // MARK: - Bağlantılar
 
     private func accept(_ connection: NWConnection) {
+        guard case let .hostPort(host, _) = connection.endpoint, SubtitleAccess.isLocalPeer("\(host)") else {
+            connection.cancel()
+            return
+        }
         connection.start(queue: queue)
         readRequest(connection, buffer: Data())
     }
@@ -383,7 +411,7 @@ public final class SubtitleServer: @unchecked Sendable {
             if let data { buffer.append(data) }
             if let end = buffer.range(of: Data("\r\n\r\n".utf8)) {
                 let head = String(decoding: buffer[..<end.lowerBound], as: UTF8.self)
-                self.route(connection, requestLine: head.components(separatedBy: "\r\n").first ?? "")
+                self.route(connection, requestLine: head)
             } else if isComplete || error != nil || buffer.count > 65536 {
                 connection.cancel()
             } else {
@@ -393,49 +421,82 @@ public final class SubtitleServer: @unchecked Sendable {
     }
 
     private func route(_ connection: NWConnection, requestLine: String) {
-        let parts = requestLine.split(separator: " ")
-        let target = parts.count > 1 ? String(parts[1]) : ""
-        let path = target.components(separatedBy: "?")[0]
-        let method = parts.first.map(String.init) ?? ""
+        guard let request = SubtitleAccess.parse(requestLine) else {
+            respondAndClose(connection, status: "400 Bad Request")
+            return
+        }
+        let access = SubtitleAccess.authorize(request, key: key, allowLegacy: allowLegacy)
+        let cors = SubtitleAccess.cors(request)
+        guard access.status == 200 else {
+            respondAndClose(connection, status: access.status == 403 ? "403 Forbidden" : "401 Unauthorized", cors: access.status == 403 ? "" : cors)
+            return
+        }
+        let path = request.path
+        let method = request.method
 
+        if path == "/pair" {
+            if method == "POST" {
+                guard let ticket = pairing.begin() else { respondAndClose(connection, status: "409 Conflict", cors: cors); return }
+                if let handler = onPairingRequest { DispatchQueue.main.async { handler(ticket) } }
+                let data = try! JSONSerialization.data(withJSONObject: ["id": ticket.id, "code": ticket.code])
+                respondAndClose(connection, status: "200 OK", data: data, type: "application/json", cors: cors)
+            } else if method == "GET" {
+                let state: String
+                if request.parameter("validate") == "1" {
+                    let supplied = request.parameter("k") ?? ""
+                    let check = SubtitleAccess.Request(method: "GET", target: "/events?k=\(supplied.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")", origin: request.origin, host: request.host)
+                    state = SubtitleAccess.authorize(check, key: key, allowLegacy: false).status == 200 ? "valid" : "expired"
+                } else { state = pairing.poll(request.parameter("id") ?? "") }
+                var result = ["state": state]
+                if state == "approved" { result["key"] = key }
+                respondAndClose(connection, status: "200 OK", data: try! JSONSerialization.data(withJSONObject: result), type: "application/json", cors: cors)
+            } else { respondAndClose(connection, status: "405 Method Not Allowed", cors: cors) }
+            return
+        }
         if method == "OPTIONS" {
             // Chromium'un yerel ağ erişimi denetimi (Private Network Access) ön istekte bu başlıkları ister; yeni
             // tarayıcılı TV'ler (Tizen 9.0 ve sonrası) başlık olmadan bilgisayara bağlanmayabilir. Eski TV'ler yok sayar.
-            respondAndClose(connection, status: "204 No Content", data: Data(), type: nil, extraHeaders: Self.preflightHeaders)
+            respondAndClose(connection, status: "204 No Content", data: Data(), type: nil, cors: cors + Self.preflightHeaders)
         } else if method == "GET" && path == "/events" {
-            openStream(connection, viewer: target.contains("viewer=obs"))
+            let obs = request.parameter("viewer") == "obs"
+            // Anahtarsız OBS sayfası eski bir OBS adresidir; TV uygulamasının eski olduğu anlamına gelmez.
+            if access.legacy && !obs && !legacySeen {
+                legacySeen = true
+                if let handler = onLegacyClient { DispatchQueue.main.async { handler() } }
+            }
+            openStream(connection, viewer: obs, cors: cors)
         } else if method == "GET" && path == "/obs" {
-            respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8")
+            respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == "/hello" {
             // TV uygulaması ağdaki bilgisayarı bu yanıtla tanır (bağlantı kuyruğunda: sayaçlar doğrudan okunur).
-            respondAndClose(connection, status: "200 OK", body: Self.helloBody(id: instanceId, tvs: clients.count - viewers.count))
+            respondAndClose(connection, status: "200 OK", body: Self.helloBody(id: instanceId, tvs: clients.count - viewers.count), cors: cors)
         } else if method == "GET", let file = files[path] {
-            respondAndClose(connection, status: "200 OK", data: file.data, type: file.type)
+            respondAndClose(connection, status: "200 OK", data: file.data, type: file.type, cors: cors)
         } else {
-            respondAndClose(connection, status: "404 Not Found")
+            respondAndClose(connection, status: "404 Not Found", cors: cors)
         }
     }
 
-    private func respondAndClose(_ connection: NWConnection, status: String, body: String = "") {
-        respondAndClose(connection, status: status, data: Data(body.utf8), type: nil)
+    private func respondAndClose(_ connection: NWConnection, status: String, body: String = "", cors: String = "") {
+        respondAndClose(connection, status: status, data: Data(body.utf8), type: nil, cors: cors)
     }
 
-    static let preflightHeaders = "Access-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\n"
+    static let preflightHeaders = "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\n"
         + "Access-Control-Allow-Private-Network: true\r\nAccess-Control-Max-Age: 600\r\n"
 
-    private func respondAndClose(_ connection: NWConnection, status: String, data: Data, type: String?, extraHeaders: String = "") {
-        var head = "HTTP/1.1 \(status)\r\nAccess-Control-Allow-Origin: *\r\n" + extraHeaders
-        if let type { head += "Content-Type: \(type)\r\nCache-Control: no-cache\r\n" }
+    private func respondAndClose(_ connection: NWConnection, status: String, data: Data, type: String?, cors: String = "") {
+        var head = "HTTP/1.1 \(status)\r\n\(cors)Cache-Control: no-store\r\nReferrer-Policy: no-referrer\r\n"
+        if let type { head += "Content-Type: \(type)\r\n" }
         head += "Content-Length: \(data.count)\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(head.utf8) + data, completion: .contentProcessed { _ in connection.cancel() })
     }
 
-    private func openStream(_ connection: NWConnection, viewer: Bool = false) {
+    private func openStream(_ connection: NWConnection, viewer: Bool = false, cors: String = "") {
         var head = "HTTP/1.1 200 OK\r\n"
         head += "Content-Type: text/event-stream; charset=utf-8\r\n"
         head += "Cache-Control: no-cache\r\n"
         head += "Connection: keep-alive\r\n"
-        head += "Access-Control-Allow-Origin: *\r\n\r\n"
+        head += cors + "\r\n"
         head += "retry: 2000\n\n"
         if let style = lastStyle {
             head += Self.frame(event: "style", json: style.json)

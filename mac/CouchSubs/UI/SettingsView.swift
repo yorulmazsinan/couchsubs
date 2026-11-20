@@ -433,7 +433,7 @@ private struct OBSCard: View {
     @State private var obsCopied = false
 
     /// OBS'de "Tarayıcı kaynağı" adresi; OBS çoğunlukla CouchSubs ile aynı bilgisayarda çalışır.
-    private var obsAddress: String { "http://localhost:\(model.serverPort)/obs" }
+    private var obsAddress: String { "http://localhost:\(model.serverPort)/obs?k=\(model.subtitleAccessKey)" }
 
     var body: some View {
         Card {
@@ -458,13 +458,16 @@ private struct OBSCard: View {
                 HintText(text: "Your streaming app does not accept localhost (TikTok LIVE Studio, for example)? Use this address with the computer's network address:")
                 AddressRow(address: networkAddress)
             }
+            Button("Pair TV") { Task { await model.openTVPairing() } }.buttonStyle(.secondary)
+            Button("Renew access key") { model.rotateSubtitleKey() }.buttonStyle(.secondary)
+            if model.legacyTVWarning { HintText(text: "The TV app is old. Update it.") }
         }
         StreamWindowCard()
     }
 
     /// Aynı adres bu Mac'in ağ adresiyle; localhost'u kabul etmeyen yayın programları için.
     private var networkAddress: String? {
-        AppModel.localAddress(near: nil).map { "http://\($0):\(model.serverPort)/obs" }
+        AppModel.localAddress(near: nil).map { "http://\($0):\(model.serverPort)/obs?k=\(model.subtitleAccessKey)" }
     }
 }
 

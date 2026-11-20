@@ -110,6 +110,23 @@ class TranslationService : Service() {
          * telefonda ve TV'de yazının yerinde görünür. Çeviri sürerken ya da sonuçlar ekrandayken yeniden çağrılmak onları
          * kaldırır (Mac ⌥⌘T ve iPhone ile aynı). Çeviri çalışmıyorsa false.
          */
+        fun resolvePairing(id: String, accept: Boolean) {
+            val resolved = liveServer?.pairing?.resolve(id, accept) == true
+            LiveState.update { it.copy(pairing = null, error = if (accept && !resolved) current?.getString(R.string.tv_pair_expired) else it.error) }
+        }
+        fun viewerAddress(): String? {
+            val host = java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())
+                .filter { it.isUp && !it.isLoopback }.sortedBy { if (it.name.startsWith("wlan")) 0 else 1 }
+                .flatMap { java.util.Collections.list(it.inetAddresses) }
+                .firstOrNull { it is java.net.Inet4Address && com.couchsubs.mobile.core.SubtitleAccess.isLocalPeer(it) }?.hostAddress ?: return null
+            return "http://$host:${current?.subtitlePort ?: 8787}/obs?k=${Services.settings.subtitleAccessKey}"
+        }
+        fun renewAccessKey() {
+            val key = Services.settings.renewSubtitleAccessKey()
+            liveServer?.rotateKey(key)
+            current?.launchTv(key)
+            LiveState.update { it.copy(pairing = null) }
+        }
         fun translateScreen(): Boolean {
             val service = current ?: return false
             service.toggleScreen()
@@ -130,6 +147,13 @@ class TranslationService : Service() {
         }
     }
 
+    @Volatile private var subtitlePort = 8787
+    private fun launchTv(key: String) {
+        if (settings.target != SubtitleTarget.TV) return
+        Thread({ runCatching {
+            com.couchsubs.mobile.tv.TvSessionLauncher.launch(settings, subtitlePort, key) { !destroyed && server?.accessKey == key }
+        } }, "CouchSubs TV launch").apply { isDaemon = true }.start()
+    }
     private lateinit var settings: AppSettings
     @Volatile private var session: FrameSource? = null
     @Volatile private var server: SubtitleServer? = null
@@ -268,7 +292,10 @@ class TranslationService : Service() {
         glossaryInUse = glossary
         val free = MlKitTranslator(cache(MlKitTranslator.ENGINE_ID), glossary).also { freeTranslator = it }
         val translator = engineTranslator(free)
-        val subtitleServer = SubtitleServer(instanceId = installationId(this)).also { server = it }
+        val subtitleServer = SubtitleServer(instanceId = installationId(this), key = settings.subtitleAccessKey, obsOverlay = assets.open("obs-overlay.html").bufferedReader().use { it.readText() }).also { server = it }
+        subtitleServer.pairing.setSession(true)
+        subtitleServer.onPairingRequest = { ticket -> LiveState.update { it.copy(pairing = ticket) } }
+        subtitleServer.onLegacyClient = { LiveState.update { it.copy(legacyTv = true) }; Log.i(TAG, "TV uygulamasını güncelleyin; geçiş bağlantısı.") }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
         subtitleServer.onClientsChanged = { count ->
             val before = LiveState.status.value.connectedTvs
@@ -289,9 +316,10 @@ class TranslationService : Service() {
             extraAreas = settings.extraAreas.watched(settings.areaPreset)
         }
         try {
-            subtitleServer.start()
+            subtitlePort = subtitleServer.start()
             subtitleServer.sendStyle(settings.style)
             liveServer = subtitleServer
+            launchTv(subtitleServer.accessKey)
         } catch (error: Exception) {
             Log.e(TAG, "SSE server", error)
             LiveState.update { it.copy(error = getString(R.string.error_port)) }
@@ -689,6 +717,7 @@ class TranslationService : Service() {
         pipeline = null
         liveServer = null
         server?.stop()
+        LiveState.update { it.copy(pairing = null) }
         server = null
         reader?.close()
         reader = null

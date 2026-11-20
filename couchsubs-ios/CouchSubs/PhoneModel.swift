@@ -238,6 +238,11 @@ final class PhoneModel: ObservableObject {
             engine.storeKey.flatMap { store.load(String.self, for: $0) }?.isEmpty == false
         })
         installedTVApp = defaults.data(forKey: StoreKey.tvAppInstalled).flatMap { try? JSONDecoder().decode(InstalledTVApp.self, from: $0) }
+        let storedKey = store.load(String.self, for: StoreKey.subtitleAccessKey)
+        let accessKey = storedKey?.isEmpty == false ? storedKey! : SubtitleAccess.createKey()
+        store.save(accessKey, for: StoreKey.subtitleAccessKey)
+        server.rotateKey(accessKey)
+        subtitleAccessKey = accessKey
         attachServer()
         reloadPackList()
         let pool = self.pool
@@ -286,7 +291,45 @@ final class PhoneModel: ObservableObject {
         }
     }
 
+    @Published private(set) var subtitleAccessKey = ""
+    @Published private(set) var legacyTVWarning = false
+    @Published var tvPairingRequest: SubtitlePairing.Ticket?
+    func resolveTVPairing(_ ticket: SubtitlePairing.Ticket, accept: Bool) {
+        server.pairing.resolve(ticket.id, accept: accept)
+        tvPairingRequest = nil
+    }
+    var subtitleViewerAddress: String { "http://\(NetworkAddress.near(nil) ?? "127.0.0.1"):\(serverPort)/obs?k=\(subtitleAccessKey)" }
+    func openTVPairing() async {
+        do { try await startServer(); server.pairing.open() }
+        catch { SubtitleLog.write("TV eşleştirme sunucusu açılamadı.") }
+    }
+
+    func rotateSubtitleKey() {
+        let key = SubtitleAccess.createKey()
+        store.save(key, for: StoreKey.subtitleAccessKey)
+        keeper?.stop()
+        keeper = nil
+        server.rotateKey(key)
+        tvPairingRequest = nil
+        subtitleAccessKey = key
+        startKeeper()
+    }
+
     private func attachServer() {
+        server.onPairingRequest = { [weak self] ticket in
+            Task { @MainActor [weak self] in
+                guard let self, self.server.pairing.poll(ticket.id) == "pending" else { return }
+                self.tvPairingRequest = ticket
+            }
+        }
+        server.onLegacyClient = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.legacyTVWarning = true
+                SubtitleLog.write("TV bağlantısı geçiş izniyle anahtarsız açıldı; TV uygulamasını güncelleyin.")
+            }
+        }
+
         server.onClientsChanged = { [weak self] count in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -375,7 +418,7 @@ final class PhoneModel: ObservableObject {
     func pair(_ tv: LGTV) async throws {
         try await startServer()
         let savedKey = store.load(String.self, for: StoreKey.tvKey)
-        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv))
+        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv), accessKey: server.accessKey)
         self.tv = tv
         store.save(tv, for: StoreKey.tv)
         // Samsung jetonla gelen bağlantıda jetonu yeniden göndermeyebilir; boş jeton saklı olanı silmez (#40).
@@ -481,6 +524,7 @@ final class PhoneModel: ObservableObject {
                 return self.settings.askGame && self.settings.sharePool
             }
         }
+        server.pairing.setSession(true)
         isRunning = true
         startedAt = Date()
         runningSince = startedAt
@@ -516,6 +560,8 @@ final class PhoneModel: ObservableObject {
         regionWatcher = nil
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.reset()
+        server.pairing.setSession(false)
+        tvPairingRequest = nil
         isRunning = false
         onlineIssue = nil
         sessionState = .disconnected(.stopped)
@@ -550,7 +596,7 @@ final class PhoneModel: ObservableObject {
     private func startKeeper() {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
-        let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv)],
+        let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv), "key": server.accessKey],
                                          appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
         }, onKey: { [weak self] key in
@@ -1125,7 +1171,7 @@ final class PhoneModel: ObservableObject {
         do {
             serverPort = try await server.start()
         } catch {
-            server = SubtitleServer(port: 0)
+            server = SubtitleServer(port: 0, key: server.accessKey)
             attachServer()
             serverPort = try await server.start()
         }

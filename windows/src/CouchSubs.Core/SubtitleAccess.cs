@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace CouchSubs.Core;
+
+/// <summary>TV, OBS ve telefonun ortak erişim kuralları. Anahtarlar hiçbir zaman günlüklenmez.</summary>
+public static class SubtitleAccess
+{
+    // Yalnız geçiş sürümü: sonraki sürümde false yapılmalı.
+    public const bool AllowLegacyClients = true;
+    public static string CreateKey() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    public static bool IsLocalPeer(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        var b = address.GetAddressBytes();
+        if (IPAddress.IsLoopback(address)) return true;
+        if (b.Length == 16) return (b[0] & 0xfe) == 0xfc || b[0] == 0xfe && (b[1] & 0xc0) == 0x80;
+        return b[0] == 10 || b[0] == 172 && b[1] >= 16 && b[1] <= 31 || b[0] == 192 && b[1] == 168
+            || b[0] == 169 && b[1] == 254 || b[0] == 100 && b[1] >= 64 && b[1] <= 127;
+    }
+
+    public sealed record Request(string Method, string Target, string? Origin, string Host)
+    {
+        public string Path => Target.Split('?')[0];
+        public string? Parameter(string name)
+        {
+            var query = Target.IndexOf('?');
+            if (query < 0) return null;
+            string? result = null;
+            foreach (var pair in Target[(query + 1)..].Split('&'))
+            {
+                var parts = pair.Split('=', 2);
+                if (Uri.UnescapeDataString(parts[0]) != name) continue;
+                if (result is not null) return ""; // Çift anahtarlı belirsiz istek reddedilir.
+                result = parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : "";
+            }
+            return result;
+        }
+    }
+
+    public static Request? Parse(string head)
+    {
+        var lines = head.Split("\r\n");
+        var first = lines[0].Split(' ');
+        if (first.Length != 3 || !first[1].StartsWith('/')) return null;
+        string? origin = null;
+        string? host = null;
+        foreach (var line in lines.Skip(1).TakeWhile(l => l.Length > 0))
+        {
+            var colon = line.IndexOf(':');
+            if (colon <= 0 || char.IsWhiteSpace(line[0])) return null;
+            var name = line[..colon];
+            var value = line[(colon + 1)..].Trim();
+            if (value.Any(c => c < 32 || c > 126)) return null;
+            if (name.Equals("Origin", StringComparison.OrdinalIgnoreCase))
+            {
+                if (origin is not null) return null;
+                origin = value;
+            }
+            if (name.Equals("Host", StringComparison.OrdinalIgnoreCase))
+            {
+                if (host is not null) return null;
+                host = value;
+            }
+        }
+        return new(first[0], first[1], origin, host ?? "");
+    }
+
+    // Paketli TV uygulamaları: webOS/Android TV "null", Samsung Tizen ise (en az 5.0'da, POST isteklerinde) "file://" gönderir.
+    private static bool PackagedOrigin(string origin) => origin is "null" or "file://" ||
+        Uri.TryCreate(origin, UriKind.Absolute, out var url) && url.Scheme == "app" && url.Host.Length > 0
+        && url.UserInfo.Length == 0 && url.Query.Length == 0 && url.Fragment.Length == 0 && url.AbsolutePath is "" or "/";
+
+    public static bool OriginAllowed(Request request)
+    {
+        if (request.Origin is null || PackagedOrigin(request.Origin)) return true;
+        if (!Uri.TryCreate(request.Origin, UriKind.Absolute, out var origin) || origin.Scheme != "http"
+            || origin.UserInfo.Length != 0 || origin.AbsolutePath != "/" || origin.Query.Length != 0 || origin.Fragment.Length != 0) return false;
+        return Uri.TryCreate("http://" + request.Host, UriKind.Absolute, out var local)
+            && local.UserInfo.Length == 0 && local.AbsolutePath == "/" && local.Query.Length == 0 && local.Fragment.Length == 0
+            && origin.Host.Equals(local.Host, StringComparison.OrdinalIgnoreCase) && origin.Port == local.Port;
+    }
+
+    public static string Cors(Request request) => request.Origin is { } origin && PackagedOrigin(origin)
+        ? $"Access-Control-Allow-Origin: {origin}\r\nVary: Origin\r\n" : "";
+
+    public static int Authorize(Request request, string key, bool allowLegacy, out bool legacy)
+    {
+        legacy = false;
+        if (!OriginAllowed(request)) return 403;
+        if (request.Path is "/hello" or "/obs" or "/pair") return 200;
+        var supplied = request.Parameter("k");
+        if (supplied is null && allowLegacy && (request.Origin is null || PackagedOrigin(request.Origin)))
+        {
+            legacy = true;
+            return 200;
+        }
+        return supplied is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(key), Encoding.UTF8.GetBytes(supplied)) ? 200 : 401;
+    }
+}

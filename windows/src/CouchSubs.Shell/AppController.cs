@@ -122,6 +122,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         this.sleep = sleep;
         this.text = text;
         this.post = post;
+        var accessKey = store.Load<string>(StoreKeys.SubtitleAccessKey);
+        if (string.IsNullOrEmpty(accessKey))
+        {
+            accessKey = SubtitleAccess.CreateKey();
+            store.Save(StoreKeys.SubtitleAccessKey, accessKey);
+        }
+        server.RotateKey(accessKey);
         if (services.Xbox is { } xbox) xbox.TokenUpdated += OnXboxTokenUpdated;
         accountId = store.Load<byte[]>(StoreKeys.AccountId);
         console = store.Load<RegisteredConsole>(StoreKeys.Console);
@@ -184,6 +191,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         server.ClientsChanged += OnClientsChanged;
         server.EventSent += OnSubtitleEvent;
+        server.LegacyClientConnected += OnLegacyClient;
+        server.PairingRequested += OnPairingRequest;
         server.SendsToTv = settings.Output.ShowsOnTv();
     }
 
@@ -191,6 +200,37 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         server.ClientsChanged -= OnClientsChanged;
         server.EventSent -= OnSubtitleEvent;
+        server.LegacyClientConnected -= OnLegacyClient;
+        server.PairingRequested -= OnPairingRequest;
+    }
+
+    public event Action<SubtitlePairing.Ticket>? TvPairingRequested;
+    private void OnPairingRequest(SubtitlePairing.Ticket ticket) => post(() => {
+        if (server.Pairing.Poll(ticket.Id) == "pending") TvPairingRequested?.Invoke(ticket);
+    });
+    public bool ResolveTvPairing(string id, bool accept) => server.Pairing.Resolve(id, accept);
+    /// <summary>Onay penceresini olay anında açamayan arayüzler (Linux paneli) isteğin hâlâ beklediğini buradan sorar.</summary>
+    public bool IsTvPairingPending(string id) => server.Pairing.Poll(id) == "pending";
+    public async Task OpenTvPairingAsync() { await StartServerAsync(); server.Pairing.Open(); }
+    public bool LegacyTvWarning => server.HasLegacyClient;
+    public string ObsAddress => $"http://localhost:{ServerPort}/obs?k={server.AccessKey}";
+
+    private void OnLegacyClient() => post(() =>
+    {
+        SubtitleLog.Write("TV bağlantısı geçiş izniyle anahtarsız açıldı; TV uygulamasını güncelleyin.");
+        Changed(nameof(LegacyTvWarning));
+        _ = RefreshTvAppAsync();
+    });
+
+    public void RotateSubtitleKey()
+    {
+        var key = SubtitleAccess.CreateKey();
+        store.Save(StoreKeys.SubtitleAccessKey, key);
+        keeper?.Stop();
+        keeper = null;
+        server.RotateKey(key);
+        StartKeeper();
+        Changed(nameof(ObsAddress), nameof(NetworkObsAddress));
     }
 
     // --- Durum ---
@@ -705,7 +745,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         await StartServerAsync();
         var savedKey = store.Load<string>(StoreKeys.TvKey);
-        var pairing = await services.PairTvAsync(target, savedKey, ServerAddress(target));
+        var pairing = await services.PairTvAsync(target, savedKey, ServerAddress(target), server.AccessKey);
         if (tv?.Brand != target.Brand || (target.Brand != TvBrand.AndroidTv && tv?.Host != target.Host))
             store.Remove(StoreKeys.TvAppVersion);
         tv = target;
@@ -1052,7 +1092,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             keeper.Reconnect();
             return;
         }
-        try { await services.PairTvAsync(target, store.Load<string>(StoreKeys.TvKey), ServerAddress(target)); }
+        try { await services.PairTvAsync(target, store.Load<string>(StoreKeys.TvKey), ServerAddress(target), server.AccessKey); }
         catch (Exception) { /* TV uygulaması kuruldu; açılmadıysa kullanıcı açabilir */ }
     }
 
@@ -1470,6 +1510,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             stream.Start();
             session = stream;
 
+            server.Pairing.SetSession(true);
             StartKeeper();
             StartGameSense();
 
@@ -1498,7 +1539,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         if (keeper is not null || !ShowsOnTv || !HasTv || tv is not { } target) return;
         var running = server;
-        var tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target) },
+        var tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target), ["key"] = server.AccessKey },
             () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)), key => post(() => store.Save(StoreKeys.TvKey, key)));
         tvKeeper.Start(TimeSpan.FromSeconds(5));
         keeper = tvKeeper;
@@ -1596,7 +1637,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>Bilgisayarın ağ adresiyle OBS sayfası; localhost'u kabul etmeyen yayın programları (TikTok LIVE Studio) için.</summary>
-    public string? NetworkObsAddress => LocalAddress(null) is { } address ? $"http://{address}:{ServerPort}/obs" : null;
+    public string? NetworkObsAddress => LocalAddress(null) is { } address ? $"http://{address}:{ServerPort}/obs?k={server.AccessKey}" : null;
 
     /// <summary>Kullanıcı çeviriyi durdurdu: oturum biter, TV uygulaması da kapanır (#268).</summary>
     public void Stop() => _ = StopSession(closeTvApp: true);
@@ -1610,6 +1651,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Oturumu bitirir; TV uygulamasına çıkış gönderildiyse mesajın yazılmasını bekleyen görevi döner.</summary>
     private Task StopSession(bool closeTvApp)
     {
+        server.Pairing.SetSession(false);
         var stoppedKeeper = keeper;
         keeper = null;
         stoppedKeeper?.Stop();
@@ -2426,7 +2468,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             // 8787 başka bir uygulamada; TV'ye adres her seferinde bildirildiği için herhangi bir boş port olur.
             DetachServer();
-            server = new SubtitleServer(0);
+            server = new SubtitleServer(0, key: server.AccessKey);
             AttachServer();
             ServerPort = await server.StartAsync();
         }

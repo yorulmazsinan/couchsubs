@@ -138,7 +138,7 @@ android {
 // Oyun paketleri ve yapay zekâ model listesi Mac ve Windows'la aynı dosyalardır.
 tasks.register('copyCouchSubsAssets', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-assets')
-    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json', 'glossary-en-tr.json' }
+    from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json', 'glossary-en-tr.json', 'obs-overlay.html' }
 }
 tasks.register('copyCouchSubsPacks', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-packs')
@@ -262,6 +262,8 @@ tasks.withType(Test).configureEach {
 }
 
 dependencies {
+    // LG/Samsung oturum başlatma: yalnız yerel TV WebSocket denetimi (Apache-2.0).
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation platform('androidx.compose:compose-bom:2024.12.01')
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.ui:ui'

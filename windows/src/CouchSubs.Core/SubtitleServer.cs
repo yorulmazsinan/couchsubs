@@ -104,8 +104,31 @@ public sealed record SubtitleEvent(SubtitleEventKind Kind, string Text = "", int
 /// TV uygulamasının bağlandığı yerel Server-Sent Events sunucusu.
 /// <c>GET /events</c> akışında <c>subtitle</c>, <c>clear</c> ve <c>style</c> olaylarını yayınlar.
 /// </summary>
-public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = null) : ISubtitleSender, IRegionSender, IDisposable
+public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = null, string? key = null,
+    bool allowLegacy = SubtitleAccess.AllowLegacyClients) : ISubtitleSender, IRegionSender, IDisposable
 {
+    private string accessKey = key ?? SubtitleAccess.CreateKey();
+    public SubtitlePairing Pairing { get; } = new();
+    public event Action<SubtitlePairing.Ticket>? PairingRequested;
+    private int legacySeen;
+    public event Action? LegacyClientConnected;
+    public string AccessKey { get { lock (gate) return accessKey; } }
+    public bool HasLegacyClient => Volatile.Read(ref legacySeen) != 0;
+
+    /// <summary>Anahtar değişince mevcut akışlar da kapanır; eski anahtar yeniden bağlanamaz.</summary>
+    public void RotateKey(string key)
+    {
+        List<Client> closing;
+        lock (gate)
+        {
+            accessKey = key;
+            Pairing.Reset();
+            closing = [.. clients];
+            clients.Clear();
+        }
+        foreach (var client in closing) client.Tcp.Dispose();
+        ClientsChanged?.Invoke(0);
+    }
     private sealed class Client(TcpClient tcp, bool viewer = false)
     {
         public TcpClient Tcp { get; } = tcp;
@@ -146,9 +169,10 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
 
     private static string HelloId(string id) => new([.. id.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-')]);
 
-    /// <summary><c>/hello</c> yanıtı: uygulama, kurulum kimliği ve bağlı TV sayısı (Mac ve Android ile aynı biçim). TV ağda
-    /// birden çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si bağlı olmayanı seçer.</summary>
-    internal static string HelloBody(string id, int tvs) => $"{{\"app\":\"couchsubs\",\"id\":\"{HelloId(id)}\",\"tvs\":{Math.Max(0, tvs)}}}";
+    /// <summary><c>/hello</c> yanıtı: uygulama, eşleştirme gerektiği (<c>auth</c>), kurulum kimliği ve bağlı TV sayısı (Mac ve
+    /// Android ile aynı biçim). Erişim anahtarını içermez. TV ağda birden çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si
+    /// bağlı olmayanı seçer; onayladığı anahtarı da bu kimlikle eşler (adres değişse de yeniden eşleşme gerekmez).</summary>
+    internal static string HelloBody(string id, int tvs) => $"{{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"{HelloId(id)}\",\"tvs\":{Math.Max(0, tvs)}}}";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -217,6 +241,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
 
     public void Stop()
     {
+        Pairing.SetSession(false);
         pingTimer?.Dispose();
         pingTimer = null;
         listener?.Stop();
@@ -402,6 +427,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             TcpClient tcp;
             try { tcp = await listener.AcceptTcpClientAsync(); }
             catch { return; }
+            if (tcp.Client.RemoteEndPoint is not IPEndPoint remote || !SubtitleAccess.IsLocalPeer(remote.Address))
+            {
+                tcp.Dispose();
+                continue;
+            }
             _ = Serve(tcp);
         }
     }
@@ -414,19 +444,51 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             // Altyazı çerçeveleri küçüktür; Nagle beklemesi her satırı TV'ye geç ulaştırmasın.
             tcp.NoDelay = true;
             var stream = tcp.GetStream();
-            var requestLine = await ReadRequestLine(stream);
-            var parts = requestLine?.Split(' ') ?? [];
-            var method = parts.Length > 0 ? parts[0] : "";
-            var target = parts.Length > 1 ? parts[1] : "";
-            var path = target.Split('?')[0];
-
-            if (method == "OPTIONS") await RespondAndClose(tcp, "204 No Content", "", PreflightHeaders);
-            else if (method == "GET" && path == "/events") await OpenStream(tcp, target.Contains("viewer=obs", StringComparison.Ordinal));
-            else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8");
+            var head = await ReadRequestLine(stream);
+            var request = head is null ? null : SubtitleAccess.Parse(head);
+            if (request is null) { await RespondAndClose(tcp, "400 Bad Request"); return; }
+            var checkedKey = AccessKey;
+            var status = SubtitleAccess.Authorize(request, checkedKey, allowLegacy, out var legacy);
+            var cors = SubtitleAccess.Cors(request);
+            if (status != 200) { await RespondAndClose(tcp, status == 403 ? "403 Forbidden" : "401 Unauthorized", cors: status == 403 ? "" : cors); return; }
+            var method = request.Method;
+            var path = request.Path;
+            if (path == "/pair")
+            {
+                if (method == "POST")
+                {
+                    var ticket = Pairing.Begin();
+                    if (ticket is null) { await RespondAndClose(tcp, "409 Conflict", cors: cors); return; }
+                    PairingRequested?.Invoke(ticket);
+                    await RespondAndClose(tcp, "200 OK", JsonSerializer.Serialize(new { id = ticket.Id, code = ticket.Code }), cors);
+                }
+                else if (method == "GET")
+                {
+                    string body;
+                    lock (gate)
+                    {
+                        var valid = request.Parameter("validate") == "1";
+                        var state = valid ? (SubtitleAccess.Authorize(request with { Target = "/events?k=" + Uri.EscapeDataString(request.Parameter("k") ?? "") }, accessKey, false, out _) == 200 ? "valid" : "expired") : Pairing.Poll(request.Parameter("id") ?? "");
+                        body = JsonSerializer.Serialize(new { state, key = state == "approved" ? accessKey : null });
+                    }
+                    await RespondAndClose(tcp, "200 OK", body, cors);
+                }
+                else await RespondAndClose(tcp, "405 Method Not Allowed", cors: cors);
+                return;
+            }
+            if (method == "OPTIONS") await RespondAndClose(tcp, "204 No Content", cors: cors + PreflightHeaders);
+            else if (method == "GET" && path == "/events")
+            {
+                var obs = request.Parameter("viewer") == "obs";
+                // Anahtarsız OBS sayfası eski bir OBS adresidir; TV uygulamasının eski olduğu anlamına gelmez.
+                if (legacy && !obs && Interlocked.Exchange(ref legacySeen, 1) == 0) LegacyClientConnected?.Invoke();
+                await OpenStream(tcp, obs, cors, checkedKey);
+            }
+            else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8", cors);
             // TV uygulaması ağdaki bilgisayarı bu yanıtla tanır.
-            else if (method == "GET" && path == "/hello") await RespondAndClose(tcp, "200 OK", HelloBody(InstanceId, ConnectedClients));
-            else if (method == "GET" && FindFile(path) is { } file) await RespondAndClose(tcp, file.Data, file.Type);
-            else await RespondAndClose(tcp, "404 Not Found");
+            else if (method == "GET" && path == "/hello") await RespondAndClose(tcp, "200 OK", HelloBody(InstanceId, ConnectedClients), cors);
+            else if (method == "GET" && FindFile(path) is { } file) await RespondAndClose(tcp, file.Data, file.Type, cors);
+            else await RespondAndClose(tcp, "404 Not Found", cors: cors);
         }
         catch
         {
@@ -441,12 +503,13 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         using var head = new MemoryStream();
         while (head.Length < 65536)
         {
-            var count = await stream.ReadAsync(buffer);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var count = await stream.ReadAsync(buffer, timeout.Token);
             if (count == 0) return null;
             head.Write(buffer, 0, count);
             var text = Encoding.ASCII.GetString(head.GetBuffer(), 0, (int)head.Length);
             var end = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-            if (end >= 0) return text[..text.IndexOf("\r\n", StringComparison.Ordinal)];
+            if (end >= 0) return text[..end];
         }
         return null;
     }
@@ -456,9 +519,9 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         lock (gate) return files.TryGetValue(path, out var file) ? file : null;
     }
 
-    private static async Task RespondAndClose(TcpClient tcp, byte[] data, string type)
+    private static async Task RespondAndClose(TcpClient tcp, byte[] data, string type, string cors = "")
     {
-        var head = $"HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: {type}\r\nCache-Control: no-cache\r\n" +
+        var head = $"HTTP/1.1 200 OK\r\n{cors}Content-Type: {type}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\n" +
                    $"Content-Length: {data.Length}\r\nConnection: close\r\n\r\n";
         var stream = tcp.GetStream();
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head));
@@ -471,29 +534,31 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// sunucudan <c>Access-Control-Allow-Private-Network</c> ister; yeni tarayıcılı TV'ler (Tizen 9.0 ve sonrası) bu
     /// başlık olmadan bilgisayara bağlanmayabilir. Başlık eski TV'lerde yok sayılır.
     /// </summary>
-    internal const string PreflightHeaders = "Access-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\n" +
+    internal const string PreflightHeaders = "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\n" +
                                              "Access-Control-Allow-Private-Network: true\r\nAccess-Control-Max-Age: 600\r\n";
 
-    private static async Task RespondAndClose(TcpClient tcp, string status, string body = "", string extraHeaders = "")
+    private static async Task RespondAndClose(TcpClient tcp, string status, string body = "", string cors = "")
     {
-        var head = $"HTTP/1.1 {status}\r\nAccess-Control-Allow-Origin: *\r\n{extraHeaders}Content-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
+        var head = $"HTTP/1.1 {status}\r\n{cors}Cache-Control: no-store\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
         await tcp.GetStream().WriteAsync(Encoding.ASCII.GetBytes(head));
         tcp.Dispose();
     }
 
-    private async Task OpenStream(TcpClient tcp, bool viewer = false)
+    private async Task OpenStream(TcpClient tcp, bool viewer, string cors, string checkedKey)
     {
         var head = new StringBuilder()
             .Append("HTTP/1.1 200 OK\r\n")
             .Append("Content-Type: text/event-stream; charset=utf-8\r\n")
             .Append("Cache-Control: no-cache\r\n")
             .Append("Connection: keep-alive\r\n")
-            .Append("Access-Control-Allow-Origin: *\r\n\r\n")
+            .Append(cors).Append("\r\n")
             .Append("retry: 2000\n\n");
         var client = new Client(tcp, viewer);
         int count;
         lock (gate)
         {
+            // Yetki denetimi ile istemci kaydı arasındaki yenileme yarışını kapatır.
+            if (accessKey != checkedKey) { tcp.Dispose(); return; }
             if (lastStyle is { } style) head.Append(StyleFrame(style));
             clients.Add(client);
             count = TvCount();

@@ -76,13 +76,15 @@ internal static class Panel
     private sealed record KeyRequest(string Key);
     private sealed record TextRequest(string Text);
     private sealed record SettingsRequest(CropRegion? Region, SubtitleStyle? Style, bool? OnlineTranslation);
+    private sealed record TvPairingRequest(string Code, bool Accept);
 
     public static void Map(WebApplication app, AppController controller, LinuxServices services, UiThread ui)
     {
+        var pairing = new TvPairingPrompt(controller);
         app.MapGet("/", () => Results.Content(Resource("panel.html"), "text/html; charset=utf-8"));
         app.MapGet("/logo.svg", () => Results.Content(Resource("logo.svg"), "image/svg+xml"));
 
-        app.MapGet("/api/state", () => ui.Run(() => State(controller, services)));
+        app.MapGet("/api/state", () => ui.Run(() => State(controller, services, pairing)));
         app.MapGet("/api/log", () => new { lines = Log.Tail() });
 
         // --- Kurulum sihirbazı ---
@@ -100,6 +102,10 @@ internal static class Panel
         app.MapPost("/api/model/download", () => Act(ui, controller.StartModelDownload));
         app.MapPost("/api/test-subtitle", () => Act(ui, controller.SendTestSubtitle));
         app.MapPost("/api/reset", () => Act(ui, controller.ResetSetup));
+
+        // --- TV eşleştirme onayı (güncel TV uygulamaları anahtarı yalnız kullanıcı onayıyla alır) ---
+        app.MapPost("/api/tv-pairing/open", () => Act(ui, controller.OpenTvPairingAsync));
+        app.MapPost("/api/tv-pairing", (TvPairingRequest body) => Act(ui, () => pairing.Resolve(body.Code, body.Accept)));
 
         // --- Çeviri ---
         app.MapPost("/api/start", () => Act(ui, controller.StartAsync));
@@ -148,8 +154,9 @@ internal static class Panel
         }));
     }
 
-    private static object State(AppController c, LinuxServices services) => new
+    private static object State(AppController c, LinuxServices services, TvPairingPrompt pairing) => new
     {
+        tvPairingCode = pairing.Code,
         version = Program.Version,
         language = Program.Text.Language,
         step = c.Step,
@@ -241,4 +248,48 @@ internal static class Panel
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
+}
+
+/// <summary>
+/// Linux'un eşleştirme onayı. Windows ve Mac'te açılan onay penceresinin yerine panel bekleyen isteği gösterir.
+/// TV'yi yalnız istek sırrı (<see cref="SubtitlePairing.Ticket.Id"/>) eşleştirir; bu sır panele hiç gönderilmez,
+/// panel yalnız TV'de görünen kodu karşılaştırma için gösterir ve onayı o kodla verir. Yalnız UI iş parçacığında kullanılır.
+/// </summary>
+internal sealed class TvPairingPrompt
+{
+    private readonly AppController controller;
+    private SubtitlePairing.Ticket? ticket;
+
+    public TvPairingPrompt(AppController controller)
+    {
+        this.controller = controller;
+        controller.TvPairingRequested += request => ticket = request;
+    }
+
+    /// <summary>Bekleyen isteğin kodu; süresi dolmuş ya da yanıtlanmış istek gösterilmez.</summary>
+    public string? Code
+    {
+        get
+        {
+            if (ticket is { } current && controller.IsTvPairingPending(current.Id)) return current.Code;
+            ticket = null;
+            return null;
+        }
+    }
+
+    /// <summary>Panelde görünen kodla yanıtlar; sayfa eski bir kodu gösteriyorsa onay yeni bir isteğe geçmez.</summary>
+    public void Resolve(string code, bool accept)
+    {
+        if (ticket is not { } current || current.Code != code.Trim())
+        {
+            if (accept) throw Expired();
+            return;
+        }
+        ticket = null;
+        if (!controller.ResolveTvPairing(current.Id, accept) && accept) throw Expired();
+    }
+
+    private static InvalidOperationException Expired() => new(Program.Text.Language == "tr"
+        ? "Eşleştirme isteğinin süresi doldu. TV'de yeniden deneyin."
+        : "The pairing request expired. Try again on the TV.");
 }

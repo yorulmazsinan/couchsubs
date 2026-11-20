@@ -1,0 +1,251 @@
+[
+  {
+    "name": "closed",
+    "steps": [
+      {
+        "op": "begin",
+        "ok": false
+      }
+    ]
+  },
+  {
+    "name": "approval-secret-and-single-request",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "begin",
+        "ok": false
+      },
+      {
+        "op": "poll",
+        "state": "pending"
+      },
+      {
+        "op": "poll",
+        "wrong": true,
+        "state": "expired"
+      },
+      {
+        "op": "resolve",
+        "wrong": true,
+        "accept": true,
+        "ok": false
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": true
+      },
+      {
+        "op": "poll",
+        "state": "approved"
+      },
+      {
+        "op": "poll",
+        "state": "approved"
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": false
+      }
+    ]
+  },
+  {
+    "name": "deadline",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "advance",
+        "ms": 120000
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": false
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      },
+      {
+        "op": "begin",
+        "ok": false
+      },
+      {
+        "op": "advance",
+        "ms": 10000
+      },
+      {
+        "op": "begin",
+        "ok": true
+      }
+    ]
+  },
+  {
+    "name": "rejection",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "resolve",
+        "accept": false,
+        "ok": true
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      },
+      {
+        "op": "begin",
+        "ok": false
+      },
+      {
+        "op": "advance",
+        "ms": 10000
+      },
+      {
+        "op": "begin",
+        "ok": true
+      }
+    ]
+  },
+  {
+    "name": "manual-window",
+    "steps": [
+      {
+        "op": "open"
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "advance",
+        "ms": 120000
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      },
+      {
+        "op": "advance",
+        "ms": 10000
+      },
+      {
+        "op": "begin",
+        "ok": false
+      }
+    ]
+  },
+  {
+    "name": "session-close",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": true
+      },
+      {
+        "op": "session",
+        "value": false
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      },
+      {
+        "op": "begin",
+        "ok": false
+      }
+    ]
+  },
+  {
+    "name": "key-rotation",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": true
+      },
+      {
+        "op": "reset"
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": false
+      },
+      {
+        "op": "begin",
+        "ok": true
+      }
+    ]
+  },
+  {
+    "name": "approved-expiry",
+    "steps": [
+      {
+        "op": "session",
+        "value": true
+      },
+      {
+        "op": "begin",
+        "ok": true
+      },
+      {
+        "op": "resolve",
+        "accept": true,
+        "ok": true
+      },
+      {
+        "op": "advance",
+        "ms": 120000
+      },
+      {
+        "op": "poll",
+        "state": "expired"
+      }
+    ]
+  }
+]

@@ -528,6 +528,10 @@
                                     <TextBox x:Name="NetworkObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
                                 </DockPanel>
                             </StackPanel>
+                            <Button Content="{t:T 'Pair TV'}" HorizontalAlignment="Left" Margin="0,12,0,0" Click="OnOpenTvPairing" />
+                            <Button Content="{t:T 'Renew access key'}" HorizontalAlignment="Left" Margin="0,12,0,0" Click="OnRenewAccessKey" />
+                            <TextBlock x:Name="LegacyTvWarning" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Text="{t:T 'The TV app is old. Update it.'}" Visibility="Collapsed" />
                         </StackPanel>
                     </c:Card>
                     <!-- Şeffaflık tanımayan yayın programları için düz zeminli altyazı penceresi (StreamWindow.cs). -->

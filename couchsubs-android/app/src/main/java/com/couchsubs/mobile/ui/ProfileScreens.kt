@@ -166,6 +166,13 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
     }
     ScreenScaffold(top = { TopBar(stringResource(R.string.settings), onBack = onBack) }) {
         Tile(Modifier.fillMaxWidth()) {
+            androidx.compose.material3.TextButton(onClick = {
+                com.couchsubs.mobile.service.TranslationService.viewerAddress()?.let { address ->
+                    context.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("CouchSubs", address))
+                }
+            }) { Text(stringResource(R.string.tv_copy_address)) }
+            androidx.compose.material3.TextButton(onClick = { com.couchsubs.mobile.service.TranslationService.renewAccessKey() }) { Text(stringResource(R.string.tv_key_renew)) }
+            if (com.couchsubs.mobile.service.LiveState.status.collectAsState().value.legacyTv) Text(stringResource(R.string.tv_legacy_warning))
             TileLabel(stringResource(R.string.settings_engine))
             Segmented(listOf(stringResource(R.string.engine_free_short), "DeepL", "Gemini", stringResource(R.string.engine_other)), segment) { index ->
                 choose(when (index) {

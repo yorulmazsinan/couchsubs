@@ -28,7 +28,10 @@ Sonra aynı ağdaki bir cihazdan `http://<sunucu adresi>:8788` adresini açıp s
 doğrudan bağlı çalışır (`network_mode: host`): PS5 araması UDP yayınıyla, TV araması SSDP ile yapılır.
 
 - 8788: panel. Parola yoktur; yalnız ev ağınızda açık tutun.
-- 8787: TV uygulamasının bağlandığı altyazı sunucusu.
+- 8787: TV uygulamasının bağlandığı altyazı sunucusu. Güncel TV uygulaması (ve Android TV) ilk bağlantıda
+  eşleştirme ister: istek panelin üstünde TV'deki kodla görünür, kod aynıysa **Onayla**'ya basın. Çeviri kapalıyken
+  panelde **Eşleştirmeyi aç** iki dakikalığına istek kabul eder. Panelin parolası olmadığından panele ulaşan herkes
+  bu onayı verebilir; bu da panelin yalnız ev ağında açık kalması için bir neden.
 - Veriler (hesap kimliği, PS5 ve TV anahtarları, ~530 MB çeviri modeli, `remoteplay.log`) `couchsubs-data` biriminde durur.
 
 Ortam değişkenleri: `COUCHSUBS_LANG` (`tr`/`en`, sunucunun hata iletileri), `COUCHSUBS_PANEL_PORT`,

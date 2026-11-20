@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.update
 
 /** Okuma hattının arayüze gösterdiği durum (servis yazar, ekranlar okur). */
 data class LiveStatus(
+    val pairing: com.couchsubs.mobile.core.SubtitlePairing.Ticket? = null,
+    val legacyTv: Boolean = false,
     val running: Boolean = false,
     /** Deneme modu: görüntü konsoldan değil uygulamadaki örnek karelerden (bkz. TranslationService.startDemo). */
     val demo: Boolean = false,

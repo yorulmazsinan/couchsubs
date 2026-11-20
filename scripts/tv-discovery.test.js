@@ -65,14 +65,19 @@ function element() {
 // panelTips: panel ipucunun önceki açılışlarda kaç kez gösterildiği.
 // hello: adrese göre /hello yanıtındaki kimlik ve bağlı TV sayısı ({ id, tvs }); verilmeyen adres eski sürüm gibi yalnız
 // {"app":"couchsubs"} döner. savedId: TV'nin kayıtlı CouchSubs kimliği. params: başlatma parametreleri.
-function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdmi, resolution, closeWhenHidden, panelTips, hello, savedId, params }) {
+// auth: sunucunun eşleştirme durumu; storedKeys/identities: TV'de kayıtlı anahtarlar ve sunucu kimlikleri.
+function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdmi, resolution, closeWhenHidden, panelTips, hello, savedId, params,
+                   auth = null, storedKeys = null, identities = null }) {
   const clock = makeClock();
   const storage = new Map();
   if (saved) storage.set('couchsubs.server', saved);
   if (savedId) storage.set('couchsubs.serverId', savedId);
   if (savedHdmi) storage.set('couchsubs.hdmi', String(savedHdmi));
   if (panelTips !== undefined) storage.set('couchsubs.panelTips', String(panelTips));
+  if (storedKeys) storage.set('couchsubs.keys', JSON.stringify(storedKeys));
+  if (identities) storage.set('couchsubs.server-identities', JSON.stringify(identities));
   const documentListeners = {};
+  const requests = [];
   const elements = new Map();
   // index.html'de gizli başlayan öğeler.
   for (const id of ['panel-tip', 'source-tip', 'no-picture']) elements.set(id, Object.assign(element(), { className: 'hidden' }));
@@ -94,7 +99,8 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
     attempt() {
       clock.setTimeout(() => {
         if (this.closed) return;
-        if (alive.has(this.url.replace(/\/events$/, ''))) {
+        const target = new URL(this.url);
+        if (alive.has(target.origin) && (!auth || target.searchParams.get('k') === auth.key)) {
           this.readyState = 1;
           if (this.onopen) this.onopen({});
         } else {
@@ -111,14 +117,25 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
 
   const probes = [];
   class FakeXHR {
-    open(method, url) { this.url = url; }
+    open(method, url) { this.url = url; this.method = method; requests.push({ method, url }); }
     send() {
       probes.push(this.url);
-      const base = this.url.replace(/\/hello$/, '');
+      const target = new URL(this.url);
+      const base = target.origin;
       if (alive.has(base)) {
         clock.setTimeout(() => {
           this.status = 200;
-          this.responseText = JSON.stringify(Object.assign({ app: 'couchsubs' }, (hello || {})[base]));
+          let data = Object.assign({ app: 'couchsubs' }, (hello || {})[base]);
+          if (auth && target.pathname === '/hello') data = Object.assign(data, { auth: 1, id: auth.id });
+          if (auth && target.pathname === '/pair') {
+            if (this.method === 'POST') {
+              if (auth.reject) { this.status = 409; data = {}; }
+              else data = { id: 'abcdefghijklmnopqrstuv', code: '123456' };
+            } else if (target.searchParams.has('validate')) data = { state: target.searchParams.get('k') === auth.key ? 'valid' : 'expired' };
+            else if (auth.expired) data = { state: 'expired' };
+            else data = auth.approved ? { state: 'approved', key: auth.key } : { state: 'pending' };
+          }
+          this.responseText = JSON.stringify(data);
           this.onload();
         }, 20);
       } else {
@@ -190,6 +207,9 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
   return {
     clock,
     saved: () => storage.get('couchsubs.server'),
+    requests,
+    storage,
+    failStream: () => streams[streams.length - 1].onerror({}),
     lastOpened: () => opened[opened.length - 1],
     element: (id) => document.getElementById(id),
     // Açık bağlantıya bilgisayardan olay gelir.
@@ -718,4 +738,95 @@ test('webOS: yeni hizmet hata dönerse ya da yanıtsız kalırsa eski webOS\'un 
 test('webOS: iki hizmet de adres vermezse null, 3 sn içinde', () => {
   assert.strictEqual(webosAddress({}).result, null);
   assert.strictEqual(webosAddress({ [NEW_CM]: {}, [OLD_CM]: { returnValue: false } }).result, null);
+});
+
+const secureAddress = 'http://192.168.1.42:8787';
+const secureKey = 'ABCDEFGHIJKLMNOPQRSTUV';
+const secureId = 'ABCDEF0123456789ABCDEF0123456789';
+test('yeni sunucu: insan onayından önce SSE açılmaz; kod ve uzun istek sırrı ayrıdır', () => {
+  const auth = { key: secureKey, id: secureId, approved: false };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), undefined);
+  assert.match(tv.element('pairing').textContent, /123456/);
+  assert(!tv.element('pairing').textContent.includes('abcdefghijklmnopqrstuv'));
+  auth.approved = true;
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+  assert(!tv.element('pairing').textContent.includes(secureKey));
+});
+test('reddedilen/süresi dolan istek anahtarsız SSE ye düşmez', () => {
+  const auth = { key: secureKey, id: secureId, expired: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(5000);
+  assert.strictEqual(tv.lastOpened(), undefined);
+});
+test('kayıtlı anahtar önce doğrulanır; yenilenmişse yeniden insan onayı istenir', () => {
+  const auth = { key: secureKey, id: secureId };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth,
+    storedKeys: { [secureAddress]: 'oldoldoldoldoldoldoldo1' } });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), undefined);
+  assert(tv.requests.some(r => r.method === 'POST'));
+});
+test('sunucu adresi değişse de aynı anahtar kimliğiyle tekrar onay gerekmez', () => {
+  const auth = { key: secureKey, id: secureId };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth,
+    identities: { [secureId]: secureKey } });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+  assert(!tv.requests.some(r => r.method === 'POST'));
+});
+test('eşleşmiş TV anahtarlı bağlantıda ek alan bloklarını kendi yerlerinde gösterir', () => {
+  const auth = { key: secureKey, id: secureId };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth, identities: { [secureId]: secureKey } });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+  const blocks = [
+    { text: 'Demirciyi bul', box: { left: 0.7, top: 0.05, right: 0.95, bottom: 0.08 }, line: 0.03 },
+    { text: 'Ahıra git', box: { left: 0.55, top: 0.2, right: 0.65, bottom: 0.23 }, line: 0.03 }
+  ];
+  tv.emit('region', { id: 'q', text: 'Demirciyi bul\nAhıra git', box: { left: 0.55, top: 0.05, right: 0.95, bottom: 0.23 }, blocks });
+  const group = tv.element('regions').children[0];
+  assert.strictEqual(group.className, 'region-blocks');
+  assert.deepStrictEqual(group.children.map((c) => c.textContent), ['Demirciyi bul', 'Ahıra git']);
+});
+test('anahtar yenilenince yanlış anahtarla sonsuz yeniden deneme yerine eşleştirme açılır', () => {
+  const auth = { key: secureKey, id: secureId };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth, storedKeys: { [secureAddress]: secureKey } });
+  tv.clock.advance(1000);
+  auth.key = 'ZYXWVUTSRQPONMLKJIHGFE'; auth.id = '123456789ABCDEF0123456789ABCDEF0';
+  tv.failStream();
+  tv.clock.advance(6000);
+  assert(tv.requests.some(r => r.method === 'POST'));
+  assert.match(tv.element('pairing').textContent, /123456/);
+});
+
+
+test('discovery does not restart pairing while waiting for human approval', () => {
+  const auth = { key: secureKey, id: secureId, approved: false };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(90000);
+  assert.strictEqual(tv.lastOpened(), undefined);
+  assert.strictEqual(tv.requests.filter(r => r.method === 'POST').length, 1);
+  auth.approved = true;
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+});
+
+test('süresi dolan eşleştirme kendiliğinden yeniden başlamaz, Tamam ile yeniden istenir', () => {
+  const auth = { key: secureKey, id: secureId, expired: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(5000);
+  assert.match(tv.element('pairing').textContent, /Tamam/);
+  tv.clock.advance(60000);
+  assert.strictEqual(tv.requests.filter(r => r.method === 'POST').length, 1);
+  auth.expired = false; auth.approved = true;
+  // Gerçek sayfada kaynak ipucu ve görüntü yok ekranı başta gizlidir.
+  tv.element('source-tip').className = 'hidden';
+  tv.element('no-picture').className = 'hidden';
+  tv.key(13);
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.requests.filter(r => r.method === 'POST').length, 2);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
 });

@@ -29,7 +29,7 @@ final class SubtitleServerTests: XCTestCase {
         let (bytes, response) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
         let http = try XCTUnwrap(response as? HTTPURLResponse)
         XCTAssertEqual(http.statusCode, 200)
-        XCTAssertEqual(http.value(forHTTPHeaderField: "Access-Control-Allow-Origin"), "*")
+        XCTAssertNil(http.value(forHTTPHeaderField: "Access-Control-Allow-Origin"))
         XCTAssertTrue(http.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("text/event-stream") == true)
 
         try await waitUntil { server.connectedClients == 1 }
@@ -277,8 +277,9 @@ final class SubtitleServerTests: XCTestCase {
         defer { server.stop() }
         let (data, response) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/hello")!)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-        XCTAssertEqual((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Access-Control-Allow-Origin"), "*")
-        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"app":"couchsubs","id":"3f2a-b9","tvs":0}"#)
+        XCTAssertNil((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Access-Control-Allow-Origin"))
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"app":"couchsubs","auth":1,"id":"3f2a-b9","tvs":0}"#)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains(server.accessKey))
     }
 
     /// Kurulum kimliği kalıcıdır: aynı ağdaki iki CouchSubs'ı TV bununla ayırır (GitHub #425).
@@ -286,7 +287,7 @@ final class SubtitleServerTests: XCTestCase {
         let first = SubtitleServer.installationId
         XCTAssertFalse(first.isEmpty)
         XCTAssertEqual(SubtitleServer.installationId, first)
-        XCTAssertEqual(SubtitleServer.helloBody(id: "a\"b", tvs: 2), #"{"app":"couchsubs","id":"ab","tvs":2}"#)
+        XCTAssertEqual(SubtitleServer.helloBody(id: "a\"b", tvs: 2), #"{"app":"couchsubs","auth":1,"id":"ab","tvs":2}"#)
     }
 
     func testUnknownPathIs404() async throws {

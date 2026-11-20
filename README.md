@@ -14,6 +14,8 @@ gönderilir. Ayrıntılar: [Gizlilik](PRIVACY.md). Ücretsiz ve açık kaynaklı
 
 *English below.*
 
+TV bağlantısında eşleştirme kodu veya OBS erişim anahtarı için [TV eşleştirme rehberine](docs/tv-pairing.md) bakın.
+
 ## Oyunda nasıl görünüyor
 
 Mafia: The Old Country, PS5'te İngilizce oynanıyor; Türkçe altyazı TV'de oyunun üstünde, CouchSubs bilgisayarda çalışıyor.

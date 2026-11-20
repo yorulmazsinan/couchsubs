@@ -27,7 +27,7 @@ private final class FakeServices: PhoneServices {
     func accountId(fromRedirect url: URL) async throws -> Data { Data([1, 2, 3]) }
     func register(host: String, accountId: Data, pin: UInt32) async throws -> RegisteredConsole { try registerResult.get() }
     func discoverTVs() async -> [LGTV] { [] }
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing { TVPairing(key: "key", launched: launched) }
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing { TVPairing(key: "key", launched: launched) }
     var streamPasscodes: [String?] = []
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling {
         streamPasscodes.append(loginPasscode)

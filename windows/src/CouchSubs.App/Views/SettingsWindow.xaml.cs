@@ -66,7 +66,8 @@ public partial class SettingsWindow : Window
         LanguageCard.Visibility = GameLanguage.Items.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         (settings.FreeAreaTarget switch { ResultTarget.Pc => FreePc, ResultTarget.Both => FreeBoth, _ => FreeTv }).IsChecked = true;
         Region.Frame = controller.LastFrame;
-        ObsAddress.Text = $"http://localhost:{controller.ServerPort}/obs";
+        ObsAddress.Text = controller.ObsAddress;
+        LegacyTvWarning.Visibility = controller.LegacyTvWarning ? Visibility.Visible : Visibility.Collapsed;
         // Localhost'u kabul etmeyen yayın programları (TikTok LIVE Studio) için aynı adres bilgisayarın ağ adresiyle.
         if (controller.NetworkObsAddress is { } networkObs) NetworkObsAddress.Text = networkObs;
         else NetworkObsPanel.Visibility = Visibility.Collapsed;
@@ -237,6 +238,12 @@ public partial class SettingsWindow : Window
 
     private void OnControllerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(AppController.ObsAddress) or nameof(AppController.NetworkObsAddress) or nameof(AppController.LegacyTvWarning))
+        {
+            ObsAddress.Text = controller.ObsAddress;
+            NetworkObsAddress.Text = controller.NetworkObsAddress ?? "";
+            LegacyTvWarning.Visibility = controller.LegacyTvWarning ? Visibility.Visible : Visibility.Collapsed;
+        }
         if (e.PropertyName is nameof(AppController.Settings) or nameof(AppController.ShowsOnTv) or nameof(AppController.ShowsOnComputer))
             ShowStyleTitle();
         if (e.PropertyName == nameof(AppController.LastFrame)) ShowLiveFrame();
@@ -285,6 +292,14 @@ public partial class SettingsWindow : Window
                             MessageBoxImage.Question) == MessageBoxResult.Yes)
             controller.DeleteAreaProfile();
     }
+
+    private async void OnOpenTvPairing(object sender, RoutedEventArgs e)
+    {
+        try { await controller.OpenTvPairingAsync(); }
+        catch (Exception error) { MessageBox.Show(this, error.Message, "CouchSubs"); }
+    }
+
+    private void OnRenewAccessKey(object sender, RoutedEventArgs e) => controller.RotateSubtitleKey();
 
     /// <summary>
     /// Alan sekmesi açıkken önizleme oyunun görüntüsüyle saniyede dört kez yenilenir (çerçeve sürüklenirken beklenir); çerçeve

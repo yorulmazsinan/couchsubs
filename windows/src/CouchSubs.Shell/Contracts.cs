@@ -8,6 +8,7 @@ namespace CouchSubs.Shell;
 
 public static class StoreKeys
 {
+    public const string SubtitleAccessKey = "subtitleAccessKey";
     public const string ConsoleKind = "consoleKind";
     public const string ConsoleKindLocked = "consoleKindLocked";
     public const string XboxToken = "xboxToken";
@@ -571,7 +572,7 @@ public interface IAppServices
     Task<RegisteredConsole> RegisterAsync(string host, byte[] accountId, uint pin);
     Task<IReadOnlyList<LgTv>> DiscoverTvsAsync();
     /// <summary>TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.</summary>
-    Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server);
+    Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server, string accessKey);
     /// <param name="loginPasscode">PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).</param>
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId, string? loginPasscode);
     /// <summary>Görüntüyü bu bilgisayardaki Remote Play penceresinden (PS Remote Play ya da chiaki-ng) alan kaynak.</summary>

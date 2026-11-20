@@ -48,7 +48,7 @@ protocol AppServices: AnyObject {
     func register(host: String, accountId: Data, pin: UInt32) async throws -> RegisteredConsole
     func discoverTVs() async -> [LGTV]
     /// TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing
     /// `loginPasscode`: PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling
     /// Görüntüyü bu Mac'teki Remote Play penceresinden alan kaynak (`UserSettings.frameSource`, `remotePlayApp`).
@@ -192,7 +192,7 @@ final class LiveServices: AppServices {
         return await lg + samsung
     }
 
-    func pairTV(_ tv: LGTV, key: String?, server: String) async throws -> TVPairing {
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing {
         switch tv.brand {
         case .androidTV:
             // Bilgisayar bu TV'yi denetlemez; TV uygulaması bilgisayarı kendisi bulur.
@@ -212,7 +212,7 @@ final class LiveServices: AppServices {
                 TVInstallLog.write("Samsung uzaktan kumanda izni alınamadı (\(error)); TV 8001'de yanıt verdi, eşleşme izinsiz sürdü.")
                 return TVPairing(key: key ?? "", launched: true)
             }
-            try? await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server])
+            try? await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server, "key": accessKey])
             return TVPairing(key: token, launched: true)
         case .lg:
             break
@@ -220,7 +220,7 @@ final class LiveServices: AppServices {
         let client = SSAPClient(tv: tv, clientKey: key)
         defer { client.close() }
         let newKey = try await client.connect()
-        let launched = (try? await client.launch(appId: AppIdentity.tvAppId, params: ["server": server])) != nil
+        let launched = (try? await client.launch(appId: AppIdentity.tvAppId, params: ["server": server, "key": accessKey])) != nil
         return TVPairing(key: newKey, launched: launched)
     }
 
@@ -732,6 +732,11 @@ final class AppModel: ObservableObject {
         savedKeys = Set(TranslationEngine.allCases.filter { engine in
             engine.storeKey.flatMap { store.load(String.self, for: $0) }?.isEmpty == false
         })
+        let storedKey = store.load(String.self, for: StoreKey.subtitleAccessKey)
+        let accessKey = storedKey?.isEmpty == false ? storedKey! : SubtitleAccess.createKey()
+        store.save(accessKey, for: StoreKey.subtitleAccessKey)
+        server.rotateKey(accessKey)
+        subtitleAccessKey = accessKey
         attachServer()
         let pool = self.pool
         gameChoice.onChange = { [weak self] game in
@@ -838,7 +843,45 @@ final class AppModel: ObservableObject {
     }
 
     /// Sunucunun TV sayısını, altyazı yerini ve bilgisayar ekranına giden olayları bağlar (sunucu yeniden kurulunca da).
+    @Published private(set) var subtitleAccessKey = ""
+    @Published private(set) var legacyTVWarning = false
+    @Published var tvPairingRequest: SubtitlePairing.Ticket?
+    func resolveTVPairing(_ ticket: SubtitlePairing.Ticket, accept: Bool) {
+        server.pairing.resolve(ticket.id, accept: accept)
+        tvPairingRequest = nil
+    }
+    func openTVPairing() async {
+        do { try await startServer(); server.pairing.open() }
+        catch { SubtitleLog.write("TV eşleştirme sunucusu açılamadı.") }
+    }
+
+    func rotateSubtitleKey() {
+        let key = SubtitleAccess.createKey()
+        store.save(key, for: StoreKey.subtitleAccessKey)
+        keeper?.stop()
+        keeper = nil
+        server.rotateKey(key)
+        tvPairingRequest = nil
+        subtitleAccessKey = key
+        startKeeper()
+    }
+
     private func attachServer() {
+        server.onPairingRequest = { [weak self] ticket in
+            Task { @MainActor [weak self] in
+                guard let self, self.server.pairing.poll(ticket.id) == "pending" else { return }
+                self.tvPairingRequest = ticket
+            }
+        }
+        server.onLegacyClient = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.legacyTVWarning = true
+                SubtitleLog.write("TV bağlantısı geçiş izniyle anahtarsız açıldı; TV uygulamasını güncelleyin.")
+                await self.refreshTVApp()
+            }
+        }
+
         server.onClientsChanged = { [weak self] count in self?.tvClients = count }
         server.sendsToTV = settings.output.showsOnTV
         server.onEvent = { [weak self] event in
@@ -1052,7 +1095,7 @@ final class AppModel: ObservableObject {
     func pair(_ tv: LGTV) async throws {
         try await startServer()
         let savedKey = store.load(String.self, for: StoreKey.tvKey)
-        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv))
+        let pairing = try await services.pairTV(tv, key: savedKey, server: serverAddress(for: tv), accessKey: server.accessKey)
         if self.tv?.brand != tv.brand || (tv.brand != .androidTV && self.tv?.host != tv.host) {
             store.remove(StoreKey.tvAppVersion)
         }
@@ -1350,7 +1393,7 @@ final class AppModel: ObservableObject {
         if let keeper {
             keeper.reconnect()
         } else {
-            _ = try? await services.pairTV(tv, key: store.load(String.self, for: StoreKey.tvKey), server: serverAddress(for: tv))
+            _ = try? await services.pairTV(tv, key: store.load(String.self, for: StoreKey.tvKey), server: serverAddress(for: tv), accessKey: server.accessKey)
         }
     }
 
@@ -1503,6 +1546,7 @@ final class AppModel: ObservableObject {
             }
         }
         keepAwake()
+        server.pairing.setSession(true)
         isRunning = true
         if screenHotkey == nil { screenHotkey = GlobalHotkey(.translateScreen) { [weak self] in self?.translateScreen() } }
         screenHotkey?.enabled = true
@@ -1521,7 +1565,7 @@ final class AppModel: ObservableObject {
     private func startKeeper() {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
-        let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv)],
+        let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv), "key": server.accessKey],
                                          appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
         }, onKey: { [weak self] key in
@@ -1927,6 +1971,8 @@ final class AppModel: ObservableObject {
         wakeObserver = nil
         if let sleepActivity { ProcessInfo.processInfo.endActivity(sleepActivity) }
         sleepActivity = nil
+        server.pairing.setSession(false)
+        tvPairingRequest = nil
         isRunning = false
         onlineIssue = nil
         sessionState = .disconnected(.stopped)
@@ -2124,7 +2170,7 @@ final class AppModel: ObservableObject {
             serverPort = try await server.start()
         } catch {
             // 8787 başka bir uygulamada; TV'ye zaten adres bildirildiği için herhangi bir boş port olur.
-            server = SubtitleServer(port: 0)
+            server = SubtitleServer(port: 0, key: server.accessKey)
             attachServer()
             serverPort = try await server.start()
         }

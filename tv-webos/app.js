@@ -90,6 +90,24 @@
     try { window.localStorage.setItem('couchsubs.' + key, String(value)); } catch (e) {}
   }
 
+  // Anahtar sunucuya aittir: telefon ve bilgisayar arasında geçişte birbirine gönderilmez.
+  function serverKey(address) {
+    try { return (JSON.parse(load('keys') || '{}') || {})[address.replace(/\/+$/, '')] || ''; } catch (e) { return ''; }
+  }
+
+  function saveServerKey(address, key) {
+    if (!/^[A-Za-z0-9_-]{22}$/.test(key || '')) return;
+    var keys;
+    try { keys = JSON.parse(load('keys') || '{}') || {}; } catch (e) { keys = {}; }
+    keys[address.replace(/\/+$/, '')] = key;
+    save('keys', JSON.stringify(keys));
+  }
+
+  function authenticatedUrl(address, path) {
+    var key = serverKey(address);
+    return address + path + (key ? (path.indexOf('?') < 0 ? '?' : '&') + 'k=' + encodeURIComponent(key) : '');
+  }
+
   function setStatus(id, text, cls) {
     var el = $(id);
     el.textContent = text;
@@ -112,11 +130,14 @@
       showHdmi(hdmiPort);
     }
     if (params.server) {
+      var address = params.server.replace(/\/+$/, '');
+      var oldKey = serverKey(address);
+      if (params.key) saveServerKey(address, params.key);
       // Adresi bilgisayar ya da telefon kendisi verdi: bağlanınca kimliği "kendi CouchSubs'ı" olarak kaydedilir.
-      adoptAddress = params.server;
-      if (params.server !== server) {
-        save('server', params.server);
-        connect(params.server);
+      adoptAddress = address;
+      if (address !== server || oldKey !== serverKey(address)) {
+        save('server', address);
+        connect(address);
       } else if (eventSource && eventSource.readyState === 1) {
         learnServer(server);
       }
@@ -1098,14 +1119,108 @@
     });
   }
 
+  var connectionGeneration = 0;
+  var pairingTimer = null;
+  // Eşleştirme kodu ekranda beklerken tarama aynı adresi bulursa bağlantı baştan kurulmaz (kod kaybolmasın).
+  var pairingActive = false;
+  // Eşleştirme kendiliğinden yeniden başlamaz (bilgisayarda yeni onay penceresi açılırdı); Tamam ile yeniden denenir.
+  var pairingFailed = false;
+  function stopPairing() { pairingActive = false; pairingFailed = true; $('pairing').textContent = t('pairRetry'); }
+  function pairRequest(method, address, path, done) {
+    var xhr = new XMLHttpRequest(), finished = false;
+    function finish(data) { if (finished) return; finished = true; done(data); }
+    xhr.onload = function () {
+      var data = null;
+      if (xhr.status === 200) { try { data = JSON.parse(xhr.responseText); } catch (e) {} }
+      finish(data);
+    };
+    xhr.onerror = xhr.ontimeout = function () { finish(null); };
+    try { xhr.open(method, address + path); xhr.timeout = 4000; xhr.send(); }
+    catch (e) { finish(null); }
+  }
   function connect(address) {
+    address = address.replace(/\/+$/, '');
+    var generation = ++connectionGeneration;
+    clearTimeout(pairingTimer);
+    pairingActive = false;
+    pairingFailed = false;
     // Arka plandayken bağlanılmaz; adres akılda tutulur, uygulama öne gelince bağlanır (bkz. dropWhileHidden).
+    if (pausedByHidden) {
+      server = address;
+      return;
+    }
+    if (eventSource) eventSource.close();
+    eventSource = null;
+    if (address !== server) failures = 0;
+    server = address;
+    pairRequest('GET', address, '/hello', function (hello) {
+      if (generation !== connectionGeneration) return;
+      if (!hello || hello.app !== 'couchsubs') { scanForServer(); return; }
+      // Do not restart discovery while waiting for human approval.
+      cancelScan();
+      if (hello.auth !== 1) { connectStream(address); return; }
+      var identities;
+      try { identities = JSON.parse(load('server-identities') || '{}'); } catch (e) { identities = {}; }
+      // Kimlik, /hello'daki kurulum kimliğidir (GitHub #425; bilgisayarı seçmek için de kullanılır).
+      var identity = /^[A-Za-z0-9-]{1,64}$/.test(hello.id || '') ? hello.id : '';
+      var saved = identity && identities[identity];
+      // Aynı sunucu DHCP ile taşınmışsa eski onay kullanılabilir. Anahtar yenilendiyse eski anahtar doğrulanmaz ve
+      // TV yeniden eşleşme ister.
+      if (saved) saveServerKey(address, saved);
+      var key = serverKey(address);
+      if (key) {
+        pairRequest('GET', address, '/pair?validate=1&k=' + encodeURIComponent(key), function (result) {
+          if (generation !== connectionGeneration) return;
+          if (result && result.state === 'valid') { remember(key); connectStream(address); }
+          else beginPair();
+        });
+      } else beginPair();
+      function remember(value) {
+        saveServerKey(address, value);
+        if (identity) { identities[identity] = value; save('server-identities', JSON.stringify(identities)); }
+      }
+      function beginPair() {
+        pairingActive = true;
+        $('waiting').className = '';
+        $('pairing').textContent = t('pairServer');
+        pairRequest('POST', address, '/pair', function (ticket) {
+          if (generation !== connectionGeneration) return;
+          if (!ticket || !/^[A-Za-z0-9_-]{22}$/.test(ticket.id || '') || !/^[0-9]{6}$/.test(ticket.code || '')) {
+            stopPairing();
+            pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 15000);
+            return;
+          }
+          var deadline = Date.now() + 120000;
+          $('pairing').textContent = t('pairCode') + ' ' + ticket.code + ' — ' + t('pairServer');
+          setStatus('st-conn', t('pairCode') + ' ' + ticket.code, 'muted');
+          function poll() {
+            if (generation !== connectionGeneration) return;
+            if (Date.now() >= deadline) { stopPairing(); return; }
+            pairRequest('GET', address, '/pair?id=' + encodeURIComponent(ticket.id), function (result) {
+              if (generation !== connectionGeneration) return;
+              if (result && result.state === 'approved' && /^[A-Za-z0-9_-]{22}$/.test(result.key || '')) {
+                remember(result.key); $('pairing').textContent = ''; connectStream(address); return;
+              }
+              if (result && result.state === 'expired') { stopPairing(); return; }
+              pairingTimer = setTimeout(poll, 1500);
+            });
+          }
+          poll();
+        });
+      }
+    });
+  }
+
+  function connectStream(address) {
+    address = address.replace(/\/+$/, '');
+    pairingActive = false;
     if (pausedByHidden) {
       server = address;
       return;
     }
     if (demoRunning()) stopDemo();
     if (eventSource) eventSource.close();
+    eventSource = null;
     if (address !== server) failures = 0;
     server = address;
     $('waiting').className = 'hidden';
@@ -1115,11 +1230,12 @@
       return;
     }
     setStatus('st-conn', t('connecting'), 'muted');
-    eventSource = new EventSource(address + '/events');
+    eventSource = new EventSource(authenticatedUrl(address, '/events'));
     lastActivity = Date.now();
     eventSource.onopen = function () {
       lastActivity = Date.now();
       failures = 0;
+      clearTimeout(pairingTimer);
       cancelScan();
       clearTimeout(dropTimer);
       dropTimer = null;
@@ -1127,6 +1243,9 @@
       learnServer(address);
     };
     eventSource.onerror = function () {
+      var failedGeneration = connectionGeneration;
+      clearTimeout(pairingTimer);
+      pairingTimer = setTimeout(function () { if (failedGeneration === connectionGeneration) connect(address); }, 5000);
       // Bağlantı kısa süre içinde geri gelmezse eski altyazı ekranda asılı kalmasın. Bir anlık kopma yazıyı silmez.
       diag.drops++;
       renderDiag();
@@ -1159,7 +1278,7 @@
     onEvent('region-clear', hideRegions);
     onEvent('exit', function () { leaving = true; platform.exit(); });
     onEvent('style', applyStyle);
-    onEvent('speech', function (data) { if (data.url) playSpeech(server + data.url); });
+    onEvent('speech', function (data) { if (data.url && data.url.charAt(0) === '/' && data.url.charAt(1) !== '/') playSpeech(authenticatedUrl(server, data.url)); });
     onEvent('speech-stop', stopSpeech);
   }
 
@@ -1615,7 +1734,9 @@
         // Bulunan adres kaydedilir: TV bir sonraki açılışta eski adrese takılmasın.
         save('server', choice.address);
         // Aynı bilgisayarsa EventSource kendisi yeniden bağlanır; kapanıp vazgeçtiyse (CLOSED) yeniden kurulur.
-        if (choice.address !== server || (eventSource && eventSource.readyState === 2)) connect(choice.address);
+        // Eşleştirme beklemiyor (ya da Tamam'ı beklemiyor) ve bağlantı da yoksa (bilgisayar kapalıyken /hello yanıtsız
+        // kalmıştı) yeniden kurulur.
+        if (choice.address !== server || (eventSource ? eventSource.readyState === 2 : !pairingActive && !pairingFailed)) connect(choice.address);
         else if (fallback) scheduleScan(FALLBACK_SCAN_MS);
       }
       pump();
@@ -1863,6 +1984,7 @@
     hidePanelTip();
     if (sourceTipShown()) hideSourceTip();
     else if (noPictureShown()) return;
+    else if (pairingFailed && server) connect(server);
     else if ($('waiting').className !== 'hidden') startDemo();
     else if (!demoRunning()) togglePanel();
   });
@@ -1904,6 +2026,8 @@
       togglePicture();
     } else if (code === KEY.BLUE) {
       if (demoRunning()) stopDemo(); else startDemo();
+    } else if (code === KEY.OK && pairingFailed && server) {
+      connect(server);
     } else if (code === KEY.OK && $('waiting').className !== 'hidden') {
       startDemo();
     } else if (code === KEY.OK && !demoRunning()) {

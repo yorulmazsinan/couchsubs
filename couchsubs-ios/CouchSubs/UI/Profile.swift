@@ -147,6 +147,10 @@ struct SettingsScreen: View {
             BackHeader(title: "Settings")
         } content: {
             Tile {
+                Button("Pair TV") { Task { await model.openTVPairing() } }
+                ShareLink("Copy or share subtitle address", item: model.subtitleViewerAddress)
+                Button("Renew access key") { model.rotateSubtitleKey() }
+                if model.legacyTVWarning { Text("The TV app is old. Update it.") }
                 Text("Translation engine").font(Mobile.TypeScale.headline)
                 SegmentedTabs(options: Self.choices,
                               selection: Binding(get: { choice }, set: { setChoice($0) }))

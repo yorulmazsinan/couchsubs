@@ -4,6 +4,7 @@
 import Foundation
 
 public enum StoreKey {
+    public static let subtitleAccessKey = "subtitleAccessKey"
     public static let accountId = "accountId"
     public static let console = "console"
     public static let tv = "tv"

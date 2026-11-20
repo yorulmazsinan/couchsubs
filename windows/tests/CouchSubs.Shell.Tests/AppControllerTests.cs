@@ -193,7 +193,7 @@ internal sealed class FakeServices : IAppServices
         TvCalls++;
         return Task.FromResult<IReadOnlyList<LgTv>>(Tvs);
     }
-    public Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server)
+    public Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server, string accessKey)
     {
         LaunchedServer = server;
         PairCount++;
@@ -1387,14 +1387,33 @@ public class AppControllerRunTests
     }
 
     [Fact]
+    public async Task PendingTvPairingIsVisibleUntilAnswered()
+    {
+        // Linux paneli onay penceresi açamaz; bekleyen isteği bu soruyla gösterir.
+        var controller = AppControllerTests.Make();
+        SubtitlePairing.Ticket? asked = null;
+        controller.TvPairingRequested += ticket => asked = ticket;
+        await controller.OpenTvPairingAsync();
+        using var http = new HttpClient();
+        using var created = await http.PostAsync($"http://127.0.0.1:{controller.ServerPort}/pair", null);
+        Assert.Equal(200, (int)created.StatusCode);
+        Assert.NotNull(asked);
+        Assert.True(controller.IsTvPairingPending(asked!.Id));
+        Assert.False(controller.IsTvPairingPending("not-the-request-secret"));
+        Assert.True(controller.ResolveTvPairing(asked.Id, true));
+        Assert.False(controller.IsTvPairingPending(asked.Id));
+        controller.Dispose();
+    }
+
+    [Fact]
     public void SettingsArePersistedOutsideTheSecureStore()
     {
         var store = new MemoryStore();
         var settings = new MemorySettings();
         var controller = AppControllerTests.Make(store: store, settings: settings);
         controller.Settings = controller.Settings with { Style = new SubtitleStyle(58, 7) };
-        // Güvenli depoda yalnız kurulumun bitip bitmediği durur.
-        Assert.Equal([StoreKeys.SetupComplete], store.Values.Keys);
+        // Görünüm ayarları ayrı; kurulum durumu ve TV erişim anahtarı güvenli depodadır.
+        Assert.Equal(new[] { StoreKeys.SetupComplete, StoreKeys.SubtitleAccessKey }.Order(), store.Values.Keys.Order());
         Assert.Equal(58, AppControllerTests.Make(store: store, settings: settings).Settings.Style.FontSize);
     }
 

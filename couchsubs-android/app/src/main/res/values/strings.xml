@@ -543,4 +543,12 @@
     <string name="demo_mode_exit_short">Çık</string>
     <string name="demo_mode_body">Deneme modu, uygulamanın tamamını içindeki örnek görüntülerle gösterir. Konsol, hesap ya da TV gerekmez.</string>
     <string name="demo_mode_frame_note">Örnek oyun görüntüsü: uygulama içindeki İngilizce altyazıyı okur, çevirir; çeviri aşağıda ve telefon ekranında görünür.</string>
+    <string name="tv_pair_title">Bu TV eşleşsin mi?</string>
+    <string name="tv_pair_code">TV kodu: %1$s. Yalnız bu kod TV ekranınızda görünüyorsa onaylayın.</string>
+    <string name="tv_pair_approve">Onayla</string>
+    <string name="tv_pair_reject">Reddet</string>
+    <string name="tv_key_renew">Erişim anahtarını yenile</string>
+    <string name="tv_legacy_warning">TV uygulaması eski. Güncelleyin.</string>
+    <string name="tv_copy_address">Altyazı adresini kopyala</string>
+    <string name="tv_pair_expired">Eşleştirme isteğinin süresi doldu. TV’den yeniden deneyin.</string>
 </resources>
