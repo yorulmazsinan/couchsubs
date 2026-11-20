@@ -6,12 +6,11 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6'da oyun telefonu çevirisi (deneysel, Windows ve Mac, #565, #600):** Oyundaki telefon açılınca mesajlar ve yanıt seçenekleri kendiliğinden çevriliyor; Türkçesi, telefon ekranından alınan renklerle özgün yazının üstünde görünüyor. Katkı: lones8888.
-- **GTA 6 için 39 bin satırlık topluluk çevirisi (#614):** Elle düzeltilmiş çeviriler pakete ekleniyor; Windows'ta GTA ekran yazıları kısmi eşleşmeyle ve kısa satırlarda benzerlikle de bulunuyor. Katkı: lones8888.
-- **Altyazı okunmuyorsa (#613):** Oyun penceresinden görüntü gelmezse CouchSubs yedek yakalamaya geçiyor; oyunun kendi altyazısı kapalıysa "oyunun altyazısını açın" ipucu çıkıyor.
-- **Paketleri şimdi güncelle (Android, #622):** Güncellerken sayfa bekleme perdesiyle örtülüyor, bitince kaç paketin kaç satırla güncellendiği ya da "Paketler zaten güncel" yazıyor. Liste her seferinde sunucudan taze geliyor.
-- **Android TV'de uygulamanın kapanması (TV uygulaması 0.9.41, #616):** Bazı TV'lerde (ör. Philips, Android 8) altyazı sayfasının web görünümü kapanınca uygulama artık kapanmıyor, sayfa kendiliğinden yeniden açılıyor.
-- **Linux sunucusu (#617):** Docker imajı derleniyor ve Android TV uygulamasını içeriyor; panelde Android TV seçilebiliyor, TV adresi elle yazılabiliyor, altyazı portu değiştirilebiliyor. Windows'ta 8787 portu doluysa Android TV yine bağlanıyor.
+- **Uzun oyunda bağlanıp kopma döngüsü (bütün uygulamalar, #593):** Wi-Fi'da kısa bir paket kaybından sonra görüntü donup her dakika yeniden bağlanma döngüsüne girilmesi giderildi. PS5'ten istenen tam kare artık gelene kadar yineleniyor, gönderme kuyruğu taşmıyor, görüntü donarsa uygulama hemen kesmeden 15 saniye bekliyor ve yeniden bağlanırken PS5'e nefes alacak zaman bırakıyor.
+- **Hazır paketten daha çok satır (bütün uygulamalar):** Yazı tanıma bir iki harfi yanlış okuduğunda (yutulan harf, I/l/1, O/0 karışması) satır yine paketteki çevirisiyle bulunuyor; ilgisiz bir satıra eşleşme azaldı.
+- **2016 Samsung TV'lere kurulum (Android telefon, #621):** Tizen 2.x TV'lerde "install failed[118]" hatası için paket bu TV'lerin kabul ettiği biçimde hazırlanıyor.
+
+**beta.61'de gelenler:** GTA 6'da oyun telefonu çevirisi (deneysel, katkı: lones8888), GTA 6 için 39 bin satırlık topluluk çevirisi, altyazı okunmayınca yedek yakalama ve "oyunun altyazısını açın" ipucu, Android'de yeni paket güncelleme ekranı, Android TV'de uygulamanın kapanmaması (TV uygulaması 0.9.41), Linux sunucu düzeltmeleri.
 
 **beta.60'ta gelenler:** PS5'e bağlanma ve eşleştirmenin daha güvenilir olması, "PS5 bağlanmayı reddetti"nin kendiliğinden yeniden bağlanması, LG TV'de ekran koruyucu (TV uygulaması 0.9.40), Android telefonda kilit ekranı ve PSN girişi düzeltmeleri, ek alanlarda kontrolcü simgeleri (katkı: erayslyrt00), paket sunucusuna yedek adres, Mac güncelleme imzasının yenilenmesi.
 
