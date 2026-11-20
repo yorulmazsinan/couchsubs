@@ -69,8 +69,47 @@ enum UiCommands {
         "RESUME": "Sürdür", "QUIT": "Çık", "NEXT": "İleri", "PREVIOUS": "Önceki", "ALL": "Tümü",
         "NONE": "Hiçbiri", "DEFAULT": "Varsayılan", "APPLY": "Uygula", "RESET": "Sıfırla",
         "INVENTORY": "Envanter", "OUTFITS": "Kıyafetler", "OUTFIT": "Kıyafet", "WEAPONS": "Silahlar",
-        "STATS": "İstatistikler",
+        "STATS": "İstatistikler", "GAME": "Oyun",
     ]
+
+    /// Yazı tanımanın Kiril harfle okuduğu Latin harfler ("Мар" → "Map").
+    static func latin(_ text: String) -> String {
+        let map: [Character: Character] = [
+            "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X",
+            "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+        ]
+        return String(text.map { map[$0] ?? $0 })
+    }
+
+    /// `translateLabel`, yazı tanımanın etikete kattığı kırıntıyla da: simge imleriyle ayrılan her parça ayrı aranır;
+    /// baştaki ya da sondaki en çok iki harflik kırıntı (simgenin yanlış okunuşu: "pi Settings", "EXIT OR") olduğu gibi
+    /// kalır (baştaki tuş adı değilse atılır). Bir parça bulunmazsa nil (Windows/Android ile aynı).
+    static func translateLabelLoosely(_ label: String) -> String? {
+        let marker = ButtonIcons.marker
+        if label.contains(marker) {
+            var done: [String] = []
+            var any = false
+            for part in label.split(separator: marker, omittingEmptySubsequences: false) {
+                if part.trimmingCharacters(in: .whitespaces).isEmpty { done.append(""); continue }
+                guard let turkish = translateLabelLoosely(String(part)) else { return nil }
+                done.append(turkish)
+                any = true
+            }
+            guard any else { return nil }
+            return done.joined(separator: " \(marker) ").split(separator: " ").joined(separator: " ")
+        }
+        if let direct = translateLabel(label) { return direct }
+        let words = label.split(separator: " ").map(String.init)
+        guard words.count >= 2 else { return nil }
+        // Baştaki kırıntı tuş adıysa ("R3 LOOK BEHIND") kalır; değilse ("1 Map", "pi Settings") atılır.
+        if words[0].count <= 2, let rest = translateLabel(words.dropFirst().joined(separator: " ")) {
+            return ButtonIcons.isButtonName(words[0]) ? words[0] + " " + rest : rest
+        }
+        if words[words.count - 1].count <= 2, let head = translateLabel(words.dropLast().joined(separator: " ")) {
+            return head + " " + words[words.count - 1]
+        }
+        return nil
+    }
 
     /// Menüdeki kısa etiketin Türkçesi ("OFF" → "KAPALI", "Off" → "Kapalı", "off" → "kapalı"): etiketin tamamı sözlükte
     /// olmalı (büyük/küçük harf fark etmez); biçimi Türkçe kurallarıyla korunur (i → İ). Sözlükte yoksa nil.
@@ -79,7 +118,7 @@ enum UiCommands {
             .trimmingCharacters(in: CharacterSet(charactersIn: ".,:!?"))
             .trimmingCharacters(in: .whitespaces)
         guard words.contains(where: \.isLetter) else { return nil }
-        let key = words.uppercased(with: Locale(identifier: "en_US_POSIX"))
+        let key = latin(words).uppercased(with: Locale(identifier: "en_US_POSIX"))
         guard let turkish = commands[key] ?? labels[key] else { return nil }
         let letters = words.filter(\.isLetter)
         let turkishLocale = Locale(identifier: "tr_TR")

@@ -2221,6 +2221,8 @@ final class AppModel: ObservableObject {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
         }
         regionWatcher?.offer(frame, areas: areas, phone: pose)
+        // Ekranda menü açık (otomatik ekran yazısı menü durumunda): menü satırları altyazıya karışmasın, altyazı okunmaz.
+        if screenTextDetector?.inMenu == true { return }
         // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.
         var entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
         if case .stuck(let ms) = entry {

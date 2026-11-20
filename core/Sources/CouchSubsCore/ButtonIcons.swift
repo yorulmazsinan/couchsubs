@@ -172,6 +172,23 @@ public enum ButtonIcons {
 
     /// Tek harf/simge (küçük "a" ve "I" dışında: sözcüktürler) ya da düğme adı; çevresindeki parantez ve noktalama
     /// sayılmaz. Uzunluk Windows'taki gibi UTF-16 birimiyle ölçülür.
+    /// Sözcük bir kumanda tuşunun adı ya da simgesi mi ("R3", "(L1)", "△").
+    static func isButtonName(_ text: String) -> Bool { names.contains(trimming(text, brackets).uppercased()) }
+
+    /// Kutudaki parlak piksellerin çoğu renksiz mi (kumanda simgesi beyaz/gri; portre, harita renkli).
+    static func isColourless(_ frame: CGImage, _ box: TextBox) -> Bool {
+        let rect = GamePhonePixels.rect(box, in: frame)
+        guard let pixels = GamePhonePixels(frame, in: rect) else { return false }
+        var bright = 0, coloured = 0
+        for i in stride(from: 0, to: pixels.bytes.count, by: 4) {
+            let r = Int(pixels.bytes[i]), g = Int(pixels.bytes[i + 1]), b = Int(pixels.bytes[i + 2])
+            if (299 * r + 587 * g + 114 * b) / 1000 < 110 { continue }
+            bright += 1
+            if max(r, g, b) - min(r, g, b) > 60 { coloured += 1 }
+        }
+        return bright > 0 && coloured * 4 < bright
+    }
+
     static func isIconToken(_ text: String) -> Bool {
         let core = trimming(trimming(trimming(text, brackets), punctuation, leading: false), brackets)
         if names.contains(core.uppercased()) { return true }
@@ -339,7 +356,10 @@ public enum ButtonIcons {
 
     /// Ek alanlardaki tuş çubuklarında ve satır uçlarında yalnız kareden doğrulanan simgeler işaretlenir.
     /// Windows ButtonIcons.MarkFree ile aynı kurallar (GameTranslator ve Nino Game Translator, bkz. THIRD-PARTY-NOTICES.md).
-    static func markFree(_ line: TextLine, frame: CGImage) -> TextLine {
+    /// `monochrome`: otomatik bulunan ekran yazısında yalnız renksiz (beyaz/gri) ve satır yüksekliğinin en az %60'ı
+    /// kadar simgeler kabul edilir; satırın solundaki menü simgesi çeviriye taşınmaz (kutu simgeden sonra başlar).
+    /// Görev kutusundaki portre ve harita parçası simge sanılıp çevirinin içine kesiliyordu (gerçek kare doğrulaması).
+    static func markFree(_ line: TextLine, frame: CGImage, monochrome: Bool = false) -> TextLine {
         guard let lineBox = line.box, (line.icons ?? []).isEmpty, frame.width >= 8, frame.height >= 8 else { return line }
         let measured = !(line.words ?? []).isEmpty
         let words = measured ? line.words! : estimate(line.text, lineBox)
@@ -358,9 +378,9 @@ public enum ButtonIcons {
                     right: max(0, min(1, right)), bottom: max(0, min(1, lineBox.bottom + lineHeight * 0.3)))
         }
         func hasIcon(_ box: TextBox) -> Bool {
-            guard let ink = locate(frame, box), Double(ink.inkHeight) >= linePx * 0.5,
+            guard let ink = locate(frame, box), Double(ink.inkHeight) >= linePx * (monochrome ? 0.6 : 0.5),
                   Double(ink.inkHeight) <= linePx * 2.2 else { return false }
-            return (0.6...2.4).contains(Double(ink.inkWidth) / Double(ink.inkHeight))
+            return (0.6...2.4).contains(Double(ink.inkWidth) / Double(ink.inkHeight)) && (!monochrome || isColourless(frame, box))
         }
         func addEdge(_ left: Double, _ right: Double) {
             let box = padded(left, right)
@@ -369,7 +389,7 @@ public enum ButtonIcons {
                 icons.append(IconSlot(box: box, text: ""))
             }
         }
-        if !isIconToken(first.text), lineBox.left > 0 {
+        if !monochrome, !isIconToken(first.text), lineBox.left > 0 {
             addEdge(lineBox.left - spanX, lineBox.left - spanX * 0.08)
         }
         for (i, word) in words.enumerated() {
@@ -406,10 +426,29 @@ public enum ButtonIcons {
             }
             tokens.append(word.text)
         }
-        if bar, !tokens.isEmpty, tokens.last != symbol, lineBox.right < 1 {
+        if !monochrome, bar, !tokens.isEmpty, tokens.last != symbol, lineBox.right < 1 {
             addEdge(lineBox.right + spanX * 0.08, lineBox.right + spanX)
         }
         guard !icons.isEmpty else { return line }
+        if monochrome {
+            // Otomatik ekran yazısında satırın başındaki ve sonundaki simge çeviriye taşınmaz: oyunun kendi simgesi yerinde
+            // görünür kalır, çeviri kutusu simgeden sonra başlar (önce biter). Yazının ortasındaki simge korunur.
+            var kept = tokens, slots = icons
+            while kept.first == symbol, kept.count > 1 { kept.removeFirst(); slots.removeFirst() }
+            while kept.last == symbol, kept.count > 1 { kept.removeLast(); slots.removeLast() }
+            guard kept.count < tokens.count else {
+                return TextLine(tokens.joined(separator: " "), box: line.box, confidence: line.confidence, icons: icons)
+            }
+            let texts = Set(kept.filter { $0 != symbol })
+            let boxes = words.filter { texts.contains($0.text) }.map(\.box)
+            var box = lineBox
+            if let first = boxes.first, let last = boxes.last {
+                box.left = max(lineBox.left, first.left)
+                box.right = min(lineBox.right, last.right)
+            }
+            return TextLine(kept.joined(separator: " "), box: box, confidence: line.confidence,
+                            icons: slots.isEmpty ? nil : slots)
+        }
         return TextLine(tokens.joined(separator: " "), box: line.box, confidence: line.confidence, icons: icons)
     }
 

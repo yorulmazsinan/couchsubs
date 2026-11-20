@@ -323,9 +323,12 @@ public final class RegionWatcher {
     /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false) -> Candidate {
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
-        let marked = reading.withButtonIcons(frame: frame)
+        let marked = reading.withButtonIcons(frame: frame, monochrome: auto)
         let lines = (auto ? marked : marked.withoutButtonPrompts()).withoutOcrNoise().lines
             .filter { ScreenTranslation.isWords($0.text) }
+            // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı"), karenin kenarında kesilmiş tek sözcük ve bozuk okuma
+            // (düşük güven, tuhaf harfler) atılır.
+            .filter { !auto || !(ScreenTextNoise.isOverlay($0.text) || cutAtEdge($0) || ScreenTextNoise.isGarbled($0)) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
         var paragraphs = ScreenTranslation.paragraphs(lines)
         let place = TextBox(left: region.left, top: region.top, right: region.right, bottom: region.bottom)
@@ -378,14 +381,27 @@ public final class RegionWatcher {
     /// satırın ters rengi) satır başına çıkarılır. Uzun yazı satırları eskisi gibi paragraflara toplanır.
     static func autoGroups(_ lines: [TextLine]) -> [ScreenTranslation.Group] {
         func isLabel(_ line: TextLine) -> Bool { line.text.split(whereSeparator: \.isWhitespace).count <= labelWords }
-        let prose = lines.filter { !isLabel($0) }
-        var groups = prose.isEmpty ? [] : ScreenTranslation.groups(from: prose)
-        for line in lines where isLabel(line) {
+        func isTitle(_ line: TextLine) -> Bool { line.text.contains(where: \.isLetter) && !line.text.contains(where: \.isLowercase) }
+        func single(_ line: TextLine) -> ScreenTranslation.Group {
             let icons = ScreenTranslation.paragraphIcons([line])
             let box = line.box!
-            groups.append(ScreenTranslation.Group(paragraphs: ScreenTranslation.paragraphs([line]), box: box,
-                                                  lineHeight: box.bottom - box.top,
-                                                  icons: icons.contains { !$0.isEmpty } ? icons : nil))
+            return ScreenTranslation.Group(paragraphs: ScreenTranslation.paragraphs([line]), box: box,
+                                           lineHeight: box.bottom - box.top, icons: icons.contains { !$0.isEmpty } ? icons : nil)
+        }
+        // Gruplar önce birlikte kurulur (gerçek kare doğrulaması: sarılmış cümlenin kısa son satırı "cash. Meet her at
+        // Delights." ayrı blok olup ayrı çevriliyordu). Bütün satırları kısa etiket olan grup (menü sütunu) satır satır
+        // bloktur; uzun satırı olan grup paragraftır, başındaki BÜYÜK HARF başlık ise kendi bloğudur (stili ayrı).
+        var groups: [ScreenTranslation.Group] = []
+        for group in ScreenTranslation.groups(from: lines) {
+            let own = lines.filter { inside($0.box!, group.box) }
+            if own.allSatisfy(isLabel) {
+                groups += own.map(single)
+                continue
+            }
+            let titles = Array(own.prefix { isTitle($0) && isLabel($0) })
+            groups += titles.map(single)
+            if titles.isEmpty { groups.append(group) }
+            else { groups += ScreenTranslation.groups(from: Array(own.dropFirst(titles.count))) }
         }
         return groups.enumerated().sorted {
             ($0.element.box.top, $0.element.box.left, $0.offset) < ($1.element.box.top, $1.element.box.left, $1.offset)
@@ -410,6 +426,13 @@ public final class RegionWatcher {
             aligned.look = look
             return aligned
         }
+    }
+
+    /// Tek sözcüklük satır alanın sol ya da sağ kenarına değiyor: kesilmiş bir yazının parçası ("KELI").
+    static func cutAtEdge(_ line: TextLine) -> Bool {
+        guard let box = line.box, !IconText.plain(line.text).trimmingCharacters(in: .whitespaces).contains(" ") else { return false }
+        // Otomatik alan yazının dışına kadar genişletilir: kenara değen sözcük alanın (ya da karenin) dışından taşıyor.
+        return box.left <= 0.005 || box.right >= 0.995
     }
 
     private static func inside(_ line: TextBox, _ group: TextBox) -> Bool {
@@ -662,7 +685,7 @@ public final class RegionWatcher {
         for part in parts.joined() {
             let core = part.core.trimmingCharacters(in: .whitespaces)
             guard core.contains(where: \.isLetter), known[core] == nil, !pending.contains(core) else { continue }
-            if let found = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabel(core) : nil)
+            if let found = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabelLoosely(core) : nil)
                 ?? packLookup?(IconText.plain(core))?.text ?? (skipsTurkish && TurkishText.isSure(core) ? core : nil) {
                 known[core] = found
             } else {

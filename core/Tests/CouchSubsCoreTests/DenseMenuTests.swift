@@ -80,14 +80,14 @@ final class DenseMenuTests: XCTestCase {
         XCTAssertEqual(first.count, 6)
         XCTAssertTrue(Self.light(try XCTUnwrap(first[2].style).background))
         for (index, block) in first.enumerated() where index != 2 { XCTAssertFalse(Self.light(block.style!.background)) }
-        // Yalnız sözlükte olmayan "Game" motora gitti; karışık harfli özgün normal Türkçe kalır.
-        XCTAssertEqual(translator.requests, 1)
-        XCTAssertEqual(translator.texts, ["Game"])
+        // Satırların hepsi arayüz sözlüğünde: motora istek gitmez; karışık harfli özgün normal Türkçe kalır.
+        XCTAssertEqual(translator.requests, 0)
         XCTAssertEqual(first[0].translation, "Harita")
+        XCTAssertEqual(first[1].translation, "Oyun")
 
         await watcher.pass(Self.pause(3), areas: [area])
         await watcher.pass(Self.pause(3), areas: [area])
-        XCTAssertEqual(translator.requests, 1)
+        XCTAssertEqual(translator.requests, 0)
         let moved = try XCTUnwrap(server.blocks.last { $0 != nil } ?? nil)
         XCTAssertFalse(Self.light(moved[2].style!.background))
         XCTAssertTrue(Self.light(moved[3].style!.background))

@@ -226,10 +226,11 @@ public struct Reading: Equatable, Sendable {
     }
 
     /// Yazının içindeki kumanda simgeleri `ButtonIcons.marker` ile işaretlenmiş hali (bkz. `ButtonIcons.mark`).
-    public func withButtonIcons(frame: CGImage? = nil) -> Reading {
+    /// `monochrome`: yalnız renksiz simgeler (otomatik ekran yazısı; bkz. `ButtonIcons.markFree`).
+    public func withButtonIcons(frame: CGImage? = nil, monochrome: Bool = false) -> Reading {
         let marked = ButtonIcons.joinHints(self).lines.map(ButtonIcons.mark)
         guard let frame else { return Reading(lines: marked) }
-        return Reading(lines: marked.map { ButtonIcons.markFree($0, frame: frame) })
+        return Reading(lines: marked.map { ButtonIcons.markFree($0, frame: frame, monochrome: monochrome) })
     }
 }
 

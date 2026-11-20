@@ -4,7 +4,7 @@ import CoreGraphics
 import Foundation
 
 /// Ekran yazılarını kendiliğinden bulur (görev, yardım kutusu, mesaj; oyundan bağımsız, sabit bölge yok). Kare 32x18
-/// karoya bölünür, her karodan 12x12 nokta örneği alınır: koyu ya da yarı saydam zeminde açık renk yazı taşıyan ve en az
+/// karoya bölünür, her karodan 24x24 nokta örneği alınır: koyu ya da yarı saydam zeminde açık renk yazı taşıyan ve en az
 /// 300 ms durgun kalan karolar birleşip geçici ek alan olur (`ExtraArea.auto`). OCR, paket ve canlı çeviri, yerinde
 /// gösterme ve boşalınca kaldırma `RegionWatcher`'dadır. Okunup yazı bulunmayan ya da gürültü çıkan alan (harita, para,
 /// saat) `reject` ile bildirilir; karoları görüntü değişmedikçe yeniden önerilmez. Windows (ScreenTextDetector.cs) ve
@@ -12,8 +12,8 @@ import Foundation
 public final class ScreenTextDetector: @unchecked Sendable {
     public static let columns = 32
     public static let rows = 18
-    /// Karo başına bir kenardaki örnek sayısı (12x12 = 144 nokta).
-    public static let samples = 12
+    /// Karo başına bir kenardaki örnek sayısı (24x24 = 576 nokta; ince açık yazılı sol sütunlar 12x12'de kaçıyordu).
+    public static let samples = 24
     /// İki örnek arasında en az bu kadar süre geçer (en çok 10 Hz).
     public static let sampleIntervalMs = 100
     /// Karo bu kadar süre durgun kalınca aday olur.
@@ -36,15 +36,16 @@ public final class ScreenTextDetector: @unchecked Sendable {
 
     private static let bright = 160
     private static let dark = 100
-    private static let maskChange = 6
+    /// Maskenin değişmiş sayılması için en az bu kadar nokta farklı olmalı (576 noktada; 144 noktadaki 6'nın orantılısı).
+    private static let maskChange = 24
     private static let maxShare = 0.35
     private static let keepOverlap = 0.30
 
     /// 144 bitlik karo maskesi (parlaklığı `bright` ve üstü olan noktalar).
     struct Mask: Equatable {
-        var a: UInt64 = 0, b: UInt64 = 0, c: UInt64 = 0
+        var words = [UInt64](repeating: 0, count: (ScreenTextDetector.samples * ScreenTextDetector.samples + 63) / 64)
         func distance(_ other: Mask) -> Int {
-            (a ^ other.a).nonzeroBitCount + (b ^ other.b).nonzeroBitCount + (c ^ other.c).nonzeroBitCount
+            zip(words, other.words).reduce(0) { $0 + ($1.0 ^ $1.1).nonzeroBitCount }
         }
     }
 
@@ -107,7 +108,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
     @discardableResult
     public func sample(_ frame: CGImage, now: Int, excluded: [CropRegion]) -> Bool {
         guard due(now) else { return false }
-        // Nokta örnekleri: kare, her karoya 12x12 piksel düşecek boya (384x216) ara değerlemesiz küçültülür.
+        // Nokta örnekleri: kare, her karoya 24x24 piksel düşecek boya (768x432) ara değerlemesiz küçültülür.
         guard let pixels = GamePhonePixels(frame, width: Self.columns * Self.samples, height: Self.rows * Self.samples)
         else { return false }
         let measured = Self.measure(pixels)
@@ -127,9 +128,11 @@ public final class ScreenTextDetector: @unchecked Sendable {
                     tile.hasLast = true
                     if tile.isRejected && tile.rejected.distance(mask) > Self.maskChange { tile.isRejected = false }
                     tiles[index] = tile
-                    let textLike = (6...72).contains(bright) && dark >= 36
+                    // Koyu/yarı saydam zeminde açık yazı (576 noktada: 24..288 parlak, en az 144 koyu).
+                    let textLike = (24...288).contains(bright) && dark >= 144
                     candidate[index] = textLike && now - tile.stableSince >= Self.stableMs && !tile.isRejected
-                        && !Self.excluded(column, row, excluded)
+                        // Menü durumunda altyazı alanı dışlanmaz (menü satırları orada da olabilir).
+                        && (menu || !Self.excluded(column, row, excluded))
                 }
             }
             let all = Self.components(candidate)
@@ -183,9 +186,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
                             squares += luma * luma
                             if luma >= Self.bright {
                                 bright += 1
-                                if bit < 64 { mask.a |= 1 << UInt64(bit) }
-                                else if bit < 128 { mask.b |= 1 << UInt64(bit - 64) }
-                                else { mask.c |= 1 << UInt64(bit - 128) }
+                                mask.words[bit / 64] |= 1 << UInt64(bit % 64)
                             } else if luma <= Self.dark {
                                 dark += 1
                             }
@@ -245,6 +246,32 @@ public final class ScreenTextDetector: @unchecked Sendable {
             if Double(cells.area) > maxShare * Double(columns * rows) { continue }
             result.append((cells, list))
         }
+        return merged(result)
+    }
+
+    /// Bölgeleri kesişen bileşenler birleşir: aynı yazı iki alanda yarım yarım okunmasın (gerçek karede tuş çubuğu iki
+    /// alana bölünüp ikisi de kesik okunuyor, kutular sırayla gidip geliyordu). Bölge yatayda bir, dikeyde yarım karo
+    /// genişlediği için yatayda iki, dikeyde bir boş karoya kadar aralıklı bileşenler kesişir. Birleşen sahne dokusu
+    /// kadar büyürse birleşmez.
+    static func merged(_ components: [(cells: Cells, tiles: [Int])]) -> [(cells: Cells, tiles: [Int])] {
+        var result = components
+        var changed = true
+        while changed {
+            changed = false
+            outer: for i in result.indices {
+                for j in result.indices where j > i {
+                    let a = result[i].cells, b = result[j].cells
+                    guard a.left <= b.right + 2, b.left <= a.right + 2, a.top <= b.bottom + 1, b.top <= a.bottom + 1 else { continue }
+                    let union = Cells(left: min(a.left, b.left), top: min(a.top, b.top),
+                                      right: max(a.right, b.right), bottom: max(a.bottom, b.bottom))
+                    guard Double(union.area) <= maxShare * Double(columns * rows) else { continue }
+                    result[i] = (union, result[i].tiles + result[j].tiles)
+                    result.remove(at: j)
+                    changed = true
+                    break outer
+                }
+            }
+        }
         return result
     }
 
@@ -266,7 +293,8 @@ public final class ScreenTextDetector: @unchecked Sendable {
         let closed = menu && !inMenu
         menu = inMenu
         // Menü kapandı: menüde bulunan bütün alanlar hemen kalkar (700 ms beklemez).
-        if closed { tracked.removeAll(where: \.menu) }
+        // Karoları hâlâ yerinde duran alan (seçim gezinirken menü durumu bir örnek düşse de) kalır; yanıp sönmez.
+        if closed { tracked.removeAll { $0.menu && !$0.tiles.contains { candidate[$0] } } }
         var matched = Set<ObjectIdentifier>()
         for (cells, list) in components {
             var existing = tracked.first { !matched.contains(ObjectIdentifier($0)) && $0.cells.overlap(cells) >= Self.keepOverlap }
@@ -299,18 +327,52 @@ public final class ScreenTextDetector: @unchecked Sendable {
         }
     }
 
-    /// Karo dikdörtgeni her yandan yarım karo genişletilmiş, 0..1'e kırpılmış bölge.
+    /// Karo dikdörtgeni yatayda her yandan bir karo, dikeyde yarım karo genişletilmiş, 0..1'e kırpılmış bölge.
     static func region(_ cells: Cells) -> CropRegion {
         CropRegion(top: max(0, (Double(cells.top) - 0.5) / Double(rows)),
                    bottom: min(1, (Double(cells.bottom) + 1.5) / Double(rows)),
-                   left: max(0, (Double(cells.left) - 0.5) / Double(columns)),
-                   right: min(1, (Double(cells.right) + 1.5) / Double(columns)))
+                   left: max(0, (Double(cells.left) - 1) / Double(columns)),
+                   right: min(1, (Double(cells.right) + 2) / Double(columns)))
     }
 }
 
 /// Otomatik bulunan alanda okunan yazı çevrilmeye değer mi: sayaç, saat, para, tek sözcüklük etiket ya da büyük harfli
 /// kısa tabela gürültüdür (Windows/Android: ScreenTextNoise ile aynı kurallar). Yalnız otomatik alanlarda uygulanır.
 public enum ScreenTextNoise {
+    /// Yayıncı katmanının sık yazıları (logo, canlı yayın işareti); oyun yazısı değildir.
+    private static let overlay: Set<String> = [
+        "GAMING", "GAMERS", "REPUBLIC OF", "REPUBLIC OF GAMERS", "ROG", "LIVE", "CANLI", "CANLİ",
+    ]
+    private static let domain = try! NSRegularExpression(pattern: #"\b[\w-]+\. ?(?:com|net|org|tv|tr|gg|io|live|tk)\b"#,
+                                                         options: .caseInsensitive)
+
+    /// Satır yayın katmanının yazısı mı (alan adı "GEN.TR", logo "REPUBLIC OF GAMERS", "• Canlı").
+    public static func isOverlay(_ line: String) -> Bool {
+        let text = IconText.plain(line).trimmingCharacters(in: CharacterSet(charactersIn: "•·● "))
+        let range = NSRange(text.startIndex..., in: text)
+        return domain.firstMatch(in: text, range: range) != nil
+            || overlay.contains(text.uppercased(with: Locale(identifier: "en_US_POSIX")))
+            || overlay.contains(text.uppercased(with: Locale(identifier: "tr_TR")))
+    }
+
+    /// Bozuk okuma (otomatik alanda çevrilmez): güveni 0,5'ten düşük ya da harflerinin %30'undan fazlası tuhaf
+    /// sözcüklerde (ilk harften sonra karışık büyük/küçük: "MelFaming"; harfle simge karışık: "SBACK)Q,").
+    public static func isGarbled(_ line: TextLine) -> Bool {
+        if let confidence = line.confidence, confidence < 0.5 { return true }
+        let words = IconText.plain(line.text).split(separator: " ")
+        let letters = words.reduce(0) { $0 + $1.filter(\.isLetter).count }
+        guard letters > 0 else { return false }
+        let odd = words.filter { word in
+            let body = word.trimmingCharacters(in: CharacterSet(charactersIn: ".,:;!?()[]'\u{2019}\"/"))
+            let tail = body.dropFirst().filter(\.isLetter)
+            let mixedCase = tail.contains(where: \.isUppercase) && tail.contains(where: \.isLowercase)
+            let mixedSymbols = body.contains(where: \.isLetter)
+                && body.contains(where: { !$0.isLetter && !$0.isNumber && !"-'\u{2019}&".contains($0) })
+            return mixedCase || mixedSymbols
+        }.reduce(0) { $0 + $1.filter(\.isLetter).count }
+        return Double(odd) > 0.3 * Double(letters)
+    }
+
     /// `menu`: menü durumunda (`ExtraArea.menu`) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz
     /// (sayı, simge, noktalama: "40", "100%") ve sayısı ağır basan ("x3") etiketler gürültüdür.
     public static func isNoise(_ text: String, menu: Bool = false) -> Bool {

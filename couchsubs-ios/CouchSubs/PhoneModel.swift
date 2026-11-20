@@ -873,6 +873,8 @@ final class PhoneModel: ObservableObject {
         areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas)
         if regionWatcher == nil, !areas.isEmpty { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
         regionWatcher?.offer(frame, areas: areas)
+        // Ekranda menü açık (otomatik ekran yazısı menü durumunda): menü satırları altyazıya karışmasın, altyazı okunmaz.
+        if screenTextDetector?.inMenu == true { return }
         // Önceki kare hâlâ işleniyorsa bu kare atlanır. Tek okuma bitmezse çeviri tamamen duruyor, "Durdur / Başlat"
         // düzeltmiyordu (Mac'te görüldü, 2026-11-13); takılan okuma hattı yeniden kurdurur.
         var entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
