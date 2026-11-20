@@ -31,6 +31,12 @@ class PackStore(
     val directory: File,
     private val server: PackServer,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Uygulamayla gelen paketlerin SHA-256'sı (kimlik → özet). Sunucudaki sürümü bununla aynı olan paket indirilmez:
+     * eskiden ilk açılışta uygulamada zaten olan dokuz paket (~29 MB) yeniden iniyordu; yeni paket (ör. GTA 6) sırasını
+     * bunların arkasında bekliyor, yavaş bağlantıda "Paketleri güncelle" dakikalarca "güncelleniyor"da kalıyordu.
+     */
+    private val bundledHashes: () -> Map<String, String> = { emptyMap() },
 ) {
     companion object {
         /** Açılışta ve günde bir bakılır (iPhone'daki PackStore ile aynı); havuzdan her gece üretilen `pool-*` paketleri en geç bir gün sonra gelir. */
@@ -74,8 +80,10 @@ class PackStore(
      */
     fun refresh(force: Boolean = false, maxAgeMs: Long = REFRESH_INTERVAL_MS): Refresh = synchronized(lock) {
         val (checked, current) = manifest()
-        if (!force && current.isNotEmpty() && clock() - checked < maxAgeMs) return Refresh(skipped = true)
+        // Bütün paketler uygulamayla geliyorsa liste boş kalır; o zaman da son bakış zamanı geçerlidir.
+        if (!force && (current.isNotEmpty() || checked > 0) && clock() - checked < maxAgeMs) return Refresh(skipped = true)
         val remote = server.list()
+        val bundled = if (remote.isEmpty()) emptyMap() else bundledHashes()
         directory.mkdirs()
         val kept = mutableListOf<Local>()
         val downloaded = mutableListOf<String>()
@@ -85,6 +93,12 @@ class PackStore(
         for (pack in remote) {
             val existing = current.firstOrNull { it.id == pack.id }
             val file = packFile(pack.id)
+            // Uygulamayla gelen sürüm sunucudakiyle aynı: indirilmez, eskiden inmiş farklı bir sürüm varsa silinir
+            // (uygulamayla gelen kullanılır).
+            if (bundled[pack.id]?.equals(pack.sha256, ignoreCase = true) == true) {
+                if (file.isFile) file.delete()
+                continue
+            }
             if (existing != null && existing.version == pack.version && existing.sha256.equals(pack.sha256, ignoreCase = true) &&
                 file.isFile && sha256(file.readBytes()).equals(pack.sha256, ignoreCase = true)
             ) {

@@ -216,6 +216,47 @@ class PackStoreTest {
     }
 
     @Test
+    fun packsAlreadyBundledAreNotDownloadedAgain() {
+        // Sunucudaki gibi: uygulamayla gelen paket (gta-v) sunucuda aynı özetle durur, yeni paket (gta-6) yalnız sunucuda.
+        // Eskiden ilk açılışta bütün paketler iniyor, GTA 6 sırasını onların arkasında bekliyordu.
+        val dir = Files.createTempDirectory("packs").toFile()
+        var now = 1_000L
+        val server = FakeServer(listOf(remote("gta-6", gta), remote("gta-v", rdr)), mutableMapOf("gta-6" to gta, "gta-v" to rdr))
+        val store = PackStore(dir, server, { now }, bundledHashes = { mapOf("gta-v" to PackStore.sha256(rdr)) })
+        val result = store.refresh(force = true)
+        assertEquals(listOf("gta-6"), result.downloaded)
+        assertEquals(listOf("gta-6"), server.downloads)
+        assertEquals(Services.PackStatus.READY, Services.packStatus(result))
+        assertEquals(setOf("gta-6.json.gz"), store.files().map { it.name }.toSet())
+        // Sunucudaki sürüm değişince (uygulamadakinden yeni) iner.
+        val newer = "gta v2".toByteArray()
+        server.files["gta-v"] = newer
+        server.packs = listOf(remote("gta-6", gta), remote("gta-v", newer, version = 2))
+        assertEquals(listOf("gta-v"), store.refresh(force = true).downloaded)
+        // Sunucu uygulamadakine dönerse inmiş kopya silinir, uygulamayla gelen kullanılır.
+        server.packs = listOf(remote("gta-6", gta), remote("gta-v", rdr))
+        store.refresh(force = true)
+        assertFalse(File(dir, "gta-v.json.gz").exists())
+        assertEquals(listOf("gta-6"), store.installed().map { it.id })
+        // Süresi dolmadan yeniden bakılmaz.
+        now += 60_000
+        assertTrue(store.refresh().skipped)
+    }
+
+    @Test
+    fun allBundledStillRemembersTheCheck() {
+        val dir = Files.createTempDirectory("packs").toFile()
+        var now = 1_000L
+        val server = FakeServer(listOf(remote("gta-v", rdr)), mutableMapOf("gta-v" to rdr))
+        val store = PackStore(dir, server, { now }, bundledHashes = { mapOf("gta-v" to PackStore.sha256(rdr)) })
+        assertTrue(store.refresh(force = true).downloaded.isEmpty())
+        now += 60_000
+        // Liste boş kalsa da günde bir bakılır (her oyun değişiminde sunucuya gidilmez).
+        assertTrue(store.refresh().skipped)
+        assertTrue(server.downloads.isEmpty())
+    }
+
+    @Test
     fun packListErrorsMapToStatus() {
         assertEquals(Services.PackStatus.OFFLINE, Services.packStatus(PackDownloadException(null, "network")))
         assertEquals(Services.PackStatus.FAILED, Services.packStatus(PackDownloadException(503, "HTTP 503")))

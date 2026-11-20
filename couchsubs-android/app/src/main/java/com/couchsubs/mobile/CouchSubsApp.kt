@@ -101,7 +101,7 @@ object Services {
         Backend.init(app)
         Meta.init(app)
         applyMeasurement()
-        packStore = PackStore(File(app.filesDir, "packs-remote"), packServer)
+        packStore = PackStore(File(app.filesDir, "packs-remote"), packServer, bundledHashes = { bundledPackHashes(app) })
         importedPacksDirectory = File(app.filesDir, "packs-imported")
         // Açılışta hemen, sonra uygulama açık kaldıkça günde bir yeni ve güncellenen paketlere bakılır (iPhone'daki gibi).
         refreshPacks(force = true)
@@ -127,6 +127,18 @@ object Services {
             settings.lastExitReportAt = Backend.reportPreviousExits(app, settings.lastExitReportAt, duringTranslation, lastHealth)
         }
     }
+
+    @Volatile private var bundledHashes: Map<String, String>? = null
+
+    /** Uygulamayla gelen paketlerin SHA-256'sı (kimlik → özet); bir kez hesaplanır, sürüm içinde değişmez. */
+    private fun bundledPackHashes(context: Context): Map<String, String> = bundledHashes ?: try {
+        (context.assets.list("packs") ?: emptyArray()).filter { GamePackLibrary.isPackFile(it) }.associate { name ->
+            GamePackLibrary.baseName(name) to PackStore.sha256(context.assets.open("packs/$name").use { it.readBytes() })
+        }
+    } catch (error: java.io.IOException) {
+        Log.w(TAG, "uygulamayla gelen paketler okunamadı", error)
+        emptyMap()
+    }.also { bundledHashes = it }
 
     /** Profil › Kullanım verisi değişince ya da karşılama geçilince (iPhone'daki gibi). */
     fun applyMeasurement() {
@@ -156,7 +168,9 @@ object Services {
                     if (result.failed.isNotEmpty()) Log.w(TAG, "paketler inemedi: ${result.failed}")
                     packsVersion.value++
                 }
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
+                // Exception değil Throwable: bellek yetmezse (OutOfMemoryError) durum "güncelleniyor"da kalıyor, düğme bir
+                // daha basılamıyordu.
                 Log.w(TAG, "paketler", error)
                 packStatus.value = packStatus(error)
                 // Ekran yeniden okusun: sunucudaki liste alınamadıysa yalnız bu telefondakiler görünür.
