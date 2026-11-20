@@ -383,22 +383,34 @@ async function markExported(req, env) {
   return json({ marked });
 }
 
-// Dağıtımın bellek önbelleği: görülme tablosunu taramak okuma kotası harcar, herkese açık adres sık çağrılmasın.
-let statsCache = { at: 0, body: null };
-const STATS_TTL_MS = 10 * 60 * 1000;
+// Herkese açık sayılar D1'den istek başına hesaplanmaz: COUNT(DISTINCT) bütün sightings tablosunu tarar (milyonlarca
+// satır; sorgu süre sınırını aşıp 503 veriyordu ve okuma kotasını yiyordu). Sayıları gece planının hemen ardından
+// autopack (src/autopack.js computeStats) hesaplayıp R2'ye yazar; burası yalnız o özeti okur.
+export const STATS_KEY = "auto/stats.json";
+// Dağıtımın bellek önbelleği: özet günde bir değişir; hata ya da boş özet de kısa süre önbellekte durur.
+let statsCache = { at: 0, ttl: 0, body: null };
+export const STATS_TTL_MS = 10 * 60 * 1000;
+export const STATS_ERROR_TTL_MS = 60 * 1000;
+export const resetStatsCache = () => { statsCache = { at: 0, ttl: 0, body: null }; };
 
 async function stats(env) {
-  if (statsCache.body && Date.now() - statsCache.at < STATS_TTL_MS) return json(statsCache.body);
-  // lines yalnız en az iki kurulumun gördüğü satırları tutar; tüm satırlar ve kurulumlar sightings'ten sayılır.
-  const seen = await env.DB.prepare(
-    "SELECT COUNT(DISTINCT key) AS lines, COUNT(DISTINCT install) AS installs FROM sightings"
-  ).first();
-  const confirmed = await env.DB.prepare("SELECT COUNT(*) AS confirmed FROM lines WHERE installs>=2").first();
-  statsCache = {
-    at: Date.now(),
-    body: { lines: seen?.lines ?? 0, confirmed: confirmed?.confirmed ?? 0, installs: seen?.installs ?? 0 },
-  };
-  return json(statsCache.body);
+  if (statsCache.body && Date.now() - statsCache.at < statsCache.ttl) return json(statsCache.body);
+  let body = null;
+  let ttl = STATS_TTL_MS;
+  try {
+    const object = await env.PACKS?.get(STATS_KEY);
+    const snapshot = object ? JSON.parse(await object.text()) : null;
+    if (snapshot && Number.isFinite(snapshot.lines) && Number.isFinite(snapshot.confirmed) && Number.isFinite(snapshot.installs)) {
+      body = { lines: snapshot.lines, confirmed: snapshot.confirmed, installs: snapshot.installs, updated: snapshot.updated ?? null };
+      if (snapshot.approx) body.approx = true;
+    }
+  } catch (e) {
+    console.error(JSON.stringify({ error: "stats_read", message: String(e?.message || e).slice(0, 200) }));
+  }
+  // Özet henüz yok (ilk gece gelmedi) ya da okunamadı: önceki özet varsa o, yoksa sıfırlar; kısa süre sonra yeniden denenir.
+  if (!body) { body = statsCache.body ?? { lines: 0, confirmed: 0, installs: 0, updated: null }; ttl = STATS_ERROR_TTL_MS; }
+  statsCache = { at: Date.now(), ttl, body };
+  return json(body);
 }
 
 // D1'in geçici hataları ve günlük sınırları: istemci sonra yeniden göndersin (503 + Retry-After). Günlük satır

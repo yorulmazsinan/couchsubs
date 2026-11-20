@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   GENERAL, GENERAL_TITLE, JOB_NIGHTLY, LAST_HOUR_UTC, LINES_PER_RUN, NIGHTLY_LIMIT, PAGE, isFinalTick, jobPackId,
-  packBody, packTitle, parseReply, runAutopack,
+  computeStats, packBody, packTitle, parseReply, runAutopack,
 } from "../src/autopack.js";
 
 test("malformed current-night state is rebuilt instead of stopping the scheduler", async () => {
@@ -720,4 +720,78 @@ test("night limit stays inside the Workers AI free daily allowance and the cron 
   assert.equal(isFinalTick(new Date("2026-11-20T05:52:00Z")), true);
   assert.equal(isFinalTick(new Date("2026-11-20T05:47:00Z")), false);
   assert.equal(LAST_HOUR_UTC, 5);
+});
+
+
+// --- Herkese açık sayıların gecelik özeti ---
+
+function statsEnv({ heavy, confirmed = 7, previous = null }) {
+  const stored = new Map();
+  if (previous) stored.set("auto/stats.json", JSON.stringify(previous));
+  const sqls = [];
+  return {
+    sqls, stored,
+    env: {
+      PACKS: {
+        get: async (name) => stored.has(name) ? { text: async () => stored.get(name) } : null,
+        put: async (name, value) => { stored.set(name, value); },
+      },
+      DB: {
+        prepare: (sql) => {
+          sqls.push(sql);
+          const run = async () => /COUNT\(DISTINCT/.test(sql)
+            ? (typeof heavy === "function" ? heavy() : heavy)
+            : { confirmed };
+          return { first: run, bind: () => ({ first: run }) };
+        },
+      },
+    },
+  };
+}
+
+test("nightly summary stores the distinct counts in R2", async () => {
+  const { env, stored } = statsEnv({ heavy: { lines: 1000, installs: 40 }, confirmed: 600 });
+  const out = await computeStats(env, new Date("2026-11-20T03:02:00Z"));
+  assert.deepEqual(JSON.parse(stored.get("auto/stats.json")), out);
+  assert.equal(out.lines, 1000);
+  assert.equal(out.confirmed, 600);
+  assert.equal(out.installs, 40);
+  assert.equal(out.updated, "2026-11-20T03:02:00.000Z");
+  assert.equal(out.approx, undefined);
+});
+
+test("summary keeps the previous distinct counts when the heavy query times out", async () => {
+  const previous = { lines: 900, confirmed: 500, installs: 30, updated: "2026-11-19T03:02:00.000Z" };
+  const { env } = statsEnv({ heavy: () => { throw new Error("D1 query timed out"); }, confirmed: 650, previous });
+  const out = await computeStats(env, new Date("2026-11-20T03:02:00Z"));
+  assert.equal(out.lines, 900);
+  assert.equal(out.installs, 30);
+  assert.equal(out.confirmed, 650);
+  assert.equal(out.approx, true);
+});
+
+test("summary without any history falls back to confirmed lines as the lower bound", async () => {
+  const { env } = statsEnv({ heavy: () => { throw new Error("timed out"); }, confirmed: 321 });
+  const out = await computeStats(env, new Date("2026-11-20T03:02:00Z"));
+  assert.deepEqual([out.lines, out.confirmed, out.installs, out.approx], [321, 321, 0, true]);
+});
+
+test("night plan writes the summary and a summary failure cannot stop the plan", async () => {
+  const stored = new Map([["index.json", JSON.stringify({ packs: [] })]]);
+  const env = {
+    AI: {},
+    PACKS: {
+      get: async (name) => stored.has(name) ? { text: async () => stored.get(name) } : null,
+      put: async (name, value) => {
+        if (name === "auto/stats.json") throw new Error("R2 put failed");
+        stored.set(name, value);
+      },
+    },
+    DB: { prepare: () => ({ first: async () => ({ lines: 1, installs: 1 }), bind: () => ({
+      all: async () => ({ results: [] }), first: async () => ({ lines: 0, confirmed: 0 }),
+    }) }) },
+  };
+  const result = await runAutopack(env, new Date("2026-11-20T03:02:00Z"));
+  assert.equal(result.phase, "plan");
+  assert.equal(result.stats, null);
 });

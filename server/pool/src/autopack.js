@@ -14,7 +14,7 @@
 // (gecenin ilk tetiklemesi plan, sonrakiler oyun başına çeviri parçaları ve en son paket). Durum R2'de auto/state.json.
 
 import { accepts } from "./filter.js";
-import { canon, key } from "./index.js";
+import { STATS_KEY, canon, key } from "./index.js";
 import { EXTRA_SUFFIX, gameKey, gameSlug } from "./games.js";
 
 /** Bir satırın pakete girmesi için onu okuyan en az farklı kurulum sayısı. */
@@ -373,6 +373,43 @@ async function buildPack(env, job, cache, known) {
   return { id, built: true, version, entries: count, size: data.length };
 }
 
+/** Herkese açık sayıların gecelik özeti (R2 auto/stats.json; GET /v1/stats yalnız bunu okur). Ağır sorgu (bütün
+ *  sightings'i tarayan COUNT DISTINCT) yalnız burada, gecede bir kez ve kendi tetiklemesinde çalışır; süre sınırına
+ *  takılırsa önceki özetteki sayılar korunur (approx işareti), tetiklemeyi ve gece işini düşürmez. */
+export async function computeStats(env, now) {
+  const previous = await getJson(env, STATS_KEY);
+  let { lines, installs } = previous ?? {};
+  let confirmed = previous?.confirmed;
+  let approx = false;
+  try {
+    const seen = await env.DB.prepare(
+      "SELECT COUNT(DISTINCT key) AS lines, COUNT(DISTINCT install) AS installs FROM sightings"
+    ).first();
+    lines = seen?.lines ?? lines;
+    installs = seen?.installs ?? installs;
+  } catch (e) {
+    approx = true;
+    console.log("autopack: özet (sightings) sayılamadı", String(e?.message || e));
+  }
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS confirmed FROM lines WHERE installs>=?").bind(MIN_INSTALLS).first();
+    confirmed = row?.confirmed ?? confirmed;
+  } catch (e) {
+    approx = true;
+    console.log("autopack: özet (lines) sayılamadı", String(e?.message || e));
+  }
+  // Hiç eski özet yoksa ve ağır sorgu başarısızsa: onaylanmış satırlar alt sınırdır.
+  const out = {
+    lines: Number.isFinite(lines) ? lines : (Number.isFinite(confirmed) ? confirmed : 0),
+    confirmed: Number.isFinite(confirmed) ? confirmed : 0,
+    installs: Number.isFinite(installs) ? installs : 0,
+    updated: now.toISOString(),
+  };
+  if (approx) out.approx = true;
+  await putJson(env, STATS_KEY, out);
+  return out;
+}
+
 /** Gecenin son tetiklemesi mi (cron 2-57/5 UTC 03–05)? Çevrilen oyunun paketi en geç bu tetiklemede kurulur. */
 export function isFinalTick(now) {
   return now.getUTCHours() > LAST_HOUR_UTC
@@ -457,7 +494,12 @@ export async function runAutopack(env, now = new Date()) {
     queue = retitle.map((t) => ({ ...t, retitle: true })).concat(queue.filter((t) => !retitle.includes(t)));
     state = { night, titles, queue, namedGames, translated: 0, done: [] };
     await putJson(env, STATE, state);
-    return { phase: "plan", titles: titles.length, queued: queue.length };
+    // Plan yazıldıktan sonra gecelik özet: ağır sorgu çevirinin önüne geçmez, hatası geceyi düşürmez.
+    let summary = null;
+    try { summary = await computeStats(env, now); } catch (e) {
+      console.log("autopack: özet yazılamadı", String(e?.message || e));
+    }
+    return { phase: "plan", titles: titles.length, queued: queue.length, stats: summary };
   }
   const job = state.queue[0];
   if (!job) return { phase: "idle", done: state.done };

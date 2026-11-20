@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accepts } from "../src/filter.js";
-import worker, { gameName, titleId, unavailableFor, ownApp, QUOTA_BLOCK, SATURATED } from "../src/index.js";
+import worker, { resetStatsCache, STATS_KEY, gameName, titleId, unavailableFor, ownApp, QUOTA_BLOCK, SATURATED } from "../src/index.js";
 import { GENERAL, jobPackId, nameJobs, runAutopack } from "../src/autopack.js";
 import { gameKey, gameSlug } from "../src/games.js";
 
@@ -659,4 +659,42 @@ test("uygulamanın günlük toplam sınırı kurulum sınırına ek olarak uygul
   assert.equal(DB.quotaWrites, 3, "uygulama sayacı bir kez, iki kurulum birer kez");
   // Kendi istemcilerimiz uygulama sınırından etkilenmez.
   assert.equal((await postLines(env, install(4), lines(10, "d"))).status, 200);
+});
+
+
+test("GET /v1/stats reads the nightly R2 summary and never touches D1", async () => {
+  resetStatsCache();
+  let dbCalls = 0;
+  const env = {
+    DB: { prepare: () => { dbCalls++; throw new Error("D1 must not be used"); } },
+    PACKS: { get: async (name) => name === STATS_KEY
+      ? { text: async () => JSON.stringify({ lines: 10, confirmed: 4, installs: 3, updated: "2026-11-20T03:02:00.000Z" }) }
+      : null },
+  };
+  const res = await worker.fetch(new Request("https://pool.test/v1/stats"), env);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { lines: 10, confirmed: 4, installs: 3, updated: "2026-11-20T03:02:00.000Z" });
+  assert.equal(dbCalls, 0);
+});
+
+test("GET /v1/stats answers 200 with zeros before the first nightly summary and caches the miss briefly", async () => {
+  resetStatsCache();
+  let reads = 0;
+  const env = { DB: {}, PACKS: { get: async () => { reads++; return null; } } };
+  const first = await worker.fetch(new Request("https://pool.test/v1/stats"), env);
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), { lines: 0, confirmed: 0, installs: 0, updated: null });
+  await worker.fetch(new Request("https://pool.test/v1/stats"), env);
+  assert.equal(reads, 1);
+});
+
+test("GET /v1/stats answers 200 with zeros when R2 fails", async () => {
+  resetStatsCache();
+  const ok = { DB: {}, PACKS: { get: async () => ({ text: async () => JSON.stringify({ lines: 5, confirmed: 2, installs: 1 }) }) } };
+  assert.equal((await (await worker.fetch(new Request("https://pool.test/v1/stats"), ok)).json()).lines, 5);
+  resetStatsCache();
+  const broken = { DB: {}, PACKS: { get: async () => { throw new Error("R2 down"); } } };
+  const res = await worker.fetch(new Request("https://pool.test/v1/stats"), broken);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).lines, 0);
 });
