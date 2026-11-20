@@ -6,12 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Mac'te uygulama içi güncelleme yeniden geliyor (#696):** beta.60'tan beri sürümlerin yapı numarası yanlış çıktığı için Mac yeni sürümü önermiyordu. beta.60–65'i elle kurmuş olanlara bundan sonraki güncellemeler uygulama içinden gelir. beta.59 ve öncesindeyseniz DMG'yi siteden bir kez elle kurmanız gerekiyor. Teşhis için emiraliarif'e teşekkürler.
-- **Windows kurulumunda "Yükleme Kısmen Başarılı" (#676):** Kurulumun son adımı artık bir dosya engellense de takılmıyor; uygulama açılamazsa sessizce kapanmak yerine hangi dosyanın yüklenemediğini söylüyor ve bunu hata.log'a yazıyor.
-- **Elle yazılan TV adresi (Windows, Mac):** Adresin LG, Samsung ya da Android TV olduğu TV'ye sorularak anlaşılıyor; Android TV adresi artık LG sanılmıyor.
-- **LG'de "TV uygulamasını yeniden kur" ve "TV'yi değiştir" (Windows, Mac, #700):** Ana ekrandaki TV kutusundan, kurulumu baştan yapmadan.
-- **Mac'te altyazının TV'ye gitmesi:** Altyazı sunucusu yeniden açılınca portunu kaybetmiyor.
-- **Konuşan renkleri (Mac):** Aynı kişi oturum boyunca aynı renkte; adı hafif yanlış okunsa da rengi değişmiyor.
+- **İki satırlı altyazının üst satırı da çevriliyor (Windows, Mac, #715):** beta.64'ten beri, üst satırı uzun alt satırı bir iki sözcük olan altyazılarda yalnız alt satır çevriliyordu. Düzeltildi.
+- **Mac'te "macOS ekrandaki yazıyı okuyamıyor" (#678, #679):** macOS yazı okuma modelini hazırlarken okuma bir iki dakika yanıt vermeyebiliyor. Altyazılar bu sırada yedek bir okuyucuyla sürüyor, macOS toparlanınca kendiliğinden eski okuyucuya dönülüyor. Uyarı çıkarsa uygulamayı kapatmanız gerekmiyor.
+- **Xbox (Beta) Mac'te:** Kurulumun başında konsol olarak Xbox Series / Xbox One seçilebiliyor; Microsoft girişi, Xbox seçimi ve ayarlar Windows'takiyle aynı. Yeni bir özellik; sorun yaşarsanız bildirin.
+- **Oyun paketleri ekranında "Paketleri şimdi güncelle" (Windows, Mac):** Yamaları beklemeden güncelliyor ve bitince neyin güncellendiğini söylüyor.
+- **Deneme modu Windows'ta:** Konsol bağlamadan örnek görüntülerle çeviriyi deneyebilirsiniz.
+- **Ekran yazıları (deneysel):** Oyun dünyasındaki poster, plaka ve tabelalar Mac'te de çevrilmiyor; hazır alanlar yalnız oyunun arayüz kutusunda çeviriyor; görev satırı Mac'te de altyazıdan ayrı gösteriliyor. TV'de ekran yazısı ile altyazı üst üste binmiyor (TV uygulaması 0.9.46).
+
+**beta.66'da gelenler:** Mac'te uygulama içi güncellemenin yeniden gelmesi (#696), Windows kurulumunda "Yükleme Kısmen Başarılı" (#676), elle yazılan TV adresinde Android TV'nin tanınması, LG'de "TV uygulamasını yeniden kur" ve "TV'yi değiştir" (#700).
 
 **beta.65'te gelenler:** Android TV'de katman modunda altyazının yeniden görünmesi (TV uygulaması 0.9.45), ekran yazılarını otomatik çevirmenin varsayılan kapalı olması (deneysel), Samsung TV'de uygulamanın açılması (#685), LG TV'nin sürekli CouchSubs'a dönmemesi (#688), PSN girişinde "Tarayıcıda giriş yap" (Mac, #683), TV kurulum günlüğü (#686).
 
