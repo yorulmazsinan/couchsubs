@@ -32,6 +32,8 @@ object TextStyleSampler {
     fun sample(
         frame: GrayFrame, left: Int, top: Int, right: Int, bottom: Int, lineHeight: Double, source: String,
         edges: List<Pair<Double, Double>> = emptyList(),
+        /** Aynı karenin (x, y) noktasının rengi (0xRRGGBB); verilirse kümelerin rengi gerçek renktir, yoksa gri ton. */
+        color: ((Int, Int) -> Int)? = null,
     ): Style? {
         val l = left.coerceIn(0, frame.width)
         val r = right.coerceIn(0, frame.width)
@@ -60,11 +62,28 @@ object TextStyleSampler {
         val ground = (if (textIsHigh) lowSum else highSum).toDouble() / groundCount
         val groundSquares = if (textIsHigh) lowSquares else highSquares
         val deviation = sqrt(maxOf(0.0, groundSquares / groundCount - ground * ground))
+        // Renkli kare: kümeler parlaklıkla ayrılır, renkleri kümedeki piksellerin ortalamasıdır (iPhone ile aynı).
+        var inkHex = hex(ink)
+        var groundHex = hex(ground)
+        if (color != null) {
+            val inkSum = LongArray(3)
+            val groundSum = LongArray(3)
+            for (y in t until b) for (x in l until r) {
+                val rgb = color(x, y)
+                val isHigh = frame.at(x, y) > threshold
+                val sum = if (isHigh == textIsHigh) inkSum else groundSum
+                sum[0] += (rgb shr 16) and 0xff
+                sum[1] += (rgb shr 8) and 0xff
+                sum[2] += rgb and 0xff
+            }
+            inkHex = rgbHex(inkSum, inkCount)
+            groundHex = rgbHex(groundSum, groundCount)
+        }
         val ratio = inkCount.toDouble() / (inkCount + groundCount)
         val longest = source.split('\n').maxOfOrNull { it.trim().length } ?: 0
         val condensed = longest > 0 && lineHeight > 0 && (r - l).toDouble() / longest / lineHeight < CONDENSED
         return Style(
-            TextSurface(hex(ground), hex(ink), deviation < FLAT_DEVIATION),
+            TextSurface(groundHex, inkHex, deviation < FLAT_DEVIATION),
             TextLook(bold = ratio >= BOLD_INK, condensed = condensed, align = align(edges), upper = isUpper(source)),
         )
     }
@@ -122,6 +141,11 @@ object TextStyleSampler {
             rights <= tolerance -> "right"
             else -> listOf("left" to lefts, "center" to centers, "right" to rights).minBy { it.second }.first
         }
+    }
+
+    private fun rgbHex(sum: LongArray, count: Long): String {
+        if (count <= 0) return "#000000"
+        return String.format(Locale.ROOT, "#%02X%02X%02X", (sum[0] / count).toInt(), (sum[1] / count).toInt(), (sum[2] / count).toInt())
     }
 
     private fun hex(luma: Double): String {

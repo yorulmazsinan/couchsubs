@@ -56,7 +56,8 @@ sealed class SubtitleEvent {
     data class Subtitle(val text: String, val durationMs: Int, val replaces: Boolean = false) : SubtitleEvent()
     data object Cleared : SubtitleEvent()
     /** Ek alanın (görev, telefon, bildirim) çevirisi; [text] boşsa o alanın kutusu kalkar. */
-    data class Region(val id: String, val text: String, val box: TextBox?) : SubtitleEvent()
+    /** [blocks]: alandaki ayrı yazı gruplarının çevirileri kendi yerleri ve (otomatik ekran yazısında) özgün stilleriyle. */
+    data class Region(val id: String, val text: String, val box: TextBox?, val blocks: List<ScreenTranslation.Item>? = null) : SubtitleEvent()
     /** Bütün ek alan kutuları kalktı (çeviri durdu). */
     data object RegionsCleared : SubtitleEvent()
     /** "Ekranı çevir" sonuçları: her çeviri yazının yerinde gösterilir. */
@@ -289,7 +290,7 @@ class SubtitleServer(
         blocks: List<ScreenTranslation.Item>?,
     ) {
         broadcast(regionFrame(id, text, box, lineHeight, icons, blocks), subtitle = true)
-        onEvent?.invoke(SubtitleEvent.Region(id, text, box))
+        onEvent?.invoke(SubtitleEvent.Region(id, text, box, blocks?.takeIf { text.isNotEmpty() }))
     }
 
     override fun clearRegions() {

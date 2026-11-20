@@ -42,9 +42,9 @@ class ScreenTextDetectorTest {
         assertTrue(area.auto)
         assertEquals("Screen text", area.name)
         assertTrue(area.id.startsWith("auto-"))
-        // Kutunun karoları (sütun 1-8, satır 1-3) yarım karo genişletilir.
-        assertEquals(0.5 / 32, area.region.left, 1e-9)
-        assertEquals(9.5 / 32, area.region.right, 1e-9)
+        // Kutunun karoları (sütun 1-8, satır 1-3) yatayda bir, dikeyde yarım karo genişletilir.
+        assertEquals(0.0, area.region.left, 1e-9)
+        assertEquals(10.0 / 32, area.region.right, 1e-9)
         assertEquals(0.5 / 18, area.region.top, 1e-9)
         assertEquals(4.5 / 18, area.region.bottom, 1e-9)
         // Sonraki örneklerde kimlik korunur.

@@ -160,7 +160,7 @@ bool couchsubs_video_decoder_start(CouchSubsVideoDecoder *decoder, JNIEnv *env, 
 	if((*env)->GetJavaVM(env, &decoder->vm) != JNI_OK)
 		return false;
 	jclass cls = (*env)->GetObjectClass(env, frame_listener);
-	decoder->on_frame = cls ? (*env)->GetMethodID(env, cls, "onFrame", "(Ljava/nio/ByteBuffer;IIII)V") : NULL;
+	decoder->on_frame = cls ? (*env)->GetMethodID(env, cls, "onFrame", "(Ljava/nio/ByteBuffer;IIIIZ)V") : NULL;
 	if(cls)
 		(*env)->DeleteLocalRef(env, cls);
 	if(!decoder->on_frame)
@@ -421,6 +421,63 @@ static bool ensure_frame_buffer(CouchSubsVideoDecoder *decoder, JNIEnv *env, siz
 	return true;
 }
 
+/* Renk düzlemlerini (U, V; yarım çözünürlük, sıkışık) kare arabelleğinde Y'nin ardına kopyalar. Yalnız düzeni kesin
+ * bilinen biçimlerde (I420, NV12, NV21); diğerlerinde false döner, Java tarafı gri tonla sürer. Ekran yazısının
+ * özgün renklerini (zemin, yazı) bulmak içindir; yazı tanıma yine yalnız parlaklıkla okur. */
+static bool copy_chroma(CouchSubsVideoDecoder *decoder, const uint8_t *base, size_t start, size_t end, size_t width, size_t height)
+{
+	CouchSubsOutputFormat *f = &decoder->format;
+	size_t stride = (size_t)f->stride;
+	size_t slice = (size_t)(f->slice_height >= f->height ? f->slice_height : f->height);
+	size_t cw = width / 2;
+	size_t ch = height / 2;
+	size_t cl = (size_t)f->crop_left / 2;
+	size_t ct = (size_t)f->crop_top / 2;
+	if(cw == 0 || ch == 0)
+		return false;
+	uint8_t *dst_u = decoder->frame_ptr + width * height;
+	uint8_t *dst_v = dst_u + cw * ch;
+	size_t plane = start + stride * slice;
+	switch(f->color_format)
+	{
+		case 19: /* I420 */
+		case 20:
+		{
+			size_t cstride = stride / 2;
+			size_t u0 = plane;
+			size_t v0 = plane + cstride * (slice / 2);
+			if(v0 + (ct + ch - 1) * cstride + cl + cw > end)
+				return false;
+			for(size_t y = 0; y < ch; y++)
+			{
+				memcpy(dst_u + y * cw, base + u0 + (ct + y) * cstride + cl, cw);
+				memcpy(dst_v + y * cw, base + v0 + (ct + y) * cstride + cl, cw);
+			}
+			return true;
+		}
+		case 21: /* NV12: UV iç içe */
+		case 39:
+		case 0x11: /* NV21: VU iç içe */
+		{
+			bool vu = f->color_format == 0x11;
+			if(plane + (ct + ch - 1) * stride + 2 * (cl + cw) > end)
+				return false;
+			for(size_t y = 0; y < ch; y++)
+			{
+				const uint8_t *row = base + plane + (ct + y) * stride + 2 * cl;
+				for(size_t x = 0; x < cw; x++)
+				{
+					dst_u[y * cw + x] = row[2 * x + (vu ? 1 : 0)];
+					dst_v[y * cw + x] = row[2 * x + (vu ? 0 : 1)];
+				}
+			}
+			return true;
+		}
+		default:
+			return false;
+	}
+}
+
 /* Çıkış arabelleğinin görünür Y bölgesini sıkışık (satır aralığı = en) biçimde kare arabelleğine kopyalar
  * (output_mutex tutulurken, çözücü durdurulmamışken). Okunamıyorsa false; kare atlanır. */
 static bool copy_luma(CouchSubsVideoDecoder *decoder, JNIEnv *env, size_t index, const AMediaCodecBufferInfo *info)
@@ -454,12 +511,15 @@ static bool copy_luma(CouchSubsVideoDecoder *decoder, JNIEnv *env, size_t index,
 			CHIAKI_LOGE(decoder->log, "Video decoder: output buffer too small (%zu < %zu); frames skipped", end, last);
 		return false;
 	}
-	if(!ensure_frame_buffer(decoder, env, width * height))
+	size_t chroma_width = width / 2;
+	size_t chroma_height = height / 2;
+	if(!ensure_frame_buffer(decoder, env, width * height + 2 * chroma_width * chroma_height))
 		return false;
 	const uint8_t *src = base + first;
 	uint8_t *dst = decoder->frame_ptr;
 	for(size_t y = 0; y < height; y++)
 		memcpy(dst + y * width, src + y * stride, width);
+	decoder->frame_chroma = copy_chroma(decoder, base, start, end, width, height);
 	return true;
 }
 
@@ -469,7 +529,7 @@ static void deliver_frame(CouchSubsVideoDecoder *decoder, JNIEnv *env)
 	jint width = f->crop_right - f->crop_left;
 	jint height = f->crop_bottom - f->crop_top;
 	(*env)->CallVoidMethod(env, decoder->frame_listener, decoder->on_frame, decoder->frame_buffer, width, height, width,
-			(jint)f->color_format);
+			(jint)f->color_format, (jboolean)decoder->frame_chroma);
 	if((*env)->ExceptionCheck(env))
 		(*env)->ExceptionClear(env);
 	atomic_fetch_add(&decoder->frames_out, 1);

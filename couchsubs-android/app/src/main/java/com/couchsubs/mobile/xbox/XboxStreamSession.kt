@@ -14,6 +14,7 @@ import com.couchsubs.mobile.account.Backend
 import com.couchsubs.mobile.remoteplay.DisconnectKind
 import com.couchsubs.mobile.remoteplay.FrameSource
 import com.couchsubs.mobile.remoteplay.SessionState
+import com.couchsubs.mobile.remoteplay.ChromaPlanes
 import com.couchsubs.mobile.remoteplay.VideoFrame
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -293,7 +294,8 @@ class XboxStreamSession(
             val i420 = frame.buffer.toI420() ?: return@VideoSink
             try {
                 if (frameCounter.framesInSession(negotiatedFrames) > 0) {
-                    onFrame(VideoFrame(i420.dataY, i420.width, i420.height, i420.strideY))
+                    val chroma = if (i420.strideU == i420.strideV) ChromaPlanes(i420.dataU, i420.dataV, i420.strideU) else null
+                    onFrame(VideoFrame(i420.dataY, i420.width, i420.height, i420.strideY, chroma = chroma))
                 }
             } finally {
                 i420.release()

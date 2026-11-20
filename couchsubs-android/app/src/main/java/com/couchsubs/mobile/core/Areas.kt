@@ -374,7 +374,9 @@ class RegionWatcher(
          * Otomatik ekran yazısı: her blok (tek grupta bütün yazı tek blok) için özgün görünüş [frame]'den (okunan alan)
          * çıkarılır; çeviri aynı yerde, aynı renk ve biçimde gösterilir.
          */
-        internal fun styled(candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?): Candidate {
+        internal fun styled(
+            candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?, color: ((Int, Int) -> Int)? = null,
+        ): Candidate {
             if (frame == null) return candidate
             val groups = candidate.blocks ?: run {
                 val box = candidate.box ?: return candidate
@@ -394,10 +396,16 @@ class RegionWatcher(
                 // Hizalama grubun satırlarından (sağa yaslı kontrol etiketleri, ortalı başlık).
                 val align = if (own.size >= 2) TextStyleSampler.align(own.map { it.left to it.right })
                     else own.singleOrNull()?.let { columnAlign(it, lines) }
-                if (group.count > 1 && own.size == group.count) {
-                    // Her satır bir parça (menü listesi): stil satır başına çıkarılır, seçili satır ters renkli olabilir.
-                    own.forEachIndexed { i, line ->
-                        blocks.add(Block(group.start + i, 1, line, line.bottom - line.top))
+                val parts = if (group.count > 1) paragraphLines(candidate.paragraphs.subList(group.start, group.start + group.count),
+                    lines.filter { inside(it, group.box) }.let { boxes -> reading.lines.filter { it.box != null }
+                        .map { it.text to it.box!!.placedIn(region.box) }.filter { (_, box) -> box in boxes }.sortedBy { it.second.top } }) else null
+                if (parts != null) {
+                    // Her parça (başlık, gövde; menü listesinde her satır) kendi bloğu: stil parça başına çıkarılır (seçili
+                    // satır ters renkli, başlık kalın), çeviri parçanın kendi yerine konur.
+                    parts.forEachIndexed { i, boxes ->
+                        val box = boxes.reduce { a, b -> a.union(b) }
+                        val heights = boxes.map { it.bottom - it.top }.sorted()
+                        blocks.add(Block(group.start + i, 1, box, heights[heights.size / 2]))
                         aligns.add(align)
                     }
                 } else {
@@ -414,10 +422,33 @@ class RegionWatcher(
                     ((box.left - region.left) / width * frame.width).toInt(), ((box.top - region.top) / height * frame.height).toInt(),
                     kotlin.math.ceil((box.right - region.left) / width * frame.width).toInt(),
                     kotlin.math.ceil((box.bottom - region.top) / height * frame.height).toInt(),
-                    block.lineHeight / height * frame.height, source, edges,
+                    block.lineHeight / height * frame.height, source, edges, color,
                 )?.let { style -> aligns[index]?.let { style.copy(look = style.look.copy(align = it)) } ?: style }
             }
             return candidate.copy(blocks = blocks, styles = styles)
+        }
+
+        /**
+         * Parçaların satırları: satırlar yukarıdan aşağı sözcük sayısıyla parçalara dağıtılır (ScreenText.paragraphs
+         * satırları birleştirir). Dağıtım tutmazsa null.
+         */
+        private fun paragraphLines(paragraphs: List<String>, lines: List<Pair<String, TextBox>>): List<List<TextBox>>? {
+            fun words(text: String) = text.split(' ').count { it.isNotBlank() }
+            val result = mutableListOf<List<TextBox>>()
+            var at = 0
+            for (paragraph in paragraphs) {
+                val need = words(IconText.plain(paragraph))
+                var have = 0
+                val boxes = mutableListOf<TextBox>()
+                while (at < lines.size && have < need) {
+                    have += words(lines[at].first)
+                    boxes.add(lines[at].second)
+                    at++
+                }
+                if (boxes.isEmpty()) return null
+                result.add(boxes)
+            }
+            return if (at == lines.size) result else null
         }
 
         /**
@@ -455,7 +486,11 @@ class RegionWatcher(
     }
 
     /** Bir alanın karesi: okunacak gri görüntü ve izi; [frame] kumanda simgelerinin kesileceği aynı görüntü. */
-    class Crop(val pixels: Any, val signature: ByteArray, val frame: GrayFrame? = null)
+    class Crop(
+        val pixels: Any, val signature: ByteArray, val frame: GrayFrame? = null,
+        /** Okunan alanın (x, y) noktasının rengi (0xRRGGBB); kare renk taşımıyorsa null (stil gri tonda). */
+        val color: ((Int, Int) -> Int)? = null,
+    )
 
     /**
      * Alanda ayrı duran bir yazı grubu: [Candidate.paragraphs] içinde [start]'tan başlayan [count] parça, karedeki yeri ve
@@ -606,7 +641,8 @@ class RegionWatcher(
         }
         if (started != session) return
         reads++
-        var candidate = candidate(reading, area.region, crop.frame, keepPrompts = area.menu)
+        val text = if (area.auto) AutoText.clean(reading, area.menu) else reading
+        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu)
         if (area.auto) {
             if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) }, area.menu)) {
                 // Sayaç, harita, kısa etiket ya da yazısız kutu: çevrilmez; alan bir sonraki turda listeden çıkar.
@@ -615,7 +651,7 @@ class RegionWatcher(
                 onAutoRejected?.invoke(area.id)
                 return
             }
-            candidate = styled(candidate, reading, area.region, crop.frame).copy(auto = true)
+            candidate = styled(candidate, text, area.region, crop.frame, crop.color).copy(auto = true)
         }
         if (state.lastRead == candidate.key) {
             state.candidate = null
@@ -710,7 +746,8 @@ class RegionWatcher(
         state.shownText = candidate.text
         state.shownIcons = iconCount(candidate)
         if (candidate.key.isEmpty()) {
-            send { sender.sendRegion(area.id, "", null, null) }
+            // Kutu hiç gösterilmediyse boşaltma olayı gönderilmez.
+            if (!state.renderedText.isNullOrEmpty()) send { sender.sendRegion(area.id, "", null, null) }
             state.renderedKey = candidate.key
             state.renderedText = ""
             state.renderedIcons = null
@@ -749,7 +786,8 @@ class RegionWatcher(
             TextMatch.isSimilar(TextMatch.normalize(IconText.plain(a)), TextMatch.normalize(IconText.plain(b)), 0.90)
         }
         if (similar.all { it }) {
-            send { sender.sendRegion(area.id, "", null, null) }
+            // Kutu hiç gösterilmediyse boşaltma olayı gönderilmez.
+            if (!state.renderedText.isNullOrEmpty()) send { sender.sendRegion(area.id, "", null, null) }
             state.renderedText = ""
             state.renderedIcons = null
             state.renderedBox = null

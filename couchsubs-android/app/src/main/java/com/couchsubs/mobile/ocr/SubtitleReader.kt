@@ -15,9 +15,33 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.TimeUnit
 
 /** Karenin altyazı bölgesinden kopyalanmış parlaklık (Y) düzlemi: yazı tanımaya bu gider, kare hemen bırakılır. */
-class RegionPixels(val nv21: ByteArray, val width: Int, val height: Int, val signature: Long) {
+class RegionPixels(
+    val nv21: ByteArray, val width: Int, val height: Int, val signature: Long,
+    /** Bölgenin yarım çözünürlüklü U ve V düzlemleri (önce U, sonra V); kare renk taşımıyorsa null. */
+    val chroma: ByteArray? = null,
+) {
     /** Kumanda simgelerinin kesileceği gri kare (NV21'in başı parlaklık düzlemidir; kopya alınmaz). */
     val gray: GrayFrame get() = GrayFrame(nv21, width, height)
+
+    /**
+     * (x, y) noktasının rengi (0xRRGGBB; BT.601, sınırlı aralık): ekran yazısının özgün zemin ve yazı rengi için. Renk
+     * yoksa null; stil gri tonla bulunur.
+     */
+    val color: ((Int, Int) -> Int)?
+        get() {
+            val uv = chroma ?: return null
+            val cw = width / 2
+            val plane = cw * (height / 2)
+            return { x, y ->
+                val luma = (nv21[y * width + x].toInt() and 0xff) - 16
+                val i = (y / 2) * cw + (x / 2).coerceAtMost(cw - 1)
+                val u = (uv[i].toInt() and 0xff) - 128
+                val v = (uv[plane + i].toInt() and 0xff) - 128
+                val c = 1.164 * luma
+                fun ch(value: Double) = value.toInt().coerceIn(0, 255)
+                (ch(c + 1.596 * v) shl 16) or (ch(c - 0.392 * u - 0.813 * v) shl 8) or ch(c + 2.017 * u)
+            }
+        }
 }
 
 /**
@@ -52,7 +76,24 @@ class SubtitleReader : AutoCloseable {
                 if (y % 8 == 0) for (x in 0 until width step 8) signature = 31 * signature + (out[base + x].toInt() and 0xf0)
             }
             java.util.Arrays.fill(out, width * height, out.size, 128.toByte())
-            return RegionPixels(out, width, height, signature)
+            // Renk düzlemleri ayrı tutulur (yazı tanıma gri okur; renk yalnız stil içindir).
+            val chroma = frame.chroma?.let { planes ->
+                val cw = width / 2
+                val ch = height / 2
+                val result = ByteArray(2 * cw * ch)
+                val u = planes.u.duplicate()
+                val v = planes.v.duplicate()
+                val end = ((top / 2 + ch - 1) * planes.stride + left / 2 + cw).toLong()
+                if (end > u.capacity() || end > v.capacity()) null else {
+                    for (y in 0 until ch) {
+                        val at = (top / 2 + y) * planes.stride + left / 2
+                        u.position(at); u.get(result, y * cw, cw)
+                        v.position(at); v.get(result, cw * ch + y * cw, cw)
+                    }
+                    result
+                }
+            }
+            return RegionPixels(out, width, height, signature, chroma)
         }
     }
 
@@ -78,7 +119,8 @@ class SubtitleReader : AutoCloseable {
                         ))
                     }
                 }
-                lines.add(TextLine(line.text, box, words = if (words.isNotEmpty() && words.size == line.elements.size) words else null))
+                lines.add(TextLine(line.text, box, words = if (words.isNotEmpty() && words.size == line.elements.size) words else null,
+                    confidence = line.confidence))
             }
         }
         // Yukarıdan aşağı (ML Kit blok sırası her zaman öyle değil).

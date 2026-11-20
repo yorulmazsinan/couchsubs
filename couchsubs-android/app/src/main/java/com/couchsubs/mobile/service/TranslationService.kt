@@ -244,11 +244,12 @@ class TranslationService : Service() {
             return
         }
         // Altyazı alanı, kullanıcının ek alanları ve oyunun hazır alanları zaten okunuyor: oradaki yazı ikinci kez önerilmez.
-        val excluded = listOf(region) + (extraAreas + presetAreas).map { it.region }
+        val excluded = (extraAreas + presetAreas).map { it.region }
+        val subtitle = region
         try {
             detectorWork.execute {
                 try {
-                    autoAreas = detector.update(sample, excluded)
+                    autoAreas = detector.update(sample, excluded, subtitle = subtitle)
                 } finally {
                     detector.finished()
                 }
@@ -500,7 +501,8 @@ class TranslationService : Service() {
         val onFrame: (com.couchsubs.mobile.remoteplay.VideoFrame) -> Unit = { frame ->
             val now = System.currentTimeMillis()
             if (screenRequested.compareAndSet(true, false)) startScreen(frame)
-            if (!reading.get() && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
+            // Menü açıkken (tekerlek, duraklatma menüsü) altyazı okunmaz: menünün alt ortadaki etiketleri altyazı sanılmasın.
+            if (!reading.get() && !detector.menu && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
                 val area = region
                 // Karenin geldiği an: gecikme buradan TV'ye gidene kadar ölçülür (hattın saatiyle).
                 val capturedAt = com.couchsubs.mobile.core.monotonicClock()
@@ -514,7 +516,7 @@ class TranslationService : Service() {
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
             regionWatcher?.offer(extraAreas + presetAreas + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
-                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray)
+                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
                 }
             }) { task -> regionWork.execute(task) }
             FramePreview.offer(frame, now)

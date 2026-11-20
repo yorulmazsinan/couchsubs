@@ -36,7 +36,11 @@ data class CropRegion(val top: Double = 0.62, val bottom: Double = 0.97, val lef
  * veriyorsa (ML Kit) sözcükler, satırla aynı oranlarda; kumanda simgesini bulmak için ([ButtonIcons]). [icons]: metindeki
  * her [ButtonIcons.MARKER] için, sırasıyla, simgenin yeri ve okunan hali.
  */
-data class TextLine(val text: String, val box: TextBox? = null, val words: List<TextWord>? = null, val icons: List<IconSlot>? = null)
+data class TextLine(
+    val text: String, val box: TextBox? = null, val words: List<TextWord>? = null, val icons: List<IconSlot>? = null,
+    /** Okuyucunun güveni (0–1); bilinmiyorsa null. Otomatik ekran yazısında düşük güvenli satır çevrilmez. */
+    val confidence: Float? = null,
+)
 
 /** Yazı tanımanın bulduğu bir sözcük ve yeri (okunan alanın kenarlarına oranla). */
 data class TextWord(val text: String, val box: TextBox)

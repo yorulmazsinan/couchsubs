@@ -19,10 +19,16 @@ object TurkishText {
     internal val commonWords = listOf(
         "daha", "sonra", "simdi", "degil", "haydi", "tamam", "evet", "hayir", "devam", "iptal", "giris", "guncelle",
         "guncellemesi", "yazilimi", "kurulum", "sirasinda", "sisteminizi", "sistemindeki", "kapatmayin", "baglanti",
-        "baglantinizi", "uzaktan", "oynama", "dosyasi", "gostergesi", "kablosunu", "bir",
+        "baglantinizi", "uzaktan", "oynama", "dosyasi", "gostergesi", "kablosunu", "bir", "canli", "yayin",
     ).map { PoolFilter.fold(it).joinToString("") }
 
     private val known by lazy { PoolFilter.turkishWords + commonWords }
+
+    /**
+     * Tek sözcük, Türkçe harfi bozulmuş olsa da bilinen bir Türkçe sözcük mü ("Canli": yayın arayüzü). Otomatik ekran
+     * yazısındaki kısa etiket içindir; İngilizce sözcük olan etiketler ("ON", "MAP") bu listede yoktur.
+     */
+    fun isKnownWord(text: String): Boolean = PoolFilter.fold(text).singleOrNull()?.let { it in known } ?: false
 
     /** Satır yüksek güvenle Türkçe mi: en az bir Türkçe harf ve en az bir bilinen Türkçe sözcük. */
     fun isSure(text: String): Boolean {

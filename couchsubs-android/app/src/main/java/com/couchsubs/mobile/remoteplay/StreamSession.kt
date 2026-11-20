@@ -529,7 +529,7 @@ class StreamSession(
         var described = false
         // Çözücünün çıkış iş parçacığından gelir. Kare Java'nın arabelleğindedir (Image.getPlanes yok): okunamayan
         // kare yerel tarafta atlanır, burada JNI'yi durduracak bir çağrı kalmadı.
-        val frames = NativeFrameListener { buffer, frameWidth, frameHeight, rowStride, colorFormat ->
+        val frames = NativeFrameListener { buffer, frameWidth, frameHeight, rowStride, colorFormat, chroma ->
             framesReceived++
             watchdog.picture(SystemClock.elapsedRealtime())
             if (!described) {
@@ -539,7 +539,8 @@ class StreamSession(
                 Backend.breadcrumb(text)
             }
             try {
-                onFrame(VideoFrame(buffer, frameWidth, frameHeight, rowStride, colorFormat))
+                onFrame(VideoFrame(buffer, frameWidth, frameHeight, rowStride, colorFormat,
+                    if (chroma) ChromaPlanes.after(buffer, frameWidth, frameHeight) else null))
             } catch (error: RuntimeException) {
                 Log.e(TAG, "frame handler", error)
             }

@@ -9,7 +9,30 @@ import java.nio.ByteBuffer
  * arayla (piksel aralığı 1). [buffer] yalnız çağrı süresince geçerlidir; sonraki kare aynı arabelleğe yazılır, yani
  * saklanacaksa kopyalanmalıdır. [colorFormat] çözücünün kare biçimi (tanı için; MediaCodecInfo renk biçimi).
  */
-class VideoFrame(val buffer: ByteBuffer, val width: Int, val height: Int, val rowStride: Int, val colorFormat: Int = 0)
+class VideoFrame(
+    val buffer: ByteBuffer, val width: Int, val height: Int, val rowStride: Int, val colorFormat: Int = 0,
+    /** Renk düzlemleri (yarım çözünürlük); çözücü biçimi bilinmiyorsa null (stil gri tonla bulunur). */
+    val chroma: ChromaPlanes? = null,
+)
+
+/**
+ * Karenin yarım çözünürlüklü U ve V düzlemleri: (x, y) noktasının rengi [u] ve [v]'de (y / 2) * [stride] + x / 2'dedir.
+ * Yalnız ekran yazısının özgün renklerini bulmak için (yazı tanıma parlaklıkla okur). Arabellekler yalnız çağrı
+ * süresince geçerlidir.
+ */
+class ChromaPlanes(val u: ByteBuffer, val v: ByteBuffer, val stride: Int) {
+    companion object {
+        /** Yerel çözücünün kare arabelleği: Y (width × height), ardından U ve V ((width / 2) × (height / 2)). */
+        fun after(buffer: ByteBuffer, width: Int, height: Int): ChromaPlanes? {
+            val cw = width / 2
+            val ch = height / 2
+            val u = width * height
+            if (cw <= 0 || ch <= 0 || buffer.capacity() < u + 2 * cw * ch) return null
+            fun slice(at: Int): ByteBuffer = buffer.duplicate().apply { position(at); limit(at + cw * ch) }.slice()
+            return ChromaPlanes(slice(u), slice(u + cw * ch), cw)
+        }
+    }
+}
 
 /** Okuma hattına kare veren kaynak: gerçekte PS5 Remote Play oturumu ([StreamSession]). */
 interface FrameSource {

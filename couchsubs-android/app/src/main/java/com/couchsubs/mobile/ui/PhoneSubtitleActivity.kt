@@ -144,6 +144,12 @@ class PhoneSubtitleActivity : ComponentActivity() {
                     // Ek alanların (görev, telefon, bildirim) çevirisi oyundaki yerinde küçük kutuda (TV ve iPhone'daki gibi).
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         status.regions.forEach { region ->
+                            // Ekran yazısı blokları özgün yerinde ve stilinde (zemin, yazı rengi, kalınlık, hizalama; TV'deki gibi).
+                            val styled = region.blocks?.filter { it.surface != null }
+                            if (!styled.isNullOrEmpty()) {
+                                styled.forEach { item -> StyledBlock(item, maxWidth, maxHeight) }
+                                return@forEach
+                            }
                             val box = region.box ?: com.couchsubs.mobile.core.TextBox(0.6, 0.05, 0.95, 0.2)
                             Text(region.text, style = Tokens.Type.caption, color = Tokens.Color.text,
                                 modifier = Modifier
@@ -157,4 +163,35 @@ class PhoneSubtitleActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/**
+ * Otomatik ekran yazısının bir bloğu, özgün yazının yerinde ve stilinde: zemin rengi (düz zeminde tam, değilse %85
+ * opak), yazı rengi, kalınlık, dar aile, hizalama. Yazı boyu özgün satır yüksekliğinden; Türkçe uzunsa en çok %40
+ * küçülür (TV ile aynı kural).
+ */
+@androidx.compose.runtime.Composable
+private fun StyledBlock(item: com.couchsubs.mobile.core.ScreenTranslation.Item, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    val surface = item.surface ?: return
+    val look = item.look
+    fun color(hex: String, alpha: Float = 1f) = runCatching { Color(android.graphics.Color.parseColor(hex)).copy(alpha = alpha) }.getOrDefault(Color.Black)
+    val box = item.box
+    val boxWidth = width * (box.right - box.left).toFloat()
+    val line = (height.value * item.lineHeight * 0.8).coerceIn(8.0, 40.0).toFloat()
+    val longest = item.translation.split('\n').maxOfOrNull { it.length } ?: 1
+    val original = item.source.split('\n').maxOfOrNull { it.length } ?: 1
+    val shrink = (original.toFloat() / longest).coerceIn(0.6f, 1f)
+    Text(item.translation,
+        style = Tokens.Type.caption.copy(
+            fontSize = (line * shrink).sp, lineHeight = (line * shrink * 1.15f).sp,
+            fontWeight = if (look?.bold == true) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+            fontFamily = if (look?.condensed == true) androidx.compose.ui.text.font.FontFamily(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL)) else null,
+        ),
+        color = color(surface.foreground),
+        textAlign = when (look?.align) { "right" -> TextAlign.End; "center" -> TextAlign.Center; else -> TextAlign.Start },
+        modifier = Modifier
+            .offset(x = width * box.left.toFloat(), y = height * box.top.toFloat())
+            .width(boxWidth)
+            .background(color(surface.background, if (surface.flat) 1f else 0.85f))
+            .padding(horizontal = 2.dp))
 }
