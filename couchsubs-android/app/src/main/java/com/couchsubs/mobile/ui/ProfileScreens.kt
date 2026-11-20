@@ -303,6 +303,9 @@ fun SettingsScreen(onBack: () -> Unit, onPacks: () -> Unit, onTarget: () -> Unit
             Text(stringResource(R.string.settings_display_mode_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
         }
         RowList(listOf({ RowItem(stringResource(R.string.settings_screen_on)) { Switch(screenOn, { screenOn = it; settings.keepScreenOn = it }) } }))
+        // Telefon kilitlenince ne olduğu açıkça yazar; pil kısıtlaması açıksa ayara giden düğme de çıkar.
+        Text(stringResource(R.string.settings_screen_on_note), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+        BackgroundLimitNote()
         // Altyazı alanı ve ek alanlar (iPhone ile aynı sırada: görünümden sonra).
         AreaProfileTile()
         AreaTile()

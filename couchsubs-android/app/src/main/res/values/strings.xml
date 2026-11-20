@@ -170,6 +170,10 @@
     <string name="settings_display_mode_overlay">Katman</string>
     <string name="settings_display_mode_note">PS5 görüntüsü CouchSubs TV uygulamasının içinde siyah kalıyorsa Katman\'ı seçin: TV, PS5\'i kendi HDMI girişinde gösterir, altyazı görüntünün üstünde çıkar. Görüntü gelmezse TV uygulaması önce HDMI girişlerini gösterir, Katman varsa ona geçer. TV uygulaması açıkken TV\'nin görüntü modu değişiyor, oyun modu ya da HDR kayboluyorsa da Katman\'ı seçin: uygulamanın içinde TV, PS5 görüntüsünü HDMI girişi olarak değil uygulama olarak işler. Google Play\'den kurulan TV uygulamasında Katman yok: orada bu seçim uygulanmaz, TV bunu ekranda söyler.</string>
     <string name="settings_screen_on">Ekranı açık tut</string>
+    <string name="settings_screen_on_note">Telefon kilitlense ya da ekran kapansa da TV\'deki çeviri sürer. Ancak ekran kapalıyken Wi-Fi güç tasarrufuna geçer; bazı telefonlarda bağlantı yavaşlayabilir ya da kopabilir. En sağlam yol, ekranı açık bırakıp parlaklığı kısmak.</string>
+    <string name="background_limit_title">Telefon kilitlenince çeviri durabilir</string>
+    <string name="background_limit_body">Bu telefonda CouchSubs için pil kısıtlaması açık. Ekran kapanınca telefonun pil tasarrufu bağlantıyı yavaşlatabilir, kesebilir ya da çeviriyi durdurabilir. Açılan ayarda Pil bölümünden CouchSubs\'ı Kısıtlamasız yap. Vivo, Xiaomi ve Oppo\'da ayrıca arka planda çalışmaya ve otomatik başlatmaya izin ver.</string>
+    <string name="background_limit_button">Pil ayarını aç</string>
     <string name="close">Kapat</string>
     <!-- Kendi ürünlerimizin tanıtım popup'ı (promo.json) -->
     <string name="promo_label">Sponsorlu</string>

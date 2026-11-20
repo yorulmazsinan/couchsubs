@@ -168,6 +168,10 @@
     <string name="settings_display_mode_overlay">Overlay</string>
     <string name="settings_display_mode_note">If the PS5 picture stays black inside the CouchSubs TV app, choose Overlay: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. If no picture arrives, the TV app first lists its HDMI inputs and switches to Overlay where it can. Overlay also helps if the TV changes its picture mode or drops Game mode or HDR while the TV app is open: inside the app the TV handles the PS5 picture as an app, not as its HDMI input. The TV app from Google Play has no Overlay mode: there this choice is not applied and the TV says so on screen.</string>
     <string name="settings_screen_on">Keep screen on</string>
+    <string name="settings_screen_on_note">Translation to the TV keeps going when the phone is locked or the screen turns off. While the screen is off, though, Wi-Fi switches to power saving, and on some phones the connection can slow down or drop. The most reliable way is to leave the screen on and turn the brightness down.</string>
+    <string name="background_limit_title">Translation may stop when the phone locks</string>
+    <string name="background_limit_body">Battery restrictions are on for CouchSubs on this phone. When the screen turns off, the phone\'s battery saver can slow down or cut the connection, or stop translation. In the settings that open, set CouchSubs to Unrestricted under Battery. On Vivo, Xiaomi and Oppo, also allow it to run in the background and to auto-start.</string>
+    <string name="background_limit_button">Open battery settings</string>
     <string name="close">Close</string>
     <!-- Kendi ürünlerimizin tanıtım popup'ı (promo.json) -->
     <string name="promo_label">Sponsored</string>

@@ -300,6 +300,8 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         // bağlanırken ve bağlantı sorunlarında gösterilir.
         if (!status.streaming && status.phase.isNotEmpty()) Text(status.phase, style = Tokens.Type.caption, color = Tokens.Color.secondary)
         AnimatedNote(status.error)
+        // TV'ye çevirirken telefon kilitlenebilir: pil kısıtlaması açıksa çeviri ekran kapanınca durabilir.
+        if (!status.demo && Services.settings.target == SubtitleTarget.TV) BackgroundLimitNote()
         val current = status.recent.firstOrNull()
         // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231, MainAccountTip).
         if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,
