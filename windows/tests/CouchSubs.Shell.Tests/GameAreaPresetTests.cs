@@ -41,6 +41,43 @@ public class GameAreaPresetTests
         Assert.False(JsonSerializer.Deserialize<UserSettings>(off)!.GameAreaPresets);
     }
 
+    private static Frame PanelFrame()
+    {
+        var frame = Frame.Blank(400, 225);
+        Array.Fill(frame.Pixels, (byte)120);
+        for (var y = 8; y < 60; y++)
+            for (var x = 6; x < 140; x++)
+            {
+                var p = y * frame.Stride + x * 4;
+                var value = (byte)(((y >= 16 && y < 26) || (y >= 34 && y < 44)) && x % 7 < 3 ? 235 : 26);
+                frame.Pixels[p] = frame.Pixels[p + 1] = frame.Pixels[p + 2] = value;
+            }
+        return frame;
+    }
+
+    [Fact]
+    public async Task PresetAreaWithoutAnInterfacePanelShowsNothing()
+    {
+        // Oyun yanlış seçili (GTA 6) ama ekranda arayüz kutusu yok: hazır alan hiçbir şey çevirmez.
+        var services = new FakeServices { ReaderLines = Reading.FromText("Follow Paulie to the car.") };
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, AutoScreenText = false,
+                                         AutoScreenTextReset = true });
+        using var controller = AppControllerTests.Make(services, settings: settings);
+        var events = new ConcurrentQueue<SubtitleEvent>();
+        controller.StreamEvent += events.Enqueue;
+        controller.ChooseGame("GTA 6");
+        await controller.StartAsync();
+        var frame = Frame.Blank(400, 225);
+        for (var i = 0; i < 40; i++)
+        {
+            services.Streams[0].Emit(frame);
+            await Task.Delay(50);
+        }
+        Assert.DoesNotContain(events, e => e.Kind == SubtitleEventKind.Region && e.Text.Length > 0);
+        controller.Stop();
+    }
+
     [Fact]
     public async Task PresetAreasAreReadForGta6AndLeaveWhenTheGameChanges()
     {
@@ -55,7 +92,8 @@ public class GameAreaPresetTests
         controller.StreamEvent += events.Enqueue;
         controller.ChooseGame("GTA 6");
         await controller.StartAsync();
-        var frame = Frame.Blank(400, 225);
+        // Hazır alan ancak arayüz kutusu kanıtıyla okunur: sol üstte koyu panel üstünde beyaz yazı çizgileri.
+        var frame = PanelFrame();
         bool Shown() => events.Any(e => e.Kind == SubtitleEventKind.Region && e.Id == "preset-help" && e.Text.Length > 0);
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6)))
             while (!Shown())

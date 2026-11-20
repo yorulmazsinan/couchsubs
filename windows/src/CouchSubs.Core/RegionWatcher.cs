@@ -37,6 +37,11 @@ public sealed record WatchedArea(string Id, string Name, CropRegion Region)
     public bool Auto { get; init; }
     /// <summary>Otomatik alan ekrandaki bir menüde (<see cref="ScreenTextDetector.InMenu"/>): kısa etiketler de çevrilir.</summary>
     public bool Menu { get; init; }
+    /// <summary>
+    /// Oyuna göre hazır alan (<see cref="GameAreaPresets"/>): yazı ancak düz panel zemininde duruyorsa okunur
+    /// (<see cref="UiPanel.HasText"/>). Oyun yanlış seçiliyse ya da bölgede yalnız oyun dünyası varsa hiçbir şey çevrilmez.
+    /// </summary>
+    public bool RequiresPanel { get; init; }
     internal GamePhoneGeometry.Pose? PhonePose { get; init; }
 }
 
@@ -333,6 +338,25 @@ public sealed partial class RegionWatcher
             {
                 state.Candidate = null;
                 await CommitAsync(stable, area, state, started).ConfigureAwait(false);
+            }
+            return;
+        }
+        if (area.RequiresPanel && !UiPanel.HasText(crop))
+        {
+            // Hazır alanda arayüz kutusu yok (PS5 ana ekranı, başka oyun, oyun dünyası): OCR çalışmaz, gösterilen kutu kalkar.
+            state.Candidate = null;
+            (state.Held, state.Holds) = (null, 0);
+            if (state.Shown.Length > 0)
+            {
+                state.Shown = state.ShownText = "";
+                state.ShownIcons = 0;
+                state.RenderedKey = state.RenderedText = null;
+                state.RenderedBox = null;
+                state.RenderedLineHeight = null;
+                state.RenderedLayout = null;
+                state.RenderedBlocks = null;
+                server.SendRegion(area.Id, "", null);
+                Log?.Invoke($"ek alan {area.Name}: arayüz kutusu yok, kaldırıldı");
             }
             return;
         }

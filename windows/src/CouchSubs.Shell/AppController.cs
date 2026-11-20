@@ -2392,6 +2392,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 screenText = null;
                 autoAreas = [];
             }
+            // Otomatik ekran yazısı kapandı (ya da çeviri durdu): görev satırının ayrı kutusu da kalkar; görev yine
+            // altyazıya girmez ama altyazı alanı dışında hiçbir yazı çevrilmez.
+            if (!running || !settings.AutoScreenText) missionArea = null;
             savedWatchedAreas = running ? settings.WatchedAreas() : [];
             presetRunning = running;
             ComposeWatchedAreas();

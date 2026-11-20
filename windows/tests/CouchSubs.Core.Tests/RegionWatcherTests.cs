@@ -110,6 +110,46 @@ public class RegionWatcherTests
         while (watcher.IsBusy) await Task.Delay(5, timeout.Token);
     }
 
+    // Hazır alan (GTA 6 yardım kutusu) bölgenin tamamını kaplayan kare: zemin düz panel ya da oyun dünyası.
+    private static Frame PresetFrame(bool panel) => UiPanelTests.Region(panel ? (_, _) => 28 : null, 240, width: 320, height: 180);
+    private static readonly WatchedArea PresetHelp = new("preset-help", "Help", new CropRegion(0, 1, 0, 1)) { RequiresPanel = true };
+
+    [Fact]
+    public async Task PresetAreaWithoutAnInterfacePanelIsNeverReadOrShown()
+    {
+        // Oyun yanlış seçiliyse (PS5 ana ekranı, başka oyun) ya da bölgede yalnız dünya yazısı varsa hazır alan çevrilmez.
+        var reader = new Reader { Lines = [Line("LIQUOR STORE OPEN 24 HOURS")] };
+        var server = new Server();
+        long clock = 0;
+        var watcher = new RegionWatcher(reader, new Translator(), server, clock: () => clock);
+        for (var i = 0; i < 3; i++)
+        {
+            await watcher.PassAsync(PresetFrame(panel: false), [PresetHelp]);
+            clock += 1000;
+        }
+        Assert.Equal(0, reader.Count);
+        Assert.Empty(server.Sent);
+    }
+
+    [Fact]
+    public async Task PresetAreaOnAPanelIsTranslatedAndRemovedWhenThePanelGoes()
+    {
+        var reader = new Reader { Lines = [Line("Follow Vicki to the car.")] };
+        var server = new Server();
+        long clock = 0;
+        var watcher = new RegionWatcher(reader, new Translator(), server, clock: () => clock);
+        await watcher.PassAsync(PresetFrame(panel: true), [PresetHelp]);
+        await watcher.PassAsync(PresetFrame(panel: true), [PresetHelp]);
+        Assert.Contains(server.Sent, message => message.Id == "preset-help" && message.Text == "TR: Follow Vicki to the car.");
+        clock += 1000;
+        await watcher.PassAsync(PresetFrame(panel: false), [PresetHelp]);
+        Assert.Equal(("preset-help", ""), (server.Sent[^1].Id, server.Sent[^1].Text));
+    }
+
+    [Fact]
+    public void GameAreaPresetsRequireAnInterfacePanel() =>
+        Assert.All(GameAreaPresets.Areas("GTA 6"), area => Assert.True(area.RequiresPanel));
+
     [Fact]
     public async Task SmallChangingMenuLabelIsReadEvenWhenTheAreaSignatureMatches()
     {
