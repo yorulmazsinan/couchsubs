@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Havuzdan kendiliğinden oyun paketi (Cron Trigger, her gece 03:07–04:57 UTC arasında on dakikada bir).
+// Havuzdan kendiliğinden oyun paketi (Cron Trigger, her gece 03:02–05:57 UTC arasında beş dakikada bir).
 //
 // Bir oyunun (title_id; kimlik yoksa src/games.js'teki anahtarıyla oyun adı) satırları en az MIN_INSTALLS farklı kurulumda aynı biçimde (aynı canon anahtarla) okunduysa
 // tools/packs/poolpack.py'deki kurallarla temizlenir, Workers AI ile Türkçeye çevrilir ve R2'ye (couchsubs-packs kovası)
@@ -23,8 +23,26 @@ export const MIN_INSTALLS = 2;
 export const MIN_LINES = 300;
 /** Bir tetiklemede en çok bu kadar yeni satır çevrilir (CPU sınırı). */
 export const LINES_PER_RUN = 200;
-/** Bir gecede en çok bu kadar satır çevrilir (Workers AI'ın günlük ücretsiz 10.000 nöronunun yarısından azı). */
-export const NIGHTLY_LIMIT = 3000;
+/** Bir gecede en çok bu kadar satır çevrilir.
+ *  Hesap: Workers AI Free planı günde 10.000 nöron verir (UTC 00:00'da sıfırlanır). Önceki sınır 3000 satırı "10.000
+ *  nöronun yarısından azı" saymıştı, yani en çok ~1,67 nöron/satır. 5000 satır × 1,67 = ~8.333 nöron: günlük sınırın
+ *  %83'ü, %17 pay kalır (satır başına gerçek nöron panelden ölçülmeli; yüksek çıkarsa bu sayı düşürülür). Başka bir
+ *  yapay zekâ kullanımı yoktur. 5000 satır gecede 200'lük en az 25 tetikleme ister; cron 36 tetikleme verir
+ *  (plan 1 + çeviri ~25–30 + en son paket). */
+export const NIGHTLY_LIMIT = 5000;
+/** Bir D1 sorgusunda okunan satır sayfası ve bir tetiklemede en çok kaç sayfa gezilir. Sayfalar anahtar imleciyle
+ *  (installs azalan, key artan) ilerler; "ilk 5000 satır" penceresi yoktur, büyük oyunun tamamı sırayla gezilir. */
+export const PAGE = 1500;
+export const MAX_PAGES = 3;
+/** Bir tetiklemede en çok bu kadar çevrilebilir satıra bakılır (çöp ve bilinen satırlar çeviri bütçesini yemesin,
+ *  ama CPU da sınırlı kalsın). */
+export const MAX_LOOK = 500;
+/** Bir oyun bir gecede en çok bu kadar satır çevirir; sonra paketi kurulup sıra sonrakine geçer. Dev bir oyun
+ *  (GTA 6: yüz binlerce satır) bütün geceyi alıp öteki oyunları aç bırakmasın; her gece büyür, yeni sürüm çıkar. */
+export const JOB_NIGHTLY = 2000;
+/** Gecenin son tetiklemesi (cron 2-57/5 UTC 03–05): çevrilen oyun bu gece büyüdüyse paketi kurup sürümü artırır. */
+export const LAST_HOUR_UTC = 5;
+export const LAST_MINUTE_UTC = 52;
 export const BATCH = 40;
 export const MODEL = "@cf/google/gemma-4-26b-a4b-it";
 export const SOURCE = `CouchSubs havuzu (en az ${MIN_INSTALLS} oyuncu) + Workers AI (${MODEL})`;
@@ -355,6 +373,41 @@ async function buildPack(env, job, cache, known) {
   return { id, built: true, version, entries: count, size: data.length };
 }
 
+/** Gecenin son tetiklemesi mi (cron 2-57/5 UTC 03–05)? Çevrilen oyunun paketi en geç bu tetiklemede kurulur. */
+export function isFinalTick(now) {
+  return now.getUTCHours() > LAST_HOUR_UTC
+    || (now.getUTCHours() === LAST_HOUR_UTC && now.getUTCMinutes() >= LAST_MINUTE_UTC);
+}
+
+/** Oyunun satırlarından imleçten sonraki bir sayfa: installs azalan, key artan (anahtar imleci; sabit sıra). */
+async function fetchPage(env, job, separate, cursor) {
+  const after = cursor ? " AND (installs<? OR (installs=? AND key>?))" : "";
+  const cur = cursor ? [cursor.n, cursor.n, cursor.k] : [];
+  const tail = ` ORDER BY installs DESC, key LIMIT ${PAGE}`;
+  let sql, args;
+  if (job.titleId === GENERAL) {
+    if (separate.size) {
+      // Oyuna ayrılan satırları sayfadan önce süz; aksi halde en çok okunan satırlar ortak havuzu aç bırakır.
+      // Oyun adlarını JSON tek bir bağlı parametreyle taşıyarak D1 değişken sayısı sınırına takılmayız.
+      sql = "SELECT key, text, installs FROM lines WHERE title_id IS NULL AND installs>=? " +
+        "AND (game IS NULL OR game NOT IN (SELECT value FROM json_each(?)))" + after + tail;
+      args = [MIN_INSTALLS, JSON.stringify([...separate]), ...cur];
+    } else {
+      sql = "SELECT key, text, installs FROM lines WHERE title_id IS NULL AND installs>=?" + after + tail;
+      args = [MIN_INSTALLS, ...cur];
+    }
+  } else if (job.titleId) {
+    sql = "SELECT key, text, installs FROM lines WHERE title_id=? AND installs>=?" + after + tail;
+    args = [job.titleId, MIN_INSTALLS, ...cur];
+  } else {
+    const games = (job.games?.length ? job.games : [job.game]).slice(0, MAX_VARIANTS);
+    sql = `SELECT key, text, installs FROM lines WHERE title_id IS NULL AND game IN (${games.map(() => "?").join(",")}) ` +
+      "AND installs>=?" + after + tail;
+    args = [...games, MIN_INSTALLS, ...cur];
+  }
+  return (await env.DB.prepare(sql).bind(...args).all()).results ?? [];
+}
+
 /** Bir adım: gecenin ilk çağrısında plan, sonra sıradaki oyunda çeviri parçası ya da paket. Sonucu döner ve yazar. */
 export async function runAutopack(env, now = new Date()) {
   if (!env.PACKS || !env.AI) return { phase: "disabled" };
@@ -420,52 +473,40 @@ export async function runAutopack(env, now = new Date()) {
     .filter((finished) => finished?.gameKey && (finished.built || finished.unchanged))
     .flatMap((finished) => finished.games?.length ? finished.games : [finished.game]));
   const separate = new Set((state.namedGames ?? []).filter((name) => published.has(name)));
-  let rows;
-  if (job.retitle) {
-    rows = [];
-  } else if (job.titleId === GENERAL) {
-    if (separate.size) {
-      // Oyuna ayrılan satırları LIMIT'ten önce süz; aksi halde en çok okunan 5000 ad satırı ortak havuzu aç bırakır.
-      // Oyun adlarını JSON tek bir bağlı parametreyle taşıyarak D1 değişken sayısı sınırına takılmayız.
-      ({ results: rows } = await env.DB.prepare(
-        "SELECT key, text FROM lines WHERE title_id IS NULL AND installs>=? " +
-        "AND (game IS NULL OR game NOT IN (SELECT value FROM json_each(?))) " +
-        "ORDER BY installs DESC, last_seen DESC LIMIT 5000"
-      ).bind(MIN_INSTALLS, JSON.stringify([...separate])).all());
-    } else {
-      ({ results: rows } = await env.DB.prepare(
-        "SELECT key, text FROM lines WHERE title_id IS NULL AND installs>=? ORDER BY installs DESC, last_seen DESC LIMIT 5000"
-      ).bind(MIN_INSTALLS).all());
-    }
-  } else if (job.titleId) {
-    ({ results: rows } = await env.DB.prepare(
-      "SELECT key, text FROM lines WHERE title_id=? AND installs>=? ORDER BY installs DESC LIMIT 5000"
-    ).bind(job.titleId, MIN_INSTALLS).all());
-  } else {
-    const games = (job.games?.length ? job.games : [job.game]).slice(0, MAX_VARIANTS);
-    ({ results: rows } = await env.DB.prepare(
-      `SELECT key, text FROM lines WHERE title_id IS NULL AND game IN (${games.map(() => "?").join(",")}) AND installs>=? ` +
-      "ORDER BY installs DESC LIMIT 5000"
-    ).bind(...games, MIN_INSTALLS).all());
-  }
-
-  const budget = Math.min(LINES_PER_RUN, NIGHTLY_LIMIT - state.translated);
+  const want = Math.min(LINES_PER_RUN, NIGHTLY_LIMIT - state.translated, JOB_NIGHTLY - (job.did ?? 0));
   const todo = [];
   let looked = 0;
-  for (const r of rows) {
-    if (looked >= budget) break;
-    if (cache.lines[r.key] || cache.skip[r.key]) continue;
-    looked++;
-    const clean = cleanLine(r.text);
-    const k = clean ? (clean.labelled ? await key(clean.body) : r.key) : "";
-    if (!clean || !k || isKnown(known, k) || isKnown(known, r.key)) {
-      cache.skip[r.key] = 1;
-      continue;
+  let scanned = 0;
+  // Gezinti ya da gecelik pay bitti, gecenin son tetiklemesi (bu gece çevrilen paket kurulur) ya da yalnız yeniden
+  // adlandırma: çeviri yok, paket kurulur.
+  let exhausted = job.retitle || cache.passNight === night || want <= 0
+    || (isFinalTick(now) && cache.touched === night);
+  // Anahtar imleci: installs azalan, key artan sırada kaldığımız yerden devam eder. İmlecin gerisindeki satırlara bu
+  // geçişte bir daha bakılmaz, o yüzden atlananlar (bilinen, çöp) skip'e yazılmaz; önbellek ve D1 okuması küçük kalır.
+  for (let page = 0; !exhausted && page < MAX_PAGES && todo.length < want && looked < MAX_LOOK; page++) {
+    const rows = await fetchPage(env, job, separate, cache.cursor);
+    let stopped = false;
+    for (const r of rows) {
+      if (todo.length >= want || looked >= MAX_LOOK) { stopped = true; break; }
+      cache.cursor = { n: r.installs, k: r.key };
+      scanned++;
+      if (cache.lines[r.key] || cache.skip[r.key]) continue;
+      looked++;
+      const clean = cleanLine(r.text);
+      const k = clean ? (clean.labelled ? await key(clean.body) : r.key) : "";
+      if (!clean || !k || isKnown(known, k) || isKnown(known, r.key)) continue;
+      todo.push({ pool: r.key, k, en: clean.body });
     }
-    todo.push({ pool: r.key, k, en: clean.body });
+    // Sayfa dolu değilse ve hepsi işlendiyse imleç sona ulaştı: gezinti bitti, sonraki geçiş baştan başlar.
+    if (!stopped && rows.length < PAGE) {
+      exhausted = true;
+      cache.cursor = null;
+      cache.skip = Object.fromEntries(Object.entries(cache.skip).filter(([, v]) => v === 2));
+      cache.passNight = night;
+    }
   }
 
-  if (looked > 0) {
+  if (todo.length > 0) {
     for (let i = 0; i < todo.length; i += BATCH) {
       const chunk = todo.slice(i, i + BATCH);
       const got = await translate(env, chunk, job.game);
@@ -475,16 +516,24 @@ export async function runAutopack(env, now = new Date()) {
           cache.lines[line.pool] = { k: line.k, en: line.en, tr };
           delete cache.fail[line.pool];
         } else if ((cache.fail[line.pool] = (cache.fail[line.pool] || 0) + 1) >= 2) {
-          // İki kez çevrilemeyen satır bırakılır (sonsuz döngü olmasın).
-          cache.skip[line.pool] = 1;
+          // İki kez çevrilemeyen satır bırakılır (sonsuz döngü olmasın). 2 = bu geçişte kalıcı atla.
+          cache.skip[line.pool] = 2;
           delete cache.fail[line.pool];
         }
       });
     }
     state.translated += todo.length;
+    job.did = (job.did ?? 0) + todo.length;
+    cache.touched = night;
     await putJson(env, cacheFile(job), cache);
     await putJson(env, STATE, state);
     return { phase: "translate", titleId: job.titleId, game: job.gameKey, looked, translated: todo.length };
+  }
+
+  // Yeni çevrilecek satır çıkmadı ama gezinti sürüyor (önbellekte olanlar atlandı): imleci kaydet, paket kurma.
+  if (!exhausted && scanned > 0 && cache.cursor) {
+    await putJson(env, cacheFile(job), cache);
+    return { phase: "scan", titleId: job.titleId, game: job.gameKey, scanned };
   }
 
   // Çevrilecek yeni satır kalmadı (ya da gecenin sınırı doldu): paket.

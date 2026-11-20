@@ -13,11 +13,15 @@ yazılır. Kaynaklar ve lisansları THIRD-PARTY-NOTICES.md'de.
 
 ## Havuzdan otomatik paket (sunucuda, her gece)
 
-`server/pool` Worker'ı (`src/autopack.js`) bu dosyadaki temizlik kurallarıyla her gece 03:07–04:57 UTC arasında kendisi
+`server/pool` Worker'ı (`src/autopack.js`) bu dosyadaki temizlik kurallarıyla her gece 03:02–05:57 UTC arasında (beş dakikada bir) kendisi
 paket üretir: en az 2 kurulumun okuduğu satırlar, oyun başına en az 300 temiz satır olunca `pool-<oyun kimliği>` paketi
 (Workers AI, `@cf/google/gemma-4-26b-a4b-it`), R2'ye ve `index.json`'a. Elle paket (aşağıdaki akış) her zaman öncelikli:
 elle paket yüklenince `server/pool/scripts/build-known.mjs` ile `auto/known-keys.bin` yenilenir, otomatik paket o satırları
 bırakır. Elle akış daha iyi çeviri (Claude + sözlük + denetim) gerektiğinde kullanılır.
+
+Dev oyunlar (yüz binlerce satır) anahtar imleciyle (installs azalan, key artan) sayfa sayfa gezilir; bir oyun gecede en çok
+2000, tüm oyunlar 5000 satır çevirir (`NIGHTLY_LIMIT` hesabı `autopack.js`'te). Çevrilen oyunun paketi gecenin sonunda
+(ya da payı dolunca) kurulur ve sürümü artar: `pool-<oyun>` her gece büyür.
 
 ## Havuzdan hızlı paket (`poolpack.py`)
 

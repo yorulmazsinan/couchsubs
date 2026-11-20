@@ -21,9 +21,9 @@ bucket_name = "couchsubs-packs"
 [ai]
 binding = "AI"
 
-# Her gece 03:07'den 04:57'ye (UTC) on dakikada bir: ilk tetikleme plan, sonrakiler çeviri parçaları ve paket.
+# Her gece 03:02–05:57 (UTC) arası beş dakikada bir (36 tetikleme): ilk plan, sonrakiler çeviri parçaları ve paket.
 [triggers]
-crons = ["7,17,27,37,47,57 3,4 * * *"]
+crons = ["2-57/5 3,4,5 * * *"]
 
 [observability]
 enabled = true

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GENERAL, GENERAL_TITLE, jobPackId, packBody, packTitle, parseReply, runAutopack } from "../src/autopack.js";
+import {
+  GENERAL, GENERAL_TITLE, JOB_NIGHTLY, LAST_HOUR_UTC, LINES_PER_RUN, NIGHTLY_LIMIT, PAGE, isFinalTick, jobPackId,
+  packBody, packTitle, parseReply, runAutopack,
+} from "../src/autopack.js";
 
 test("malformed current-night state is rebuilt instead of stopping the scheduler", async () => {
   const now = new Date("2026-11-20T04:00:00Z");
@@ -88,8 +91,8 @@ test("general pool scans past separated game rows before applying the row limit"
             generalQuery = { sql, args };
             const separated = sql.includes("json_each(?)") ? JSON.parse(args[1]) : [];
             const eligible = rows.filter((row) => !row.game || !separated.includes(row.game));
-            eligible.sort((a, b) => b.installs - a.installs || b.last_seen.localeCompare(a.last_seen));
-            return { results: eligible.slice(0, 5_000) };
+            eligible.sort((a, b) => b.installs - a.installs || (a.key < b.key ? -1 : 1));
+            return { results: eligible.slice(0, 1_500) };
           },
         }),
       }),
@@ -562,4 +565,159 @@ test("night plan retitles a listed extra pack first, without translating", async
   // Ertesi gece ad zaten doğru: yeniden yazma sırası açılmaz.
   await runAutopack(env, new Date("2026-11-21T03:07:00Z"));
   assert.equal(JSON.parse(stored.get("auto/state.json")).queue.some((q) => q.retitle), false);
+});
+
+
+// --- Sayfa sayfa gezinti, gecelik pay, her gece büyüyen paket ---
+
+const hex = (i) => (0x3000000000000000n + BigInt(i)).toString(16).padStart(16, "0");
+const lineText = (i) => `Get in the car number ${i}, Lucia.`;
+
+/** Anahtar imlecini anlayan sahte D1 + R2. rows: { key, text, installs }. */
+function pagedEnv({ rows, state, cache, packs = [], queries = [] }) {
+  const stored = new Map([["index.json", JSON.stringify({ packs })]]);
+  if (state) stored.set("auto/state.json", JSON.stringify(state));
+  if (cache) stored.set("auto/tr/PPSA1.json", JSON.stringify(cache));
+  const env = {
+    AI: {
+      run: async (_model, { messages }) => ({
+        response: JSON.stringify({
+          items: messages[1].content.split("\n").filter(Boolean).map((_, i) => ({ id: String(i), tr: "Arabaya bin, Lucia." })),
+        }),
+      }),
+    },
+    PACKS: {
+      get: async (name) => name === "auto/known-keys.bin"
+        ? { arrayBuffer: async () => new ArrayBuffer(0) }
+        : stored.has(name) ? {
+          text: async () => String(stored.get(name)),
+          arrayBuffer: async () => stored.get(name),
+        } : null,
+      head: async (name) => stored.has(name) ? {} : null,
+      put: async (name, value) => { stored.set(name, value); },
+    },
+    DB: {
+      prepare: (sql) => ({
+        bind: (...args) => ({
+          all: async () => {
+            queries.push({ sql, args });
+            const cursor = sql.includes("installs<?") ? args.slice(-3) : null;
+            const eligible = rows
+              .filter((r) => !cursor || r.installs < cursor[0] || (r.installs === cursor[1] && r.key > cursor[2]))
+              .sort((a, b) => b.installs - a.installs || (a.key < b.key ? -1 : 1));
+            return { results: eligible.slice(0, PAGE) };
+          },
+        }),
+      }),
+    },
+  };
+  return { env, stored };
+}
+
+const bigRows = (n) => Array.from({ length: n }, (_, i) => ({ key: hex(i), text: lineText(i), installs: 2 + (i % 3) }));
+const titledState = (extra = {}) => ({
+  night: "2026-11-20", translated: 0, done: [], namedGames: [],
+  queue: [{ titleId: "PPSA1", game: "Test Oyunu", lines: 9000, ...extra }],
+});
+
+test("big game is paged by key cursor: each run continues where the last stopped, nothing is translated twice", async () => {
+  const queries = [];
+  const { env, stored } = pagedEnv({ rows: bigRows(4000), state: titledState(), queries });
+  const now = new Date("2026-11-20T03:12:00Z");
+  const seen = new Set();
+  for (let run = 0; run < 3; run++) {
+    const result = await runAutopack(env, now);
+    assert.equal(result.phase, "translate");
+    assert.equal(result.translated, LINES_PER_RUN);
+    for (const k of Object.keys(JSON.parse(stored.get("auto/tr/PPSA1.json")).lines)) seen.add(k);
+    assert.equal(seen.size, (run + 1) * LINES_PER_RUN);
+  }
+  assert.equal(JSON.parse(stored.get("auto/state.json")).translated, 3 * LINES_PER_RUN);
+  // İlk sorgu imleçsiz, sonrakiler imleçle; sorgu sınırı sabit sayfa (ilk-5000 penceresi yok).
+  assert.ok(!queries[0].sql.includes("installs<?"));
+  assert.ok(queries.slice(1).every((q) => q.sql.includes("installs<?")));
+  assert.ok(queries.every((q) => q.sql.includes(`LIMIT ${PAGE}`)));
+  const cache = JSON.parse(stored.get("auto/tr/PPSA1.json"));
+  assert.ok(cache.cursor && typeof cache.cursor.k === "string");
+  // Çöp ve bilinen satırlar skip'e yazılmaz (imleç zaten geride bırakır): önbellek küçük kalır.
+  assert.equal(Object.keys(cache.skip).length, 0);
+});
+
+test("rows past the first window are reached: cursor goes beyond 5000 rows", async () => {
+  // 7000 satır, ilk 6800'ü zaten çevrilmiş: eski sürüm yalnız ilk 5000'e bakıp "bitti" derdi.
+  const rows = bigRows(7000);
+  const ordered = [...rows].sort((a, b) => b.installs - a.installs || (a.key < b.key ? -1 : 1));
+  const lines = {};
+  for (const r of ordered.slice(0, 6800)) lines[r.key] = { k: r.key, en: r.text, tr: "Arabaya bin, Lucia." };
+  const { env, stored } = pagedEnv({ rows, state: titledState(), cache: { lines, skip: {}, fail: {} } });
+  const now = new Date("2026-11-20T03:12:00Z");
+  let translated = 0;
+  for (let run = 0; run < 6 && translated < 200; run++) {
+    const result = await runAutopack(env, now);
+    if (result.phase === "translate") translated += result.translated;
+  }
+  assert.equal(translated, 200);
+  const cache = JSON.parse(stored.get("auto/tr/PPSA1.json"));
+  const fresh = Object.keys(cache.lines).filter((k) => !(k in lines));
+  assert.equal(fresh.length, 200);
+  const tail = new Set(ordered.slice(6800).map((r) => r.key));
+  assert.ok(fresh.every((k) => tail.has(k)));
+});
+
+test("a game stops at its nightly share, publishes its pack and hands the night to the next game", async () => {
+  const rows = bigRows(9000);
+  const lines = {};
+  for (const r of rows.slice(0, 400)) lines[r.key] = { k: r.key, en: r.text, tr: "Arabaya bin, Lucia." };
+  const { env, stored } = pagedEnv({
+    rows, state: titledState({ did: JOB_NIGHTLY }), cache: { lines, skip: {}, fail: {} },
+  });
+  const result = await runAutopack(env, new Date("2026-11-20T03:12:00Z"));
+  assert.equal(result.phase, "build");
+  assert.equal(result.built, true);
+  assert.equal(JSON.parse(stored.get("auto/state.json")).queue.length, 0);
+  assert.equal(JSON.parse(stored.get("index.json")).packs[0].id, "pool-ppsa1");
+});
+
+test("pack grows every night: a touched game is published at the final tick and the version rises", async () => {
+  const rows = bigRows(9000);
+  const { env, stored } = pagedEnv({ rows, state: titledState() });
+  // Yeterince satır çevrilsin (MIN_LINES) ama gecelik pay dolmasın.
+  for (let run = 0; run < 2; run++) await runAutopack(env, new Date("2026-11-20T03:12:00Z"));
+  assert.equal(JSON.parse(stored.get("index.json")).packs.length, 0);
+  assert.equal((await runAutopack(env, new Date("2026-11-20T05:52:00Z"))).phase, "build");
+  const first = JSON.parse(stored.get("index.json")).packs[0];
+  assert.equal(first.id, "pool-ppsa1");
+  assert.equal(first.version, 1);
+
+  // Ertesi gece: plan R2'de aynı oyun için önbelleği bırakır; çeviri sürer, son tetiklemede sürüm 2.
+  const day2 = new Date("2026-11-21T03:12:00Z");
+  stored.set("auto/state.json", JSON.stringify({ ...titledState(), night: "2026-11-21" }));
+  await runAutopack(env, day2);
+  assert.equal((await runAutopack(env, new Date("2026-11-21T05:57:00Z"))).phase, "build");
+  const second = JSON.parse(stored.get("index.json")).packs[0];
+  assert.equal(second.version, 2);
+  assert.ok(second.entries > first.entries);
+});
+
+test("a finished pass does not restart the same night and the next night starts from the top", async () => {
+  const { env, stored } = pagedEnv({ rows: bigRows(320), state: titledState() });
+  const now = new Date("2026-11-20T03:12:00Z");
+  assert.equal((await runAutopack(env, now)).phase, "translate");
+  assert.equal((await runAutopack(env, now)).phase, "translate");
+  // 320 satır: ikinci turda gezinti biter (sayfa dolu değil); sonraki tetikleme paketi kurar, baştan başlamaz.
+  const cache = JSON.parse(stored.get("auto/tr/PPSA1.json"));
+  assert.equal(cache.cursor, null);
+  assert.equal(cache.passNight, "2026-11-20");
+  assert.equal((await runAutopack(env, now)).phase, "build");
+});
+
+test("night limit stays inside the Workers AI free daily allowance and the cron has enough runs", () => {
+  // Önceki hesap: en çok ~1,67 nöron/satır; Free plan günde 10.000 nöron.
+  assert.ok(NIGHTLY_LIMIT * (10_000 / 6_000) <= 10_000 * 0.9);
+  assert.ok(JOB_NIGHTLY <= NIGHTLY_LIMIT);
+  // 03:02–05:57 arası beş dakikada bir: 36 tetikleme; biri plan, biri paket.
+  assert.ok((36 - 2) * LINES_PER_RUN >= NIGHTLY_LIMIT);
+  assert.equal(isFinalTick(new Date("2026-11-20T05:52:00Z")), true);
+  assert.equal(isFinalTick(new Date("2026-11-20T05:47:00Z")), false);
+  assert.equal(LAST_HOUR_UTC, 5);
 });
