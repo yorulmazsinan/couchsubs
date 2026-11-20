@@ -384,7 +384,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         _ => text["Retrying the Xbox connection…"],
     };
     public StatusTone Ps5Tone => Ps5ToneFor(sessionState, isRunning);
-    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText), nameof(CanReinstallTvApp), nameof(ShowTestTvHint)]); }
+    public int TvClients { get => tvClients; private set => Set(ref tvClients, value, [nameof(TvTone), nameof(TvStatusText), nameof(CanReinstallTvApp), nameof(CanReconnectTv), nameof(ShowTestTvHint)]); }
 
     /// <summary>
     /// Son "TV'de test et"te TV uygulaması bağlanmadı ve hâlâ bağlı değil: ana ekran eşleştirme yönergesini gösterir. TV'deki
@@ -800,7 +800,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         tvAppMissing = !pairing.Launched;
         // Daha önce "TV'm yok" seçildiyse TV bağlanınca altyazı TV'ye gider.
         if (settings.Output == SubtitleOutput.Computer) Settings = settings with { Output = SubtitleOutput.Tv };
-        Changed(nameof(Tv), nameof(CanAdvance), nameof(CanInstallTvApp), nameof(CanReinstallTvApp), nameof(HasTv), nameof(NeedsTv), nameof(CanStart),
+        Changed(nameof(Tv), nameof(CanAdvance), nameof(CanInstallTvApp), nameof(CanReinstallTvApp), nameof(CanReconnectTv), nameof(HasTv), nameof(NeedsTv), nameof(CanStart),
             nameof(TvStatusText), nameof(TvTone));
         if (target.Brand == TvBrand.Lg) await RefreshTvAppAsync();
         // Samsung girişi ya da Android onayı dakikalar sürebilir; eşleşme beklemesin.
@@ -1048,6 +1048,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// TV'den kaldırılan uygulama bu bilgisayarın kaydında "kurulu" kalıyordu (#352, #389).
     /// </summary>
     public bool CanReinstallTvApp => tv is { Brand: TvBrand.Samsung or TvBrand.AndroidTv } && CanInstallTvApp && tvClients == 0;
+
+    /// <summary>
+    /// TV eşleşmiş ama TV uygulaması bağlı değilken (LG dahil) ana ekranda "TV'ye bağlan" görünür: TV adımı açılır, başka
+    /// TV seçilebilir ya da LG kurulum adımları (Developer Mode, Passphrase) yeniden izlenir. Önceden kurulum bittikten
+    /// sonra LG'de TV adımına dönmenin görünür bir yolu yoktu (yalnız Hakkında › Yeniden kur).
+    /// </summary>
+    public bool CanReconnectTv => HasTv && !CanReinstallTvApp && tvClients == 0;
 
     /// <summary>
     /// Kurulan sürüm kaydını unutur ve TV'ye yeniden bakar: uygulama TV'de yoksa kurulur, Android TV'de varsa açılır.
@@ -1504,7 +1511,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         TvApp = TvAppState.Unknown;
         Step = OnboardingStep.Welcome;
         Changed(nameof(HasAccount), nameof(Console), nameof(ConsoleKind), nameof(ConsoleKindLocked), nameof(IsXbox), nameof(ConsoleTitle), nameof(HasXboxAccount),
-            nameof(SelectedXboxConsole), nameof(StepCount), nameof(StepNumber), nameof(Ps5StatusText), nameof(Tv), nameof(CanReinstallTvApp), nameof(HasTv), nameof(NeedsTv), nameof(CanStart), nameof(HasLoginPasscode));
+            nameof(SelectedXboxConsole), nameof(StepCount), nameof(StepNumber), nameof(Ps5StatusText), nameof(Tv), nameof(CanReinstallTvApp), nameof(CanReconnectTv), nameof(HasTv), nameof(NeedsTv), nameof(CanStart), nameof(HasLoginPasscode));
     }
 
     /// <summary>İkinci hesabın PS5 giriş şifresi şifreli depoda kayıtlı mı (şifrenin kendisi arayüze dönmez).</summary>

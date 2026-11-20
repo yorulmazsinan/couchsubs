@@ -2387,10 +2387,15 @@ public class TvAppInstallTests
         var services = new FakeServices();
         services.Bundled[TvBrand.AndroidTv] = AndroidApp;
         var controller = Make(services);
+        Assert.False(controller.CanReconnectTv);
         await controller.PairAsync(Tv);
         Assert.False(controller.CanReinstallTvApp);
+        // LG eşleşmiş ama TV uygulaması bağlı değil: ana ekrandan TV adımına dönülebilir ("TV'ye bağlan").
+        Assert.True(controller.CanReconnectTv);
         await controller.PairAsync(new LgTv("Android TV", "", TvBrand.AndroidTv));
         Assert.True(controller.CanReinstallTvApp);
+        // Android TV'de aynı yerde "yeniden kur" var; iki düğme birden çıkmaz.
+        Assert.False(controller.CanReconnectTv);
     }
 
     [Fact]

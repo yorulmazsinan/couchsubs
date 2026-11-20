@@ -219,6 +219,12 @@ private struct TVStatusTile: View {
                         Task { await model.reinstallTVApp() }
                     }.buttonStyle(.secondary)
                 }
+            } else if model.canReconnectTV {
+                // TV uygulaması bağlı değil (LG): TV adımı açılır; başka TV seçilir ya da kurulum adımları yeniden izlenir.
+                StatusTile(symbol: "tv", title: "TV", value: String(localized: "Waiting for the TV app"),
+                           tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
+                    Button("Connect a TV") { model.step = .tv }.buttonStyle(.secondary)
+                }
             } else {
                 StatusTile(symbol: "tv", title: "TV",
                            value: model.tvClients > 0 ? String(localized: "Connected") : String(localized: "Waiting for the TV app"),

@@ -1318,6 +1318,11 @@ final class AppModel: ObservableObject {
         return canInstallTVApp && tvClients == 0
     }
 
+    /// TV eşleşmiş ama TV uygulaması bağlı değilken (LG dahil) ana ekranda "TV'ye bağlan" görünür: TV adımı açılır, başka
+    /// TV seçilebilir ya da LG kurulum adımları (Developer Mode, Passphrase) yeniden izlenir. Önceden kurulum bittikten
+    /// sonra LG'de TV adımına dönmenin görünür bir yolu yoktu (yalnız Hakkında › Yeniden kur).
+    var canReconnectTV: Bool { hasTV && !canReinstallTVApp && tvClients == 0 }
+
     /// Kurulan sürüm kaydını unutur ve TV'ye yeniden bakar: uygulama TV'de yoksa kurulur, Android TV'de varsa açılır.
     /// TV'ye ulaşılamazsa kart geliştirici modu / hata ayıklama adımlarını gösterir.
     func reinstallTVApp() async {

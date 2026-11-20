@@ -1381,6 +1381,23 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertFalse(model.canReinstallTVApp)
     }
 
+    /// LG eşleşmiş ama TV uygulaması bağlı değil: ana ekrandan TV adımına dönülebilir (yeniden kur yalnız Samsung/Android).
+    func testConnectATVIsOfferedWhileThePairedLGAppIsNotConnected() async throws {
+        let services = FakeServices()
+        services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
+        let model = model(services)
+        XCTAssertFalse(model.canReconnectTV)
+        try await model.pair(LGTV(name: "LG TV", host: "192.168.1.153"))
+        XCTAssertTrue(model.canReconnectTV)
+        model.tvClients = 1
+        XCTAssertFalse(model.canReconnectTV)
+        model.tvClients = 0
+        // Android TV'de aynı yerde "yeniden kur" var; iki düğme birden çıkmaz.
+        model.tv = LGTV(name: "Android TV", host: "", brand: .androidTV)
+        XCTAssertTrue(model.canReinstallTVApp)
+        XCTAssertFalse(model.canReconnectTV)
+    }
+
     func testInstalledAndroidAppNeedsNothingWhenDebuggingIsOff() async {
         let services = FakeServices()
         services.bundled[.androidTV] = BundledTVApp(url: URL(fileURLWithPath: "/tmp/a_0.7.0.apk"), version: "0.7.0")
