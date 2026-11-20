@@ -374,6 +374,16 @@
                                                Text="{t:T 'Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.'}" />
                                 </StackPanel>
                             </DockPanel>
+                            <Separator Margin="0" />
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="GameAreaPresets" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Use ready areas for known games'}" Checked="OnGameAreaPresets" Unchecked="OnGameAreaPresets" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{t:T 'Use ready areas for known games'}" Style="{StaticResource HeadlineText}" />
+                                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="{t:T 'When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.'}" />
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </c:Card>
                 </StackPanel>

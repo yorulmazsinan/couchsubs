@@ -260,6 +260,11 @@ public sealed record UserSettings
     /// <see cref="ScreenTextDetector"/>). Altyazı alanı Tam ekranken çalışmaz. Eski ayar dosyalarında yoktur; açık başlar.
     /// </summary>
     public bool AutoScreenText { get; init; } = true;
+    /// <summary>
+    /// Bilinen oyunlarda hazır ek alanlar (<see cref="Core.GameAreaPresets"/>; ör. GTA 6'nın yardım kutusu ve mesajları)
+    /// kendiliğinden okunur. Kullanıcının kendi ek alanı varsa onunki kullanılır. Eski ayar dosyalarında yoktur; açık başlar.
+    /// </summary>
+    public bool GameAreaPresets { get; init; } = true;
     /// <summary>Altyazı okuyucusu. Gelişmiş seçili ama modeli inmemişse Windows'unki kullanılır.</summary>
     public OcrEngine OcrEngine { get; init; } = OcrEngine.Windows;
     public DubbingSettings Dubbing { get; init; } = new();
@@ -413,6 +418,14 @@ public sealed record UserSettings
             .Where(ExtraLive)
             .Select(slot => ExtraRegion(slot) is { } region ? new WatchedArea("area" + slot, "Area " + slot, region) : null)
             .OfType<WatchedArea>()];
+
+    /// <summary>
+    /// Oynanan oyunun hazır ek alanları (çalışma anında; ayarlara yazılmaz): ayar açık, altyazı alanı Tam ekran değil,
+    /// kullanıcının sürekli okunan kendi ek alanı ve etkin alan profili yok. GTA 6 telefonu açıkken mesaj alanı çıkar.
+    /// </summary>
+    public IReadOnlyList<WatchedArea> PresetAreas(string? game, bool phoneOpen) =>
+        !GameAreaPresets || ExtraAreasPausedByFullScreen || ActiveAreaProfile is not null || WatchedAreas().Count > 0 ? []
+            : [.. Core.GameAreaPresets.Areas(game).Where(area => !phoneOpen || area.Id != Core.GameAreaPresets.PhoneId)];
 
     /// <summary>
     /// Oyuna göre kaydedilmiş alanlar (son kullanılan sonda, en çok <see cref="Core.AreaProfiles.MaxCount"/>). Eski ayar

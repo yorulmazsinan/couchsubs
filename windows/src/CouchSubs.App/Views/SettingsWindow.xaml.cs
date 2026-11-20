@@ -105,6 +105,7 @@ public partial class SettingsWindow : Window
         SpeakerNames.IsChecked = settings.ShowSpeakerNames;
         SpeakerColors.IsChecked = settings.SpeakerColors;
         AutoScreenText.IsChecked = settings.AutoScreenText;
+        GameAreaPresets.IsChecked = settings.GameAreaPresets;
         ShowPacks();
         AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
         FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.FrameSource.ToString());
@@ -548,6 +549,8 @@ public partial class SettingsWindow : Window
     private void OnSpeakerColors(object sender, RoutedEventArgs e) => Update(s => s with { SpeakerColors = SpeakerColors.IsChecked == true });
 
     private void OnAutoScreenText(object sender, RoutedEventArgs e) => Update(s => s with { AutoScreenText = AutoScreenText.IsChecked == true });
+
+    private void OnGameAreaPresets(object sender, RoutedEventArgs e) => Update(s => s with { GameAreaPresets = GameAreaPresets.IsChecked == true });
 
     /// <summary>Seçili motor (ayarlarda ücretsiz ise Free).</summary>
     private TranslationEngine SelectedEngine =>

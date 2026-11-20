@@ -14015,6 +14015,38 @@
         }
       }
     },
+    "Use ready areas for known games": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use ready areas for known games"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilinen oyunlarda hazır alanları kullan"
+          }
+        }
+      }
+    },
+    "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hazır alanı olan bir oyun (ör. GTA 6) oynanırken yardım kutusu ve mesajlar kendiliğinden okunup çevrilir. Kendi ek alanlarınız varsa onlar kullanılır."
+          }
+        }
+      }
+    },
     "Automatically translate on-screen text": {
       "localizations": {
         "en": {
