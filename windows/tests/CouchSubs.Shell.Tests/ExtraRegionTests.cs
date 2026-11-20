@@ -322,15 +322,16 @@ public class ScreenTranslationControllerTests
         controller.Settings = controller.Settings with { Output = SubtitleOutput.Computer };
         services.ReaderLines = new Reading([new TextLine("Open the door.", new TextBox(0.4, 0.8, 0.6, 0.84))]);
         var received = new List<SubtitleEvent>();
-        controller.OverlayEvent += received.Add;
+        controller.OverlayEvent += e => { lock (received) received.Add(e); };
         await controller.StartAsync();
         services.Streams[0].Emit(Frame.Blank(64, 64));
         Assert.Equal(ScreenOutcome.Shown, await controller.TranslateScreenAsync());
-        var screen = Assert.Single(received, e => e.Kind == SubtitleEventKind.Screen);
+        SubtitleEvent screen;
+        lock (received) screen = Assert.Single(received, e => e.Kind == SubtitleEventKind.Screen);
         Assert.NotEqual("", screen.Text);
         Assert.NotEqual("Open the door.", screen.Text);
         Assert.Equal(ScreenOutcome.Cleared, await controller.TranslateScreenAsync());
-        Assert.Contains(received, e => e.Kind == SubtitleEventKind.ScreenClear);
+        lock (received) Assert.Contains(received, e => e.Kind == SubtitleEventKind.ScreenClear);
         controller.Stop();
     }
 
@@ -341,10 +342,10 @@ public class ScreenTranslationControllerTests
         var (controller, _) = Ready();
         controller.Settings = controller.Settings with { Output = SubtitleOutput.Computer };
         var received = new List<SubtitleEvent>();
-        controller.OverlayEvent += received.Add;
+        controller.OverlayEvent += e => { lock (received) received.Add(e); };
         await controller.StartAsync();
         Assert.Equal(ScreenOutcome.NotRunning, await controller.TranslateScreenAsync());
-        Assert.Contains(received, e => e.Kind == SubtitleEventKind.Subtitle && e.Text.Contains("PS5", StringComparison.Ordinal));
+        lock (received) Assert.Contains(received, e => e.Kind == SubtitleEventKind.Subtitle && e.Text.Contains("PS5", StringComparison.Ordinal));
         controller.Stop();
     }
 }
