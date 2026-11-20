@@ -1,8 +1,8 @@
-# GTA 6 havuz eklenmesi, düzeltilmesi ve kod düzeltmeleri (38.821 satır)
+# GTA 6 havuz eklenmesi, düzeltilmesi ve kod düzeltmeleri (39.186 satır)
 
-Dosya: `gta-tr-havuz-katki.json.gz` · biçim 2 · 38.821 satır + 15.358 cümle parçası + bulanık imza (kısa satırlar dahil).
+Dosya: `gta-tr-havuz-katki.json.gz` · biçim 2 · 39.186 satır + 15.530 cümle parçası + bulanık imza (kısa satırlar dahil).
 
-Satır sayısı: #505'te gönderilen 24.452 satır → bu PR 38.821 satır (+14.369).
+Satır sayısı: #505'te gönderilen 24.452 satır → bu PR 39.186 satır (+14.734).
 
 ## Benim ayarlarım
 
@@ -114,7 +114,12 @@ seçiliyken açık.
    - Tek satır sınırı 42 → 66 karakter: GTA tek satırda 66 karaktere kadar gösteriyor; 42'de oyunun tek satırlık
      altyazılarının %23'ü bizde ikiye bölünüyordu.
 
-Testler: Core 1.128/1.128, Shell 371/371, Translation 217 (14 atlandı), paket betiği 9/9.
+Testler (en son main üstünde): Core 1.143/1.143, Shell 396/396, Translation 217 (14 atlandı), paket betiği 9/9.
+
+## Güncellemeler
+
+- **20 Kas:** 38.821 satır → 39.186 satır (+365): oyunu %100 bitiren 4. yayıncının Part 3'ü eklendi; PR en son main'in
+  (beta.60 sonrası) üstüne taşındı.
 
 ## Devamı
 
