@@ -6,13 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Android TV'de altyazı yeniden görünüyor (TV uygulaması 0.9.45):** Bir önceki TV sürümünden sonra Philips, Toshiba ve benzeri Android TV'lerde katman modunda altyazının görünmemesi ("uygulama açılıyor, 2 saniye sonra oyuna dönüyor, altyazı gelmiyor") düzeltildi. Uygulamadan çıkınca HDMI girişi tümüyle bırakılıyor; kesilen görüntü bir kez yeniden açılıyor.
-- **Ekran yazılarını otomatik çevirme artık varsayılan kapalı (deneysel; Windows, Mac, iPhone, Android):** Oyun dünyasındaki poster, plaka ve tabelalar çevrilmiyor; bulunan ekran yazıları altyazı penceresine karışmıyor. İsteyen Ayarlar'dan açabilir.
-- **Samsung TV'de uygulamanın açılması (Windows, Mac, iPhone, Android, #685):** CouchSubs'ın kurulu olduğu bilinen TV'de uygulama eskisi gibi doğrudan açılıyor; "Sunucu bakım altında" uyarısını önleyen denetim yalnız hiç kurulmamış TV'de çalışıyor.
-- **LG TV sürekli CouchSubs'a dönmüyor (Windows, Mac, iPhone, #688):** TV'de bilerek başka bir girişe geçip orada kalırsanız CouchSubs TV uygulamasını zorla öne getirmeyi bırakıyor.
-- **Büyük çeviri kutuları TV'ye gönderilmiyor (#691):** Ekranın büyük bölümünü kaplayıp oyun görüntüsünü örtebilecek kutular kaynağında eleniyor.
-- **PSN girişinde "Tarayıcıda giriş yap" Mac ve iPhone'da da var (#683):** Uygulama içi giriş sayfası açılmazsa girişi tarayıcıda yapıp adresi yapıştırabilirsiniz.
-- **Kurulum günlüğü (Windows, Mac, #686):** TV kurulumu hata verirse günlük tek düğmeyle gösterilip kopyalanıyor; LG ve Android TV kurulumu da günlük tutuyor.
+- **Mac'te uygulama içi güncelleme yeniden geliyor (#696):** beta.60'tan beri sürümlerin yapı numarası yanlış çıktığı için Mac yeni sürümü önermiyordu. beta.60–65'i elle kurmuş olanlara bundan sonraki güncellemeler uygulama içinden gelir. beta.59 ve öncesindeyseniz DMG'yi siteden bir kez elle kurmanız gerekiyor. Teşhis için emiraliarif'e teşekkürler.
+- **Windows kurulumunda "Yükleme Kısmen Başarılı" (#676):** Kurulumun son adımı artık bir dosya engellense de takılmıyor; uygulama açılamazsa sessizce kapanmak yerine hangi dosyanın yüklenemediğini söylüyor ve bunu hata.log'a yazıyor.
+- **Elle yazılan TV adresi (Windows, Mac):** Adresin LG, Samsung ya da Android TV olduğu TV'ye sorularak anlaşılıyor; Android TV adresi artık LG sanılmıyor.
+- **LG'de "TV uygulamasını yeniden kur" ve "TV'yi değiştir" (Windows, Mac, #700):** Ana ekrandaki TV kutusundan, kurulumu baştan yapmadan.
+- **Mac'te altyazının TV'ye gitmesi:** Altyazı sunucusu yeniden açılınca portunu kaybetmiyor.
+- **Konuşan renkleri (Mac):** Aynı kişi oturum boyunca aynı renkte; adı hafif yanlış okunsa da rengi değişmiyor.
+
+**beta.65'te gelenler:** Android TV'de katman modunda altyazının yeniden görünmesi (TV uygulaması 0.9.45), ekran yazılarını otomatik çevirmenin varsayılan kapalı olması (deneysel), Samsung TV'de uygulamanın açılması (#685), LG TV'nin sürekli CouchSubs'a dönmemesi (#688), PSN girişinde "Tarayıcıda giriş yap" (Mac, #683), TV kurulum günlüğü (#686).
 
 **beta.64'te gelenler:** LG TV'de düşen oyun görüntüsünün kendiliğinden yeniden kurulması (TV uygulaması 0.9.44), görev yazısı ekrandayken altyazıların çevrilmesi (#675), art arda altyazıda yazının küçülmemesi, ekran yazıları ve menülerin yerinde çevrilmesi (deneysel), TV'de konuşana göre renk, 2016 Samsung TV'lere bilgisayardan kurulum (#638), LG eşleşmişken "TV'ye bağlan" (#662).
 
