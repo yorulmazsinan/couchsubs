@@ -167,6 +167,9 @@ class SubtitleServer(
             )
             if (item.paragraphs) json["paragraphs"] = true
             item.icons?.takeIf { it.isNotEmpty() }?.let { json["icons"] = iconsJson(it) }
+            // Otomatik ekran yazısının özgün görünüşü; eski TV uygulamaları bu alanları yok sayar.
+            item.surface?.let { json["surface"] = mapOf("background" to it.background, "flat" to it.flat, "foreground" to it.foreground) }
+            item.look?.let { json["style"] = mapOf("align" to it.align, "bold" to it.bold, "condensed" to it.condensed, "upper" to it.upper) }
             return json
         }
 

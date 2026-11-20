@@ -186,6 +186,15 @@ class TranslationService : Service() {
      */
     @Volatile private var presetAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
     @Volatile private var playedGame: String? = null
+
+    /**
+     * Ekranda beliren yazı kutularını bulan ("Ekran yazılarını otomatik çevir"); bulduğu geçici alanlar ek alanlarla
+     * birlikte [regionWatcher]'a verilir. Karo örneği kare iş parçacığında alınır, işlenmesi [detectorWork]'te.
+     */
+    private val detector = com.couchsubs.mobile.core.ScreenTextDetector()
+    @Volatile private var autoAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
+    @Volatile private var fullScreenArea = false
+    private val detectorWork = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs screen text").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     /** Altyazı bölgesi ve ek alanlar (Ayarlar › Altyazı alanı); çeviri sürerken değişirse hemen yenisi okunur. */
     @Volatile private var region = CropRegion()
     @Volatile private var extraAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
@@ -211,6 +220,45 @@ class TranslationService : Service() {
     private fun refreshPresetAreas() {
         presetAreas = com.couchsubs.mobile.core.GameAreaPresets.active(
             settings.gameAreaPresets, playedGame, settings.areaPreset, settings.extraAreas, settings.activeAreaProfile != null)
+    }
+
+    /**
+     * "Ekran yazılarını otomatik çevir": en çok 10 Hz karo örneği alınır (kare iş parçacığında yalnız 32×18×144 nokta
+     * okunur), arkada işlenir. Ayar kapalıyken ya da altyazı alanı Tam ekranken bulunan alanlar bırakılır.
+     */
+    private fun offerScreenText(frame: com.couchsubs.mobile.remoteplay.VideoFrame) {
+        if (regionWatcher == null) return
+        if (fullScreenArea || !settings.autoScreenText) {
+            if (autoAreas.isNotEmpty()) resetScreenText()
+            return
+        }
+        if (!detector.begin()) return
+        val sample = try {
+            val buffer = frame.buffer
+            val stride = frame.rowStride
+            detector.sample(frame.width, frame.height) { x, y -> buffer.get(y * stride + x).toInt() and 0xff }
+        } catch (error: Exception) {
+            detector.finished()
+            return
+        }
+        // Altyazı alanı, kullanıcının ek alanları ve oyunun hazır alanları zaten okunuyor: oradaki yazı ikinci kez önerilmez.
+        val excluded = listOf(region) + (extraAreas + presetAreas).map { it.region }
+        try {
+            detectorWork.execute {
+                try {
+                    autoAreas = detector.update(sample, excluded)
+                } finally {
+                    detector.finished()
+                }
+            }
+        } catch (error: java.util.concurrent.RejectedExecutionException) {
+            detector.finished()
+        }
+    }
+
+    private fun resetScreenText() {
+        detector.reset()
+        autoAreas = emptyList()
     }
 
     override fun onCreate() {
@@ -335,10 +383,12 @@ class TranslationService : Service() {
         targetListener = settings.onTargetChanged { server?.sendsToTv = settings.target == SubtitleTarget.TV }
         region = settings.region
         extraAreas = settings.extraAreas.watched(settings.areaPreset)
+        fullScreenArea = settings.areaPreset == com.couchsubs.mobile.core.AreaPreset.FULL
         refreshPresetAreas()
         areasListener = settings.onAreasChanged {
             region = settings.region
             extraAreas = settings.extraAreas.watched(settings.areaPreset)
+            fullScreenArea = settings.areaPreset == com.couchsubs.mobile.core.AreaPreset.FULL
             refreshPresetAreas()
         }
         try {
@@ -409,6 +459,11 @@ class TranslationService : Service() {
             prefetchWork = regionPrefetch,
             prefetchTranslator = earlyTranslator ?: areaTranslator).apply {
             prefetchesTranslations = earlyTranslator != null
+            // Okunup yazı bulunamayan ya da gürültü çıkan otomatik alan: bulucu o görüntüyü bir daha önermez.
+            onAutoRejected = { id ->
+                detector.rejected(id)
+                autoAreas = detector.areas
+            }
             packLookup = { text ->
                 if (packTitles != null && settings.packsEnabled) {
                     library.setDisabled(settings.disabledPacks)
@@ -450,8 +505,9 @@ class TranslationService : Service() {
                     ocr.execute { read(pixels, area, capturedAt) }
                 }
             }
+            offerScreenText(frame)
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
-            regionWatcher?.offer(extraAreas + presetAreas, { r ->
+            regionWatcher?.offer(extraAreas + presetAreas + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray)
                 }
@@ -463,6 +519,7 @@ class TranslationService : Service() {
             if (!streaming) {
                 PlayedGame.consoleReported(null)
                 regionWatcher?.reset()
+                resetScreenText()
             }
             LiveState.update { it.withStreaming(state == SessionState.Streaming).copy(phase = describe(state)) }
         }
@@ -476,6 +533,7 @@ class TranslationService : Service() {
                 regionWatcher?.reset()
                 playedGame = game?.name
                 refreshPresetAreas()
+                resetScreenText()
                 linePool.setGame(game)
                 // Yeni oyun: o oyunun (havuzdan otomatik) paketi sunucuda yeni çıkmış olabilir; inerse bu oturumun
                 // paketleri hemen yeniden okunur (iPhone'daki gibi).
@@ -802,6 +860,7 @@ class TranslationService : Service() {
         areasListener = null
         regionWatcher?.reset()
         regionWatcher = null
+        resetScreenText()
         regionReader?.close()
         regionReader = null
         session?.dispose()
@@ -832,6 +891,7 @@ class TranslationService : Service() {
         background.shutdownNow()
         ocr.shutdownNow()
         regionWork.shutdownNow()
+        detectorWork.shutdownNow()
         regionPrefetch.shutdownNow()
         screenGeneration.incrementAndGet()
         screenTask?.cancel(true)

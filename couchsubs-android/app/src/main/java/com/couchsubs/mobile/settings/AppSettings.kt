@@ -176,6 +176,14 @@ class AppSettings(context: Context) : AreaStore {
         get() = prefs.getBoolean("gameAreaPresets", true)
         set(value) = prefs.edit().putBoolean("gameAreaPresets", value).apply()
 
+    /**
+     * "Ekran yazılarını otomatik çevir": ekranda beliren yazı kutuları (görev, yardım, mesaj) bulunup kendi yerinde
+     * çevrilir; oyundan bağımsızdır. Eski kayıtlarda yoktur; açık başlar.
+     */
+    var autoScreenText: Boolean
+        get() = prefs.getBoolean("autoScreenText", true)
+        set(value) = prefs.edit().putBoolean("autoScreenText", value).apply()
+
     /** "Konuşana göre renk": konuşan adlı satır (ad ve cümle) o konuşanın renginde görünür. Eski kayıtlarda yoktur; açık başlar. */
     var speakerColors: Boolean
         get() = prefs.getBoolean("speakerColors", true)

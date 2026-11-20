@@ -79,7 +79,11 @@ fun cropRegionFrom(json: JSONObject?): CropRegion? = json?.let {
  * Ek alanlar ana altyazıdan ayrı ve daha seyrek okunur ([RegionWatcher]); çevirileri TV'de kendi yerlerinde küçük kutuda
  * görünür.
  */
-data class ExtraArea(val id: String = UUID.randomUUID().toString(), val name: String, val region: CropRegion, val enabled: Boolean = true) {
+data class ExtraArea(
+    val id: String = UUID.randomUUID().toString(), val name: String, val region: CropRegion, val enabled: Boolean = true,
+    /** Ekran yazısı bulucusunun ([ScreenTextDetector]) geçici alanı; kaydedilmez, gürültüsü elenir, sık okunur. */
+    val auto: Boolean = false,
+) {
     companion object {
         /** En çok bu kadar ek alan tanımlanır (her biri saniyede bir okunur). */
         const val MAX_COUNT = 3
@@ -259,6 +263,9 @@ class RegionWatcher(
         /** İki tur arasındaki en kısa süre; iPhone ve Mac ile aynı (saniyede en çok bir tur, pil ve ısı için). */
         const val DEFAULT_INTERVAL_MS = 1000L
 
+        /** Otomatik ekran yazısı alanı varken iki tur arasındaki en uzun süre. */
+        const val AUTO_INTERVAL_MS = 500L
+
         /**
          * Ekrandakinden yalnız biraz farklı (ya da eksik) kararlı okuma en çok bu kadar tur bekletilir; o hâlde kalırsa
          * gerçekten değişmiş sayılır ve gösterilir (görevin tek sözcüğü değişebilir: "Go to the barn" → "Go to the bank").
@@ -356,6 +363,37 @@ class RegionWatcher(
          * Her grubun çevirisi kendi yeriyle. Çevirisi aslıyla aynı grup (ad, sayı) atlanır; İngilizcesi görünür kalır.
          * [text] simge imlerini bütün alanın sırasıyla taşır; [slots] o sıradaki simgeler.
          */
+        /**
+         * Otomatik ekran yazısı: her blok (tek grupta bütün yazı tek blok) için özgün görünüş [frame]'den (okunan alan)
+         * çıkarılır; çeviri aynı yerde, aynı renk ve biçimde gösterilir.
+         */
+        internal fun styled(candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?): Candidate {
+            if (frame == null) return candidate
+            val blocks = candidate.blocks ?: run {
+                val box = candidate.box ?: return candidate
+                val line = candidate.lineHeight ?: return candidate
+                listOf(Block(0, candidate.paragraphs.size, box, line))
+            }
+            val width = region.right - region.left
+            val height = region.bottom - region.top
+            if (width <= 0 || height <= 0) return candidate
+            val lines = reading.lines.mapNotNull { line -> line.box?.placedIn(region.box) }
+            val styles = blocks.map { block ->
+                val box = block.box
+                val source = (block.start until block.start + block.count).joinToString("\n") { IconText.plain(candidate.paragraphs[it]) }
+                val edges = lines.filter { (it.top + it.bottom) / 2 in box.top..box.bottom && (it.left + it.right) / 2 in box.left..box.right }
+                    .map { it.left to it.right }
+                TextStyleSampler.sample(
+                    frame,
+                    ((box.left - region.left) / width * frame.width).toInt(), ((box.top - region.top) / height * frame.height).toInt(),
+                    kotlin.math.ceil((box.right - region.left) / width * frame.width).toInt(),
+                    kotlin.math.ceil((box.bottom - region.top) / height * frame.height).toInt(),
+                    block.lineHeight / height * frame.height, source, edges,
+                )
+            }
+            return candidate.copy(blocks = blocks, styles = styles)
+        }
+
         internal fun renderBlocks(
             candidate: Candidate, layout: List<Block>, text: List<String>, similar: List<Boolean>, slots: List<IconSlot>,
         ): List<Pair<Int, ScreenTranslation.Item>> = layout.mapIndexedNotNull { index, block ->
@@ -363,7 +401,11 @@ class RegionWatcher(
             if (range.all { similar[it] }) return@mapIndexedNotNull null
             val rendered = IconText.render(range.joinToString("\n") { text[it] }, slots)
             val source = range.joinToString("\n") { IconText.plain(candidate.paragraphs[it]) }
-            index to ScreenTranslation.Item(source, rendered.text, block.box, block.lineHeight, rendered.icons.takeIf { it.isNotEmpty() })
+            val style = candidate.styles?.getOrNull(index)
+            // Özgün yazı BÜYÜK HARFse çeviri de (Türkçe kurallarıyla); simge yerleri değişmez.
+            val translation = if (style?.look?.upper == true) TextStyleSampler.upper(rendered.text) else rendered.text
+            index to ScreenTranslation.Item(source, translation, block.box, block.lineHeight, rendered.icons.takeIf { it.isNotEmpty() },
+                style?.surface, style?.look)
         }
     }
 
@@ -384,6 +426,8 @@ class RegionWatcher(
     data class Candidate(
         val paragraphs: List<String>, val box: TextBox?, val lineHeight: Double?, val key: String,
         val icons: List<List<IconSlot>>? = null, val blocks: List<Block>? = null, val text: String = "",
+        /** Otomatik ekran yazısında her bloğun özgün görünüşü ([styled]); diğer alanlarda null. */
+        val styles: List<TextStyleSampler.Style?>? = null,
     )
 
     private class State {
@@ -426,6 +470,9 @@ class RegionWatcher(
      */
     @Volatile var prefetchesTranslations = false
 
+    /** Otomatik alan okundu ama yazı yok ya da gürültü ([ScreenTextNoise]): bulucu o karoları reddeder. */
+    @Volatile var onAutoRejected: ((String) -> Unit)? = null
+
     /** Tamamlanan tur ve okuma sayısı (testler için). */
     var passes = 0
         private set
@@ -440,7 +487,9 @@ class RegionWatcher(
         val started = synchronized(lock) {
             if (busy || (areas.isEmpty() && states.values.none { it.shown.isNotEmpty() })) return false
             val time = clock()
-            lastPass?.let { if (time - it < intervalMs) return false }
+            // Otomatik ekran yazısı varken yazı ~1 sn içinde görünsün: tur aralığı en çok 500 ms.
+            val interval = if (areas.any { it.auto }) minOf(intervalMs, AUTO_INTERVAL_MS) else intervalMs
+            lastPass?.let { if (time - it < interval) return false }
             lastPass = time
             busy = true
             session
@@ -508,7 +557,17 @@ class RegionWatcher(
         }
         if (started != session) return
         reads++
-        val candidate = candidate(reading, area.region, crop.frame)
+        var candidate = candidate(reading, area.region, crop.frame)
+        if (area.auto) {
+            if (candidate.key.isEmpty() || ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) })) {
+                // Sayaç, harita, kısa etiket ya da yazısız kutu: çevrilmez; alan bir sonraki turda listeden çıkar.
+                state.candidate = null
+                state.lastRead = null
+                onAutoRejected?.invoke(area.id)
+                return
+            }
+            candidate = styled(candidate, reading, area.region, crop.frame)
+        }
         if (state.lastRead == candidate.key) {
             state.candidate = null
             commit(candidate, area, state, started)

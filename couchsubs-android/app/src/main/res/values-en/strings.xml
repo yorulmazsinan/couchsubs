@@ -296,6 +296,8 @@
     <string name="settings_speaker_colors">Color by speaker</string>
     <string name="settings_game_area_presets">Use ready areas for known games</string>
     <string name="settings_game_area_presets_short">When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.</string>
+    <string name="settings_auto_screen_text">Automatically translate on-screen text</string>
+    <string name="settings_auto_screen_text_short">Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.</string>
     <string name="settings_speaker_colors_short">Each speaker\'s name and line keep their own color.</string>
     <string name="settings_fast_reading">Check unchanged subtitle areas more often</string>
     <string name="settings_fast_reading_short">When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.</string>

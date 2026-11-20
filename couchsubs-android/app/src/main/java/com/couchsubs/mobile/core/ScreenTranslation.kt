@@ -27,6 +27,10 @@ object ScreenTranslation {
         val lineHeight: Double,
         /** Çevirinin içindeki kumanda simgeleri (kareden kesilmiş); TV [translation]'ın o yerine koyar. */
         val icons: List<IconPlacement>? = null,
+        /** Otomatik ekran yazısında özgün bloğun zemini ve yazı rengi ([TextStyleSampler]); `surface` alanıyla gider. */
+        val surface: TextSurface? = null,
+        /** Özgün yazının görünüşü (kalın, dar, hizalama, büyük harf); `style` alanıyla gider. */
+        val look: TextLook? = null,
     ) {
         /** Birden çok parça var: satır satır, sola yaslı gösterilir. */
         val paragraphs: Boolean get() = translation.contains('\n')
