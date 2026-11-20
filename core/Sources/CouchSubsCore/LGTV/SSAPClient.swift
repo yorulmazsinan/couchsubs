@@ -193,7 +193,20 @@ public final class SSAPClient: NSObject, TVControlling, URLSessionDelegate, @unc
 
 /// TV uygulamasını açık tutar: TV kendi HDMI ya da yayın girişine geçerse (SimpLink/CEC) uygulamayı
 /// yeniden öne getirir. TV kapalıysa ya da bağlantı koparsa bir sonraki kontrolde yeniden bağlanır.
+///
+/// Kullanıcı TV'de bilerek başka girişe geçiyorsa zorlanmaz: uygulama `standDownAfter` kez `standDownWindow` içinde
+/// girişten geri getirildiyse ve TV yine girişteyse bekçi çekilir ("PS kapalıyken HDMI değiştirince TV sürekli
+/// CouchSubs'a geri atıyor"). Kullanıcı CouchSubs'ı TV'de kendisi açınca, bağlantı yenilenince ya da çeviri yeniden
+/// başlayınca bekçi işine döner. SimpLink/CEC'in bir iki kez girişe geçirmesi sınırın altında kalır (Windows ile aynı).
 public final class TVKeeper: @unchecked Sendable {
+    /// Bu kadar zorla geri getirmeden sonra TV yine girişteyse bekçi çekilir.
+    public static let standDownAfter = 3
+    public static let standDownWindow: Duration = .seconds(90)
+    private let now: () -> ContinuousClock.Instant
+    /// Uygulamanın girişten geri getirildiği anlar (pencere içindekiler).
+    private var forced: [ContinuousClock.Instant] = []
+    /// Kullanıcı girişte kalmakta ısrar etti; bekçi uygulamayı öne getirmiyor.
+    public private(set) var stoodDown = false
     private let connect: () async throws -> TVControlling
     private let appId: String
     private let params: [String: Any]
@@ -208,7 +221,9 @@ public final class TVKeeper: @unchecked Sendable {
     /// söylemediği için sürekli açık "uzaktan kumanda" bağlantısı gereksizdi; birkaç saniyede bir yeniden kurulan
     /// bağlantı TV'de "uzaktan kumanda bağlandı" bildirimi çıkarıyor, PS5 kolunu düşürüyordu (#5).
     public init(connect: @escaping () async throws -> TVControlling, appId: String, params: [String: Any],
-                appConnected: (@Sendable () -> Bool)? = nil, relaunchInterval: Duration = .seconds(30)) {
+                appConnected: (@Sendable () -> Bool)? = nil, relaunchInterval: Duration = .seconds(30),
+                now: @escaping () -> ContinuousClock.Instant = { .now }) {
+        self.now = now
         self.connect = connect
         self.appId = appId
         self.params = params
@@ -236,7 +251,23 @@ public final class TVKeeper: @unchecked Sendable {
             }
             guard let control else { return }
             let current = try await control.foregroundAppId()
-            if Self.isInputOrLiveTV(current) { try await control.launch(appId: appId, params: params) }
+            if current == appId {
+                // Uygulama önde. Bekçi çekilmişken öndeyse kullanıcı onu kendisi açmıştır: bekçi işine döner.
+                if stoodDown {
+                    stoodDown = false
+                    forced.removeAll()
+                }
+                return
+            }
+            guard Self.isInputOrLiveTV(current), !stoodDown else { return }
+            let time = now()
+            forced.removeAll { time - $0 > Self.standDownWindow }
+            if forced.count >= Self.standDownAfter {
+                stoodDown = true
+                return
+            }
+            forced.append(time)
+            try await control.launch(appId: appId, params: params)
         } catch {
             control?.close()
             control = nil
@@ -267,6 +298,8 @@ public final class TVKeeper: @unchecked Sendable {
         control?.close()
         control = nil
         lastLaunch = nil
+        stoodDown = false
+        forced.removeAll()
     }
 
     public func stop() {

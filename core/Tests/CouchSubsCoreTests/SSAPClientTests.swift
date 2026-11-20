@@ -185,6 +185,46 @@ final class TVKeeperTests: XCTestCase {
         XCTAssertEqual(control.launches.last?.1["server"], "http://1.2.3.4:8787")
     }
 
+    func testStandsDownWhenTheUserKeepsReturningToTheInput() async throws {
+        // Kullanıcı PS5 kapalıyken TV'yi başka girişe alıyor; bekçi her seferinde CouchSubs'ı geri getiriyordu.
+        let hdmi = "com.webos.app.hdmi1"
+        let control = FakeControl(foreground: ["com.couchsubs.tv", hdmi, hdmi, hdmi, hdmi, hdmi, "com.couchsubs.tv", hdmi])
+        var time = ContinuousClock.now
+        let keeper = TVKeeper(connect: { control }, appId: "com.couchsubs.tv", params: [:], now: { time })
+        await keeper.tick()   // bağlanır ve başlatır
+        await keeper.tick()   // uygulama önde
+        for _ in 0..<TVKeeper.standDownAfter {
+            time += .seconds(10)
+            await keeper.tick()   // girişte → geri getir
+        }
+        XCTAssertEqual(control.launches.count, 1 + TVKeeper.standDownAfter)
+        time += .seconds(10)
+        await keeper.tick()   // yine girişte: kullanıcı ısrarlı → bekçi çekilir
+        XCTAssertTrue(keeper.stoodDown)
+        time += .seconds(600)
+        await keeper.tick()   // sonra da zorlamaz
+        XCTAssertEqual(control.launches.count, 1 + TVKeeper.standDownAfter)
+        await keeper.tick()   // kullanıcı CouchSubs'ı TV'de kendisi açtı → bekçi işine döner
+        XCTAssertFalse(keeper.stoodDown)
+        await keeper.tick()   // TV yine girişe geçti (SimpLink) → geri getir
+        XCTAssertEqual(control.launches.count, 2 + TVKeeper.standDownAfter)
+    }
+
+    func testOccasionalInputSwitchesNeverStandDown() async throws {
+        // SimpLink/CEC arada bir TV'yi girişe geçirir: aralıklı geçişler sınıra takılmaz.
+        let control = FakeControl(foreground: ["com.couchsubs.tv"] + Array(repeating: "com.webos.app.hdmi2", count: 12))
+        var time = ContinuousClock.now
+        let keeper = TVKeeper(connect: { control }, appId: "com.couchsubs.tv", params: [:], now: { time })
+        await keeper.tick()
+        await keeper.tick()
+        for _ in 0..<12 {
+            time += .seconds(60)
+            await keeper.tick()
+        }
+        XCTAssertFalse(keeper.stoodDown)
+        XCTAssertEqual(control.launches.count, 13)
+    }
+
     func testReconnectsWhenTVWasOffOrConnectionDropped() async throws {
         struct Off: Error {}
         let control = FakeControl(foreground: [])

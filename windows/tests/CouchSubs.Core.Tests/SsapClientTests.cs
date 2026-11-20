@@ -206,6 +206,52 @@ public class TvKeeperTests
     }
 
     [Fact]
+    public async Task StandsDownWhenTheUserKeepsReturningToTheInput()
+    {
+        // Kullanıcı PS5 kapalıyken TV'yi başka girişe alıyor; bekçi her seferinde CouchSubs'ı geri getiriyordu.
+        var control = new FakeControl("com.couchsubs.tv", "com.webos.app.hdmi1", "com.webos.app.hdmi1", "com.webos.app.hdmi1",
+            "com.webos.app.hdmi1", "com.webos.app.hdmi1", "com.couchsubs.tv", "com.webos.app.hdmi1");
+        var time = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var keeper = new TvKeeper(() => Task.FromResult<ITvControl>(control), "com.couchsubs.tv", new Dictionary<string, string>(), clock: () => time);
+        await keeper.TickAsync(); // bağlanır ve başlatır
+        await keeper.TickAsync(); // uygulama önde
+        for (var i = 0; i < TvKeeper.StandDownAfter; i++)
+        {
+            time += TimeSpan.FromSeconds(10);
+            await keeper.TickAsync(); // girişte → geri getir
+        }
+        Assert.Equal(1 + TvKeeper.StandDownAfter, control.Launches.Count);
+        time += TimeSpan.FromSeconds(10);
+        await keeper.TickAsync(); // yine girişte: kullanıcı ısrarlı → bekçi çekilir
+        Assert.True(keeper.StoodDown);
+        time += TimeSpan.FromMinutes(10);
+        await keeper.TickAsync(); // sonra da zorlamaz
+        Assert.Equal(1 + TvKeeper.StandDownAfter, control.Launches.Count);
+        await keeper.TickAsync(); // kullanıcı CouchSubs'ı TV'de kendisi açtı → bekçi işine döner
+        Assert.False(keeper.StoodDown);
+        await keeper.TickAsync(); // TV yine girişe geçti (SimpLink) → geri getir
+        Assert.Equal(2 + TvKeeper.StandDownAfter, control.Launches.Count);
+    }
+
+    [Fact]
+    public async Task OccasionalInputSwitchesNeverStandDown()
+    {
+        // SimpLink/CEC arada bir TV'yi girişe geçirir: aralıklı geçişler sınıra takılmaz.
+        var control = new FakeControl(Enumerable.Repeat("com.webos.app.hdmi2", 12).Prepend("com.couchsubs.tv").ToArray());
+        var time = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var keeper = new TvKeeper(() => Task.FromResult<ITvControl>(control), "com.couchsubs.tv", new Dictionary<string, string>(), clock: () => time);
+        await keeper.TickAsync();
+        await keeper.TickAsync();
+        for (var i = 0; i < 12; i++)
+        {
+            time += TimeSpan.FromSeconds(60);
+            await keeper.TickAsync();
+        }
+        Assert.False(keeper.StoodDown);
+        Assert.Equal(13, control.Launches.Count);
+    }
+
+    [Fact]
     public async Task ReconnectsWhenTvWasOffOrConnectionDropped()
     {
         var control = new FakeControl();
