@@ -858,3 +858,43 @@ test('eski sunucu (auth bildirmeyen, ör. Android telefon beta.62): yeni TV eşl
   assert.strictEqual(tv.lastOpened(), secureAddress + '/events');
   assert(!tv.requests.some(r => r.method === 'POST'));
 });
+
+// X @Eaglaris (beta.56, Android TV): TV'de 6 haneli kod hiç görünmedi, bilgisayarda onaylayınca bağlandı. Kod bekleme
+// kutusunun (#waiting) içindeydi: katman modunda o kutu hep gizli, panel açılınca da gizleniyor ve adres bilindiği için
+// geri gelmiyordu. Kod artık kendi katmanında, panelin ve kutuların üstünde; onay gelene kadar görünür.
+test('eşleştirme kodu panel açılıp kapansa da onaya kadar görünür kalır, onayla kalkar', () => {
+  const auth = { key: secureKey, id: secureId, approved: false };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(1000);
+  assert.match(tv.element('pairing').textContent, /123456/);
+  assert.strictEqual(tv.element('pairing').className, '');
+  tv.element('source-tip').className = 'hidden';
+  tv.element('no-picture').className = 'hidden';
+  // Panel kendiliğinden kapanır, yeşil tuşla açılıp kapanır: bekleme kutusu gizli kalsa da kod görünür.
+  tv.clock.advance(10000);
+  tv.key(404);
+  tv.key(404);
+  assert.strictEqual(tv.element('waiting').className, 'hidden');
+  assert.strictEqual(tv.element('pairing').className, '');
+  assert.match(tv.element('pairing').textContent, /123456/);
+  auth.approved = true;
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+  assert.strictEqual(tv.element('pairing').className, 'hidden');
+  assert.strictEqual(tv.element('pairing').textContent, '');
+});
+
+test('eşleştirme kodu bekleme kutusunun dışında, panelin üstünde ve katman modunda gizlenmiyor', () => {
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const waiting = html.slice(html.indexOf('<div id="waiting"'), html.indexOf('</div></div>', html.indexOf('<div id="waiting"')));
+  assert(html.includes('<div id="pairing"'));
+  assert(!waiting.includes('id="pairing"'), 'kod bekleme kutusunun içinde');
+  const css = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
+  const zIndex = (selector) => Number(new RegExp(selector + '\\s*\\{[^}]*z-index:\\s*(\\d+)').exec(css)[1]);
+  assert(zIndex('#pairing') > zIndex('#panel'));
+  assert(zIndex('#pairing') > zIndex('#no-picture'));
+  const android = fs.readFileSync(path.join(__dirname, '..', 'tv-android', 'platform.js'), 'utf8');
+  const hidden = /style\.textContent = '([^']*)display: none/.exec(android)[1];
+  assert(!hidden.includes('#pairing'), 'katman modu kodu gizliyor');
+  assert(hidden.includes('#waiting'));
+});

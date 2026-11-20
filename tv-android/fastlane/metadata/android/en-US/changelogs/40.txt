@@ -1,0 +1,1 @@
+0.9.37: The pairing code now also shows in overlay mode and while the panel is open; it stays at the bottom of the screen until you approve it on your phone/computer.

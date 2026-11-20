@@ -1,0 +1,1 @@
+0.9.37: Eşleştirme kodu artık katman modunda ve panel açıkken de görünüyor; bilgisayarda/telefonda onaylanana kadar ekranın altında kalıyor.

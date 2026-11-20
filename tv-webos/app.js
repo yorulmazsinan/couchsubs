@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.36';
+  var APP_VERSION = '0.9.37';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -1137,7 +1137,16 @@
   var pairingActive = false;
   // Eşleştirme kendiliğinden yeniden başlamaz (bilgisayarda yeni onay penceresi açılırdı); Tamam ile yeniden denenir.
   var pairingFailed = false;
-  function stopPairing() { pairingActive = false; pairingFailed = true; $('pairing').textContent = t('pairRetry'); }
+  function stopPairing() { pairingActive = false; pairingFailed = true; setPairing(t('pairRetry')); }
+  // Eşleştirme kodu ve yönlendirmesi bekleme kutusunun dışında, her şeyin üstünde durur (X @Eaglaris, 20 Kas: Android
+  // TV'de kod hiç görünmedi, bilgisayarda onaylayınca bağlandı). Kod bekleme kutusunun içindeydi; o kutu katman modunda
+  // hep gizli (tv-android/platform.js), panel ya da "görüntü yok" kutusu açılınca da gizleniyor ve bağlanılacak adres
+  // bilindiği için geri gelmiyordu. Yazı boş olana kadar (onay, süre dolması) görünür kalır.
+  function setPairing(text) {
+    var el = $('pairing');
+    el.textContent = text;
+    el.className = text ? '' : 'hidden';
+  }
   function pairRequest(method, address, path, done) {
     var xhr = new XMLHttpRequest(), finished = false;
     function finish(data, status) { if (finished) return; finished = true; done(data, status || 0); }
@@ -1195,7 +1204,7 @@
         pairingActive = true;
         $('waiting').className = '';
         // Eşleştirmeye kapalı sunucuya yeniden denerken yönlendirme yazısı her denemede silinip gelmesin.
-        if ($('pairing').textContent !== t('pairClosed')) $('pairing').textContent = t('pairServer');
+        if ($('pairing').textContent !== t('pairClosed')) setPairing(t('pairServer'));
         pairRequest('POST', address, '/pair', function (ticket, status) {
           if (generation !== connectionGeneration) return;
           if (status === 409) {
@@ -1204,7 +1213,7 @@
             // söylenir ve birkaç saniyede bir kendiliğinden yeniden denenir; onay penceresi açılınca kod hemen çıkar.
             pairingActive = false;
             pairingFailed = true;
-            $('pairing').textContent = t('pairClosed');
+            setPairing(t('pairClosed'));
             pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 5000);
             return;
           }
@@ -1214,7 +1223,7 @@
             return;
           }
           var deadline = Date.now() + 120000;
-          $('pairing').textContent = t('pairCode') + ' ' + ticket.code + ' — ' + t('pairServer');
+          setPairing(t('pairCode') + ' ' + ticket.code + ' — ' + t('pairServer'));
           setStatus('st-conn', t('pairCode') + ' ' + ticket.code, 'muted');
           function poll() {
             if (generation !== connectionGeneration) return;
@@ -1222,7 +1231,7 @@
             pairRequest('GET', address, '/pair?id=' + encodeURIComponent(ticket.id), function (result) {
               if (generation !== connectionGeneration) return;
               if (result && result.state === 'approved' && /^[A-Za-z0-9_-]{22}$/.test(result.key || '')) {
-                remember(result.key); $('pairing').textContent = ''; connectStream(address); return;
+                remember(result.key); setPairing(''); connectStream(address); return;
               }
               if (result && result.state === 'expired') { stopPairing(); return; }
               pairingTimer = setTimeout(poll, 1500);
@@ -1237,6 +1246,7 @@
   function connectStream(address) {
     address = address.replace(/\/+$/, '');
     pairingActive = false;
+    setPairing('');
     if (pausedByHidden) {
       server = address;
       return;
