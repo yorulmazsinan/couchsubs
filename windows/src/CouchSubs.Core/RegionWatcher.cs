@@ -475,7 +475,8 @@ public sealed partial class RegionWatcher
                                             bool auto = false)
     {
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame);
-        var lines = marked.WithoutButtonPrompts().WithoutOcrNoise(phone).Lines
+        // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
+        var lines = (auto ? marked : marked.WithoutButtonPrompts()).WithoutOcrNoise(phone).Lines
             .Where(line => ScreenTranslation.IsWords(line.Text))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
@@ -493,7 +494,7 @@ public sealed partial class RegionWatcher
         IReadOnlyList<Block>? blocks = null;
         var key = TextKey(paragraphs);
         var groups = (phone || auto || lines.Count > 1) && boxes.Count == lines.Count
-            ? (phone ? GamePhoneText.Groups(reading) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
+            ? (phone ? GamePhoneText.Groups(reading) : auto ? AutoGroups(lines, menuRows) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
         if (((phone || auto) && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
         {
             paragraphs = [.. groups.SelectMany(group => group.Paragraphs)];
@@ -514,6 +515,7 @@ public sealed partial class RegionWatcher
                 list.Add(new Block(start, group.Paragraphs.Count, group.Box.PlacedIn(place), group.LineHeight * height, style, look));
                 start += group.Paragraphs.Count;
             }
+            if (auto && !phone) list = AlignByNeighbours(list);
             blocks = list;
             key = TextKey(paragraphs) + "|" + string.Join(',', list.Select(block => block.Count));
         }
@@ -522,6 +524,48 @@ public sealed partial class RegionWatcher
         if (phone && paragraphs.Count > 0)
             key = string.Join('\n', paragraphs) + (blocks is null ? "" : "|" + string.Join(',', blocks.Select(block => block.Count)));
         return new Candidate(paragraphs, box, lineHeight, key, cut, blocks) { Text = TextKey(paragraphs) };
+    }
+
+    /// <summary>
+    /// Otomatik alanın grupları: kısa etiket satırları (menü satırı, tuş etiketi) her biri kendi bloğudur; stili (seçili
+    /// satırın ters rengi) satır başına çıkarılır. Uzun yazı satırları eskisi gibi paragraflara toplanır.
+    /// </summary>
+    private static List<ScreenTranslation.Group> AutoGroups(List<TextLine> lines, bool menuRows)
+    {
+        var shortLines = lines.Where(IsLabelLine).ToList();
+        var prose = lines.Where(line => !IsLabelLine(line)).ToList();
+        var groups = prose.Count == 0 ? [] : ScreenTranslation.GroupsFromLines(prose, menuRows).ToList();
+        foreach (var line in shortLines)
+        {
+            var icons = ScreenTranslation.ParagraphIcons([line]);
+            groups.Add(new ScreenTranslation.Group(ScreenTranslation.Paragraphs([line]), line.Box!.Value,
+                line.Box!.Value.Bottom - line.Box!.Value.Top, icons.Any(list => list.Count > 0) ? icons : null));
+        }
+        return [.. groups.OrderBy(group => group.Box.Top).ThenBy(group => group.Box.Left)];
+    }
+
+    private static bool IsLabelLine(TextLine line) =>
+        line.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length <= ScreenTranslation.MenuLabelWords;
+
+    /// <summary>
+    /// Tek satırlık etiketin hizası komşularından: sağ kenarı başka etiketlerle hizalıysa (kol resminin solundaki tuş
+    /// etiketleri) sağa, sol kenarı hizalıysa sola, ortası hizalıysa ortaya yaslıdır.
+    /// </summary>
+    private static List<Block> AlignByNeighbours(List<Block> blocks)
+    {
+        const double tolerance = 0.012;
+        var result = new List<Block>(blocks.Count);
+        foreach (var block in blocks)
+        {
+            if (block.Look is not { } look || block.Count > 1) { result.Add(block); continue; }
+            var others = blocks.Where(other => !ReferenceEquals(other, block)).ToList();
+            var left = others.Count(other => Math.Abs(other.Box.Left - block.Box.Left) < tolerance);
+            var right = others.Count(other => Math.Abs(other.Box.Right - block.Box.Right) < tolerance);
+            var center = others.Count(other => Math.Abs((other.Box.Left + other.Box.Right) / 2 - (block.Box.Left + block.Box.Right) / 2) < tolerance);
+            var align = right > left && right >= center ? "right" : center > left && center > right ? "center" : left > 0 ? "left" : look.Align;
+            result.Add(block with { Look = look with { Align = align } });
+        }
+        return result;
     }
 
     private static bool Inside(TextBox line, TextBox group)
@@ -558,7 +602,11 @@ public sealed partial class RegionWatcher
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
             var moved = state.RenderedBlocks is { } rendered && candidate.Blocks is { } current
                 ? rendered.Select(block => (Group: block.Group, Item: block.Item with
-                    { Box = current[block.Group].Box, LineHeight = current[block.Group].LineHeight })).ToList()
+                    {
+                        Box = current[block.Group].Box, LineHeight = current[block.Group].LineHeight,
+                        // Seçim gezince yalnız renkler değişir: çeviri yeniden istenmez, zemin/yazı rengi güncellenir.
+                        Style = current[block.Group].Style ?? block.Item.Style, Look = current[block.Group].Look ?? block.Item.Look,
+                    })).ToList()
                 : null;
             server.SendRegion(area.Id, state.RenderedText, candidate.Box, candidate.LineHeight, state.RenderedIcons,
                               moved?.Select(block => block.Item).ToList());
@@ -793,6 +841,7 @@ public sealed partial class RegionWatcher
     /// </param>
     private async Task<Translation> TranslateAsync(IReadOnlyList<string> paragraphs, bool labelsFirst = false)
     {
+        if (labelsFirst) return await TranslateLabelsAsync(paragraphs).ConfigureAwait(false);
         // Simgeler paket aramasında yok sayılır, çeviride uydurma adlarla korunur (IconText).
         var prepared = paragraphs.Select(IconText.Protect).ToList();
         string?[] result = [.. paragraphs.Select(paragraph =>
@@ -812,6 +861,87 @@ public sealed partial class RegionWatcher
         return new Translation(result, readyCount);
     }
 
+    /// <summary>Oturum terim sözlüğü: otomatik alanlarda çevrilen etiket ve parçalar (kaynak → çeviri).</summary>
+    private readonly Dictionary<string, string> terms = new(StringComparer.Ordinal);
+    private const int TermLimit = 4096;
+
+    /// <summary>Etiketin çevrilecek parçası: önündeki ve ardındaki tuş adları ("(L1)", "(△)") olduğu gibi kalır.</summary>
+    private sealed record LabelPart(string Prefix, string Core, string Suffix)
+    {
+        public string? Translation { get; set; }
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?:(?:\((?:[LR][1-3]?|[△□○✕])\)|[△□○✕]|[LR][1-3](?=\s))\s*)+")]
+    private static partial System.Text.RegularExpressions.Regex KeyPrefix();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?:\s*(?:\((?:[LR][1-3]?|[△□○✕])\)|[△□○✕]|(?<=\s)[LR][1-3]))+$")]
+    private static partial System.Text.RegularExpressions.Regex KeySuffix();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s+\d+\s*/\s*\d+$")]
+    private static partial System.Text.RegularExpressions.Regex Counter();
+
+    internal static IReadOnlyList<(string Prefix, string Core, string Suffix)> SplitLabel(string paragraph)
+    {
+        // Simgesi kareden kesilmiş parça bölünmez (simge imleri çeviride korunur).
+        if (paragraph.Contains(ButtonIcons.Marker)) return [("", paragraph, "")];
+        // Sondaki sayaç ("Default 1 / 3") dokunulmaz; " / " yalnız iki yanında harf varsa ayırıcıdır.
+        var counter = Counter().Match(paragraph).Value;
+        var body = paragraph[..^counter.Length];
+        var pieces = body.Split(" / ");
+        if (pieces.Any(piece => !piece.Any(char.IsLetter))) pieces = [body];
+        var result = pieces.Select(part =>
+        {
+            var prefix = KeyPrefix().Match(part).Value;
+            var rest = part[prefix.Length..];
+            var suffix = KeySuffix().Match(rest).Value;
+            return (prefix, rest[..^suffix.Length], suffix);
+        }).ToList();
+        if (counter.Length > 0) result[^1] = result[^1] with { Item3 = result[^1].Item3 + counter };
+        return result;
+    }
+
+    /// <summary>
+    /// Otomatik alanın çevirisi (yoğun menüler): her paragraf " / " ayırıcısından parçalara bölünür, tuş adları ve sayaçlar
+    /// olduğu gibi kalır. Parçalar önce oturum terim sözlüğünden, arayüz sözlüğünden ve paketten; kalanların hepsi tek
+    /// toplu istekte motordan çevrilir ve terim sözlüğüne yazılır (aynı ekrana dönüşte anında, aynı etiket hep aynı).
+    /// </summary>
+    private async Task<Translation> TranslateLabelsAsync(IReadOnlyList<string> paragraphs)
+    {
+        var parts = paragraphs.Select(paragraph => SplitLabel(paragraph).Select(part => new LabelPart(part.Prefix, part.Core, part.Suffix)).ToList()).ToList();
+        var pending = new List<LabelPart>();
+        foreach (var part in parts.SelectMany(list => list))
+        {
+            var core = part.Core.Trim();
+            if (!core.Any(char.IsLetter)) { part.Translation = part.Core; continue; }
+            string? known;
+            lock (terms) terms.TryGetValue(core, out known);
+            known ??= (TranslatesUiCommands ? UiCommands.TranslateLabel(core) : null)
+                      ?? PackLookup?.Invoke(IconText.Plain(core))?.Text
+                      ?? (SkipsTurkish && TurkishText.IsSure(core) ? core : null);
+            if (known is not null) part.Translation = known;
+            else pending.Add(part);
+        }
+        var unique = pending.Select(part => part.Core.Trim()).Distinct().ToList();
+        if (unique.Count > 0)
+        {
+            var protectedTexts = unique.Select(text => IconText.Protect(text)).ToList();
+            var translated = await translator.TranslateAllAsync([.. protectedTexts.Select(item => item.Text)]).ConfigureAwait(false);
+            var map = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var i = 0; i < unique.Count && i < translated.Count; i++)
+                if (translated[i]?.Trim() is { Length: > 0 } text) map[unique[i]] = text;
+            lock (terms)
+            {
+                if (terms.Count + map.Count > TermLimit) terms.Clear();
+                foreach (var (source, text) in map) terms[source] = text;
+            }
+            foreach (var part in pending) part.Translation = map.GetValueOrDefault(part.Core.Trim());
+        }
+        string?[] result = [.. parts.Select(list => list.Any(part => part.Translation is null) ? null
+            : string.Join(" / ", list.Select(part => part.Prefix + part.Translation + part.Suffix)))];
+        var readyCount = parts.Count(list => list.All(part => !pending.Contains(part)));
+        return new Translation(result, readyCount);
+    }
+
     /// <summary>Çeviri durdu ya da hat yeniden kuruldu: süren tur bırakılır, TV'deki ek alan kutuları kalkar.</summary>
     public void Reset()
     {
@@ -826,6 +956,7 @@ public sealed partial class RegionWatcher
             latest = null;
         }
         lock (translations) translations.Clear();
+        lock (terms) terms.Clear();
         if (anyShown) server.ClearRegions();
     }
 }
