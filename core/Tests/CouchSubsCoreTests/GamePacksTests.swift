@@ -368,9 +368,15 @@ struct FuzzyVectors: Decodable {
     struct Signature: Decodable { let input: String; let folded: String; let damaged: Bool; let length: Int?; let bits: Int?; let bloom: String? }
     struct Pair: Decodable { let query: String; let entry: String; let bits: Int; let similarity: Double }
     struct Loose: Decodable { let input: String; let label: String?; let body: String? }
+    struct Edit: Decodable { let input: String; let count: Int; let contains: [String]; let first: [String]; let last: [String] }
+    struct Evidence: Decodable { let both: Int; let inQuery: Int; let inEntry: Int; let bits: Int; let query: Double; let entry: Double }
+    struct Thresholds: Decodable { let minimumEvidence: Double; let cleanMissing: Int; let editLength: [Int] }
     let signatures: [Signature]
     let similarities: [Pair]
     let looseLabels: [Loose]
+    let edits: [Edit]
+    let evidence: [Evidence]
+    let thresholds: Thresholds
 
     static func load() throws -> FuzzyVectors {
         try JSONDecoder().decode(FuzzyVectors.self, from: Data(contentsOf: fixture("fuzzy-vectors.json")))
@@ -378,6 +384,51 @@ struct FuzzyVectors: Decodable {
 }
 
 final class PackFuzzyTests: XCTestCase {
+    /// İkinci tur düzeltmeler (yutulan harf, benzeyen harf, iki karışıklık) Android ve Windows'la aynı küme; arama
+    /// anahtarları metinlerinkiyle aynı.
+    func testEditVectors() throws {
+        let vectors = try FuzzyVectors.load()
+        XCTAssertEqual(vectors.thresholds.editLength, [PackFuzzy.editLength.minimum, PackFuzzy.editLength.maximum,
+                                                       PackFuzzy.editLength.pairs])
+        XCTAssertEqual(vectors.thresholds.minimumEvidence, PackFuzzy.minimumEvidence)
+        XCTAssertEqual(vectors.thresholds.cleanMissing, PackFuzzy.cleanMissing)
+        XCTAssertGreaterThanOrEqual(vectors.edits.count, 5)
+        for vector in vectors.edits {
+            let edits = PackFuzzy.edits(vector.input)
+            XCTAssertEqual(edits.count, vector.count, vector.input)
+            XCTAssertEqual(Array(edits.prefix(5)), vector.first, vector.input)
+            XCTAssertEqual(Array(edits.suffix(5)), vector.last, vector.input)
+            for expected in vector.contains { XCTAssertTrue(edits.contains(expected), expected) }
+            XCTAssertEqual(PackFuzzy.editKeys(vector.input), Set(edits.compactMap(PackKey.canonNumber)), vector.input)
+            XCTAssertTrue(Set(edits).isDisjoint(with: PackFuzzy.variants(vector.input)), vector.input)
+        }
+        for vector in vectors.evidence {
+            let z = PackFuzzy.evidence(both: vector.both, inQuery: vector.inQuery, inEntry: vector.inEntry, bits: vector.bits)
+            XCTAssertEqual(z.query, vector.query, accuracy: 1e-9)
+            XCTAssertEqual(z.entry, vector.entry, accuracy: 1e-9)
+        }
+    }
+
+    /// Ortak deneme paketi (Fixtures/pack-fuzzy.json.gz, paket betiğiyle yapıldı): tek harf hatası, yutulan harf, iki
+    /// karışıklık, konuşmacı adı ve OCR izli uzun satır bulunur; pakette olmayan benzer satırlar ("Who sent him?",
+    /// "We need to talk about your sister.") başka satıra eşlenmez. Android ve Windows aynı vakalarla aynı sonucu verir.
+    func testSharedFuzzyPackCases() throws {
+        struct Cases: Decodable {
+            struct Case: Decodable { let screen: String; let turkish: String? }
+            let warmUp: String
+            let cases: [Case]
+        }
+        let fixtures = try JSONDecoder().decode(Cases.self, from: Data(contentsOf: fixture("pack-fuzzy-cases.json")))
+        let directory = temporaryDirectory()
+        try FileManager.default.copyItem(at: fixture("pack-fuzzy.json.gz"), to: directory.appendingPathComponent("pack-fuzzy.json.gz"))
+        let library = GamePackLibrary(bundled: directory, user: nil)
+        XCTAssertNotNil(library.match(fixtures.warmUp))
+        XCTAssertEqual(library.searchScope, "fuzzy-test")
+        for item in fixtures.cases {
+            XCTAssertEqual(library.match(item.screen)?.text, item.turkish, item.screen)
+        }
+    }
+
     /// İmza Windows ve paket betiğiyle bit bit aynı.
     func testSignatureVectors() throws {
         let vectors = try FuzzyVectors.load()

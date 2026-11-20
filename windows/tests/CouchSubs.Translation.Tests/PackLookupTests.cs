@@ -161,6 +161,26 @@ public class PackLookupTests
     }
 
     /// <summary>
+    /// Ortak deneme paketi (Fixtures/pack-fuzzy.json.gz, paket betiğiyle yapıldı): Mac ve Android'le aynı vakalar, aynı
+    /// sonuç. Tek harf hatası, yutulan harf, iki karışıklık, konuşmacı adı ve OCR izli uzun satır bulunur; pakette olmayan
+    /// benzer satırlar başka satıra eşlenmez.
+    /// </summary>
+    [Fact]
+    public void SharedFuzzyPackCases()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Fixture("pack-fuzzy-cases.json")));
+        var library = new GamePackLibrary(() => [("pack-fuzzy.json.gz", File.ReadAllBytes(Fixture("pack-fuzzy.json.gz")))], null);
+        Assert.NotNull(PackLookup.Match(library, document.RootElement.GetProperty("warmUp").GetString()!));
+        Assert.Equal("fuzzy-test", library.SearchScope);
+        foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            var screen = item.GetProperty("screen").GetString()!;
+            var expected = item.GetProperty("turkish").ValueKind == JsonValueKind.Null ? null : item.GetProperty("turkish").GetString();
+            Assert.True(expected == PackLookup.Match(library, screen)?.Text, $"{screen} => {PackLookup.Match(library, screen)?.Text} (beklenen {expected})");
+        }
+    }
+
+    /// <summary>
     /// Kullanıcılardan gelen gerçek ıskalamalar (Mafia: The Old Country, OCR hatalı, parça parça ve etiketi bozuk
     /// satırlar): paket betiğinin Python karşılığıyla ve Mac'le aynı Türkçe ya da hiç eşleşme (başka oyunların satırları).
     /// </summary>

@@ -60,6 +60,17 @@ public static class PackKey
         return Convert.ToHexStringLower(hash, 0, 8);
     }
 
+    /// <summary>
+    /// Zaten canon olan metnin UTF-8 baytlarından anahtar sayısı: <c>Number(Key(canon))</c> ile aynı, onaltılık yazıya
+    /// çevirmeden (düzeltme adaylarında binlerce kez çağrılır). Bayt boş olmamalı.
+    /// </summary>
+    public static ulong CanonNumber(ReadOnlySpan<byte> canon)
+    {
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(canon, hash);
+        return System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(hash);
+    }
+
     /// <summary>Anahtarın sayı hâli (sözlükte daha az yer tutar); geçersizse null.</summary>
     public static ulong? Number(string key) =>
         key.Length == 16 && ulong.TryParse(key, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
@@ -429,20 +440,25 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
     }
 
     /// <summary>
-    /// Tek OCR düzeltmesiyle (<see cref="PackFuzzy.Variants"/>) oynanan oyunun paketinde tam bulunan satırın Türkçesi;
-    /// düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa null.
+    /// Tek OCR düzeltmesiyle (<see cref="PackFuzzy.Variants"/>, hiçbiri tutmazsa <see cref="PackFuzzy.EditKeys"/>) oynanan
+    /// oyunun paketinde tam bulunan satırın Türkçesi; aynı turdaki düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa null.
     /// </summary>
     private static string? Corrected(string text, GamePack pack, Func<ulong, string?> translation)
     {
-        string? found = null;
-        foreach (var variant in PackFuzzy.Variants(text))
+        IEnumerable<ulong> First() =>
+            PackFuzzy.Variants(text).Select(variant => PackKey.CanonNumber(Encoding.UTF8.GetBytes(variant)));
+        foreach (var round in new Func<IEnumerable<ulong>>[] { First, () => PackFuzzy.EditKeys(text) })
         {
-            if (PackKey.Key(variant) is not { } key || PackKey.Number(key) is not { } number || !Contains(pack.Keys, number)
-                || translation(number) is not { } turkish) continue;
-            if (found is not null && found != turkish) return null;
-            found = turkish;
+            string? found = null;
+            foreach (var number in round())
+            {
+                if (!Contains(pack.Keys, number) || translation(number) is not { } turkish) continue;
+                if (found is not null && found != turkish) return null;
+                found = turkish;
+            }
+            if (found is not null) return found;
         }
-        return found;
+        return null;
     }
 
     /// <summary>Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa null.</summary>

@@ -1,0 +1,81 @@
+{
+ "warmUp": "Give me the keys.",
+ "cases": [
+  {
+   "screen": "Give me the keys.",
+   "turkish": "Anahtarları ver."
+  },
+  {
+   "screen": "Somebody caII an ambulance!",
+   "turkish": "Biri ambulans çağırsın!"
+  },
+  {
+   "screen": "I cant believe you did that.",
+   "turkish": "Bunu yaptığına inanamıyorum."
+  },
+  {
+   "screen": "Wach out for the guards.",
+   "turkish": "Muhafızlara dikkat et."
+  },
+  {
+   "screen": "The dal is off.",
+   "turkish": "Anlaşma iptal."
+  },
+  {
+   "screen": "Pull ovr right here.",
+   "turkish": "Tam burada kenara çek."
+  },
+  {
+   "screen": "Who sent yov?",
+   "turkish": "Seni kim gönderdi?"
+  },
+  {
+   "screen": "You owe me a favar.",
+   "turkish": "Bana bir iyilik borçlusun."
+  },
+  {
+   "screen": "Stay cIose and keep qviet.",
+   "turkish": "Yakında dur ve sessiz ol."
+  },
+  {
+   "screen": "LUCIA: Drop the gun, now!",
+   "turkish": "LUCIA: Silahı bırak, hemen!"
+  },
+  {
+   "screen": "JASON: Wach out for the guards.",
+   "turkish": "JASON: Muhafızlara dikkat et."
+  },
+  {
+   "screen": "Let's get 0ut of here bef0re the c0ps show up.",
+   "turkish": "Polisler gelmeden buradan gidelim."
+  },
+  {
+   "screen": "We need to ta1k about y0ur br0ther.",
+   "turkish": "Kardeşin hakkında konuşmamız lazım."
+  },
+  {
+   "screen": "Give me the money.",
+   "turkish": null
+  },
+  {
+   "screen": "Who sent him?",
+   "turkish": null
+  },
+  {
+   "screen": "I just want to go to bed.",
+   "turkish": null
+  },
+  {
+   "screen": "The boat leaves at noon tomorrow.",
+   "turkish": null
+  },
+  {
+   "screen": "Nobody trusts anyone here.",
+   "turkish": null
+  },
+  {
+   "screen": "We need to talk about your sister.",
+   "turkish": null
+  }
+ ]
+}

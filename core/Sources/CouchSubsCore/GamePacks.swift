@@ -39,6 +39,20 @@ public enum PackKey {
         return SHA256.hash(data: Data(canon.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Zaten canon olan metnin (`canon`) anahtarı sayı olarak: `number(key(canon))` ile aynı, onaltılık yazıya
+    /// çevirmeden (düzeltme adaylarında binlerce kez çağrılır). Boşsa nil.
+    static func canonNumber(_ canon: String) -> UInt64? {
+        canonNumber(bytes: Array(canon.utf8))
+    }
+
+    /// `canonNumber`, canon metnin UTF-8 baytlarından.
+    static func canonNumber(bytes: [UInt8]) -> UInt64? {
+        guard !bytes.isEmpty else { return nil }
+        return SHA256.hash(data: bytes).withUnsafeBytes { raw in
+            raw.prefix(8).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+        }
+    }
+
     /// Anahtarın sayı hâli (sözlükte daha az yer tutar); geçersizse nil.
     public static func number(_ key: String) -> UInt64? {
         guard key.utf8.count == 16 else { return nil }
@@ -353,17 +367,21 @@ public final class GamePackLibrary: @unchecked Sendable {
         })
     }
 
-    /// Tek OCR düzeltmesiyle (`PackFuzzy.variants`) oynanan oyunun paketinde tam bulunan satırın Türkçesi; düzeltmelerin
-    /// hepsi aynı Türkçeye çıkmıyorsa nil.
+    /// Tek OCR düzeltmesiyle (`PackFuzzy.variants`, hiçbiri tutmazsa `PackFuzzy.edits`) oynanan oyunun paketinde tam
+    /// bulunan satırın Türkçesi; aynı turdaki düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa nil.
     private static func corrected(_ line: String, in pack: Searchable, translation: (UInt64) -> String?) -> String? {
-        var found: String?
-        for variant in PackFuzzy.variants(line) {
-            guard let number = PackKey.key(variant).flatMap(PackKey.number), pack.contains(number),
-                  let turkish = translation(number) else { continue }
-            if let earlier = found, earlier != turkish { return nil }
-            found = turkish
+        let rounds: [() -> [UInt64]] = [{ PackFuzzy.variants(line).compactMap(PackKey.canonNumber) },
+                                        { Array(PackFuzzy.editKeys(line)) }]
+        for round in rounds {
+            var found: String?
+            for number in round() {
+                guard pack.contains(number), let turkish = translation(number) else { continue }
+                if let earlier = found, earlier != turkish { return nil }
+                found = turkish
+            }
+            if found != nil { return found }
         }
-        return found
+        return nil
     }
 
     /// Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa nil.

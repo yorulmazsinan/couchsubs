@@ -59,10 +59,9 @@ public enum PackFuzzy {
             let value = String(view)
             if !value.isEmpty, !value.hasPrefix(" "), !value.hasSuffix(" "), !value.contains("  ") { output.insert(value) }
         }
-        let confusions = Self.confusions.map { (Array($0.read.unicodeScalars), Array($0.real.unicodeScalars)) }
         let space: [Unicode.Scalar] = [" "]
         for index in canon.indices {
-            for (read, real) in confusions where index + read.count <= canon.count && Array(canon[index..<(index + read.count)]) == read {
+            for (read, real) in confusionScalars where starts(canon, at: index, with: read) {
                 add(canon[..<index], real[...], canon[(index + read.count)...])
             }
             if canon[index] == " " {
@@ -74,6 +73,108 @@ public enum PackFuzzy {
         }
         output.remove(String(String.UnicodeScalarView(canon)))
         return output.sorted()
+    }
+
+    /// İkinci tur düzeltmelerin en kısa ve en uzun canon satırı ve iki karışıklığın birden deneneceği en uzun satır.
+    static let editLength = (minimum: 10, maximum: 40, pairs: 32)
+    private static let alphabet = Array("abcdefghijklmnopqrstuvwxyz".utf8)
+    /// Yazı tanımanın birbirine benzettiği harfler (canon, küçük harf): okunan → asıl olabilecek. İkinci tur
+    /// düzeltmede bir harf yalnız bunlardan birine döner: herhangi bir harfe dönmek "she" → "the", "honey" → "money"
+    /// gibi başka gerçek satırlara çıkıyordu.
+    static let lookalikes: [String: String] = [
+        "a": "oecusdq", "b": "hkdlp", "c": "eoa", "d": "aobq", "e": "coa", "f": "tlir", "g": "qyp", "h": "bnk",
+        "i": "ljtfr", "j": "il", "k": "hbx", "l": "ijtf", "m": "n", "n": "mhru", "o": "aecudq", "p": "qgb", "q": "gpo",
+        "r": "nfti", "s": "z", "t": "flir", "u": "vnoa", "v": "uyw", "w": "v", "x": "ky", "y": "vgx", "z": "s",
+        "0": "o", "1": "il", "5": "s", "6": "b", "8": "b", "9": "g",
+    ]
+    private static let lookalikeBytes: [[UInt8]] = {
+        var table = [[UInt8]](repeating: [], count: 128)
+        for (read, real) in lookalikes { table[Int(read.utf8.first!)] = Array(real.utf8) }
+        return table
+    }()
+
+    /// İkinci tur düzeltmeler: `variants` pakette hiçbir satıra çıkmazsa denenir. Bir harf benzediği bir harf olur
+    /// (`lookalikes`), yutulmuş bir harf eklenir ("abut" → "about") ya da `editLength.pairs`ten kısa satırda iki
+    /// karışıklık birden düzelir ("l'm rnad" → "i'm mad"). Çok aday ürettikleri için yalnız `editLength` sınırındaki
+    /// satırlarda; `variants`taki ve satırın kendisi olan hâller yoktur. Sıralı canon metinler (denemeler için;
+    /// arama `editKeys` ile yapılır).
+    static func edits(_ text: String) -> [String] {
+        var output = Set<String>()
+        forEachEdit(text) { output.insert(String(decoding: $0, as: UTF8.self)) }
+        output.subtract(variants(text))
+        output.remove(PackKey.canon(text))
+        return output.sorted()
+    }
+
+    /// `edits`in anahtarları (`PackKey.canonNumber`), metne çevirmeden.
+    static func editKeys(_ text: String) -> Set<UInt64> {
+        var output = Set<UInt64>()
+        forEachEdit(text) { if let key = PackKey.canonNumber(bytes: $0) { output.insert(key) } }
+        for variant in variants(text) { if let key = PackKey.canonNumber(variant) { output.remove(key) } }
+        if let key = PackKey.canonNumber(PackKey.canon(text)) { output.remove(key) }
+        return output
+    }
+
+    /// İkinci tur adaylar, UTF-8 baytlarıyla (yinelenebilir). Değişen ve eklenen harfler ASCII'dir; UTF-8'de ASCII
+    /// baytı çok baytlı bir harfin içinde geçmez, bu yüzden karışıklıklar bayt bayt aranabilir.
+    private static func forEachEdit(_ text: String, _ body: ([UInt8]) -> Void) {
+        let canon = PackKey.canon(text)
+        let scalars = Array(canon.unicodeScalars)
+        guard scalars.count >= editLength.minimum, scalars.count <= editLength.maximum else { return }
+        let bytes = Array(canon.utf8)
+        // offsets[i]: i. harfin bayt konumu; offsets[count]: bayt sayısı.
+        var offsets = [Int](repeating: bytes.count, count: scalars.count + 1)
+        var position = 0
+        for (index, scalar) in scalars.enumerated() {
+            offsets[index] = position
+            position += String(scalar).utf8.count
+        }
+        var buffer = [UInt8]()
+        buffer.reserveCapacity(bytes.count + 8)
+        for index in 0...scalars.count {
+            let at = offsets[index]
+            for letter in alphabet {
+                buffer.removeAll(keepingCapacity: true)
+                buffer.append(contentsOf: bytes[..<at])
+                buffer.append(letter)
+                buffer.append(contentsOf: bytes[at...])
+                body(buffer)
+            }
+            guard index < scalars.count, scalars[index].isASCII else { continue }
+            let next = offsets[index + 1]
+            for letter in lookalikeBytes[Int(scalars[index].value)] {
+                buffer.removeAll(keepingCapacity: true)
+                buffer.append(contentsOf: bytes[..<at])
+                buffer.append(letter)
+                buffer.append(contentsOf: bytes[next...])
+                body(buffer)
+            }
+        }
+        guard scalars.count <= editLength.pairs else { return }
+        for variant in variants(text) {
+            let bytes = Array(variant.utf8)
+            for index in bytes.indices {
+                for (read, real) in confusionBytes where starts(bytes, at: index, with: read) {
+                    buffer.removeAll(keepingCapacity: true)
+                    buffer.append(contentsOf: bytes[..<index])
+                    buffer.append(contentsOf: real)
+                    buffer.append(contentsOf: bytes[(index + read.count)...])
+                    body(buffer)
+                }
+            }
+        }
+    }
+
+    private static let confusionBytes = confusions.map { (Array($0.read.utf8), Array($0.real.utf8)) }
+
+    private static let confusionScalars = confusions.map { (Array($0.read.unicodeScalars), Array($0.real.unicodeScalars)) }
+
+    /// `scalars`ın `index`ten başlayan kısmı `prefix` ile mi başlıyor.
+    @inline(__always)
+    private static func starts<T: Equatable>(_ scalars: [T], at index: Int, with prefix: [T]) -> Bool {
+        guard index + prefix.count <= scalars.count else { return false }
+        for offset in prefix.indices where scalars[index + offset] != prefix[offset] { return false }
+        return true
     }
 
     /// canon metin, boşluksuz ve OCR'ın karıştırdığı harfler birleşmiş.
@@ -124,6 +225,26 @@ public enum PackFuzzy {
             inEntry += e.nonzeroBitCount
         }
         return score(both: both, inQuery: inQuery, inEntry: inEntry, bits: bits)
+    }
+
+    /// Kabul edilen bulanık adayda ortak bitler rastlantının en az bu kadar standart sapma üstünde olmalı
+    /// (`evidence`). Kısa satırın 64 bitlik imzasında yüz binlerce aday arasında rastlantıyla eşiği geçen ilgisiz
+    /// satır çıkıyordu ("No n0, the wealth was all Mother's." → "He could use some clothes.").
+    static let minimumEvidence = 5.0
+    /// OCR izi olmayan okumada tek yönlü kapsamada kısa tarafın adayda olmayan en çok bit sayısı: temiz okuma ya
+    /// uzun satırın tam bir parçasıdır ya da başka bir satırdır ("You weren't supposed to see that." → "So that's
+    /// the something you weren't supposed to see, huh?" değil).
+    static let cleanMissing = 0
+
+    /// Ortak bitlerin rastlantıya göre ne kadar fazla olduğu (standart sapma cinsinden), iki yönden: sorgunun bitleri
+    /// adayın doluluğuyla ve adayın bitleri sorgunun doluluğuyla rastlantıda ne kadar örtüşürdü.
+    static func evidence(both: Int, inQuery: Int, inEntry: Int, bits: Int) -> (query: Double, entry: Double) {
+        let fillQuery = Double(inQuery) / Double(bits), fillEntry = Double(inEntry) / Double(bits)
+        func z(_ count: Int, _ fill: Double) -> Double {
+            let mean = Double(count) * fill, spread = (Double(count) * fill * (1 - fill)).squareRoot()
+            return spread > 0 ? (Double(both) - mean) / spread : 0
+        }
+        return (z(inQuery, fillEntry), z(inEntry, fillQuery))
     }
 
     /// Benzerlik, bit sayılarından (ortak, sorgudaki, adaydaki).
@@ -397,7 +518,8 @@ struct PackFuzzyIndex: Sendable {
         let scalars = PackFuzzy.folded(text)
         guard scalars.count >= PackFuzzy.minLength, !keys.isEmpty else { return nil }
         let length = min(scalars.count, 255)
-        let floor = PackFuzzy.required(length: length, damaged: PackFuzzy.damaged(text)) - PackFuzzy.margin
+        let damaged = PackFuzzy.damaged(text)
+        let floor = PackFuzzy.required(length: length, damaged: damaged) - PackFuzzy.margin
         let need = floor + PackFuzzy.margin
         let hashes = PackFuzzy.trigramHashes(scalars)
         // Sorgunun üç boydaki Bloom'u yan yana: 64 bit [0], 128 bit [1, 2], 256 bit [3...6].
@@ -412,8 +534,8 @@ struct PackFuzzyIndex: Sendable {
         // `inner - penalty`.
         let wide = length >= contain.minLength
             ? max(contain.minLength, length * 11 / 20)...min(255, length * 5 / 2) : near
-        var close: [(score: Double, key: UInt64)] = []
-        var contained: [(score: Double, key: UInt64)] = []
+        var close: [(score: Double, key: UInt64, z: Double)] = []
+        var contained: [(score: Double, key: UInt64, z: Double)] = []
         /// Okumanın yan cümle üçlüleri (`PackFuzzy.clauseHashes`); ilk fazlalıklı adayda hesaplanır.
         var clauses: [[[UInt64]]]?
         let nearLower = near.lowerBound, nearUpper = near.upperBound
@@ -444,7 +566,10 @@ struct PackFuzzyIndex: Sendable {
                 let inEntry = Int(ones[index])
                 if !wideOn {
                     let score = PackFuzzy.score(both: both, inQuery: inQuery, inEntry: inEntry, bits: bits)
-                    if score >= floor { close.append((score, keys[index])) }
+                    if score >= floor {
+                        let z = PackFuzzy.evidence(both: both, inQuery: inQuery, inEntry: inEntry, bits: bits)
+                        close.append((score, keys[index], min(z.query, z.entry)))
+                    }
                     continue
                 }
                 // Kısa tarafın bitlerinin en az %90'ı ortak olmalı (hızlı eleme).
@@ -454,13 +579,17 @@ struct PackFuzzyIndex: Sendable {
                 let (inner, outer, least) = entryLength > length
                     ? (cover.query, cover.entry, contain.partial) : (cover.entry, cover.query, contain.extra)
                 guard inner >= contain.inner, outer >= least, inner - contain.penalty >= floor else { continue }
+                // OCR izi olmayan okuma adayın içindeyse (ya da aday okumanın içindeyse) kısa tarafın bitlerinin
+                // hepsi ortak olmalı: temiz okuma ya tam parçadır ya da başka bir satırdır.
+                if !damaged, (entryLength > length ? inQuery : inEntry) - both > PackFuzzy.cleanMissing { continue }
                 // Fazlalıklı okumada her yan cümle adayda olmalı: ikinci bir altyazının cümlesi fazlalık sayılmaz.
                 if entryLength < length {
                     if clauses == nil { clauses = PackFuzzy.clauseHashes(text) }
                     if let clauses, !clauses.isEmpty,
                        !PackFuzzy.coversClauses(clauses, entry: w, offset: base, bits: bits, inEntry: inEntry) { continue }
                 }
-                contained.append((inner - contain.penalty, keys[index]))
+                let z = PackFuzzy.evidence(both: both, inQuery: inQuery, inEntry: inEntry, bits: bits)
+                contained.append((inner - contain.penalty, keys[index], entryLength > length ? z.query : z.entry))
             }
         }
         }
@@ -469,8 +598,9 @@ struct PackFuzzyIndex: Sendable {
         }
         }
         /// En iyi aday; eşiği geçmiyorsa nil, Türkçesi farklı rakibi yakınsa `.ambiguous`.
-        func pick(_ found: [(score: Double, key: UInt64)]) -> (key: UInt64?, ambiguous: Bool) {
+        func pick(_ found: [(score: Double, key: UInt64, z: Double)]) -> (key: UInt64?, ambiguous: Bool) {
             guard let best = found.max(by: { ($0.score, $0.key) < ($1.score, $1.key) }), best.score >= need else { return (nil, false) }
+            guard best.z >= PackFuzzy.minimumEvidence else { return (nil, true) }
             let turkish = translation(best.key)
             for other in found where other.key != best.key && other.score > best.score - PackFuzzy.margin
                 && translation(other.key) != turkish {

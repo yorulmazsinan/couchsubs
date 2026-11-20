@@ -256,7 +256,8 @@ public class GamePackTests
 
     /// <summary>
     /// GTA paketinde 8-15 harfli satır da bulanık bulunur ("I'II take it." → "I'll take it."); öteki oyunun paketinde aynı
-    /// imza olsa da 16 harf sınırı kalır.
+    /// imza olsa da 16 harf sınırı kalır. Bu okuma artık ikinci tur tam anahtar düzeltmesiyle (<see cref="PackFuzzy.Edits"/>:
+    /// "ii" → "il") öteki oyunlarda da bulunur.
     /// </summary>
     [Fact]
     public void ShortLinesAreFuzzyOnlyInTheGtaPack()
@@ -268,7 +269,7 @@ public class GamePackTests
             return library.Nearest("I'II take it.");
         }
         Assert.Equal("Alırım.", Near("Grand Theft Auto VI"));
-        Assert.Null(Near("Mafia: The Old Country"));
+        Assert.Equal("Alırım.", Near("Mafia: The Old Country"));
         Assert.Null(PackFuzzy.Signature("I'll take it."));
         Assert.NotNull(PackFuzzy.Signature("I'll take it.", PackFuzzy.ShortMinLength));
     }

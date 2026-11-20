@@ -66,6 +66,13 @@ object PackKey {
         return java.nio.ByteBuffer.wrap(digest.get()!!.digest(canon.toByteArray(Charsets.UTF_8))).long
     }
 
+    /** [canonNumber], canon metnin UTF-8 baytlarının ilk [size] tanesinden (boş olmamalı). */
+    fun canonNumber(bytes: ByteArray, size: Int): Long {
+        val sha = digest.get()!!
+        sha.update(bytes, 0, size)
+        return java.nio.ByteBuffer.wrap(sha.digest()).long
+    }
+
     /** Anahtarın sayı hâli (sözlükte daha az yer tutar); geçersizse null. */
     fun number(key: String): Long? {
         if (key.length != 16 || !key.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
@@ -423,18 +430,31 @@ class GamePackLibrary(
      */
     val scopeTitle: String? get() = synchronized(lock) { scope?.let { packs.getOrNull(it)?.first?.title } }
 
-    /** Tek OCR düzeltmesiyle [pack]'te tam bulunan satırın Türkçesi; düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa null. */
+    /**
+     * Tek OCR düzeltmesiyle ([PackFuzzy.variants], hiçbiri tutmazsa [PackFuzzy.editKeys]) [pack]'te tam bulunan satırın
+     * Türkçesi; aynı turdaki düzeltmelerin hepsi aynı Türkçeye çıkmıyorsa null.
+     */
     private fun corrected(text: String, pack: GamePack, current: List<Pair<GamePack, Boolean>>, only: Set<Int>?): PackMatch? {
-        var found: PackMatch? = null
-        for (variant in PackFuzzy.variants(text)) {
-            // ASCII canon metin yeniden sadeleştirilince değişmez; Normalizer'a gitmeden özetlenir.
-            val number = (if (variant.all { it.code < 128 }) PackKey.canonNumber(variant) else PackKey.keyNumber(variant)) ?: continue
-            if (!pack.contains(number)) continue
-            val turkish = lookup(current, number, only) ?: continue
-            if (found != null && found.text != turkish.text) return null
-            found = turkish
+        val rounds: List<() -> Collection<Long>> = listOf(
+            {
+                PackFuzzy.variants(text).mapNotNull { variant ->
+                    // ASCII canon metin yeniden sadeleştirilince değişmez; Normalizer'a gitmeden özetlenir.
+                    if (variant.all { it.code < 128 }) PackKey.canonNumber(variant) else PackKey.keyNumber(variant)
+                }
+            },
+            { PackFuzzy.editKeys(text) },
+        )
+        for (round in rounds) {
+            var found: PackMatch? = null
+            for (number in round()) {
+                if (!pack.contains(number)) continue
+                val turkish = lookup(current, number, only) ?: continue
+                if (found != null && found.text != turkish.text) return null
+                found = turkish
+            }
+            if (found != null) return found
         }
-        return found
+        return null
     }
 
     /**

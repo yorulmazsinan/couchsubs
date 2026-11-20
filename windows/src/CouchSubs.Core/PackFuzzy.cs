@@ -42,6 +42,33 @@ public static class PackFuzzy
     /// gösterilmez, satır cümle cümle aranır ya da motora gider.
     /// </summary>
     internal static readonly (int Letters, double Covered) SentenceCheck = (6, 30);
+    /// <summary>
+    /// Kabul edilen bulanık adayda ortak bitler rastlantının en az bu kadar standart sapma üstünde olmalı
+    /// (<see cref="Evidence"/>). Kısa satırın 64 bitlik imzasında yüz binlerce aday arasında rastlantıyla eşiği geçen
+    /// ilgisiz satır çıkıyordu ("No n0, the wealth was all Mother's." → "He could use some clothes."). Mac ve Android ile aynı.
+    /// </summary>
+    internal const double MinimumEvidence = 5;
+    /// <summary>
+    /// OCR izi olmayan okumada tek yönlü kapsamada kısa tarafın adayda olmayan en çok bit sayısı: temiz okuma ya uzun
+    /// satırın tam bir parçasıdır ya da başka bir satırdır.
+    /// </summary>
+    internal const int CleanMissing = 0;
+
+    /// <summary>
+    /// Ortak bitlerin rastlantıya göre ne kadar fazla olduğu (standart sapma cinsinden), iki yönden: sorgunun bitleri
+    /// adayın doluluğuyla ve adayın bitleri sorgunun doluluğuyla rastlantıda ne kadar örtüşürdü.
+    /// </summary>
+    internal static (double Query, double Entry) Evidence(int both, int inQuery, int inEntry, int bits)
+    {
+        double fillQuery = (double)inQuery / bits, fillEntry = (double)inEntry / bits;
+        double Z(int count, double fill)
+        {
+            double mean = count * fill, spread = Math.Sqrt(count * fill * (1 - fill));
+            return spread > 0 ? (both - mean) / spread : 0;
+        }
+        return (Z(inQuery, fillEntry), Z(inEntry, fillQuery));
+    }
+
     /// <summary>OCR izi olmayan satır neredeyse aynı olmalı: (uzunluk sınırı, en düşük benzerlik).</summary>
     private static readonly (int Limit, double Value)[] CleanMinimum = [(24, 90), (256, 80)];
     /// <summary>OCR izi olan satır: (uzunluk sınırı, en düşük benzerlik).</summary>
@@ -103,6 +130,108 @@ public static class PackFuzzy
         var sorted = output.ToList();
         sorted.Sort(StringComparer.Ordinal);
         return sorted;
+    }
+
+    /// <summary>İkinci tur düzeltmelerin en kısa ve en uzun canon satırı ve iki karışıklığın birden deneneceği en uzun satır.</summary>
+    internal static readonly (int Minimum, int Maximum, int Pairs) EditLength = (10, 40, 32);
+
+    /// <summary>
+    /// Yazı tanımanın birbirine benzettiği harfler (canon, küçük harf): okunan → asıl olabilecek. İkinci tur düzeltmede
+    /// bir harf yalnız bunlardan birine döner: herhangi bir harfe dönmek "honey" → "money" gibi başka gerçek satırlara
+    /// çıkıyordu. Mac ve Android ile aynı tablo.
+    /// </summary>
+    internal static readonly Dictionary<char, string> Lookalikes = new()
+    {
+        ['a'] = "oecusdq", ['b'] = "hkdlp", ['c'] = "eoa", ['d'] = "aobq", ['e'] = "coa", ['f'] = "tlir", ['g'] = "qyp",
+        ['h'] = "bnk", ['i'] = "ljtfr", ['j'] = "il", ['k'] = "hbx", ['l'] = "ijtf", ['m'] = "n", ['n'] = "mhru",
+        ['o'] = "aecudq", ['p'] = "qgb", ['q'] = "gpo", ['r'] = "nfti", ['s'] = "z", ['t'] = "flir", ['u'] = "vnoa",
+        ['v'] = "uyw", ['w'] = "v", ['x'] = "ky", ['y'] = "vgx", ['z'] = "s",
+        ['0'] = "o", ['1'] = "il", ['5'] = "s", ['6'] = "b", ['8'] = "b", ['9'] = "g",
+    };
+    private static readonly byte[][] LookalikeBytes = Enumerable.Range(0, 128)
+        .Select(code => Lookalikes.TryGetValue((char)code, out var real) ? Encoding.ASCII.GetBytes(real) : []).ToArray();
+    private static readonly byte[] Alphabet = Encoding.ASCII.GetBytes("abcdefghijklmnopqrstuvwxyz");
+    private static readonly (byte[] Read, byte[] Real)[] ConfusionBytes =
+        Confusions.Select(pair => (Encoding.ASCII.GetBytes(pair.Read), Encoding.ASCII.GetBytes(pair.Real))).ToArray();
+
+    /// <summary>
+    /// İkinci tur düzeltmeler: <see cref="Variants"/> pakette hiçbir satıra çıkmazsa denenir. Bir harf benzediği bir harf
+    /// olur (<see cref="Lookalikes"/>), yutulmuş bir harf eklenir ("abut" → "about") ya da <c>EditLength.Pairs</c>'ten kısa
+    /// satırda iki karışıklık birden düzelir ("l'm rnad" → "i'm mad"). Yalnız <see cref="EditLength"/> sınırındaki
+    /// satırlarda; <see cref="Variants"/>'taki ve satırın kendisi olan hâller yoktur. Sıralı canon metinler (denemeler
+    /// için; arama <see cref="EditKeys"/> ile). Mac'teki <c>PackFuzzy.edits</c> ile aynı küme.
+    /// </summary>
+    internal static List<string> Edits(string text)
+    {
+        var output = new HashSet<string>(StringComparer.Ordinal);
+        ForEachEdit(text, bytes => output.Add(Encoding.UTF8.GetString(bytes)));
+        output.ExceptWith(Variants(text));
+        output.Remove(PackKey.Canon(text));
+        var sorted = output.ToList();
+        sorted.Sort(StringComparer.Ordinal);
+        return sorted;
+    }
+
+    /// <summary><see cref="Edits"/>'in anahtarları (<see cref="PackKey.CanonNumber"/>), metne çevirmeden.</summary>
+    internal static HashSet<ulong> EditKeys(string text)
+    {
+        var output = new HashSet<ulong>();
+        ForEachEdit(text, bytes => output.Add(PackKey.CanonNumber(bytes)));
+        foreach (var variant in Variants(text)) output.Remove(PackKey.CanonNumber(Encoding.UTF8.GetBytes(variant)));
+        var canon = PackKey.Canon(text);
+        if (canon.Length > 0) output.Remove(PackKey.CanonNumber(Encoding.UTF8.GetBytes(canon)));
+        return output;
+    }
+
+    internal delegate void EditSink(ReadOnlySpan<byte> bytes);
+
+    /// <summary>
+    /// İkinci tur adaylar, UTF-8 baytlarıyla (yinelenebilir). Değişen ve eklenen harfler ASCII'dir; UTF-8'de ASCII baytı
+    /// çok baytlı bir harfin içinde geçmez, bu yüzden karışıklıklar bayt bayt aranabilir.
+    /// </summary>
+    private static void ForEachEdit(string text, EditSink body)
+    {
+        var canon = PackKey.Canon(text);
+        var runes = canon.EnumerateRunes().ToList();
+        if (runes.Count < EditLength.Minimum || runes.Count > EditLength.Maximum) return;
+        var bytes = Encoding.UTF8.GetBytes(canon);
+        // at[i]: i. harfin bayt konumu; at[count]: bayt sayısı.
+        var at = new int[runes.Count + 1];
+        for (var index = 0; index < runes.Count; index++) at[index + 1] = at[index] + runes[index].Utf8SequenceLength;
+        var buffer = new byte[bytes.Length + 8];
+        void Emit(int cut, ReadOnlySpan<byte> middle, int resume, byte[] source)
+        {
+            var size = cut + middle.Length + source.Length - resume;
+            if (size > buffer.Length) buffer = new byte[size + 8];
+            source.AsSpan(0, cut).CopyTo(buffer);
+            middle.CopyTo(buffer.AsSpan(cut));
+            source.AsSpan(resume).CopyTo(buffer.AsSpan(cut + middle.Length));
+            body(buffer.AsSpan(0, size));
+        }
+        Span<byte> one = stackalloc byte[1];
+        for (var index = 0; index <= runes.Count; index++)
+        {
+            var cut = at[index];
+            foreach (var letter in Alphabet)
+            {
+                one[0] = letter;
+                Emit(cut, one, cut, bytes);
+            }
+            if (index == runes.Count || runes[index].Value >= 128) continue;
+            foreach (var letter in LookalikeBytes[runes[index].Value])
+            {
+                one[0] = letter;
+                Emit(cut, one, at[index + 1], bytes);
+            }
+        }
+        if (runes.Count > EditLength.Pairs) return;
+        foreach (var variant in Variants(text))
+        {
+            var source = Encoding.UTF8.GetBytes(variant);
+            for (var index = 0; index < source.Length; index++)
+                foreach (var (read, real) in ConfusionBytes)
+                    if (source.AsSpan(index).StartsWith(read)) Emit(index, real, index + read.Length, source);
+        }
     }
 
     /// <summary>canon metin, boşluksuz ve OCR'ın karıştırdığı harfler birleşmiş.</summary>
@@ -477,7 +606,8 @@ public sealed class PackFuzzyIndex
         var runes = PackFuzzy.Folded(text);
         if (runes.Count < minLength || keys.Length == 0) return null;
         var length = Math.Min(runes.Count, 255);
-        var need = PackFuzzy.Required(length, PackFuzzy.Damaged(text));
+        var damaged = PackFuzzy.Damaged(text);
+        var need = PackFuzzy.Required(length, damaged);
         var hashes = PackFuzzy.TrigramHashes(runes);
         // Sorgunun üç boydaki Bloom'u ve bit sayısı (64, 128, 256 bit).
         ulong[][] queries = [PackFuzzy.Bloom(hashes, 64), PackFuzzy.Bloom(hashes, 128), PackFuzzy.Bloom(hashes, 256)];
@@ -489,9 +619,9 @@ public sealed class PackFuzzyIndex
         List<List<List<ulong>>>? clauses = null;
         // Boyu lower..upper olan adaylar. İki yönlü (wide false): benzerlik kapsamaların küçüğü. Tek yönlü: kısa taraf en
         // az Inner kapsanmalı, uzun tarafın en az Partial/Extra'sı kısa tarafta; benzerlik Inner - Penalty.
-        List<(double Score, ulong Key)> Scan(int lower, int upper, bool wide)
+        List<(double Score, ulong Key, double Evidence)> Scan(int lower, int upper, bool wide)
         {
-            var found = new List<(double Score, ulong Key)>();
+            var found = new List<(double Score, ulong Key, double Evidence)>();
             if (lower > upper) return found;
             for (var index = start[lower]; index < start[upper + 1]; index++)
             {
@@ -504,7 +634,11 @@ public sealed class PackFuzzyIndex
                 if (!wide)
                 {
                     var score = PackFuzzy.Score(both, inQuery, inEntry, bits);
-                    if (score >= floor) found.Add((score, keys[index]));
+                    if (score >= floor)
+                    {
+                        var z = PackFuzzy.Evidence(both, inQuery, inEntry, bits);
+                        found.Add((score, keys[index], Math.Min(z.Query, z.Entry)));
+                    }
                     continue;
                 }
                 // Kısa tarafın bitlerinin en az %90'ı ortak olmalı (hızlı eleme).
@@ -514,25 +648,30 @@ public sealed class PackFuzzyIndex
                 var (inner, outer, least) = entryLength > length
                     ? (cover.Query, cover.Entry, contain.Partial) : (cover.Entry, cover.Query, contain.Extra);
                 if (inner < contain.Inner || outer < least || inner - contain.Penalty < floor) continue;
+                // OCR izi olmayan okuma adayın içindeyse (ya da aday okumanın içindeyse) kısa tarafın bitlerinin hepsi
+                // ortak olmalı: temiz okuma ya tam parçadır ya da başka bir satırdır.
+                if (!damaged && (entryLength > length ? inQuery : inEntry) - both > PackFuzzy.CleanMissing) continue;
                 // Fazlalıklı okumada her yan cümle adayda olmalı: ikinci bir altyazının cümlesi fazlalık sayılmaz.
                 if (entryLength < length)
                 {
                     clauses ??= PackFuzzy.ClauseHashes(text);
                     if (clauses.Count > 0 && !PackFuzzy.CoversClauses(clauses, words, offsets[index], bits, inEntry)) continue;
                 }
-                found.Add((inner - contain.Penalty, keys[index]));
+                var evidence = PackFuzzy.Evidence(both, inQuery, inEntry, bits);
+                found.Add((inner - contain.Penalty, keys[index], entryLength > length ? evidence.Query : evidence.Entry));
             }
             return found;
         }
 
         // En iyi aday; eşiği geçmiyorsa null, Türkçesi farklı rakibi yakınsa Ambiguous.
-        (ulong? Key, bool Ambiguous) Pick(List<(double Score, ulong Key)> found)
+        (ulong? Key, bool Ambiguous) Pick(List<(double Score, ulong Key, double Evidence)> found)
         {
             if (found.Count == 0) return (null, false);
             var best = found[0];
             foreach (var candidate in found)
                 if (candidate.Score > best.Score || (candidate.Score == best.Score && candidate.Key > best.Key)) best = candidate;
             if (best.Score < need) return (null, false);
+            if (best.Evidence < PackFuzzy.MinimumEvidence) return (null, true);
             var turkish = translation(best.Key);
             foreach (var other in found)
                 if (other.Key != best.Key && other.Score > best.Score - PackFuzzy.Margin && translation(other.Key) != turkish) return (null, true);

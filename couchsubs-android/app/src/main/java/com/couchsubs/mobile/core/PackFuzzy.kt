@@ -21,6 +21,36 @@ object PackFuzzy {
     /** Türkçesi farklı en yakın ikinci aday en az bu kadar geride olmalı. */
     const val MARGIN = 5.0
 
+    /**
+     * Kabul edilen bulanık adayda ortak bitler rastlantının en az bu kadar standart sapma üstünde olmalı ([evidence]).
+     * Kısa satırın 64 bitlik imzasında yüz binlerce aday arasında rastlantıyla eşiği geçen ilgisiz satır çıkıyordu
+     * ("No n0, the wealth was all Mother's." → "He could use some clothes."). Mac ve Windows ile aynı.
+     */
+    const val MINIMUM_EVIDENCE = 5.0
+    /**
+     * OCR izi olmayan okumada tek yönlü kapsamada kısa tarafın adayda olmayan en çok bit sayısı: temiz okuma ya uzun
+     * satırın tam bir parçasıdır ya da başka bir satırdır.
+     */
+    const val CLEAN_MISSING = 0
+
+    /** Ortak bitlerin rastlantıya göre fazlası (standart sapma cinsinden), sorgu ve aday yönünden. */
+    class Evidence(val query: Double, val entry: Double)
+
+    /**
+     * Ortak bitlerin rastlantıya göre ne kadar fazla olduğu, iki yönden: sorgunun bitleri adayın doluluğuyla ve adayın
+     * bitleri sorgunun doluluğuyla rastlantıda ne kadar örtüşürdü.
+     */
+    fun evidence(both: Int, inQuery: Int, inEntry: Int, bits: Int): Evidence {
+        val fillQuery = inQuery.toDouble() / bits
+        val fillEntry = inEntry.toDouble() / bits
+        fun z(count: Int, fill: Double): Double {
+            val mean = count * fill
+            val spread = Math.sqrt(count * fill * (1 - fill))
+            return if (spread > 0) (both - mean) / spread else 0.0
+        }
+        return Evidence(z(inQuery, fillEntry), z(inEntry, fillQuery))
+    }
+
     /** OCR izi olmayan satır neredeyse aynı olmalı: (uzunluk sınırı, en düşük benzerlik). */
     private val cleanMinimum = listOf(24 to 90.0, 256 to 80.0)
     /** OCR izi olan satır: (uzunluk sınırı, en düşük benzerlik). */
@@ -215,6 +245,111 @@ object PackFuzzy {
         }
         output.remove(canon)
         return output.sorted()
+    }
+
+    /** İkinci tur düzeltmelerin en kısa ve en uzun canon satırı (harf sayısı). */
+    const val EDIT_MINIMUM = 10
+    const val EDIT_MAXIMUM = 40
+    /** İki karışıklığın birden deneneceği en uzun canon satır. */
+    const val EDIT_PAIRS = 32
+
+    /**
+     * Yazı tanımanın birbirine benzettiği harfler (canon, küçük harf): okunan → asıl olabilecek. İkinci tur düzeltmede
+     * bir harf yalnız bunlardan birine döner: herhangi bir harfe dönmek "honey" → "money" gibi başka gerçek satırlara
+     * çıkıyordu. Mac ve Windows ile aynı tablo.
+     */
+    val lookalikes: Map<Char, String> = mapOf(
+        'a' to "oecusdq", 'b' to "hkdlp", 'c' to "eoa", 'd' to "aobq", 'e' to "coa", 'f' to "tlir", 'g' to "qyp", 'h' to "bnk",
+        'i' to "ljtfr", 'j' to "il", 'k' to "hbx", 'l' to "ijtf", 'm' to "n", 'n' to "mhru", 'o' to "aecudq", 'p' to "qgb",
+        'q' to "gpo", 'r' to "nfti", 's' to "z", 't' to "flir", 'u' to "vnoa", 'v' to "uyw", 'w' to "v", 'x' to "ky",
+        'y' to "vgx", 'z' to "s", '0' to "o", '1' to "il", '5' to "s", '6' to "b", '8' to "b", '9' to "g",
+    )
+    private val lookalikeBytes: Array<ByteArray> = Array(128) { code ->
+        lookalikes[code.toChar()]?.toByteArray(Charsets.US_ASCII) ?: ByteArray(0)
+    }
+    private val alphabet = "abcdefghijklmnopqrstuvwxyz".toByteArray(Charsets.US_ASCII)
+    private val confusionBytes by lazy {
+        confusions.map { (read, real) -> read.toByteArray(Charsets.US_ASCII) to real.toByteArray(Charsets.US_ASCII) }
+    }
+
+    /**
+     * İkinci tur düzeltmeler: [variants] pakette hiçbir satıra çıkmazsa denenir. Bir harf benzediği bir harf olur
+     * ([lookalikes]), yutulmuş bir harf eklenir ("abut" → "about") ya da [EDIT_PAIRS]'ten kısa satırda iki karışıklık
+     * birden düzelir ("l'm rnad" → "i'm mad"). Yalnız [EDIT_MINIMUM]..[EDIT_MAXIMUM] harfli satırlarda; [variants]taki ve
+     * satırın kendisi olan hâller yoktur. Sıralı canon metinler (denemeler için; arama [editKeys] ile). Mac'teki
+     * `PackFuzzy.edits` ile aynı küme.
+     */
+    fun edits(text: String): List<String> {
+        val output = HashSet<String>()
+        forEachEdit(text) { bytes, size -> output.add(String(bytes, 0, size, Charsets.UTF_8)) }
+        output.removeAll(variants(text).toSet())
+        output.remove(PackKey.canon(text))
+        return output.sorted()
+    }
+
+    /** [edits]'in anahtarları ([PackKey.canonNumber]), metne çevirmeden. */
+    fun editKeys(text: String): Set<Long> {
+        val output = HashSet<Long>()
+        forEachEdit(text) { bytes, size -> output.add(PackKey.canonNumber(bytes, size)) }
+        for (variant in variants(text)) PackKey.canonNumber(variant)?.let { output.remove(it) }
+        PackKey.canonNumber(PackKey.canon(text))?.let { output.remove(it) }
+        return output
+    }
+
+    /**
+     * İkinci tur adaylar, UTF-8 baytlarıyla (yinelenebilir; [body]'ye tampon ve boyu). Değişen ve eklenen harfler
+     * ASCII'dir; UTF-8'de ASCII baytı çok baytlı bir harfin içinde geçmez, bu yüzden karışıklıklar bayt bayt aranabilir.
+     */
+    private fun forEachEdit(text: String, body: (ByteArray, Int) -> Unit) {
+        val canon = PackKey.canon(text)
+        val points = canon.codePoints().toArray()
+        if (points.size < EDIT_MINIMUM || points.size > EDIT_MAXIMUM) return
+        val bytes = canon.toByteArray(Charsets.UTF_8)
+        // at[i]: i. harfin bayt konumu; at[count]: bayt sayısı.
+        val at = IntArray(points.size + 1)
+        for (index in points.indices) {
+            val point = points[index]
+            at[index + 1] = at[index] + when {
+                point < 0x80 -> 1
+                point < 0x800 -> 2
+                point < 0x10000 -> 3
+                else -> 4
+            }
+        }
+        var buffer = ByteArray(bytes.size + 8)
+        fun emit(cut: Int, middle: ByteArray, middleSize: Int, resume: Int, source: ByteArray) {
+            val size = cut + middleSize + source.size - resume
+            if (size > buffer.size) buffer = ByteArray(size + 8)
+            System.arraycopy(source, 0, buffer, 0, cut)
+            System.arraycopy(middle, 0, buffer, cut, middleSize)
+            System.arraycopy(source, resume, buffer, cut + middleSize, source.size - resume)
+            body(buffer, size)
+        }
+        val one = ByteArray(1)
+        for (index in 0..points.size) {
+            val cut = at[index]
+            for (letter in alphabet) {
+                one[0] = letter
+                emit(cut, one, 1, cut, bytes)
+            }
+            if (index == points.size || points[index] >= 128) continue
+            for (letter in lookalikeBytes[points[index]]) {
+                one[0] = letter
+                emit(cut, one, 1, at[index + 1], bytes)
+            }
+        }
+        if (points.size > EDIT_PAIRS) return
+        for (variant in variants(text)) {
+            val source = variant.toByteArray(Charsets.UTF_8)
+            for (index in source.indices) {
+                for ((read, real) in confusionBytes) {
+                    if (index + read.size > source.size) continue
+                    var same = true
+                    for (offset in read.indices) if (source[index + offset] != read[offset]) { same = false; break }
+                    if (same) emit(index, real, real.size, index + read.size, source)
+                }
+            }
+        }
     }
 
     /** canon metin, boşluksuz ve OCR'ın karıştırdığı harfler birleşmiş (kod noktaları). */
@@ -452,7 +587,7 @@ class PackFuzzyIndex private constructor(
         }
     }
 
-    private class Candidate(val score: Double, val key: Long)
+    private class Candidate(val score: Double, val key: Long, val evidence: Double)
 
     /**
      * Eşik, uzunluk ve ikinci aday şartlarını sağlayan en benzer satırın anahtarı; yoksa null. [translation]: anahtarın
@@ -465,7 +600,8 @@ class PackFuzzyIndex private constructor(
         val points = PackFuzzy.folded(text)
         if (points.size < PackFuzzy.MIN_LENGTH || keys.isEmpty()) return null
         val length = minOf(points.size, 255)
-        val need = PackFuzzy.required(length, PackFuzzy.damaged(text))
+        val damaged = PackFuzzy.damaged(text)
+        val need = PackFuzzy.required(length, damaged)
         val floor = need - PackFuzzy.MARGIN
         val hashes = PackFuzzy.trigramHashes(points)
         // Sorgunun üç boydaki Bloom'u (64, 128, 256 bit) ve bit sayıları.
@@ -502,7 +638,10 @@ class PackFuzzyIndex private constructor(
                     offset += perLine
                     if (!wide) {
                         val score = PackFuzzy.score(both, inQuery, inEntry, bits)
-                        if (score >= floor) close.add(Candidate(score, keys[index]))
+                        if (score >= floor) {
+                            val z = PackFuzzy.evidence(both, inQuery, inEntry, bits)
+                            close.add(Candidate(score, keys[index], minOf(z.query, z.entry)))
+                        }
                         continue
                     }
                     // Kısa tarafın bitlerinin en az %90'ı ortak olmalı (hızlı eleme).
@@ -513,12 +652,16 @@ class PackFuzzyIndex private constructor(
                     val outer = if (longer) cover.entry else cover.query
                     val least = if (longer) contain.partial else contain.extra
                     if (inner < contain.inner || outer < least || inner - contain.penalty < floor) continue
+                    // OCR izi olmayan okuma adayın içindeyse (ya da aday okumanın içindeyse) kısa tarafın bitlerinin
+                    // hepsi ortak olmalı: temiz okuma ya tam parçadır ya da başka bir satırdır.
+                    if (!damaged && (if (longer) inQuery else inEntry) - both > PackFuzzy.CLEAN_MISSING) continue
                     // Fazlalıklı okumada her yan cümle adayda olmalı: ikinci bir altyazının cümlesi fazlalık sayılmaz.
                     if (!longer) {
                         val found = clauses ?: PackFuzzy.clauseHashes(text).also { clauses = it }
                         if (found.isNotEmpty() && !PackFuzzy.coversClauses(found, words, offset - perLine, bits, inEntry)) continue
                     }
-                    contained.add(Candidate(inner - contain.penalty, keys[index]))
+                    val z = PackFuzzy.evidence(both, inQuery, inEntry, bits)
+                    contained.add(Candidate(inner - contain.penalty, keys[index], if (longer) z.query else z.entry))
                 }
             }
         }
@@ -532,6 +675,7 @@ class PackFuzzyIndex private constructor(
                     (candidate.score == current.score && java.lang.Long.compareUnsigned(candidate.key, current.key) > 0)) best = candidate
             }
             if (best == null || best.score < need) return null to false
+            if (best.evidence < PackFuzzy.MINIMUM_EVIDENCE) return null to true
             val turkish = translation(best.key)
             for (other in found) {
                 if (other.key != best.key && other.score > best.score - PackFuzzy.MARGIN && translation(other.key) != turkish) return null to true

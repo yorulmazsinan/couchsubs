@@ -228,6 +228,143 @@
    ]
   ],
   "margin": 5,
-  "minLength": 16
- }
+  "minLength": 16,
+  "minimumEvidence": 5,
+  "cleanMissing": 0,
+  "editLength": [
+   10,
+   40,
+   32
+  ]
+ },
+ "edits": [
+  {
+   "input": "Wach out for the guards.",
+   "count": 1315,
+   "contains": [
+    "watch out for the guards"
+   ],
+   "first": [
+    "acb out for the guards",
+    "ach aut for the guards",
+    "ach ouf for the guards",
+    "ach out far the guards",
+    "ach out for fhe guards"
+   ],
+   "last": [
+    "wyach out for the guards",
+    "wzach out for the guards",
+    "xwach out for the guards",
+    "ywach out for the guards",
+    "zwach out for the guards"
+   ]
+  },
+  {
+   "input": "Who sent yov?",
+   "count": 553,
+   "contains": [],
+   "first": [
+    "awho sent yov",
+    "bo sent yov",
+    "bwho sent yov",
+    "cwho sent yov",
+    "dwho sent yov"
+   ],
+   "last": [
+    "wyho sent yov",
+    "wzho sent yov",
+    "xwho sent yov",
+    "ywho sent yov",
+    "zwho sent yov"
+   ]
+  },
+  {
+   "input": "Stay cIose and keep qviet.",
+   "count": 1577,
+   "contains": [
+    "stay close and keep quiet"
+   ],
+   "first": [
+    "astay ciose and keep qviet",
+    "bstay ciose and keep qviet",
+    "cstay ciose and keep qviet",
+    "dstay ciose and keep qviet",
+    "estay ciose and keep qviet"
+   ],
+   "last": [
+    "wstay ciose and keep qviet",
+    "xstay ciose and keep qviet",
+    "ystay ciose and keep qviet",
+    "zstay ciose and keep qviet",
+    "ztay ciose and keep qviet"
+   ]
+  },
+  {
+   "input": "Café olé, señor.",
+   "count": 683,
+   "contains": [],
+   "first": [
+    "aafe ole senor",
+    "acafe ole senor",
+    "afc ole senor",
+    "afe ale senor",
+    "afe oie senor"
+   ],
+   "last": [
+    "vcafe ole senor",
+    "wcafe ole senor",
+    "xcafe ole senor",
+    "ycafe ole senor",
+    "zcafe ole senor"
+   ]
+  },
+  {
+   "input": "Short",
+   "count": 0,
+   "contains": [],
+   "first": [],
+   "last": []
+  },
+  {
+   "input": "x",
+   "count": 0,
+   "contains": [],
+   "first": [],
+   "last": []
+  }
+ ],
+ "evidence": [
+  {
+   "bits": 64,
+   "both": 14,
+   "entry": 4.545786084165713,
+   "inEntry": 17,
+   "inQuery": 20,
+   "query": 4.3983157545640195
+  },
+  {
+   "bits": 64,
+   "both": 5,
+   "entry": -0.16351748504193214,
+   "inEntry": 17,
+   "inQuery": 20,
+   "query": -0.1582127969267633
+  },
+  {
+   "bits": 256,
+   "both": 30,
+   "entry": 11.420069589016935,
+   "inEntry": 35,
+   "inQuery": 40,
+   "query": 11.290144205156926
+  },
+  {
+   "bits": 256,
+   "both": 20,
+   "entry": 6.837364020552566,
+   "inEntry": 60,
+   "inQuery": 22,
+   "query": 7.470825549071733
+  }
+ ]
 }

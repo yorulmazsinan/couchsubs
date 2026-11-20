@@ -83,6 +83,60 @@ class PackLookupFuzzyTest {
 }
 
 class PackFuzzyTest {
+    /**
+     * İkinci tur düzeltmeler (yutulan harf, benzeyen harf, iki karışıklık) Mac ve Windows'la aynı küme
+     * (fuzzy-vectors.json); arama anahtarları metinlerinkiyle aynı.
+     */
+    @Test
+    fun editVectors() {
+        val vectors = JSONObject(Fixtures.text("fuzzy-vectors.json"))
+        val thresholds = vectors.getJSONObject("thresholds")
+        val length = thresholds.getJSONArray("editLength")
+        assertEquals(listOf(PackFuzzy.EDIT_MINIMUM, PackFuzzy.EDIT_MAXIMUM, PackFuzzy.EDIT_PAIRS), (0 until length.length()).map { length.getInt(it) })
+        assertEquals(PackFuzzy.MINIMUM_EVIDENCE, thresholds.getDouble("minimumEvidence"), 0.0)
+        assertEquals(PackFuzzy.CLEAN_MISSING, thresholds.getInt("cleanMissing"))
+        val edits = vectors.getJSONArray("edits")
+        assertTrue(edits.length() >= 5)
+        fun strings(array: org.json.JSONArray) = (0 until array.length()).map { array.getString(it) }
+        for (index in 0 until edits.length()) {
+            val vector = edits.getJSONObject(index)
+            val input = vector.getString("input")
+            val found = PackFuzzy.edits(input)
+            assertEquals(input, vector.getInt("count"), found.size)
+            assertEquals(input, strings(vector.getJSONArray("first")), found.take(5))
+            assertEquals(input, strings(vector.getJSONArray("last")), found.takeLast(5))
+            for (expected in strings(vector.getJSONArray("contains"))) assertTrue(expected, expected in found)
+            assertEquals(input, found.mapNotNull { PackKey.canonNumber(it) }.toSet(), PackFuzzy.editKeys(input))
+            assertTrue(input, found.toSet().intersect(PackFuzzy.variants(input).toSet()).isEmpty())
+        }
+        val evidence = vectors.getJSONArray("evidence")
+        for (index in 0 until evidence.length()) {
+            val vector = evidence.getJSONObject(index)
+            val z = PackFuzzy.evidence(vector.getInt("both"), vector.getInt("inQuery"), vector.getInt("inEntry"), vector.getInt("bits"))
+            assertEquals(vector.getDouble("query"), z.query, 1e-9)
+            assertEquals(vector.getDouble("entry"), z.entry, 1e-9)
+        }
+    }
+
+    /**
+     * Ortak deneme paketi (pack-fuzzy.json.gz, paket betiğiyle yapıldı): Mac ve Windows'la aynı vakalar, aynı sonuç. Tek
+     * harf hatası, yutulan harf, iki karışıklık, konuşmacı adı ve OCR izli uzun satır bulunur; pakette olmayan benzer
+     * satırlar başka satıra eşlenmez.
+     */
+    @Test
+    fun sharedFuzzyPackCases() {
+        val fixtures = JSONObject(Fixtures.text("pack-fuzzy-cases.json"))
+        val library = GamePackLibrary({ listOf("pack-fuzzy.json.gz" to { Fixtures.bytes("pack-fuzzy.json.gz") }) }, null)
+        assertNotNull(PackLookup.match(library, fixtures.getString("warmUp")))
+        assertEquals("fuzzy-test", library.searchScope)
+        val cases = fixtures.getJSONArray("cases")
+        for (index in 0 until cases.length()) {
+            val item = cases.getJSONObject(index)
+            val screen = item.getString("screen")
+            assertEquals(screen, if (item.isNull("turkish")) null else item.getString("turkish"), PackLookup.match(library, screen)?.text)
+        }
+    }
+
     /** İmza Mac, Windows ve paket betiğiyle bit bit aynı. */
     @Test
     fun signatureVectors() {
