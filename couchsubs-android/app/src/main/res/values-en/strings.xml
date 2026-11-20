@@ -299,6 +299,8 @@
     <string name="settings_auto_screen_text">Automatically translate on-screen text (experimental)</string>
     <string name="auto_screen_text_notice">Automatic on-screen text translation is experimental; you can turn it on in Settings.</string>
     <string name="settings_auto_screen_text_short">Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.</string>
+    <string name="settings_set_text_apart">Set on-screen text apart from subtitles</string>
+    <string name="settings_set_text_apart_short">On-screen text keeps its own colours and place, and never looks like the subtitle box.</string>
     <string name="settings_speaker_colors_short">Each speaker\'s name and line keep their own color.</string>
     <string name="settings_fast_reading">Check unchanged subtitle areas more often</string>
     <string name="settings_fast_reading_short">When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.</string>

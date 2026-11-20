@@ -84,6 +84,7 @@ fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> U
     var speakerColors by remember { mutableStateOf(settings.speakerColors) }
     var gameAreaPresets by remember { mutableStateOf(settings.gameAreaPresets) }
     var autoScreenText by remember { mutableStateOf(settings.autoScreenText) }
+    var setTextApart by remember { mutableStateOf(settings.setTextApart) }
     var fastReading by remember { mutableStateOf(settings.fastSubtitleDetection) }
     var usage by remember { mutableStateOf(settings.usageData) }
     LaunchedEffect(Unit) { tvs = withContext(Dispatchers.IO) { runCatching { TvDiscovery.search() }.getOrDefault(emptyList()) } }
@@ -127,6 +128,9 @@ fun ProfileScreen(onBack: () -> Unit, onSettings: () -> Unit, onPairing: () -> U
             } },
             { RowItem(stringResource(R.string.settings_auto_screen_text), stringResource(R.string.settings_auto_screen_text_short)) {
                 Switch(autoScreenText, { autoScreenText = it; settings.autoScreenText = it })
+            } },
+            { RowItem(stringResource(R.string.settings_set_text_apart), stringResource(R.string.settings_set_text_apart_short)) {
+                Switch(setTextApart, { setTextApart = it; settings.setTextApart = it; TranslationService.setTextApart(it) })
             } },
             { RowItem(stringResource(R.string.settings_fast_reading), stringResource(R.string.settings_fast_reading_short)) {
                 Switch(fastReading, { fastReading = it; settings.fastSubtitleDetection = it })

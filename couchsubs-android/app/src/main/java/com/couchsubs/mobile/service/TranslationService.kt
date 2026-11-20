@@ -132,6 +132,13 @@ class TranslationService : Service() {
         fun setSpeakerColors(on: Boolean) {
             liveServer?.speakerColors = on
         }
+
+        /** "Ekran yazılarını altyazıdan ayır" değişti: TV yeni çizimi hemen alır (style olayı). */
+        fun setTextApart(on: Boolean) {
+            val server = liveServer ?: return
+            server.setApart = on
+            server.sendStyle(Services.settings.style)
+        }
         fun translateScreen(): Boolean {
             val service = current ?: return false
             service.toggleScreen()
@@ -187,6 +194,8 @@ class TranslationService : Service() {
      * sürekli okunanlara eklenir. Ayarlara yazılmaz; oyun ya da ayar değişince yeniden hesaplanır.
      */
     @Volatile private var presetAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
+    /** Altyazı hattının altyazıdan ayırdığı görev satırının ek alanı ([com.couchsubs.mobile.core.MissionLine]); yoksa boş. */
+    @Volatile private var missionAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
     @Volatile private var playedGame: String? = null
 
     /**
@@ -372,6 +381,7 @@ class TranslationService : Service() {
         subtitleServer.onLegacyClient = { LiveState.update { it.copy(legacyTv = true) }; Log.i(TAG, "TV uygulamasını güncelleyin; geçiş bağlantısı.") }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
         subtitleServer.speakerColors = settings.speakerColors
+        subtitleServer.setApart = settings.setTextApart
         // Konuşan renkleri oturum boyunca sabittir; yeni oturum yeni defterle başlar.
         com.couchsubs.mobile.core.SpeakerColors.session.reset()
         subtitleServer.onClientsChanged = { count ->
@@ -443,6 +453,14 @@ class TranslationService : Service() {
                 } else null
             }
             showSpeakerNames = { settings.showSpeakerNames }
+            // Görev satırı altyazıya girmez; otomatik ekran yazısı açıksa "auto-mission" ek alanı olarak kendi yerinde ve
+            // özgün stilinde gösterilir (Windows ve Mac ile aynı). Kapalıysa ayrıca gösterilmez.
+            missionAreas = emptyList()
+            onMissionChanged = { region ->
+                missionAreas = if (region != null && settings.autoScreenText)
+                    listOf(com.couchsubs.mobile.core.ExtraArea(com.couchsubs.mobile.core.MissionLine.AREA_ID, "Mission", region, auto = true))
+                else emptyList()
+            }
             onPackMissed = { text -> linePool.offer(text) }
             onPairShown = { pair ->
                 LiveState.shown(pair, pair.packId?.let { packTitles?.get(it) ?: it })
@@ -516,7 +534,7 @@ class TranslationService : Service() {
             }
             offerScreenText(frame)
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
-            regionWatcher?.offer(extraAreas + presetAreas + autoAreas, { r ->
+            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
                 }

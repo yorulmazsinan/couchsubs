@@ -105,6 +105,13 @@ class SubtitlePipeline(
     private val stabilizer = SubtitleStabilizer(clock = now)
     /** Konuşma değişirken sabit duran görev/HUD satırları (GTA 6). */
     private val stickyRows = StickyRows()
+    private val mission = MissionLine()
+
+    /**
+     * Görev satırının bölgesi değişti (null: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
+     * kendi yerinde ve özgün stilinde gösterilir (bkz. [MissionLine]).
+     */
+    @Volatile var onMissionChanged: ((CropRegion?) -> Unit)? = null
     private var lastRequested = 0
     private var lastShown = 0
     private var inFlight: Request? = null
@@ -162,7 +169,17 @@ class SubtitlePipeline(
         // Kumanda ipuçları ve yazı tanıma çöpleri çevrilmez; yalnız altyazı bloğu çevrilir.
         // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
         val rows = raw.withoutButtonPrompts().withoutOcrNoise().joiningRows()
-        val reading = synchronized(lock) { stickyRows.filter(rows, now()) }.subtitleBlock(area)
+        var missionChanged = false
+        var missionRegion: CropRegion? = null
+        val reading = synchronized(lock) {
+            val filtered = stickyRows.filter(rows, now())
+            if (mission.observe(stickyRows.removed, area, now())) {
+                missionChanged = true
+                missionRegion = mission.region
+            }
+            filtered
+        }.subtitleBlock(area)
+        if (missionChanged) onMissionChanged?.invoke(missionRegion)
         var flushed: (() -> Unit)? = null
         val after: (() -> Unit)? = synchronized(lock) {
             var action = stabilizer.feed(reading.text, signature, reading.box)
@@ -515,6 +532,7 @@ class SubtitlePipeline(
         lastShownSource = null
         pairs.clear()
         stickyRows.reset()
+        mission.reset()
         if (stabilizer.reset() == StabilizerAction.Clear) sender.clear()
     }
 

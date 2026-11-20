@@ -143,14 +143,25 @@ class Reading(lines: List<TextLine>) {
             val placed = reading.box!!.placedIn(area)
             abs((placed.left + placed.right) / 2 - 0.5) <= 0.12
         }
+        // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
+        // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
+        centered.firstOrNull { SpeakerPrefix.split(it.lines[0].text) != null }?.let { return it }
         if (centered.isNotEmpty()) return centered.maxBy { it.box!!.bottom }
         return candidates.filter { wordCount(it.text) >= 3 }.maxByOrNull { it.box!!.bottom } ?: Empty
     }
 
+    /**
+     * Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
+     * yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
+     * satırı ayrılır; Windows ve Mac ile aynı).
+     */
     private fun belongs(box: TextBox, block: List<TextLine>, area: TextBox): Boolean {
         val last = block.last().box!!.placedIn(area)
-        val height = maxOf(box.bottom - box.top, last.bottom - last.top)
-        if (box.top - last.bottom >= height * 0.8 || box.top < last.top) return false
+        val own = box.bottom - box.top
+        val previous = last.bottom - last.top
+        val height = maxOf(own, previous)
+        if (box.top - last.bottom > height * 0.6 || box.top < last.top) return false
+        if (maxOf(own, previous) > 1.25 * minOf(own, previous)) return false
         val overlap = minOf(box.right, last.right) - maxOf(box.left, last.left)
         val narrower = minOf(box.right - box.left, last.right - last.left)
         return overlap > 0 && overlap >= narrower * 0.5

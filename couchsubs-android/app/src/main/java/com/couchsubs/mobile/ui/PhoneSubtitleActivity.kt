@@ -87,6 +87,7 @@ class PhoneSubtitleActivity : ComponentActivity() {
         val stackPrevious = settings.stackPrevious
         // "Konuşana göre renk": konuşan adlı satır o konuşanın renginde (TV ile aynı palet; bkz. SpeakerColors).
         val speakerColors = settings.speakerColors
+        val setApart = settings.setTextApart
         setContent {
             CouchSubsTheme {
                 val status by LiveState.status.collectAsState()
@@ -151,11 +152,17 @@ class PhoneSubtitleActivity : ComponentActivity() {
                                 return@forEach
                             }
                             val box = region.box ?: com.couchsubs.mobile.core.TextBox(0.6, 0.05, 0.95, 0.2)
-                            Text(region.text, style = Tokens.Type.caption, color = Tokens.Color.text,
+                            // "Ekran yazılarını altyazıdan ayır": stili bilinmeyen kutu altyazı kutusuna benzemesin
+                            // (zeminsiz, beyaz, koyu gölgeli; Mac ile aynı). Altyazının yeri hiç değişmez.
+                            Text(region.text,
+                                style = if (setApart) Tokens.Type.caption.copy(shadow = androidx.compose.ui.graphics.Shadow(Color.Black, blurRadius = 6f))
+                                    else Tokens.Type.caption,
+                                color = if (setApart) Color.White else Tokens.Color.text,
                                 modifier = Modifier
                                     .offset(x = maxWidth * box.left.toFloat(), y = maxHeight * box.top.toFloat())
                                     .widthIn(min = 120.dp, max = maxOf(120.dp, maxWidth * (box.right - box.left).toFloat()))
-                                    .background(Color.Black.copy(alpha = 0.8f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                    .then(if (setApart) Modifier else Modifier.background(Color.Black.copy(alpha = 0.8f),
+                                        androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
                                     .padding(6.dp))
                         }
                     }

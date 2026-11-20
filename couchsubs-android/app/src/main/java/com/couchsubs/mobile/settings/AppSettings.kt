@@ -219,6 +219,14 @@ class AppSettings(context: Context) : AreaStore {
         if (step.notice) autoScreenTextNotice = true
     }
 
+    /**
+     * "Ekran yazılarını altyazıdan ayır": ek alan ve otomatik ekran yazısı kutuları özgün rengini ve zeminini korur,
+     * altyazı kutusuna benzemez (zemin yoksa zeminsiz, koyu gölgeli). Eski kayıtlarda yoktur; açık başlar.
+     */
+    var setTextApart: Boolean
+        get() = prefs.getBoolean("setTextApart", true)
+        set(value) = prefs.edit().putBoolean("setTextApart", value).apply()
+
     /** "Konuşana göre renk": konuşan adlı satır (ad ve cümle) o konuşanın renginde görünür. Eski kayıtlarda yoktur; açık başlar. */
     var speakerColors: Boolean
         get() = prefs.getBoolean("speakerColors", true)

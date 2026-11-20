@@ -306,6 +306,8 @@
     <string name="settings_auto_screen_text">Ekran yazılarını otomatik çevir (deneysel)</string>
     <string name="auto_screen_text_notice">Ekran yazılarını otomatik çevirme deneysel; Ayarlar\'dan açabilirsiniz.</string>
     <string name="settings_auto_screen_text_short">Ekranda beliren yazı kutuları (görev, yardım, mesaj) bulunur ve kendi yerinde çevrilir. Sayaçlar, harita ve kısa etiketler atlanır.</string>
+    <string name="settings_set_text_apart">Ekran yazılarını altyazıdan ayır</string>
+    <string name="settings_set_text_apart_short">Ekran yazıları kendi rengini ve yerini korur, altyazı kutusuna benzemez.</string>
     <string name="settings_speaker_colors_short">Her konuşanın adı ve satırı kendi renginde görünür.</string>
     <string name="settings_fast_reading">Değişmeyen altyazı alanını daha sık oku</string>
     <string name="settings_fast_reading_short">Altyazı alanı değişmemiş görünüyorsa 20 yerine 2 kare sonra yeniden oku. Daha fazla CPU kullanır.</string>

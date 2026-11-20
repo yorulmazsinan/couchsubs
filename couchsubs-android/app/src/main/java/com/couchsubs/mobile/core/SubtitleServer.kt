@@ -204,7 +204,11 @@ class SubtitleServer(
         /** Çevirinin içindeki kumanda simgeleri: düz metindeki yeri (`at`) ve PNG'si (`src`); eski TV uygulamaları yok sayar. */
         fun iconsJson(icons: List<IconPlacement>) = icons.map { mapOf("at" to it.at, "src" to it.image) }
 
-        fun styleFrame(style: SubtitleStyle) = frame(
+        /**
+         * [setApart]: "Ekran yazılarını altyazıdan ayır"; TV ek alan kutularını özgün renginde ve kendi yerinde, altyazı
+         * kutusundan farklı zeminde çizer (`setApart`; eski TV uygulamaları yok sayar, yeni olanlar yoksa açık sayar).
+         */
+        fun styleFrame(style: SubtitleStyle, setApart: Boolean = true) = frame(
             "style", mapOf(
                 "background" to style.background.coerceIn(0, 100),
                 "backgroundShape" to style.backgroundShape.name.lowercase(Locale.ROOT),
@@ -213,6 +217,7 @@ class SubtitleServer(
                 "displayMode" to if (style.displayMode == TvDisplayMode.OVERLAY) "overlay" else "inApp",
                 "fontSize" to style.fontSize,
                 "placement" to style.placement.name.lowercase(Locale.ROOT),
+                "setApart" to setApart,
                 "stackPrevious" to style.stackPrevious,
                 "textColor" to style.textColor.name.lowercase(Locale.ROOT),
             )
@@ -228,6 +233,9 @@ class SubtitleServer(
     private var listener: ServerSocket? = null
     private var pinger: ScheduledExecutorService? = null
     private var lastStyle: SubtitleStyle? = null
+
+    /** "Ekran yazılarını altyazıdan ayır" (bkz. [styleFrame]); değişince [sendStyle] yeniden çağrılmalı. */
+    @Volatile var setApart: Boolean = true
 
     /** Bağlı TV sayısı değişince çağrılır (sunucunun iş parçacığında). */
     @Volatile var onClientsChanged: ((Int) -> Unit)? = null
@@ -312,7 +320,7 @@ class SubtitleServer(
 
     fun sendStyle(style: SubtitleStyle) {
         synchronized(lock) { lastStyle = style }
-        broadcast(styleFrame(style), subtitle = true)
+        broadcast(styleFrame(style, setApart), subtitle = true)
     }
 
     private fun acceptLoop(socket: ServerSocket) {
@@ -416,7 +424,7 @@ class SubtitleServer(
         val count = synchronized(client) {
             val count = synchronized(lock) {
                 if (accessKey != checkedKey) { closeQuietly(socket); return }
-                lastStyle?.let { head.append(styleFrame(it)) }
+                lastStyle?.let { head.append(styleFrame(it, setApart)) }
                 clients.add(client)
                 clients.count { !it.viewer }
             }
