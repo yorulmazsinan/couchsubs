@@ -364,6 +364,16 @@
                                                Text="{t:T 'Each speaker\'s name and line keep their own color.'}" />
                                 </StackPanel>
                             </DockPanel>
+                            <Separator Margin="0" />
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="AutoScreenText" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Automatically translate on-screen text'}" Checked="OnAutoScreenText" Unchecked="OnAutoScreenText" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{t:T 'Automatically translate on-screen text'}" Style="{StaticResource HeadlineText}" />
+                                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="{t:T 'Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.'}" />
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </c:Card>
                 </StackPanel>

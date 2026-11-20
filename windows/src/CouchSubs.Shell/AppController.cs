@@ -2246,6 +2246,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private WatchedArea? phoneArea;
     private CancellationTokenSource? phoneLifetime;
     private bool watcherRequested;
+    /// <summary>Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var) ve bulduğu geçici alanlar.</summary>
+    private ScreenTextDetector? screenText;
+    private IReadOnlyList<WatchedArea> autoAreas = [];
+    private int screenTextBusy;
+
+    // regionGate altında: kullanıcının ek alanları, otomatik bulunan ekran yazıları ve açık telefon.
+    private void ComposeWatchedAreas() =>
+        watchedAreas = [.. savedWatchedAreas, .. autoAreas, .. phoneArea is null ? [] : new[] { phoneArea }];
 
     /// <summary>
     /// Ek bölge okuyucusu gerekiyorsa kurulur, gerekmiyorsa kaldırılır (kutuları TV'den kalkar). Kendi yazı tanıma motoru
@@ -2265,11 +2273,18 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 ClosePhone();
                 phoneTracker = null;
             }
+            if (running && settings.AutoScreenText && !settings.ExtraAreasPausedByFullScreen)
+                screenText ??= new ScreenTextDetector();
+            else
+            {
+                screenText = null;
+                autoAreas = [];
+            }
             savedWatchedAreas = running ? settings.WatchedAreas() : [];
-            watchedAreas = phoneArea is null ? savedWatchedAreas : [.. savedWatchedAreas, phoneArea];
+            ComposeWatchedAreas();
             if (watchedAreas.Count == 0)
             {
-                if (phoneTracker is null)
+                if (phoneTracker is null && screenText is null)
                 {
                     regionWatcher?.Reset();
                     regionWatcher = null;
@@ -2281,11 +2296,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (services.MakeReader(settings.SourceLanguage, settings.OcrEngine) is not { } reader)
                 {
                     // Okuyucu kurulamadıysa her örnekte tekrar açma. Yeni telefon veya ayar değişikliği yeniden dener.
-                    watcherRequested = phoneArea is not null;
+                    watcherRequested = phoneArea is not null || autoAreas.Count > 0;
                     return;
                 }
                 regionWatcher = new RegionWatcher(reader, MakeTranslator(), server) { Log = SubtitleLog.Write };
             }
+            // Okunup yazısız ya da gürültülü çıkan otomatik alan dedektöre bildirilir (o görüntüde yeniden önerilmez).
+            var detector = screenText;
+            regionWatcher.Rejected = detector is null ? null : detector.Reject;
             regionWatcher.PackLookup = PacksActive ? services.FindInPacks : null;
             regionWatcher.SkipsTurkish = settings.TargetLanguage == "tr";
             regionWatcher.TranslatesUiCommands = settings.SourceLanguage == "en" && settings.TargetLanguage == "tr";
@@ -2304,7 +2322,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         phoneLifetime = null;
         phoneArea = null;
         watcherRequested = false;
-        watchedAreas = savedWatchedAreas;
+        ComposeWatchedAreas();
     }
 
     private void ResetRegionWatcher(bool discard)
@@ -2313,6 +2331,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             ClosePhone();
             phoneTracker?.Reset();
+            screenText?.Reset();
+            autoAreas = [];
+            ComposeWatchedAreas();
             regionWatcher?.Reset();
             if (discard) regionWatcher = null;
         }
@@ -2320,7 +2341,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
 
     private void OfferWatchedAreas(Frame frame, long arrived)
     {
-        if (Volatile.Read(ref regionWatcher) is null && Volatile.Read(ref phoneTracker) is null) return;
+        if (Volatile.Read(ref regionWatcher) is null && Volatile.Read(ref phoneTracker) is null && Volatile.Read(ref screenText) is null) return;
         // Okuyucu ayarlar değişirken kuruluyorsa ana altyazı karesini bekletme.
         if (!Monitor.TryEnter(regionGate)) return;
         var requestWatcher = false;
@@ -2337,16 +2358,45 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     if (area != phoneArea)
                     {
                         phoneArea = area;
-                        watchedAreas = [.. savedWatchedAreas, area];
+                        ComposeWatchedAreas();
                     }
                 }
                 if (region is not null && regionWatcher is null && !watcherRequested)
                     requestWatcher = watcherRequested = true;
             }
             regionWatcher?.Offer(frame, watchedAreas);
+            if (screenText is { } detector && detector.Due(arrived) && Interlocked.CompareExchange(ref screenTextBusy, 1, 0) == 0)
+            {
+                // Karo örneği kare iş parçacığını tutmaz: arka planda, tek uçuşta (sürerken gelen kare atlanır).
+                IReadOnlyList<CropRegion> excluded = [settings.Region, .. savedWatchedAreas.Select(item => item.Region),
+                                                      .. phoneArea is null ? [] : new[] { phoneArea.Region }];
+                _ = Task.Run(() => SampleScreenText(detector, frame, arrived, excluded));
+            }
         }
         finally { Monitor.Exit(regionGate); }
         // OCR/çevirmen yalnız doğrulanmış bir panelde gerekir. İlk kuruluş kare iş parçacığını tutmaz.
+        if (requestWatcher) post(UpdateRegionWatcher);
+    }
+
+    private void SampleScreenText(ScreenTextDetector detector, Frame frame, long arrived, IReadOnlyList<CropRegion> excluded)
+    {
+        var requestWatcher = false;
+        try
+        {
+            detector.Sample(frame, arrived, excluded);
+            var next = detector.Areas;
+            lock (regionGate)
+            {
+                // Ayar kapandı ya da oturum yenilendi: eski dedektörün sonucu yazılmaz. Reddedilen alan da burada düşer.
+                if (!ReferenceEquals(screenText, detector) || next.SequenceEqual(autoAreas)) return;
+                autoAreas = next;
+                ComposeWatchedAreas();
+                if (autoAreas.Count > 0 && regionWatcher is null && !watcherRequested)
+                    requestWatcher = watcherRequested = true;
+            }
+        }
+        catch (Exception error) { SubtitleLog.Write($"ekran yazısı örneği hata verdi: {error.Message}"); }
+        finally { Volatile.Write(ref screenTextBusy, 0); }
         if (requestWatcher) post(UpdateRegionWatcher);
     }
 

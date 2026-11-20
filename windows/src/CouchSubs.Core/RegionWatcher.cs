@@ -30,6 +30,11 @@ public sealed record WatchedArea(string Id, string Name, CropRegion Region)
 {
     /// <summary>Geçici panel ekran yazısı olarak okunur; kapanınca bekleyen çevirisi geçersiz olur.</summary>
     public CancellationToken? PanelLifetime { get; init; }
+    /// <summary>
+    /// Ekran yazısı olarak kendiliğinden bulunmuş alan (<see cref="ScreenTextDetector"/>): gürültü yazısı (sayaç, etiket)
+    /// çevrilmez, yazısız ya da gürültülü okuma <see cref="RegionWatcher.Rejected"/> ile bildirilir; okuma aralığı en çok 500 ms.
+    /// </summary>
+    public bool Auto { get; init; }
     internal GamePhoneGeometry.Pose? PhonePose { get; init; }
 }
 
@@ -49,6 +54,9 @@ public sealed partial class RegionWatcher
 {
     /// <summary>Hareketli ek alanlar en fazla saniyede bir normal OCR turuna girer.</summary>
     public const int DefaultIntervalMs = 1000;
+
+    /// <summary>Otomatik bulunmuş alan varken okuma aralığı en çok bu kadardır (yazı belirdikten ~1 sn içinde Türkçesi).</summary>
+    public const int AutoIntervalMs = 500;
 
     // Okunmuş bir aday aynı görüntüde kalıyorsa ikinci OCR turunu beklemeden gösterilebilir.
     private const int ConfirmationMs = 250;
@@ -168,6 +176,8 @@ public sealed partial class RegionWatcher
     /// </summary>
     internal static bool SplitsMenuRows(string? game) => GameName.Key(game) == "gta 6";
     public Action<string>? Log { get; set; }
+    /// <summary>Otomatik alan okundu ama yazı yok ya da gürültü (<see cref="ScreenTextNoise"/>): alanın kimliği.</summary>
+    public Action<string>? Rejected { get; set; }
     /// <summary>Her okumanın süresi (ms; ölçüm için).</summary>
     public Action<long>? ReadMeasured { get; set; }
     public int Passes => Volatile.Read(ref passes);
@@ -200,7 +210,8 @@ public sealed partial class RegionWatcher
             if (areas.Count == 0 && !AnyShown()) return;
             var hasPhone = areas.Any(area => area.PanelLifetime.HasValue);
             var hasRegular = !hasPhone || areas.Any(area => !area.PanelLifetime.HasValue);
-            regularDue = hasRegular && (lastPass is null || time - lastPass.Value >= intervalMs);
+            var interval = areas.Any(area => area.Auto) ? Math.Min(intervalMs, AutoIntervalMs) : intervalMs;
+            regularDue = hasRegular && (lastPass is null || time - lastPass.Value >= interval);
             phoneDue = hasPhone
                 && (lastPhonePass is null || time - lastPhonePass.Value >= Math.Min(450, intervalMs));
             confirmOnly = false;
@@ -506,6 +517,20 @@ public sealed partial class RegionWatcher
 
     private async Task CommitAsync(Candidate candidate, WatchedArea area, State state, int started)
     {
+        if (area.Auto && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs))))
+        {
+            // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
+            // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
+            if (state.Shown.Length > 0 || !string.IsNullOrEmpty(state.RenderedText)) server.SendRegion(area.Id, "", null);
+            state.Shown = candidate.Key;
+            state.ShownText = candidate.Text;
+            state.RenderedKey = candidate.Key;
+            state.RenderedText = "";
+            state.RenderedBox = null;
+            state.RenderedLineHeight = null;
+            if (Volatile.Read(ref session) == started) Rejected?.Invoke(area.Id);
+            return;
+        }
         if (state.Shown == candidate.Key)
         {
             if (state.RenderedKey != candidate.Key || string.IsNullOrEmpty(state.RenderedText)) return;

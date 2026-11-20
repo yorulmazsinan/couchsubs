@@ -1288,4 +1288,87 @@ public class RegionWatcherTests
         Assert.False(watcher.IsBusy);
         Assert.Equal(0, reader.Count);
     }
+
+    private static readonly WatchedArea AutoArea = new("auto-1", ScreenTextDetector.AreaName, new CropRegion(0.02, 0.2, 0.02, 0.4)) { Auto = true };
+
+    [Fact]
+    public async Task AutoAreaTranslatesRealTextInPlace()
+    {
+        var reader = new Reader { Lines = [Line("Lamar has sent you a message.")] };
+        var server = new Server();
+        var rejected = new List<string>();
+        var translator = new Translator { Map = _ => "Lamar sana mesaj gönderdi." };
+        var watcher = new RegionWatcher(reader, translator, server) { Rejected = rejected.Add };
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        Assert.Equal(["auto-1|Lamar sana mesaj gönderdi."], server.Sent.Select(item => item.Id + "|" + item.Text));
+        Assert.Empty(rejected);
+    }
+
+    [Theory]
+    [InlineData("$1,250")]
+    [InlineData("HONOR")]
+    [InlineData("LIQUOR STORE")]
+    public async Task AutoAreaWithNoiseIsRejectedNotTranslated(string text)
+    {
+        var reader = new Reader { Lines = [Line(text)] };
+        var translator = new Translator();
+        var server = new Server();
+        var rejected = new List<string>();
+        var watcher = new RegionWatcher(reader, translator, server) { Rejected = rejected.Add };
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        Assert.Empty(translator.Calls);
+        Assert.Empty(server.Sent);
+        Assert.Equal(["auto-1"], rejected);
+    }
+
+    [Fact]
+    public async Task AutoAreaWithoutTextIsRejected()
+    {
+        var server = new Server();
+        var rejected = new List<string>();
+        var watcher = new RegionWatcher(new Reader(), new Translator(), server) { Rejected = rejected.Add };
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        await watcher.PassAsync(Shade(10), [AutoArea]);
+        Assert.Equal(["auto-1"], rejected);
+        Assert.Empty(server.Sent);
+    }
+
+    [Fact]
+    public async Task NoiseInAUserAreaIsStillHandledAsBefore()
+    {
+        // Gürültü elemesi yalnız otomatik alanlarda: kullanıcının alanı eskisi gibi çevrilir.
+        var reader = new Reader { Lines = [Line("LIQUOR STORE")] };
+        var server = new Server();
+        var rejected = new List<string>();
+        var watcher = new RegionWatcher(reader, new Translator(), server) { Rejected = rejected.Add };
+        await watcher.PassAsync(Shade(10), [Quest]);
+        await watcher.PassAsync(Shade(10), [Quest]);
+        Assert.Empty(rejected);
+        Assert.Equal(["TR: LIQUOR STORE"], server.Sent.Select(item => item.Text));
+    }
+
+    [Fact]
+    public async Task AutoAreasAreReadEveryHalfSecond()
+    {
+        long clock = 0;
+        var reader = new Reader { Lines = [Line("Follow Paulie to the car.")] };
+        var watcher = new RegionWatcher(reader, new Translator(), new Server(), clock: () => clock);
+        watcher.Offer(Shade(10), [AutoArea]);
+        await WaitForPass(watcher);
+        clock = RegionWatcher.AutoIntervalMs;
+        watcher.Offer(Shade(20), [AutoArea]);
+        await WaitForPass(watcher);
+        Assert.Equal(2, watcher.Passes);
+
+        var user = new RegionWatcher(reader, new Translator(), new Server(), clock: () => clock);
+        clock = 0;
+        user.Offer(Shade(10), [Quest]);
+        await WaitForPass(user);
+        clock = RegionWatcher.AutoIntervalMs;
+        user.Offer(Shade(20), [Quest]);
+        await WaitForPass(user);
+        Assert.Equal(1, user.Passes);
+    }
 }

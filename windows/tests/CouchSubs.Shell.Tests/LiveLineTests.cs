@@ -160,6 +160,15 @@ public class AreaPresetSettingsTests
     }
 
     [Fact]
+    public void AutoScreenTextIsOnByDefaultAndInOldSettings()
+    {
+        Assert.True(new UserSettings().AutoScreenText);
+        Assert.True(JsonSerializer.Deserialize<UserSettings>("""{"SourceLanguage":"en"}""")!.AutoScreenText);
+        var off = JsonSerializer.Serialize(new UserSettings() with { AutoScreenText = false });
+        Assert.False(JsonSerializer.Deserialize<UserSettings>(off)!.AutoScreenText);
+    }
+
+    [Fact]
     public void KeepCenteredIsKeptByTheController()
     {
         var store = new MemorySettings();

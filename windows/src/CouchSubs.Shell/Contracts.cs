@@ -255,6 +255,11 @@ public sealed record UserSettings
     public bool WatchSubtitleBackground { get; init; }
     /// <summary>GTA 6'da ekrandaki telefon açılınca yazılarını otomatik çevirir (deneysel).</summary>
     public bool AutoReadGamePhone { get; init; }
+    /// <summary>
+    /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
+    /// <see cref="ScreenTextDetector"/>). Altyazı alanı Tam ekranken çalışmaz. Eski ayar dosyalarında yoktur; açık başlar.
+    /// </summary>
+    public bool AutoScreenText { get; init; } = true;
     /// <summary>Altyazı okuyucusu. Gelişmiş seçili ama modeli inmemişse Windows'unki kullanılır.</summary>
     public OcrEngine OcrEngine { get; init; } = OcrEngine.Windows;
     public DubbingSettings Dubbing { get; init; } = new();

@@ -13983,6 +13983,38 @@
         }
       }
     },
+    "Automatically translate on-screen text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically translate on-screen text"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yazılarını otomatik çevir"
+          }
+        }
+      }
+    },
+    "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekranda beliren yazı kutuları (görev, yardım, mesaj) bulunur ve kendi yerinde çevrilir. Sayaçlar, harita ve kısa etiketler atlanır."
+          }
+        }
+      }
+    },
     "Color by speaker": {
       "localizations": {
         "en": {
