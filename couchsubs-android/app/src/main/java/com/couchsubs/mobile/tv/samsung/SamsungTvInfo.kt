@@ -15,9 +15,11 @@ data class SamsungTvInfo(val name: String?, val model: String?, val developerMod
      * geliştirici modu kapalı, Host PC IP başka cihazın ya da ayar doğru ama TV o zamandan beri tam yeniden başlamamış.
      * sdb sunucusu yalnız açılışta başlar; TV kapanınca güç tuşunu bırakmak yalnız bekleme moduna geçirir (#524, #484).
      */
-    fun refusal(phoneIp: String?): SamsungRefusal {
+    fun refusal(phoneIp: String?, tvIp: String? = null): SamsungRefusal {
         val ip = developerIp?.trim()?.takeIf { it.isNotEmpty() }
         val phone = phoneIp?.trim()?.takeIf { it.isNotEmpty() }
+        // #484: TV ile telefon farklı /24 ağında (ikinci modem, mesh, misafir ağı): Host PC IP doğru olsa da TV reddeder.
+        if (tvIp != null && phone != null && differentNetworks(tvIp, phone)) return SamsungRefusal.DifferentNetworks(tvIp.trim(), phone)
         return when (developerMode) {
             false -> SamsungRefusal.DeveloperModeOff
             true -> when {
@@ -30,6 +32,18 @@ data class SamsungTvInfo(val name: String?, val model: String?, val developerMod
     }
 
     companion object {
+        /** İki IPv4 adresi farklı /24 ağında mı? Biri IPv4 değilse farklı sayılmaz. */
+        fun differentNetworks(a: String, b: String): Boolean {
+            fun prefix(text: String): List<Int>? {
+                val parts = text.trim().split(".").map { it.toIntOrNull() }
+                if (parts.size != 4 || parts.any { it == null || it !in 0..255 }) return null
+                return parts.take(3).filterNotNull()
+            }
+            val left = prefix(a) ?: return false
+            val right = prefix(b) ?: return false
+            return left != right
+        }
+
         fun parse(json: String): SamsungTvInfo? = try {
             val device = JSONObject(json).optJSONObject("device") ?: throw IllegalArgumentException()
             fun text(name: String) = device.optString(name, "").replace("&quot;", "\"").trim().takeIf { it.isNotEmpty() }
@@ -61,6 +75,8 @@ data class SamsungTvInfo(val name: String?, val model: String?, val developerMod
 
 /** Samsung TV'nin sdb bağlantısını neden reddettiği (8001'deki geliştirici modu bilgisine göre). */
 sealed interface SamsungRefusal {
+    /** TV ile bu telefon farklı ağlarda (adresleri farklı /24'te). */
+    data class DifferentNetworks(val tv: String, val phone: String) : SamsungRefusal
     data object DeveloperModeOff : SamsungRefusal
     data class OtherHostIp(val ip: String) : SamsungRefusal
     /** Geliştirici modu açık ve Host PC IP bu telefon; TV ayardan sonra tam yeniden başlamamış. */

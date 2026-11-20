@@ -111,6 +111,13 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: nil, device: "192.168.1.6"), .unknown)
         XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.1.6", device: nil), .unknown)
         XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: nil, developerIp: nil, device: "192.168.1.6"), .unknown)
+        // #484: TV 192.168.1.101, telefon başka ağda 192.168.0.26 (Host PC IP de 192.168.0.26): ayar doğru görünse de ağ farklı.
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.0.26", device: "192.168.0.26", tv: "192.168.1.101"),
+                       .differentNetworks(tv: "192.168.1.101", device: "192.168.0.26"))
+        XCTAssertEqual(SamsungDeveloperInfo.refusal(developerMode: true, developerIp: "192.168.1.103", device: "192.168.1.103", tv: "192.168.1.101"),
+                       .notRestarted)
+        XCTAssertFalse(SamsungDeveloperInfo.differentNetworks("192.168.1.101", "samsung-tv.local"))
+        XCTAssertFalse(SamsungDeveloperInfo.differentNetworks("10.0.0.5", "10.0.0.200"))
     }
 
     func testBrandDefaultsToLGForSavedTVs() throws {

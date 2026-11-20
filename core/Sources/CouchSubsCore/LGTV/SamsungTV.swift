@@ -87,7 +87,10 @@ public struct SamsungDeveloperInfo: Equatable, Sendable {
     /// sdb (26101) bağlantısı reddedilince TV'nin kendi söylediği duruma göre neden: geliştirici modu kapalı, Host PC IP
     /// başka bir cihazın, ya da ayar doğru olduğu hâlde TV o zamandan beri tam yeniden başlamamış (sdb sunucusu yalnız
     /// açılışta başlar; TV kapanınca güç tuşunu bırakmak yalnız bekleme moduna geçirir, #524, #484).
-    public static func refusal(developerMode: Bool?, developerIp: String?, device: String?) -> SamsungRefusal {
+    /// `tv` verilirse önce ağ denetlenir: TV ile bu cihaz farklı /24 ağındaysa (#484'te 192.168.1.x ve 192.168.0.x; ikinci
+    /// modem, mesh ya da misafir ağı) Host PC IP doğru yazılsa da TV bağlantıyı reddeder.
+    public static func refusal(developerMode: Bool?, developerIp: String?, device: String?, tv: String? = nil) -> SamsungRefusal {
+        if let tv, let device, differentNetworks(tv, device) { return .differentNetworks(tv: tv, device: device) }
         switch developerMode {
         case false?: return .developerModeOff
         case true?:
@@ -102,8 +105,23 @@ public struct SamsungDeveloperInfo: Equatable, Sendable {
     }
 }
 
+extension SamsungDeveloperInfo {
+    /// İki IPv4 adresi farklı /24 ağında mı? Adreslerden biri IPv4 değilse farklı sayılmaz.
+    public static func differentNetworks(_ a: String, _ b: String) -> Bool {
+        func prefix(_ text: String) -> [Int]? {
+            let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+            guard parts.count == 4, parts.allSatisfy({ ($0 ?? -1) >= 0 && ($0 ?? 256) <= 255 }) else { return nil }
+            return parts.prefix(3).compactMap { $0 }
+        }
+        guard let left = prefix(a), let right = prefix(b) else { return false }
+        return left != right
+    }
+}
+
 /// Samsung TV'nin sdb bağlantısını neden reddettiği (8001'deki geliştirici modu bilgisine göre).
 public enum SamsungRefusal: Equatable, Sendable {
+    /// TV ile bu cihaz farklı ağlarda (adresleri farklı /24'te).
+    case differentNetworks(tv: String, device: String)
     case developerModeOff
     case otherHostIp(String)
     /// Geliştirici modu açık ve Host PC IP bu cihaz; TV ayardan sonra tam yeniden başlamamış.

@@ -127,7 +127,8 @@ Samsung, uygulamanın her TV için ayrı imzalanmasını ister. CouchSubs bunu s
 **TV bilgisayarı kabul etmedi** uyarısı çıkarsa geliştirici modu penceresindeki **Host PC IP**'nin bilgisayarınızın
 şu anki adresi olduğunu kontrol edin ve TV'yi yukarıdaki gibi tam yeniden başlatın. Bilgisayarın adresi değişirse bu
 adım yinelenir. Telefondan kurulumda uygulama hatadan sonra TV'ye geliştirici modunu yeniden sorar: ayar doğruysa TV'nin
-tam yeniden başlamadığını, Host PC IP başka bir cihazınsa hangi adresin yazılacağını söyler.
+tam yeniden başlamadığını, Host PC IP başka bir cihazınsa hangi adresin yazılacağını, TV ile telefon farklı ağlardaysa
+(ör. 192.168.1.x ve 192.168.0.x: ikinci modem, mesh ya da misafir ağı) ikisini aynı Wi-Fi'ya bağlamayı söyler.
 
 **Sorun çıkarsa** (75" Neo QLED'de denendi):
 

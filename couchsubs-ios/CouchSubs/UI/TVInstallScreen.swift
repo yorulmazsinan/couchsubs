@@ -339,8 +339,11 @@ struct SamsungInstallSection: View {
                 // TV'ye 26101 kapalıysa 8001'den geliştirici modu yeniden sorulur: neden ayar mı, yeniden başlatma mı (#524).
                 let refusal: SamsungRefusal
                 if failure.error == .unreachable, let info = await SamsungTvInfo.fetch(host: target) {
-                    refusal = SamsungDeveloperInfo.refusal(developerMode: info.developerMode, developerIp: info.developerIp, device: phone)
+                    refusal = SamsungDeveloperInfo.refusal(developerMode: info.developerMode, developerIp: info.developerIp, device: phone, tv: target)
                     InstallLog.shared.write("TV 8001: developerMode=\(info.developerMode.map { $0 ? "1" : "0" } ?? "?"), developerIP=\(info.developerIp ?? "?"), telefon=\(phone ?? "?") → \(refusal)")
+                } else if failure.error == .unreachable {
+                    // TV 8001'de yanıt vermese de farklı ağ adreslerden görülür.
+                    refusal = SamsungDeveloperInfo.refusal(developerMode: nil, developerIp: nil, device: phone, tv: target)
                 } else {
                     refusal = .unknown
                 }
@@ -355,6 +358,7 @@ struct SamsungInstallSection: View {
         var text: String = switch failure.error {
         case .unreachable:
             switch refusal {
+            case .differentNetworks(let tv, let device): TVText.errOtherNetwork(tv, device)
             case .notRestarted: TVText.errNotRestarted(phone ?? "?")
             case .otherHostIp(let ip): TVText.errOtherIp(ip, phone ?? "?")
             case .developerModeOff: TVText.errDevOff(phone ?? "?")

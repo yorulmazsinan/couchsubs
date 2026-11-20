@@ -222,6 +222,11 @@ class SamsungInstallerTest {
         assertEquals(SamsungRefusal.Unknown, info(true, null).refusal("192.168.1.6"))
         assertEquals(SamsungRefusal.Unknown, info(true, "192.168.1.6").refusal(null))
         assertEquals(SamsungRefusal.Unknown, info(null, null).refusal("192.168.1.6"))
+        // #484: TV 192.168.1.101, telefon başka ağda (Host PC IP de telefonun o adresi): neden ağ.
+        assertEquals(SamsungRefusal.DifferentNetworks("192.168.1.101", "192.168.0.26"),
+            info(true, "192.168.0.26").refusal("192.168.0.26", "192.168.1.101"))
+        assertEquals(SamsungRefusal.NotRestarted, info(true, "192.168.1.103").refusal("192.168.1.103", "192.168.1.101"))
+        assertEquals(false, SamsungTvInfo.differentNetworks("192.168.1.101", "tv.local"))
     }
 
     @Test

@@ -203,11 +203,11 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
                 // TV'de 26101 kapalıysa 8001'den geliştirici modu yeniden sorulur: neden ayar mı, yeniden başlatma mı (#524).
                 val refusal = if (error.error != SamsungInstallError.UNREACHABLE) SamsungRefusal.Unknown else withContext(Dispatchers.IO) {
                     SamsungTvInfo.fetch(target)?.let { info ->
-                        info.refusal(phoneIp).also {
+                        info.refusal(phoneIp, target).also {
                             InstallLog(logFile).write("TV 8001: developerMode=${info.developerMode?.let { on -> if (on) "1" else "0" } ?: "?"}, " +
                                 "developerIP=${info.developerIp ?: "?"}, telefon=${phoneIp ?: "?"} → $it")
                         }
-                    } ?: SamsungRefusal.Unknown
+                    } ?: SamsungTvInfo(null, null, null, null).refusal(phoneIp, target) // 8001 yanıtsızsa yalnız ağ denetlenir.
                 }
                 InstallState.Failed(error.error, error.detail, refusal)
             } catch (error: Exception) {
@@ -372,6 +372,7 @@ private fun failureText(failure: InstallState.Failed, phoneIp: String?): String 
     val context = LocalContext.current
     val advice = when (failure.error) {
         SamsungInstallError.UNREACHABLE -> when (val refusal = failure.refusal) {
+            is SamsungRefusal.DifferentNetworks -> context.getString(R.string.tvinstall_err_other_network, refusal.tv, refusal.phone)
             SamsungRefusal.NotRestarted -> context.getString(R.string.tvinstall_err_not_restarted, phoneIp ?: "?")
             is SamsungRefusal.OtherHostIp -> context.getString(R.string.tvinstall_err_other_ip, refusal.ip, phoneIp ?: "?")
             SamsungRefusal.DeveloperModeOff -> context.getString(R.string.tvinstall_err_dev_off, phoneIp ?: "?")
