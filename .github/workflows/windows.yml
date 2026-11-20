@@ -38,7 +38,11 @@ jobs:
         run: |
           git submodule update --init --depth 1 third-party/chiaki-ng
           git -C third-party/chiaki-ng submodule update --init --depth 1 third-party/nanopb third-party/jerasure third-party/gf-complete third-party/curl
-          git -C third-party/chiaki-ng apply ../patches/chiaki-takion-send-after-close.patch
+          # Mac (scripts/build-chiaki-macos.sh) ve Android (scripts/patch-chiaki.sh) gibi bütün yamalar uygulanır.
+          Get-ChildItem third-party/patches/chiaki-*.patch | Sort-Object Name | ForEach-Object {
+            git -C third-party/chiaki-ng apply "../patches/$($_.Name)"
+            if ($LASTEXITCODE -ne 0) { throw "chiaki yaması uygulanamadı: $($_.Name)" }
+          }
 
       - uses: msys2/setup-msys2@v2
         with:

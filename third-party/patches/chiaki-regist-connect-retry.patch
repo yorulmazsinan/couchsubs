@@ -1,0 +1,159 @@
+diff --git a/lib/src/regist.c b/lib/src/regist.c
+index 88f3001..7c0164e 100644
+--- a/lib/src/regist.c
++++ b/lib/src/regist.c
+@@ -28,6 +28,20 @@ typedef uint32_t in_addr_t;
+ #define SEARCH_REQUEST_SLEEP_MS 100
+ #define REGIST_SEARCH_TIMEOUT_MS 3000
+ #define REGIST_REPONSE_TIMEOUT_MS 3000
++// The console answered the search and is still in pairing mode: retrying only the TCP connect can still succeed,
++// while a new search after a failed attempt is refused by the console.
++#define REGIST_REQUEST_CONNECT_ATTEMPTS 3
++#define REGIST_REQUEST_CONNECT_RETRY_MS 500
++
++// Text of the last socket error (errno, or WSAGetLastError on Windows). Must be called right after the failing call.
++static void regist_socket_error_str(char *buf, size_t buf_size)
++{
++#ifdef _WIN32
++	snprintf(buf, buf_size, "WSA error %d", WSAGetLastError());
++#else
++	snprintf(buf, buf_size, "%s", strerror(errno));
++#endif
++}
+ 
+ static void *regist_thread_func(void *user);
+ static ChiakiErrorCode regist_search(ChiakiRegist *regist, struct addrinfo *addrinfos, struct sockaddr *recv_addr, socklen_t *recv_addr_size);
+@@ -499,7 +513,11 @@ static ChiakiErrorCode regist_search(ChiakiRegist *regist, struct addrinfo *addr
+ 		if(n <= 0)
+ 		{
+ 			if(n < 0)
+-				CHIAKI_LOGE(regist->log, "Regist failed to receive search response: %s", strerror(errno));
++			{
++				char reason[128];
++				regist_socket_error_str(reason, sizeof(reason));
++				CHIAKI_LOGE(regist->log, "Regist failed to receive search response: %s", reason);
++			}
+ 			else
+ 				CHIAKI_LOGE(regist->log, "Regist failed to receive search response");
+ 			err = CHIAKI_ERR_NETWORK;
+@@ -629,45 +647,68 @@ connect_fail:
+ 
+ static ChiakiErrorCode regist_request_connect(ChiakiRegist *regist, const struct sockaddr *addr, size_t addr_len, chiaki_socket_t *sock_out)
+ {
+-	chiaki_socket_t sock = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
+-	if(CHIAKI_SOCKET_IS_INVALID(sock))
++	ChiakiErrorCode err = CHIAKI_ERR_NETWORK;
++	for(int attempt = 1; attempt <= REGIST_REQUEST_CONNECT_ATTEMPTS; attempt++)
+ 	{
+-		return CHIAKI_ERR_NETWORK;
+-	}
++		if(attempt > 1)
++		{
++			err = chiaki_stop_pipe_sleep(&regist->stop_pipe, REGIST_REQUEST_CONNECT_RETRY_MS);
++			if(err != CHIAKI_ERR_TIMEOUT)
++			{
++				CHIAKI_LOGI(regist->log, "Regist canceled while waiting to connect request socket again");
++				return CHIAKI_ERR_CANCELED;
++			}
++		}
+ 
+-	ChiakiErrorCode err = chiaki_socket_set_nonblock(sock, true);
+-	if(err != CHIAKI_ERR_SUCCESS)
+-	{
+-		CHIAKI_LOGE(regist->log, "Regist failed to set request socket non-blocking: %s", chiaki_error_string(err));
+-		CHIAKI_SOCKET_CLOSE(sock);
+-		return err;
+-	}
++		chiaki_socket_t sock = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
++		if(CHIAKI_SOCKET_IS_INVALID(sock))
++		{
++			char reason[128];
++			regist_socket_error_str(reason, sizeof(reason));
++			CHIAKI_LOGE(regist->log, "Regist connect failed: could not create request socket (%s), attempt %d of %d",
++					reason, attempt, REGIST_REQUEST_CONNECT_ATTEMPTS);
++			err = CHIAKI_ERR_NETWORK;
++			continue;
++		}
+ 
+-	err = chiaki_stop_pipe_connect(&regist->stop_pipe, sock, (struct sockaddr *)addr, addr_len, REGIST_REPONSE_TIMEOUT_MS);
+-	if(err != CHIAKI_ERR_SUCCESS)
+-	{
+-		if(err == CHIAKI_ERR_CANCELED)
++		err = chiaki_socket_set_nonblock(sock, true);
++		if(err != CHIAKI_ERR_SUCCESS)
+ 		{
+-			CHIAKI_LOGI(regist->log, "Regist canceled while connecting request socket");
++			CHIAKI_LOGE(regist->log, "Regist failed to set request socket non-blocking: %s", chiaki_error_string(err));
++			CHIAKI_SOCKET_CLOSE(sock);
++			return err;
+ 		}
+-		else
++
++		err = chiaki_stop_pipe_connect(&regist->stop_pipe, sock, (struct sockaddr *)addr, addr_len, REGIST_REPONSE_TIMEOUT_MS);
++		if(err == CHIAKI_ERR_SUCCESS)
+ 		{
+-#ifdef _WIN32
+-			CHIAKI_LOGE(regist->log, "Regist connect failed: %u", WSAGetLastError());
+-#else
+-			CHIAKI_LOGE(regist->log, "Regist connect failed: %s", chiaki_error_string(err));
+-#endif
++			*sock_out = sock;
++			return CHIAKI_ERR_SUCCESS;
+ 		}
+-		if(!CHIAKI_SOCKET_IS_INVALID(sock))
++
++		// errno (WSAGetLastError) still belongs to connect(); read it before close() can change it.
++		char reason[128];
++		regist_socket_error_str(reason, sizeof(reason));
++		CHIAKI_SOCKET_CLOSE(sock);
++		sock = CHIAKI_INVALID_SOCKET;
++
++		if(err == CHIAKI_ERR_CANCELED)
+ 		{
+-			CHIAKI_SOCKET_CLOSE(sock);
+-			sock = CHIAKI_INVALID_SOCKET;
++			CHIAKI_LOGI(regist->log, "Regist canceled while connecting request socket");
++			return err;
+ 		}
+-		return err;
+-	}
++		if(err == CHIAKI_ERR_NETWORK)
++			CHIAKI_LOGE(regist->log, "Regist connect failed: %s (%s), attempt %d of %d",
++					chiaki_error_string(err), reason, attempt, REGIST_REQUEST_CONNECT_ATTEMPTS);
++		else
++			CHIAKI_LOGE(regist->log, "Regist connect failed: %s, attempt %d of %d",
++					chiaki_error_string(err), attempt, REGIST_REQUEST_CONNECT_ATTEMPTS);
+ 
+-	*sock_out = sock;
+-	return CHIAKI_ERR_SUCCESS;
++		// A timeout already waited REGIST_REPONSE_TIMEOUT_MS; only failures that happen at once are tried again.
++		if(err != CHIAKI_ERR_NETWORK && err != CHIAKI_ERR_CONNECTION_REFUSED)
++			return err;
++	}
++	return err;
+ }
+ 
+ static ChiakiErrorCode regist_recv_response(ChiakiRegist *regist, ChiakiRegisteredHost *host, chiaki_socket_t sock, ChiakiRPCrypt *rpcrypt, uint16_t remote_counter, char *send_buf, size_t send_buf_size)
+diff --git a/lib/src/session.c b/lib/src/session.c
+index 41c6bbf..738aab8 100644
+--- a/lib/src/session.c
++++ b/lib/src/session.c
+@@ -853,7 +853,17 @@ static ChiakiErrorCode session_thread_request_session(ChiakiSession *session, Ch
+ 			}
+ 			else if(err != CHIAKI_ERR_SUCCESS)
+ 			{
+-				CHIAKI_LOGE(session->log, "Session request connect failed: %s", chiaki_error_string(err));
++				// The plain "Network error" hid the reason (no route, local network blocked, no free port).
++				char reason[128];
++#ifdef _WIN32
++				snprintf(reason, sizeof(reason), "WSA error %d", WSAGetLastError());
++#else
++				snprintf(reason, sizeof(reason), "%s", strerror(errno));
++#endif
++				if(err == CHIAKI_ERR_NETWORK)
++					CHIAKI_LOGE(session->log, "Session request connect failed: %s (%s)", chiaki_error_string(err), reason);
++				else
++					CHIAKI_LOGE(session->log, "Session request connect failed: %s", chiaki_error_string(err));
+ 				if(err == CHIAKI_ERR_CONNECTION_REFUSED)
+ 					session->quit_reason = CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED;
+ 				else
