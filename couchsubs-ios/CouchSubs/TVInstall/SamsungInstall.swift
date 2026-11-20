@@ -621,6 +621,7 @@ final class SamsungInstaller {
         let toolPath = capabilities["sdk_toolpath"]?.trimmingCharacters(in: .whitespaces).nonEmpty ?? "/opt/usr/apps/tmp"
         log.write("TV: Tizen \(platform.isEmpty ? "?" : platform), sdk_toolpath \(toolPath)")
         if Self.isTooOld(platform) { throw SamsungInstallFailure(error: .tooOld, detail: "Tizen \(platform)") }
+        if !platform.isEmpty, Versions.isNewer("5.0", than: platform) { log.write("Tizen \(platform): 2016–2018 TV si, destek deneysel.") }
 
         let onTv = readInstalledVersion(device)
         if let version, let onTv, !Versions.isNewer(version, than: onTv) {
@@ -648,7 +649,12 @@ final class SamsungInstaller {
 
         progress(.signing)
         let key = try profile.privateKey()
-        let signed = try WgtSigner.sign(try wgt(),
+        var unsigned = try wgt()
+        if LegacyTizenPackage.applies(platform) {
+            unsigned = try LegacyTizenPackage.adapt(unsigned)
+            log.write("Tizen \(platform): paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).")
+        }
+        let signed = try WgtSigner.sign(unsigned,
                                         author: WgtSigner.Signer(key: key, chain: SamsungCertificates.chain(try profile.author())),
                                         distributor: WgtSigner.Signer(key: key, chain: SamsungCertificates.chain(try profile.distributor())))
         log.write("Paket imzalandı (\(signed.count) bayt).")

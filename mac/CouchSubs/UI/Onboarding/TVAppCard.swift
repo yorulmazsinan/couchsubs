@@ -157,6 +157,8 @@ struct TVAppCard: View {
         case .samsung:
             Card(title: "CouchSubs TV app") {
                 Text("The TV app is not installed. CouchSubs installs it once Developer Mode is on.")
+                // Telefonlardaki kurulum ekranıyla aynı not: 2016 (Tizen 2.4) ve sonrası kurulur, 2016–2018 deneysel.
+                HintText(text: "Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).")
                 HintText(text: "1. On the TV, open Apps and scroll to the very bottom of the page.")
                 HintText(text: "2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.")
                 HintText(text: "3. Turn Developer mode On, type this computer's address as Host PC IP: \(model.computerAddress ?? "?") and press OK.")
@@ -245,7 +247,7 @@ struct TVAppCard: View {
             String(localized: "The TV app could not be installed. Try again; if it fails again, send us the reason below.")
         case .installFailed: String(localized: "The TV app could not be installed. Try again.")
         case .notEnoughSpace: String(localized: "The TV is out of free space. Remove an app you do not use from the TV and try again.")
-        case .tooOld: String(localized: "This Samsung TV is too old for the CouchSubs TV app (2017 models and later are supported).")
+        case .tooOld: String(localized: "This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported).")
         case .signInFailed: String(localized: "Samsung sign-in did not complete. Try again and finish signing in on the page that opens.")
         case .certificateFailed: String(localized: "Samsung did not issue the signing certificate. Try again in a few minutes.")
         case .notApproved: String(localized: "Debugging was not allowed on the TV. Try again and choose Allow on the TV.")

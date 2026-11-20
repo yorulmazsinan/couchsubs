@@ -15,7 +15,7 @@ public enum SamsungInstallError
     Unreachable,
     LoginFailed,
     CertificateFailed,
-    /// <summary>TV, Tizen 3.0'dan (2017) eski.</summary>
+    /// <summary>TV, Tizen 2.4'ten (2016) eski.</summary>
     TooOld,
     InstallFailed,
     /// <summary>TV'de yer yok ([116]).</summary>
@@ -61,11 +61,11 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     internal const string PackageId = "CouchSubsT";
 
     /// <summary>
-    /// Desteklenen en eski Tizen: 3.0 (2017 modelleri, ör. UE43MU7000U). Sayfa ES5 ile yazıldığından Tizen 3.0'ın
-    /// tarayıcısında (Chromium 47) çalışır. Tizen 2.x (2015–2016) hiç denenmedi, kurulum yolu da farklıdır
-    /// (Apps2Samsung profili /home/developer'a gönderir); reddedilir.
+    /// Desteklenen en eski Tizen: 2.4 (2016, deneysel; #71'e göre elle kurulumu çalışıyor), telefonlardaki kurulumla
+    /// aynı. Sayfa ES5 ile yazıldığından eski tarayıcılarda da çalışır. Tizen 2.x'te paket imzalanmadan önce
+    /// sadeleştirilir (<see cref="LegacyTizenPackage"/>). 2.3 ve eskisi reddedilir.
     /// </summary>
-    internal const string MinimumTizen = "3.0";
+    internal const string MinimumTizen = "2.4";
 
     /// <summary>
     /// Bu sürüme kadar (dahil) TV, kurulumdan önce dağıtıcı sertifikasının cihaz profilini (device-profile.xml) ister;
@@ -76,7 +76,7 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     /// <summary>TV'nin bildirdiği Tizen sürümü desteklenmiyor mu? Sürüm okunamadıysa (boş) kurulum denenir.</summary>
     internal static bool IsTooOld(string platform) => platform.Length > 0 && Versions.IsNewer(MinimumTizen, platform);
 
-    /// <summary>Tizen 3.0–4.0 (2017–2018): kurulumdan önce cihaz profili TV'ye gönderilmeli.</summary>
+    /// <summary>Tizen 2.4–4.0 (2016–2018): kurulumdan önce cihaz profili TV'ye gönderilmeli.</summary>
     internal static bool NeedsDeviceProfile(string platform) =>
         platform.Length > 0 && !IsTooOld(platform) && !Versions.IsNewer(platform, DeviceProfileUpTo);
 
@@ -198,7 +198,7 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         if (IsTooOld(platform))
             throw new SamsungInstallException(SamsungInstallError.TooOld, $"Tizen {platform}");
         if (platform.Length > 0 && Versions.IsNewer("5.0", platform))
-            Log.Write($"Tizen {platform}: 2017–2018 TV'si, destek deneysel.");
+            Log.Write($"Tizen {platform}: 2016–2018 TV'si, destek deneysel.");
 
         var onTv = await ReadInstalledVersionAsync(device, cancellationToken);
         if (version is not null && onTv is not null && !Versions.IsNewer(version, onTv))
@@ -233,6 +233,8 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         File.Copy(wgtPath, staged);
         try
         {
+            if (LegacyTizenPackage.Applies(platform) && LegacyTizenPackage.Adapt(staged))
+                Log.Write($"Tizen {platform}: paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).");
             await TizenWgtSigner.ReSignWgtWithCertsInPlace(staged, profile.AuthorP12, profile.DistributorP12, profile.Password);
             Log.Write("Paket imzalandı.");
             Progress?.Invoke("installing");

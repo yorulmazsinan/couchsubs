@@ -9,7 +9,7 @@ adımları: [tv-kurulum.md](tv-kurulum.md#samsung-tv).
 |---|---|---|
 | 5.0 ve üstü | 2019+ | Desteklenir, gerçek TV'de denendi |
 | 3.0–4.0 | 2017–2018 | Deneysel (bkz. aşağı) |
-| 2.4 | 2016 | Deneysel, yalnız telefondan: Android telefon ve iPhone kurulumu dener (en eski sürüm 2.4). Mac ve Windows kurulumu Tizen 3.0'dan eskisini `TooOld` ile durdurur |
+| 2.4 | 2016 | Deneysel: dört uygulama da (Mac, Windows, Android telefon, iPhone) kurulumu dener (en eski sürüm 2.4); paket imzalanmadan önce sadeleştirilir (`LegacyTizenPackage`) |
 | 2.3 ve eskisi, Orsay | 2015 ve öncesi | Desteklenmez: kurulum `TooOld` ile durur |
 
 Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
@@ -27,17 +27,18 @@ Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
 - `tizen.*` ve `webapis.*` çağrılarının hepsi `try/catch` içindedir; API yoksa sessizce geçilir (`tizen` nesnesi
   olmadan sayfa hatasız açılıyor, başsız Chrome'da denendi). `webapis.js` yüklenemezse yalnız ekran koruyucuyu
   kapatma çalışmaz.
-- Kurulum: Mac ve Windows'taki `SamsungTvInstaller` Tizen 3.0'dan eskisini reddeder (`MinimumTizen`). Telefonlar
-  2.4'ü de dener (Android `SamsungInstaller.MINIMUM_TIZEN`, iPhone `SamsungInstaller.minimumTizen`); Android ayrıca
-  Tizen 2.x'te paketin `config.xml`'ini #71'de çalışan hâle döndürür (`LegacyTizenPackage`, #621), iPhone'da bu
-  uyarlama henüz yok. Tizen 3.0–4.0'da, Apps2Samsung'un
+- Kurulum: dört uygulamada da alt sınır Tizen 2.4'tür (Mac ve Windows `SamsungTvInstaller.MinimumTizen`, Android
+  `SamsungInstaller.MINIMUM_TIZEN`, iPhone `SamsungInstaller.minimumTizen`); 2.3 ve eskisi `TooOld` ile durur (#638'de
+  masaüstü 2016 TV'yi reddediyordu). Tizen 2.x'te dördü de imzalamadan önce paketin `config.xml`'ini #71'de çalışan hâle
+  döndürür: `network.public` izni ve `base_screen_resolution` ayarı çıkarılır (`LegacyTizenPackage`, #621; Android
+  `.kt`, iPhone `.swift`, Mac ve Windows `.cs`). Tizen 2.4–4.0'da, Apps2Samsung'un
   `TizenPermitInstall`'ı gibi, sertifika alınırken saklanan `device-profile.xml`'i kurulumdan önce TV'nin
   `sdk_toolpath` klasörüne gönderir. Sertifika aynı uç noktalardan, aynı `public` düzeyle alınır.
 - **Gerçek TV'de doğrulanan:** bir kullanıcı (UE43MU7000U, Tizen 3.0) paketi Tizen Studio sertifikası ve Apps2Samsung
   ile elle kurdu; çeviri ve HDMI görüntüsü (`tvwindow` `BEHIND`) çalıştı. İlk açılıştaki "bağlantı hatası" TV yeniden
   başlatılınca geçti.
 - **Doğrulanmayan:** CouchSubs'ın kendi kurulumunun (Samsung sertifikası + cihaz profili + `vd_appinstall`) Tizen
-  3.0–4.0'da çalışması, `0 vd_applist` çıktısının bu TV'lerde aynı biçimde gelmesi, `webapis.appcommon` ekran koruyucu
+  2.4–4.0'da çalışması, `0 vd_applist` çıktısının bu TV'lerde aynı biçimde gelmesi, `webapis.appcommon` ekran koruyucu
   ayarı ve Web Audio dublajı.
 
 ## Yapı
@@ -74,8 +75,8 @@ TV'sine kurmak mümkün değildir. Mac ve Windows uygulamaları bunu kullanıcı
 3. Yazar ve dağıtıcı CSR'lerini `svdca.samsungqbe.com`'a gönderir (dağıtıcı CSR'sinde `URN:tizen:deviceid=<DUID>`),
    gelen sertifikaları Samsung ara sertifikasıyla PKCS#12'ye yazar (Mac: `~/Library/Application Support/CouchSubs/samsung`,
    Windows: `%LOCALAPPDATA%\CouchSubs\samsung`).
-4. Tizen 3.0–4.0'da cihaz profilini (`device-profile.xml`) `sdk_toolpath`'e gönderir.
-5. Uygulamayla gelen imzasız `couchsubs-samsung_<sürüm>.wgt`'yi imzalar, `vd_appinstall` ile kurar ve `was_execute` ile açar.
+4. Tizen 2.4–4.0'da cihaz profilini (`device-profile.xml`) `sdk_toolpath`'e gönderir.
+5. Uygulamayla gelen imzasız `couchsubs-samsung_<sürüm>.wgt`'yi (Tizen 2.x'te sadeleştirilmiş kopyasını) imzalar, `vd_appinstall` ile kurar ve `was_execute` ile açar.
    TV başka sertifikalı eski kopya ya da paket kimliği yüzünden reddederse (`[118, -12]`, `[118, -11]`, `[118, -22]`)
    eski kopyayı kaldırıp bir kez daha dener; TV sertifikayı reddederse kayıtlı sertifika bırakılır, bir sonraki
    denemede yenisi alınır. Hata kodlarının anlamı `SamsungInstallDiagnostics.cs`'te.

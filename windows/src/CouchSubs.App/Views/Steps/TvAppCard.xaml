@@ -15,6 +15,8 @@
                 <TextBlock Style="{StaticResource HintText}" Text="{t:T '3. Turn on Dev Mode Status. The TV restarts and this screen continues by itself.'}" />
             </StackPanel>
             <StackPanel x:Name="SamsungSteps" Visibility="Collapsed" Margin="0,8,0,0">
+                <!-- Telefonlardaki kurulum ekranıyla aynı not: 2016 (Tizen 2.4) ve sonrası kurulur, 2016–2018 deneysel. -->
+                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,4" Text="{t:T 'Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).'}" />
                 <TextBlock Style="{StaticResource HintText}" Text="{t:T '1. On the TV, open Apps and scroll to the very bottom of the page.'}" />
                 <TextBlock Style="{StaticResource HintText}" Text="{t:T '2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.'}" />
                 <TextBlock x:Name="SamsungHostStep" Style="{StaticResource HintText}" />

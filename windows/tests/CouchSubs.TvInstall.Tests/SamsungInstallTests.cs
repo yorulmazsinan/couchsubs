@@ -35,10 +35,12 @@ public class SamsungInstallTests
     public void InstallOutputIsClassified(string output, string expected) =>
         Assert.Equal(expected, SamsungInstallDiagnostics.Classify(output).ToString());
 
-    /// 2017 (Tizen 3.0) ve sonrası kurulur; Tizen 3.0–4.0 TV'ler kurulumdan önce cihaz profilini ister.
+    /// 2016 (Tizen 2.4) ve sonrası kurulur (telefonlarla aynı); Tizen 2.4–4.0 TV'ler kurulumdan önce cihaz profilini ister.
     [Theory]
-    [InlineData("2.4", true, false)]
+    [InlineData("2.4", false, true)]
+    [InlineData("2.4.0", false, true)]
     [InlineData("2.3.1", true, false)]
+    [InlineData("2.3", true, false)]
     [InlineData("3.0", false, true)]
     [InlineData("4.0", false, true)]
     [InlineData("4.0.0", false, true)]

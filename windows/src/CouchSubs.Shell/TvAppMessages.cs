@@ -82,7 +82,7 @@ public static class TvAppMessages
         DevModeError.HostPcMismatch => HostPcMismatchMessage,
         DevModeError.Unreachable => "The TV did not respond. Make sure it is on and on the same network.",
         DevModeError.ToolMissing => "Windows' OpenSSH Client is missing. Add it in Settings › System › Optional features and try again.",
-        DevModeError.TooOld => "This Samsung TV is too old for the CouchSubs TV app (2017 models and later are supported).",
+        DevModeError.TooOld => "This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported).",
         DevModeError.SignInFailed => "Samsung sign-in did not complete. Try again and finish signing in on the page that opens.",
         DevModeError.CertificateFailed => "Samsung did not issue the signing certificate. Try again in a few minutes.",
         DevModeError.NotApproved => "Debugging was not allowed on the TV. Try again and choose Allow on the TV.",
