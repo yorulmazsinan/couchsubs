@@ -212,6 +212,9 @@
     <string name="regist_bad_address">Bu adres çözülemedi. PS5\'in IP adresini kontrol et.</string>
     <string name="regist_no_answer">PS5 yanıt vermedi. Telefon ve PS5 aynı Wi-Fi\'da mı?</string>
     <string name="regist_no_reply">PS5 kodu aldı ama yanıt vermedi. Yeniden dene.</string>
+    <string name="regist_pairing_closed">PS5 ağda ama kod beklemiyor. PS5\'te Ayarlar › Sistem › Uzaktan Oynatma › Cihazı Eşle\'yi aç ve ekrandaki yeni kodu yaz. PS5 dinlenme modundaysa önce aç.</string>
+    <string name="regist_connect_failed">PS5 yanıt verdi ama eşleştirme bağlantısı açılamadı. Telefonda VPN ya da ağı engelleyen bir uygulama varsa kapat, sonra PS5\'te Cihazı Eşle\'yi yeniden açıp yeni kodu yaz.</string>
+    <string name="regist_no_free_port">Telefonda boş ağ bağlantı noktası (port) kalmadı, bu yüzden PS5\'e bağlanamıyor. Telefonu yeniden başlat, sonra PS5\'te Cihazı Eşle\'yi yeniden açıp yeni kodu yaz.</string>
     <string name="regist_failed">Eşleme olmadı.</string>
     <string name="target_body">Sonra ana ekrandan değiştirebilirsin.</string>
     <string name="target_searching">Ağda TV aranıyor…</string>

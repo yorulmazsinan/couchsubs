@@ -56,13 +56,31 @@ public static class Registration
         VersionReason => RegistrationFailure.VersionMismatch,
         CrashReason => RegistrationFailure.ConsoleCrashed,
         null when Any(errors, "getaddrinfo") => RegistrationFailure.BadAddress,
+        // Hata nedenini (WSA kodu) libchiaki yaması yazar (third-party/patches/chiaki-regist-connect-retry.patch).
+        null when Any(errors, "send search", "for search", "Regist connect failed", "search response")
+                  && Any(errors, NoFreePortErrors) => RegistrationFailure.NoFreePort,
+        // PS5 aramayı reddetti (Windows'ta ICMP "port kapalı" WSAECONNRESET olarak gelir): eşleştirme ekranı açık değil.
+        null when Any(errors, "search response") && Any(errors, "Connection refused", "WSA error 10054") => RegistrationFailure.PairingClosed,
+        // PS5 aramaya yanıt verdi, bağlantı açılamadı: "PS5 yanıt vermedi" değildir (GitHub #590).
+        null when Any(errors, "connect for request") => RegistrationFailure.ConnectFailed,
         // Eskiden yalnız "search response" ve "connect for search" sayılıyordu; aramanın gönderilemediği
-        // ("failed to send search") ve isteğin bağlanamadığı durumlar genel "kodu kabul etmedi"ye düşüyordu.
+        // ("failed to send search") durumlar genel "kodu kabul etmedi"ye düşüyordu.
         null when Any(errors, "search response", "connect for search", "send search", "Regist search failed",
-                      "connect for request", "Regist connect failed") => RegistrationFailure.NoAnswer,
+                      "Regist connect failed") => RegistrationFailure.NoAnswer,
         null when Any(errors, "response HTTP header", "receiving response content", "receive response content") => RegistrationFailure.NoReply,
         _ => RegistrationFailure.Failed,
     };
+
+    /// <summary>Boş port ya da soket kalmadığını söyleyen hata metinleri: 10049 WSAEADDRNOTAVAIL, 10055 WSAENOBUFS,
+    /// 10024 WSAEMFILE (Mac ve Android'de strerror metinleri).</summary>
+    private static readonly string[] NoFreePortErrors =
+        ["assign requested address", "No buffer space", "Too many open files", "WSA error 10049", "WSA error 10055", "WSA error 10024"];
+
+    /// <summary>Bu hatadan sonra aynı kodla yeniden denensin mi. Yalnız arama yanıtsız kaldıysa: PS5 aramaya bir kez yanıt
+    /// verdikten sonra yeni aramayı reddeder; eskiden yapılan iki deneme daha hep reddediliyor ve kullanıcı asıl hata
+    /// yerine "Connection refused"u görüp PS5'in bağlanmayı reddettiğini sanıyordu (GitHub #590).</summary>
+    internal static bool ShouldRetry(RegistrationFailure failure, int attempt) =>
+        failure == RegistrationFailure.NoAnswer && attempt < SearchAttempts;
 
     private static bool Any(IReadOnlyList<string>? errors, params string[] needles) =>
         errors?.Any(line => needles.Any(needle => line.Contains(needle, StringComparison.Ordinal))) == true;
@@ -123,7 +141,7 @@ public static class Registration
                 _ => $"native error {result}",
             };
             RemotePlayLog.Write(0, $"PS5 kaydı başarısız ({host}, deneme {attempt}): {failure} {detail}");
-            if (failure != RegistrationFailure.NoAnswer || attempt >= SearchAttempts)
+            if (!ShouldRetry(failure, attempt))
                 throw new RegistrationException(failure, reported, detail);
             Thread.Sleep(500);
         }

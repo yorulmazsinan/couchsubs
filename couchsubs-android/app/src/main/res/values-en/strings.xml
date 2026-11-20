@@ -206,6 +206,9 @@
     <string name="regist_bad_address">This address could not be resolved. Check the PS5\'s IP address.</string>
     <string name="regist_no_answer">The PS5 did not respond. Are the phone and PS5 on the same Wi-Fi?</string>
     <string name="regist_no_reply">The PS5 received the code but did not respond. Try again.</string>
+    <string name="regist_pairing_closed">The PS5 is on the network but is not waiting for a code. On the PS5 open Settings › System › Remote Play › Pair Device and enter the new code it shows. If the PS5 is in rest mode, turn it on first.</string>
+    <string name="regist_connect_failed">The PS5 answered, but the pairing connection to it could not be opened. Turn off any VPN or app that blocks the network on the phone, then open Pair Device again on the PS5 and enter the new code.</string>
+    <string name="regist_no_free_port">This phone has no free network ports left, so it cannot connect to the PS5. Restart the phone, then open Pair Device again on the PS5 and enter the new code.</string>
     <string name="regist_failed">Pairing failed.</string>
     <string name="target_body">You can change this later from the home screen.</string>
     <string name="target_searching">Looking for TVs on the network…</string>

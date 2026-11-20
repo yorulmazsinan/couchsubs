@@ -676,6 +676,9 @@ public class AppControllerTests
     [InlineData(RegistrationFailure.NoReply, AppError.ConsoleNoReply)]
     [InlineData(RegistrationFailure.Canceled, AppError.ConsoleNoReply)]
     [InlineData(RegistrationFailure.BadAddress, AppError.BadAddress)]
+    [InlineData(RegistrationFailure.PairingClosed, AppError.ConsolePairingClosed)]
+    [InlineData(RegistrationFailure.ConnectFailed, AppError.ConsoleConnectFailed)]
+    [InlineData(RegistrationFailure.NoFreePort, AppError.NoFreePort)]
     public async Task RegistrationFailureMapsToItsOwnMessage(RegistrationFailure failure, AppError expected)
     {
         var services = new FakeServices { RegisterError = new RegistrationException(failure) };

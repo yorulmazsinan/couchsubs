@@ -27,12 +27,43 @@ final class RegistrationReasonTests: XCTestCase {
     func testChiakiErrorLinesAreClassified() {
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist timed out waiting for search response", "Regist search failed"]), .noAnswer)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist failed to send search: Host is down", "Regist search failed"]), .noAnswer)
-        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Timeout", "Regist eventually failed to connect for request"]), .noAnswer)
+        // PS5 aramaya yanıt verdi, eşleştirme bağlantısı açılamadı: "yanıt vermedi" değil.
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Timeout, attempt 1 of 3", "Regist eventually failed to connect for request"]), .connectFailed)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist failed to send search: No route to host", "Regist search failed"]), .localNetworkBlocked)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist failed to getaddrinfo on 192.168.1.", "Regist eventually failed"]), .badAddress)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist failed to receive response HTTP header", "Regist eventually failed"]), .noReply)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist timed out receiving response content"]), .noReply)
         XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist response is missing RegistKey (or it was invalid)"]), .failed)
+    }
+
+    /// #590'daki remoteplay.log'un satırları: PS5 ilk aramaya yanıt verdi, bağlantı açılamadı; sonraki aramaları
+    /// reddetti. Her aşama kendi türünü alır ve yalnız yanıtsız arama yeniden denenir.
+    func testIssue590LinesAreClassified() {
+        // Eşleştirme ekranı kapalıyken (ya da PS5 dinlenmedeyken) arama reddedilir.
+        let refused = ["Regist failed to receive search response: Connection refused", "Regist search failed"]
+        XCTAssertEqual(Registration.kind(reason: nil, errors: refused), .pairingClosed)
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist failed to receive search response: WSA error 10054", "Regist search failed"]), .pairingClosed)
+        // Yamasız libchiaki nedeni yazmaz; yine de "PS5 yanıt vermedi" denmez.
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Network error", "Regist eventually failed to connect for request"]), .connectFailed)
+        // Yamalı libchiaki errno'yu yazar: yerel ağ izni ve boş port kalmaması ayrı anlatılır.
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Network error (No route to host), attempt 1 of 3",
+                                                               "Regist eventually failed to connect for request"]), .localNetworkBlocked)
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Network error (Can't assign requested address), attempt 3 of 3",
+                                                               "Regist eventually failed to connect for request"]), .noFreePort)
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: Network error (WSA error 10055), attempt 3 of 3",
+                                                               "Regist eventually failed to connect for request"]), .noFreePort)
+        XCTAssertEqual(Registration.kind(reason: nil, errors: ["Regist connect failed: could not create request socket (Too many open files), attempt 1 of 3",
+                                                               "Regist eventually failed to connect for request"]), .noFreePort)
+    }
+
+    func testOnlyAnUnansweredSearchIsRetried() {
+        XCTAssertTrue(Registration.shouldRetry(Registration.RegistrationError(.noAnswer), attempt: 1))
+        XCTAssertTrue(Registration.shouldRetry(Registration.RegistrationError(.noAnswer), attempt: 2))
+        XCTAssertFalse(Registration.shouldRetry(Registration.RegistrationError(.noAnswer), attempt: Registration.searchAttempts))
+        let kinds: [Registration.RegistrationError.Kind] = [.pairingClosed, .connectFailed, .noFreePort, .localNetworkBlocked, .wrongCode, .noReply]
+        for kind in kinds {
+            XCTAssertFalse(Registration.shouldRetry(Registration.RegistrationError(kind), attempt: 1), kind.rawValue)
+        }
     }
 
     func testDetailPrefersThePs5Reason() {

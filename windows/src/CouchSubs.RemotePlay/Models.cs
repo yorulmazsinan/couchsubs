@@ -122,6 +122,12 @@ public enum RegistrationFailure
     NoReply,
     /// <summary>Girilen adres çözülemedi (yanlış yazılmış IP).</summary>
     BadAddress,
+    /// <summary>PS5 ağda ama aramayı reddetti: Cihazı Eşleştir ekranı açık değil, kodun süresi dolmuş ya da PS5 dinlenmede.</summary>
+    PairingClosed,
+    /// <summary>PS5 aramaya yanıt verdi ama eşleştirme bağlantısı (TCP 9295) açılamadı.</summary>
+    ConnectFailed,
+    /// <summary>Bilgisayarda yeni bağlantı için boş port ya da soket kalmadı (GitHub #590'daki şikâyet).</summary>
+    NoFreePort,
 }
 
 /// <param name="reason">PS5'in bildirdiği RP-Application-Reason (ör. 0x80108b09); PS5 yanıt vermediyse null.</param>

@@ -384,7 +384,14 @@ public class RegistrationReasonTests
     /// PS5 kod bildirmediyse libchiaki'nin hata satırlarından nerede kalındığı anlaşılır (satırlar regist.c'den).
     [Theory]
     [InlineData(RegistrationFailure.NoAnswer, "Regist failed to send search: Unknown error", "Regist search failed")]
-    [InlineData(RegistrationFailure.NoAnswer, "Regist connect failed: 10060", "Regist eventually failed to connect for request")]
+    // PS5 aramaya yanıt verdi, bağlantı açılamadı (yamasız ve yamalı libchiaki satırları): "yanıt vermedi" değil.
+    [InlineData(RegistrationFailure.ConnectFailed, "Regist connect failed: 10060", "Regist eventually failed to connect for request")]
+    [InlineData(RegistrationFailure.ConnectFailed, "Regist connect failed: Network error (WSA error 10051), attempt 3 of 3", "Regist eventually failed to connect for request")]
+    [InlineData(RegistrationFailure.NoFreePort, "Regist connect failed: Network error (WSA error 10055), attempt 3 of 3", "Regist eventually failed to connect for request")]
+    [InlineData(RegistrationFailure.NoFreePort, "Regist connect failed: Network error (WSA error 10049), attempt 3 of 3", "Regist eventually failed to connect for request")]
+    // GitHub #590: PS5 yeni aramayı reddetti (eşleştirme ekranı kapalı); Windows'ta ICMP WSAECONNRESET olarak gelir.
+    [InlineData(RegistrationFailure.PairingClosed, "Regist failed to receive search response: WSA error 10054", "Regist search failed")]
+    [InlineData(RegistrationFailure.PairingClosed, "Regist failed to receive search response: Connection refused", "Regist search failed")]
     [InlineData(RegistrationFailure.NoAnswer, "Regist eventually failed to connect for search", "Regist search failed")]
     [InlineData(RegistrationFailure.BadAddress, "Regist failed to getaddrinfo on 192.168.1.", "Regist eventually failed")]
     [InlineData(RegistrationFailure.NoReply, "Regist failed to receive response HTTP header", "Regist eventually failed")]
@@ -392,6 +399,18 @@ public class RegistrationReasonTests
     [InlineData(RegistrationFailure.Failed, "Regist response is missing RegistKey (or it was invalid)", "Regist eventually failed")]
     public void ChiakiErrorLinesAreClassified(RegistrationFailure expected, string first, string second) =>
         Assert.Equal(expected, Registration.FailureFrom(null, [first, second]));
+
+    /// Yalnız yanıtsız arama yeniden denenir; PS5 yanıt verdikten ya da reddettikten sonra yeni arama hep reddediliyordu (GitHub #590).
+    [Fact]
+    public void OnlyAnUnansweredSearchIsRetried()
+    {
+        Assert.True(Registration.ShouldRetry(RegistrationFailure.NoAnswer, 1));
+        Assert.True(Registration.ShouldRetry(RegistrationFailure.NoAnswer, 2));
+        Assert.False(Registration.ShouldRetry(RegistrationFailure.NoAnswer, 3));
+        foreach (var failure in new[] { RegistrationFailure.PairingClosed, RegistrationFailure.ConnectFailed, RegistrationFailure.NoFreePort,
+                                         RegistrationFailure.WrongCode, RegistrationFailure.NoReply })
+            Assert.False(Registration.ShouldRetry(failure, 1));
+    }
 
     [Theory]
     [InlineData("12345678", 12345678u)]

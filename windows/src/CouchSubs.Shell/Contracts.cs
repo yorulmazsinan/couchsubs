@@ -718,6 +718,8 @@ public enum AppError
     /// <summary>PS5 seçilmedi ve IP adresi yazılmadı.</summary>
     MissingConsole,
     WrongCode, ConsoleNoReply, BadAddress,
+    /// <summary>PS5 ağda ama eşleştirme ekranı kapalı; PS5 bulundu ama bağlantı açılamadı; boş port kalmadı (GitHub #590).</summary>
+    ConsolePairingClosed, ConsoleConnectFailed, NoFreePort,
     /// <summary>PSN girişinin ayrı ayrı anlatılan sonuçları (eskiden hepsi InvalidLogin'di).</summary>
     LoginRefused, LoginRateLimited, LoginServer, LoginNetwork, LoginBadResponse, LoginWindowClosed, LoginPageFailed,
 }
@@ -741,6 +743,9 @@ public sealed class AppException(AppError error, string message) : Exception(mes
         AppError.WrongCode => "The code is wrong or has expired. Open Pair Device again on the PS5 and enter the new code.",
         AppError.ConsoleNoReply => "The PS5 received the request but did not answer in time. Open Pair Device again on the PS5 and enter the new code.",
         AppError.BadAddress => "No PS5 found at this address. Check the PS5's IP address under Settings › Network › Connection Status.",
+        AppError.ConsolePairingClosed => "The PS5 is on the network but is not waiting for a code. On the PS5 open Settings › System › Remote Play › Pair Device and enter the new code it shows. If the PS5 is in rest mode, turn it on first.",
+        AppError.ConsoleConnectFailed => "The PS5 answered, but the pairing connection to it could not be opened. Turn off any VPN or firewall app that blocks the home network, then open Pair Device again on the PS5 and enter the new code.",
+        AppError.NoFreePort => "This computer has no free network ports left, so it cannot connect to the PS5. Restart the computer, then open Pair Device again on the PS5 and enter the new code.",
         AppError.LoginRefused => "Sony did not complete the sign-in. Wait a minute, then press Sign in again and sign in with the second account.",
         AppError.LoginRateLimited => "Sony received too many sign-in attempts. Wait about 15 minutes, then sign in again.",
         AppError.LoginServer => "Sony's sign-in server returned an error. Wait a few minutes, then sign in again.",

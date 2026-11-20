@@ -231,6 +231,9 @@ fun registrationErrors(): (RegistrationFailure) -> String {
             RegistrationFailure.BAD_ADDRESS -> R.string.regist_bad_address
             RegistrationFailure.NO_ANSWER -> R.string.regist_no_answer
             RegistrationFailure.NO_REPLY -> R.string.regist_no_reply
+            RegistrationFailure.PAIRING_CLOSED -> R.string.regist_pairing_closed
+            RegistrationFailure.CONNECT_FAILED -> R.string.regist_connect_failed
+            RegistrationFailure.NO_FREE_PORT -> R.string.regist_no_free_port
             RegistrationFailure.FAILED -> R.string.regist_failed
         })
     }

@@ -667,6 +667,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // İptal yalnız cs_register'ın süresi dolunca olur: PS5 yanıt vermemiştir.
             RegistrationFailure.NoReply or RegistrationFailure.Canceled => AppError.ConsoleNoReply,
             RegistrationFailure.BadAddress => AppError.BadAddress,
+            RegistrationFailure.PairingClosed => AppError.ConsolePairingClosed,
+            RegistrationFailure.ConnectFailed => AppError.ConsoleConnectFailed,
+            RegistrationFailure.NoFreePort => AppError.NoFreePort,
             _ => AppError.RegistrationFailed,
         };
         var message = AppException.Describe(kind, text);

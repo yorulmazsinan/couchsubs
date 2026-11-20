@@ -389,6 +389,7 @@ final class AppModelTests: XCTestCase {
             (.wrongCode, .wrongCode), (.noAnswer, .consoleNoAnswer), (.noReply, .consoleNoReply), (.canceled, .consoleNoReply),
             (.inUse, .consoleInUse), (.consoleCrashed, .consoleCrashed), (.versionMismatch, .consoleVersion),
             (.badAddress, .badAddress), (.localNetworkBlocked, .localNetworkBlocked),
+            (.pairingClosed, .consolePairingClosed), (.connectFailed, .consoleConnectFailed), (.noFreePort, .noFreePort),
         ]
         for (kind, expected) in cases {
             let error = await registrationError(Registration.RegistrationError(kind))

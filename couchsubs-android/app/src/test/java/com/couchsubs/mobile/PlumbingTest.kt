@@ -47,7 +47,25 @@ class RemotePlayLogicTest {
         assertEquals(RegistrationFailure.WRONG_CODE, Registration.failureFrom(0x80108b09.toInt(), emptyList()))
         assertEquals(RegistrationFailure.NO_ANSWER, Registration.failureFrom(null, listOf("Regist search failed")))
         assertEquals(RegistrationFailure.FAILED, Registration.failureFrom(null, emptyList()))
+        // GitHub #590: PS5 aramaya yanıt verip bağlantı açılamadığında ya da aramayı reddettiğinde "yanıt vermedi" denmez.
+        assertEquals(RegistrationFailure.CONNECT_FAILED,
+            Registration.failureFrom(null, listOf("Regist connect failed: Network error", "Regist eventually failed to connect for request")))
+        assertEquals(RegistrationFailure.PAIRING_CLOSED,
+            Registration.failureFrom(null, listOf("Regist failed to receive search response: Connection refused", "Regist search failed")))
+        assertEquals(RegistrationFailure.NO_FREE_PORT,
+            Registration.failureFrom(null, listOf("Regist connect failed: Network error (Cannot assign requested address), attempt 3 of 3",
+                "Regist eventually failed to connect for request")))
         assertEquals("0x80108b09 (Regist failed)", Registration.detailFrom(listOf("x", "Reported Application Reason: 0x80108b09 (Regist failed)")))
+    }
+
+    @Test
+    fun onlyAnUnansweredSearchIsRetried() {
+        assertTrue(Registration.shouldRetry(RegistrationFailure.NO_ANSWER, 1))
+        assertFalse(Registration.shouldRetry(RegistrationFailure.NO_ANSWER, 3))
+        for (failure in listOf(RegistrationFailure.PAIRING_CLOSED, RegistrationFailure.CONNECT_FAILED, RegistrationFailure.NO_FREE_PORT,
+                RegistrationFailure.WRONG_CODE, RegistrationFailure.NO_REPLY)) {
+            assertFalse(failure.name, Registration.shouldRetry(failure, 1))
+        }
     }
 
     @Test

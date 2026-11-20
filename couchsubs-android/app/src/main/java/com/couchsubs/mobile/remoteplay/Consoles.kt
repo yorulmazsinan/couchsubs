@@ -34,8 +34,15 @@ class RegisteredConsole(val host: String, val name: String, val registKey: ByteA
     fun withHost(newHost: String) = RegisteredConsole(newHost, name, registKey, morning)
 }
 
-/** Kaydın kullanıcıya anlatılan sonucu (Windows: RegistrationFailure). */
-enum class RegistrationFailure { WRONG_ACCOUNT, WRONG_CODE, IN_USE, VERSION_MISMATCH, CONSOLE_CRASHED, BAD_ADDRESS, NO_ANSWER, NO_REPLY, FAILED }
+/**
+ * Kaydın kullanıcıya anlatılan sonucu (Windows: RegistrationFailure). [PAIRING_CLOSED]: PS5 ağda ama aramayı reddetti
+ * (Cihazı Eşleştir ekranı kapalı ya da PS5 dinlenmede); [CONNECT_FAILED]: PS5 aramaya yanıt verdi ama eşleştirme
+ * bağlantısı açılamadı; [NO_FREE_PORT]: telefonda boş port ya da soket kalmadı (GitHub #590).
+ */
+enum class RegistrationFailure {
+    WRONG_ACCOUNT, WRONG_CODE, IN_USE, VERSION_MISMATCH, CONSOLE_CRASHED, BAD_ADDRESS, NO_ANSWER, NO_REPLY,
+    PAIRING_CLOSED, CONNECT_FAILED, NO_FREE_PORT, FAILED,
+}
 
 class RegistrationException(val failure: RegistrationFailure, val reason: Int? = null, val detail: String? = null) :
     Exception("PS5 registration failed: $failure ${detail ?: ""}")
@@ -48,6 +55,15 @@ object Registration {
     private const val CRASH = 0x80108b15.toInt()
     private const val SEARCH_ATTEMPTS = 3
     private const val REASON_PREFIX = "Reported Application Reason: "
+    /** Boş port ya da soket kalmadığını söyleyen strerror metinleri (EADDRNOTAVAIL, ENOBUFS, EMFILE). */
+    private val NO_FREE_PORT_ERRORS = arrayOf("assign requested address", "No buffer space", "Too many open files")
+
+    /**
+     * Bu hatadan sonra aynı kodla yeniden denensin mi. Yalnız arama yanıtsız kaldıysa: PS5 aramaya bir kez yanıt verdikten
+     * sonra yeni aramayı reddeder; eskiden yapılan iki deneme daha hep reddediliyor ve kullanıcı asıl hata yerine
+     * "Connection refused"u görüp PS5'in bağlanmayı reddettiğini sanıyordu (GitHub #590).
+     */
+    fun shouldRetry(failure: RegistrationFailure, attempt: Int) = failure == RegistrationFailure.NO_ANSWER && attempt < SEARCH_ATTEMPTS
 
     /** PS5'in gösterdiği 8 haneli kod; boşluk, tire, nokta atlanır. Başka karakter ya da 8'den farklı hane: null. */
     fun parsePin(text: String?): Int? {
@@ -75,7 +91,13 @@ object Registration {
             reason == CRASH -> RegistrationFailure.CONSOLE_CRASHED
             reason != null -> RegistrationFailure.FAILED
             any("getaddrinfo") -> RegistrationFailure.BAD_ADDRESS
-            any("search response", "connect for search", "send search", "Regist search failed", "connect for request", "Regist connect failed") ->
+            // Nedeni (errno) libchiaki yaması yazar (third-party/patches/chiaki-regist-connect-retry.patch).
+            any("send search", "for search", "Regist connect failed", "search response") && any(*NO_FREE_PORT_ERRORS) ->
+                RegistrationFailure.NO_FREE_PORT
+            any("search response") && any("Connection refused") -> RegistrationFailure.PAIRING_CLOSED
+            // PS5 aramaya yanıt verdi, bağlantı açılamadı: "PS5 yanıt vermedi" değildir.
+            any("connect for request") -> RegistrationFailure.CONNECT_FAILED
+            any("search response", "connect for search", "send search", "Regist search failed", "Regist connect failed") ->
                 RegistrationFailure.NO_ANSWER
             any("response HTTP header", "receiving response content", "receive response content") -> RegistrationFailure.NO_REPLY
             else -> RegistrationFailure.FAILED
@@ -106,7 +128,7 @@ object Registration {
                 else -> RegistrationFailure.FAILED
             }
             // Kod PS5'e gitmeden biten arama aşamasında paket kaybı olabilir; yeniden denemek güvenlidir.
-            if (failure != RegistrationFailure.NO_ANSWER || attempt >= SEARCH_ATTEMPTS)
+            if (!shouldRetry(failure, attempt))
                 throw RegistrationException(failure, reported, detailFrom(lines))
             attempt++
             Thread.sleep(500)

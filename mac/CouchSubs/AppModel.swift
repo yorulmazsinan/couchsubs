@@ -371,6 +371,8 @@ enum AppError: LocalizedError, Equatable {
     /// PS5 eşleştirmesinin ayrı ayrı anlatılan sonuçları (Windows'taki AppError ile aynı).
     case missingConsole, wrongCode, consoleNoAnswer, consoleNoReply, consoleInUse, consoleCrashed, consoleVersion,
          badAddress, localNetworkBlocked
+    /// PS5 ağda ama eşleştirme ekranı kapalı; PS5 bulundu ama bağlantı açılamadı; bu cihazda boş port kalmadı (GitHub #590).
+    case consolePairingClosed, consoleConnectFailed, noFreePort
     /// PSN girişinin ayrı ayrı anlatılan sonuçları (eskiden hepsi invalidLogin ya da ham Swift hatasıydı).
     case loginRefused, loginRateLimited, loginServer, loginNetwork, loginBadResponse, loginWindowClosed, loginPageFailed
 
@@ -403,6 +405,9 @@ enum AppError: LocalizedError, Equatable {
         case .versionMismatch: self = .consoleVersion
         case .badAddress: self = .badAddress
         case .localNetworkBlocked: self = .localNetworkBlocked
+        case .pairingClosed: self = .consolePairingClosed
+        case .connectFailed: self = .consoleConnectFailed
+        case .noFreePort: self = .noFreePort
         case .failed: self = .registrationFailed
         }
     }
@@ -423,6 +428,9 @@ enum AppError: LocalizedError, Equatable {
         case .consoleVersion: String(localized: "This PS5 system version is not supported yet. Update CouchSubs and try again.")
         case .badAddress: String(localized: "No PS5 found at this address. Check the PS5's IP address under Settings › Network › Connection Status.")
         case .localNetworkBlocked: String(localized: "macOS blocked the connection to the local network. Turn on CouchSubs in System Settings › Privacy & Security › Local Network, then enter a new code.")
+        case .consolePairingClosed: String(localized: "The PS5 is on the network but is not waiting for a code. On the PS5 open Settings › System › Remote Play › Pair Device and enter the new code it shows. If the PS5 is in rest mode, turn it on first.")
+        case .consoleConnectFailed: String(localized: "The PS5 answered, but the pairing connection to it could not be opened. Turn off any VPN or firewall app that blocks the home network, then open Pair Device again on the PS5 and enter the new code.")
+        case .noFreePort: String(localized: "This computer has no free network ports left, so it cannot connect to the PS5. Restart the computer, then open Pair Device again on the PS5 and enter the new code.")
         case .loginRefused: String(localized: "Sony did not complete the sign-in. Wait a minute, then press Sign in again and sign in with the second account.")
         case .loginRateLimited: String(localized: "Sony received too many sign-in attempts. Wait about 15 minutes, then sign in again.")
         case .loginServer: String(localized: "Sony's sign-in server returned an error. Wait a few minutes, then sign in again.")

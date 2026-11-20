@@ -32,7 +32,17 @@ public struct RegisteredConsole: Codable, Equatable, Sendable {
 
 public enum Registration {
     /// Kod PS5'e gitmeden biten aşama (arama tek UDP paketiyle yapılır); paket kaybında yeniden denemek güvenlidir.
+    ///
+    /// Yalnız arama yanıtsız kaldıysa (`noAnswer`) yeniden denenir. PS5 aramaya bir kez yanıt verdikten sonra yeni aramayı
+    /// reddeder ("Connection refused"); eskiden PS5 yanıt verip bağlantı açılamayınca iki deneme daha yapılıyor, ikisi de
+    /// reddediliyor ve kullanıcı ilk (asıl) hata yerine "Connection refused"u görüp PS5'in bağlanmayı reddettiğini
+    /// sanıyordu (GitHub #590: 12 eşleştirmenin hepsinde 2. ve 3. deneme reddedildi, hiçbiri tutmadı).
     static let searchAttempts = 3
+
+    /// Bu hatadan sonra aynı kodla yeniden denensin mi.
+    static func shouldRetry(_ error: RegistrationError, attempt: Int) -> Bool {
+        error.kind == .noAnswer && attempt < searchAttempts
+    }
 
     /// PS5'in "Cihazı Bağla" ekranındaki 8 haneli kodla kayıt olur. Başarısızlıkta `RegistrationError`; her deneme
     /// ve sonucu remoteplay.log'a yazılır.
@@ -51,7 +61,7 @@ public enum Registration {
                 return console.withHost(host)
             } catch let error as RegistrationError {
                 RemotePlayLog.write("PS5 kaydı başarısız (\(host), deneme \(attempt)): \(error)")
-                guard error.kind == .noAnswer, attempt < searchAttempts else { throw error }
+                guard shouldRetry(error, attempt: attempt) else { throw error }
             }
             attempt += 1
             try? await Task.sleep(for: .milliseconds(500))
@@ -138,6 +148,13 @@ public enum Registration {
             case wrongCode
             /// PS5 arama paketine yanıt vermedi: kod PS5'e hiç ulaşmadı (kapalı, dinlenme modunda, başka ağda).
             case noAnswer
+            /// PS5 ağda ama aramayı reddetti ("Connection refused"): Cihazı Eşleştir ekranı açık değil, kodun süresi dolmuş
+            /// ya da PS5 dinlenme modunda. Yeniden denemek aynı yere çıkar; ekran yeniden açılıp yeni kod girilmelidir.
+            case pairingClosed
+            /// PS5 aramaya yanıt verdi ama eşleştirme bağlantısı (TCP 9295) açılamadı.
+            case connectFailed
+            /// Bu cihazda yeni bağlantı için boş port ya da soket kalmadı (GitHub #590'daki şikâyet); yeniden başlatmak çözer.
+            case noFreePort
             /// PS5 isteği aldı ama yanıtı zamanında gelmedi.
             case noReply
             case inUse
@@ -165,6 +182,11 @@ public enum Registration {
 
     static let reasonPrefix = "Reported Application Reason: "
 
+    /// Boş port ya da soket kalmadığını söyleyen hata metinleri (macOS/Linux strerror ve Windows WSA kodları:
+    /// 10049 WSAEADDRNOTAVAIL, 10055 WSAENOBUFS, 10024 WSAEMFILE).
+    static let noFreePortErrors = ["assign requested address", "No buffer space", "Too many open files",
+                                   "WSA error 10049", "WSA error 10055", "WSA error 10024"]
+
     /// PS5'in kodundan ve libchiaki'nin hata satırlarından hatanın türü.
     static func kind(reason: UInt32?, errors: [String]) -> RegistrationError.Kind {
         if let reason {
@@ -180,11 +202,18 @@ public enum Registration {
         func any(_ needles: [String]) -> Bool { errors.contains { line in needles.contains { line.contains($0) } } }
         if any(["getaddrinfo"]) { return .badAddress }
         // macOS yerel ağ izni yoksa paket gönderilemez: "No route to host" ya da "Operation not permitted".
+        // libchiaki eskiden bağlantı hatasının nedenini yazmıyordu ("Network error"); yama (third-party/patches/
+        // chiaki-regist-connect-retry.patch) errno'yu satıra ekler, bu sınıflama ancak onunla işler.
         if any(["send search", "for search", "Regist connect failed"]) && any(["No route to host", "not permitted"]) {
             return .localNetworkBlocked
         }
+        if any(["send search", "for search", "Regist connect failed", "search response"]) && any(noFreePortErrors) {
+            return .noFreePort
+        }
+        if any(["search response"]) && any(["Connection refused", "WSA error 10054"]) { return .pairingClosed }
+        if any(["connect for request"]) { return .connectFailed }
         if any(["search response", "connect for search", "failed to send search", "Regist search failed",
-                "connect for request", "Regist connect failed"]) { return .noAnswer }
+                "Regist connect failed"]) { return .noAnswer }
         if any(["response HTTP header", "receiving response content", "receive response content"]) { return .noReply }
         return .failed
     }
