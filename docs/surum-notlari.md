@@ -6,14 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **4K Samsung TV'de PS5 görüntüsü küçük kalmıyor (TV uygulaması 0.9.39, #304):** Bazı 4K Samsung TV'lerde PS5 görüntüsü ekranın sol üst köşesinde, çeyrek boyutta kalıyordu. Artık görüntü ekranın tamamını kaplıyor. Ultra geniş Samsung monitörlerde menüden oyuna geçince (görüntü sinyali değişince) PS5 penceresi yeniden doğru ölçüye getiriliyor. Bilgisayardaki CouchSubs beta.59'a güncellenince TV uygulaması kendiliğinden 0.9.39'a güncellenir.
-- **Telefonda paket güncelleme hatası görünüyor (iPhone, Android, #583):** Paket sunucusuna ulaşılamayınca "Paketleri güncelle" hiçbir şey söylemeden duruyordu, GTA 6 gibi yeni paketler listede çıkmıyordu. Artık hata ekranda yazıyor. iPhone'da bir paket inemeyince ötekiler de duruyordu; artık her paket ayrı iniyor.
-- **Ek alan çevirileri daha doğru (Windows, Mac, iPhone, Android, #560):** Yarım okunan yazı çevirinin yerine geçmiyor, menüde seçim değişince eski seçeneğin Türkçesi yeni seçeneğin üstünde kalmıyor, aynı yazı yeniden gelince çevirisi hemen çıkıyor, oyun değişince ek alanlar sıfırlanıyor. Windows'ta ek alanlar daha hızlı çevriliyor. Katkı: erayslyrt00.
-- **Güncelleme kartında sürüm notları (Windows, #577):** Güncelleme çıkınca kartta "Neler değişti?" notları görünüyor; Ayarlar'da kurulu sürüm yazıyor. Katkı: erayslyrt00.
-- **Pencere yakalama tanısı (Windows, #581):** Görüntü kaynağı olarak OBS projektörü ya da oyun penceresi seçildiğinde görüntü gelmezse nedeni altyazi.log dosyasına yazılıyor.
-- **Ortak altyazı havuzu daha az veri gönderiyor (bütün uygulamalar, #576):** Havuzda yeterince doğrulanmış satırlar bir daha gönderilmiyor.
-- **Mac paketi derleme kanıtıyla (#585):** Sürümdeki bütün dosyaların bu depodan derlendiği GitHub derleme kanıtıyla doğrulanabiliyor.
-- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.66).
+- **PS5'e bağlanma ve eşleştirme daha güvenilir (Windows, Mac, iPhone, Android, #590):** Eşleştirmede PS5 yanıt verip bağlantı kopunca kısa aralıklarla yeniden deneniyor. "Network error" yerine sorunun asıl nedeni yazıyor: PS5'te eşleştirme ekranı açık değilse, VPN ya da güvenlik duvarı engelliyorsa ya da cihazda boş bağlantı noktası kalmadıysa ne yapacağınız ekranda çıkıyor.
+- **"PS5 bağlanmayı reddetti" ayrıldı (bütün uygulamalar):** PS5 yeni uyanmışsa ya da adresi değişmişse CouchSubs artık eşlemeyi yenilemenizi istemiyor; PS5'i ağda yeniden arayıp kendiliğinden bağlanıyor. Yalnız eşleme gerçekten bozulduğunda "yeniden eşleyin" yazıyor.
+- **LG TV'de ekran koruyucu (TV uygulaması 0.9.40, #555):** Bazı LG TV'lerde oyun sırasında açılan saat ekranı için TV uygulaması ekran koruyucu isteğine her açılışta yeniden kaydoluyor. Bilgisayardaki CouchSubs beta.60'a güncellenince TV uygulaması kendiliğinden 0.9.40'a güncellenir.
+- **Android telefonda bağlantı ve kilit ekranı (#553):** Telefon kilitlenince Wi-Fi güç tasarrufuna geçip çeviriyi durdurmuyor; pil kısıtlaması açıksa ana ekranda uyarı ve "Pil ayarını aç" düğmesi çıkıyor. PSN girişi takılırsa en geç 45 saniyede hata ve "Yeniden dene" görünüyor. Samsung TV kurulum ekranı bellek yetmeyince uygulamayı kapatmıyor, siyah ekranda kalmıyor. "Paketleri güncelle" uygulamada zaten olan paketleri yeniden indirmiyor, GTA 6 paketi daha çabuk iniyor.
+- **Ek alanlarda kontrolcü simgeleri ve kısa komutlar (Windows, Mac, iPhone, #573):** Tuş simgeleri korunuyor, sık geçen kısa komutlar hazır sözlükten anında Türkçeleşiyor. Katkı: erayslyrt00.
+- **Paket sunucusuna yedek adres (bütün uygulamalar, #589):** Bazı ağların ulaşamadığı ana adres yerine paketler yedek adresten iniyor.
+- **Mac:** Güncelleme imzası yenilendi. Mac'te uygulama içi güncelleme bu sürümü bulamazsa CouchSubs'ı bir kez siteden indirip üstüne kurun; sonraki güncellemeler yine kendiliğinden gelir. Mac'te PS5 arama günlüğü artık şişmiyor.
+
+**beta.59'da gelenler:** 4K Samsung TV'de PS5 görüntüsünün ekranı kaplaması (TV uygulaması 0.9.39), telefonda paket güncelleme hatasının görünmesi, ek alan çevirilerinin daha doğru olması (katkı: erayslyrt00), Windows güncelleme kartında sürüm notları (katkı: erayslyrt00), pencere yakalama tanısı, ortak havuzun daha az veri göndermesi.
 
 **beta.58'de gelenler:** Windows'ta TV aranırken uygulamanın kapanmasının düzelmesi, Ekranı çevir'in ekrandaki bütün yazıları çevirmesi, TV eşleştirme kodunun her durumda görünmesi (TV uygulaması 0.9.37), ek alan çevirilerinin ekrana sığması (0.9.38, katkı: erayslyrt00), GTA 6 "Altyazı zeminini izle" (katkı: erayslyrt00), telefonda altyazı ekranının kararmaması ve "Ekranı döndür" (Play, 0.1.0-beta.65).
 
