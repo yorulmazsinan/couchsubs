@@ -1,0 +1,1 @@
+0.9.36: When the phone/computer is not accepting pairing, the TV says what to do (Start translation or Pair TV in Settings) and retries by itself.

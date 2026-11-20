@@ -830,3 +830,31 @@ test('süresi dolan eşleştirme kendiliğinden yeniden başlamaz, Tamam ile yen
   assert.strictEqual(tv.requests.filter(r => r.method === 'POST').length, 2);
   assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
 });
+
+// X @Eaglaris (20 Kas): çeviri sürmeden "TV'de test et"e basılınca sunucu eşleştirmeyi 409 ile reddediyordu; TV
+// "Eşleştirme tamamlanmadı, Tamam'a basın" yazıyor, Tamam da aynı 409'a çıkıyordu. TV ne yapılacağını söyler, kendisi
+// birkaç saniyede bir yeniden dener; bilgisayar onay penceresini açınca kod çıkar ve onayla bağlanır.
+test('eşleştirmeye kapalı sunucu (409): yönlendirme gösterilir, kendiliğinden yeniden denenir, pencere açılınca kod çıkar', () => {
+  const auth = { key: secureKey, id: secureId, reject: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(1000);
+  assert.match(tv.element('pairing').textContent, /Çeviriyi başlat/);
+  assert.doesNotMatch(tv.element('pairing').textContent, /Tamam/);
+  assert.strictEqual(tv.lastOpened(), undefined);
+  tv.clock.advance(6000);
+  assert(tv.requests.filter(r => r.method === 'POST').length >= 2);
+  assert.match(tv.element('pairing').textContent, /Çeviriyi başlat/);
+  auth.reject = false;
+  tv.clock.advance(6000);
+  assert.match(tv.element('pairing').textContent, /123456/);
+  auth.approved = true;
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+});
+
+test('eski sunucu (auth bildirmeyen, ör. Android telefon beta.62): yeni TV eşleştirme istemeden anahtarsız bağlanır', () => {
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]) });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events');
+  assert(!tv.requests.some(r => r.method === 'POST'));
+});

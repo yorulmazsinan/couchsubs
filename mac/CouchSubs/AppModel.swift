@@ -1400,17 +1400,31 @@ final class AppModel: ObservableObject {
     /// Ana ekrandaki "TV'de test et": sunucu henüz açık değilse açılır, deneme altyazısı gönderilir.
     func testSubtitle() async {
         try? await startServer()
+        // Çeviri sürmüyorken TV'nin eşleştirme isteği (TV 0.9.34+) reddediliyordu: Android TV anahtarı başlatma yoluyla
+        // alamaz, "TV'de test et"e TV'de yalnız "Eşleştirme tamamlanmadı" çıkıyordu. Deneme, Ayarlar'daki "TV eşleştir"
+        // gibi iki dakikalık onay penceresi açar; TV kodu gösterince bilgisayarda onay sorulur.
+        if !isRunning { server.pairing.open() }
         // TV uygulaması bağlı değilse deneme altyazısı kimseye gitmiyordu: bekçi yalnız çeviri sürerken çalışır, TV
         // uygulaması kapalıysa ya da bilgisayarı arıyorsa "TV'de test et"e TV'de hiçbir şey çıkmıyordu (Samsung 65S95F).
         // Önce TV uygulaması açılır (Samsung'da geliştirici bağlantısıyla) ve bağlanması beklenir.
         if settings.output.showsOnTV, hasTV, let tv, tv.brand != .androidTV, server.connectedClients == 0 {
             await openTVAppForTest(tv)
+        } else if settings.output.showsOnTV, hasTV, let tv, tv.brand == .androidTV, server.connectedClients == 0 {
+            // Android TV uygulaması bilgisayarı kendisi bulur; eşleştirme onayı da gerekebilir. Yazı TV bağlanınca gitsin.
+            openingTVAppForTest = true
+            let deadline = ContinuousClock.now + testPairWait
+            while server.connectedClients == 0, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            openingTVAppForTest = false
         }
         sendTestSubtitle()
     }
 
     /// "TV'de test et"te TV uygulamasının açılıp bağlanması için en çok bu kadar beklenir.
     var testTVWait: Duration = .seconds(20)
+    /// Android TV'de deneme altyazısı için TV'nin bağlanması (gerekirse eşleştirme onayı) en çok bu kadar beklenir.
+    var testPairWait: Duration = .seconds(30)
     /// Deneme altyazısından önce TV uygulaması açılıp bağlanması bekleniyor (düğme bunu gösterir).
     @Published private(set) var openingTVAppForTest = false
 

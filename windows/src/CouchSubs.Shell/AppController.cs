@@ -1165,16 +1165,37 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public async Task SendTestSubtitleAsync()
     {
         try { await StartServerAsync(); } catch (SocketException) { }
+        // Çeviri sürmüyorken TV'nin eşleştirme isteği (TV 0.9.34+) reddediliyordu: Android TV anahtarı başlatma yoluyla
+        // alamaz, "TV'de test et"e TV'de yalnız "Eşleştirme tamamlanmadı" çıkıyordu. Deneme, Ayarlar'daki "TV eşleştir"
+        // gibi iki dakikalık onay penceresi açar; TV kodu gösterince bilgisayarda onay sorulur.
+        if (!isRunning) server.Pairing.Open();
         // TV uygulaması bağlı değilse deneme altyazısı kimseye gitmiyordu: bekçi yalnız çeviri sürerken çalışır, TV
         // uygulaması kapalıysa ya da bilgisayarı arıyorsa "TV'de test et"e TV'de hiçbir şey çıkmıyordu (Samsung 65S95F).
         // Önce TV uygulaması açılır (Samsung'da geliştirici bağlantısıyla) ve bağlanması beklenir.
         if (ShowsOnTv && HasTv && tv is { Brand: not TvBrand.AndroidTv } target && server.ConnectedClients == 0)
             await OpenTvAppForTestAsync(target);
+        // Android TV uygulaması bilgisayarı kendisi bulur; eşleştirme onayı da gerekebilir. Yazı TV bağlanınca gitsin.
+        else if (ShowsOnTv && HasTv && tv is { Brand: TvBrand.AndroidTv } && server.ConnectedClients == 0)
+            await WaitForTvForTestAsync(TestPairWait);
         SendTestSubtitle();
     }
 
     /// <summary>"TV'de test et"te TV uygulamasının açılıp bağlanması için en çok bu kadar beklenir.</summary>
     public TimeSpan TestTvWait { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>Android TV'de deneme altyazısı için TV'nin bağlanması (gerekirse eşleştirme onayı) en çok bu kadar beklenir.</summary>
+    public TimeSpan TestPairWait { get; set; } = TimeSpan.FromSeconds(30);
+
+    private async Task WaitForTvForTestAsync(TimeSpan wait)
+    {
+        OpeningTvAppForTest = true;
+        try
+        {
+            var deadline = DateTime.UtcNow + wait;
+            while (server.ConnectedClients == 0 && DateTime.UtcNow < deadline) await Task.Delay(250);
+        }
+        finally { OpeningTvAppForTest = false; }
+    }
 
     /// <summary>Deneme altyazısından önce TV uygulaması bağlanıyor (ana ekrandaki düğme beklerken bunu gösterir).</summary>
     public bool OpeningTvAppForTest

@@ -551,6 +551,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.openingTVAppForTest)
     }
 
+    /// X @Eaglaris (20 Kas): çeviri sürmeden "TV'de test et"e basılınca Android TV 0.9.34'ün eşleştirme isteği 409 ile
+    /// reddediliyordu; TV "Eşleştirme tamamlanmadı" yazıyor, deneme altyazısı hiç çıkmıyordu. Deneme onay penceresini açar.
+    func testTestOnTVOpensThePairingWindowForAnAndroidTV() async throws {
+        let store = MemoryStore()
+        store.save(LGTV(name: "Android TV", host: "127.0.0.1", brand: .androidTV), for: StoreKey.tv)
+        let model = AppModel(services: FakeServices(), store: store, defaults: .isolated())
+        model.settings.output = .tv
+        model.testPairWait = .milliseconds(300)
+        await model.testSubtitle()
+        XCTAssertFalse(model.openingTVAppForTest)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(model.serverPort)/pair")!)
+        request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    }
+
     /// #40: Samsung jetonla gelen bağlantıda jeton göndermeyince saklı jeton silinmemeli (yoksa TV her seferinde izin sorar).
     func testPairingWithoutNewTokenKeepsSavedToken() async throws {
         let services = FakeServices()

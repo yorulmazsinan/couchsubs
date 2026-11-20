@@ -1,0 +1,1 @@
+0.9.36: Bilgisayar/telefon eşleştirmeye açık değilken TV ne yapılacağını söylüyor (Çeviriyi başlat ya da Ayarlar'daki TV eşleştir) ve kendiliğinden yeniden deniyor; Tamam'a boşa basılmıyor.

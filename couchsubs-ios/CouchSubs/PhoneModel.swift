@@ -1134,6 +1134,9 @@ final class PhoneModel: ObservableObject {
     func sendTestSubtitle() {
         Task {
             try? await startServer()
+            // Çeviri sürmüyorken TV'nin eşleştirme isteği (TV 0.9.34+) reddediliyordu; TV'de yalnız "Eşleştirme
+            // tamamlanmadı" çıkıyordu. Deneme, Profil'deki "TV eşleştir" gibi iki dakikalık onay penceresi açar.
+            if !isRunning { server.pairing.open() }
             server.sendStyle(settings.style)
             server.sendSubtitle(String(localized: "This is a test subtitle. Can you see it on top of the game?"), durationMs: 8000)
         }

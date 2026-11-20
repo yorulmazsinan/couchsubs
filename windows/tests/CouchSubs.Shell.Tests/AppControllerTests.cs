@@ -1256,6 +1256,28 @@ public class AppControllerRunTests
         controller.Dispose();
     }
 
+    /// X @Eaglaris (20 Kas): çeviri sürmeden "TV'de test et"e basılınca Android TV 0.9.34'ün eşleştirme isteği 409 ile
+    /// reddediliyordu; TV "Eşleştirme tamamlanmadı" yazıyor, deneme altyazısı hiç çıkmıyordu. Deneme onay penceresini açar.
+    [Fact]
+    public async Task TestOnTvOpensThePairingWindowForAnAndroidTv()
+    {
+        var services = new FakeServices();
+        var store = new MemoryStore();
+        store.Save(StoreKeys.Tv, new LgTv("Android TV", "127.0.0.1", TvBrand.AndroidTv));
+        var controller = AppControllerTests.Make(services, store);
+        controller.TestPairWait = TimeSpan.FromMilliseconds(300);
+        SubtitlePairing.Ticket? asked = null;
+        controller.TvPairingRequested += ticket => asked = ticket;
+        await controller.SendTestSubtitleAsync();
+        Assert.False(controller.OpeningTvAppForTest);
+        using var http = new HttpClient();
+        using var response = await http.PostAsync($"http://127.0.0.1:{controller.ServerPort}/pair", null);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(asked);
+        Assert.True(controller.ResolveTvPairing(asked!.Id, true));
+        controller.Dispose();
+    }
+
     /// #40: bekçinin bağlantısında TV yeni jeton verirse saklanır; sonraki açılışta TV yeniden izin sormaz.
     [Fact]
     public async Task KeeperSavesNewTvToken()

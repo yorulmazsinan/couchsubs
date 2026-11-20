@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.35';
+  var APP_VERSION = '0.9.36';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -1140,11 +1140,11 @@
   function stopPairing() { pairingActive = false; pairingFailed = true; $('pairing').textContent = t('pairRetry'); }
   function pairRequest(method, address, path, done) {
     var xhr = new XMLHttpRequest(), finished = false;
-    function finish(data) { if (finished) return; finished = true; done(data); }
+    function finish(data, status) { if (finished) return; finished = true; done(data, status || 0); }
     xhr.onload = function () {
       var data = null;
       if (xhr.status === 200) { try { data = JSON.parse(xhr.responseText); } catch (e) {} }
-      finish(data);
+      finish(data, xhr.status);
     };
     xhr.onerror = xhr.ontimeout = function () { finish(null); };
     try { xhr.open(method, address + path); xhr.timeout = 4000; xhr.send(); }
@@ -1194,9 +1194,20 @@
       function beginPair() {
         pairingActive = true;
         $('waiting').className = '';
-        $('pairing').textContent = t('pairServer');
-        pairRequest('POST', address, '/pair', function (ticket) {
+        // Eşleştirmeye kapalı sunucuya yeniden denerken yönlendirme yazısı her denemede silinip gelmesin.
+        if ($('pairing').textContent !== t('pairClosed')) $('pairing').textContent = t('pairServer');
+        pairRequest('POST', address, '/pair', function (ticket, status) {
           if (generation !== connectionGeneration) return;
+          if (status === 409) {
+            // Bilgisayar/telefon şu an eşleştirme kabul etmiyor (çeviri sürmüyor, "TV eşleştir" açılmamış ya da başka
+            // istek bekliyor). "Eşleştirme tamamlanmadı, Tamam'a basın" yazıp Tamam'ı boşa bastırmak yerine ne yapılacağı
+            // söylenir ve birkaç saniyede bir kendiliğinden yeniden denenir; onay penceresi açılınca kod hemen çıkar.
+            pairingActive = false;
+            pairingFailed = true;
+            $('pairing').textContent = t('pairClosed');
+            pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 5000);
+            return;
+          }
           if (!ticket || !/^[A-Za-z0-9_-]{22}$/.test(ticket.id || '') || !/^[0-9]{6}$/.test(ticket.code || '')) {
             stopPairing();
             pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 15000);

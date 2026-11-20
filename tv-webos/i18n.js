@@ -7,6 +7,8 @@
     tr: {
       pairCode: 'TV kodu:',
       pairRetry: 'Eşleştirme tamamlanmadı. Yeniden denemek için Tamam tuşuna basın.',
+      // Sunucu eşleştirmeye kapalı (409): çeviri sürmüyor ve onay penceresi açılmamış. TV birkaç saniyede bir yeniden dener.
+      pairClosed: 'Eşleştirme için telefonda/bilgisayarda Çeviriyi başlat\'a ya da Ayarlar\'daki TV eşleştir\'e basın; kod burada çıkar.',
       pairServer: 'Bu kodu telefon/bilgisayarda karşılaştırıp onaylayın.',
       // Telefondan kuranların çoğunun bilgisayarı yoktur: önce telefon söylenir (#113).
       waiting: 'Telefonda (ya da bilgisayarda) CouchSubs\'ı açıp Çeviriyi başlat\'a basın.',
@@ -60,6 +62,7 @@
     en: {
       pairCode: 'TV code:',
       pairRetry: 'Pairing did not finish. Press OK to try again.',
+      pairClosed: 'To pair, press Start translation or Pair TV in Settings on your phone/computer; the code appears here.',
       pairServer: 'Compare this code and approve on your phone/computer.',
       waiting: 'Open CouchSubs on your phone (or computer) and start translating.',
       waitingHint: 'No computer needed. Set the subtitle target to TV and keep the phone and TV on the same Wi-Fi: CouchSubs finds this TV and sends subtitles here.',
