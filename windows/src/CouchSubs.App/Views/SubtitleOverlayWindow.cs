@@ -277,7 +277,7 @@ public sealed partial class SubtitleOverlayWindow : Window
             Effect = new DropShadowEffect { Color = Colors.Black, ShadowDepth = 2 * scale, BlurRadius = 4 * scale, Opacity = 1, Direction = 270 },
         };
         // Konuşana göre renk: "Ad: …" satırı o konuşanın renginde (ayar kapalıysa düz metin).
-        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors);
+        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors, controller.SpeakerBook);
         return new Border
         {
             Background = new SolidColorBrush(Color.FromArgb((byte)Math.Round(alpha * 255), 0, 0, 0)),

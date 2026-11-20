@@ -220,7 +220,7 @@ public sealed class StreamWindow : Window
             Effect = boxed ? null : new DropShadowEffect { Color = Colors.Black, ShadowDepth = 2 * scale, BlurRadius = 4 * scale, Opacity = 1, Direction = 270 },
         };
         // Konuşana göre renk: "Ad: …" satırı o konuşanın renginde (ayar kapalıysa düz metin).
-        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors, color.A);
+        SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors, controller.SpeakerBook, color.A);
         return new Border
         {
             Background = boxed ? Brushes.Black : Brushes.Transparent,

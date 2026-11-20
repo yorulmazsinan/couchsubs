@@ -216,6 +216,9 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// </summary>
     public bool SpeakerColors { get; set; }
 
+    /// <summary>Oturumun konuşan renkleri (v2; çeviri başlayınca sıfırlanır). Bilgisayar ekranındaki pencereler de buradan boyar.</summary>
+    public SpeakerColorBook SpeakerBook { get; } = new();
+
     public int ConnectedClients
     {
         get { lock (gate) return TvCount(); }
@@ -279,7 +282,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (replaces) json["replace"] = true;
         if (box is { } b) json["box"] = BoxJson(b);
         if (SpeakerColors && Core.SpeakerColors.Speakers(text) is { Count: > 0 } speakers)
-            json["speakers"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = Core.SpeakerColors.Color(name) }).ToList();
+            json["speakers"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = SpeakerBook.Color(name)! }).ToList();
         Broadcast(Frame("subtitle", json), subtitle: true);
         EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Subtitle, text, durationMs, paragraphs, replaces));
     }

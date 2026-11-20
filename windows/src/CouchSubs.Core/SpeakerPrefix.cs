@@ -28,6 +28,8 @@ public static partial class SpeakerPrefix
         "location", "chapter", "mission", "task", "tutorial", "update", "info", "status", "level", "controls",
         "press", "hold", "tap", "remember", "example", "question", "answer", "result", "results", "time",
         "listen", "look", "wait", "okay", "ok", "well", "so", "yes", "no", "now", "then", "and", "but",
+        // Türkçe başlıklar (çevirinin kendisi ya da Türkçe oyun): "Hedef: Arabaya bin." konuşan değildir.
+        "hedef", "görev", "not", "ipucu", "uyarı", "bilgi", "ödül", "konum", "bölüm", "durum", "soru", "cevap",
     ];
 
     /// <summary>Baştaki konuşan adı ve cümle; ad yoksa (saat "10:30", adres "https://", oran "16:9", "Note:" gibi başlıklar) null.</summary>
@@ -39,7 +41,8 @@ public static partial class SpeakerPrefix
         var name = match.Groups[1].Value;
         var body = trimmed[match.Length..].Trim();
         if (name.Length > MaxNameLength) return null;
-        if (!name.Contains(' ') && NotNames.Contains(name.ToLowerInvariant())) return null;
+        // "İpucu": büyük noktalı İ, sistem dilinden bağımsız küçük i sayılır.
+        if (!name.Contains(' ') && NotNames.Contains(name.Replace('İ', 'i').ToLowerInvariant())) return null;
         if (!body.Any(char.IsLetter) || body.StartsWith('/')) return null;
         return new Split(name, body);
     }

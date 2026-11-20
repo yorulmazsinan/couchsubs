@@ -17,15 +17,18 @@ public static class SpeakerColors
     ];
 
     /// <summary>Adın rengi ("#RRGGBB").</summary>
-    public static string Color(string name)
+    public static string Color(string name) => Palette[(int)(Hash(name.Trim().ToLowerInvariant()) % (uint)Palette.Count)];
+
+    /// <summary>FNV-1a (32 bit), UTF-16 birimleri üzerinde.</summary>
+    public static uint Hash(string key)
     {
         var hash = 2166136261u;
-        foreach (var unit in name.Trim().ToLowerInvariant())
+        foreach (var unit in key)
         {
             hash ^= unit;
             hash = unchecked(hash * 16777619u);
         }
-        return Palette[(int)(hash % (uint)Palette.Count)];
+        return hash;
     }
 
     /// <summary>Metnin satır başlarındaki konuşan adları (<see cref="SpeakerPrefix.Parse"/>), ilk görülme sırasıyla, tekrarsız.</summary>
@@ -39,7 +42,8 @@ public static class SpeakerColors
     /// Bölünmüş (satırlara sarılmış) metni renkli parçalara ayırır: <paramref name="names"/>'ten biri satır başında
     /// "Ad:" ile başlıyorsa oradan bir sonraki adlı satıra dek o adın rengindedir. Ad yoksa tek renksiz parça döner.
     /// </summary>
-    public static IReadOnlyList<Segment> Segments(string text, IReadOnlyList<string> names)
+    /// <param name="colorOf">Adın rengi (oturumun <see cref="SpeakerColorBook"/>'u); verilmezse <see cref="Color"/>.</param>
+    public static IReadOnlyList<Segment> Segments(string text, IReadOnlyList<string> names, Func<string, string?>? colorOf = null)
     {
         if (names.Count == 0) return [new Segment(text, null)];
         var result = new List<Segment>();
@@ -53,7 +57,7 @@ public static class SpeakerColors
             {
                 if (lineStart > start) result.Add(new Segment(text[start..lineStart], color));
                 start = lineStart;
-                color = Color(found);
+                color = colorOf is null ? Color(found) : colorOf(found);
             }
             var next = text.IndexOf('\n', lineStart);
             if (next < 0) break;

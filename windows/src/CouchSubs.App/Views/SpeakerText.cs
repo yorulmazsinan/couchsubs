@@ -16,7 +16,7 @@ internal static class SpeakerText
     /// <param name="shown">Ekrana yazılacak (sarılmış) metin.</param>
     /// <param name="source">Satırın özgün metni; konuşan adları buradan çıkarılır.</param>
     /// <param name="alpha">Renkli parçaların saydamlığı (yayın penceresinde soluk üst satırlar için).</param>
-    public static void Fill(TextBlock block, string shown, string source, bool enabled, byte alpha = 255)
+    public static void Fill(TextBlock block, string shown, string source, bool enabled, SpeakerColorBook book, byte alpha = 255)
     {
         var names = enabled ? SpeakerColors.Speakers(source) : [];
         if (names.Count == 0)
@@ -25,7 +25,7 @@ internal static class SpeakerText
             return;
         }
         block.Inlines.Clear();
-        foreach (var segment in SpeakerColors.Segments(shown, names))
+        foreach (var segment in SpeakerColors.Segments(shown, names, book.Color))
         {
             var brush = segment.Color is { } hex ? new SolidColorBrush(Parse(hex, alpha)) : null;
             var parts = segment.Text.Split('\n');

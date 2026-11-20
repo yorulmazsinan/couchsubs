@@ -67,6 +67,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private Task? modelDownload;
 
     private SubtitleServer server = new(DefaultServerPort);
+
+    /// <summary>Oturumun konuşan renkleri (TV'ye gidenle aynı; bilgisayar ekranındaki pencereler buradan boyar).</summary>
+    public SpeakerColorBook SpeakerBook => server.SpeakerBook;
     private bool serverStarted;
     private IStreamSession? session;
     private IKeeper? keeper;
@@ -1552,6 +1555,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             RefreshTranslatorStatus();
             try { await StartServerAsync(); } catch { /* port açılamadıysa TV durumu "bekleniyor" kalır */ }
             server.SendStyle(settings.Style);
+            // Konuşan renkleri oturum başına: yeni oturumda kişiler yeniden sıralanır.
+            server.SpeakerBook.Reset();
             SubtitlesPaused = false;
             MetricsText = "";
             framesSince = null;
