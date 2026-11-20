@@ -35,9 +35,21 @@ public enum SpeakerColors {
     public static func speakers(in text: String) -> [Speaker] {
         var seen = Set<String>()
         return text.components(separatedBy: "\n").compactMap { line in
-            guard let name = SpeakerPrefix.split(line)?.name, seen.insert(name).inserted else { return nil }
+            guard let name = speaker(line), seen.insert(name).inserted else { return nil }
             return Speaker(name: name, color: color(for: name))
         }
+    }
+
+    /// Çeviride ad gibi görünen Türkçe başlıklar ("Hedef: Arabaya bin."); konuşan sayılmaz, renklenmez (Android ile aynı).
+    static let turkishHeadings: Set<String> = [
+        "hedef", "görev", "not", "ipucu", "uyarı", "ödül", "ödüller", "konum", "bölüm", "güncelleme", "bilgi", "durum",
+    ]
+
+    /// Satırın baştaki konuşan adı; Türkçe başlıksa nil.
+    static func speaker(_ line: String) -> String? {
+        guard let name = SpeakerPrefix.split(line)?.name,
+              !turkishHeadings.contains(name.lowercased(with: Locale(identifier: "tr"))) else { return nil }
+        return name
     }
 
     public struct Segment: Equatable, Sendable {
@@ -52,7 +64,12 @@ public enum SpeakerColors {
         var result: [Segment] = []
         var color: String?
         for (index, line) in text.components(separatedBy: "\n").enumerated() {
-            if let name = SpeakerPrefix.split(line)?.name { color = self.color(for: name) }
+            if let name = speaker(line) {
+                color = self.color(for: name)
+            } else if SpeakerPrefix.split(line) != nil {
+                // Türkçe başlık ("Hedef: …") önceki konuşanın satırı değildir.
+                color = nil
+            }
             let piece = (index > 0 ? "\n" : "") + line
             if let last = result.last, last.color == color {
                 result[result.count - 1].text += piece

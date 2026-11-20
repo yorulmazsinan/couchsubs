@@ -22,6 +22,15 @@ final class SpeakerColorsTests: XCTestCase {
         XCTAssertNil(SpeakerColors.rgb("FFD54F"))
     }
 
+    /// Çeviride ad gibi görünen Türkçe başlıklar konuşan sayılmaz, renklenmez.
+    func testTurkishHeadingsAreNotSpeakers() {
+        XCTAssertTrue(SpeakerColors.speakers(in: "Hedef: Arabaya bin.\nGörev: Lucia'yı bul.\nNOT: Kaydet.\nİpucu: Koş.").isEmpty)
+        XCTAssertEqual(SpeakerColors.segments(in: "Mattia: Gidelim.\nHedef: Arabaya bin."), [
+            .init(text: "Mattia: Gidelim.", color: "#90CAF9"),
+            .init(text: "\nHedef: Arabaya bin.", color: nil),
+        ])
+    }
+
     func testSpeakersAreUniqueInOrder() {
         let speakers = SpeakerColors.speakers(in: "Lucia: Gel.\nMattia: Geliyorum.\nLucia: Çabuk.")
         XCTAssertEqual(speakers.map(\.name), ["Lucia", "Mattia"])
