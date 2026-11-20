@@ -160,6 +160,14 @@ public class AreaPresetSettingsTests
     }
 
     [Fact]
+    public void SetTextApartIsOnByDefaultAndInOldSettings()
+    {
+        Assert.True(new UserSettings().SetTextApart);
+        Assert.True(JsonSerializer.Deserialize<UserSettings>("{}")!.SetTextApart);
+        Assert.False(JsonSerializer.Deserialize<UserSettings>(JsonSerializer.Serialize(new UserSettings() with { SetTextApart = false }))!.SetTextApart);
+    }
+
+    [Fact]
     public void AutoScreenTextIsOnByDefaultAndInOldSettings()
     {
         Assert.True(new UserSettings().AutoScreenText);

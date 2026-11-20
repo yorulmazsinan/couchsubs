@@ -14035,6 +14035,38 @@
         }
       }
     },
+    "Set on-screen text apart from subtitles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set on-screen text apart from subtitles"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yazılarını altyazıdan ayır"
+          }
+        }
+      }
+    },
+    "On-screen text keeps its own colours and place, and never looks like the subtitle box.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-screen text keeps its own colours and place, and never looks like the subtitle box."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yazıları kendi rengini ve yerini korur, altyazı kutusuna benzemez."
+          }
+        }
+      }
+    },
     "Use ready areas for known games": {
       "localizations": {
         "en": {

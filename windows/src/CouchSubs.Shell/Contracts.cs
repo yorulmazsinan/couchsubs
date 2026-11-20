@@ -261,6 +261,11 @@ public sealed record UserSettings
     /// </summary>
     public bool AutoScreenText { get; init; } = true;
     /// <summary>
+    /// "Ekran yazılarını altyazıdan ayır": ek alan ve otomatik ekran yazısı kutuları özgün rengini ve zeminini korur,
+    /// altyazı kutusuna benzemez (zemin yoksa zeminsiz, koyu gölgeli). Eski ayar dosyalarında yoktur; açık başlar.
+    /// </summary>
+    public bool SetTextApart { get; init; } = true;
+    /// <summary>
     /// Bilinen oyunlarda hazır ek alanlar (<see cref="Core.GameAreaPresets"/>; ör. GTA 6'nın yardım kutusu ve mesajları)
     /// kendiliğinden okunur. Kullanıcının kendi ek alanı varsa onunki kullanılır. Eski ayar dosyalarında yoktur; açık başlar.
     /// </summary>

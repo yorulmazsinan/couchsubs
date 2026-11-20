@@ -239,7 +239,10 @@ public sealed class StreamWindow : Window
         var scale = Scale;
         var size = Math.Max(12, OverlayPlacement.FontSize(style.FontSize) * scale * 0.55);
         // Otomatik bulunan ekran yazısı: çeviri özgün yazının stilinde.
-        if (StyledRegionBox.Make(blocks, size, scale, translucent: false) is { } styled) return styled;
+        var apart = controller.Settings.SetTextApart;
+        if (apart && StyledRegionBox.Make(blocks, size, scale, translucent: false) is { } styled) return styled;
+        // Ayrık gösterim: stili bilinmeyen ek alan kutusu altyazı kutusuna benzemesin, zeminsiz ve koyu gölgeli.
+        if (apart && StyledRegionBox.Plain(text, size, scale, area) is { } plain) return plain;
         var middle = area is { } box ? (box.Left + box.Right) / 2 : 0.5;
         return new Border
         {

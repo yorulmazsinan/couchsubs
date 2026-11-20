@@ -376,6 +376,16 @@
                             </DockPanel>
                             <Separator Margin="0" />
                             <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
+                                <CheckBox x:Name="SetTextApart" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{t:T 'Set on-screen text apart from subtitles'}" Checked="OnSetTextApart" Unchecked="OnSetTextApart" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{t:T 'Set on-screen text apart from subtitles'}" Style="{StaticResource HeadlineText}" />
+                                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="{t:T 'On-screen text keeps its own colours and place, and never looks like the subtitle box.'}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Separator Margin="0" />
+                            <DockPanel MinHeight="{DynamicResource size.buttonLarge}" Margin="0,8">
                                 <CheckBox x:Name="GameAreaPresets" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
                                           AutomationProperties.Name="{t:T 'Use ready areas for known games'}" Checked="OnGameAreaPresets" Unchecked="OnGameAreaPresets" />
                                 <StackPanel VerticalAlignment="Center">

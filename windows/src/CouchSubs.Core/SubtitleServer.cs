@@ -451,8 +451,15 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     public void SendStyle(SubtitleStyle style)
     {
         lock (gate) lastStyle = style;
-        Broadcast(StyleFrame(style), subtitle: true);
+        Broadcast(StyleFrame(style, SetApart), subtitle: true);
     }
+
+    /// <summary>
+    /// "Ekran yazılarını altyazıdan ayır": TV ek alan kutularını özgün renginde ve kendi yerinde, altyazı kutusundan
+    /// farklı zeminde çizer (<c>style</c> olayının <c>setApart</c> alanı; yoksa açık sayılır). Değişince
+    /// <see cref="SendStyle"/> yeniden gönderilmeli.
+    /// </summary>
+    public bool SetApart { get; set; } = true;
 
     // --- Bağlantılar ---
 
@@ -595,7 +602,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         {
             // Yetki denetimi ile istemci kaydı arasındaki yenileme yarışını kapatır.
             if (accessKey != checkedKey) { tcp.Dispose(); return; }
-            if (lastStyle is { } style) head.Append(StyleFrame(style));
+            if (lastStyle is { } style) head.Append(StyleFrame(style, SetApart));
             clients.Add(client);
             count = TvCount();
         }
@@ -668,7 +675,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         catch (SocketException) { }
     }
 
-    private static string StyleFrame(SubtitleStyle style) =>
+    private static string StyleFrame(SubtitleStyle style, bool setApart) =>
         Frame("style", new SortedDictionary<string, object>
         {
             ["background"] = Math.Clamp(style.Background, 0, 100),
@@ -678,6 +685,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             ["displayMode"] = style.DisplayMode == TvDisplayMode.Overlay ? "overlay" : "inApp",
             ["fontSize"] = style.FontSize,
             ["placement"] = style.Placement.ToString().ToLowerInvariant(),
+            ["setApart"] = setApart,
             ["stackPrevious"] = style.StackPrevious,
             ["textColor"] = style.TextColor.ToString().ToLowerInvariant(),
         });

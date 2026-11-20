@@ -195,6 +195,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         server.PairingRequested += OnPairingRequest;
         server.SendsToTv = settings.Output.ShowsOnTv();
         server.SpeakerColors = settings.SpeakerColors;
+        server.SetApart = settings.SetTextApart;
     }
 
     private void DetachServer()
@@ -482,6 +483,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var old = settings;
             if (!Set(ref settings, value, [nameof(UsesFreeGemini)])) return;
             settingsStore.Save(value);
+            server.SetApart = value.SetTextApart;
             server.SendStyle(value.Style);
             if (old.Output != value.Output) OutputChanged();
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);

@@ -105,6 +105,7 @@ public partial class SettingsWindow : Window
         SpeakerNames.IsChecked = settings.ShowSpeakerNames;
         SpeakerColors.IsChecked = settings.SpeakerColors;
         AutoScreenText.IsChecked = settings.AutoScreenText;
+        SetTextApart.IsChecked = settings.SetTextApart;
         GameAreaPresets.IsChecked = settings.GameAreaPresets;
         ShowPacks();
         AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
@@ -549,6 +550,8 @@ public partial class SettingsWindow : Window
     private void OnSpeakerColors(object sender, RoutedEventArgs e) => Update(s => s with { SpeakerColors = SpeakerColors.IsChecked == true });
 
     private void OnAutoScreenText(object sender, RoutedEventArgs e) => Update(s => s with { AutoScreenText = AutoScreenText.IsChecked == true });
+
+    private void OnSetTextApart(object sender, RoutedEventArgs e) => Update(s => s with { SetTextApart = SetTextApart.IsChecked == true });
 
     private void OnGameAreaPresets(object sender, RoutedEventArgs e) => Update(s => s with { GameAreaPresets = GameAreaPresets.IsChecked == true });
 
