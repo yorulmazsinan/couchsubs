@@ -301,8 +301,10 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         if (!status.streaming && status.phase.isNotEmpty()) Text(status.phase, style = Tokens.Type.caption, color = Tokens.Color.secondary)
         AnimatedNote(status.error)
         val current = status.recent.firstOrNull()
-        // İlk altyazı gelene kadar: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231).
-        if (current == null && !Services.settings.xbox && !status.demo) NoteTile(stringResource(R.string.psn_main_account), Tokens.Color.secondary)
+        // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231, MainAccountTip).
+        if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,
+                hasSubtitle = current != null, streaming = status.streaming))
+            NoteTile(stringResource(R.string.psn_main_account), Tokens.Color.secondary)
         if (!status.demo) GameSection(status)
         Tile(Modifier.fillMaxWidth()) {
             TileLabel(stringResource(R.string.running_now))

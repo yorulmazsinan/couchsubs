@@ -217,9 +217,10 @@ struct RunningScreen: View {
                 if model.sessionState != .streaming {
                     MobileNote(text: model.ps5StatusText, tone: Mobile.Palette.secondary)
                 }
-                // İlk altyazı gelene kadar: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231).
-                if model.recentLines.isEmpty && !model.isXbox {
-                    MobileNote(text: String(localized: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller won't work in the game."),
+                // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231).
+                if MainAccountTip.isVisible(ps5: !model.isXbox, demo: model.demoMode, hasSubtitle: !model.recentLines.isEmpty,
+                                            streaming: model.sessionState == .streaming) {
+                    MobileNote(text: String(localized: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game."),
                                tone: Mobile.Palette.secondary)
                 }
                 GameSection(choice: model.gameChoice, areas: model.gameAreas)

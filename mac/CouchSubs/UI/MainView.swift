@@ -335,12 +335,15 @@ private struct LiveSubtitlesTile: View {
                 Spacer()
                 if model.isRunning { Pill(text: String(localized: "Translating…"), live: true) }
             }
+            // Çeviri PS5'ten (ikinci hesap) okunurken, ilk altyazıya kadar ve bağlantı koptuğunda: kolu açınca ana hesap
+            // seçilmeli (GitHub #231, MainAccountTip).
+            if model.isRunning && MainAccountTip.isVisible(ps5: model.settings.frameSource == .ps5, demo: model.demoMode,
+                                                           hasSubtitle: !model.lastTranslation.isEmpty,
+                                                           streaming: model.sessionState == .streaming) {
+                HintText(text: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game.")
+            }
             if model.lastTranslation.isEmpty {
                 HintText(text: "Subtitles will appear here while you play.")
-                // Çeviri PS5'ten (ikinci hesap) okunurken: kolu açınca ana hesap seçilmeli (GitHub #231).
-                if model.isRunning && model.settings.frameSource == .ps5 && !model.demoMode {
-                    HintText(text: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller won't work in the game.")
-                }
             } else {
                 // Yeni satır kısa bir geçişle belirir (azaltılmış harekette geçiş yok); eskisiyle üst üste biner, karo zıplamaz.
                 ZStack(alignment: .topLeading) {

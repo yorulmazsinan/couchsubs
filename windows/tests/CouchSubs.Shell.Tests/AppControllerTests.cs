@@ -377,6 +377,18 @@ public class AppControllerTests
     [Fact]
     public void FreshInstallStartsAtWelcome() => Assert.Equal(OnboardingStep.Welcome, Make().Step);
 
+    /// <summary>Kol ikinci hesaba atanınca PS5 her yeniden bağlanışta kolu kapatıyor (Play yorumu 20 Kas): "ana hesabı seçin"
+    /// ipucu bağlantı koptuğunda da görünmeli (Mac/iPhone MainAccountTipTests, Android MainAccountTipTest ile aynı).</summary>
+    [Theory]
+    [InlineData(true, false, false, true)]
+    [InlineData(true, false, true, true)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, false, true)]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, false, false)]
+    public void MainAccountTipShowsBeforeFirstSubtitleAndWhenConnectionDrops(bool ps5, bool hasSubtitle, bool streaming, bool expected) =>
+        Assert.Equal(expected, AppController.MainAccountTipVisible(ps5, hasSubtitle, streaming));
+
     [Fact]
     public async Task ReloadGamePacksRefreshesInstalledPacksAfterWritingAUserPack()
     {

@@ -365,7 +365,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public LgTv? Tv => tv;
     public bool IsRunning { get => isRunning; private set => Set(ref isRunning, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(TvTone), nameof(ShowsMainAccountTip)]); }
     public bool IsStarting { get => isStarting; private set => Set(ref isStarting, value); }
-    public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone)]); }
+    public SessionState SessionState { get => sessionState; private set => Set(ref sessionState, value, [nameof(Ps5StatusText), nameof(Ps5Tone), nameof(ShowsMainAccountTip)]); }
     public string Ps5StatusText => IsXbox ? XboxStatusText()
         : settings.FrameSource == FrameSource.RemotePlayWindow
             ? WindowStatusText(sessionState, isRunning, text, installed: !RemotePlayMissing)
@@ -403,8 +403,18 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                             && (ShowsOnComputer || HasTv);
     public string LastSource { get => lastSource; private set => Set(ref lastSource, value); }
     public string LastTranslation { get => lastTranslation; private set => Set(ref lastTranslation, value, [nameof(ShowsMainAccountTip)]); }
-    /// <summary>PS5'ten (ikinci hesap) çeviri başladı, ilk altyazı gelmedi: "kolu açınca ana hesabı seçin" ipucu görünür (GitHub #231).</summary>
-    public bool ShowsMainAccountTip => isRunning && !IsXbox && settings.FrameSource == FrameSource.Ps5 && lastTranslation.Length == 0;
+    /// <summary>PS5'ten (ikinci hesap) çeviri sürüyor, ilk altyazı gelmedi ya da bağlantı koptu: "kolu açınca ana hesabı seçin"
+    /// ipucu görünür (GitHub #231, <see cref="MainAccountTipVisible"/>).</summary>
+    public bool ShowsMainAccountTip => isRunning && MainAccountTipVisible(!IsXbox && settings.FrameSource == FrameSource.Ps5,
+        lastTranslation.Length > 0, sessionState.Phase == SessionPhase.Streaming);
+
+    /// <summary>
+    /// "Kolu açınca ana hesabı seçin" ipucunun kuralı (Mac/iPhone MainAccountTip, Android MainAccountTip.kt ile aynı).
+    /// CouchSubs PS5'e ikinci hesapla bağlanır. Fiziksel kol da o hesaba atanmışsa PS5 her bağlanışta kolu Uzaktan Oynatma'ya
+    /// devredip kapatır; oyuncu kolu açıp yine ikinci hesabı seçince Uzaktan Oynatma kesilir, yeniden bağlanınca kol yine kapanır
+    /// (Play yorumu 20 Kas, #231, #5). İpucu eskiden yalnız ilk altyazıdan önce görünüyordu; artık bağlantı koptuğunda da görünür.
+    /// </summary>
+    public static bool MainAccountTipVisible(bool ps5, bool hasSubtitle, bool streaming) => ps5 && (!hasSubtitle || !streaming);
     /// <summary>TV'ye giden son satırın ölçümleri tek satırda ("OCR 40 ms · Çeviri 300 ms · Gecikme 520 ms"); satır gelene kadar boş.</summary>
     public string MetricsText { get => metricsText; private set => Set(ref metricsText, value); }
     /// <summary>Çevrilen satırlar, en yenisi başta (bu ve önceki oturumlar). Değişince bu özellik bildirilir.</summary>
