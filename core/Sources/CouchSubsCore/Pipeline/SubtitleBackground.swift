@@ -13,12 +13,17 @@ public enum SubtitleBackground {
         let width = 384
         let height = max(64, min(192, Int((Double(image.height) / Double(image.width) * Double(width)).rounded())))
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        // Kare kendi renk uzayında çizilir: PS5 karesi VideoToolbox'tan BT.709 etiketiyle gelir ve başka uzaya
+        // çevrilirse koyu tonlar açılır (#534). Böylece Windows'taki gibi çözücünün ham değerleri sınanır.
+        let spaces = [image.colorSpace.flatMap { $0.model == .rgb ? $0 : nil }, CGColorSpaceCreateDeviceRGB()]
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
-            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
-                                          bitsPerComponent: 8, bytesPerRow: width * 4,
-                                          space: CGColorSpaceCreateDeviceRGB(),
+            let made = spaces.lazy.compactMap { space in
+                space.flatMap { CGContext(data: buffer.baseAddress, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width * 4, space: $0,
                                           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                                              | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
+                                              | CGBitmapInfo.byteOrder32Big.rawValue) }
+            }.first
+            guard let context = made else { return false }
             context.interpolationQuality = .low
             // Bitmap satırları ve OCR kutuları üstten ölçülür; görüntüyü ayrıca çevirmeyin.
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -59,10 +64,14 @@ public enum SubtitleBackground {
         return bestRow >= 7 && total >= 18
     }
 
-    /// Görüntüde ölçülen yaklaşık #21212E; sıkıştırma farklarına pay bırakır.
+    /// Görüntüde ölçülen yaklaşık #21212E; Mac'te #3D3D51'e kadar açık gelebiliyor (#534). Sabit renk yerine kanallar
+    /// arası ilişki sınanır: kırmızı ile yeşil yakın, mavi biraz önde (az doygun lacivert), parlaklık geniş aralıkta.
+    /// Nötr gri, beyaz/sarı yazı ve doygun mavi (gece göğü, deniz) panel sayılmaz.
     public static func isPanelColor(_ red: Int, _ green: Int, _ blue: Int) -> Bool {
         let brightest = max(red, green)
-        return (14...60).contains(red) && (14...60).contains(green) && (24...82).contains(blue)
-            && abs(red - green) <= 12 && (4...30).contains(blue - brightest)
+        guard (14...100).contains(brightest), min(red, green) >= 10,
+              abs(red - green) <= max(12, brightest / 5) else { return false }
+        let lift = blue - brightest
+        return lift >= max(4, brightest / 10) && lift <= max(30, brightest / 2)
     }
 }

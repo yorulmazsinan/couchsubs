@@ -39,6 +39,40 @@ public class SubtitleBackgroundTests
         Assert.False(SubtitleBackground.IsPanelColor(33, 33, 33));
     }
 
+    /// <summary>#534: Mac'te zemin #3D3D51'e kadar açık geliyor; #21212E ile ikisi de panel. Yazı ve sahne değil.</summary>
+    [Theory]
+    [InlineData(33, 33, 46, true)]
+    [InlineData(61, 61, 81, true)]
+    [InlineData(22, 22, 34, true)]
+    [InlineData(36, 36, 52, true)]
+    [InlineData(48, 50, 66, true)]
+    [InlineData(80, 80, 100, true)]
+    [InlineData(33, 33, 33, false)]
+    [InlineData(61, 61, 61, false)]
+    [InlineData(230, 230, 230, false)]
+    [InlineData(255, 255, 255, false)]
+    [InlineData(235, 200, 40, false)]
+    [InlineData(250, 220, 90, false)]
+    [InlineData(20, 30, 70, false)]
+    [InlineData(40, 60, 140, false)]
+    [InlineData(70, 55, 40, false)]
+    [InlineData(40, 60, 35, false)]
+    [InlineData(90, 140, 200, false)]
+    [InlineData(120, 120, 130, false)]
+    [InlineData(5, 5, 12, false)]
+    public void PanelColorFollowsChannelRelation(int red, int green, int blue, bool panel) =>
+        Assert.Equal(panel, SubtitleBackground.IsPanelColor(red, green, blue));
+
+    [Fact]
+    public void KeepsSubtitleOnLighterMacPanel()
+    {
+        var frame = Solid(20, 20, 20);
+        Fill(frame, 24, 16, 104, 32, 61, 61, 81);
+        Fill(frame, 40, 21, 88, 27, 230, 230, 230);
+        var reading = new Reading([new TextLine("Donnie dude.", new TextBox(0.32, 20.0 / Height, 0.68, 27.0 / Height))]);
+        Assert.Equal("Donnie dude.", SubtitleBackground.Filter(reading, frame).Text);
+    }
+
     private static Frame Solid(byte red, byte green, byte blue)
     {
         var frame = Frame.Blank(Width, Height);

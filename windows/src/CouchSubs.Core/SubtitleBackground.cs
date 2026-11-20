@@ -41,11 +41,17 @@ public static class SubtitleBackground
         return bestRow >= 7 && total >= 18;
     }
 
-    /// <summary>Görüntüde ölçülen yaklaşık #21212E; sabit renge yakın ama sıkıştırma payıyla.</summary>
+    /// <summary>
+    /// Görüntüde ölçülen yaklaşık #21212E; Mac'te #3D3D51'e kadar açık gelebiliyor (#534). Sabit renk yerine kanallar
+    /// arası ilişki sınanır: kırmızı ile yeşil yakın, mavi biraz önde (az doygun lacivert), parlaklık geniş aralıkta.
+    /// Nötr gri, beyaz/sarı yazı ve doygun mavi (gece göğü, deniz) panel sayılmaz. Mac çekirdeğiyle birebir aynı.
+    /// </summary>
     public static bool IsPanelColor(int red, int green, int blue)
     {
         var brightest = Math.Max(red, green);
-        return red is >= 14 and <= 60 && green is >= 14 and <= 60 && blue is >= 24 and <= 82
-               && Math.Abs(red - green) <= 12 && blue - brightest is >= 4 and <= 30;
+        if (brightest is < 14 or > 100 || Math.Min(red, green) < 10
+            || Math.Abs(red - green) > Math.Max(12, brightest / 5)) return false;
+        var lift = blue - brightest;
+        return lift >= Math.Max(4, brightest / 10) && lift <= Math.Max(30, brightest / 2);
     }
 }

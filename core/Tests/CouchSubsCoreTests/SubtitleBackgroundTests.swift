@@ -47,6 +47,46 @@ final class SubtitleBackgroundTests: XCTestCase {
         XCTAssertEqual(SubtitleBackground.filter(reading, in: image).text, "Yes.")
     }
 
+    /// #534: Mac'te zemin #3D3D51'e kadar açık geliyor; Windows'taki #21212E ile ikisi de panel. Yazı ve sahne değil.
+    func testPanelColorFollowsChannelRelationNotFixedValue() {
+        for (red, green, blue) in [(33, 33, 46), (61, 61, 81), (22, 22, 34), (36, 36, 52), (48, 50, 66), (80, 80, 100)] {
+            XCTAssertTrue(SubtitleBackground.isPanelColor(red, green, blue), "\(red),\(green),\(blue)")
+        }
+        let notPanel = [(33, 33, 33), (61, 61, 61), (230, 230, 230), (255, 255, 255), (235, 200, 40), (250, 220, 90),
+                        (20, 30, 70), (40, 60, 140), (70, 55, 40), (40, 60, 35), (90, 140, 200), (120, 120, 130),
+                        (5, 5, 12)]
+        for (red, green, blue) in notPanel {
+            XCTAssertFalse(SubtitleBackground.isPanelColor(red, green, blue), "\(red),\(green),\(blue)")
+        }
+    }
+
+    /// #534: PS5 karesi BT.709 etiketli gelir; başka uzaya çevrilmeden ham değerler sınanır, açık zemin de tutulur.
+    func testReadsTaggedFrameInItsOwnColorSpace() {
+        var pixels = solid(20, 20, 20)
+        fill(&pixels, left: 24, top: 31, right: 104, bottom: 46, red: 61, green: 61, blue: 81)
+        let space = CGColorSpace(name: CGColorSpace.itur_709)!
+        let provider = CGDataProvider(data: Data(pixels) as CFData)!
+        let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                            bytesPerRow: width * 4, space: space,
+                            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+                                | CGBitmapInfo.byteOrder32Big.rawValue), provider: provider,
+                            decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let reading = Reading(lines: [
+            TextLine("Menu text", box: TextBox(left: 0.4, top: 5.0 / 48, right: 0.6, bottom: 12.0 / 48)),
+            TextLine("You know, I don't know.", box: TextBox(left: 0.3, top: 35.0 / 48, right: 0.7, bottom: 42.0 / 48)),
+        ])
+        XCTAssertEqual(SubtitleBackground.filter(reading, in: image).text, "You know, I don't know.")
+    }
+
+    func testKeepsSubtitleOnLighterMacPanel() {
+        var pixels = solid(20, 20, 20)
+        fill(&pixels, left: 24, top: 16, right: 104, bottom: 32, red: 61, green: 61, blue: 81)
+        fill(&pixels, left: 40, top: 21, right: 88, bottom: 27, red: 230, green: 230, blue: 230)
+        let reading = Reading(lines: [TextLine("Donnie dude.", box: TextBox(left: 0.32, top: 20.0 / 48,
+                                                                            right: 0.68, bottom: 27.0 / 48))])
+        XCTAssertEqual(SubtitleBackground.filter(reading, pixels: pixels, width: width, height: height).text, "Donnie dude.")
+    }
+
     func testSettingDefaultsToOffAndSurvivesSave() throws {
         XCTAssertFalse(try JSONDecoder().decode(UserSettings.self, from: Data("{}".utf8)).watchSubtitleBackground)
         var settings = UserSettings()
