@@ -277,8 +277,9 @@ public sealed class ScreenTextDetector
     {
         var closed = menu && !inMenu;
         menu = inMenu;
-        // Menü kapandı: menüde bulunan bütün alanlar hemen kalkar (700 ms beklemez).
-        if (closed) tracked.RemoveAll(item => item.Menu);
+        // Menü kapandı: karoları artık aday olmayan menü alanları hemen kalkar (700 ms beklemez). Karoları hâlâ yerinde
+        // duran alan (seçim gezinirken menü durumu bir örnek düşse de) kalır; kutusu yanıp sönmez.
+        if (closed) tracked.RemoveAll(item => item.Menu && !item.Tiles.Any(index => candidate[index]));
         var matched = new HashSet<Tracked>();
         foreach (var (cells, list) in components)
         {
@@ -314,8 +315,24 @@ public sealed class ScreenTextDetector
 /// Otomatik bulunan alanda okunan yazı çevrilmeye değer mi: sayaç, saat, para, tek sözcüklük etiket ya da büyük harfli
 /// kısa tabela gürültüdür (Mac/Android: ScreenTextNoise ile aynı kurallar). Yalnız otomatik alanlarda uygulanır.
 /// </summary>
-public static class ScreenTextNoise
+public static partial class ScreenTextNoise
 {
+    /// <summary>Yayıncı katmanının sık yazıları (logo, canlı yayın işareti); oyun yazısı değildir.</summary>
+    private static readonly HashSet<string> Overlay = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "GAMING", "GAMERS", "REPUBLIC OF", "REPUBLIC OF GAMERS", "ROG", "LIVE", "CANLI", "CANLİ",
+    };
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[\w-]+\.(?:com|net|org|tv|tr|gg|io|live|tk)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex Domain();
+
+    /// <summary>Satır yayın katmanının yazısı mı (alan adı "GEN.TR", logo "REPUBLIC OF GAMERS", "• Canlı").</summary>
+    public static bool IsOverlay(string line)
+    {
+        var text = IconText.Plain(line).Trim().TrimStart('•', '·', '●', ' ');
+        return Domain().IsMatch(text) || Overlay.Contains(text);
+    }
+
     /// <param name="menu">
     /// Menü durumunda (<see cref="WatchedArea.Menu"/>) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz
     /// (sayı, simge, noktalama: "40", "100%") ve sayısı ağır basan ("x3") etiketler gürültüdür.

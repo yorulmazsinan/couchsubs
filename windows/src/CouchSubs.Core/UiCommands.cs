@@ -58,12 +58,51 @@ public static class UiCommands
     {
         var words = label.Trim().Trim('.', ',', ':', '!', '?').Trim();
         if (words.Length == 0 || !words.Any(char.IsLetter)) return null;
-        var key = words.ToUpperInvariant();
+        var key = Latin(words).ToUpperInvariant();
         if (!Commands.TryGetValue(key, out var turkish) && !Labels.TryGetValue(key, out turkish)) return null;
         var letters = words.Where(char.IsLetter).ToList();
         if (letters.All(char.IsUpper)) return TurkishUpper(turkish);
         if (letters.All(char.IsLower)) return TurkishLower(turkish);
         return turkish;
+    }
+
+    /// <summary>Yazı tanımanın Kiril harfle okuduğu Latin harfler ("Мар" → "Map").</summary>
+    private static string Latin(string text) => string.Concat(text.Select(c => c switch
+    {
+        'А' => 'A', 'В' => 'B', 'Е' => 'E', 'К' => 'K', 'М' => 'M', 'Н' => 'H', 'О' => 'O', 'Р' => 'P', 'С' => 'C',
+        'Т' => 'T', 'Х' => 'X', 'а' => 'a', 'е' => 'e', 'о' => 'o', 'р' => 'p', 'с' => 'c', 'х' => 'x', 'у' => 'y',
+        _ => c,
+    }));
+
+    /// <summary>
+    /// <see cref="TranslateLabel"/>, yazı tanımanın etikete kattığı kırıntıyla da: simge imleriyle ayrılan her parça ayrı
+    /// aranır; baştaki ya da sondaki en çok iki harflik kırıntı (simgenin yanlış okunuşu: "pi Settings", "EXIT OR")
+    /// olduğu gibi kalır. Bir parça bulunmazsa null.
+    /// </summary>
+    public static string? TranslateLabelLoosely(string label)
+    {
+        if (label.Contains(ButtonIcons.Marker))
+        {
+            var parts = label.Split(ButtonIcons.Marker);
+            var done = new List<string>(parts.Length);
+            var any = false;
+            foreach (var part in parts)
+            {
+                if (part.Trim().Length == 0) { done.Add(""); continue; }
+                if (TranslateLabelLoosely(part) is not { } turkish) return null;
+                done.Add(turkish);
+                any = true;
+            }
+            return any ? string.Join(' ', string.Join($" {ButtonIcons.Marker} ", done).Split(' ', StringSplitOptions.RemoveEmptyEntries)) : null;
+        }
+        if (TranslateLabel(label) is { } direct) return direct;
+        var words = label.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < 2) return null;
+        // Baştaki kırıntı tuş adıysa ("R3 LOOK BEHIND") kalır; değilse ("1 Map", "pi Settings": simgenin yanlış okunuşu) atılır.
+        if (words[0].Length <= 2 && TranslateLabel(string.Join(' ', words[1..])) is { } rest)
+            return ButtonIcons.IsButtonName(words[0]) ? words[0] + " " + rest : rest;
+        if (words[^1].Length <= 2 && TranslateLabel(string.Join(' ', words[..^1])) is { } head) return head + " " + words[^1];
+        return null;
     }
 
     private static string TurkishUpper(string text) => text.Replace('i', 'İ').Replace('ı', 'I').ToUpperInvariant();

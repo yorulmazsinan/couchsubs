@@ -215,8 +215,9 @@ public sealed class Reading
     /// <see cref="WithButtonIcons()"/>, ayrıca fiilsiz yerlerdeki simgeler (tuş çubuğu, satır başı) <paramref name="frame"/>'den
     /// (okunan görüntü) doğrulanarak işaretlenir (<see cref="ButtonIcons.MarkFree"/>).
     /// </summary>
-    public Reading WithButtonIcons(Frame frame) =>
-        new(ButtonIcons.JoinHints(this).Lines.Select(ButtonIcons.Mark).Select(line => ButtonIcons.MarkFree(line, frame)));
+    /// <param name="monochrome">Yalnız renksiz simgeler (otomatik ekran yazısı; bkz. <see cref="ButtonIcons.MarkFree"/>).</param>
+    public Reading WithButtonIcons(Frame frame, bool monochrome = false) =>
+        new(ButtonIcons.JoinHints(this).Lines.Select(ButtonIcons.Mark).Select(line => ButtonIcons.MarkFree(line, frame, monochrome)));
 }
 
 /// <summary>

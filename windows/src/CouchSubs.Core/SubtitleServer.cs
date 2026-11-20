@@ -352,15 +352,25 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     public void SendRegion(string id, string text, TextBox? box, double? lineHeight, IReadOnlyList<IconPlacement>? icons,
                            IReadOnlyList<ScreenTranslation.Item>? blocks)
     {
+        Broadcast(Frame("region", RegionData(id, text, box, lineHeight, icons, blocks)), subtitle: true);
+        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Region, text, Id: id, Box: box,
+                                            Blocks: blocks is { Count: > 0 } && text.Length > 0 ? blocks : null));
+    }
+
+    /// <summary><c>region</c> olayının verisi (TV'ye gidenin aynısı; gerçek kare doğrulaması da bunu döker).</summary>
+    internal static SortedDictionary<string, object> RegionData(string id, string text, TextBox? box, double? lineHeight,
+        IReadOnlyList<IconPlacement>? icons, IReadOnlyList<ScreenTranslation.Item>? blocks)
+    {
         var json = new SortedDictionary<string, object> { ["id"] = id, ["text"] = text };
         if (icons is { Count: > 0 }) json["icons"] = IconsJson(icons);
         if (blocks is { Count: > 0 } && text.Length > 0) json["blocks"] = blocks.Select(item => ItemJson(item, id == "game-phone")).ToList();
         if (box is { } b) json["box"] = BoxJson(b);
         if (lineHeight is { } line) json["line"] = Round(line);
-        Broadcast(Frame("region", json), subtitle: true);
-        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Region, text, Id: id, Box: box,
-                                            Blocks: blocks is { Count: > 0 } && text.Length > 0 ? blocks : null));
+        return json;
     }
+
+    /// <summary>Olay verisini TV'ye giden JSON'a çevirir.</summary>
+    internal static string Json(SortedDictionary<string, object> data) => JsonSerializer.Serialize(data, JsonOptions);
 
     /// <summary>Bütün ek alan kutularını kaldırır.</summary>
     public void ClearRegions()

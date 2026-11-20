@@ -182,6 +182,9 @@ public static class ButtonIcons
     }
 
     /// <summary>Tek harf/simge (küçük "a" ve "I" dışında: sözcüktürler) ya da düğme adı; çevresindeki parantez ve noktalama sayılmaz.</summary>
+    /// <summary>Sözcük bir kumanda tuşunun adı ya da simgesi mi ("R3", "(L1)", "△").</summary>
+    public static bool IsButtonName(string text) => Names.Contains(text.Trim(Brackets.ToCharArray()));
+
     private static bool IsIconToken(string text)
     {
         var core = text.Trim(Brackets.ToCharArray()).TrimEnd(Punctuation.ToCharArray()).Trim(Brackets.ToCharArray());
@@ -297,6 +300,24 @@ public static class ButtonIcons
     /// Kutuda simge biçiminde bir şekil var mı: zeminden ayrışan, satır yüksekliğinin en az yarısı kadar ve kabaca kare
     /// (düğme dairesi, omuz tuşu kutusu). Boşluk ya da harf kırıntısı simge sayılmaz.
     /// </summary>
+    /// <summary>Kutudaki parlak piksellerin çoğu renksiz mi (kumanda simgesi beyaz/gri; portre, harita renkli).</summary>
+    internal static bool IsColourless(Frame frame, TextBox box)
+    {
+        int left = (int)(box.Left * frame.Width), right = (int)Math.Ceiling(box.Right * frame.Width);
+        int top = (int)(box.Top * frame.Height), bottom = (int)Math.Ceiling(box.Bottom * frame.Height);
+        int bright = 0, coloured = 0;
+        for (var y = Math.Max(0, top); y < Math.Min(frame.Height, bottom); y++)
+            for (var x = Math.Max(0, left); x < Math.Min(frame.Width, right); x++)
+            {
+                var p = y * frame.Stride + x * 4;
+                int b = frame.Pixels[p], g = frame.Pixels[p + 1], r = frame.Pixels[p + 2];
+                if ((299 * r + 587 * g + 114 * b) / 1000 < 110) continue;
+                bright++;
+                if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) > 60) coloured++;
+            }
+        return bright > 0 && coloured * 4 < bright;
+    }
+
     internal static bool HasIcon(Frame frame, TextBox box, double lineHeightPx)
     {
         if (Locate(frame, box) is not { } ink) return false;
@@ -316,7 +337,11 @@ public static class ButtonIcons
     /// Sıradan cümlenin ortasındaki boşluk aranmaz: orada harita işareti ya da renkli ad durur (GTA 6: "your personal
     /// vehicle ◆ for easy access"). GameTranslator.IconWords (AGPL-3.0-only) üzerinden Nino Game Translator'ın VisionReader.withIcons / withEdgeIcons kurallarından uyarlandı.
     /// </summary>
-    public static TextLine MarkFree(TextLine line, Frame frame)
+    /// <param name="monochrome">
+    /// Otomatik bulunan ekran yazısında: yalnız renksiz (beyaz/gri) simgeler kabul edilir. Görev kutusundaki portre ve
+    /// harita parçası simge sanılıp çevirinin içine kesiliyordu (gerçek kare doğrulaması, GTA 6).
+    /// </param>
+    public static TextLine MarkFree(TextLine line, Frame frame, bool monochrome = false)
     {
         if (line.Box is not { } lineBox || line.Icons is { Count: > 0 } || frame.Width < 8 || frame.Height < 8) return line;
         var words = line.Words is { Count: > 0 } measured ? measured : Estimate(line.Text, lineBox);
@@ -332,7 +357,7 @@ public static class ButtonIcons
         TextBox Padded(double left, double right) =>
             new(Math.Clamp(left, 0, 1), Math.Clamp(top - pad, 0, 1),
                 Math.Clamp(right, 0, 1), Math.Clamp(bottom + pad, 0, 1));
-        bool Icon(TextBox box) => HasIcon(frame, box, linePx);
+        bool Icon(TextBox box) => HasIcon(frame, box, linePx) && (!monochrome || IsColourless(frame, box));
 
         // Satırın solundaki simge (okunmamış): "△ Pick up".
         if (!IsIconToken(words[0].Text) && lineBox.Left > 0)

@@ -474,10 +474,12 @@ public sealed partial class RegionWatcher
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
                                             bool auto = false)
     {
-        var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame);
+        var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame, monochrome: auto);
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         var lines = (auto ? marked : marked.WithoutButtonPrompts()).WithoutOcrNoise(phone).Lines
             .Where(line => ScreenTranslation.IsWords(line.Text))
+            // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı") ve karenin kenarında kesilmiş tek sözcük atılır.
+            .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
         var paragraphs = ScreenTranslation.Paragraphs(lines);
@@ -566,6 +568,14 @@ public sealed partial class RegionWatcher
             result.Add(block with { Look = look with { Align = align } });
         }
         return result;
+    }
+
+    /// <summary>Tek sözcüklük satır alanın sol ya da sağ kenarına değiyor: kesilmiş bir yazının parçası ("KELI").</summary>
+    private static bool CutAtEdge(TextLine line)
+    {
+        if (line.Box is not { } box || IconText.Plain(line.Text).Trim().Contains(' ')) return false;
+        // Otomatik alan yazının yarım karo dışına kadar genişletilir: kenara değen sözcük alanın (ya da karenin) dışından taşıyor.
+        return box.Left <= 0.005 || box.Right >= 0.995;
     }
 
     private static bool Inside(TextBox line, TextBox group)
@@ -915,7 +925,7 @@ public sealed partial class RegionWatcher
             if (!core.Any(char.IsLetter)) { part.Translation = part.Core; continue; }
             string? known;
             lock (terms) terms.TryGetValue(core, out known);
-            known ??= (TranslatesUiCommands ? UiCommands.TranslateLabel(core) : null)
+            known ??= (TranslatesUiCommands ? UiCommands.TranslateLabelLoosely(core) : null)
                       ?? PackLookup?.Invoke(IconText.Plain(core))?.Text
                       ?? (SkipsTurkish && TurkishText.IsSure(core) ? core : null);
             if (known is not null) part.Translation = known;
