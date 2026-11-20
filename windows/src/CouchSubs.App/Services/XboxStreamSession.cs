@@ -18,7 +18,8 @@ namespace CouchSubs.App.Services;
 internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, string token, Action<string> tokenUpdated, bool legacyFrameRate, bool playAudio) : IStreamSession
 {
     // Oynatıcı sayfası yalnız WebRTC el sıkışma komutlarını çağırabilir; giriş ve token dönen komutlar ona kapalı.
-    private static readonly HashSet<string> PlayerCommands = ["sdp", "chatSdp", "ice", "keepalive"];
+    // Canlı tutma isteğini artık uygulama gönderir (bkz. StartKeepalive).
+    private static readonly HashSet<string> PlayerCommands = ["sdp", "chatSdp", "ice"];
     private readonly CancellationTokenSource cancel = new();
     private string currentToken = token;
     private Window? window;
@@ -31,6 +32,10 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private DispatcherTimer? watchTimer;
     private long connectedAt;
     private bool keyframeReady;
+    /// <summary>Bu WebRTC bağlantısında okumaya giden kare sayısı ve ilk karenin anı (bağlantı bitince özet satırı).</summary>
+    private long connectionFrames;
+    private long firstFrameAt;
+    private CancellationTokenSource? keepaliveCancel;
 
     public event Action<Frame>? FrameReceived;
     public event Action<SessionState>? StateChanged;
@@ -120,6 +125,12 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             }
             finally
             {
+                if (browserEnded is not null)
+                {
+                    var first = Interlocked.Exchange(ref firstFrameAt, 0);
+                    Log(XboxStop.Summary(cancel.IsCancellationRequested ? null : reason ?? endReason, Interlocked.Exchange(ref connectionFrames, 0),
+                        first == 0 ? null : TimeSpan.FromMilliseconds(Environment.TickCount64 - first)));
+                }
                 ClosePlayer();
                 try { await bridge.CallAsync("stop"); } catch { /* A lost connection has no session to stop. */ }
             }
@@ -132,8 +143,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             if (permanent || failures > RetryDelaysMs.Length)
             {
                 Log(permanent ? "kalıcı hata: yeniden denenmiyor, yayın durdu" : $"{RetryDelaysMs.Length} deneme bitti: yeniden denenmiyor, yayın durdu");
-                StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Refused,
-                    Localizer.Current.Format("The Xbox connection was lost: %@. Restart the Xbox to reconnect.", reason ?? "?")));
+                StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Refused, XboxStop.Message(Localizer.Current, reason)));
                 break;
             }
             var delay = RetryDelaysMs[failures - 1];
@@ -210,6 +220,12 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                         Interlocked.CompareExchange(ref streamingSince, Environment.TickCount64, 0);
                         StateChanged?.Invoke(SessionState.Streaming);
                         StartWatch();
+                        StartKeepalive();
+                    }
+                    else if (state is "disconnected")
+                    {
+                        // Geçici olabilir (Wi-Fi takılması): oturum bitmez; oynatıcı o anki ağ tanısını da gönderir.
+                        Log("WebRTC disconnected: bağlantı takıldı, toparlanması bekleniyor");
                     }
                     else if (state is "closed" or "failed" or "error")
                     {
@@ -222,7 +238,12 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                 case "keyframeReady":
                     keyframeReady = true;
                     break;
+                case "log":
+                    // Oynatıcı sayfasındaki yakalanmamış hata ya da video.play reddi: yayını bitirmez, yalnız yazılır.
+                    Log("oynatıcı: " + XboxStop.Shorten(message.TryGetProperty("text", out var logText) ? logText.GetString() : null, 300));
+                    break;
                 case "firstFrame":
+                    Interlocked.CompareExchange(ref firstFrameAt, Environment.TickCount64, 0);
                     if (watch is { FrameSeen: false } seen)
                     {
                         seen.FrameArrived();
@@ -232,13 +253,14 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     StopWatch();
                     break;
                 case "stats":
-                    if (watch is null) break;
+                    // İlk kare beklenirken saat sorar; görüntü geldikten sonra bağlantı takılınca oynatıcı kendisi gönderir.
+                    if (connectedAt == 0) break;
                     var video = message.GetProperty("video");
                     var picture = XboxStreamStats.Picture(video.GetProperty("readyState").GetInt32(), video.GetProperty("width").GetInt32(),
                         video.GetProperty("height").GetInt32(), video.TryGetProperty("visibility", out var visibility) ? visibility.GetString() : null,
                         video.GetProperty("callbacks").GetInt64());
-                    Log(XboxStreamStats.Describe(TimeSpan.FromMilliseconds(Environment.TickCount64 - connectedAt), watch.FrameSeen,
-                        watch.KeyframesRequested, message.GetProperty("stats"), picture));
+                    Log(XboxStreamStats.Describe(TimeSpan.FromMilliseconds(Environment.TickCount64 - connectedAt),
+                        watch?.FrameSeen ?? Interlocked.Read(ref firstFrameAt) != 0, watch?.KeyframesRequested ?? 0, message.GetProperty("stats"), picture));
                     break;
                 case "rpc":
                     var id = message.GetProperty("id").GetInt32();
@@ -318,7 +340,12 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             try
             {
                 var comma = data.IndexOf(',');
-                if (comma >= 0) FrameReceived?.Invoke(DecodeJpeg(Convert.FromBase64String(data[(comma + 1)..])));
+                if (comma >= 0)
+                {
+                    var frame = DecodeJpeg(Convert.FromBase64String(data[(comma + 1)..]));
+                    Interlocked.Increment(ref connectionFrames);
+                    FrameReceived?.Invoke(frame);
+                }
             }
             catch
             {
@@ -347,6 +374,44 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         return new Frame(pixels, converted.PixelWidth, converted.PixelHeight, stride);
     }
 
+    /// <summary>
+    /// WebRTC bağlandıktan sonra 30 sn'de bir Xbox oturumunu canlı tutar. Tek başarısız istek yayını kesmez (eskiden
+    /// oynatıcıdaki <c>rpc('keepalive').catch(fail)</c> keserdi); ardışık <see cref="XboxKeepalive.MaxFailures"/> hata keser.
+    /// </summary>
+    private void StartKeepalive()
+    {
+        keepaliveCancel?.Cancel();
+        var stop = keepaliveCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel.Token);
+        var ended = browserEnded;
+        _ = Task.Run(async () =>
+        {
+            var keepalive = new XboxKeepalive();
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(XboxKeepalive.Interval, stop.Token);
+                    try
+                    {
+                        await bridge.CallAsync("keepalive");
+                        if (keepalive.Failures > 0) Log("canlı tutma yeniden yanıt verdi");
+                        keepalive.Succeeded();
+                    }
+                    catch (Exception error) when (!stop.IsCancellationRequested)
+                    {
+                        var end = keepalive.Failed();
+                        Log($"canlı tutma başarısız ({keepalive.Failures}/{XboxKeepalive.MaxFailures}): {XboxStop.Shorten(error.Message)}");
+                        if (!end) continue;
+                        endReason ??= Localizer.Current["The Xbox stopped answering keep-alive requests."];
+                        ended?.TrySetResult(true);
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { /* Bağlantı kapandı. */ }
+        });
+    }
+
     private void RememberToken(JsonElement result)
     {
         if (!result.TryGetProperty("userToken", out var refreshed)) return;
@@ -356,6 +421,9 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
 
     private void ClosePlayer()
     {
+        keepaliveCancel?.Cancel();
+        keepaliveCancel = null;
+        connectedAt = 0;
         StopWatch();
         watch = null;
         keyframeReady = false;

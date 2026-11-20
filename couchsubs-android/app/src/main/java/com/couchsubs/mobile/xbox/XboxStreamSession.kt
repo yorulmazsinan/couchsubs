@@ -223,8 +223,13 @@ class XboxStreamSession(
             else -> {
                 // Denemeler bitti ya da konsol yayını reddetti: yayın durur, yeniden denenmez.
                 log("yeniden denenmiyor, yayın durdu")
-                onState(SessionState.Disconnected(DisconnectKind.OTHER,
-                    appContext.getString(R.string.xbox_connection_lost, detail?.takeIf { it.isNotBlank() } ?: kind.name)))
+                val text = when (XboxSessionMachine.stopKind(kind, detail)) {
+                    XboxSessionMachine.StopKind.BUSY -> appContext.getString(R.string.xbox_stopped_busy)
+                    XboxSessionMachine.StopKind.CONSOLE_UNAVAILABLE -> appContext.getString(R.string.xbox_stopped_console)
+                    XboxSessionMachine.StopKind.OTHER ->
+                        appContext.getString(R.string.xbox_connection_lost, XboxSessionMachine.shortReason(detail, kind.name))
+                }
+                onState(SessionState.Disconnected(DisconnectKind.OTHER, text))
             }
         }
     }

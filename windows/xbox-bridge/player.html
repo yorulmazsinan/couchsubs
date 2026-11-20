@@ -20,7 +20,6 @@
   const FRAME_WAIT_MS = 1000;
   let frameSentAt = 0;
   let frameWaiting = false;
-  let keepalive;
   // İlk kare (#403, #530): Xbox kare onayı alamazsa ~60 sn'de kapatır; onay requestVideoFrameCallback'te gider.
   // Uygulama ilk kare gelene kadar anahtar kare ister ve getStats tanısı sorar (XboxFirstFrameWatch).
   let frameCallbacks = 0;
@@ -66,6 +65,15 @@
     } });
   }
   function fail(error) { send({ kind: 'state', state: 'error', detail: String(error?.message || error) }); }
+  // Yayını bitirmeyen sorunlar (oynatıcı kitaplığındaki yakalanmamış hata, video.play reddi) yalnız günlüğe yazılır.
+  // Eskiden her biri fail() çağırıyor ve görüntü akarken oturum kapanıyordu.
+  function log(text) { send({ kind: 'log', text: String(text?.message || text) }); }
+  function play(video, retry = true) {
+    video.play().catch(error => {
+      log('video.play: ' + (error?.name || '') + ' ' + (error?.message || error));
+      if (retry) setTimeout(() => play(video, false), 1000);
+    });
+  }
   function capture(video) {
     if (!video || !video.videoWidth || !video.videoHeight) return;
     const now = performance.now();
@@ -96,6 +104,8 @@
       } catch (error) { fail(error); }
     });
     player.getEventBus().on('connectionstate', event => {
+      // Bağlantı takıldığı ya da koptuğu anki ağ durumu günlüğe girsin.
+      if (event.state === 'disconnected' || event.state === 'failed') sendStats();
       send({ kind: 'state', state: event.state });
       if (event.state === 'connected') {
         const applyAudioPreference = () => {
@@ -118,7 +128,7 @@
           video.muted = true;
           watchFrames(video);
           notifyKeyframeReady();
-          video.play().catch(fail);
+          play(video);
           video.addEventListener('loadeddata', () => capture(video));
           frameTimer = setInterval(() => capture(video), frameMs);
           return true;
@@ -127,7 +137,6 @@
           const observer = new MutationObserver(() => { if (attach()) observer.disconnect(); });
           observer.observe(document.getElementById('stream'), { childList: true, subtree: true });
         }
-        keepalive = setInterval(() => rpc('keepalive').catch(fail), 30_000);
       }
     });
     try {
@@ -153,7 +162,6 @@
   }
   function stop() {
     clearInterval(frameTimer);
-    clearInterval(keepalive);
     audioObserver?.disconnect();
     audioObserver = undefined;
     for (const item of pending.values()) item.reject(new Error('Xbox stream stopped'));
@@ -176,10 +184,11 @@
     else if (message.kind === 'start') {
       frameMs = message.legacyFrameRate ? 200 : 66;
       playAudio = message.playAudio !== false;
-      start();
+      start().catch(fail);
     }
     else if (message.kind === 'stop') stop();
   });
-  window.addEventListener('error', event => fail(event.error || event.message));
+  window.addEventListener('error', event => log('hata: ' + (event.error?.stack || event.error || event.message)));
+  window.addEventListener('unhandledrejection', event => log('yakalanmamış söz: ' + (event.reason?.stack || event.reason)));
 })();
 </script></html>

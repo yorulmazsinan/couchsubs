@@ -526,7 +526,9 @@
     <string name="xbox_error_timeout">Xbox yanıt vermedi. Yeniden deneniyor…</string>
     <string name="xbox_error_network">Xbox bağlantısı koptu. Yeniden bağlanılıyor…</string>
     <string name="xbox_error_service">Xbox hizmeti beklenmedik yanıt verdi. Yeniden deneniyor…</string>
-    <string name="xbox_connection_lost">Xbox bağlantısı kesildi: %1$s. Yeniden bağlanmak için Xbox\'ı yeniden başlatın.</string>
+    <string name="xbox_connection_lost">Xbox yayını durdu (%1$s). Çeviriyi yeniden başlatın; sürekli duruyorsa Xbox\'ı yeniden başlatın.</string>
+    <string name="xbox_stopped_busy">Xbox şu an başka bir cihaza yayın yapıyor (Xbox uygulaması, telefon ya da bilgisayar). O oturumu kapatıp çeviriyi yeniden başlatın.</string>
+    <string name="xbox_stopped_console">Xbox\'a ulaşılamadı. Xbox\'ın açık olduğundan ve Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler\'de uzaktan oynatmanın açık olduğundan emin olup çeviriyi yeniden başlatın.</string>
     <string name="beta">Beta</string>
     <string name="platform_title">Konsolunuz</string>
     <string name="platform_body">Altyazısını çevireceğiniz konsolu seçin. Sonra Ayarlar\'dan değiştirebilirsiniz.</string>

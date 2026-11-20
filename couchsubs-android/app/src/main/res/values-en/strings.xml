@@ -518,7 +518,9 @@
     <string name="xbox_error_timeout">Your Xbox didn\'t answer. Retrying…</string>
     <string name="xbox_error_network">The Xbox connection dropped. Reconnecting…</string>
     <string name="xbox_error_service">The Xbox service sent an unexpected reply. Retrying…</string>
-    <string name="xbox_connection_lost">The Xbox connection was lost: %1$s. Restart the Xbox to reconnect.</string>
+    <string name="xbox_connection_lost">The Xbox stream stopped (%1$s). Start translation again; if it keeps stopping, restart the Xbox.</string>
+    <string name="xbox_stopped_busy">Your Xbox is streaming to another device (the Xbox app, a phone or a PC). Close that session, then start translation again.</string>
+    <string name="xbox_stopped_console">Can\'t reach your Xbox. Make sure it\'s on and remote play is enabled in Settings › Devices &amp; connections › Remote features, then start translation again.</string>
     <string name="beta">Beta</string>
     <string name="platform_title">Your console</string>
     <string name="platform_body">Choose the console whose subtitles you want translated. You can change it later in Settings.</string>

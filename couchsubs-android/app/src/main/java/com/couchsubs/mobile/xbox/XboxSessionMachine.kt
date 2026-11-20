@@ -43,6 +43,9 @@ class XboxSessionMachine(
         data object Nothing : Action()
     }
 
+    /** Yayın durunca kullanıcıya gösterilen metnin türü (Windows'taki XboxStop.Classify ile aynı kurallar). */
+    enum class StopKind { BUSY, CONSOLE_UNAVAILABLE, OTHER }
+
     @Volatile var phase: Phase = Phase.Idle
         private set
 
@@ -127,6 +130,30 @@ class XboxSessionMachine(
             val text = details?.replace(" ", "").orEmpty()
             if (text.isEmpty() || text == "{}" || text == "null") return false
             return !Regex("""^\{("[^"]*":(null|""),?)*\}$""").matches(text)
+        }
+
+        /** Kullanıcı metninde gösterilen ham nedenin en çok uzunluğu (Xbox hizmeti uzun JSON dönebilir). */
+        const val REASON_LIMIT = 120
+
+        /**
+         * Denemeler bitince ya da konsol yayını reddedince hangi metin gösterilir. Ham neden ayrıntıya bakılır: ilk kare
+         * gelmeyince de CONSOLE_UNAVAILABLE sayılır ama o durumda "Xbox'a ulaşılamadı" yanlış olur.
+         */
+        fun stopKind(kind: XboxError, detail: String?): StopKind {
+            val text = detail.orEmpty()
+            return when {
+                kind == XboxError.BUSY || text.contains("InUse", true) || text.contains("Busy", true) ||
+                    text.contains("AlreadyStreaming", true) -> StopKind.BUSY
+                text.contains("Offline", true) || text.contains("NotFound", true) || text.contains("Unavailable", true) ||
+                    text.contains("PowerOff", true) || text.contains("StreamingDisabled", true) -> StopKind.CONSOLE_UNAVAILABLE
+                else -> StopKind.OTHER
+            }
+        }
+
+        /** Ham nedeni tek satıra indirir ve [REASON_LIMIT] karakterde keser. */
+        fun shortReason(detail: String?, fallback: String): String {
+            val line = detail?.trim()?.replace(Regex("\\s+"), " ").takeUnless { it.isNullOrEmpty() } ?: fallback
+            return if (line.length <= REASON_LIMIT) line else line.take(REASON_LIMIT - 1) + "…"
         }
 
         /** `errorDetails` içinden anlaşılan neden. */

@@ -46,8 +46,28 @@ internal sealed class XboxBridge : IDisposable
         info.ArgumentList.Add(script);
         process = Process.Start(info) ?? throw new InvalidOperationException(Localizer.Current["The Xbox streaming component couldn't start."]);
         _ = ReadRepliesAsync(process);
-        _ = process.StandardError.ReadToEndAsync();
+        _ = WatchExitAsync(process);
         loadedToken = null;
+    }
+
+    /// <summary>
+    /// Köprü (node) beklenmedik kapanırsa çıkış kodu ve hata çıktısının sonu günlüğe yazılır; eskiden hata çıktısı
+    /// okunup atılıyordu ve yayının neden kesildiği görünmüyordu. Belirtece benzeyen uzun diziler gizlenir.
+    /// </summary>
+    private async Task WatchExitAsync(Process running)
+    {
+        try
+        {
+            var errors = await running.StandardError.ReadToEndAsync();
+            await running.WaitForExitAsync();
+            if (process is null) return; // Clear() ile bilerek kapatıldı.
+            var tail = XboxStop.RedactBridgeOutput(errors);
+            SubtitleLog.Write($"[Xbox] köprü kapandı: çıkış kodu {running.ExitCode}{(tail.Length > 0 ? ", hata çıktısı: " + tail : "")}");
+        }
+        catch
+        {
+            // Süreç bu arada atıldı; yazılacak bir şey yok.
+        }
     }
 
     private async Task ReadRepliesAsync(Process running)

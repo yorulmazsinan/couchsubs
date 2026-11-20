@@ -459,6 +459,26 @@ class XboxSessionMachineTest {
         assertEquals(XboxError.CONSOLE_UNAVAILABLE, XboxSessionMachine.classifyFailure("""{"code":"ConsoleOffline"}"""))
     }
 
+    @Test fun stopMessageKindFollowsReasonNotOnlyErrorKind() {
+        // Konsol başka yayında: kullanıcıya "o oturumu kapatın" denir.
+        assertEquals(XboxSessionMachine.StopKind.BUSY,
+            XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, """{"code":"ServerInUse"}"""))
+        assertEquals(XboxSessionMachine.StopKind.BUSY, XboxSessionMachine.stopKind(XboxError.BUSY, null))
+        assertEquals(XboxSessionMachine.StopKind.CONSOLE_UNAVAILABLE,
+            XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, """{"code":"ConsoleOffline"}"""))
+        // İlk kare gelmeyince tür CONSOLE_UNAVAILABLE ama "Xbox'a ulaşılamadı" yanlış olur: ham neden gösterilir.
+        assertEquals(XboxSessionMachine.StopKind.OTHER,
+            XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, "Xbox'tan 20 sn içinde görüntü gelmedi"))
+    }
+
+    @Test fun shortReasonIsOneLineAndBounded() {
+        assertEquals("NETWORK", XboxSessionMachine.shortReason("  ", "NETWORK"))
+        assertEquals("a b", XboxSessionMachine.shortReason("a\n  b", "x"))
+        val long = XboxSessionMachine.shortReason("x".repeat(500), "x")
+        assertEquals(XboxSessionMachine.REASON_LIMIT, long.length)
+        assertTrue(long.endsWith("…"))
+    }
+
     @Test fun errorDetailsStopsRetrying() {
         val m = XboxSessionMachine()
         m.start(); m.played()
