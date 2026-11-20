@@ -48,7 +48,7 @@ public class DenseMenuTests
 
     // --- (a) Duraklatma menüsü: koyu panelde altı satır, seçili satır ters renk ---
 
-    private static readonly string[] PauseRows = ["Map", "Game", "Store", "Help", "Photo Studio", "Settings"];
+    private static readonly string[] PauseRows = ["Map", "Online", "Store", "Help", "Photo Studio", "Settings"];
 
     private static TextBox Row(int index) => new(20 / 400.0, (20 + 40 * index) / 300.0, 200 / 400.0, (50 + 40 * index) / 300.0);
 
@@ -86,9 +86,9 @@ public class DenseMenuTests
         Assert.Equal(6, first.Count);
         Assert.True(Light(first[2].Style!.Background));
         Assert.All(first.Where((_, index) => index != 2), block => Assert.False(Light(block.Style!.Background)));
-        // Yalnız sözlükte olmayan "Game" motora gitti; karışık harfli özgün normal Türkçe kalır.
+        // Yalnız sözlükte olmayan "Online" motora gitti; karışık harfli özgün normal Türkçe kalır.
         Assert.Equal(1, translator.Requests);
-        Assert.Equal(["Game"], translator.Texts);
+        Assert.Equal(["Online"], translator.Texts);
         Assert.Equal("Harita", first[0].Translation);
 
         await watcher.PassAsync(Pause(3), [Area]);

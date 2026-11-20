@@ -16,8 +16,13 @@ public sealed class ScreenTextDetector
 {
     public const int Columns = 32;
     public const int Rows = 18;
-    /// <summary>Karo başına bir kenardaki örnek sayısı (12x12 = 144 nokta).</summary>
-    public const int Samples = 12;
+    /// <summary>
+    /// Karo başına bir kenardaki örnek sayısı (24x24 = 576 nokta). 12x12 örnek ince açık yazıya isabet etmiyordu (gerçek
+    /// kare doğrulaması, GTA 6 kontrol şemasının sol sütunu); eşikler nokta sayısıyla orantılı.
+    /// </summary>
+    public const int Samples = 24;
+    private const int Points = Samples * Samples;
+    private const int Words = Points / 64;
     /// <summary>İki örnek arasında en az bu kadar süre geçer (en çok 10 Hz).</summary>
     public const int SampleIntervalMs = 100;
     /// <summary>Karo bu kadar süre durgun kalınca aday olur.</summary>
@@ -40,24 +45,31 @@ public sealed class ScreenTextDetector
 
     private const int Bright = 160;
     private const int Dark = 100;
-    private const int MaskChange = 6;
+    /// <summary>Karo maskesinin "değişti" sayılması için en az farklı nokta (144 noktada 6 idi; orantılı).</summary>
+    private const int MaskChange = 24;
+    /// <summary>Yazı benzeri karo: parlak nokta sayısı bu aralıkta ve koyu nokta en az bu kadar (144'te 6..72, 36).</summary>
+    private const int BrightMin = 24, BrightMax = 288, DarkMin = 144;
     private const double MaxShare = 0.35;
     private const double KeepOverlap = 0.30;
 
     private struct Tile
     {
-        public Mask Last;
         public bool HasLast;
         public long StableSince;
-        public Mask Rejected;
         public bool IsRejected;
         public bool Quiet;
     }
 
-    private record struct Mask(ulong A, ulong B, ulong C)
+    // Karo maskeleri düz dizilerde (karo başına Words adet 64 bitlik sözcük): her örnekte ayırma yok.
+    private readonly ulong[] lastMasks = new ulong[Columns * Rows * Words];
+    private readonly ulong[] rejectedMasks = new ulong[Columns * Rows * Words];
+    private readonly ulong[] sampleMask = new ulong[Words];
+
+    private static int Distance(ReadOnlySpan<ulong> a, ReadOnlySpan<ulong> b)
     {
-        public readonly int Distance(Mask other) =>
-            BitOperations.PopCount(A ^ other.A) + BitOperations.PopCount(B ^ other.B) + BitOperations.PopCount(C ^ other.C);
+        var sum = 0;
+        for (var i = 0; i < a.Length; i++) sum += BitOperations.PopCount(a[i] ^ b[i]);
+        return sum;
     }
 
     /// <summary>Karo dikdörtgeni (sütun/satır, iki uç dahil).</summary>
@@ -108,34 +120,39 @@ public sealed class ScreenTextDetector
     }
 
     /// <summary>
-    /// Kareyi örnekler ve alanları günceller. <paramref name="excluded"/>: altyazı alanı ve kullanıcının etkin ek alanları
-    /// (merkezi bunların içinde kalan karo aday olmaz). Alan listesi değiştiyse true.
+    /// Kareyi örnekler ve alanları günceller. <paramref name="excluded"/>: kullanıcının etkin ek alanları ve hazır alanlar
+    /// (merkezi bunların içinde kalan karo aday olmaz). <paramref name="subtitle"/>: altyazı alanı; menü durumunda dışlanmaz
+    /// (menünün alttaki satırları ve tuş çubuğu da okunur). Alan listesi değiştiyse true.
     /// </summary>
-    public bool Sample(Frame frame, long now, IReadOnlyList<CropRegion> excluded)
+    public bool Sample(Frame frame, long now, IReadOnlyList<CropRegion> excluded, CropRegion? subtitle = null)
     {
         lock (gate)
         {
             if (lastSample is { } last && now - last < SampleIntervalMs) return false;
             lastSample = now;
             var before = Current();
+            var anywhere = new bool[tiles.Length];
             var candidate = new bool[tiles.Length];
             for (var row = 0; row < Rows; row++)
                 for (var column = 0; column < Columns; column++)
                 {
                     var index = row * Columns + column;
-                    var (mask, bright, dark, deviation) = Measure(frame, column, row);
+                    var (bright, dark, deviation) = Measure(frame, column, row, sampleMask);
                     ref var tile = ref tiles[index];
+                    var previous = lastMasks.AsSpan(index * Words, Words);
                     tile.Quiet = deviation < QuietDeviation;
-                    if (!tile.HasLast || tile.Last.Distance(mask) > MaskChange) tile.StableSince = now;
-                    tile.Last = mask;
+                    if (!tile.HasLast || Distance(previous, sampleMask) > MaskChange) tile.StableSince = now;
+                    sampleMask.CopyTo(previous);
                     tile.HasLast = true;
-                    if (tile.IsRejected && tile.Rejected.Distance(mask) > MaskChange) tile.IsRejected = false;
-                    var textLike = bright is >= 6 and <= 72 && dark >= 36;
-                    candidate[index] = textLike && now - tile.StableSince >= StableMs && !tile.IsRejected
-                        && !Excluded(column, row, excluded);
+                    if (tile.IsRejected && Distance(rejectedMasks.AsSpan(index * Words, Words), sampleMask) > MaskChange) tile.IsRejected = false;
+                    var textLike = bright is >= BrightMin and <= BrightMax && dark >= DarkMin;
+                    anywhere[index] = textLike && now - tile.StableSince >= StableMs && !tile.IsRejected && !Excluded(column, row, excluded);
+                    candidate[index] = anywhere[index] && (subtitle is not { } area || !Excluded(column, row, [area]));
                 }
+            var inMenu = IsMenu(Components(candidate), now);
+            // Menüde altyazı alanındaki satırlar da menünün parçasıdır (alttaki seçenekler, tuş çubuğu).
+            if (inMenu) candidate = anywhere;
             var all = Components(candidate);
-            var inMenu = IsMenu(all, now);
             var components = inMenu ? all : [.. all.Where(item => item.Tiles.Count >= 2)];
             Update([.. components.OrderByDescending(item => item.Tiles.Count).Take(inMenu ? MenuMaxAreas : MaxAreas)], candidate, now, inMenu);
             return !before.SequenceEqual(Current());
@@ -154,7 +171,7 @@ public sealed class ScreenTextDetector
             if (area is null) return;
             foreach (var index in area.Tiles)
             {
-                tiles[index].Rejected = tiles[index].Last;
+                lastMasks.AsSpan(index * Words, Words).CopyTo(rejectedMasks.AsSpan(index * Words, Words));
                 tiles[index].IsRejected = true;
             }
             tracked.Remove(area);
@@ -167,20 +184,22 @@ public sealed class ScreenTextDetector
         lock (gate)
         {
             Array.Clear(tiles);
+            Array.Clear(lastMasks);
+            Array.Clear(rejectedMasks);
             tracked.Clear();
             lastSample = null;
             menu = false;
         }
     }
 
-    private static (Mask Mask, int Bright, int Dark, double Deviation) Measure(Frame frame, int column, int row)
+    private static (int Bright, int Dark, double Deviation) Measure(Frame frame, int column, int row, ulong[] mask)
     {
+        Array.Clear(mask);
         var x0 = (long)column * frame.Width / Columns;
         var x1 = (long)(column + 1) * frame.Width / Columns;
         var y0 = (long)row * frame.Height / Rows;
         var y1 = (long)(row + 1) * frame.Height / Rows;
         var pixels = frame.Pixels;
-        ulong a = 0, b = 0, c = 0;
         int bright = 0, dark = 0, bit = 0;
         long sum = 0, squares = 0;
         for (var sy = 0; sy < Samples; sy++)
@@ -197,16 +216,13 @@ public sealed class ScreenTextDetector
                 if (luma >= Bright)
                 {
                     bright++;
-                    if (bit < 64) a |= 1UL << bit;
-                    else if (bit < 128) b |= 1UL << (bit - 64);
-                    else c |= 1UL << (bit - 128);
+                    mask[bit >> 6] |= 1UL << (bit & 63);
                 }
                 else if (luma <= Dark) dark++;
             }
         }
-        const int count = Samples * Samples;
-        var mean = (double)sum / count;
-        return (new Mask(a, b, c), bright, dark, Math.Sqrt(Math.Max(0, (double)squares / count - mean * mean)));
+        var mean = (double)sum / Points;
+        return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)));
     }
 
     private static bool Excluded(int column, int row, IReadOnlyList<CropRegion> excluded)
@@ -305,10 +321,13 @@ public sealed class ScreenTextDetector
     private List<WatchedArea> Current() =>
         [.. tracked.Select(item => new WatchedArea(item.Id, AreaName, Region(item.Cells)) { Auto = true, Menu = item.Menu })];
 
-    /// <summary>Karo dikdörtgeni her yandan yarım karo genişletilmiş, 0..1'e kırpılmış bölge.</summary>
+    /// <summary>
+    /// Karo dikdörtgeni dikeyde yarım, yatayda bir karo genişletilmiş, 0..1'e kırpılmış bölge (yarım karo sözcüğün başını
+    /// kesiyordu: "RECENTER" → "CENTER").
+    /// </summary>
     private static CropRegion Region(Cells cells) => new(
         Math.Max(0, (cells.Top - 0.5) / Rows), Math.Min(1, (cells.Bottom + 1.5) / Rows),
-        Math.Max(0, (cells.Left - 0.5) / Columns), Math.Min(1, (cells.Right + 1.5) / Columns));
+        Math.Max(0, (cells.Left - 1.0) / Columns), Math.Min(1, (cells.Right + 2.0) / Columns));
 }
 
 /// <summary>
@@ -325,6 +344,31 @@ public static partial class ScreenTextNoise
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\b[\w-]+\.(?:com|net|org|tv|tr|gg|io|live|tk)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex Domain();
+
+    // Simge sözcüğün içinde (ardında harf var): "Delights." gibi sondaki noktalama tuhaf sayılmaz.
+    [System.Text.RegularExpressions.GeneratedRegex(@"[bcçdfgğhjklmnpqrsştvwxyz]{3,}[^\p{L}\s]\p{L}", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex ConsonantsAndSymbol();
+
+    /// <summary>
+    /// Yazı tanımanın bozuk okuması mı: harflerin %30'undan fazlası tuhaf sözcüklerde (sözcük içinde büyük-küçük harf
+    /// karışık, art arda üç ünsüz ve simge, noktalamalı tek harf). Yalnız sözlükte ve pakette bulunmayan parçaya bakılır.
+    /// </summary>
+    public static bool IsGarbled(string text)
+    {
+        var plain = IconText.Plain(text);
+        var letters = plain.Count(char.IsLetter);
+        if (letters == 0) return false;
+        var odd = 0;
+        foreach (var word in plain.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var count = word.Count(char.IsLetter);
+            var inner = word.Length > 1 ? word[1..] : "";
+            var mixed = inner.Any(char.IsUpper) && inner.Any(char.IsLower);
+            var single = count == 1 && word.Length > 1 && word.Any(char.IsPunctuation);
+            if (mixed || single || ConsonantsAndSymbol().IsMatch(word)) odd += count;
+        }
+        return odd > 0.3 * letters;
+    }
 
     /// <summary>Satır yayın katmanının yazısı mı (alan adı "GEN.TR", logo "REPUBLIC OF GAMERS", "• Canlı").</summary>
     public static bool IsOverlay(string line)

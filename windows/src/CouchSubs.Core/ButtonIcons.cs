@@ -338,8 +338,10 @@ public static class ButtonIcons
     /// vehicle ◆ for easy access"). GameTranslator.IconWords (AGPL-3.0-only) üzerinden Nino Game Translator'ın VisionReader.withIcons / withEdgeIcons kurallarından uyarlandı.
     /// </summary>
     /// <param name="monochrome">
-    /// Otomatik bulunan ekran yazısında: yalnız renksiz (beyaz/gri) simgeler kabul edilir. Görev kutusundaki portre ve
-    /// harita parçası simge sanılıp çevirinin içine kesiliyordu (gerçek kare doğrulaması, GTA 6).
+    /// Otomatik bulunan ekran yazısında: yalnız renksiz (beyaz/gri) simgeler kabul edilir ve satırın solunda ya da
+    /// sonunda simge aranmaz. Görev kutusundaki portre ve harita parçası, menü satırının önündeki simge çevirinin içine
+    /// kesiliyor, simge hem yerinde hem çeviride iki kez görünüyordu (gerçek kare doğrulaması, GTA 6). Kenardaki simge
+    /// çeviri kutusunun dışında, yerinde kalır.
     /// </param>
     public static TextLine MarkFree(TextLine line, Frame frame, bool monochrome = false)
     {
@@ -360,7 +362,8 @@ public static class ButtonIcons
         bool Icon(TextBox box) => HasIcon(frame, box, linePx) && (!monochrome || IsColourless(frame, box));
 
         // Satırın solundaki simge (okunmamış): "△ Pick up".
-        if (!IsIconToken(words[0].Text) && lineBox.Left > 0)
+        double? leadingCut = null;
+        if (!monochrome && !IsIconToken(words[0].Text) && lineBox.Left > 0)
         {
             var box = Padded(lineBox.Left - spanX, lineBox.Left - (spanX * 0.08));
             if (Icon(box)) { tokens.Add(Marker.ToString()); icons.Add(new IconSlot(box, "")); }
@@ -399,6 +402,13 @@ public static class ButtonIcons
                     boxRight = Math.Min(boxRight, word.Box.Right + rim);
                 }
                 var box = Padded(boxLeft, boxRight);
+                // Otomatik ekran yazısında satırın başındaki simge çeviriye taşınmaz: yazıdan çıkar, kutu ondan sonra
+                // başlar ("© MELFAMINE", "R3 LOOK BEHIND"); simge yerinde görünür kalır.
+                if (monochrome && i == 0 && words.Count >= 2 && Icon(box))
+                {
+                    leadingCut = words[1].Box.Left;
+                    continue;
+                }
                 // Satır başında okunan düğme adı ("R2 Swing") kareden doğrulanmadıkça işaretlenmez: bu kısa ipuçları
                 // eskisi gibi çevrilmez, düğme görünür kalır.
                 if (Icon(box))
@@ -416,11 +426,17 @@ public static class ButtonIcons
             tokens.Add(text);
         }
         // Tuş çubuğunun sonundaki simge: "SELECT ✕".
-        if (bar && tokens.Count > 0 && tokens[^1] != Marker.ToString() && lineBox.Right < 1)
+        if (!monochrome && bar && tokens.Count > 0 && tokens[^1] != Marker.ToString() && lineBox.Right < 1)
         {
             var box = Padded(lineBox.Right + (spanX * 0.08), lineBox.Right + spanX);
             if (Icon(box)) { tokens.Add(Marker.ToString()); icons.Add(new IconSlot(box, "")); }
         }
+        if (leadingCut is { } cut)
+            return line with
+            {
+                Text = string.Join(' ', tokens), Words = null, Icons = icons.Count > 0 ? icons : line.Icons,
+                Box = lineBox with { Left = cut },
+            };
         if (icons.Count == 0) return line;
         return line with { Text = string.Join(' ', tokens), Words = null, Icons = icons };
     }

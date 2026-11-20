@@ -47,7 +47,7 @@ public static class UiCommands
         ["RESUME"] = "Sürdür", ["QUIT"] = "Çık", ["NEXT"] = "İleri", ["PREVIOUS"] = "Önceki", ["ALL"] = "Tümü",
         ["NONE"] = "Hiçbiri", ["DEFAULT"] = "Varsayılan", ["APPLY"] = "Uygula", ["RESET"] = "Sıfırla",
         ["INVENTORY"] = "Envanter", ["OUTFITS"] = "Kıyafetler", ["OUTFIT"] = "Kıyafet", ["WEAPONS"] = "Silahlar",
-        ["STATS"] = "İstatistikler",
+        ["STATS"] = "İstatistikler", ["GAME"] = "Oyun",
     };
 
     /// <summary>

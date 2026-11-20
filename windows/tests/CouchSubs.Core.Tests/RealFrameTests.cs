@@ -26,14 +26,18 @@ public class RealFrameTests(ITestOutputHelper output)
     private sealed class VisionReader : ITextReader
     {
         public IReadOnlyList<TextLine> Lines { get; set; } = [];
-        public Dictionary<(int, int), CropRegion> Crops { get; } = [];
+        /// <summary>Bu turda okunabilecek alanlar ve kırpıntıları (aynı boyda iki alan pikselleriyle ayrılır).</summary>
+        public List<(CropRegion Region, Frame Crop)> Crops { get; } = [];
         public int Reads;
         public string Read(Frame image) => string.Join('\n', ReadScreen(image).Lines.Select(line => line.Text));
         public Reading ReadLines(Frame image, bool deep) => ReadScreen(image);
         public Reading ReadScreen(Frame image)
         {
             Interlocked.Increment(ref Reads);
-            if (!Crops.TryGetValue((image.Width, image.Height), out var region)) return new Reading([]);
+            var match = Crops.FirstOrDefault(item => item.Crop.Width == image.Width && item.Crop.Height == image.Height
+                                                     && item.Crop.Pixels.AsSpan().SequenceEqual(image.Pixels));
+            if (match.Crop is null) return new Reading([]);
+            var region = match.Region;
             var width = region.Right - region.Left;
             var height = region.Bottom - region.Top;
             var found = new List<TextLine>();
@@ -113,8 +117,8 @@ public class RealFrameTests(ITestOutputHelper output)
                 foreach (var area in areas)
                 {
                     var crop = RegionCropper.Crop(noisy, area.Region);
-                    reader.Crops[(crop.Width, crop.Height)] = area.Region;
-                    reader.Crops[(crop.Width * 2, crop.Height * 2)] = area.Region;
+                    reader.Crops.Add((area.Region, crop));
+                    reader.Crops.Add((area.Region, crop.Scaled(2)));
                 }
                 await watcher.PassAsync(noisy, areas);
                 report.AppendLine($"   t{time} {(detector.InMenu ? "menü " : "")}{string.Join(", ", areas.Select(area => $"{area.Id} {Fmt(area.Region)}"))}");
@@ -139,7 +143,30 @@ public class RealFrameTests(ITestOutputHelper output)
     {
         var list = new List<(string, List<(Frame, IReadOnlyList<TextLine>)>)> { ("", [(frame, lines)]) };
         if (name == "K3" && ShiftSelection(frame, lines) is { } shifted) list.Add(("-kayma", [(frame, lines), (shifted, lines)]));
+        if (WithoutMargin(frame) is { } clean) list.Add(("-kenarsiz", [(clean, lines)]));
         return list;
+    }
+
+    /// <summary>
+    /// Ekran görüntüsünün sol kenarındaki beyaz şerit (yakalama artığı; oyun karesinde yok) yanındaki renkle doldurulur.
+    /// Şerit yoksa null.
+    /// </summary>
+    private static Frame? WithoutMargin(Frame frame)
+    {
+        int Luma(int x, int y)
+        {
+            var p = y * frame.Stride + x * 4;
+            return (299 * frame.Pixels[p + 2] + 587 * frame.Pixels[p + 1] + 114 * frame.Pixels[p]) / 1000;
+        }
+        var middle = frame.Height / 2;
+        var margin = 0;
+        while (margin < frame.Width / 20 && Luma(margin, middle) > 220) margin++;
+        if (margin == 0 || margin >= frame.Width / 20) return null;
+        var copy = new Frame((byte[])frame.Pixels.Clone(), frame.Width, frame.Height, frame.Stride);
+        for (var y = 0; y < frame.Height; y++)
+            for (var x = 0; x <= margin + 1; x++)
+                Array.Copy(frame.Pixels, y * frame.Stride + (margin + 3) * 4, copy.Pixels, y * frame.Stride + x * 4, 4);
+        return copy;
     }
 
     /// <summary>Açık zeminli (seçili) satır şeridi bir alttaki satırınkiyle yer değiştirir.</summary>

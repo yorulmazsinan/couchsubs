@@ -2219,7 +2219,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (reader is null) return;
         var scheduler = new ReadScheduler(maxReuse: settings.FastSubtitleDetection
             ? ReadScheduler.FastMaxReuse : ReadScheduler.DefaultMaxReuse);
-        var built = new SubtitlePipeline(reader, MakeTranslator(), server, scheduler)
+        // Ekranda menü varken altyazı gönderilmez: altyazı alanındaki menü satırları (alttaki seçenekler, tuş çubuğu)
+        // otomatik ekran yazısı olarak kendi yerinde çevriliyor, altyazıya karışmasın.
+        var sender = new MenuPausedSender(server, () => Volatile.Read(ref screenText)?.InMenu == true);
+        var built = new SubtitlePipeline(reader, MakeTranslator(), sender, scheduler)
         {
             ShowSpeakerNames = settings.ShowSpeakerNames,
             SkipsTurkish = settings.TargetLanguage == "tr",
@@ -2400,10 +2403,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (screenText is { } detector && detector.Due(arrived) && Interlocked.CompareExchange(ref screenTextBusy, 1, 0) == 0)
             {
                 // Karo örneği kare iş parçacığını tutmaz: arka planda, tek uçuşta (sürerken gelen kare atlanır).
-                IReadOnlyList<CropRegion> excluded = [settings.Region, .. savedWatchedAreas.Select(item => item.Region),
+                IReadOnlyList<CropRegion> excluded = [.. savedWatchedAreas.Select(item => item.Region),
                                                       .. presetAreas.Select(item => item.Region),
                                                       .. phoneArea is null ? [] : new[] { phoneArea.Region }];
-                _ = Task.Run(() => SampleScreenText(detector, frame, arrived, excluded));
+                var subtitle = settings.Region;
+                _ = Task.Run(() => SampleScreenText(detector, frame, arrived, excluded, subtitle));
             }
         }
         finally { Monitor.Exit(regionGate); }
@@ -2411,12 +2415,12 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (requestWatcher) post(UpdateRegionWatcher);
     }
 
-    private void SampleScreenText(ScreenTextDetector detector, Frame frame, long arrived, IReadOnlyList<CropRegion> excluded)
+    private void SampleScreenText(ScreenTextDetector detector, Frame frame, long arrived, IReadOnlyList<CropRegion> excluded, CropRegion subtitle)
     {
         var requestWatcher = false;
         try
         {
-            detector.Sample(frame, arrived, excluded);
+            detector.Sample(frame, arrived, excluded, subtitle);
             var next = detector.Areas;
             lock (regionGate)
             {

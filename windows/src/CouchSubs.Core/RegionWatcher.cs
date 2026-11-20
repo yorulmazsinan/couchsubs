@@ -479,7 +479,9 @@ public sealed partial class RegionWatcher
         var lines = (auto ? marked : marked.WithoutButtonPrompts()).WithoutOcrNoise(phone).Lines
             .Where(line => ScreenTranslation.IsWords(line.Text))
             // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı") ve karenin kenarında kesilmiş tek sözcük atılır.
-            .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)))
+            // Güveni düşük okuma, sözlükte karşılığı yoksa atılır ("1 Мар" güven 0,3 ama sözlükte "Map").
+            .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)
+                                      || (line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null)))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
         var paragraphs = ScreenTranslation.Paragraphs(lines);
@@ -929,6 +931,8 @@ public sealed partial class RegionWatcher
                       ?? PackLookup?.Invoke(IconText.Plain(core))?.Text
                       ?? (SkipsTurkish && TurkishText.IsSure(core) ? core : null);
             if (known is not null) part.Translation = known;
+            // Yazı tanımanın bozuk okuması (sözlükte ve pakette yok, harflerinin çoğu tuhaf): çevrilmez, aslı kalır.
+            else if (ScreenTextNoise.IsGarbled(core)) part.Translation = part.Core;
             else pending.Add(part);
         }
         var unique = pending.Select(part => part.Core.Trim()).Distinct().ToList();
