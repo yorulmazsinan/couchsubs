@@ -169,7 +169,12 @@ class SamsungInstaller(
 
             progress(InstallStep.SIGNING)
             val key = profile.privateKey()
-            val signed = WgtSigner.sign(wgt(),
+            val unsigned = if (LegacyTizenPackage.applies(platform)) {
+                LegacyTizenPackage.adapt(wgt()).also {
+                    log.write("Tizen $platform: paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).")
+                }
+            } else wgt()
+            val signed = WgtSigner.sign(unsigned,
                 WgtSigner.Signer(key, SamsungCertificates.chain(profile.author())),
                 WgtSigner.Signer(key, SamsungCertificates.chain(profile.distributor())))
             log.write("Paket imzalandı (${signed.size} bayt).")
