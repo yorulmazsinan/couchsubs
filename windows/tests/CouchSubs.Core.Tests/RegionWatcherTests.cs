@@ -1371,4 +1371,31 @@ public class RegionWatcherTests
         await WaitForPass(user);
         Assert.Equal(1, user.Passes);
     }
+
+    private static readonly WatchedArea MenuLabel = new("auto-2", ScreenTextDetector.AreaName, new CropRegion(0.2, 0.3, 0.2, 0.3)) { Auto = true, Menu = true };
+
+    [Fact]
+    public async Task MenuLabelIsTranslatedFromTheDictionaryAtOnce()
+    {
+        var reader = new Reader { Lines = [Line("OFF")] };
+        var translator = new Translator();
+        var server = new Server();
+        var watcher = new RegionWatcher(reader, translator, server) { TranslatesUiCommands = true };
+        await watcher.PassAsync(Shade(10), [MenuLabel]);
+        await watcher.PassAsync(Shade(10), [MenuLabel]);
+        Assert.Empty(translator.Calls);
+        Assert.Equal(["KAPALI"], server.Sent.Select(item => item.Text));
+    }
+
+    [Fact]
+    public async Task NumberLabelInAMenuIsNotDrawn()
+    {
+        var reader = new Reader { Lines = [Line("40")] };
+        var server = new Server();
+        var rejected = new List<string>();
+        var watcher = new RegionWatcher(reader, new Translator(), server) { TranslatesUiCommands = true, Rejected = rejected.Add };
+        await watcher.PassAsync(Shade(10), [MenuLabel]);
+        await watcher.PassAsync(Shade(10), [MenuLabel]);
+        Assert.Empty(server.Sent.Where(item => item.Text.Length > 0));
+    }
 }

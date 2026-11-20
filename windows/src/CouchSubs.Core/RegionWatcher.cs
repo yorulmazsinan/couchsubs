@@ -35,6 +35,8 @@ public sealed record WatchedArea(string Id, string Name, CropRegion Region)
     /// çevrilmez, yazısız ya da gürültülü okuma <see cref="RegionWatcher.Rejected"/> ile bildirilir; okuma aralığı en çok 500 ms.
     /// </summary>
     public bool Auto { get; init; }
+    /// <summary>Otomatik alan ekrandaki bir menüde (<see cref="ScreenTextDetector.InMenu"/>): kısa etiketler de çevrilir.</summary>
+    public bool Menu { get; init; }
     internal GamePhoneGeometry.Pose? PhonePose { get; init; }
 }
 
@@ -534,7 +536,7 @@ public sealed partial class RegionWatcher
 
     private async Task CommitAsync(Candidate candidate, WatchedArea area, State state, int started)
     {
-        if (area.Auto && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs))))
+        if (area.Auto && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs), area.Menu)))
         {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
@@ -601,7 +603,7 @@ public sealed partial class RegionWatcher
             if (cached is not null) translation = cached;
             else
             {
-                var request = TranslateAsync(candidate.Paragraphs);
+                var request = TranslateAsync(candidate.Paragraphs, labelsFirst: area.Auto);
                 waited = !request.IsCompleted;
                 // Yeni komut doğrulandı; yavaş motor yanıtını beklerken eski Türkçe onun üstünde kalmasın.
                 if (waited && !string.IsNullOrEmpty(state.RenderedText) && Volatile.Read(ref session) == started)
@@ -785,12 +787,17 @@ public sealed partial class RegionWatcher
     /// </summary>
     private static string TranslationKey(Candidate candidate) => string.Join('\n', candidate.Paragraphs);
 
-    private async Task<Translation> TranslateAsync(IReadOnlyList<string> paragraphs)
+    /// <param name="labelsFirst">
+    /// Otomatik bulunan ekran yazısı: kısa arayüz etiketi ("OFF", "Back") paket ve motordan önce, anında sözlükten
+    /// (<see cref="UiCommands.TranslateLabel"/>) çevrilir; büyük/küçük harf biçimi korunur.
+    /// </param>
+    private async Task<Translation> TranslateAsync(IReadOnlyList<string> paragraphs, bool labelsFirst = false)
     {
         // Simgeler paket aramasında yok sayılır, çeviride uydurma adlarla korunur (IconText).
         var prepared = paragraphs.Select(IconText.Protect).ToList();
         string?[] result = [.. paragraphs.Select(paragraph =>
-            PackLookup?.Invoke(IconText.Plain(paragraph))?.Text ?? (TranslatesUiCommands ? UiCommands.Translate(paragraph) : null))];
+            (labelsFirst && TranslatesUiCommands ? UiCommands.TranslateLabel(IconText.Plain(paragraph)) : null)
+            ?? PackLookup?.Invoke(IconText.Plain(paragraph))?.Text ?? (TranslatesUiCommands ? UiCommands.Translate(paragraph) : null))];
         var readyCount = result.Count(text => text is not null);
         // Zaten Türkçe olan parça çevrilmez: aslı kalır, tümü öyleyse kutu gösterilmez.
         for (var i = 0; i < result.Length; i++)

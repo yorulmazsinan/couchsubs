@@ -38,6 +38,39 @@ public static class UiCommands
     };
 
     /// <summary>
+    /// Menülerin kısa etiketleri (ayar değerleri, sekme ve düğme adları). <see cref="Commands"/>'ta olan bir etiketin
+    /// orada kayıtlı Türkçesi kullanılır; bunlar yalnız orada olmayanlardır.
+    /// </summary>
+    private static readonly Dictionary<string, string> Labels = new(StringComparer.Ordinal)
+    {
+        ["ON"] = "Açık", ["OFF"] = "Kapalı", ["LOAD"] = "Yükle", ["SETTINGS"] = "Ayarlar", ["MAP"] = "Harita",
+        ["RESUME"] = "Sürdür", ["QUIT"] = "Çık", ["NEXT"] = "İleri", ["PREVIOUS"] = "Önceki", ["ALL"] = "Tümü",
+        ["NONE"] = "Hiçbiri", ["DEFAULT"] = "Varsayılan", ["APPLY"] = "Uygula", ["RESET"] = "Sıfırla",
+        ["INVENTORY"] = "Envanter", ["OUTFITS"] = "Kıyafetler", ["OUTFIT"] = "Kıyafet", ["WEAPONS"] = "Silahlar",
+        ["STATS"] = "İstatistikler",
+    };
+
+    /// <summary>
+    /// Menüdeki kısa etiketin Türkçesi ("OFF" → "KAPALI", "Off" → "Kapalı", "off" → "kapalı"): etiketin tamamı sözlükte
+    /// olmalı (büyük/küçük harf fark etmez); biçimi Türkçe kurallarıyla korunur (i → İ). Sözlükte yoksa null.
+    /// </summary>
+    public static string? TranslateLabel(string label)
+    {
+        var words = label.Trim().Trim('.', ',', ':', '!', '?').Trim();
+        if (words.Length == 0 || !words.Any(char.IsLetter)) return null;
+        var key = words.ToUpperInvariant();
+        if (!Commands.TryGetValue(key, out var turkish) && !Labels.TryGetValue(key, out turkish)) return null;
+        var letters = words.Where(char.IsLetter).ToList();
+        if (letters.All(char.IsUpper)) return TurkishUpper(turkish);
+        if (letters.All(char.IsLower)) return TurkishLower(turkish);
+        return turkish;
+    }
+
+    private static string TurkishUpper(string text) => text.Replace('i', 'İ').Replace('ı', 'I').ToUpperInvariant();
+
+    private static string TurkishLower(string text) => text.Replace('I', 'ı').Replace('İ', 'i').ToLowerInvariant();
+
+    /// <summary>
     /// Tuş çubuğunun Türkçesi: simgelerle (<see cref="ButtonIcons.Marker"/>) ayrılan her parça sözlükte olan büyük harfli
     /// bir komutsa simgeler yerinde kalarak çevrilir; tek başına büyük harfli komut da ("REFUEL"). Parçalardan biri
     /// sözlükte yoksa ya da sıradan cümleyse (küçük harfli "Open the door") null.

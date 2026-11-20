@@ -26,6 +26,16 @@ public sealed class ScreenTextDetector
     public const int ExpireMs = 700;
     /// <summary>En çok bu kadar otomatik alan.</summary>
     public const int MaxAreas = 4;
+    /// <summary>Menü durumunda en çok bu kadar otomatik alan (tekerlek menünün etiketleri, başlık, alt başlık).</summary>
+    public const int MenuMaxAreas = 12;
+    /// <summary>Menü durumu için en az bu kadar ayrı bileşen birlikte belirmeli.</summary>
+    public const int MenuComponents = 3;
+    /// <summary>Menünün bileşenleri en çok bu kadar arayla belirmiş olmalı.</summary>
+    public const int MenuTogetherMs = 300;
+    /// <summary>Bileşen dışındaki karoların en az bu kadarı düşük kenar enerjili (bulanık/karartılmış zemin) olmalı.</summary>
+    public const double MenuQuietShare = 0.6;
+    /// <summary>Karo içi parlaklık sapması bundan küçükse karo düşük kenar enerjilidir.</summary>
+    public const double QuietDeviation = 18;
     public const string AreaName = "Screen text";
 
     private const int Bright = 160;
@@ -41,6 +51,7 @@ public sealed class ScreenTextDetector
         public long StableSince;
         public Mask Rejected;
         public bool IsRejected;
+        public bool Quiet;
     }
 
     private record struct Mask(ulong A, ulong B, ulong C)
@@ -64,6 +75,7 @@ public sealed class ScreenTextDetector
 
     private sealed class Tracked(string id, Cells cells, List<int> tiles, long seen)
     {
+        public bool Menu { get; set; }
         public string Id { get; } = id;
         public Cells Cells { get; set; } = cells;
         public List<int> Tiles { get; set; } = tiles;
@@ -75,6 +87,13 @@ public sealed class ScreenTextDetector
     private readonly List<Tracked> tracked = [];
     private long? lastSample;
     private int counter;
+    private bool menu;
+
+    /// <summary>Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).</summary>
+    public bool InMenu
+    {
+        get { lock (gate) return menu; }
+    }
 
     /// <summary>Şu an önerilen otomatik alanlar.</summary>
     public IReadOnlyList<WatchedArea> Areas
@@ -104,8 +123,9 @@ public sealed class ScreenTextDetector
                 for (var column = 0; column < Columns; column++)
                 {
                     var index = row * Columns + column;
-                    var (mask, bright, dark) = Measure(frame, column, row);
+                    var (mask, bright, dark, deviation) = Measure(frame, column, row);
                     ref var tile = ref tiles[index];
+                    tile.Quiet = deviation < QuietDeviation;
                     if (!tile.HasLast || tile.Last.Distance(mask) > MaskChange) tile.StableSince = now;
                     tile.Last = mask;
                     tile.HasLast = true;
@@ -114,7 +134,10 @@ public sealed class ScreenTextDetector
                     candidate[index] = textLike && now - tile.StableSince >= StableMs && !tile.IsRejected
                         && !Excluded(column, row, excluded);
                 }
-            Update(Components(candidate), candidate, now);
+            var all = Components(candidate);
+            var inMenu = IsMenu(all, now);
+            var components = inMenu ? all : [.. all.Where(item => item.Tiles.Count >= 2)];
+            Update([.. components.OrderByDescending(item => item.Tiles.Count).Take(inMenu ? MenuMaxAreas : MaxAreas)], candidate, now, inMenu);
             return !before.SequenceEqual(Current());
         }
     }
@@ -146,10 +169,11 @@ public sealed class ScreenTextDetector
             Array.Clear(tiles);
             tracked.Clear();
             lastSample = null;
+            menu = false;
         }
     }
 
-    private static (Mask Mask, int Bright, int Dark) Measure(Frame frame, int column, int row)
+    private static (Mask Mask, int Bright, int Dark, double Deviation) Measure(Frame frame, int column, int row)
     {
         var x0 = (long)column * frame.Width / Columns;
         var x1 = (long)(column + 1) * frame.Width / Columns;
@@ -158,6 +182,7 @@ public sealed class ScreenTextDetector
         var pixels = frame.Pixels;
         ulong a = 0, b = 0, c = 0;
         int bright = 0, dark = 0, bit = 0;
+        long sum = 0, squares = 0;
         for (var sy = 0; sy < Samples; sy++)
         {
             var y = (int)(y0 + (2 * sy + 1) * (y1 - y0) / (2 * Samples));
@@ -167,6 +192,8 @@ public sealed class ScreenTextDetector
                 var x = (int)(x0 + (2 * sx + 1) * (x1 - x0) / (2 * Samples));
                 var p = line + x * 4;
                 var luma = (299 * pixels[p + 2] + 587 * pixels[p + 1] + 114 * pixels[p]) / 1000;
+                sum += luma;
+                squares += luma * luma;
                 if (luma >= Bright)
                 {
                     bright++;
@@ -177,7 +204,9 @@ public sealed class ScreenTextDetector
                 else if (luma <= Dark) dark++;
             }
         }
-        return (new Mask(a, b, c), bright, dark);
+        const int count = Samples * Samples;
+        var mean = (double)sum / count;
+        return (new Mask(a, b, c), bright, dark, Math.Sqrt(Math.Max(0, (double)squares / count - mean * mean)));
     }
 
     private static bool Excluded(int column, int row, IReadOnlyList<CropRegion> excluded)
@@ -220,24 +249,43 @@ public sealed class ScreenTextDetector
         var result = new List<(Cells, List<int>)>();
         foreach (var list in groups.Values)
         {
-            if (list.Count < 2) continue;
             var cells = new Cells(list.Min(i => i % Columns), list.Min(i => i / Columns), list.Max(i => i % Columns), list.Max(i => i / Columns));
             // Ekranın büyük bölümünü kaplayan bileşen yazı kutusu değil, sahne dokusudur.
             if (cells.Area > MaxShare * Columns * Rows) continue;
             result.Add((cells, list));
         }
-        return [.. result.OrderByDescending(item => item.Item2.Count).Take(MaxAreas)];
+        return result;
     }
 
-    private void Update(List<(Cells Cells, List<int> Tiles)> components, bool[] candidate, long now)
+    /// <summary>
+    /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya da
+    /// karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
+    /// menüde gezinirken (seçim çerçevesi değişince) durum korunur.
+    /// </summary>
+    private bool IsMenu(List<(Cells Cells, List<int> Tiles)> components, long now)
     {
+        if (components.Count < MenuComponents) return false;
+        var inside = components.SelectMany(item => item.Tiles).ToHashSet();
+        var outside = Enumerable.Range(0, tiles.Length).Where(index => !inside.Contains(index)).ToList();
+        if (outside.Count == 0 || outside.Count(index => tiles[index].Quiet) < MenuQuietShare * outside.Count) return false;
+        if (menu) return true;
+        var appeared = components.Select(item => item.Tiles.Max(index => tiles[index].StableSince)).ToList();
+        return appeared.Max() - appeared.Min() <= MenuTogetherMs;
+    }
+
+    private void Update(List<(Cells Cells, List<int> Tiles)> components, bool[] candidate, long now, bool inMenu)
+    {
+        var closed = menu && !inMenu;
+        menu = inMenu;
+        // Menü kapandı: menüde bulunan bütün alanlar hemen kalkar (700 ms beklemez).
+        if (closed) tracked.RemoveAll(item => item.Menu);
         var matched = new HashSet<Tracked>();
         foreach (var (cells, list) in components)
         {
             var existing = tracked.Where(item => !matched.Contains(item)).FirstOrDefault(item => item.Cells.Overlap(cells) >= KeepOverlap);
             if (existing is null)
             {
-                if (tracked.Count >= MaxAreas) continue;
+                if (tracked.Count >= (inMenu ? MenuMaxAreas : MaxAreas)) continue;
                 existing = new Tracked("auto-" + ++counter, cells, list, now);
                 tracked.Add(existing);
             }
@@ -245,6 +293,7 @@ public sealed class ScreenTextDetector
             existing.Cells = cells;
             existing.Tiles = list;
             existing.Seen = now;
+            existing.Menu = inMenu;
             matched.Add(existing);
         }
         foreach (var item in tracked)
@@ -252,7 +301,8 @@ public sealed class ScreenTextDetector
         tracked.RemoveAll(item => now - item.Seen >= ExpireMs);
     }
 
-    private List<WatchedArea> Current() => [.. tracked.Select(item => new WatchedArea(item.Id, AreaName, Region(item.Cells)) { Auto = true })];
+    private List<WatchedArea> Current() =>
+        [.. tracked.Select(item => new WatchedArea(item.Id, AreaName, Region(item.Cells)) { Auto = true, Menu = item.Menu })];
 
     /// <summary>Karo dikdörtgeni her yandan yarım karo genişletilmiş, 0..1'e kırpılmış bölge.</summary>
     private static CropRegion Region(Cells cells) => new(
@@ -266,12 +316,18 @@ public sealed class ScreenTextDetector
 /// </summary>
 public static class ScreenTextNoise
 {
-    public static bool IsNoise(string text)
+    /// <param name="menu">
+    /// Menü durumunda (<see cref="WatchedArea.Menu"/>) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz
+    /// (sayı, simge, noktalama: "40", "100%") ve sayısı ağır basan ("x3") etiketler gürültüdür.
+    /// </param>
+    public static bool IsNoise(string text, bool menu = false)
     {
         var plain = IconText.Plain(text);
         var letters = plain.Count(char.IsLetter);
         var digits = plain.Count(char.IsDigit);
-        if (letters < 8 || digits * 2 > letters) return true;
+        if (letters == 0 || digits * 2 > letters) return true;
+        if (menu) return false;
+        if (letters < 8) return true;
         var words = plain.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Count(token => token.Count(char.IsLetter) >= 2);
         if (words < 2) return true;
         return !plain.Any(char.IsLower) && words < 3;
