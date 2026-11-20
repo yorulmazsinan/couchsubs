@@ -15,7 +15,8 @@ class StickyRowsTest {
     @Test fun objectiveUnderChangingDialogueIsDropped() {
         val rows = StickyRows()
         assertEquals(objective, rows.text(objective, 0))
-        assertEquals("Yeah!\n$objective", rows.text("Yeah!\n$objective", 3000))
+        // Görev konuşmadan 3 sn önce geldi: henüz sabit değil ama konuşmaya karışmaz (LINGER_MS).
+        assertEquals("Yeah!", rows.text("Yeah!\n$objective", 3000))
         // Görev 6 sn'dir ekranda, konuşma ondan 3 sn sonra geldi: görev sabit sayılır.
         assertEquals("Yeah!", rows.text("Yeah!\n$objective", 6000))
         assertEquals(listOf(objective), rows.newlySticky)
@@ -34,6 +35,21 @@ class StickyRowsTest {
         assertEquals("Where are you going?", typed.text("Where are you going?", 0))
         assertEquals("Where are you going?\nIt is late.", typed.text("Where are you going?\nIt is late.", 1000))
         assertEquals("Where are you going?\nIt is late.", typed.text("Where are you going?\nIt is late.", 12_000))
+    }
+
+    @Test fun olderRowAtEdgeIsKeptOutOfNewDialogue() {
+        val rows = StickyRows()
+        assertEquals(objective, rows.text(objective, 0))
+        // Görev üstte de olsa (altyazının üstünde duran görev) yeni konuşmaya karışmaz.
+        assertEquals("We have to go.", rows.text("$objective\nWe have to go.", 1500))
+        // Konuşan adlı satır eski olsa da çıkarılmaz.
+        val named = StickyRows()
+        named.text("Lucia: Wait for me.", 0)
+        assertEquals("Lucia: Wait for me.\nOkay.", named.text("Lucia: Wait for me.\nOkay.", 2000))
+        // Görev tek başına kalınca (henüz sabit değilken) okunur.
+        val alone = StickyRows()
+        alone.text(objective, 0)
+        assertEquals(objective, alone.text(objective, 3000))
     }
 
     @Test fun rowThatLeftIsForgottenAndShownAgain() {
@@ -83,7 +99,7 @@ class StickyRowsTest {
             }
             // Konuşma kalkıp görev tek başına kalınca eski konuşmanın çevirisi TV'den kalkar; yeni kısa konuşma çevrilir.
             assertTrue(clearsWhileObjectiveAlone > 0)
-            assertEquals(listOf(objective, "Yeah!\n$objective", "Okay."), translator.requested.toList())
+            assertEquals(listOf(objective, "Yeah!", "Okay."), translator.requested.toList())
         } finally {
             executor.shutdownNow()
         }

@@ -18,6 +18,12 @@ public struct StickyRows {
     public static let youngerByMs = 3000
     /// Bu kadar okunmayan satır ekrandan kalkmış sayılır (birkaç karelik okuma kaçağı satırı unutturmaz).
     public static let forgetAfterMs = 1500
+    /// Görev satırı henüz sabit sayılmadan da (ilk `stickyMs`) altyazıya karışmasın: okumanın üst ya da alt ucunda duran,
+    /// yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan çıkarılır.
+    /// Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok gönderiliyor
+    /// ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu. Yazı yazılır gibi beliren
+    /// ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+    public static let lingerMs = 1200
 
     private struct Row {
         var text: String
@@ -58,10 +64,29 @@ public struct StickyRows {
                 newlySticky.append(reading.lines[matched.firstIndex(of: index)!].text)
             }
         }
-        let kept = zip(reading.lines, matched).filter { _, index in index.map { !rows[$0].sticky } ?? true }.map(\.0)
+        let lingering = lingeringLines(reading, matched)
+        let kept = zip(reading.lines, matched).enumerated()
+            .filter { position, pair in !lingering[position] && (pair.1.map { !rows[$0].sticky } ?? true) }
+            .map(\.element.0)
         // Kalkan satırlar unutulur (dizinler yukarıda kullanıldı; silme en sonda).
         rows.removeAll { time - $0.lastSeen > Self.forgetAfterMs }
         return kept.count == reading.lines.count ? reading : Reading(lines: kept)
+    }
+
+    /// `lingerMs`: okumanın üst ya da alt ucundaki, en yeni satırdan en az o kadar eski satırlar (görev yazısı). Sabit
+    /// satırlar hesaba katılmaz; konuşan adlı satır hiç çıkarılmaz.
+    private func lingeringLines(_ reading: Reading, _ matched: [Int?]) -> [Bool] {
+        var result = Array(repeating: false, count: reading.lines.count)
+        let live = matched.indices.filter { matched[$0].map { !rows[$0].sticky } ?? false }
+        guard live.count >= 2, let youngest = live.map({ rows[matched[$0]!].since }).max() else { return result }
+        func old(_ position: Int) -> Bool {
+            youngest - rows[matched[position]!].since >= Self.lingerMs
+                && SpeakerPrefix.split(reading.lines[position].text) == nil
+        }
+        // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
+        for position in live { if old(position) { result[position] = true } else { break } }
+        for position in live.reversed() { if old(position) { result[position] = true } else { break } }
+        return result
     }
 
     public mutating func reset() {

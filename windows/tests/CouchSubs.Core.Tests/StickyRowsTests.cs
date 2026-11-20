@@ -11,7 +11,8 @@ public class StickyRowsTests
     {
         var rows = new StickyRows();
         Assert.Equal(Objective, rows.Filter(Reading.FromText(Objective), 0).Text);
-        Assert.Equal("Yeah!\n" + Objective, rows.Filter(Reading.FromText("Yeah!\n" + Objective), 3000).Text);
+        // Görev konuşmadan 3 sn önce geldi: henüz sabit değil ama konuşmaya karışmaz (LingerMs).
+        Assert.Equal("Yeah!", rows.Filter(Reading.FromText("Yeah!\n" + Objective), 3000).Text);
         // Görev 6 sn'dir ekranda, konuşma ondan 3 sn sonra geldi: görev sabit sayılır.
         Assert.Equal("Yeah!", rows.Filter(Reading.FromText("Yeah!\n" + Objective), 6000).Text);
         Assert.Equal([Objective], rows.NewlySticky);
@@ -33,6 +34,23 @@ public class StickyRowsTests
         Assert.Equal("Where are you going?", typed.Filter(Reading.FromText("Where are you going?"), 0).Text);
         Assert.Equal("Where are you going?\nIt is late.", typed.Filter(Reading.FromText("Where are you going?\nIt is late."), 1000).Text);
         Assert.Equal("Where are you going?\nIt is late.", typed.Filter(Reading.FromText("Where are you going?\nIt is late."), 12_000).Text);
+    }
+
+    [Fact]
+    public void OlderRowAtEdgeIsKeptOutOfNewDialogue()
+    {
+        var rows = new StickyRows();
+        Assert.Equal(Objective, rows.Filter(Reading.FromText(Objective), 0).Text);
+        // Görev üstte de olsa (altyazının üstünde duran görev) yeni konuşmaya karışmaz.
+        Assert.Equal("We have to go.", rows.Filter(Reading.FromText(Objective + "\nWe have to go."), 1500).Text);
+        // Konuşan adlı satır eski olsa da çıkarılmaz.
+        var named = new StickyRows();
+        named.Filter(Reading.FromText("Lucia: Wait for me."), 0);
+        Assert.Equal("Lucia: Wait for me.\nOkay.", named.Filter(Reading.FromText("Lucia: Wait for me.\nOkay."), 2000).Text);
+        // Görev tek başına kalınca (henüz sabit değilken) okunur.
+        var alone = new StickyRows();
+        alone.Filter(Reading.FromText(Objective), 0);
+        Assert.Equal(Objective, alone.Filter(Reading.FromText(Objective), 3000).Text);
     }
 
     [Fact]
@@ -72,6 +90,6 @@ public class StickyRowsTests
         }
         // Konuşma kalkıp görev tek başına kalınca eski konuşmanın çevirisi TV'den kalkar; yeni kısa konuşma çevrilir.
         Assert.True(clearsWhileObjectiveAlone > 0);
-        Assert.Equal(new[] { Objective, "Yeah!\n" + Objective, "Okay." }, translator.Requested);
+        Assert.Equal(new[] { Objective, "Yeah!", "Okay." }, translator.Requested);
     }
 }

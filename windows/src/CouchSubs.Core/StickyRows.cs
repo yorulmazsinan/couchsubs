@@ -19,6 +19,14 @@ public sealed class StickyRows
     public const int YoungerByMs = 3000;
     /// <summary>Bu kadar okunmayan satır ekrandan kalkmış sayılır (birkaç karelik okuma kaçağı satırı unutturmaz).</summary>
     public const int ForgetAfterMs = 1500;
+    /// <summary>
+    /// Görev satırı henüz sabit sayılmadan da (ilk <see cref="StickyMs"/>) altyazıya karışmasın: okumanın üst ya da alt
+    /// ucunda duran, yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan
+    /// çıkarılır. Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok
+    /// gönderiliyor ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu.
+    /// Yazı yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+    /// </summary>
+    public const int LingerMs = 1200;
 
     private sealed class Row(string text, long since)
     {
@@ -60,9 +68,28 @@ public sealed class StickyRows
             }
         }
         NewlySticky = newly;
-        var kept = reading.Lines.Where((_, i) => matched[i] is not { Sticky: true }).ToList();
+        var lingering = Lingering(reading, matched);
+        var kept = reading.Lines.Where((_, i) => matched[i] is not { Sticky: true } && !lingering[i]).ToList();
         rows.RemoveAll(r => time - r.LastSeen > ForgetAfterMs);
         return kept.Count == reading.Lines.Count ? reading : new Reading(kept);
+    }
+
+    /// <summary>
+    /// <see cref="LingerMs"/>: okumanın üst ya da alt ucundaki, en yeni satırdan en az o kadar eski satırlar (görev yazısı).
+    /// Sabit satırlar hesaba katılmaz; konuşan adlı satır hiç çıkarılmaz.
+    /// </summary>
+    private static bool[] Lingering(Reading reading, List<Row?> matched)
+    {
+        var count = reading.Lines.Count;
+        var result = new bool[count];
+        var live = Enumerable.Range(0, count).Where(i => matched[i] is { Sticky: false }).ToList();
+        if (live.Count < 2) return result;
+        var youngest = live.Max(i => matched[i]!.Since);
+        bool Old(int i) => youngest - matched[i]!.Since >= LingerMs && SpeakerPrefix.Parse(reading.Lines[i].Text) is null;
+        // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
+        for (var k = 0; k < live.Count && Old(live[k]); k++) result[live[k]] = true;
+        for (var k = live.Count - 1; k >= 0 && Old(live[k]); k--) result[live[k]] = true;
+        return result;
     }
 
     public void Reset()

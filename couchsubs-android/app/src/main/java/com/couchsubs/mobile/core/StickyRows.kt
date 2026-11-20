@@ -18,6 +18,14 @@ class StickyRows {
         const val YOUNGER_BY_MS = 3000L
         /** Bu kadar okunmayan satır ekrandan kalkmış sayılır (birkaç karelik okuma kaçağı satırı unutturmaz). */
         const val FORGET_AFTER_MS = 1500L
+        /**
+         * Görev satırı henüz sabit sayılmadan da (ilk [STICKY_MS]) altyazıya karışmasın: okumanın üst ya da alt ucunda
+         * duran, yanındaki en yeni satırdan en az bu kadar önce gelmiş, konuşan adı taşımayan satır bu okumadan çıkarılır.
+         * Kullanıcı bildirimi (GTA 6): görev yazısı ("x yere git") ekrandayken gelen altyazılar ya görevle tek blok
+         * gönderiliyor ya da görev ayrı blok olarak altyazının yerine seçiliyordu; arada diyaloglar kayboluyordu. Yazı
+         * yazılır gibi beliren ikinci satır (yaklaşık 1 sn sonra) bu süreden kısa kalır, konuşma bölünmez.
+         */
+        const val LINGER_MS = 1200L
     }
 
     private class Row(val text: String, val since: Long) {
@@ -54,9 +62,26 @@ class StickyRows {
             }
         }
         newlySticky = newly
-        val kept = reading.lines.filterIndexed { i, _ -> matched[i]?.sticky != true }
+        val lingering = lingering(reading, matched)
+        val kept = reading.lines.filterIndexed { i, _ -> matched[i]?.sticky != true && !lingering[i] }
         rows.removeAll { time - it.lastSeen > FORGET_AFTER_MS }
         return if (kept.size == reading.lines.size) reading else Reading(kept)
+    }
+
+    /**
+     * [LINGER_MS]: okumanın üst ya da alt ucundaki, en yeni satırdan en az o kadar eski satırlar (görev yazısı). Sabit
+     * satırlar hesaba katılmaz; konuşan adlı satır hiç çıkarılmaz.
+     */
+    private fun lingering(reading: Reading, matched: List<Row?>): BooleanArray {
+        val result = BooleanArray(reading.lines.size)
+        val live = matched.indices.filter { matched[it]?.sticky == false }
+        if (live.size < 2) return result
+        val youngest = live.maxOf { matched[it]!!.since }
+        fun old(i: Int) = youngest - matched[i]!!.since >= LINGER_MS && SpeakerPrefix.split(reading.lines[i].text) == null
+        // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
+        for (i in live) if (old(i)) result[i] = true else break
+        for (i in live.asReversed()) if (old(i)) result[i] = true else break
+        return result
     }
 
     fun reset() {

@@ -9,7 +9,8 @@ final class StickyRowsTests: XCTestCase {
     func testObjectiveUnderChangingDialogueIsDropped() {
         var rows = StickyRows()
         XCTAssertEqual(rows.filter(Reading(text: objective), at: 0).text, objective)
-        XCTAssertEqual(rows.filter(Reading(text: "Yeah!\n" + objective), at: 3000).text, "Yeah!\n" + objective)
+        // Görev konuşmadan 3 sn önce geldi: henüz sabit değil ama konuşmaya karışmaz (lingerMs).
+        XCTAssertEqual(rows.filter(Reading(text: "Yeah!\n" + objective), at: 3000).text, "Yeah!")
         // Görev 6 sn'dir ekranda, konuşma ondan 3 sn sonra geldi: görev sabit sayılır.
         XCTAssertEqual(rows.filter(Reading(text: "Yeah!\n" + objective), at: 6000).text, "Yeah!")
         XCTAssertEqual(rows.newlySticky, [objective])
@@ -30,6 +31,21 @@ final class StickyRowsTests: XCTestCase {
         XCTAssertEqual(typed.filter(Reading(text: "Where are you going?"), at: 0).text, "Where are you going?")
         XCTAssertEqual(typed.filter(Reading(text: "Where are you going?\nIt is late."), at: 1000).text, "Where are you going?\nIt is late.")
         XCTAssertEqual(typed.filter(Reading(text: "Where are you going?\nIt is late."), at: 12_000).text, "Where are you going?\nIt is late.")
+    }
+
+    func testOlderRowAtEdgeIsKeptOutOfNewDialogue() {
+        var rows = StickyRows()
+        XCTAssertEqual(rows.filter(Reading(text: objective), at: 0).text, objective)
+        // Görev üstte de olsa (altyazının üstünde duran görev) yeni konuşmaya karışmaz.
+        XCTAssertEqual(rows.filter(Reading(text: objective + "\nWe have to go."), at: 1500).text, "We have to go.")
+        // Konuşan adlı satır eski olsa da çıkarılmaz.
+        var named = StickyRows()
+        _ = named.filter(Reading(text: "Lucia: Wait for me."), at: 0)
+        XCTAssertEqual(named.filter(Reading(text: "Lucia: Wait for me.\nOkay."), at: 2000).text, "Lucia: Wait for me.\nOkay.")
+        // Görev tek başına kalınca (henüz sabit değilken) okunur.
+        var alone = StickyRows()
+        _ = alone.filter(Reading(text: objective), at: 0)
+        XCTAssertEqual(alone.filter(Reading(text: objective), at: 3000).text, objective)
     }
 
     func testRowThatLeftIsForgottenAndShownAgain() {
@@ -91,7 +107,7 @@ final class StickyObjectivePipelineTests: XCTestCase {
         }
         // Konuşma kalkıp görev tek başına kalınca eski konuşmanın çevirisi TV'den kalkar; yeni kısa konuşma çevrilir.
         XCTAssertGreaterThan(clearsWhileObjectiveAlone, 0)
-        XCTAssertEqual(translator.requested, [objective, "Yeah!\n" + objective, "Okay."])
+        XCTAssertEqual(translator.requested, [objective, "Yeah!", "Okay."])
     }
 }
 #endif
