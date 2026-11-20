@@ -6,17 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **LG TV'de oyun sırasında siyah ekran (TV uygulaması 0.9.44):** TV uygulaması HDMI görüntüsünü izliyor; görüntü düşerse kendiliğinden yeniden kuruyor. Kumandada açık HDMI girişinin numarasına basmak da görüntüyü baştan kurar. Bilgi panelinde (Tamam ya da Yeşil tuş) görüntünün durumu ve TV'nin sürümü yazıyor; sorun sürerse panelin fotoğrafı nedeni gösterir.
-- **LG ekran koruyucu (TV uygulaması 0.9.44):** Ekran koruyucuyu erteleyen kayıt kabul edilmezse eski yöntemle yeniden deneniyor, düşerse yenileniyor.
-- **Altyazı boyu (TV uygulaması 0.9.44):** Art arda gelen altyazılarda yazının gereksiz yere küçülmesi düzeltildi (0.9.42'de gelmişti).
-- **TV'de CouchSubs'tan çıkış (TV uygulaması 0.9.44):** Panel kapalıyken Geri tuşu uygulamayı tümüyle kapatır; tuş listesinde de yazıyor.
-- **Android TV'de siyah ekran (TV uygulaması 0.9.42, #643):** Katman modunda altyazı sayfası art arda kapanınca CouchSubs artık oyunun üstüne açılıp görüntüyü karartmıyor; katman kapanır, neden ekranda yazar, oyun görüntüsü yerinde kalır. Katman, sayfası yüklenene kadar hiçbir şey çizmez.
-- **Altyazı konuşana göre renkli (Windows, Mac, iPhone, Android):** "Ad: söz" biçimindeki altyazılarda konuşanın adı kendi renginde görünür; aynı kişi hep aynı renktedir. Ayarlardan kapatılabilir.
-- **Ekran yazıları kendiliğinden çevriliyor (Windows, deneysel):** Görev kutusu, yardım yazısı ve gelen mesaj gibi ekranda beliren yazılar bulunur, Türkçesi özgün yazının yerinde, onun rengi ve boyutuyla görünür. Ayarlar › "Ekran yazılarını otomatik çevir" ile kapatılabilir.
-- **GTA 6'da hazır ek alanlar (Windows, Mac, iPhone, Android):** GTA 6 seçilince yardım kutusu ve mesajlar için ek alanlar kendiliğinden açık gelir; ayar yapmak gerekmez.
-- **Altyazı kutusu yazıya oturuyor (TV uygulaması 0.9.42):** İki satıra bölünen altyazıda siyah zemin artık yalnız yazıyı kaplıyor.
-- **Samsung "Sunucu bakım altında (1544007)" (#637, #511):** TV'de CouchSubs kurulu değilse açma komutu gönderilmiyor, uyarı çıkmıyor; uygulama "TV uygulaması eksik" diyor.
-- **"TV'de test et" (#645):** TV bağlı değilse ne yapılacağı yazıyor; TV'deki 6 haneli kodun bir yere yazılmadığı, açılan pencerede onaylandığı açıkça söyleniyor.
+- **LG TV'de siyah ekran (TV uygulaması 0.9.44):** Oyun görüntüsü düşerse TV uygulaması bunu fark edip görüntüyü kendiliğinden yeniden kuruyor; ekranın büyük bölümünü kaplayan hatalı bir çeviri kutusu artık çizilmiyor. Kumandada açık girişin numarasına basmak görüntüyü baştan kurar. Bilgi panelinde görüntünün durumu, TV modeli ve webOS sürümü yazıyor.
+- **Görev yazısı ekrandayken altyazılar (Windows, Mac, iPhone, Android, #675):** Oyun altta "şuraya git" gibi bir görev yazısı gösterirken konuşma altyazıları artık çevrilmeye devam ediyor. Windows'ta görev satırı altyazıdan ayrı, kendi yerinde gösteriliyor.
+- **Art arda gelen altyazıda yazı küçülmüyor (TV uygulaması 0.9.44):** Bir önceki TV sürümünde altyazı kutusu daraldıktan sonra yeni satırın gereksiz küçülmesi düzeltildi.
+- **Ekran yazıları ve menüler (deneysel; Windows, Mac):** Görev kutusu, yardım yazısı, menü ve ayar ekranlarındaki yazılar yerinde, özgün rengi ve boyutuyla çevriliyor; gerçek oyun karelerinde bulunan kusurlar giderildi. Ayarlar › "Ekran yazılarını otomatik çevir" ile kapatılabilir.
+- **Altyazı konuşana göre renkli (TV'de de):** Konuşanın adı TV'deki altyazıda da kendi renginde; aynı kişi oturum boyunca aynı renkte kalıyor.
+- **2016 Samsung TV'lere kurulum (Windows, Mac, #638):** Tizen 2.4 TV'ler artık bilgisayardan da deneniyor (deneysel); paket bu TV'lerin kabul ettiği biçimde hazırlanıyor.
+- **LG eşleşmişken "TV'ye bağlan" (Windows, Mac, #662):** TV uygulaması bağlı değilken ana ekrandaki TV kutusunda düğme çıkıyor. Mac, eski webOS TV'lerin bağlantı yöntemlerini de kabul ediyor.
+
+**beta.63'te gelenler:** Android TV'de katman modunda siyah ekran döngüsünün giderilmesi (TV uygulaması 0.9.42, #643), konuşana göre renkli altyazı, GTA 6'da hazır ek alanlar, altyazı kutusunun yazıya oturması, Samsung "Sunucu bakım altında (1544007)" (#637, #511), "TV'de test et" yönergeleri (#645).
 
 **beta.62'de gelenler:** uzun oyunda bağlanıp kopma döngüsünün giderilmesi (#593), bir iki harfi yanlış okunan satırların hazır paketten bulunması, 2016 Samsung TV'lere kurulum düzeltmesi (Android telefon, #621).
 
