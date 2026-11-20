@@ -42,7 +42,8 @@ public static class ScreenTranslation
         Action<IReadOnlyList<Item>>? progress = null, CancellationToken cancellationToken = default)
     {
         // Küçük karede (720p) köşe yazıları birkaç piksel boyundadır; büyütmek yazı tanımanın onları da bulmasını sağlar.
-        var reading = await Task.Run(() => reader.ReadLines(frame.Height < 900 ? frame.Scaled(2) : frame, false), cancellationToken)
+        // ReadScreen: altyazıya göre seçilmiş hazırlık değil, karenin bütün yazıları (bkz. ITextReader.ReadScreen).
+        var reading = await Task.Run(() => reader.ReadScreen(frame.Height < 900 ? frame.Scaled(2) : frame), cancellationToken)
             .ConfigureAwait(false);
         return await TranslateAsync(reading, translator, progress, cancellationToken, frame).ConfigureAwait(false);
     }
@@ -271,6 +272,21 @@ public static class ScreenTranslation
         text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Any(word => word.Count(char.IsLetter) >= 2);
 
     private static int WordCount(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    /// <summary>
+    /// Karenin iki okunuşunu birleştirir: <paramref name="raw"/> (olduğu gibi okunan kare) bütünüyle alınır,
+    /// <paramref name="extra"/>'dan (ör. yalnız beyaz yazı bırakılarak okunan kare; açık sahnedeki beyaz altyazıyı ancak o
+    /// bulur) yalnız ham okumadaki hiçbir satırla üst üste binmeyen satırlar eklenir. Aynı yazı iki kez çevrilmez.
+    /// </summary>
+    public static Reading Combined(Reading raw, Reading extra)
+    {
+        var boxes = raw.Lines.Where(line => line.Box is not null).Select(line => line.Box!.Value).ToList();
+        var added = extra.Lines.Where(line => line.Box is { } box && !boxes.Any(other => Overlaps(box, other)));
+        return new Reading(raw.Lines.Concat(added).OrderBy(line => line.Box?.Top ?? 0));
+    }
+
+    private static bool Overlaps(TextBox a, TextBox b) =>
+        Math.Min(a.Right, b.Right) > Math.Max(a.Left, b.Left) && Math.Min(a.Bottom, b.Bottom) > Math.Max(a.Top, b.Top);
 
     /// <summary>Çevirilerin TV'de kalma süresi (ms): yazı çoksa daha uzun; tuşa yeniden basınca hemen kalkar.</summary>
     public static int DisplayMilliseconds(IReadOnlyList<Item> items) =>

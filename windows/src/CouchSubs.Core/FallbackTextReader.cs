@@ -25,24 +25,29 @@ public sealed class FallbackTextReader(ITextReader primary, ITextReader? fallbac
 
     public string Read(Frame image, bool deep) => ReadLines(image, deep).Text;
 
-    public Reading ReadLines(Frame image, bool deep)
+    public Reading ReadLines(Frame image, bool deep) => Run(reader => reader.ReadLines(image, deep));
+
+    /// <summary>"Ekranı çevir" okuması da aynı yedekle (bkz. <see cref="ITextReader.ReadScreen"/>).</summary>
+    public Reading ReadScreen(Frame image) => Run(reader => reader.ReadScreen(image));
+
+    private Reading Run(Func<ITextReader, Reading> read)
     {
-        if (FellBack) return Secondary(image, deep);
+        if (FellBack) return Secondary(read);
         Reading reading;
         try
         {
-            reading = primary.ReadLines(image, deep);
+            reading = read(primary);
         }
         catch (Exception error)
         {
             Failed(error);
-            return Secondary(image, deep);
+            return Secondary(read);
         }
         lock (gate) if (!fellBack) failures = 0;
         return reading;
     }
 
-    private Reading Secondary(Frame image, bool deep) => fallback?.ReadLines(image, deep) ?? Reading.Empty;
+    private Reading Secondary(Func<ITextReader, Reading> read) => fallback is null ? Reading.Empty : read(fallback);
 
     private void Failed(Exception error)
     {

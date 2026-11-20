@@ -189,6 +189,12 @@ public interface ITextReader
     string Read(Frame image, bool deep) => Read(image);
     /// <summary>Satırlar ayrı ayrı ve görüntüdeki yerleriyle.</summary>
     Reading ReadLines(Frame image, bool deep) => Reading.FromText(Read(image, deep));
+    /// <summary>
+    /// "Ekranı çevir": karenin bütün yazıları, olduğu gibi. Altyazı okuması karenin birkaç hazırlığından (yalnız gölgeli
+    /// beyaz yazı...) pakete ya da sözlüğe en uyanını seçer; ekranın tamamında o seçim altyazının hazırlığını kazandırıyor,
+    /// menü, görev ve bilgi yazıları okumadan düşüyordu (GTA 6: "Ekranı çevir yalnız altyazıyı çeviriyor").
+    /// </summary>
+    Reading ReadScreen(Frame image) => ReadLines(image, false);
 }
 
 /// <summary>
