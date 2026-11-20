@@ -637,6 +637,9 @@ final class AppModel: ObservableObject {
     /// Ek alanları (görev, telefon, bildirim) okuyup çeviren; çeviri sürerken var.
     private var regionWatcher: RegionWatcher?
     private var gamePhoneTracker: GamePhoneTracker?
+    /// Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var); örnek arka planda, tek uçuşta alınır.
+    private var screenTextDetector: ScreenTextDetector?
+    private var screenTextBusy = false
     /// Oyundaki altyazının son görüldüğü yer; deneme altyazısı TV'de oraya yerleşir.
     private var lastSubtitleBox: TextBox?
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur.
@@ -1789,6 +1792,7 @@ final class AppModel: ObservableObject {
         // Ek alan okuyucusu yeni dil ve motorla, ilk ek alan karesinde yeniden kurulur.
         regionWatcher?.reset()
         regionWatcher = nil
+        screenTextDetector?.reset()
         configureGamePhone()
         connectPacks(to: pipeline)
         activeLanguages = (settings.sourceLanguage, settings.targetLanguage)
@@ -1811,6 +1815,8 @@ final class AppModel: ObservableObject {
         watcher.translatesUiCommands = settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
         watcher.englishPhoneMessages = settings.sourceLanguage == "en"
         watcher.onLog = { SubtitleLog.write($0) }
+        // Okunup yazısız ya da gürültülü çıkan otomatik alan dedektöre bildirilir (o görüntüde yeniden önerilmez).
+        watcher.onAutoRejected = { [weak self] id in self?.screenTextDetector?.reject(id) }
         return watcher
     }
 
@@ -2011,6 +2017,7 @@ final class AppModel: ObservableObject {
         pipeline = nil
         regionWatcher?.reset()
         regionWatcher = nil
+        screenTextDetector?.reset()
         gamePhoneTracker = nil
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.reset()
@@ -2062,6 +2069,7 @@ final class AppModel: ObservableObject {
             pipeline?.reset()
             regionWatcher?.reset()
             gamePhoneTracker?.reset()
+            screenTextDetector?.reset()
             server.clear()
             dubber?.stop()
         }
@@ -2202,7 +2210,8 @@ final class AppModel: ObservableObject {
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         let pose = gamePhoneTracker?.sample(frame, now: capturedAt).pose
-        let areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
+        var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
+        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: pose != nil)
         if regionWatcher == nil, !areas.isEmpty || pose != nil, let pipeline {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
         }
@@ -2218,6 +2227,27 @@ final class AppModel: ObservableObject {
         guard case .enter(let token) = entry, let pipeline else { return }
         await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
         frameGate.leave(token)
+    }
+
+    /// Kendiliğinden bulunan ekran yazıları (ayar açıkken, Tam ekran dışında; oyun telefonu açıkken değil). Karo örneği
+    /// kare akışını tutmaz: arka planda tek uçuşta alınır, sonuç sonraki karelerde kullanılır. Altyazı alanı ve okunan
+    /// ek alanlar (hazır alanlar dahil) dışlanır.
+    private func screenTextAreas(_ frame: CGImage, capturedAt: Int, watched: [ExtraArea], phoneOpen: Bool) -> [ExtraArea] {
+        guard settings.autoScreenText, !settings.extraAreasPausedByFullScreen, !phoneOpen else {
+            screenTextDetector = nil
+            return []
+        }
+        let detector = screenTextDetector ?? ScreenTextDetector()
+        screenTextDetector = detector
+        if !screenTextBusy, detector.due(capturedAt) {
+            screenTextBusy = true
+            let excluded = [settings.region] + watched.map(\.region)
+            Task.detached(priority: .utility) { [weak self] in
+                detector.sample(frame, now: capturedAt, excluded: excluded)
+                await MainActor.run { self?.screenTextBusy = false }
+            }
+        }
+        return detector.areas
     }
 
     // MARK: - Geçmiş

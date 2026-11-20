@@ -109,6 +109,9 @@ public enum SubtitleEvent: Equatable, Sendable {
     case regionClear
     /// Oyun içi telefonun renkleri ve yerleriyle gösterilen balonları. Boş liste yalnız telefonu kaldırır.
     case gamePhone([ScreenTranslation.Item])
+    /// Kendiliğinden bulunan ekran yazısının blokları, özgün yazının yeri ve stiliyle (`TextLook`). Kutu kaldırılırken
+    /// `region` olayı boş metinle gelir.
+    case screenText(id: String, items: [ScreenTranslation.Item])
 }
 
 /// TV uygulamasının bağlandığı yerel Server-Sent Events sunucusu.
@@ -316,8 +319,14 @@ public final class SubtitleServer: @unchecked Sendable {
         let line = Decimal(Int((max(0, min(1, item.lineHeight)) * 10000).rounded())) / 10000
         var result: [String: Any] = ["box": Self.json(item.box), "line": line, "text": item.translation]
         if item.paragraphs { result["paragraphs"] = true }
-        if phone, let style = item.style, isRGB(style.background), isRGB(style.foreground) {
-            result["surface"] = ["background": style.background, "foreground": style.foreground]
+        if phone || item.look != nil, let style = item.style, isRGB(style.background), isRGB(style.foreground) {
+            var surface: [String: Any] = ["background": style.background, "foreground": style.foreground]
+            if let look = item.look { surface["flat"] = look.flat }
+            result["surface"] = surface
+        }
+        // Otomatik ekran yazısı: özgün yazının görünüşü (eski TV yok sayar).
+        if let look = item.look {
+            result["style"] = ["align": look.align.rawValue, "bold": look.bold, "condensed": look.condensed, "upper": look.upper]
         }
         if let icons = item.icons, !icons.isEmpty { result["icons"] = Self.json(icons) }
         return result
@@ -393,7 +402,9 @@ public final class SubtitleServer: @unchecked Sendable {
         if let lineHeight { json["line"] = Decimal(Int((max(0, min(1, lineHeight)) * 10000).rounded())) / 10000 }
         broadcast(event: "region", json: json)
         if id == "game-phone" { onEvent?(.gamePhone(text.isEmpty ? [] : blocks ?? [])) }
-        else { onEvent?(.region(id: id, text: text, box: box)) }
+        else if let blocks, !blocks.isEmpty, !text.isEmpty, blocks.contains(where: { $0.look != nil }) {
+            onEvent?(.screenText(id: id, items: blocks))
+        } else { onEvent?(.region(id: id, text: text, box: box)) }
     }
 
     /// Bütün ek alan kutularını kaldırır.

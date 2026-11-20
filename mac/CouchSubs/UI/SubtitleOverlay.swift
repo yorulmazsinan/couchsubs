@@ -307,7 +307,9 @@ struct SubtitleOverlayView: View {
             .gesture(moveGesture)
     }
 
-    /// Ek alanın çevirisi: altyazıdan küçük, koyu zeminli kutu; oyundaki yazının bulunduğu yana yaslı.
+    /// Ek alanın çevirisi: altyazıdan küçük, koyu zeminli kutu; oyundaki yazının bulunduğu yana yaslı. Kendiliğinden
+    /// bulunan ekran yazısının blokları özgün yazının renkleri ve görünüşüyle çizilir.
+    @ViewBuilder
     private func regionBox(_ region: OverlayRegion) -> some View {
         let style = model.settings.style
         let size = max(12, CGFloat(style.fontSize) * scale * 0.55)
@@ -316,6 +318,25 @@ struct SubtitleOverlayView: View {
         case .center: .center
         case .trailing: .trailing
         }
+        if let items = region.items {
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                ForEach(items.indices, id: \.self) { index in
+                    StyledScreenText.label(items[index], size: size)
+                        .padding(.vertical, 4 * scale)
+                        .padding(.horizontal, 10 * scale)
+                        .background(StyledScreenText.background(items[index]), in: RoundedRectangle(cornerRadius: 4 * scale))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: alignment)
+            .contentShape(Rectangle())
+            .gesture(moveGesture)
+        } else {
+            plainRegionBox(region, size: size, alignment: alignment)
+        }
+    }
+
+    private func plainRegionBox(_ region: OverlayRegion, size: CGFloat, alignment: Alignment) -> some View {
+        let style = model.settings.style
         return Text(verbatim: region.text)
             .font(.system(size: size, weight: .semibold))
             .foregroundStyle(Self.color(style.textColor))

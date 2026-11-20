@@ -139,6 +139,23 @@ final class ComputerScreenTests: XCTestCase {
         XCTAssertEqual(model.overlayRegions.map(\.id), ["quest"])
     }
 
+    /// Kendiliğinden bulunan ekran yazısı blokları stilleriyle saklanır; boş region olayı onları kaldırır.
+    func testScreenTextBlocksAreKeptWithTheirStyleUntilCleared() {
+        let model = AppModel(services: FakeServices(), store: storeWithoutTV(), defaults: .isolated())
+        model.settings.output = .computer
+        var item = ScreenTranslation.Item(source: "ROB VICKI'S BOSS", translation: "VİCKİ'NİN PATRONUNU SOY",
+                                          box: TextBox(left: 0.02, top: 0.05, right: 0.3, bottom: 0.09), lineHeight: 0.03)
+        item.style = PhoneTextStyle(background: "#14161E", foreground: "#F0F0F0")
+        item.look = TextLook(bold: true, condensed: true, align: .left, upper: true, flat: true)
+        model.overlayReceive(.screenText(id: "auto-1", items: [item]))
+        XCTAssertEqual(model.overlayRegions.map(\.id), ["auto-1"])
+        XCTAssertEqual(model.overlayRegions.first?.items, [item])
+        XCTAssertEqual(model.overlayRegions.first?.box, item.box)
+        XCTAssertTrue(model.overlayVisible)
+        model.overlayReceive(.region(id: "auto-1", text: "", box: nil))
+        XCTAssertTrue(model.overlayRegions.isEmpty)
+    }
+
     func testTestSubtitleAppearsInComputerWindow() async {
         let model = AppModel(services: FakeServices(), store: storeWithoutTV(), defaults: .isolated())
         model.settings.output = .computer

@@ -289,6 +289,9 @@ private struct AreaCards: View {
         }
         ExtraAreasCard()
         Card {
+            SwitchRow(title: "Automatically translate on-screen text", isOn: $model.settings.autoScreenText)
+            HintText(text: "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.")
+            Divider().overlay(Color.csBorder)
             SwitchRow(title: "Use ready areas for known games", isOn: $model.settings.gameAreaPresets)
             HintText(text: "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.")
             Divider().overlay(Color.csBorder)

@@ -16,13 +16,20 @@ public struct ExtraArea: Codable, Equatable, Identifiable, Sendable {
     public var region: CropRegion
     /// Kapalı alan okunmaz, ayarı kalır.
     public var enabled: Bool
+    /// Ekran yazısı olarak kendiliğinden bulunmuş geçici alan (`ScreenTextDetector`): gürültü yazısı (sayaç, etiket)
+    /// çevrilmez, yazısız ya da gürültülü okuma `RegionWatcher.onAutoRejected` ile bildirilir; okuma aralığı en çok
+    /// 500 ms. Ayarlara yazılmaz.
+    public var auto = false
 
-    public init(id: String = UUID().uuidString, name: String, region: CropRegion, enabled: Bool = true) {
+    public init(id: String = UUID().uuidString, name: String, region: CropRegion, enabled: Bool = true, auto: Bool = false) {
         self.id = id
         self.name = name
         self.region = region
         self.enabled = enabled
+        self.auto = auto
     }
+
+    private enum CodingKeys: String, CodingKey { case id, name, region, enabled }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)

@@ -46,6 +46,9 @@ public final class RegionWatcher {
     /// Ek alanlar altyazıyla aynı seri OCR kuyruğunu kullanır. Mac ve iPhone'da saniyede en çok bir tur çalışır.
     public static let defaultIntervalMs = 1000
 
+    /// Otomatik bulunmuş alan varken okuma aralığı en çok bu kadardır (yazı belirdikten ~1 sn içinde Türkçesi).
+    public static let autoIntervalMs = 500
+
     /// Ekrandakinden yalnız biraz farklı (ya da eksik) kararlı okuma en çok bu kadar tur bekletilir; o hâlde kalırsa
     /// gerçekten değişmiş sayılır ve gösterilir (görevin tek sözcüğü değişebilir: "Go to the barn" → "Go to the bank").
     static let holdLimit = 4
@@ -88,6 +91,9 @@ public final class RegionWatcher {
         var count: Int
         var box: TextBox
         var lineHeight: Double
+        /// Otomatik ekran yazısında özgün yazının renkleri ve görünüşü (`TextStyleSampler`); diğerlerinde nil.
+        var style: PhoneTextStyle? = nil
+        var look: TextLook? = nil
     }
 
     struct Candidate {
@@ -141,6 +147,8 @@ public final class RegionWatcher {
     /// Kısa İngilizce tuş komutlarını Türkçeye çevirir. Yalnız en → tr için açılır.
     public var translatesUiCommands = false
     public var onLog: ((String) -> Void)?
+    /// Otomatik alan okundu ama yazı yok ya da gürültü (`ScreenTextNoise`): alanın kimliği (`ScreenTextDetector.reject`).
+    public var onAutoRejected: ((String) -> Void)?
     /// Her okumanın süresi (ms; ölçüm için).
     public var onReadMs: ((Int) -> Void)?
     /// Tamamlanan tur sayısı ve okuma sayısı (ölçüm ve testler için).
@@ -169,8 +177,9 @@ public final class RegionWatcher {
         }
         guard running == nil else { return }
         let time = now()
+        let interval = areas.contains(where: \.auto) ? min(intervalMs, Self.autoIntervalMs) : intervalMs
         let manualDue = (!areas.isEmpty || states.values.contains { !$0.shown.isEmpty })
-            && (lastPass.map { time - $0 >= intervalMs } ?? true)
+            && (lastPass.map { time - $0 >= interval } ?? true)
         let phone = phoneSession
         let phoneDue = phone?.beginIfDue(time) ?? false
         guard manualDue || phoneDue else { return }
@@ -242,7 +251,7 @@ public final class RegionWatcher {
         }
         reads += 1
         onReadMs?(now() - started)
-        let candidate = Self.candidate(reading, in: region, frame: crop)
+        let candidate = Self.candidate(reading, in: region, frame: crop, auto: area.auto)
         if state.lastRead == candidate.key {
             state.candidate = nil
             states[area.id] = state
@@ -311,7 +320,8 @@ public final class RegionWatcher {
     /// Okumadan çevrilecek parçalar: kumanda ipuçları, yazı tanıma çöpleri ve harfsiz göstergeler ("23m", "9") atılır;
     /// satırlar yukarıdan aşağı parçalara toplanır (başlık, cümle, madde). Yazının içindeki kumanda simgeleri `frame`'den
     /// (okunan alan) kesilir; çeviride yerleri korunur.
-    static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil) -> Candidate {
+    /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
+    static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false) -> Candidate {
         let lines = reading.withButtonIcons(frame: frame).withoutButtonPrompts().withoutOcrNoise().lines
             .filter { ScreenTranslation.isWords($0.text) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
@@ -328,15 +338,24 @@ public final class RegionWatcher {
         // gibi gruplanır; her grubun çevirisi TV'de kendi yerine konur. Tek grupta (ya da yeri bilinmeyen satır varsa)
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         var blocks: [Block]?
-        let groups = lines.count > 1 && boxes.count == lines.count ? ScreenTranslation.groups(from: lines) : []
-        if groups.count > 1, groups.count < ScreenTranslation.maxGroups {
+        let groups = (auto || lines.count > 1) && !lines.isEmpty && boxes.count == lines.count
+            ? ScreenTranslation.groups(from: lines) : []
+        if (auto && !groups.isEmpty) || (groups.count > 1 && groups.count < ScreenTranslation.maxGroups) {
             paragraphs = groups.flatMap(\.paragraphs)
             icons = groups.flatMap { $0.icons ?? $0.paragraphs.map { _ in [IconSlot]() } }
             var list: [Block] = []
             var start = 0
             for group in groups {
+                var style: PhoneTextStyle?
+                var look: TextLook?
+                if auto, let frame {
+                    // Çeviri özgün yazının stilinde çizilsin: renkler, kalınlık, dar aile, hiza, büyük harf.
+                    let own = lines.filter { inside($0.box!, group.box) }
+                    (style, look) = TextStyleSampler.sample(frame, box: group.box, lines: own,
+                                                            source: group.paragraphs.joined(separator: " "))
+                }
                 list.append(Block(start: start, count: group.paragraphs.count, box: group.box.placed(in: place),
-                                  lineHeight: group.lineHeight * height))
+                                  lineHeight: group.lineHeight * height, style: style, look: look))
                 start += group.paragraphs.count
             }
             blocks = list
@@ -350,9 +369,30 @@ public final class RegionWatcher {
                          text: textKey(paragraphs))
     }
 
+    private static func inside(_ line: TextBox, _ group: TextBox) -> Bool {
+        let x = (line.left + line.right) / 2, y = (line.top + line.bottom) / 2
+        return x >= group.left - 1e-6 && x <= group.right + 1e-6 && y >= group.top - 1e-6 && y <= group.bottom + 1e-6
+    }
+
     /// Kararlı yazı: öncekinden farklıysa çevrilip gönderilir, boşsa kutu kalkar.
     private func commit(_ candidate: Candidate, area: ExtraArea) async {
         guard var state = states[area.id] else { return }
+        if area.auto, candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " ")) {
+            // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
+            // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
+            if !state.shown.isEmpty || !(state.renderedText ?? "").isEmpty {
+                server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+            }
+            state.shown = candidate.key
+            state.shownText = candidate.text
+            state.renderedKey = candidate.key
+            state.renderedText = ""
+            state.renderedBox = nil
+            state.renderedLineHeight = nil
+            states[area.id] = state
+            onAutoRejected?(area.id)
+            return
+        }
         if state.shown == candidate.key {
             guard state.renderedKey == candidate.key,
                   let renderedText = state.renderedText, !renderedText.isEmpty else { return }
@@ -485,11 +525,16 @@ public final class RegionWatcher {
         for (index, block) in layout.enumerated() {
             let range = block.start..<(block.start + block.count)
             if range.allSatisfy({ similar[$0] }) { continue }
-            let rendered = IconText.render(range.map { text[$0] }.joined(separator: "\n"), slots: slots)
+            var joined = range.map { text[$0] }.joined(separator: "\n")
+            // Özgün yazı BÜYÜK HARF: çeviri de Türkçe kurallarıyla büyük harf (simge imleri harf değildir, korunur).
+            if block.look?.upper == true { joined = TextStyleSampler.turkishUpper(joined) }
+            let rendered = IconText.render(joined, slots: slots)
             let source = range.map { IconText.plain(candidate.paragraphs[$0]) }.joined(separator: "\n")
-            result.append((index, ScreenTranslation.Item(source: source, translation: rendered.text, box: block.box,
-                                                          lineHeight: block.lineHeight,
-                                                          icons: rendered.icons.isEmpty ? nil : rendered.icons)))
+            var item = ScreenTranslation.Item(source: source, translation: rendered.text, box: block.box,
+                                              lineHeight: block.lineHeight, icons: rendered.icons.isEmpty ? nil : rendered.icons)
+            item.style = block.style
+            item.look = block.look
+            result.append((index, item))
         }
         return result
     }

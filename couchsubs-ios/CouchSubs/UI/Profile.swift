@@ -84,6 +84,10 @@ struct ProfileScreen: View {
                 toggleRow("Color by speaker", "Each speaker's name and line keep their own color.",
                           isOn: $model.settings.speakerColors)
                 RowDivider()
+                toggleRow("Automatically translate on-screen text",
+                          "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.",
+                          isOn: $model.settings.autoScreenText)
+                RowDivider()
                 toggleRow("Use ready areas for known games",
                           "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.",
                           isOn: $model.settings.gameAreaPresets)

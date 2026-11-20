@@ -9,6 +9,8 @@ struct OverlayRegion: Equatable, Identifiable {
     let text: String
     /// Yazının oyun karesindeki yeri; pencerede kutu bu yana yaslanır.
     let box: TextBox?
+    /// Kendiliğinden bulunan ekran yazısının blokları, özgün yazının yeri ve stiliyle (`TextLook`); diğerlerinde nil.
+    var items: [ScreenTranslation.Item]? = nil
 
     /// Ekranın solundaki alan sola, sağındaki sağa, ortadaki ortaya.
     var side: HorizontalPlacement {
@@ -54,6 +56,14 @@ extension AppModel {
         case .region(let id, let text, let box):
             var regions = overlayRegions.filter { $0.id != id }
             if !text.isEmpty { regions.append(OverlayRegion(id: id, text: text, box: box)) }
+            overlayRegions = regions.sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
+            return
+        // Kendiliğinden bulunan ekran yazısı: bloklar özgün yazının stilinde çizilir (yayın penceresinde kendi yerinde).
+        case .screenText(let id, let items):
+            var regions = overlayRegions.filter { $0.id != id }
+            let boxes = items.map(\.box)
+            let box = boxes.dropFirst().reduce(boxes.first) { $0?.union($1) }
+            regions.append(OverlayRegion(id: id, text: items.map(\.translation).joined(separator: "\n"), box: box, items: items))
             overlayRegions = regions.sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
             return
         case .gamePhone(let items):

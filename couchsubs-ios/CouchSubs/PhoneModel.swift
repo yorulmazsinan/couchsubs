@@ -185,6 +185,9 @@ final class PhoneModel: ObservableObject {
     private var pipeline: SubtitlePipeline?
     /// Ek alanları (görev, telefon, bildirim) okuyup çeviren; çeviri sürerken ve ek alan varken var (Mac ile aynı).
     private var regionWatcher: RegionWatcher?
+    /// Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var); örnek arka planda, tek uçuşta alınır.
+    private var screenTextDetector: ScreenTextDetector?
+    private var screenTextBusy = false
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur (Mac ile aynı).
     private var frameGate = FrameGate()
     private var savedKeys: Set<TranslationEngine> = []
@@ -607,6 +610,7 @@ final class PhoneModel: ObservableObject {
         pipeline = nil
         regionWatcher?.reset()
         regionWatcher = nil
+        screenTextDetector?.reset()
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.reset()
         server.pairing.setSession(false)
@@ -777,6 +781,7 @@ final class PhoneModel: ObservableObject {
         if case .disconnected = state {
             pipeline?.reset()
             regionWatcher?.reset()
+            screenTextDetector?.reset()
             server.clear()
         }
     }
@@ -812,6 +817,7 @@ final class PhoneModel: ObservableObject {
         // Ek alan okuyucusu yeni dil ve motorla, ilk ek alan karesinde yeniden kurulur.
         regionWatcher?.reset()
         regionWatcher = nil
+        screenTextDetector?.reset()
         connectPacks(to: pipeline)
         onlineIssue = nil
         pipeline.warmUp()
@@ -825,7 +831,29 @@ final class PhoneModel: ObservableObject {
         watcher.skipsTurkish = settings.targetLanguage == "tr"
         watcher.translatesUiCommands = settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
         watcher.onLog = { SubtitleLog.write($0) }
+        // Okunup yazısız ya da gürültülü çıkan otomatik alan dedektöre bildirilir (o görüntüde yeniden önerilmez).
+        watcher.onAutoRejected = { [weak self] id in self?.screenTextDetector?.reject(id) }
         return watcher
+    }
+
+    /// Kendiliğinden bulunan ekran yazıları (ayar açıkken, Tam ekran dışında; Mac ile aynı). Karo örneği arka planda
+    /// tek uçuşta alınır; altyazı alanı ve okunan ek alanlar dışlanır.
+    private func screenTextAreas(_ frame: CGImage, capturedAt: Int, watched: [ExtraArea]) -> [ExtraArea] {
+        guard settings.autoScreenText, !settings.extraAreasPausedByFullScreen else {
+            screenTextDetector = nil
+            return []
+        }
+        let detector = screenTextDetector ?? ScreenTextDetector()
+        screenTextDetector = detector
+        if !screenTextBusy, detector.due(capturedAt) {
+            screenTextBusy = true
+            let excluded = [settings.region] + watched.map(\.region)
+            Task.detached(priority: .utility) { [weak self] in
+                detector.sample(frame, now: capturedAt, excluded: excluded)
+                await MainActor.run { self?.screenTextBusy = false }
+            }
+        }
+        return detector.areas
     }
 
     /// Kare geldi, satır gösterildi ya da bağlantı değişti: ipucu yeniden değerlendirilir (deneme modunda görünmez).
@@ -841,7 +869,8 @@ final class PhoneModel: ObservableObject {
         guard let current = pipeline else { return }
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
-        let areas = settings.watchedExtraAreas(game: gameChoice.game?.name)
+        var areas = settings.watchedExtraAreas(game: gameChoice.game?.name)
+        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas)
         if regionWatcher == nil, !areas.isEmpty { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
         regionWatcher?.offer(frame, areas: areas)
         // Önceki kare hâlâ işleniyorsa bu kare atlanır. Tek okuma bitmezse çeviri tamamen duruyor, "Durdur / Başlat"
@@ -1067,6 +1096,14 @@ final class PhoneModel: ObservableObject {
         case .region(let id, let text, let box):
             var regions = phoneRegions.filter { $0.id != id }
             if !text.isEmpty { regions.append(PhoneRegion(id: id, text: text, box: box)) }
+            if regions != phoneRegions { phoneRegions = regions }
+            return
+        // Kendiliğinden bulunan ekran yazısı telefonda da ek alan kutusu gibi görünür (TV'de özgün stilinde).
+        case .screenText(let id, let items):
+            let boxes = items.map(\.box)
+            let box = boxes.dropFirst().reduce(boxes.first) { $0?.union($1) }
+            var regions = phoneRegions.filter { $0.id != id }
+            regions.append(PhoneRegion(id: id, text: items.map(\.translation).joined(separator: "\n"), box: box))
             if regions != phoneRegions { phoneRegions = regions }
             return
         case .regionClear:

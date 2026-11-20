@@ -159,6 +159,9 @@ public struct UserSettings: Codable, Equatable {
     public var autoReadGamePhone = false
     /// Bilinen oyunlarda hazır ek alanlar (bkz. `GameAreaPresets`); kullanıcının kendi ek alanı varsa o kullanılır.
     public var gameAreaPresets = true
+    /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
+    /// `ScreenTextDetector`). Altyazı alanı Tam ekranken çalışmaz. Eski kayıtlarda yoktur; açık başlar.
+    public var autoScreenText = true
     /// iPhone Xbox ev yayınında oyun sesi telefonda çalınır. Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
     /// susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir, bu yüzden varsayılan açık. PS5'i etkilemez.
     public var xboxAudioOnDevice = true
@@ -211,6 +214,7 @@ public struct UserSettings: Codable, Equatable {
         watchSubtitleBackground = try values.decodeIfPresent(Bool.self, forKey: .watchSubtitleBackground) ?? defaults.watchSubtitleBackground
         autoReadGamePhone = try values.decodeIfPresent(Bool.self, forKey: .autoReadGamePhone) ?? defaults.autoReadGamePhone
         gameAreaPresets = try values.decodeIfPresent(Bool.self, forKey: .gameAreaPresets) ?? defaults.gameAreaPresets
+        autoScreenText = try values.decodeIfPresent(Bool.self, forKey: .autoScreenText) ?? defaults.autoScreenText
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         frameSource = (try? values.decodeIfPresent(FrameSource.self, forKey: .frameSource)) ?? defaults.frameSource

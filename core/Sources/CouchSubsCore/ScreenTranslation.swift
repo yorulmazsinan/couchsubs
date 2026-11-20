@@ -28,6 +28,8 @@ public enum ScreenTranslation {
         /// Çevirinin içindeki kumanda simgeleri (kareden kesilmiş); TV `translation`'ın o yerine koyar.
         public var icons: [IconPlacement]?
         public var style: PhoneTextStyle?
+        /// Otomatik ekran yazısında özgün yazının görünüşü; TV ve masaüstü çeviriyi bu stilde çizer.
+        public var look: TextLook?
 
         public init(source: String, translation: String, box: TextBox, lineHeight: Double, icons: [IconPlacement]? = nil) {
             self.source = source

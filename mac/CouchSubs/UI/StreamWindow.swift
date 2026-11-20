@@ -69,7 +69,8 @@ struct StreamWindowView: View {
             VStack(spacing: 14 * scale) {
                 // Sürekli okunan ek alanların çevirisi saydam penceredeki gibi üstte, alanın yanına yaslı.
                 VStack(spacing: 10 * scale) {
-                    ForEach(model.overlayRegions) { regionBox($0, scale: scale) }
+                    // Ekran yazıları (bloklu) aşağıda kendi yerlerinde çizilir.
+                    ForEach(model.overlayRegions.filter { $0.items == nil }) { regionBox($0, scale: scale) }
                 }
                 .padding(.top, 16 * scale)
                 Spacer(minLength: 0)
@@ -80,6 +81,8 @@ struct StreamWindowView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background {
                 if !model.overlayPhoneItems.isEmpty { GamePhoneBlocks(items: model.overlayPhoneItems) }
+                let screenText = model.overlayRegions.flatMap { $0.items ?? [] }
+                if !screenText.isEmpty { ScreenTextBlocks(items: screenText) }
             }
         }
         .background(Self.color(model.streamBackground))
@@ -179,5 +182,68 @@ struct GamePhoneBlocks: View {
     private static func color(_ hex: String?, fallback: Color) -> Color {
         guard let hex, let (r, g, b) = DesignTokens.rgb(hex) else { return fallback }
         return Color(.sRGB, red: r, green: g, blue: b)
+    }
+}
+
+/// Kendiliğinden bulunan ekran yazısının çevirisi özgün yazının stilinde: zemin ve yazı rengi, kalınlık, dar aile, hiza
+/// (`TextLook`; BÜYÜK HARF çeviriye zaten uygulanmış gelir). Düz zeminde kutu tam opak, değilse %85 opak.
+enum StyledScreenText {
+    static func label(_ item: ScreenTranslation.Item, size: CGFloat) -> some View {
+        let look = item.look
+        let alignment: TextAlignment = switch look?.align {
+        case .center: .center
+        case .right: .trailing
+        default: .leading
+        }
+        return Text(verbatim: item.translation)
+            .font(.system(size: size, weight: look?.bold == true ? .bold : .semibold).width(look?.condensed == true ? .condensed : .standard))
+            .foregroundStyle(color(item.style?.foreground, fallback: .white))
+            .multilineTextAlignment(alignment)
+    }
+
+    static func background(_ item: ScreenTranslation.Item) -> Color {
+        color(item.style?.background, fallback: .black).opacity(item.look?.flat == false ? 0.85 : 1)
+    }
+
+    static func frameAlignment(_ item: ScreenTranslation.Item) -> Alignment {
+        switch item.look?.align {
+        case .center: .center
+        case .right: .trailing
+        default: .leading
+        }
+    }
+
+    static func color(_ hex: String?, fallback: Color) -> Color {
+        guard let hex, let (r, g, b) = SpeakerColors.rgb(hex) else { return fallback }
+        return Color(.sRGB, red: r, green: g, blue: b)
+    }
+}
+
+/// Ekran yazısı blokları oyun karesindeki kendi yerlerinde (yayın penceresi 16:9 karenin kendisidir). Türkçe özgün
+/// bloğun genişliğini aşmaz: satır kırılır, gerekirse yazı en çok %20 küçülür; yine sığmazsa kutu aşağı uzar.
+struct ScreenTextBlocks: View {
+    let items: [ScreenTranslation.Item]
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                ForEach(items.indices, id: \.self) { i in
+                    let item = items[i]
+                    let line = max(1, item.lineHeight * proxy.size.height)
+                    let pad = line * 0.15
+                    let width = max(0, item.box.right - item.box.left) * proxy.size.width + 2 * pad
+                    StyledScreenText.label(item, size: line * 0.85)
+                        .minimumScaleFactor(0.8)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: width, alignment: StyledScreenText.frameAlignment(item))
+                        .padding(.vertical, pad)
+                        .background(StyledScreenText.background(item))
+                        .offset(x: item.box.left * proxy.size.width - pad, y: item.box.top * proxy.size.height - pad)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+        }
+        .clipped()
+        .allowsHitTesting(false)
     }
 }
