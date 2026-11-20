@@ -1,0 +1,1 @@
+0.9.42: Altyazının arka planı yalnız yazıyı kaplıyor; iki satıra bölünen çeviride iki yanda boş siyah alan kalmıyor.

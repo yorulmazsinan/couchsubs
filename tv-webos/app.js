@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.41';
+  var APP_VERSION = '0.9.42';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -604,13 +604,40 @@
     // küçültülse de genişliğe sığmayan yazıda tarayıcı kendiliğinden yeni satır açıyordu. Yazı, hem yükseklik sınırına
     // hem bölünmüş satır sayısına sığana dek küçülür. Görev paneli gibi satır satır yazılar bu sınırın dışındadır.
     // Gizli satır (display: none) ölçülemez, 0 yüksekliğiyle döngüye girmez.
-    if (paragraphs) return;
+    if (paragraphs) return fitBox(el);
     var limit = (document.documentElement.clientHeight || window.innerHeight || 1080) * SUBTITLE_MAX_HEIGHT;
     var lines = wrapped.text.split('\n').length;
     while (size > SUBTITLE_MIN_FONT && (el.offsetHeight > limit || extraLines(el, lines))) {
       size -= 1;
       el.style.fontSize = size + 'px';
     }
+    fitBox(el);
+  }
+
+  // Arka plan yalnız yazıyı kaplasın: tarayıcı bölünmüş bir satırı genişliğe sığdıramayıp kendisi yeniden kırınca
+  // inline-block kutu en geniş hâline (max-width) açılıyor, yazı ortada dar kalıyor, iki yanda boş siyah alan oluşuyordu.
+  // Kutu, yazının gerçek genişliğine (en uzun satır + iç boşluk) indirilir. Bantta kutu bilerek ekran genişliğindedir;
+  // örtü (#subtitle-cover) ayrı bir kutudur, bundan etkilenmez. Ölçülemeyen (gizli) satırda ve Range'i olmayan
+  // tarayıcıda kutu eskisi gibi kalır.
+  function fitBox(el) {
+    el.style.width = '';
+    if (bandShape || !document.createRange) return;
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var rects = range.getClientRects ? range.getClientRects() : null;
+    if (!rects || !rects.length) return;
+    var left = Infinity;
+    var right = -Infinity;
+    for (var i = 0; i < rects.length; i++) {
+      if (!(rects[i].width > 0)) continue;
+      left = Math.min(left, rects[i].left);
+      right = Math.max(right, rects[i].right);
+    }
+    if (!(right > left)) return;
+    var style = window.getComputedStyle(el);
+    var pad = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    var needed = Math.ceil(right - left + pad) + 1;
+    if (el.getBoundingClientRect().width - needed > 4) el.style.width = needed + 'px';
   }
 
   // Tarayıcı, bölünmüş satırlardan birini genişliğe sığdıramadığı için kendiliğinden satır açtı mı.
@@ -717,6 +744,7 @@
     clearTimeout(timers[1]);
     setLineText(id + '-text', text, false, Math.round(fontBase * 0.8));
     $(id).className = '';
+    fitBox($(id + '-text'));
     timers[0] = setTimeout(function () {
       $(id).className = 'fading';
       timers[1] = setTimeout(function () { hideSlot(id); }, PREVIOUS_FADE_MS);

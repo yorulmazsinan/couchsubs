@@ -1,0 +1,1 @@
+0.9.42: The subtitle background now fits the text; a translation split over two lines no longer leaves empty black space on both sides.

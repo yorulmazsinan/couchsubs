@@ -26,6 +26,11 @@ const cases = {
   coverRight: { text: LONG, box: box(.75) },
   above: { text: LONG, box: box(.5), placement: 'above' },
   coverBand: { text: LONG, box: box(.5), band: true },
+  // Canlı yayında görüldü: İngilizce satır geniş (ekranın %60'ı), çeviri 42 karakterle iki dar satıra bölününce kutu
+  // yazıdan her yanda ~%20 genişti. Örtüde de kutu yazıya oturmalı (yazı örtü genişliğinde tek satır).
+  coverFit: { text: 'Yerel bağımlılar ona katalitik konvertörü eksik bir araba bulabilirler.',
+    box: { left: .2, top: .85, right: .8, bottom: .89 }, fit: true },
+  fixedFit: { text: 'Yerel bağımlılar ona katalitik konvertörü eksik bir araba bulabilirler.', placement: 'fixed', fit: true },
 };
 
 function render(width, height) {
@@ -41,8 +46,13 @@ function render(width, height) {
     function measure() {
       var el = document.getElementById('line'), cs = getComputedStyle(el), b = el.getBoundingClientRect();
       var inner = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      var range = document.createRange(); range.selectNodeContents(el);
+      var rects = Array.from(range.getClientRects());
+      var textWidth = Math.max.apply(null, rects.map(function (r) { return r.right; })) -
+        Math.min.apply(null, rects.map(function (r) { return r.left; }));
       return { lines: Math.round(inner / parseFloat(cs.lineHeight)), wrapped: el.textContent.split('\\n').length,
-        left: b.left, right: b.right, width: b.width };
+        left: b.left, right: b.right, width: b.width, textWidth: textWidth,
+        padding: parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) };
     }
     for (var key in cases) {
       var c = cases[key];
@@ -124,13 +134,21 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
   test('OBS katmanı: ' + width + '×' + height, { skip: !browser && 'Chrome/Edge bulunamadı' }, async t => {
     const r = render(width, height);
     assert.deepEqual(r.viewport, { width, height });
-    for (const key of Object.keys(cases)) {
+    for (const key of Object.keys(cases).filter(key => !cases[key].fit)) {
       await t.test(key + ': uygulamanın böldüğü satır sayısı korunur', () => {
         // Çeviri 2 satıra bölünür; tarayıcı kutuyu daraltıp bir kez daha bölerse OBS'te 3-4 satır olurdu.
         assert.equal(r[key].wrapped, 2, JSON.stringify(r[key]));
         assert.equal(r[key].lines, 2, JSON.stringify(r[key]));
       });
     }
+    await t.test('arka plan yalnız yazıyı kaplar (örtüde de iki yanda boş siyah alan kalmaz)', () => {
+      for (const key of ['coverFit', 'fixedFit', 'coverCenter', 'above']) {
+        const empty = r[key].width - r[key].padding - r[key].textWidth;
+        assert.ok(empty <= 4, key + ' ' + JSON.stringify(r[key]));
+      }
+      // Örtü yine İngilizce satırı kaplar.
+      assert.ok(r.coverFit.left <= .2 * width + 1 && r.coverFit.right >= .8 * width - 1, JSON.stringify(r.coverFit));
+    });
     await t.test('örtü kutusu ekranın dışına taşmaz', () => {
       for (const key of ['coverCenter', 'coverRight']) {
         assert.ok(r[key].left >= -1 && r[key].right <= width + 1, key + ' ' + JSON.stringify(r[key]));

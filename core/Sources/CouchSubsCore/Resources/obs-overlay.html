@@ -170,6 +170,46 @@
     return { text: wrapBalance(words, Math.min(lines, words.length)), scale: scale };
   }
 
+  // Örtme (cover): kutu en az İngilizce satır kadar geniştir. Çeviri 42 karakter kuralıyla dengeli bölününce geniş kutunun
+  // ortasında dar iki satır kalıyor, iki yanda boş siyah alan oluşuyordu ("Yerel bağımlılar ona katalitik / konvertörü
+  // …": kutu yazıdan her yanda ~%20 genişti). TV uygulamasındaki gibi (tv-webos/app.js wrapToCover) 1-3 satırın her biri
+  // için örtü ile yazının birleşik kutusunun alanı hesaplanır, en küçüğü seçilir; bir satır daha ancak kutuyu en az %20
+  // küçültüyorsa eklenir. Ölçüm yapılamazsa null döner, 42 karakter kuralı geçerli kalır.
+  var COVER_LINE_GAIN = 0.8, measureContext = null;
+  function textWidth(text, font) {
+    if (measureContext === null) {
+      var canvas = document.createElement('canvas');
+      measureContext = (canvas.getContext && canvas.getContext('2d')) || false;
+    }
+    if (!measureContext) return 0;
+    measureContext.font = font;
+    var widest = 0, parts = text.split('\n');
+    for (var i = 0; i < parts.length; i++) widest = Math.max(widest, measureContext.measureText(parts[i]).width);
+    return widest;
+  }
+
+  function wrapToCover(text, box) {
+    if (!box || text.indexOf('\n') >= 0) return null;
+    var words = wrapTokens(text);
+    var style = window.getComputedStyle(line);
+    var size = parseFloat(pixels(baseSize));
+    var font = style.fontWeight + ' ' + size + 'px ' + style.fontFamily;
+    var pageWidth = window.innerWidth || 1920, pageHeight = window.innerHeight || 1080;
+    // İç boşluk: yanlarda 0.6em, üstte ve altta 0.25em (#line); en çok 84vw.
+    var pad = size * 1.2, room = pageWidth * 0.84 - pad;
+    var coverWidth = (box.right - box.left) * pageWidth, coverHeight = (box.bottom - box.top) * pageHeight;
+    var best = null;
+    for (var lines = 1; lines <= Math.min(WRAP_MAX_LINES, words.length); lines++) {
+      var candidate = lines === 1 ? words.join(' ') : wrapBalance(words, lines);
+      var width = textWidth(candidate, font);
+      if (!width) return null;
+      if (width > room) continue;
+      var area = Math.max(coverWidth, width + pad) * Math.max(coverHeight, size * (1.3 * lines + 0.5));
+      if (!best || area < best.area * COVER_LINE_GAIN) best = { text: candidate, area: area };
+    }
+    return best ? { text: best.text, scale: 1 } : null;
+  }
+
   /// Yazı boyu 1080 satırlık ekrana göredir; sayfanın gerçek yüksekliğinde tam piksele yuvarlanır (keskin yazı).
   function pixels(size) {
     return Math.max(8, Math.round(size * (window.innerHeight || 1080) / 1080)) + 'px';
@@ -307,7 +347,8 @@
     clearTimeout(timer);
     if (!text) return hide();
     hideHint();
-    var wrapped = wrapSubtitle(text);
+    var covering = box && !fixed.bottom && placement === 'cover' && !(lastStyle && lastStyle.backgroundShape === 'band');
+    var wrapped = (covering && wrapToCover(text, box)) || wrapSubtitle(text);
     textScale = wrapped.scale;
     line.textContent = wrapped.text;
     line.style.fontSize = pixels(baseSize * textScale);
