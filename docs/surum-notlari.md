@@ -6,13 +6,16 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Windows'ta TV aranırken uygulamanın kapanması düzeldi (Windows, #564):** Bazı ağlarda TV aranırken (kurulumda ya da "TV'yi bul"da) CouchSubs birden kapanıyordu. Nedeni, ağdaki bazı cihazların verdiği "bağlantı zorla kapatıldı" yanıtının işlenmemesiydi; artık bu yanıt atlanıyor ve arama sürüyor. Bu sorunu yaşayan herkesin beta.58'e güncellemesini öneriyoruz.
-- **Ekranı çevir ekrandaki bütün yazıları çeviriyor (Windows, #551):** Ctrl+Shift+9 (Num 9) GTA 6'da yalnız altyazıyı ya da telefon mesajındaki tek satırı çeviriyor, diğer mesajları, menüleri ve görev yazılarını bırakıyordu. Artık renkli ya da açık zemindeki yazılar da okunuyor.
-- **TV eşleştirme kodu her durumda görünüyor (TV uygulaması 0.9.37, #550):** Android TV'de katman modunda ya da bilgi paneli açıkken 6 haneli eşleştirme kodu görünmüyordu (onaylayınca yine bağlanıyordu). Kod artık ekranın alt ortasında, onaylanana ya da süresi dolana kadar duruyor.
-- **Ek alan çevirileri ekrana sığıyor (TV uygulaması 0.9.38, #557):** Telefon mesajı ve ipucu gibi ek alan çevirileri İngilizce yazıyı tam örtüyor ve ekrana sığıyor; sağ kenardaki dar etiketler ekran dışına taşmıyor. Katkı: erayslyrt00.
-- **GTA 6 "Altyazı zeminini izle" daha güvenilir (Windows, Mac, #567):** Ayar açıkken zemin rengi görüntü değişmese de izleniyor; panel yeni bir satırın altına gelince satır yeniden okunuyor. Oyunda altyazı zemini için Solid (opak) seçin. Katkı: erayslyrt00.
-- **Telefonda altyazı ekranı kararmıyor, "Ekranı döndür" düğmesi (iPhone, Android, #568):** Altyazı ekranı açılınca parlaklık kısılıyordu, artık kısılmıyor. iPhone'da yatay dönüş güvenilir hâle geldi; iki telefonda da altyazı ekranındaki **Ekranı döndür** düğmesi yatayla dik arasında geçiyor.
-- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.65).
+- **4K Samsung TV'de PS5 görüntüsü küçük kalmıyor (TV uygulaması 0.9.39, #304):** Bazı 4K Samsung TV'lerde PS5 görüntüsü ekranın sol üst köşesinde, çeyrek boyutta kalıyordu. Artık görüntü ekranın tamamını kaplıyor. Ultra geniş Samsung monitörlerde menüden oyuna geçince (görüntü sinyali değişince) PS5 penceresi yeniden doğru ölçüye getiriliyor. Bilgisayardaki CouchSubs beta.59'a güncellenince TV uygulaması kendiliğinden 0.9.39'a güncellenir.
+- **Telefonda paket güncelleme hatası görünüyor (iPhone, Android, #583):** Paket sunucusuna ulaşılamayınca "Paketleri güncelle" hiçbir şey söylemeden duruyordu, GTA 6 gibi yeni paketler listede çıkmıyordu. Artık hata ekranda yazıyor. iPhone'da bir paket inemeyince ötekiler de duruyordu; artık her paket ayrı iniyor.
+- **Ek alan çevirileri daha doğru (Windows, Mac, iPhone, Android, #560):** Yarım okunan yazı çevirinin yerine geçmiyor, menüde seçim değişince eski seçeneğin Türkçesi yeni seçeneğin üstünde kalmıyor, aynı yazı yeniden gelince çevirisi hemen çıkıyor, oyun değişince ek alanlar sıfırlanıyor. Windows'ta ek alanlar daha hızlı çevriliyor. Katkı: erayslyrt00.
+- **Güncelleme kartında sürüm notları (Windows, #577):** Güncelleme çıkınca kartta "Neler değişti?" notları görünüyor; Ayarlar'da kurulu sürüm yazıyor. Katkı: erayslyrt00.
+- **Pencere yakalama tanısı (Windows, #581):** Görüntü kaynağı olarak OBS projektörü ya da oyun penceresi seçildiğinde görüntü gelmezse nedeni altyazi.log dosyasına yazılıyor.
+- **Ortak altyazı havuzu daha az veri gönderiyor (bütün uygulamalar, #576):** Havuzda yeterince doğrulanmış satırlar bir daha gönderilmiyor.
+- **Mac paketi derleme kanıtıyla (#585):** Sürümdeki bütün dosyaların bu depodan derlendiği GitHub derleme kanıtıyla doğrulanabiliyor.
+- **Android telefon:** [Google Play](https://play.google.com/store/apps/details?id=com.couchsubs.mobile) üzerinden güncelleniyor (0.1.0-beta.66).
+
+**beta.58'de gelenler:** Windows'ta TV aranırken uygulamanın kapanmasının düzelmesi, Ekranı çevir'in ekrandaki bütün yazıları çevirmesi, TV eşleştirme kodunun her durumda görünmesi (TV uygulaması 0.9.37), ek alan çevirilerinin ekrana sığması (0.9.38, katkı: erayslyrt00), GTA 6 "Altyazı zeminini izle" (katkı: erayslyrt00), telefonda altyazı ekranının kararmaması ve "Ekranı döndür" (Play, 0.1.0-beta.65).
 
 **beta.57'de gelenler:** Android TV'de "Eşleştirme tamamlanmadı" ekranında kalmanın düzelmesi (TV uygulaması 0.9.36), PS5 "Remote Play on Console has crashed" döngüsünün durması, kol kendiliğinden kapanınca ana hesap ipucu, Samsung ultra geniş monitörde HDMI penceresi (0.9.35), telefonlarda "Ağda TV bulunamadı" yönergesi, uzun oyunda telefon kapanması için tanı (Play, 0.1.0-beta.64).
 
