@@ -292,6 +292,9 @@ final class DisconnectReasonTests: XCTestCase {
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_IN_USE), .inUse)
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STOPPED), .stopped)
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED), .refused)
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED), .refused)
+        // TCP reddi eşleme sorunu değildir; yalnız PSN eşlemesinin reddi yeniden eşleme ister.
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_PSN_REGIST_FAILED), .registrationInvalid)
         XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED), .network)
     }
 

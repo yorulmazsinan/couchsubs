@@ -275,6 +275,8 @@ public class DisconnectReasonTests
         Assert.Equal(new DisconnectReason(DisconnectKind.InUse), DisconnectReasons.FromNative(NativeMethods.QuitInUse, null));
         Assert.Equal(new DisconnectReason(DisconnectKind.Stopped), DisconnectReasons.FromNative(NativeMethods.QuitStopped, null));
         Assert.Equal(new DisconnectReason(DisconnectKind.Refused), DisconnectReasons.FromNative(NativeMethods.QuitRefused, "ignored"));
+        // TCP reddi eşleme sorunu değildir; yalnız PSN eşlemesinin reddi yeniden eşleme ister.
+        Assert.Equal(new DisconnectReason(DisconnectKind.RegistrationInvalid), DisconnectReasons.FromNative(NativeMethods.QuitPsnRegistFailed, "ignored"));
         Assert.Equal(new DisconnectReason(DisconnectKind.Network), DisconnectReasons.FromNative(NativeMethods.QuitNetwork, null));
         Assert.Equal(new DisconnectReason(DisconnectKind.Other, "Version Mismatch"),
                      DisconnectReasons.FromNative(NativeMethods.QuitOther, "Version Mismatch"));

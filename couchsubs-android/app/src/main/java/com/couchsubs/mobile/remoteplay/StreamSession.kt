@@ -10,7 +10,13 @@ import java.util.concurrent.TimeUnit
 
 /** Bağlantının neden koptuğu; kullanıcıya anlatılabilecek biçimde (Windows: DisconnectKind). */
 enum class DisconnectKind {
-    STOPPED, IN_USE, REFUSED, NETWORK, NOT_FOUND, CONSOLE_ASLEEP,
+    STOPPED, IN_USE,
+    /**
+     * PS5'in adresi oturum ya da ctrl bağlantısını (TCP 9295) reddetti: PS5 yeni uyanıyor ya da adres başka bir cihaza
+     * geçmiş. Eşleme sorunu değildir; beklenip yeniden denenir ve PS5 ağda yeniden aranır.
+     */
+    REFUSED,
+    NETWORK, NOT_FOUND, CONSOLE_ASLEEP,
     /** PS5 bu hesap için giriş şifresi istiyor, Ayarlar'da kayıtlı şifre yok. */
     LOGIN_PASSCODE,
     /** PS5 Ayarlar'daki giriş şifresini kabul etmedi; yeniden gönderilmez. */
@@ -47,6 +53,8 @@ enum class DisconnectKind {
             NativeBridge.QUIT_REFUSED -> REFUSED
             NativeBridge.QUIT_NETWORK -> NETWORK
             NativeBridge.QUIT_RP_CRASHED -> CONSOLE_RP_CRASHED
+            // PSN üzerinden eşleme reddedildi: yeniden eşleme gerekir (eskiden TCP reddiyle aynı REFUSED'du).
+            NativeBridge.QUIT_PSN_REGIST_FAILED -> REGISTRATION_INVALID
             else -> OTHER
         }
 
@@ -623,6 +631,9 @@ class StreamSession(
                             return@execute
                         }
                     }
+                    // PS5'in adresi TCP bağlantısını reddetti: PS5 yeni uyanıyor olabilir ya da adres başka bir cihaza geçmiş
+                    // olabilir. Bir sonraki denemede beklemeden ağda da aranır (eşlemeyi yenilemek bunu çözmez).
+                    if (kind == DisconnectKind.REFUSED) nextRelocate = 0L
                     scheduleReconnect(eventGeneration, state)
                 }
             }

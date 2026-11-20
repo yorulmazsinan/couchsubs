@@ -44,6 +44,8 @@ object NativeBridge {
     const val QUIT_OTHER = 5
     /** PS5'teki Uzaktan Oynatma çöktü (CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH). */
     const val QUIT_RP_CRASHED = 6
+    /** PSN üzerinden eşleme reddedildi (CHIAKI_QUIT_REASON_PSN_REGIST_FAILED); QUIT_REFUSED yalnız TCP reddidir. */
+    const val QUIT_PSN_REGIST_FAILED = 7
 
     /** Yerel kütüphane yüklenebildi mi (yalnız Kotlin derlemesinde ya da desteklenmeyen işlemcide false). */
     val available: Boolean by lazy {

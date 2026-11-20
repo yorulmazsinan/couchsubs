@@ -31,7 +31,7 @@
     <string name="phase_asleep">PS5 dinlenme modundan uyanmadı.</string>
     <string name="phase_passcode">PS5 bu hesap için giriş şifresi istiyor. Ayarlar\'dan şifreyi gir ya da PS5\'te bu hesabın giriş şifresini kapat.</string>
     <string name="phase_passcode_incorrect">PS5, Ayarlar\'daki giriş şifresini kabul etmedi. Şifreyi düzelt ya da PS5\'te bu hesabın giriş şifresini kapat.</string>
-    <string name="phase_refused">PS5 bağlantıyı reddetti. Eşlemeyi yenile.</string>
+    <string name="phase_refused">PS5 bağlantıyı henüz kabul etmedi. PS5 yeni açılıyor olabilir ya da ağdaki adresi değişmiş olabilir. Yeniden bağlanılıyor ve PS5 ağda aranıyor; sürerse PS5\'in açık ve telefonla aynı Wi-Fi\'da olduğundan emin ol.</string>
 
     <string name="error_not_paired">Önce PSN girişi ve PS5 eşlemesi gerekiyor.</string>
     <string name="error_native">Bu cihazda Remote Play kütüphanesi yüklenemedi.</string>

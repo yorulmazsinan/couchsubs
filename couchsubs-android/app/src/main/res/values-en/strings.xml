@@ -31,7 +31,7 @@
     <string name="phase_asleep">PS5 did not wake from rest mode.</string>
     <string name="phase_passcode">The PS5 asks for this account\'s login passcode. Enter it in Settings, or turn off this account\'s login passcode on the PS5.</string>
     <string name="phase_passcode_incorrect">The PS5 didn\'t accept the login passcode in Settings. Correct it, or turn off this account\'s login passcode on the PS5.</string>
-    <string name="phase_refused">PS5 refused the connection. Pair again.</string>
+    <string name="phase_refused">The PS5 did not accept the connection yet. It may still be starting up, or its network address may have changed. Reconnecting and searching for the PS5; if this keeps happening, make sure the PS5 is on and on the same Wi-Fi as this phone.</string>
 
     <string name="error_not_paired">Sign in to PSN and pair your PS5 first.</string>
     <string name="error_native">The Remote Play library could not be loaded on this device.</string>

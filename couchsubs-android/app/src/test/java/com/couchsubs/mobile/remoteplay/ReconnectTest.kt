@@ -73,6 +73,8 @@ class ReconnectTest {
         assertEquals(DisconnectKind.REFUSED, DisconnectKind.fromNative(NativeBridge.QUIT_REFUSED))
         assertEquals(DisconnectKind.NETWORK, DisconnectKind.fromNative(NativeBridge.QUIT_NETWORK))
         assertEquals(DisconnectKind.OTHER, DisconnectKind.fromNative(NativeBridge.QUIT_OTHER))
+        // TCP reddi eşleme sorunu değildir; yalnız PSN eşlemesinin reddi yeniden eşleme ister.
+        assertEquals(DisconnectKind.REGISTRATION_INVALID, DisconnectKind.fromNative(NativeBridge.QUIT_PSN_REGIST_FAILED))
         // 720p'ye düşürme nedeni değildir.
         assertFalse(QualityFallback.countsAsDrop(DisconnectKind.CONSOLE_RP_CRASHED))
     }

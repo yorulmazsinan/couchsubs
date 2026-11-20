@@ -1779,7 +1779,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         {
             DisconnectKind.ConsoleAsleep => text["Turn on your PS5"],
             DisconnectKind.InUse => text["Remote Play is in use on another device"],
-            DisconnectKind.Refused => text["The PS5 refused the connection. Set up the PS5 again."],
+            // Eskiden "PS5'i yeniden kurun" deniyordu; TCP reddi eşleme sorunu değildir, yeniden eşlemek çözmez.
+            DisconnectKind.Refused => text["The PS5 did not accept the connection yet. It may still be starting up, or its network address may have changed. Reconnecting and searching for the PS5… If this keeps happening, make sure the PS5 is on and on the same network."],
             DisconnectKind.LoginPasscode => text["The PS5 asks for this account's login passcode. Enter it in Settings, or turn off this account's login passcode on the PS5."],
             // Yanlış şifre bir kez gönderilir; PS5 yeniden isterse oturum kapanır (döngü yok).
             DisconnectKind.LoginPasscodeIncorrect => text["The PS5 didn't accept the login passcode in Settings. Correct it, or turn off this account's login passcode on the PS5."],

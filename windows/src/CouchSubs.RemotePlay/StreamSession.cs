@@ -184,6 +184,8 @@ internal static class DisconnectReasons
         NativeMethods.QuitRefused => new(DisconnectKind.Refused),
         NativeMethods.QuitNetwork => new(DisconnectKind.Network),
         NativeMethods.QuitRpCrashed => new(DisconnectKind.ConsoleRemotePlayCrashed),
+        // PSN eşlemesinin reddi yeniden eşleme ister (eskiden TCP reddiyle aynı Refused'du).
+        NativeMethods.QuitPsnRegistFailed => new(DisconnectKind.RegistrationInvalid),
         _ => new(DisconnectKind.Other, text),
     };
 
@@ -559,6 +561,9 @@ public sealed class StreamSession : IStreamSession
                             return;
                         }
                     }
+                    // PS5'in adresi TCP bağlantısını reddetti: PS5 yeni uyanıyor olabilir ya da adres başka bir cihaza geçmiş
+                    // olabilir. Bir sonraki denemede beklemeden ağda da aranır (eşlemeyi yenilemek bunu çözmez).
+                    if (reason.Kind == DisconnectKind.Refused) nextRelocate = DateTime.MinValue;
                     ScheduleReconnect(eventGeneration, reason);
                 });
                 break;

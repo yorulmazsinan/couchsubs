@@ -215,7 +215,9 @@ public enum DisconnectReason: Equatable, Sendable {
     case consoleAsleep
     /// Remote Play başka bir cihazda kullanılıyor.
     case inUse
-    /// PS5 bağlantıyı reddetti (ör. kayıt geçersiz ya da Uzaktan Oynatma kapalı).
+    /// PS5'in adresi oturum ya da ctrl bağlantısını (TCP 9295) reddetti: PS5 yeni uyanıyor ya da adres başka bir cihaza
+    /// geçmiş. Eşleme sorunu değildir (eskiden "PS5'i yeniden kurun" deniyordu); beklenip yeniden denenir ve PS5 ağda
+    /// yeniden aranır.
     case refused
     case network
     /// İkinci kullanıcının PS5'te giriş şifresi var ve Ayarlar'da kayıtlı şifre yok.
@@ -292,8 +294,9 @@ public enum DisconnectReason: Equatable, Sendable {
         switch quit {
         case CHIAKI_QUIT_REASON_STOPPED: self = .stopped
         case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_IN_USE: self = .inUse
-        case CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED,
-             CHIAKI_QUIT_REASON_PSN_REGIST_FAILED: self = .refused
+        case CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED: self = .refused
+        // PSN üzerinden eşleme reddedildi: yalnız bu yeniden eşleme ister (eskiden TCP reddiyle aynı `.refused`'du).
+        case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED: self = .registrationInvalid
         case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN,
              CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN: self = .network
         case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH: self = .consoleRemotePlayCrashed
@@ -712,6 +715,9 @@ public final class StreamSession: @unchecked Sendable {
                         return self.emit(.disconnected(reason))
                     }
                 }
+                // PS5'in adresi TCP bağlantısını reddetti: PS5 yeni uyanıyor olabilir ya da adres başka bir cihaza geçmiş
+                // olabilir. Bir sonraki denemede beklemeden ağda da aranır (eşlemeyi yenilemek bunu çözmez).
+                if reason == .refused { self.nextRelocate = .distantPast }
                 self.scheduleReconnect(eventGeneration, reason: reason)
             }
         default:

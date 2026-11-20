@@ -37,7 +37,9 @@ public enum DisconnectKind
     ConsoleAsleep,
     /// <summary>Remote Play başka bir cihazda kullanılıyor.</summary>
     InUse,
-    /// <summary>PS5 bağlantıyı reddetti (ör. kayıt geçersiz ya da Uzaktan Oynatma kapalı).</summary>
+    /// <summary>PS5'in adresi oturum ya da ctrl bağlantısını (TCP 9295) reddetti: PS5 yeni uyanıyor ya da adres başka bir
+    /// cihaza geçmiş. Eşleme sorunu değildir; beklenip yeniden denenir ve PS5 ağda yeniden aranır. (Xbox'ta: konsol yayını
+    /// reddetti, ayrıntıda neden.)</summary>
     Refused,
     Network,
     /// <summary>PS5 bu hesap için giriş şifresi istiyor; Ayarlar'da kayıtlı şifre yok.</summary>

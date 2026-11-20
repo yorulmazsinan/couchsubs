@@ -1154,7 +1154,7 @@ final class PhoneModel: ObservableObject {
             switch reason {
             case .consoleAsleep: return String(localized: "Turn on your PS5")
             case .inUse: return String(localized: "Remote Play is in use on another device")
-            case .refused: return String(localized: "The PS5 refused the connection. Set up the PS5 again.")
+            case .refused: return String(localized: "The PS5 did not accept the connection yet. It may still be starting up, or its network address may have changed. Reconnecting and searching for the PS5… If this keeps happening, make sure the PS5 is on and on the same network.")
             case .loginPasscode:
                 return String(localized: "The PS5 asks for this account's login passcode. Enter it in Settings, or turn off this account's login passcode on the PS5.")
             case .loginPasscodeIncorrect:
