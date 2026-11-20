@@ -319,6 +319,15 @@ internal sealed class FakeServices : IAppServices
     public Task<IReadOnlyList<string>> ScanAndroidTvsAsync() => Task.FromResult<IReadOnlyList<string>>([.. AndroidHosts]);
     /// <summary>Her Android kurulumunda "güncelse de aç" istendi mi.</summary>
     public List<bool> AndroidOpenRequests { get; } = [];
+    /// <summary>Android uygulamasına açılırken verilen parametreler (#617).</summary>
+    public List<string?> AndroidLaunchParams { get; } = [];
+    public int? PreferredServerPort { get; set; }
+    public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
+                                               Action<TvInstallEvent> onEvent)
+    {
+        AndroidLaunchParams.Add(launchParams);
+        return InstallAndroidAppAsync(host, app, openIfInstalled, onEvent);
+    }
     public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
     {
         AndroidOpenRequests.Add(openIfInstalled);
@@ -2192,6 +2201,29 @@ public class TvAppInstallTests
         Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.7.0"), controller.TvApp);
         Assert.Equal("192.168.1.40", controller.Tv?.Host);
         Assert.Equal("192.168.1.40", store.Load<LgTv>(StoreKeys.Tv)?.Host);
+    }
+
+    /// <summary>
+    /// Android TV uygulaması altyazı sunucusunun adresiyle açılır; sunucu elle seçilen portta (Linux'ta
+    /// COUCHSUBS_SERVER_PORT) dinler ve TV uygulaması 8787'yi taramadan onu bulur (#617).
+    /// </summary>
+    [Fact]
+    public async Task AndroidTvAppGetsTheServerAddressOnItsPort()
+    {
+        using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        probe.Start();
+        var free = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        var services = new FakeServices { PreferredServerPort = free };
+        services.Bundled[TvBrand.AndroidTv] = new BundledTvApp("couchsubs-androidtv_0.7.0.apk", "0.7.0");
+        services.AndroidHosts.Add("192.168.1.40");
+        var controller = Make(services, new MemoryStore());
+        await controller.PairAsync(new LgTv("Android TV", "", TvBrand.AndroidTv));
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.7.0"), controller.TvApp);
+        Assert.Equal(free, controller.ServerPort);
+        var launch = Assert.Single(services.AndroidLaunchParams);
+        using var json = System.Text.Json.JsonDocument.Parse(launch!);
+        Assert.EndsWith($":{free}", json.RootElement.GetProperty("server").GetString());
     }
 
     /// <summary>Aynı ağda iki Android TV: kurulum ilk bulunana gitmez, TV sorulur; seçilen TV'ye kurulur ve hatırlanır (#425).</summary>

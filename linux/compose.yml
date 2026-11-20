@@ -13,6 +13,8 @@ services:
     environment:
       # Sunucunun hata iletilerinin dili (tr ya da en); panelin dili tarayıcıyı izler.
       COUCHSUBS_LANG: tr
+      # 8787 bu sunucuda başka bir serviste kullanılıyorsa altyazı sunucusunun portu (TV uygulamasına adres verilir).
+      # COUCHSUBS_SERVER_PORT: "8790"
     volumes:
       # Hesap kimliği, PS5 ve TV anahtarları, çeviri modeli (~530 MB), günlükler.
       - couchsubs-data:/data

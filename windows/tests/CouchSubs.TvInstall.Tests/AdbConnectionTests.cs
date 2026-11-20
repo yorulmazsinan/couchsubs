@@ -226,6 +226,32 @@ public class AdbConnectionTests
         Assert.DoesNotContain(tv.OpenedServices, s => s.StartsWith("shell:pm grant"));
     }
 
+    /// <summary>Kurulumdan sonra uygulama altyazı sunucusunun adresiyle açılır (sunucu 8787 dışında olabilir, #617).</summary>
+    [Fact]
+    public async Task InstallerOpensTheAppWithLaunchParams()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var apk = Path.Combine(dir, "couchsubs.apk");
+        await File.WriteAllBytesAsync(apk, RandomNumberGenerator.GetBytes(3000));
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        await using var tv = new FakeAdbd { TrustedKey = key };
+        tv.Serve();
+        var installer = new AndroidTvInstaller("127.0.0.1", dir, tv.Port) { LaunchParams = "{\"server\":\"http://192.168.1.5:8790\"}" };
+        await installer.EnsureInstalledAsync(apk, "0.9.11");
+        Assert.Contains("shell:am start -n com.couchsubs.tv/.MainActivity --es params '{\"server\":\"http://192.168.1.5:8790\"}'",
+            tv.OpenedServices);
+    }
+
+    [Theory]
+    [InlineData(null, "shell:am start -n com.couchsubs.tv/.MainActivity")]
+    [InlineData("", "shell:am start -n com.couchsubs.tv/.MainActivity")]
+    [InlineData("{\"server\":\"http://10.0.0.2:8787\"}", "shell:am start -n com.couchsubs.tv/.MainActivity --es params '{\"server\":\"http://10.0.0.2:8787\"}'")]
+    // Kabukta tırnaktan çıkabilecek değer gönderilmez; uygulama parametresiz açılır.
+    [InlineData("{\"server\":\"x'; reboot; '\"}", "shell:am start -n com.couchsubs.tv/.MainActivity")]
+    [InlineData("{\"a\":\"b\"}\nreboot", "shell:am start -n com.couchsubs.tv/.MainActivity")]
+    public void StartCommandQuotesTheParams(string? launchParams, string expected) =>
+        Assert.Equal(expected, AndroidTvInstaller.StartCommand(launchParams));
+
     [Fact]
     public async Task RefusedAppopsTriesPmGrantAndDoesNotFailTheInstall()
     {

@@ -190,13 +190,15 @@ public sealed class LinuxServices : IAppServices
 
     /// <summary>TV'deki sürüme bakar, eksik ya da eskiyse kurar (Windows'taki LiveServices gibi); ayrıntılı kurulum günlüğü
     /// veri klasöründeki tvinstall.log'a yazılır.</summary>
-    public async Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, Action<TvInstallEvent> onEvent)
+    public async Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled,
+                                                                              Action<TvInstallEvent> onEvent)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(1) };
         var log = new TvInstall.InstallLog(AppPaths.Folder("tvinstall.log"));
         var installer = new SamsungTvInstaller(host, AppPaths.Folder("samsung"), new SamsungCertificates(http, log))
         {
             Log = log,
+            OpenIfInstalled = openIfInstalled,
             Progress = step => onEvent(new TvInstallEvent(TvInstallEventKind.Progress, Step: step)),
             SignIn = token => SamsungLogin.SignInAsync(url => onEvent(new TvInstallEvent(TvInstallEventKind.SignIn, new Uri(url))),
                 TimeSpan.FromMinutes(10), token),
@@ -233,14 +235,24 @@ public sealed class LinuxServices : IAppServices
         _ => DevModeError.InstallFailed,
     };
 
+    /// <summary>COUCHSUBS_SERVER_PORT: sunucuda 8787 başka bir serviste kullanılıyorsa altyazı sunucusunun portu (#617).</summary>
+    public int? PreferredServerPort { get; } = ServerPortFrom(Environment.GetEnvironmentVariable("COUCHSUBS_SERVER_PORT"));
+
+    internal static int? ServerPortFrom(string? value) =>
+        int.TryParse(value, out var port) && port is > 0 and <= 65535 ? port : null;
+
     public Task<bool> IsAndroidDebugOnAsync(string host) => AndroidTvInstaller.IsReachableAsync(host);
 
     public Task<IReadOnlyList<string>> ScanAndroidTvsAsync() => AndroidTvInstaller.ScanAsync();
 
-    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
+    public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent) =>
+        InstallAndroidAppAsync(host, app, openIfInstalled, null, onEvent);
+
+    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
+                                                     Action<TvInstallEvent> onEvent)
     {
         void Approve() => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv));
-        var installer = new AndroidTvInstaller(host, AppPaths.Folder("adb")) { OnApprovalNeeded = Approve };
+        var installer = new AndroidTvInstaller(host, AppPaths.Folder("adb")) { OnApprovalNeeded = Approve, LaunchParams = launchParams };
         try
         {
             // TV'den kaldırılıp kaydı kalan uygulama da kurulur; "yeniden kur"da güncel uygulama açılır (AndroidTvApp.cs).

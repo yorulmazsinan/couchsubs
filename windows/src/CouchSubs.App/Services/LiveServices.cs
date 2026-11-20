@@ -337,12 +337,17 @@ public sealed class LiveServices : IAppServices
 
     public Task<IReadOnlyList<string>> ScanAndroidTvsAsync() => AndroidTvInstaller.ScanAsync();
 
-    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
+    public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent) =>
+        InstallAndroidAppAsync(host, app, openIfInstalled, null, onEvent);
+
+    public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
+                                                     Action<TvInstallEvent> onEvent)
     {
         void Approve() => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv));
         var installer = new AndroidTvInstaller(host, DataDirectory("adb"))
         {
             OnApprovalNeeded = Approve,
+            LaunchParams = launchParams,
             // CouchSubs TV Play'de ve TV'de Play Store varsa TV'de Play sayfası açılır (PlayStoreRedirect.cs).
             PlayListed = AndroidTvInstaller.IsListedOnPlayAsync,
             OnPlayOpened = () => onEvent(new TvInstallEvent(TvInstallEventKind.Progress, Step: "play")),

@@ -11,6 +11,14 @@ WORKDIR /src
 COPY tv-webos tv-webos
 RUN mkdir -p dist/tv-app && ares-package tv-webos -o dist/tv-app -n && ls -l dist/tv-app
 
+# --- Android TV uygulaması (.apk); sunucu bunu hata ayıklaması açık TV'ye ADB ile kurar (#617) ---
+# APK sürüm anahtarıyla imzalı olduğu için burada derlenmez: GitHub sürümünden SHA256SUMS.txt ile denetlenerek indirilir.
+# COUCHSUBS_TV_RELEASE: sürüm etiketi (ör. v0.1.0-beta.60), "latest" (varsayılan) ya da "none" (APK'sız imaj).
+FROM python:3.12-slim AS androidtv
+ARG COUCHSUBS_TV_RELEASE=latest
+COPY linux/fetch-androidtv-apk.py /fetch.py
+RUN python3 -I /fetch.py /out/tv-app "$COUCHSUBS_TV_RELEASE" && ls -l /out/tv-app
+
 # --- couchsubs_native.so: libchiaki + FFmpeg h264 çözücü üstünde düz C arayüzü ---
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS native
 RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
@@ -38,6 +46,7 @@ COPY windows/Directory.Build.props windows/Directory.Build.props
 COPY windows/src windows/src
 COPY linux/CouchSubs.Linux linux/CouchSubs.Linux
 COPY --from=tv /src/dist/tv-app dist/tv-app
+COPY --from=androidtv /out/tv-app dist/tv-app
 COPY --from=native /build/couchsubs_native.so windows/native/bin/couchsubs_native.so
 RUN dotnet publish linux/CouchSubs.Linux -c Release -o /app --nologo -v q \
  && ls /app/couchsubs_native.so /app/tv-app/*.ipk
@@ -60,7 +69,7 @@ ENV COUCHSUBS_DATA=/data \
 VOLUME /data
 USER $APP_UID
 WORKDIR /app
-# 8788: panel, 8787: TV uygulamasının bağlandığı altyazı sunucusu. PS5 ve TV'yi ağda bulabilmek için konteyner
+# 8788: panel, 8787: TV uygulamasının bağlandığı altyazı sunucusu (COUCHSUBS_SERVER_PORT ile değişir). PS5 ve TV'yi ağda bulabilmek için konteyner
 # ev ağına doğrudan bağlı çalışmalıdır (docker run --network host; bkz. linux/compose.yml).
 EXPOSE 8788 8787
 ENTRYPOINT ["dotnet", "/app/couchsubs.dll"]

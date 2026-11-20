@@ -170,8 +170,13 @@ function wizard(s) {
         '<div class="list" style="margin-top:12px">' + (lists.tvs || []).map(function (tv, i) {
           return '<button data-pick-tv="' + i + '"' + (busy.pair ? ' disabled' : '') + '><span>' + esc(tv.name) + '</span><span class="muted">' + esc(tv.brand) + ' · ' + esc(tv.host) + '</span></button>';
         }).join('') + (lists.tvs && !lists.tvs.length ? '<p class="warn">' + t('TV bulunamadı. Adresini elle yazabilirsiniz.', 'No TV found. You can type its address.') + '</p>' : '') + '</div>' +
-        input('tvHost', t('LG TV adresi (elle)', 'LG TV address (manual)'), 'placeholder="192.168.1.30" inputmode="decimal" autocomplete="off"') +
-        '<div class="row" style="margin-top:12px">' + btn('pair', t('Bu adresle bağlan', 'Connect to this address')) + '</div>' + err('pair') + '</div>' +
+        input('tvHost', t('LG ya da Samsung TV adresi (elle)', 'LG or Samsung TV address (manual)'), 'placeholder="192.168.1.30" inputmode="decimal" autocomplete="off"') +
+        '<div class="row" style="margin-top:12px">' + btn('pairManual', t('Bu adresle bağlan', 'Connect to this address')) + '</div>' + err('pairManual') + err('pair') + '</div>' +
+        // Android TV aranmaz ve SSAP konuşmaz: seçilince sunucu ağda ADB'si açık TV'yi arar ve uygulamayı kurar (#617).
+        '<div class="card"><h2>Android TV / Google TV</h2>' +
+        '<p class="muted">' + t('Vestel, Arçelik, Beko, Grundig, Philips ve Android TV\'li öteki TV\'ler. TV\'de Geliştirici seçenekleri\'nden USB hata ayıklamayı (varsa Ağ hata ayıklamayı da) açın; kurulumda TV\'deki izin sorusunu onaylayın.',
+                                'Vestel, Arçelik, Beko, Grundig, Philips and other TVs running Android TV. Turn on USB debugging (and Network debugging if present) in the TV\'s Developer options; accept the permission prompt on the TV during installation.') + '</p>' +
+        '<div class="row">' + btn('pairAndroid', t('Android TV\'yi seç', 'Choose Android TV')) + '</div>' + err('pairAndroid') + '</div>' +
         (s.tv ? tvApp(s) : '') + pairingOpen();
       break;
     case 'Translation':
@@ -199,6 +204,8 @@ function health(s) {
   var problems = [];
   if (!s.nativeAvailable) problems.push(t('PS5 bağlantı kütüphanesi (couchsubs_native.so) yüklenemedi.', 'The PS5 connection library (couchsubs_native.so) could not be loaded.'));
   if (s.ocrMissing) problems.push(t('Yazı tanıma (Tesseract) bulunamadı.', 'Text recognition (Tesseract) was not found.'));
+  if (s.tv && s.tv.brand === 'AndroidTv' && !s.bundledAndroidTvApp)
+    problems.push(t('Android TV paketi (APK) bu kurulumda yok; TV uygulaması buradan kurulamaz. İmajı yeniden derleyin (linux/build.sh, COUCHSUBS_TV_RELEASE).', 'The Android TV package (APK) is missing from this build; the TV app cannot be installed from here. Rebuild the image (linux/build.sh, COUCHSUBS_TV_RELEASE).'));
   if (!s.bundledTvApp) problems.push(t('LG TV paketi bu kurulumda yok; TV uygulaması buradan kurulamaz.', 'The LG TV package is missing from this build; the TV app cannot be installed from here.'));
   return problems.length ? '<div class="card"><h2 class="warn">' + t('Dikkat', 'Attention') + '</h2>' + problems.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') + '</div>' : '';
 }
@@ -389,7 +396,11 @@ document.addEventListener('click', function (e) {
     case 'consoles': run('consoles', 'GET', '/api/consoles', null, function (list) { lists.consoles = list; if (list.length === 1) form.consoleHost = list[0].host; }); break;
     case 'register': run('register', 'POST', '/api/register', { host: form.consoleHost || '', pin: form.pin || '' }, function () { form.pin = ''; }); break;
     case 'tvs': run('tvs', 'GET', '/api/tvs', null, function (list) { lists.tvs = list; }); break;
-    case 'pair': run('pair', 'POST', '/api/pair', { name: 'LG TV', host: form.tvHost || '', brand: 'Lg' }); break;
+    // Elle yazılan adres: TV'ye LG mi Samsung mu olduğu sorulur, sonra bağlanılır (#617).
+    case 'pairManual': run('pairManual', 'GET', '/api/tv-at?host=' + encodeURIComponent(form.tvHost || ''), null, function (tv) {
+      run('pair', 'POST', '/api/pair', { name: tv.name, host: tv.host, brand: tv.brand });
+    }); break;
+    case 'pairAndroid': run('pairAndroid', 'POST', '/api/pair', { name: 'Android TV', host: '', brand: 'AndroidTv' }); break;
     case 'tvInstall': run('tvInstall', 'POST', '/api/tv-app/install', { passphrase: form.passphrase || '' }); break;
     case 'tvRefresh': run('tvRefresh', 'POST', '/api/tv-app/refresh'); break;
     case 'model': run('model', 'POST', '/api/model/download'); break;

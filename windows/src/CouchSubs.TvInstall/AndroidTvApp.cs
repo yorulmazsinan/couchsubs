@@ -60,7 +60,7 @@ public static partial class AndroidTvApp
         if (!result.Installed && openIfInstalled)
         {
             await using var adb = await ConnectAsync(host, keyDirectory, onApprovalNeeded, cancellationToken);
-            var started = await adb.RunAsync($"shell:am start -n {Package}/.MainActivity", cancellationToken: cancellationToken);
+            var started = await adb.RunAsync(AndroidTvInstaller.StartCommand(installer.LaunchParams), cancellationToken: cancellationToken);
             log?.Invoke($"Android TV: uygulama güncel ({result.Version}), açıldı: {started.Trim()}");
         }
         return result;

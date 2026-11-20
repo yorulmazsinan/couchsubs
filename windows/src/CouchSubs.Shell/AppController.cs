@@ -984,7 +984,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         openTvAppAfterCheck = false;
         try
         {
-            var version = await services.InstallAndroidAppAsync(host, bundled, open, e => post(() => InstallEvent(e)));
+            // Açılan uygulamaya altyazı sunucusunun adresi verilir: sunucu 8787 dışında bir portta olsa da (8787 doluysa ya da
+            // Linux'ta COUCHSUBS_SERVER_PORT) TV uygulaması onu bulur (#617). Eşleştirme yine TV'deki kodla yapılır.
+            try { await StartServerAsync(); } catch (SocketException) { }
+            var launch = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["server"] = ServerAddress(target with { Host = host }) });
+            var version = await services.InstallAndroidAppAsync(host, bundled, open, launch, e => post(() => InstallEvent(e)));
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
             var located = target with { Host = host };
             tv = located;
@@ -2544,9 +2548,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private bool preferredPortApplied;
+
     private async Task StartServerAsync()
     {
         if (serverStarted) return;
+        // Linux sunucusunda port elle seçilebilir (COUCHSUBS_SERVER_PORT, #617); doluysa aşağıdaki gibi boş bir porta geçilir.
+        if (!preferredPortApplied && services.PreferredServerPort is { } preferred && preferred != DefaultServerPort)
+        {
+            preferredPortApplied = true;
+            DetachServer();
+            server = new SubtitleServer(preferred, key: server.AccessKey);
+            AttachServer();
+        }
         try
         {
             ServerPort = await server.StartAsync();

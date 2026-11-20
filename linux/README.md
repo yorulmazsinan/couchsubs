@@ -35,8 +35,16 @@ doğrudan bağlı çalışır (`network_mode: host`): PS5 araması UDP yayınıy
 - Veriler (hesap kimliği, PS5 ve TV anahtarları, ~530 MB çeviri modeli, `remoteplay.log`) `couchsubs-data` biriminde durur.
 
 Ortam değişkenleri: `COUCHSUBS_LANG` (`tr`/`en`, sunucunun hata iletileri), `COUCHSUBS_PANEL_PORT`,
+`COUCHSUBS_SERVER_PORT` (altyazı sunucusunun portu; 8787 sunucuda başka bir serviste kullanılıyorsa),
 `COUCHSUBS_AUTOSTART=1` (sunucu yeniden başlayınca çeviri kendiliğinden sürer; dinlenme modundaki PS5'i de
 uyandırdığı için varsayılan kapalıdır).
+
+**TV'ler.** LG ve Samsung panelde **TV'leri ara** ile bulunur; bulunmazsa adresi elle yazılır (TV'ye LG mi Samsung mu
+olduğu sorulur). Android TV / Google TV aranmaz: panelde **Android TV'yi seç**'e basın, sunucu ağda hata ayıklaması açık
+TV'yi bulup uygulamayı ADB ile kurar ve açar. Açarken TV uygulamasına altyazı sunucusunun adresi verilir, port 8787
+değilse de bağlanır. Android TV paketi (APK) imaja derlenirken GitHub sürümünden `SHA256SUMS.txt` ile denetlenerek
+indirilir: `./linux/build.sh --build-arg COUCHSUBS_TV_RELEASE=v0.1.0-beta.60` belirli bir sürümü, `latest` (varsayılan)
+son sürümü, `none` APK'sız imajı seçer.
 
 ## Tanı
 

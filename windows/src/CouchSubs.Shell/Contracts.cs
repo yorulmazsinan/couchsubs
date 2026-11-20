@@ -617,6 +617,18 @@ public interface IAppServices
     /// açılır ("TV uygulamasını yeniden kur").
     /// </summary>
     Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent);
+    /// <summary>
+    /// <see cref="InstallAndroidAppAsync(string, BundledTvApp, bool, Action{TvInstallEvent})"/>; uygulama açılırken
+    /// <paramref name="launchParams"/> (JSON, ör. altyazı sunucusunun adresi) TV uygulamasına verilir. Altyazı sunucusu 8787
+    /// dışındaki bir portta olsa da TV uygulaması onu bulur (#617). Desteklemeyen derlemede parametresiz açılır.
+    /// </summary>
+    Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
+                                        Action<TvInstallEvent> onEvent) => InstallAndroidAppAsync(host, app, openIfInstalled, onEvent);
+    /// <summary>
+    /// Altyazı sunucusunun dinleyeceği port; null ise 8787 (doluysa boş bir port). Linux sunucusunda
+    /// COUCHSUBS_SERVER_PORT ile seçilir (#617).
+    /// </summary>
+    int? PreferredServerPort => null;
     /// <summary>Oyun dili için yazı tanıyıcı; bilgisayarda hiç OCR dili yoksa null.</summary>
     ITextReader? MakeReader(string language);
     /// <summary>

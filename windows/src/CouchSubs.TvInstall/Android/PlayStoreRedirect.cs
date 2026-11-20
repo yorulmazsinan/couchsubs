@@ -62,7 +62,7 @@ public sealed partial class AndroidTvInstaller
             if (now is not null && now != before)
             {
                 await GrantOverlayAsync(adb, cancellationToken);
-                await adb.RunAsync($"shell:am start -n {PackageName}/.MainActivity", cancellationToken: cancellationToken);
+                await adb.RunAsync(StartCommand(LaunchParams), cancellationToken: cancellationToken);
                 return now;
             }
         }

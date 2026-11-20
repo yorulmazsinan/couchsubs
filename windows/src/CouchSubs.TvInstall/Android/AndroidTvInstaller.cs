@@ -20,6 +20,21 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
     /// <summary>Kurulum sırasında TV'nin onay sorusunu göstermesi.</summary>
     public Action? OnApprovalNeeded { get; init; }
 
+    /// <summary>
+    /// Uygulama açılırken verilen başlatma parametreleri (webOS ve Samsung'daki gibi JSON, ör. <c>{"server":"http://…:8787"}</c>).
+    /// TV uygulaması bunu <c>params</c> ekinden okur; altyazı sunucusu 8787 dışında bir portta olsa da onu bulur (#617).
+    /// </summary>
+    public string? LaunchParams { get; init; }
+
+    /// <summary>Uygulamayı açan ADB komutu; <paramref name="launchParams"/> varsa <c>--es params '…'</c> ile.</summary>
+    public static string StartCommand(string? launchParams)
+    {
+        var command = $"shell:am start -n {PackageName}/.MainActivity";
+        // TV'de sh çalıştırır: değer tek tırnak içinde gider; tek tırnak ve satır sonu içeren değer hiç gönderilmez.
+        if (string.IsNullOrEmpty(launchParams) || launchParams.IndexOfAny(['\'', '\n', '\r', '\0']) >= 0) return command;
+        return $"{command} --es params '{launchParams}'";
+    }
+
     /// <summary>TV'de ADB açık mı (port yanıt veriyor mu)?</summary>
     public static async Task<bool> IsReachableAsync(string host, int port = DefaultPort, TimeSpan? timeout = null)
     {
@@ -98,7 +113,7 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
             return (fromPlay, true);
         await InstallAsync(adb, apkPath, cancellationToken);
         await GrantOverlayAsync(adb, cancellationToken);
-        await adb.RunAsync($"shell:am start -n {PackageName}/.MainActivity", cancellationToken: cancellationToken);
+        await adb.RunAsync(StartCommand(LaunchParams), cancellationToken: cancellationToken);
         return (version, true);
     }
 

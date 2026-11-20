@@ -50,7 +50,8 @@ public static class Program
 
         Log.Write("panel", $"CouchSubs {Version} hazır. Panel: http://{AppController.LocalAddress("192.168.1.1") ?? "localhost"}:{port}");
         Log.Write("panel", $"Veri klasörü: {AppPaths.Data} · PS5 kütüphanesi: {(Diagnostics.NativeAvailable ? "var" : "YOK")} · " +
-                           $"yazı tanıma: {(TesseractReader.HasLanguage("en") ? "var" : "YOK")} · LG paketi: {services.BundledTvAppVersion ?? "YOK"}");
+                           $"yazı tanıma: {(TesseractReader.HasLanguage("en") ? "var" : "YOK")} · LG paketi: {services.BundledTvAppVersion ?? "YOK"} · " +
+                           $"Android TV paketi: {services.BundledApp(TvBrand.AndroidTv)?.Version ?? "YOK"}");
 
         // Sunucu yeniden başladığında çeviri kendiliğinden sürsün istenirse. Varsayılan kapalı: açıkken dinlenme
         // modundaki PS5'i de uyandırır.
@@ -94,6 +95,9 @@ internal static class Panel
         app.MapGet("/api/consoles", () => Query(ui, async () => (object)await controller.DiscoverConsolesAsync()));
         app.MapPost("/api/register", (RegisterRequest body) => Act(ui, () => controller.RegisterAsync(body.Host.Trim(), body.Pin)));
         app.MapGet("/api/tvs", () => Query(ui, async () => (object)await controller.DiscoverTvsAsync()));
+        // Aramada çıkmayan TV'nin adresi: LG mi Samsung mu olduğu TV'ye sorulur (Windows'taki elle ekleme gibi, #617).
+        app.MapGet("/api/tv-at", (string host) => Query(ui, async () => (object)await LgDiscovery.TvAtAsync(
+            LgDiscovery.NormalizeHost(host) ?? throw new InvalidOperationException(Program.Text["This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number."]))));
         app.MapPost("/api/pair", (PairRequest body) => Act(ui, () => controller.PairAsync(new LgTv(body.Name, body.Host.Trim(), body.Brand))));
         app.MapPost("/api/tv-app/install", (PassphraseRequest body) => Act(ui, () => controller.InstallTvAppAsync(body.Passphrase)));
         app.MapPost("/api/tv-app/refresh", () => Act(ui, controller.RefreshTvAppAsync));
@@ -171,6 +175,7 @@ internal static class Panel
         tvApp = new { kind = c.TvApp.Kind, c.TvApp.Version, error = c.TvApp.Error?.ToString(), url = c.TvApp.Url?.AbsoluteUri, c.TvApp.Reason, c.TvApp.Hosts },
         canInstallTvApp = c.CanInstallTvApp,
         bundledTvApp = services.BundledTvAppVersion,
+        bundledAndroidTvApp = services.BundledApp(TvBrand.AndroidTv)?.Version,
         devModeHoursLeft = c.DevModeHoursLeft,
         computerAddress = c.ComputerAddress,
         serverPort = c.ServerPort,
