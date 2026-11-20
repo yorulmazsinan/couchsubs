@@ -17,7 +17,7 @@ başlayınca listeye bakar.
 ## Havuzdan otomatik paketler
 
 `server/pool` Worker'ı her gece (03:07–04:57 UTC, on dakikada bir adım) ortak havuzda en az iki oyuncunun okuduğu
-satırlardan oyun başına `pool-<oyun kimliği>` paketini Workers AI ile üretip bu kovaya yazar ve `index.json`'u
+satırlardan oyun başına `pool-<oyun kimliği>` paketini Claude ile (secret yoksa Workers AI) üretip bu kovaya yazar ve `index.json`'u
 günceller (bkz. `server/pool/src/autopack.js`). Elle hazırlanmış paketlerin anahtarları `auto/known-keys.bin`'dedir;
 yeni elle paket yüklenince `cd server/pool && node scripts/build-known.mjs > known-keys.bin` ile yeniden üretilip
 `npx wrangler r2 object put couchsubs-packs/auto/known-keys.bin --file known-keys.bin --remote` ile yüklenir.

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   GENERAL, GENERAL_TITLE, JOB_NIGHTLY, LAST_HOUR_UTC, LINES_PER_RUN, NIGHTLY_LIMIT, PAGE, isFinalTick, jobPackId,
   computeStats, packBody, packTitle, parseReply, runAutopack,
+  CLAUDE_LIMITS, CLAUDE_MODEL, CLAUDE_URL, limitsFor, translateClaude,
 } from "../src/autopack.js";
 
 test("malformed current-night state is rebuilt instead of stopping the scheduler", async () => {
@@ -720,6 +721,88 @@ test("night limit stays inside the Workers AI free daily allowance and the cron 
   assert.equal(isFinalTick(new Date("2026-11-20T05:52:00Z")), true);
   assert.equal(isFinalTick(new Date("2026-11-20T05:47:00Z")), false);
   assert.equal(LAST_HOUR_UTC, 5);
+});
+
+
+// --- Claude (Anthropic Messages API) ---
+
+/** Sahte fetch: Claude yanıtını taklit eder, istekleri kaydeder. */
+function claudeFetch({ calls = [], reply } = {}) {
+  return async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url, headers: init.headers, body });
+    if (reply) return reply(body);
+    const ids = body.messages[0].content.split("\n").filter(Boolean).map((l) => l.split("\t")[0]);
+    return new Response(JSON.stringify({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify({ items: ids.map((id) => ({ id, tr: "Arabaya bin, Lucia." })) }) }],
+      usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+}
+
+test("Claude limits fit the cron and the per-run subrequest budget", () => {
+  assert.ok((36 - 2) * CLAUDE_LIMITS.linesPerRun >= CLAUDE_LIMITS.nightly);
+  assert.ok(CLAUDE_LIMITS.jobNightly <= CLAUDE_LIMITS.nightly);
+  // Workers Free: istek başına 50 alt istek. Çeviri istekleri + en çok 3 D1 sayfası + ~8 R2 işi.
+  assert.ok(Math.ceil(CLAUDE_LIMITS.linesPerRun / CLAUDE_LIMITS.batch) + 3 + 8 <= 50);
+  assert.ok(CLAUDE_LIMITS.maxLook >= CLAUDE_LIMITS.linesPerRun);
+  assert.ok(3 * PAGE >= CLAUDE_LIMITS.maxLook);
+  assert.equal(limitsFor({ ANTHROPIC_API_KEY: "k" }), CLAUDE_LIMITS);
+  assert.equal(limitsFor({ AI: {} }).linesPerRun, LINES_PER_RUN);
+});
+
+test("Claude request uses the secret, Haiku without thinking and a cached system prompt", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", claudeFetch({ calls }));
+  const items = [{ en: "Get in the car, Lucia." }, { en: "Where's Essex?" }];
+  const got = await translateClaude({ ANTHROPIC_API_KEY: "sk-test" }, items, "Grand Theft Auto VI");
+  assert.deepEqual([...got.entries()], [[0, "Arabaya bin, Lucia."], [1, "Arabaya bin, Lucia."]]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, CLAUDE_URL);
+  assert.equal(calls[0].headers["x-api-key"], "sk-test");
+  assert.equal(calls[0].headers["anthropic-version"], "2023-06-01");
+  assert.equal(calls[0].body.model, CLAUDE_MODEL);
+  assert.deepEqual(calls[0].body.thinking, { type: "disabled" });
+  assert.deepEqual(calls[0].body.system[0].cache_control, { type: "ephemeral" });
+  assert.match(calls[0].body.system[0].text, /Grand Theft Auto VI/);
+  assert.equal(calls[0].body.output_config.format.type, "json_schema");
+  assert.equal(calls[0].body.messages[0].content, "0\tGet in the car, Lucia.\n1\tWhere's Essex?");
+});
+
+test("Claude errors and unfinished replies translate nothing instead of guessing", async (t) => {
+  const items = [{ en: "Get in the car, Lucia." }];
+  const env = { ANTHROPIC_API_KEY: "sk-test" };
+  t.mock.method(globalThis, "fetch", claudeFetch({ reply: () => new Response("overloaded", { status: 529 }) }));
+  assert.equal((await translateClaude(env, items, null)).size, 0);
+  t.mock.method(globalThis, "fetch", claudeFetch({
+    reply: () => new Response(JSON.stringify({ stop_reason: "max_tokens", content: [{ type: "text", text: "{\"items\":[" }] })),
+  }));
+  assert.equal((await translateClaude(env, items, null)).size, 0);
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("network"); });
+  assert.equal((await translateClaude(env, items, null)).size, 0);
+});
+
+test("with the Claude secret the night runs on Claude, in larger runs, without Workers AI", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", claudeFetch({ calls }));
+  const { env, stored } = pagedEnv({ rows: bigRows(4000), state: titledState() });
+  env.AI = { run: async () => { throw new Error("Workers AI must not be used"); } };
+  env.ANTHROPIC_API_KEY = "sk-test";
+  const result = await runAutopack(env, new Date("2026-11-20T03:12:00Z"));
+  assert.equal(result.phase, "translate");
+  assert.equal(result.translated, CLAUDE_LIMITS.linesPerRun);
+  assert.equal(calls.length, CLAUDE_LIMITS.linesPerRun / CLAUDE_LIMITS.batch);
+  assert.equal(Object.keys(JSON.parse(stored.get("auto/tr/PPSA1.json")).lines).length, CLAUDE_LIMITS.linesPerRun);
+});
+
+test("without Workers AI binding the Claude secret alone enables the night", async (t) => {
+  t.mock.method(globalThis, "fetch", claudeFetch());
+  const { env } = pagedEnv({ rows: bigRows(10), state: titledState() });
+  delete env.AI;
+  assert.equal((await runAutopack(env, new Date("2026-11-20T03:12:00Z"))).phase, "disabled");
+  env.ANTHROPIC_API_KEY = "sk-test";
+  assert.notEqual((await runAutopack(env, new Date("2026-11-20T03:12:00Z"))).phase, "disabled");
 });
 
 

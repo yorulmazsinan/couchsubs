@@ -17,7 +17,8 @@ database_id = "c134a041-8f51-4a29-8195-9c6929e7e529"
 binding = "PACKS"
 bucket_name = "couchsubs-packs"
 
-# Çeviri: Workers AI (hesabın kendi bağı; ayrı anahtar yok). Free planda günde 10.000 nöron ücretsiz.
+# Çeviri: ANTHROPIC_API_KEY secret'ı varsa Claude (claude-haiku-5-5; `wrangler secret put ANTHROPIC_API_KEY`, depoya
+# konmaz), yoksa Workers AI (hesabın kendi bağı; Free planda günde 10.000 nöron ücretsiz). Sınırlar src/autopack.js'te.
 [ai]
 binding = "AI"
 

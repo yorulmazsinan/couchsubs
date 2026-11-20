@@ -2,9 +2,11 @@
 // Havuzdan kendiliğinden oyun paketi (Cron Trigger, her gece 03:02–05:57 UTC arasında beş dakikada bir).
 //
 // Bir oyunun (title_id; kimlik yoksa src/games.js'teki anahtarıyla oyun adı) satırları en az MIN_INSTALLS farklı kurulumda aynı biçimde (aynı canon anahtarla) okunduysa
-// tools/packs/poolpack.py'deki kurallarla temizlenir, Workers AI ile Türkçeye çevrilir ve R2'ye (couchsubs-packs kovası)
-// `packs/pool-<oyun kimliği>.json.gz` olarak yazılır; index.json'a sürümü artırılarak girer. Uygulamalar paketi
-// kendileri indirir (server/packs). Yeni kimlik bilgisi yoktur: D1, R2 ve Workers AI bu Worker'ın bağlarıdır.
+// tools/packs/poolpack.py'deki kurallarla temizlenir, Claude (Anthropic Messages API; ANTHROPIC_API_KEY secret'ı yoksa
+// Workers AI) ile Türkçeye çevrilir ve R2'ye (couchsubs-packs kovası) `packs/pool-<oyun kimliği>.json.gz` olarak
+// yazılır; index.json'a sürümü artırılarak girer. Uygulamalar paketi kendileri indirir (server/packs). D1, R2 ve
+// Workers AI bu Worker'ın bağlarıdır; Claude'un tek kimlik bilgisi ANTHROPIC_API_KEY secret'ıdır
+// (`wrangler secret put ANTHROPIC_API_KEY`).
 //
 // Elle hazırlanmış (uygulamayla gelen) paketler öncelikli: onlardaki anahtarlar (R2'de auto/known-keys.bin,
 // scripts/build-known.mjs üretir) otomatik pakete hiç girmez, böylece iki paket aynı satırda çakışmaz; otomatik paket
@@ -21,9 +23,9 @@ import { EXTRA_SUFFIX, gameKey, gameSlug } from "./games.js";
 export const MIN_INSTALLS = 2;
 /** Bir oyunun ilk paketi için en az çevrilmiş satır; paket bir kez çıktıktan sonra her yeni satır eklenir. */
 export const MIN_LINES = 300;
-/** Bir tetiklemede en çok bu kadar yeni satır çevrilir (CPU sınırı). */
+/** Workers AI ile (ANTHROPIC_API_KEY yokken) bir tetiklemede en çok bu kadar yeni satır çevrilir (CPU sınırı). */
 export const LINES_PER_RUN = 200;
-/** Bir gecede en çok bu kadar satır çevrilir.
+/** Workers AI ile bir gecede en çok bu kadar satır çevrilir (Claude sınırları aşağıda, CLAUDE_LIMITS).
  *  Hesap: Workers AI Free planı günde 10.000 nöron verir (UTC 00:00'da sıfırlanır). Önceki sınır 3000 satırı "10.000
  *  nöronun yarısından azı" saymıştı, yani en çok ~1,67 nöron/satır. 5000 satır × 1,67 = ~8.333 nöron: günlük sınırın
  *  %83'ü, %17 pay kalır (satır başına gerçek nöron panelden ölçülmeli; yüksek çıkarsa bu sayı düşürülür). Başka bir
@@ -40,12 +42,29 @@ export const MAX_LOOK = 500;
 /** Bir oyun bir gecede en çok bu kadar satır çevirir; sonra paketi kurulup sıra sonrakine geçer. Dev bir oyun
  *  (GTA 6: yüz binlerce satır) bütün geceyi alıp öteki oyunları aç bırakmasın; her gece büyür, yeni sürüm çıkar. */
 export const JOB_NIGHTLY = 2000;
+/** Workers AI isteği başına satır. */
+export const BATCH = 40;
+/** Claude ile (ANTHROPIC_API_KEY varken) sınırlar. Nöron payı yoktur; sınırı tetikleme sayısı ve Worker sınırları koyar.
+ *  Gece: 36 tetiklemenin biri plan, en az biri paket; 34 × 1000 = 34.000 ≥ 30.000 satır. Tetikleme: 1000 satır, 100'lük
+ *  10 istek aynı anda (yanıt beklemek CPU sayılmaz) + D1 sayfaları (en çok 3) + R2 okuma/yazma (~6) = ~20 alt istek,
+ *  Free planın 50 sınırının altında. 1000 çevrilecek satır için çöp payıyla 1500 satıra bakılır (3 × 1500'lük sayfa).
+ *  Dev oyun (GTA 6) gecede en çok 15.000 satır alır, kalan pay öteki oyunlara kalır. Maliyet (claude-haiku-5-5,
+ *  $0,10 / $0,50 MTok): satır başına ~20 giriş + ~25 çıkış jetonu, sistem metni önbellekten; 30.000 satır ~0,5 $. */
+export const CLAUDE_LIMITS = Object.freeze({
+  linesPerRun: 1000, nightly: 30000, jobNightly: 15000, maxLook: 1500, batch: 100,
+});
+const AI_LIMITS = Object.freeze({
+  linesPerRun: LINES_PER_RUN, nightly: NIGHTLY_LIMIT, jobNightly: JOB_NIGHTLY, maxLook: MAX_LOOK, batch: BATCH,
+});
+/** Çeviri sağlayıcısının sınırları: secret varsa Claude, yoksa Workers AI. */
+export const limitsFor = (env) => (env?.ANTHROPIC_API_KEY ? CLAUDE_LIMITS : AI_LIMITS);
 /** Gecenin son tetiklemesi (cron 2-57/5 UTC 03–05): çevrilen oyun bu gece büyüdüyse paketi kurup sürümü artırır. */
 export const LAST_HOUR_UTC = 5;
 export const LAST_MINUTE_UTC = 52;
-export const BATCH = 40;
 export const MODEL = "@cf/zai-org/glm-5.3-flash";
-export const SOURCE = `CouchSubs havuzu (en az ${MIN_INSTALLS} oyuncu) + Workers AI (${MODEL})`;
+export const CLAUDE_MODEL = "claude-haiku-5-5";
+export const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+export const SOURCE = `CouchSubs havuzu (en az ${MIN_INSTALLS} oyuncu) + Claude (${CLAUDE_MODEL}) / Workers AI (${MODEL})`;
 /** Oyunu bilinmeyen satırların ortak paketi (title_id NULL). PS5'in keşif yanıtı çalışan oyunu bildirmediği için
  *  satırların çoğu oyunsuz gelir; uygulamalar sunucudaki her paketi indirdiğinden bu paket de herkese gider. Oyunu
  *  bilinen paketlerden sonra hazırlanır. */
@@ -182,8 +201,95 @@ const SYSTEM = (game) =>
   "- These lines were read from the TV with OCR; if a word is clearly damaged, translate the most likely original.\n" +
   "- One Turkish line per item, no notes. Output only JSON: {\"items\":[{\"id\":\"0\",\"tr\":\"...\"}]}";
 
+// Claude için oyun altyazısı kuralları (tools/packs/poolpack.py system_prompt'undan uyarlandı). Metin yalnız oyuna göre
+// değişir: bir oyunun bütün istekleri aynı sistem metniyle gider ve önbellekten (prompt caching) okunur.
+const CLAUDE_SYSTEM = (game) =>
+  "You translate video game subtitles from English into Turkish for CouchSubs, an app that shows Turkish subtitles on " +
+  "the TV while people play" + (game ? ` ${game}` : "") + ".\nThese lines were read from the TV screen with OCR.\n\n" +
+  "Rules:\n" +
+  "- Natural spoken Turkish, the way a professional Turkish subtitle translator would write it; match the tone and " +
+  "register (casual banter stays casual; 'sen' between friends, family and enemies; 'siz' only for formal or " +
+  "respectful address). Tutorial hints: short imperative.\n" +
+  "- Each item is one on-screen subtitle line (it may hold several sentences). Translate it as one Turkish line and " +
+  "keep its sentences in order. Never merge, split or skip items, never move meaning between items.\n" +
+  "- A line may be cut off by OCR: translate only what is there; never invent the missing words.\n" +
+  "- OCR often swaps letters (ali = all, Iaw = law, Hels = He's): read the intended English first and never copy OCR " +
+  "damage into the Turkish.\n" +
+  "- Keep character, place, gang, vehicle, brand and radio station names as they are.\n" +
+  "- Keep profanity and insults at the same strength (motherfucker = orospu çocuğu, fucking = siktiğimin / amına " +
+  "koyayım, shit = bok / siktir, damn = lanet olsun). Do not soften and do not intensify. Slang stays slang.\n" +
+  "- Keep punctuation style (…, ?!, quotes, dashes) and numbers. No English words left unless they are names.\n" +
+  "- Interjections and sounds (Ugh, Huh, Hmm) get a Turkish equivalent or stay as a sound.\n" +
+  "- Input: one line per item as `id<TAB>English`. Output only JSON: {\"items\":[{\"id\":\"0\",\"tr\":\"...\"}]}, " +
+  "exactly one item per input id, no notes, no line breaks inside a translation.";
+
+const CLAUDE_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, tr: { type: "string" } },
+        required: ["id", "tr"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["items"],
+  additionalProperties: false,
+};
+
+/** Satırları Claude ile (Anthropic Messages API) çevirir; id → Türkçe. Hata ya da bozuk yanıtta boş. */
+export async function translateClaude(env, items, game) {
+  const user = items.map((it, i) => `${i}\t${it.en}`).join("\n");
+  let reply;
+  try {
+    const res = await fetch(CLAUDE_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 16000,
+        // Kısa satır çevirisi: düşünme jetonları çıktıyı yemesin.
+        thinking: { type: "disabled" },
+        system: [{ type: "text", text: CLAUDE_SYSTEM(game), cache_control: { type: "ephemeral" } }],
+        output_config: { format: { type: "json_schema", schema: CLAUDE_SCHEMA } },
+        messages: [{ role: "user", content: user }],
+      }),
+    });
+    if (!res.ok) {
+      console.log("autopack: Claude hatası", res.status, (await res.text()).slice(0, 300));
+      return new Map();
+    }
+    reply = await res.json();
+  } catch (e) {
+    console.log("autopack: Claude çeviri hatası", String(e?.message || e));
+    return new Map();
+  }
+  // Yarım (max_tokens) ya da reddedilmiş yanıt alınmaz; satırlar sonraki tetiklemede yeniden denenir (fail sayacı).
+  if (reply?.stop_reason !== "end_turn") {
+    console.log("autopack: Claude yanıtı tamamlanmadı", reply?.stop_reason);
+    return new Map();
+  }
+  const text = (reply.content ?? []).filter((b) => b?.type === "text").map((b) => b.text).join("");
+  const u = reply.usage ?? {};
+  console.log("autopack: Claude", items.length, "satır; giriş", u.input_tokens, "önbellek", u.cache_read_input_tokens,
+    "çıkış", u.output_tokens);
+  return parseReply({ response: text }, items);
+}
+
+/** Çeviri sağlayıcısı: ANTHROPIC_API_KEY secret'ı varsa Claude, yoksa Workers AI. */
+export function translate(env, items, game) {
+  return env.ANTHROPIC_API_KEY ? translateClaude(env, items, game) : translateWorkersAI(env, items, game);
+}
+
 /** Satırları Workers AI ile çevirir; id → Türkçe. Yanıt bozuksa boş. */
-export async function translate(env, items, game) {
+export async function translateWorkersAI(env, items, game) {
   const user = items.map((it, i) => `${i}\t${it.en}`).join("\n");
   let reply;
   try {
@@ -447,7 +553,8 @@ async function fetchPage(env, job, separate, cursor) {
 
 /** Bir adım: gecenin ilk çağrısında plan, sonra sıradaki oyunda çeviri parçası ya da paket. Sonucu döner ve yazar. */
 export async function runAutopack(env, now = new Date()) {
-  if (!env.PACKS || !env.AI) return { phase: "disabled" };
+  if (!env.PACKS || (!env.AI && !env.ANTHROPIC_API_KEY)) return { phase: "disabled" };
+  const limits = limitsFor(env);
   const night = now.toISOString().slice(0, 10);
   let state = await getJson(env, STATE);
   // A parseable but incomplete R2 state must not stall every remaining run of this night.
@@ -515,7 +622,7 @@ export async function runAutopack(env, now = new Date()) {
     .filter((finished) => finished?.gameKey && (finished.built || finished.unchanged))
     .flatMap((finished) => finished.games?.length ? finished.games : [finished.game]));
   const separate = new Set((state.namedGames ?? []).filter((name) => published.has(name)));
-  const want = Math.min(LINES_PER_RUN, NIGHTLY_LIMIT - state.translated, JOB_NIGHTLY - (job.did ?? 0));
+  const want = Math.min(limits.linesPerRun, limits.nightly - state.translated, limits.jobNightly - (job.did ?? 0));
   const todo = [];
   let looked = 0;
   let scanned = 0;
@@ -525,11 +632,11 @@ export async function runAutopack(env, now = new Date()) {
     || (isFinalTick(now) && cache.touched === night);
   // Anahtar imleci: installs azalan, key artan sırada kaldığımız yerden devam eder. İmlecin gerisindeki satırlara bu
   // geçişte bir daha bakılmaz, o yüzden atlananlar (bilinen, çöp) skip'e yazılmaz; önbellek ve D1 okuması küçük kalır.
-  for (let page = 0; !exhausted && page < MAX_PAGES && todo.length < want && looked < MAX_LOOK; page++) {
+  for (let page = 0; !exhausted && page < MAX_PAGES && todo.length < want && looked < limits.maxLook; page++) {
     const rows = await fetchPage(env, job, separate, cache.cursor);
     let stopped = false;
     for (const r of rows) {
-      if (todo.length >= want || looked >= MAX_LOOK) { stopped = true; break; }
+      if (todo.length >= want || looked >= limits.maxLook) { stopped = true; break; }
       cache.cursor = { n: r.installs, k: r.key };
       scanned++;
       if (cache.lines[r.key] || cache.skip[r.key]) continue;
@@ -549,9 +656,15 @@ export async function runAutopack(env, now = new Date()) {
   }
 
   if (todo.length > 0) {
-    for (let i = 0; i < todo.length; i += BATCH) {
-      const chunk = todo.slice(i, i + BATCH);
-      const got = await translate(env, chunk, job.game);
+    const chunks = [];
+    for (let i = 0; i < todo.length; i += limits.batch) chunks.push(todo.slice(i, i + limits.batch));
+    // Claude istekleri aynı anda gider (yanıt beklemek CPU sayılmaz); Workers AI eskisi gibi sırayla.
+    const parallel = env.ANTHROPIC_API_KEY
+      ? await Promise.all(chunks.map((chunk) => translate(env, chunk, job.game)))
+      : null;
+    for (let c = 0; c < chunks.length; c++) {
+      const chunk = chunks[c];
+      const got = parallel ? parallel[c] : await translate(env, chunk, job.game);
       chunk.forEach((line, j) => {
         const tr = got.get(j);
         if (tr) {
