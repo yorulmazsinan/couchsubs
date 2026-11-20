@@ -91,4 +91,17 @@ public class FallbackWatchTest {
         assertFalse(watch.takenOver(2_300, false));
         assertFalse(watch.takenOver(1_000 + FallbackWatch.TAKEOVER_MS, true));
     }
+
+    @Test
+    public void userLeavingAfterPictureCameIsNotATakeover() {
+        FallbackWatch watch = new FallbackWatch();
+        watch.tuned(1_000);
+        // Görüntü gelmedi (#42'deki TV'ler): sistem ekranı işaret verse de devralma sayılır.
+        assertTrue(watch.takenOver(2_300, true, true));
+        // Görüntü uygulamada geldi, kullanıcı Ana ekrana bastı: katmana geçilmez.
+        watch.videoAvailable();
+        assertFalse(watch.takenOver(2_300, true, true));
+        // İşaret yoksa eski davranış sürer.
+        assertTrue(watch.takenOver(2_300, true, false));
+    }
 }

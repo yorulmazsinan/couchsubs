@@ -1,0 +1,1 @@
+0.9.33: On Android TV, going to the Home screen or another app right after opening the app no longer starts the subtitle overlay on top of the screen you chose.

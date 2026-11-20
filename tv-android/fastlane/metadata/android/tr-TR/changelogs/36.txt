@@ -1,0 +1,1 @@
+0.9.33: Android TV'de uygulamayı açtıktan hemen sonra Ana ekrana ya da başka uygulamaya geçince altyazı katmanı artık seçtiğiniz ekranın üstünde açılmıyor.

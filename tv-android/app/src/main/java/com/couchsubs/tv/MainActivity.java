@@ -73,6 +73,8 @@ public class MainActivity extends Activity implements TvPage.Host {
     private String launchParams = "";
     /** Son açılan HDMI girişi; ekran önden çekilince bırakılır, öne gelince ya da bağlantı kopunca yeniden açılır. */
     private final HdmiSession session = new HdmiSession();
+    /** Ekran kullanıcının seçimiyle arka plana gidiyor (onUserLeaveHint: Ana ekran, başka uygulama); bkz. onStop. */
+    private boolean userLeaving;
     private int retuneAttempts;
     private final FallbackWatch watch = new FallbackWatch();
     private boolean watching;
@@ -586,6 +588,7 @@ public class MainActivity extends Activity implements TvPage.Host {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        userLeaving = false;
         String id = session.toForeground();
         if (tvView != null && id != null) tune(id);
     }
@@ -595,12 +598,22 @@ public class MainActivity extends Activity implements TvPage.Host {
     protected void onStop() {
         super.onStop();
         // TV kendi HDMI oynatıcısını öne çekti (bkz. FallbackWatch.TAKEOVER_MS): altyazı onun üstünde, katmanda çizilir.
-        if (!isFinishing() && tvView != null && watch.takenOver(SystemClock.elapsedRealtime(), overlayAllowed())) {
+        // Görüntü uygulamada gelmişken kullanıcı kendisi çıktıysa (Ana ekran) bu devralma değildir: altyazı seçtiği ekranın
+        // üstüne çizilmez.
+        boolean leftByUser = userLeaving;
+        userLeaving = false;
+        if (!isFinishing() && tvView != null && watch.takenOver(SystemClock.elapsedRealtime(), overlayAllowed(), leftByUser)) {
             switchToOverlay(R.string.overlay_fallback);
             // Arka plandan ön plan servisi başlatılamadıysa (Android 12+ kısıtı) ekran açık kalır, normal yoldan devam.
             if (isFinishing()) return;
         }
         if (page != null) page.background(true);
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        userLeaving = true;
     }
 
     @Override

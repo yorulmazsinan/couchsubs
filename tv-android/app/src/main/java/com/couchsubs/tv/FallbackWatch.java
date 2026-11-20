@@ -33,6 +33,16 @@ final class FallbackWatch {
         return canDrawOverlays && tunedAt >= 0 && now - tunedAt < TAKEOVER_MS;
     }
 
+    /**
+     * Kullanıcı Ana ekrana ya da başka uygulamaya geçti (Android onUserLeaveHint bildirdi) ve görüntü uygulamanın
+     * içinde zaten geldi: bu, TV'nin HDMI oynatıcısını öne çekmesi değildir, katmana geçilmez (#210). İşaret tek
+     * başına yetmez: sistemin başlattığı ekranlar da çoğu zaman bu işareti verir; #42'deki TV'lerde ise görüntü
+     * uygulamada hiç gelmez, oradaki devralma bu yüzden bozulmaz.
+     */
+    boolean takenOver(long now, boolean canDrawOverlays, boolean userLeaving) {
+        return !(userLeaving && played) && takenOver(now, canDrawOverlays);
+    }
+
     /** Giriş açıldı ya da görüntü kayboldu (TvView bildirimi). Saat yalnız ilk sorunda başlar, yeniden denemeler sıfırlamaz. */
     void trouble(long now) {
         if (!played && troubleSince < 0) troubleSince = now;
