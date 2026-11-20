@@ -1,0 +1,1 @@
+0.9.45: Katman modunda (altyazı TV'nin kendi HDMI ekranının üstünde) altyazının hiç görünmemesi düzeltildi. 0.9.42'den beri bazı Android TV'lerde (Philips) uygulama açılıyor, birkaç saniye sonra TV oyuna dönüyor, altyazı gelmiyordu.

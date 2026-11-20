@@ -1,0 +1,1 @@
+0.9.45: Fixed subtitles never appearing in Overlay mode (subtitles on top of the TV's own HDMI screen). Since 0.9.42, on some Android TVs (Philips) the app opened, the TV returned to the game a few seconds later and no subtitles appeared.

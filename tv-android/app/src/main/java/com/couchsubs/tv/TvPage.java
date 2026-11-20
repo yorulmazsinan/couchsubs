@@ -85,9 +85,9 @@ final class TvPage {
         webView.setInitialScale(fitScalePercent());
         webView.addJavascriptInterface(new Bridge(), "AndroidTV");
         webView.setWebViewClient(new PageClient());
-        // Katman penceresi oyunun üstünde durur: sayfa yüklenene kadar hiçbir şey çizilmez (bkz. PageClient.onPageFinished).
-        // Sayfa yüklenemezse pencere görünmez kalır, görüntüyü örtmez.
-        if (overlay) webView.setAlpha(0f);
+        // Katman penceresi hiçbir zaman gizlenerek açılmaz. 0.9.42'de sayfa yüklenene kadar görünmez tutuluyordu (alfa 0,
+        // yükleme bitince 1): bazı Android TV'lerde (Philips) katman bir daha görünmedi, altyazı HDMI görüntüsünün üstüne
+        // hiç çıkmadı. Zemin zaten şeffaftır; yüklenmemiş sayfa görüntüyü örtmez.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Altyazı katmanı görünmese de (TV'nin HDMI ekranı öndeyken) WebView işlemi önemli sayılsın; düşük bellekli
             // TV'lerde sistem onu ilk kapatılacaklar arasına koymasın.
@@ -98,11 +98,6 @@ final class TvPage {
     /** WebView işlemi giderse uygulama kapanmasın diye bildirimi üstlenir (bkz. Host.pageGone). */
     private final class PageClient extends WebViewClient {
         private boolean gone;
-
-        @Override
-        public void onPageFinished(WebView view, String url) {
-            view.setAlpha(1f);
-        }
 
         @TargetApi(Build.VERSION_CODES.O)
         @Override
