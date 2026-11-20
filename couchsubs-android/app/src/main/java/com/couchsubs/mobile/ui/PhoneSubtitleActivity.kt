@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile.ui
 
+import com.couchsubs.mobile.core.SpeakerColors
 import com.couchsubs.mobile.core.SubtitleWrap
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.WindowManager
@@ -51,6 +55,20 @@ import com.couchsubs.mobile.service.LiveState
  */
 class PhoneSubtitleActivity : ComponentActivity() {
     companion object {
+        /** Bölünmüş [display] metni; [enabled] ise konuşanların parçaları kendi renginde ([source]: bölünmemiş metin). */
+        fun speakerText(display: String, source: String, enabled: Boolean): AnnotatedString {
+            val segments = if (enabled) SpeakerColors.segments(display, source) else emptyList()
+            if (segments.none { it.color != null }) return AnnotatedString(display)
+            return buildAnnotatedString {
+                append(display)
+                segments.forEach { segment ->
+                    val hex = segment.color ?: return@forEach
+                    addStyle(SpanStyle(color = Color(android.graphics.Color.parseColor(hex))), segment.start, segment.end)
+                }
+            }
+        }
+
+
         /** "Ekranı döndür": yataysa dike, değilse yataya (sensör yönüne göre iki yan da olur). */
         fun nextOrientation(current: Int): Int =
             if (current == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -67,6 +85,8 @@ class PhoneSubtitleActivity : ComponentActivity() {
         val scale = settings.subtitleScale / 100f
         // "Hızlı konuşmada önceki satırları üstte tut" kapalıysa soluk önceki satır gösterilmez (TV ve Windows ile aynı).
         val stackPrevious = settings.stackPrevious
+        // "Konuşana göre renk": konuşan adlı satır o konuşanın renginde (TV ile aynı palet; bkz. SpeakerColors).
+        val speakerColors = settings.speakerColors
         setContent {
             CouchSubsTheme {
                 val status by LiveState.status.collectAsState()
@@ -94,12 +114,13 @@ class PhoneSubtitleActivity : ComponentActivity() {
                         // Uzun çeviri en çok 3 satıra dengeli bölünür; sığmazsa yazı biraz küçülür (bkz. SubtitleWrap).
                         if (stackPrevious && previous.isNotEmpty() && status.current.isNotEmpty() && previous != status.current) {
                             val wrapped = SubtitleWrap.fit(previous)
-                            Text(wrapped.text,
+                            Text(speakerText(wrapped.text, previous, speakerColors),
                                 style = style.copy(fontSize = style.fontSize * scale * 0.8f * wrapped.scale, lineHeight = style.lineHeight * scale * 0.8f * wrapped.scale),
                                 color = color.copy(alpha = 0.4f), textAlign = TextAlign.Center)
                         }
-                        val current = SubtitleWrap.fit(status.current.ifEmpty { if (status.running) "" else "CouchSubs" })
-                        Text(current.text,
+                        val currentText = status.current.ifEmpty { if (status.running) "" else "CouchSubs" }
+                        val current = SubtitleWrap.fit(currentText)
+                        Text(speakerText(current.text, currentText, speakerColors),
                             style = style.copy(fontSize = style.fontSize * scale * current.scale, lineHeight = style.lineHeight * scale * current.scale),
                             color = color, textAlign = TextAlign.Center)
                     }

@@ -168,6 +168,11 @@ class AppSettings(context: Context) : AreaStore {
         get() = prefs.getBoolean("showSpeakerNames", true)
         set(value) = prefs.edit().putBoolean("showSpeakerNames", value).apply()
 
+    /** "Konuşana göre renk": konuşan adlı satır (ad ve cümle) o konuşanın renginde görünür. Eski kayıtlarda yoktur; açık başlar. */
+    var speakerColors: Boolean
+        get() = prefs.getBoolean("speakerColors", true)
+        set(value) = prefs.edit().putBoolean("speakerColors", value).apply()
+
     /**
      * Xbox ev yayınında oyunun sesi bu telefonda çalınır. Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
      * susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir, bu yüzden varsayılan açık. PS5'i etkilemez.

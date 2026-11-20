@@ -116,10 +116,18 @@ class SubtitleServer(
             "right" to Json.Decimal(box.right), "top" to Json.Decimal(box.top),
         )
 
-        fun subtitleFrame(text: String, durationMs: Int, box: TextBox?, at: Long, paragraphs: Boolean = false, replaces: Boolean = false): String {
+        /** [speakerColors]: açıksa satırlardaki konuşanlar renkleriyle `speakers` alanında gider (bkz. [SpeakerColors]). */
+        fun subtitleFrame(
+            text: String, durationMs: Int, box: TextBox?, at: Long, paragraphs: Boolean = false, replaces: Boolean = false,
+            speakerColors: Boolean = false,
+        ): String {
             val json = mutableMapOf<String, Any?>("at" to at, "duration" to durationMs, "text" to text)
             if (paragraphs) json["paragraphs"] = true
             if (replaces) json["replace"] = true
+            // Konuşan adı yoksa ya da ayar kapalıysa alan hiç yazılmaz; eski TV uygulamaları alanı yok sayar.
+            if (speakerColors) SpeakerColors.speakers(text).takeIf { it.isNotEmpty() }?.let { speakers ->
+                json["speakers"] = speakers.map { mapOf("color" to it.color, "name" to it.name) }
+            }
             if (box != null) json["box"] = boxJson(box)
             return frame("subtitle", json)
         }
@@ -198,6 +206,8 @@ class SubtitleServer(
 
     /** false ise altyazı olayları TV'lere gitmez (altyazı yalnız telefon ekranında). */
     @Volatile var sendsToTv: Boolean = true
+    /** "Konuşana göre renk": altyazı olayına konuşanların renkleri eklenir (`speakers`). */
+    @Volatile var speakerColors: Boolean = false
 
     val connectedClients: Int get() = synchronized(lock) { clients.count { !it.viewer } }
 
@@ -228,7 +238,7 @@ class SubtitleServer(
     }
 
     override fun sendSubtitle(text: String, durationMs: Int, box: TextBox?, replaces: Boolean) {
-        broadcast(subtitleFrame(text, durationMs, box, clock(), replaces = replaces), subtitle = true)
+        broadcast(subtitleFrame(text, durationMs, box, clock(), replaces = replaces, speakerColors = speakerColors), subtitle = true)
         onEvent?.invoke(SubtitleEvent.Subtitle(text, durationMs, replaces))
     }
 

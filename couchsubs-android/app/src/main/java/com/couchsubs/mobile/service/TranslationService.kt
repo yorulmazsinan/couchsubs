@@ -128,6 +128,10 @@ class TranslationService : Service() {
             current?.launchTv(key)
             LiveState.update { it.copy(pairing = null) }
         }
+        /** Ayarlar'da "Konuşana göre renk" değişti: çeviri sürüyorsa sonraki satırlar hemen yeni ayarla gider. */
+        fun setSpeakerColors(on: Boolean) {
+            liveServer?.speakerColors = on
+        }
         fun translateScreen(): Boolean {
             val service = current ?: return false
             service.toggleScreen()
@@ -301,6 +305,7 @@ class TranslationService : Service() {
         subtitleServer.onPairingRequest = { ticket -> LiveState.update { it.copy(pairing = ticket) } }
         subtitleServer.onLegacyClient = { LiveState.update { it.copy(legacyTv = true) }; Log.i(TAG, "TV uygulamasını güncelleyin; geçiş bağlantısı.") }
         subtitleServer.sendsToTv = settings.target == SubtitleTarget.TV
+        subtitleServer.speakerColors = settings.speakerColors
         subtitleServer.onClientsChanged = { count ->
             val before = LiveState.status.value.connectedTvs
             LiveState.update { it.copy(connectedTvs = count) }
