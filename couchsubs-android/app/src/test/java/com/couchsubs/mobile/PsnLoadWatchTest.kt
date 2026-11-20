@@ -46,6 +46,13 @@ class PsnLoadWatchTest {
     }
 
     @Test
+    fun renderProcessGoneTellsCrashFromMemory() {
+        // Sistem belleği yetmediği için kapatılan sayfa süreci ayrı anlatılır (#553: "bellek hatası").
+        assertEquals(PsnPageProblem.CRASHED, PsnPageProblem.fromRenderGone(didCrash = true))
+        assertEquals(PsnPageProblem.OUT_OF_MEMORY, PsnPageProblem.fromRenderGone(didCrash = false))
+    }
+
+    @Test
     fun oddScriptResultsAreNotReady() {
         val watch = PsnLoadWatch(start)
         watch.onInteractiveCount(null)

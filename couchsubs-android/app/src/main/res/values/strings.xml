@@ -379,6 +379,11 @@
     <string name="tvinstall_share_log">Kurulum günlüğünü paylaş</string>
     <string name="tvinstall_signin_title">Samsung girişi</string>
     <string name="tvinstall_signin_browser">Tarayıcıda aç</string>
+    <string name="tvinstall_signin_loading">Samsung\'un giriş sayfası açılıyor…</string>
+    <string name="tvinstall_signin_loading_hint">Sayfa gelmezse yukarıdaki Tarayıcıda aç ile girişi telefonun tarayıcısında yapabilirsin.</string>
+    <string name="tvinstall_signin_failed">Samsung\'un giriş sayfası açılamadı</string>
+    <string name="tvinstall_signin_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapabilirsin. Giriş bitince CouchSubs\'a dön; kurulum kendiliğinden sürer.</string>
+    <string name="webview_out_of_memory">Telefonun belleği uygulama içi tarayıcıya yetmedi. Arka plandaki uygulamaları kapatıp yeniden dene ya da girişi tarayıcıda yap.</string>
     <string name="tvinstall_maintenance">TV\'de “Sunucu bakım altında” yazıyorsa TV, Samsung\'un sunucularına ulaşamıyor: TV\'nin internet bağlantısını, tarih ve saatini kontrol et, TV\'yi yeniden başlatıp tekrar dene.</string>
     <string name="tvinstall_err_unreachable">TV bu telefonu kabul etmedi. TV\'deki geliştirici modu penceresinde Host PC IP\'nin bu telefonun adresi (%1$s) olduğunu kontrol et ve TV\'yi tam yeniden başlat: güç tuşunu Samsung logosu görünene kadar (yaklaşık 5 saniye) basılı tut ya da TV\'nin fişini 30 saniye çek.</string>
     <string name="tvinstall_err_other_network">TV (%1$s) ile bu telefon (%2$s) farklı ağlarda, bu yüzden TV telefonu kabul etmiyor. İkisini aynı Wi-Fi\'ya bağla (misafir ağı ya da ikinci modem değil), TV\'de Host PC IP\'ye telefonun yeni adresini yaz, sonra TV\'yi tam yeniden başlat (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tut).</string>

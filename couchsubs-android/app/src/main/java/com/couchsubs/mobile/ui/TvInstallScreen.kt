@@ -8,14 +8,22 @@ import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,12 +35,16 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,10 +55,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.BuildConfig
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
+import com.couchsubs.mobile.remoteplay.PsnPageProblem
 import com.couchsubs.mobile.tv.InstalledTv
 import com.couchsubs.mobile.tv.TvAddress
 import com.couchsubs.mobile.tv.TvAppStatus
@@ -66,6 +80,7 @@ import com.couchsubs.mobile.tv.samsung.SamsungTvInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -307,12 +322,33 @@ internal fun TvAddressField(
     else if (phoneIp != null) Text(stringResource(R.string.tvinstall_address_not_phone, phoneIp), style = Tokens.Type.caption, color = Tokens.Color.secondary)
 }
 
-/** Uygulama içinde Samsung'un giriş sayfası; "Tarayıcıda aç" aynı dinleyiciye döner. */
+/**
+ * Uygulama içinde Samsung'un giriş sayfası; "Tarayıcıda aç" aynı dinleyiciye döner. Sayfa yüklenirken gösterge ve
+ * yazı, açılamazsa nedeni, "Yeniden dene" ve "Tarayıcıda aç" görünür (#553: koyu arka planlı boş WebView "siyah ekran"
+ * sanılıyordu). WebView'in sayfa süreci bellek yetmediği için kapatılırsa (onRenderProcessGone) bu yakalanır; eskiden
+ * yakalanmadığı için Android bütün uygulamayı kapatıyordu ("TV'ye bağlanırken uygulama kapanıyor, bellek hatası").
+ * WebView ekrandan çıkınca yok edilir; her denemede yenisi kurulur.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun SamsungSignIn(onClose: () -> Unit) {
     val context = LocalContext.current
     val background = Tokens.Color.bg.toArgb()
+    val problems = pageProblems()
+    var attempt by remember { mutableIntStateOf(0) }
+    var progress by remember { mutableIntStateOf(0) }
+    var visible by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<Pair<PsnPageProblem, String?>?>(null) }
+    fun fail(problem: PsnPageProblem, detail: String?) {
+        Log.w(TAG, "Samsung giriş sayfası açılamadı: $problem ${detail ?: ""}")
+        if (failure == null) failure = problem to detail
+    }
+    fun retry() {
+        failure = null
+        visible = false
+        progress = 0
+        attempt++
+    }
     BackHandler(onBack = onClose)
     ScreenBackground {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -321,22 +357,127 @@ private fun SamsungSignIn(onClose: () -> Unit) {
                     GhostButton(stringResource(R.string.tvinstall_signin_browser)) { open(context, SamsungLogin.authorizeUrl) }
                 }
             }
-            AndroidView(modifier = Modifier.fillMaxWidth().weight(1f), factory = { viewContext ->
-                WebView(viewContext).apply {
-                    setBackgroundColor(background)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    // Giriş https sayfasından http://localhost'a gönderilir.
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    // Samsung'un hesap sayfaları WebView'in "; wv" imzasıyla sorun çıkarıyor (TizenSdb'nin Android denemesi).
-                    settings.userAgentString = settings.userAgentString.replace("; wv", "")
-                    CookieManager.getInstance().setAcceptCookie(true)
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    webViewClient = WebViewClient()
-                    loadUrl(SamsungLogin.authorizeUrl)
+            if (failure == null && progress < 100) LinearProgressIndicator(
+                progress = { progress / 100f }, modifier = Modifier.fillMaxWidth(),
+                color = Tokens.Color.accent, trackColor = Tokens.Color.border,
+            )
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                key(attempt) {
+                    // Sayfa hiç görünmezse (WebView takıldı, ağ yanıt vermiyor) süre dolunca hata ekranı çıkar.
+                    LaunchedEffect(Unit) {
+                        delay(SAMSUNG_PAGE_TIMEOUT_MS)
+                        if (!visible) fail(PsnPageProblem.TIMEOUT, null)
+                    }
+                    AndroidView(modifier = Modifier.fillMaxSize(), factory = { viewContext ->
+                        try {
+                            WebView(viewContext)
+                        } catch (error: RuntimeException) {
+                            // WebView kurulu değil ya da o an güncelleniyor.
+                            Log.w(TAG, "WebView açılamadı", error)
+                            fail(PsnPageProblem.CRASHED, error.javaClass.simpleName)
+                            null
+                        }?.apply {
+                            setBackgroundColor(background)
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            // Giriş https sayfasından http://localhost'a gönderilir.
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            // Samsung'un hesap sayfaları WebView'in "; wv" imzasıyla sorun çıkarıyor (TizenSdb'nin Android denemesi).
+                            settings.userAgentString = settings.userAgentString.replace("; wv", "")
+                            CookieManager.getInstance().setAcceptCookie(true)
+                            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                                    progress = newProgress
+                                }
+                            }
+                            webViewClient = SamsungSignInClient(onVisible = { visible = true }, onFailure = ::fail)
+                            loadUrl(SamsungLogin.authorizeUrl)
+                        } ?: android.view.View(viewContext)
+                    }, onRelease = { view ->
+                        // Eskiden WebView hiç yok edilmiyordu: her denemede bir sayfa süreci daha bellekte kalıyordu.
+                        if (view is WebView) {
+                            view.stopLoading()
+                            view.destroy()
+                        }
+                    })
                 }
-            })
+                if (failure == null && !visible) Column(
+                    Modifier.fillMaxSize().background(Tokens.Color.bg).padding(Tokens.Space.screen),
+                    verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CircularProgressIndicator(color = Tokens.Color.accent)
+                    BodyText(stringResource(R.string.tvinstall_signin_loading))
+                    BodyText(stringResource(R.string.tvinstall_signin_loading_hint), align = TextAlign.Center)
+                }
+                failure?.let { (problem, detail) ->
+                    Column(
+                        Modifier.fillMaxSize().background(Tokens.Color.bg).padding(Tokens.Space.screen),
+                        verticalArrangement = Arrangement.spacedBy(Tokens.Space.gap, Alignment.CenterVertically),
+                    ) {
+                        Heading(stringResource(R.string.tvinstall_signin_failed), problems(problem) + (detail?.let { " ($it)" } ?: ""))
+                        NoteTile(stringResource(R.string.tvinstall_signin_failed_hint), Tokens.Color.secondary)
+                        PrimaryButton(stringResource(R.string.psn_retry)) { retry() }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            GhostButton(stringResource(R.string.tvinstall_signin_browser)) { open(context, SamsungLogin.authorizeUrl) }
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+/** Samsung giriş sayfası bu sürede görünmezse hata ekranı. */
+private const val SAMSUNG_PAGE_TIMEOUT_MS = 30_000L
+
+/** Samsung giriş sayfasının WebView olayları: ana sayfanın hataları ve sayfa sürecinin kapanması bildirilir. */
+private class SamsungSignInClient(
+    private val onVisible: () -> Unit,
+    private val onFailure: (PsnPageProblem, String?) -> Unit,
+) : WebViewClient() {
+    private var failed = false
+
+    private fun fail(problem: PsnPageProblem, detail: String?) {
+        if (failed) return
+        failed = true
+        onFailure(problem, detail)
+    }
+
+    /** Giriş bitince sayfa telefonun içindeki dinleyiciye (localhost) gönderilir; o adresin hataları giriş hatası değildir. */
+    private fun isCallback(url: String) = url.startsWith("http://localhost:${SamsungLogin.CALLBACK_PORT}")
+
+    override fun onPageCommitVisible(view: WebView, url: String) {
+        if (!failed) onVisible()
+    }
+
+    override fun onPageFinished(view: WebView, url: String) {
+        if (!failed) onVisible()
+    }
+
+    override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        if (!request.isForMainFrame || isCallback(request.url.toString())) return
+        fail(PsnPageProblem.fromWebError(error.errorCode), "${error.errorCode} ${error.description}")
+    }
+
+    override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+        if (!request.isForMainFrame || isCallback(request.url.toString())) return
+        // Samsung'un sayfası 4xx/5xx ile gelirse içeriği yine görünür; yalnız hiç görünmediyse hata sayılır.
+        Log.w(TAG, "Samsung giriş sayfası: HTTP ${response.statusCode} ${request.url.host}")
+    }
+
+    @SuppressLint("WebViewClientOnReceivedSslError")
+    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+        handler.cancel()
+        fail(PsnPageProblem.SSL, "SSL ${error.primaryError}")
+    }
+
+    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        // true dönülmezse Android bütün uygulamayı kapatır. Bu WebView artık kullanılamaz; "Yeniden dene" yenisini kurar.
+        Log.w(TAG, "Samsung giriş sayfasının süreci kapandı (didCrash=${detail.didCrash()})")
+        fail(PsnPageProblem.fromRenderGone(detail.didCrash()), null)
+        return true
     }
 }
 

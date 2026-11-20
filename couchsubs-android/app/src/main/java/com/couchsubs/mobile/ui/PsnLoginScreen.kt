@@ -500,7 +500,7 @@ private class LoginClient(
 
     override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
         // true dönülmezse uygulama da kapanır; WebView "Yeniden dene" ile yeniden kurulur.
-        fail(PsnPageProblem.CRASHED, if (detail.didCrash()) "crash" else "oom")
+        fail(PsnPageProblem.fromRenderGone(detail.didCrash()), null)
         return true
     }
 }
@@ -542,7 +542,7 @@ private fun PsnBrowserLogin(
 }
 
 @Composable
-private fun pageProblems(): (PsnPageProblem) -> String {
+internal fun pageProblems(): (PsnPageProblem) -> String {
     val context = LocalContext.current
     return { problem ->
         context.getString(when (problem) {
@@ -552,6 +552,7 @@ private fun pageProblems(): (PsnPageProblem) -> String {
             PsnPageProblem.HTTP -> R.string.psn_problem_http
             PsnPageProblem.BLANK -> R.string.psn_problem_blank
             PsnPageProblem.CRASHED -> R.string.psn_problem_crashed
+            PsnPageProblem.OUT_OF_MEMORY -> R.string.webview_out_of_memory
             PsnPageProblem.OTHER -> R.string.psn_problem_other
         })
     }

@@ -14,11 +14,17 @@ import java.net.URLDecoder
 /** PSN girişinin nerede ve neden bittiği; kullanıcıya ayrı ayrı anlatılır. */
 enum class PsnLoginFailure { NO_CODE, REFUSED, RATE_LIMITED, HTTP, NETWORK, BAD_RESPONSE }
 
-/** Sony'nin giriş sayfası uygulama içinde neden açılamadı; ekranda nedeni ve çıkış yolu gösterilir. */
+/**
+ * Uygulama içi giriş sayfası (Sony, Samsung) neden açılamadı; ekranda nedeni ve çıkış yolu gösterilir. [OUT_OF_MEMORY]:
+ * sistem belleği yetmediği için WebView'in sayfa süreci kapatıldı (onRenderProcessGone, didCrash false).
+ */
 enum class PsnPageProblem {
-    OFFLINE, TIMEOUT, SSL, HTTP, BLANK, CRASHED, OTHER;
+    OFFLINE, TIMEOUT, SSL, HTTP, BLANK, CRASHED, OUT_OF_MEMORY, OTHER;
 
     companion object {
+        /** WebView'in sayfa süreci kapandı: kendisi çöktüyse [CRASHED], sistem bellek için kapattıysa [OUT_OF_MEMORY]. */
+        fun fromRenderGone(didCrash: Boolean): PsnPageProblem = if (didCrash) CRASHED else OUT_OF_MEMORY
+
         /** WebViewClient.ERROR_* kodundan (android.webkit sabitleri; JVM testinde de çalışsın diye sayıyla). */
         fun fromWebError(code: Int): PsnPageProblem = when (code) {
             -2, -6, -7 -> OFFLINE // HOST_LOOKUP, CONNECT, IO
