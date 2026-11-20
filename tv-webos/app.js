@@ -929,6 +929,8 @@
   // kutu eskisi gibi siyah kalır.
   var STYLED_MIN_SCALE = 0.8;
   var STYLED_LABEL_MIN_SCALE = 0.6;
+  // Düz olmayan zeminde (harita, bulanık sahne) kaplama: altındaki İngilizce yazı seçilmeyecek kadar koyu.
+  var STYLED_SOFT_ALPHA = 0.94;
   var CONDENSED_FONT = '"Roboto Condensed", "Arial Narrow", "Helvetica Neue Condensed", "LG Smart UI Condensed", sans-serif';
 
   function hexAlpha(hex, alpha) {
@@ -940,7 +942,7 @@
   function applyLook(el, item) {
     var surface = item.surface;
     if (!surface || !phoneColor(surface.background) || !phoneColor(surface.foreground)) return false;
-    el.style.backgroundColor = surface.flat === false ? hexAlpha(surface.background, 0.85) : surface.background;
+    el.style.backgroundColor = surface.flat === false ? hexAlpha(surface.background, STYLED_SOFT_ALPHA) : surface.background;
     el.style.color = surface.foreground;
     el.style.textShadow = 'none';
     var style = item.style;
@@ -1022,14 +1024,21 @@
       var singleOriginal = boxHeight <= line * 1.6 + 2 * pad * height;
       var label = styled && item.text.indexOf('\n') < 0 && (item.text.split(/\s+/).length <= 2 || singleOriginal);
       if (styled) floor = Math.max(label ? 10 : SCREEN_MIN_FONT, Math.round(size * (label ? STYLED_LABEL_MIN_SCALE : STYLED_MIN_SCALE)));
-      if (label) el.style.whiteSpace = 'nowrap';
+      if (label) {
+        el.style.whiteSpace = 'nowrap';
+        // Tek satırlık etiket özgün satırın dikey ortasında durur (yazı küçülse de özgün yazının yerinde).
+        el.style.lineHeight = Math.max(1, Math.round(Math.min(boxHeight, available)) - 4) + 'px';
+      }
       el.style.fontSize = size + 'px';
       host.appendChild(el);
       while (label && el.scrollWidth > el.clientWidth && size > floor) {
         size = Math.max(floor, size - 1);
         el.style.fontSize = size + 'px';
       }
-      if (label && el.scrollWidth > el.clientWidth + 1 && item.text.split(/\s+/).length > 2) el.style.whiteSpace = '';
+      if (label && el.scrollWidth > el.clientWidth + 1 && item.text.split(/\s+/).length > 2) {
+        el.style.whiteSpace = '';
+        el.style.lineHeight = '';
+      }
       // En küçük boyda da sığmayan kısa etiket kesilmez: kutu hizasına göre (ortalıysa iki yana, sağa yaslıysa sola)
       // gerektiği kadar genişler; özgün zemin rengiyle şeridin üstünde durur.
       if (label && el.style.whiteSpace === 'nowrap' && el.scrollWidth > el.clientWidth + 1) {

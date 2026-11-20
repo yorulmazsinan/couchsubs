@@ -312,7 +312,7 @@
     var surface = item.surface;
     function rgb(value) { return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value); }
     if (surface && rgb(surface.background) && rgb(surface.foreground)) {
-      el.style.backgroundColor = auto && surface.flat === false ? surface.background + 'd9' : surface.background;
+      el.style.backgroundColor = auto && surface.flat === false ? surface.background + 'f0' : surface.background;
       el.style.color = surface.foreground;
     }
     var look = auto && item.style && typeof item.style === 'object' ? item.style : null;

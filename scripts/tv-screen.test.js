@@ -299,7 +299,7 @@ test('TV ekran çevirisi: ' + width + '×' + height, {skip: !browser && 'Chrome/
     assert.equal(title.weight, '700');
     assert.equal(title.align, 'right');
     assert.match(title.family, /Condensed|Narrow/);
-    assert.equal(body.background, 'rgba(26, 28, 32, 0.85)');
+    assert.equal(body.background, 'rgba(26, 28, 32, 0.94)');
     assert.equal(body.weight, '400');
     assert.equal(body.align, 'left');
     // Özgün blok genişliğini aşmaz (en çok iç pay kadar).
