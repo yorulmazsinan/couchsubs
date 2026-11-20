@@ -31,7 +31,7 @@ public class ScreenTextReadingTests
     {
         var services = new FakeServices { ReaderLines = Reading.FromText("Follow Paulie to the car.") };
         var settings = new MemorySettings();
-        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, AutoScreenText = enabled });
+        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, AutoScreenText = enabled, AutoScreenTextReset = true });
         using var controller = AppControllerTests.Make(services, settings: settings);
         var events = new ConcurrentQueue<SubtitleEvent>();
         controller.StreamEvent += events.Enqueue;

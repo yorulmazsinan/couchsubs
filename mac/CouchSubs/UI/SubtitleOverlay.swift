@@ -201,7 +201,10 @@ struct SubtitleOverlayView: View {
                 resizeHandles
             }
             VStack(spacing: 14 * scale) {
-                ForEach(model.overlayRegions) { regionBox($0) }
+                // Kendiliğinden bulunan ekran yazıları (items) saydam pencerede gösterilmez: bu pencere kullanıcının seçtiği
+                // altyazı yeridir (beta.63: oyunun her yerindeki yazılar altyazının üstüne yığılıyordu). Yayın penceresinde ve
+                // TV'de kendi yerinde çizilirler.
+                ForEach(model.overlayRegions.filter { $0.items == nil }) { regionBox($0) }
                 if model.overlayPhoneItems.isEmpty {
                     Spacer(minLength: 0)
                 } else {

@@ -46,7 +46,10 @@ public class GameAreaPresetTests
     {
         var services = new FakeServices { ReaderLines = Reading.FromText("Follow Paulie to the car.") };
         var settings = new MemorySettings();
-        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, AutoScreenText = false });
+        var userRegion = new CropRegion(0.70, 0.90, 0.20, 0.80);
+        var overlay = new OverlayBounds(100, 600, 900);
+        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, AutoScreenText = false,
+                                         AutoScreenTextReset = true, Overlay = overlay }.WithCustomRegion(userRegion));
         using var controller = AppControllerTests.Make(services, settings: settings);
         var events = new ConcurrentQueue<SubtitleEvent>();
         controller.StreamEvent += events.Enqueue;
@@ -60,6 +63,12 @@ public class GameAreaPresetTests
                 services.Streams[0].Emit(frame);
                 await Task.Delay(60, timeout.Token);
             }
+        // Hazır alanlar kullanıcının altyazı alanını, ek alanlarını ve altyazı penceresinin yerini değiştirmez.
+        Assert.Equal(userRegion, controller.Settings.Region);
+        Assert.Equal(AreaPreset.Custom, controller.Settings.AreaPreset);
+        Assert.Null(controller.Settings.ExtraRegion1);
+        Assert.Equal(overlay, controller.Settings.Overlay);
+        Assert.Equal(userRegion, settings.Load().Region);
         events.Clear();
         controller.ChooseGame("Far Cry 3");
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6)))

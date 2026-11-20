@@ -201,6 +201,18 @@ public sealed record WindowCaptureTarget(string ProcessName, string Title);
 public enum RemotePlayApp { Automatic, Sony, Chiaki }
 
 /// <summary>Kalıcı ayarlar (şifreli depo değil, sıradan ayar dosyası).</summary>
+/// <summary>
+/// "Ekran yazılarını otomatik çevir" bir kerelik göçü (Mac/iPhone AutoScreenTextMigration, Android aynı kural):
+/// işareti olmayan ayar dosyasında ayar kapatılır ve işaret konur. Ayar açıksa (beta.63 varsayılanı) kullanıcıya bir
+/// kez "deneysel; Ayarlar'dan açabilirsiniz" bilgisi gösterilir.
+/// </summary>
+public static class AutoScreenTextMigration
+{
+    public static (UserSettings Settings, bool Notice) Apply(UserSettings settings) => settings.AutoScreenTextReset
+        ? (settings, false)
+        : (settings with { AutoScreenText = false, AutoScreenTextReset = true }, settings.AutoScreenText);
+}
+
 public sealed record UserSettings
 {
     public CropRegion Region { get; init; } = new();
@@ -257,9 +269,15 @@ public sealed record UserSettings
     public bool AutoReadGamePhone { get; init; }
     /// <summary>
     /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
-    /// <see cref="ScreenTextDetector"/>). Altyazı alanı Tam ekranken çalışmaz. Eski ayar dosyalarında yoktur; açık başlar.
+    /// <see cref="ScreenTextDetector"/>). Altyazı alanı Tam ekranken çalışmaz. Deneysel: varsayılan kapalı (beta.63'te açık
+    /// geliyordu; oyun dünyasındaki poster ve plakaları da çeviriyordu). Kullanıcı Ayarlar'dan açar.
     /// </summary>
-    public bool AutoScreenText { get; init; } = true;
+    public bool AutoScreenText { get; init; }
+    /// <summary>
+    /// Bir kerelik göç yapıldı: beta.63'te varsayılan açık gelen <see cref="AutoScreenText"/> kapatıldı. Eski dosyalarda
+    /// yoktur (false); açılışta ayar kapatılır, bu işaret konur (<see cref="AutoScreenTextMigration"/>).
+    /// </summary>
+    public bool AutoScreenTextReset { get; init; }
     /// <summary>
     /// "Ekran yazılarını altyazıdan ayır": ek alan ve otomatik ekran yazısı kutuları özgün rengini ve zeminini korur,
     /// altyazı kutusuna benzemez (zemin yoksa zeminsiz, koyu gölgeli). Eski ayar dosyalarında yoktur; açık başlar.

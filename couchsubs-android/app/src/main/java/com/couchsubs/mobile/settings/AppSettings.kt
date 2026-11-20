@@ -37,6 +37,20 @@ enum class SubtitleTarget { TV, PHONE }
 enum class EngineChoice { FREE, DEEPL, GEMINI, OPENAI, CLAUDE }
 
 /**
+ * "Ekran yazılarını otomatik çevir" bir kerelik göçü (Windows AutoScreenTextMigration, Mac/iPhone
+ * migratingAutoScreenText ile aynı kural). Göç işareti varsa null (bir şey yapılmaz); yoksa ayar kapatılıp işaret
+ * konur. Ayar açıktıysa — açık kaydedilmiş ya da hiç değiştirilmemiş eski kurulumda (beta.63 varsayılanı açıktı) —
+ * kullanıcıya bir kez bilgi gösterilir; yeni kurulumda (kayıt yok) gösterilmez.
+ */
+object AutoScreenTextMigration {
+    data class Step(val notice: Boolean)
+
+    /** [stored]: kayıttaki değer (yoksa null); [existing]: kayıt dosyasında başka ayar var (eski kurulum). */
+    fun apply(reset: Boolean, stored: Boolean?, existing: Boolean): Step? =
+        if (reset) null else Step(notice = stored ?: existing)
+}
+
+/**
  * Anahtarlar ve PS5 kaydı Android Keystore'daki (donanım destekli, dışarı çıkarılamayan) AES-GCM anahtarıyla şifrelenip
  * saklanır. Windows'taki SecureStore (DPAPI) ve Mac'teki Anahtar Zinciri karşılığı. Uygulama silinince gider.
  */
@@ -178,11 +192,32 @@ class AppSettings(context: Context) : AreaStore {
 
     /**
      * "Ekran yazılarını otomatik çevir": ekranda beliren yazı kutuları (görev, yardım, mesaj) bulunup kendi yerinde
-     * çevrilir; oyundan bağımsızdır. Eski kayıtlarda yoktur; açık başlar.
+     * çevrilir; oyundan bağımsızdır. Deneysel: varsayılan kapalı (beta.63'te açık geliyordu; oyun dünyasındaki poster ve
+     * plakaları da çeviriyordu). Kullanıcı Ayarlar'dan açar. Değiştirilince göç bilgisi kalkar.
      */
     var autoScreenText: Boolean
-        get() = prefs.getBoolean("autoScreenText", true)
-        set(value) = prefs.edit().putBoolean("autoScreenText", value).apply()
+        get() = prefs.getBoolean("autoScreenText", false)
+        set(value) {
+            prefs.edit().putBoolean("autoScreenText", value).apply()
+            autoScreenTextNotice = false
+        }
+
+    init {
+        migrateAutoScreenText()
+    }
+
+    /**
+     * Bir kerelik göç (Windows AutoScreenTextMigration, Mac/iPhone migratingAutoScreenText ile aynı kural): işaret yoksa
+     * ayar kapatılır, işaret konur. Ayar açıktıysa (beta.63'te açık kaydedilmiş ya da hiç değiştirilmemiş eski kurulum)
+     * bu süreçte bir kez "deneysel; Ayarlar'dan açabilirsiniz" bilgisi gösterilir. Yeni kurulumda bilgi yok.
+     */
+    private fun migrateAutoScreenText() {
+        val stored = if (prefs.contains("autoScreenText")) prefs.getBoolean("autoScreenText", false) else null
+        val step = AutoScreenTextMigration.apply(prefs.getBoolean("autoScreenTextReset", false), stored, prefs.all.isNotEmpty())
+            ?: return
+        prefs.edit().putBoolean("autoScreenText", false).putBoolean("autoScreenTextReset", true).apply()
+        if (step.notice) autoScreenTextNotice = true
+    }
 
     /** "Konuşana göre renk": konuşan adlı satır (ad ve cümle) o konuşanın renginde görünür. Eski kayıtlarda yoktur; açık başlar. */
     var speakerColors: Boolean
@@ -367,6 +402,9 @@ class AppSettings(context: Context) : AreaStore {
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
 
     companion object {
+        /** Otomatik ekran yazısı bu süreçte göçle kapatıldı: ana ekranda bir kez bilgi görünür. */
+        @Volatile
+        var autoScreenTextNotice = false
         /**
          * Yazı ölçeğinin sınırları, yüzde (iPhone ile aynı). Alt sınır eskiden %80'di (TV'de 37 piksel); TV'de en küçüğü
          * bile büyük kalıyordu (#218). %40, TV'de 18 piksel: Mac'teki (20) ve Windows'taki (16) en küçük boya denk.

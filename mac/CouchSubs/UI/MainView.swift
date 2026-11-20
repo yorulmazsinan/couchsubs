@@ -351,6 +351,10 @@ private struct LiveSubtitlesTile: View {
                                                            streaming: model.sessionState == .streaming) {
                 HintText(text: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game.")
             }
+            // Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir.
+            if model.showsAutoScreenTextNotice {
+                HintText(text: "Automatic on-screen text translation is experimental; you can turn it on in Settings.")
+            }
             // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
             if model.showsSubtitleOffTip {
                 HintText(text: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio.")

@@ -537,6 +537,7 @@ final class AppModel: ObservableObject {
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
             server.speakerColors = settings.speakerColors
+            if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
             if settings.frameSource != oldValue.frameSource || windowAppChanged, isRunning {
@@ -581,6 +582,9 @@ final class AppModel: ObservableObject {
     /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı gösterilmedi: "oyunun kendi altyazısını açın"
     /// ipucu (CouchSubsCore SubtitleOffTip; GitHub #503, #566, #572).
     @Published private(set) var showsSubtitleOffTip = false
+    /// Otomatik ekran yazısı göçle kapatıldı (beta.63'te açıktı): bu oturumda bir kez "deneysel; Ayarlar'dan
+    /// açabilirsiniz" bilgisi görünür. Kullanıcı ayarı değiştirince kalkar.
+    @Published private(set) var showsAutoScreenTextNotice = false
     private var subtitleOffTip = SubtitleOffTip()
     /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json); kaçırılan satır ana pencereden ve "Geçmiş"ten
     /// yeniden okunur.
@@ -718,8 +722,11 @@ final class AppModel: ObservableObject {
         self.console = console
         self.tv = tv
         // Uygulama oturum sürerken kapandıysa oyunun profili açık kalmış olabilir: genel alanlar geri gelir.
-        let curated = GameAreas.restored(loaded.withCuratedModels())
+        var curated = GameAreas.restored(loaded.withCuratedModels())
+        // beta.63'te varsayılan açık gelen otomatik ekran yazısı bir kez kapatılır; açık olanlara bir kez söylenir.
+        let autoScreenTextNotice = curated.migratingAutoScreenText()
         settings = curated
+        showsAutoScreenTextNotice = autoScreenTextNotice
         streamBackground = StreamBackground(stored: defaults.string(forKey: StoreKey.streamBackground))
         // Pencereler açılmadan önce: açılışta açık temanın bir an görünmesi olmaz.
         curated.appearance.apply()

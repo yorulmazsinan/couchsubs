@@ -244,6 +244,11 @@ struct RunningScreen: View {
                                tone: Mobile.Palette.secondary)
                 }
                 // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
+                // Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir.
+                if model.showsAutoScreenTextNotice {
+                    MobileNote(text: String(localized: "Automatic on-screen text translation is experimental; you can turn it on in Settings."),
+                               tone: Mobile.Palette.secondary)
+                }
                 if model.showsSubtitleOffTip {
                     MobileNote(text: String(localized: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio."),
                                tone: Mobile.Palette.secondary)

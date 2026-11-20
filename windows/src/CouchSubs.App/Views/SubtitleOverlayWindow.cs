@@ -156,6 +156,10 @@ public sealed partial class SubtitleOverlayWindow : Window
             // Ek alanların çevirisi altyazının üstünde, alanın bulunduğu yana yaslı küçük kutularda durur.
             case SubtitleEventKind.Region:
                 if (e.Id is null) break;
+                // Kendiliğinden bulunan ekran yazıları (auto-…) bu pencerede gösterilmez: saydam pencere kullanıcının
+                // seçtiği altyazı yeridir; oyunun her yerindeki yazılar burada altyazının üstüne yığılıp altyazı
+                // "istenmeyen yerden çıkıyor" gibi görünüyordu (beta.63). Onlar TV'de ve yayın penceresinde kendi yerinde.
+                if (ScreenTextAreas.IsAuto(e.Id)) break;
                 regions.Remove(e.Id);
                 if (e.Text.Length > 0) regions[e.Id] = (e.Text, e.Box, e.Blocks);
                 break;

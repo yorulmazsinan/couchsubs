@@ -160,8 +160,11 @@ public struct UserSettings: Codable, Equatable {
     /// Bilinen oyunlarda hazır ek alanlar (bkz. `GameAreaPresets`); kullanıcının kendi ek alanı varsa o kullanılır.
     public var gameAreaPresets = true
     /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
-    /// `ScreenTextDetector`). Altyazı alanı Tam ekranken çalışmaz. Eski kayıtlarda yoktur; açık başlar.
-    public var autoScreenText = true
+    /// `ScreenTextDetector`). Altyazı alanı Tam ekranken çalışmaz. Deneysel: varsayılan kapalı (beta.63'te açık geliyordu;
+    /// oyun dünyasındaki poster ve plakaları da çeviriyordu). Kullanıcı Ayarlar'dan açar.
+    public var autoScreenText = false
+    /// Bir kerelik göç yapıldı (bkz. `migratingAutoScreenText()`). Eski kayıtlarda yoktur (false).
+    public var autoScreenTextReset = false
     /// iPhone Xbox ev yayınında oyun sesi telefonda çalınır. Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
     /// susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir, bu yüzden varsayılan açık. PS5'i etkilemez.
     public var xboxAudioOnDevice = true
@@ -215,6 +218,7 @@ public struct UserSettings: Codable, Equatable {
         autoReadGamePhone = try values.decodeIfPresent(Bool.self, forKey: .autoReadGamePhone) ?? defaults.autoReadGamePhone
         gameAreaPresets = try values.decodeIfPresent(Bool.self, forKey: .gameAreaPresets) ?? defaults.gameAreaPresets
         autoScreenText = try values.decodeIfPresent(Bool.self, forKey: .autoScreenText) ?? defaults.autoScreenText
+        autoScreenTextReset = try values.decodeIfPresent(Bool.self, forKey: .autoScreenTextReset) ?? defaults.autoScreenTextReset
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         frameSource = (try? values.decodeIfPresent(FrameSource.self, forKey: .frameSource)) ?? defaults.frameSource
@@ -321,5 +325,19 @@ public struct DubbingSettings: Codable, Equatable {
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
         output = (try? values.decodeIfPresent(DubbingOutput.self, forKey: .output)) ?? defaults.output
         cast = (try? values.decodeIfPresent(VoiceCast.self, forKey: .cast)) ?? defaults.cast
+    }
+}
+
+extension UserSettings {
+    /// "Ekran yazılarını otomatik çevir" bir kerelik göçü (Windows AutoScreenTextMigration, Android aynı kural): göç
+    /// işareti olmayan kayıtta ayar kapatılır, işaret konur. Dönüş true ise ayar açıktı (beta.63 varsayılanı); kullanıcıya
+    /// bir kez "deneysel; Ayarlar'dan açabilirsiniz" bilgisi gösterilir.
+    @discardableResult
+    public mutating func migratingAutoScreenText() -> Bool {
+        guard !autoScreenTextReset else { return false }
+        let wasOn = autoScreenText
+        autoScreenText = false
+        autoScreenTextReset = true
+        return wasOn
     }
 }

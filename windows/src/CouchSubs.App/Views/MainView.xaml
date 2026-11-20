@@ -288,6 +288,10 @@
                         <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
                                    Text="{t:T 'When you turn on the controller to play, choose your MAIN account on the PS5. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.'}"
                                    Visibility="{Binding ShowsMainAccountTip, Converter={StaticResource VisibleIf}}" />
+                        <!-- Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir. -->
+                        <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="{t:T 'Automatic on-screen text translation is experimental; you can turn it on in Settings.'}"
+                                   Visibility="{Binding ShowsAutoScreenTextNotice, Converter={StaticResource VisibleIf}}" />
                         <!-- Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572). -->
                         <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
                                    Text="{t:T 'Turn on the game\'s own subtitles: CouchSubs reads the English subtitles on screen, not the audio.'}"

@@ -48,6 +48,7 @@ final class PhoneModel: ObservableObject {
             if settings.output != oldValue.output { outputChanged() }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
+            if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
             server.speakerColors = settings.speakerColors
             if settings.sharePool != oldValue.sharePool {
                 let (pool, enabled) = (pool, settings.sharePool)
@@ -100,6 +101,9 @@ final class PhoneModel: ObservableObject {
     /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı gösterilmedi: "oyunun kendi altyazısını açın"
     /// ipucu (CouchSubsCore SubtitleOffTip; GitHub #503, #566, #572).
     @Published private(set) var showsSubtitleOffTip = false
+    /// Otomatik ekran yazısı göçle kapatıldı (beta.63'te açıktı): bu oturumda bir kez "deneysel; Ayarlar'dan
+    /// açabilirsiniz" bilgisi görünür. Kullanıcı ayarı değiştirince kalkar.
+    @Published private(set) var showsAutoScreenTextNotice = false
     private var subtitleOffTip = SubtitleOffTip()
     /// Bu oturumdaki satır sayısı ve paketten gelenler ("Hazır çeviriden 47 / 50").
     @Published private(set) var sessionLines = 0
@@ -239,8 +243,14 @@ final class PhoneModel: ObservableObject {
         xboxAuth = XboxAuth(userToken: xboxToken, onUserToken: { token in tokenSink.handler?(token) })
         let loaded = defaults.data(forKey: StoreKey.settings).flatMap { try? JSONDecoder().decode(UserSettings.self, from: $0) }
         // Uygulama oturum sürerken kapandıysa oyunun profili açık kalmış olabilir: genel alanlar geri gelir.
-        let curated = GameAreas.restored((loaded ?? UserSettings()).withCuratedModels())
+        var curated = GameAreas.restored((loaded ?? UserSettings()).withCuratedModels())
+        // beta.63'te varsayılan açık gelen otomatik ekran yazısı bir kez kapatılır; açık olanlara bir kez söylenir.
+        let autoScreenTextNotice = curated.migratingAutoScreenText()
         settings = curated
+        showsAutoScreenTextNotice = autoScreenTextNotice
+        if loaded?.autoScreenTextReset != true, let data = try? JSONEncoder().encode(curated) {
+            defaults.set(data, forKey: StoreKey.settings)
+        }
         // "Şimdilik geç" ile PSN ve PS5 atlandıysa PS5'siz ana ekrana gidilir; altyazı hedefi seçilmediyse oradan sürer.
         let skipped = defaults.bool(forKey: Self.setupSkippedKey)
         let done = (skipped || accountId != nil && console != nil) && store.load(Bool.self, for: StoreKey.setupComplete) == true

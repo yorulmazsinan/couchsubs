@@ -350,7 +350,7 @@ public sealed class ScreenTextDetector
             if (existing is null)
             {
                 if (tracked.Count >= (inMenu ? MenuMaxAreas : MaxAreas)) continue;
-                existing = new Tracked("auto-" + ++counter, cells, list, now);
+                existing = new Tracked(ScreenTextAreas.Prefix + ++counter, cells, list, now);
                 tracked.Add(existing);
             }
             // Bölge en az bir karo kayınca güncellenir (Cells karo biriminde olduğundan her fark bir karodur).
@@ -381,6 +381,13 @@ public sealed class ScreenTextDetector
 /// Otomatik bulunan alanda okunan yazı çevrilmeye değer mi: sayaç, saat, para, tek sözcüklük etiket ya da büyük harfli
 /// kısa tabela gürültüdür (Mac/Android: ScreenTextNoise ile aynı kurallar). Yalnız otomatik alanlarda uygulanır.
 /// </summary>
+/// <summary>Kendiliğinden bulunan ekran yazısı alanlarının kimliği ("auto-1", "auto-2" …).</summary>
+public static class ScreenTextAreas
+{
+    public const string Prefix = "auto-";
+    public static bool IsAuto(string? id) => id is not null && id.StartsWith(Prefix, StringComparison.Ordinal);
+}
+
 public static partial class ScreenTextNoise
 {
     /// <summary>Yayıncı katmanının sık yazıları (logo, canlı yayın işareti); oyun yazısı değildir.</summary>

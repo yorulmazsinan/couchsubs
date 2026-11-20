@@ -84,7 +84,7 @@ struct ProfileScreen: View {
                 toggleRow("Color by speaker", "Each speaker's name and line keep their own color.",
                           isOn: $model.settings.speakerColors)
                 RowDivider()
-                toggleRow("Automatically translate on-screen text",
+                toggleRow("Automatically translate on-screen text (experimental)",
                           "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.",
                           isOn: $model.settings.autoScreenText)
                 RowDivider()

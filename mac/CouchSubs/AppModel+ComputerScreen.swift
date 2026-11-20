@@ -28,7 +28,8 @@ struct OverlayRegion: Equatable, Identifiable {
 extension AppModel {
     /// Pencere görünmeli mi: altyazı bilgisayar ekranında gösteriliyor ve ekranda bir satır var (ya da yeri ayarlanıyor).
     var overlayVisible: Bool {
-        settings.output.showsOnComputer && (overlayAdjusting || !overlayLines.isEmpty || !overlayRegions.isEmpty || !overlayPhoneItems.isEmpty)
+        settings.output.showsOnComputer && (overlayAdjusting || !overlayLines.isEmpty || overlayRegions.contains { $0.items == nil }
+                                             || !overlayPhoneItems.isEmpty)
     }
 
     /// Pencere tıklamaları geçiriyor mu (ayarlanırken hiçbir zaman).

@@ -14115,6 +14115,38 @@
         }
       }
     },
+    "Automatically translate on-screen text (experimental)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically translate on-screen text (experimental)"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yazılarını otomatik çevir (deneysel)"
+          }
+        }
+      }
+    },
+    "Automatic on-screen text translation is experimental; you can turn it on in Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic on-screen text translation is experimental; you can turn it on in Settings."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran yazılarını otomatik çevirme deneysel; Ayarlar'dan açabilirsiniz."
+          }
+        }
+      }
+    },
     "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.": {
       "localizations": {
         "en": {

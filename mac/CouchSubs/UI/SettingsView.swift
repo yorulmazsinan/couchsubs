@@ -289,7 +289,7 @@ private struct AreaCards: View {
         }
         ExtraAreasCard()
         Card {
-            SwitchRow(title: "Automatically translate on-screen text", isOn: $model.settings.autoScreenText)
+            SwitchRow(title: "Automatically translate on-screen text (experimental)", isOn: $model.settings.autoScreenText)
             HintText(text: "Text boxes that appear on screen (objectives, help, messages) are found and translated in place. Counters, the map and short labels are skipped.")
             Divider().overlay(Color.csBorder)
             SwitchRow(title: "Use ready areas for known games", isOn: $model.settings.gameAreaPresets)
