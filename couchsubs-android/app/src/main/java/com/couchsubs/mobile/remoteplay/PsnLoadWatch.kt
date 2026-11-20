@@ -44,6 +44,13 @@ class PsnLoadWatch(private val startedAtMs: Long) {
         const val LOAD_TIMEOUT_MS = 20_000L
 
         /**
+         * Yönlendirme yakalandıktan sonra hesap kimliğinin Sony'den alınması (iki istek) en çok bu kadar beklenir; sonra
+         * hata ve "Yeniden dene" gösterilir. Her isteğin kendi zaman aşımı (30 sn bağlanma + 30 sn okuma) iki istekte
+         * iki dakikayı geçebiliyordu.
+         */
+        const val TOKEN_TIMEOUT_MS = 45_000L
+
+        /**
          * Önceki oturumun çerezlerini silmek için en çok bu kadar beklenir; sonra sayfa yine açılır. Silme ekran açılınca
          * başlar; soğuk WebView'de (uygulamanın ilk girişi) 2 sn yetmiyordu (GitHub #54).
          */

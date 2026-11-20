@@ -68,6 +68,13 @@
     <string name="psn_page_failed">Sony\'s sign-in page didn\'t open</string>
     <string name="psn_page_failed_hint">You can try again, or sign in in your phone\'s browser and paste the address here.</string>
     <string name="psn_retry">Try again</string>
+    <string name="psn_completing">Finishing sign-in…</string>
+    <string name="psn_error_timeout">Sony didn\'t answer in time. Check your connection and try again.</string>
+    <string name="psn_error_no_code">Sony didn\'t send a sign-in code.</string>
+    <string name="psn_error_refused">Sony didn\'t accept the sign-in.</string>
+    <string name="psn_error_rate_limited">Sony has paused sign-ins for a while after too many attempts. Wait a few minutes and try again.</string>
+    <string name="psn_error_http">Sony\'s server isn\'t responding right now (HTTP %1$s).</string>
+    <string name="psn_error_bad_response">Sony sent an unexpected response.</string>
     <string name="psn_browser">Open in browser</string>
     <string name="psn_browser_reopen">Open the browser again</string>
     <string name="psn_browser_title">Sign in in the browser</string>

@@ -67,6 +67,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.remoteplay.PsnAccount
+import com.couchsubs.mobile.remoteplay.PsnAccountException
+import com.couchsubs.mobile.remoteplay.PsnLoginFailure
 import com.couchsubs.mobile.remoteplay.PsnLoadWatch
 import com.couchsubs.mobile.remoteplay.PsnPageProblem
 import kotlinx.coroutines.CancellationException
@@ -77,7 +79,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
@@ -108,17 +109,37 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
     }
 
     // Yönlendirme (uygulama içinden ya da tarayıcıdan yapıştırılan) hesap kimliğine çevrilir.
+    // Yönlendirmeden sonra hesap kimliği Sony'den alınırken üst sınır var: eskiden ağ takılınca bekleme göstergesinde
+    // dakikalarca kalınıyordu (yönlendirme yakalanınca sayfanın süre sayacı da durur). Süre dolunca ya da Sony reddedince
+    // nedeni anlaşılır biçimde yazılır ve "Yeniden dene" görünür.
     fun finish(redirect: String) {
         tried = redirect
         scope.launch {
-            try {
-                Services.settings.accountId = withContext(Dispatchers.IO) { PsnAccount.accountIdFromRedirect(redirect) }
-                // Kod tek kullanımlıktır: panoda kalırsa sonraki girişte yeniden denenmesin.
-                clearClipIf(context, redirect)
-                onDone()
+            val failure = try {
+                // Bloklayan istek iptal edilemez: beklemeyi bırakabilmek için uygulama kapsamında çalışır.
+                val work = Services.scope.async(Dispatchers.IO) { PsnAccount.accountIdFromRedirect(redirect) }
+                val id = withTimeoutOrNull(PsnLoadWatch.TOKEN_TIMEOUT_MS) { work.await() }
+                if (id == null) {
+                    work.cancel()
+                    context.getString(R.string.psn_error_timeout)
+                } else {
+                    Services.settings.accountId = id
+                    // Kod tek kullanımlıktır: panoda kalırsa sonraki girişte yeniden denenmesin.
+                    clearClipIf(context, redirect)
+                    onDone()
+                    null
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: PsnAccountException) {
+                Log.w(TAG, "PSN girişi tamamlanmadı", error)
+                loginFailureText(context, error)
             } catch (error: Exception) {
                 Log.w(TAG, "PSN girişi tamamlanmadı", error)
-                problem = error.message
+                error.message ?: error.javaClass.simpleName
+            }
+            if (failure != null) {
+                problem = failure
                 mode = PsnMode.INTRO
             }
         }
@@ -135,7 +156,8 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
         PsnMode.INTRO -> {
             ScreenScaffold(top = { TopBar(onBack = onBack) { SkipAction(onSkip) } }, bottom = {
                 GhostButton(stringResource(R.string.psn_why)) { why = true }
-                PrimaryButton(stringResource(R.string.psn_open)) {
+                // Giriş yarıda kaldıysa ana düğme "Yeniden dene" olur (yeni giriş açar; kullanılmış kod yeniden denenmez).
+                PrimaryButton(stringResource(if (problem != null) R.string.psn_retry else R.string.psn_open)) {
                     problem = null
                     mode = PsnMode.WEB
                 }
@@ -178,6 +200,19 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
             onClose = { mode = PsnMode.INTRO },
         )
     }
+}
+
+/** Sony'nin giriş sonucunun kullanıcıya anlatımı (eskiden "PSN sign-in failed: NETWORK" gibi ham metin görünüyordu). */
+private fun loginFailureText(context: Context, error: PsnAccountException): String {
+    val text = when (error.failure) {
+        PsnLoginFailure.NO_CODE -> context.getString(R.string.psn_error_no_code)
+        PsnLoginFailure.REFUSED -> context.getString(R.string.psn_error_refused)
+        PsnLoginFailure.RATE_LIMITED -> context.getString(R.string.psn_error_rate_limited)
+        PsnLoginFailure.HTTP -> context.getString(R.string.psn_error_http, error.status?.toString() ?: "?")
+        PsnLoginFailure.NETWORK -> context.getString(R.string.psn_problem_offline)
+        PsnLoginFailure.BAD_RESPONSE -> context.getString(R.string.psn_error_bad_response)
+    }
+    return error.detail?.takeIf { error.failure == PsnLoginFailure.REFUSED && it.isNotBlank() }?.let { "$text ($it)" } ?: text
 }
 
 private fun clipboard(context: Context) = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -228,6 +263,8 @@ private fun PsnWebLogin(
     var visible by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<Pair<PsnPageProblem, String?>?>(null) }
     var cookiesReady by remember { mutableStateOf(false) }
+    // Yönlendirme yakalandı, hesap kimliği Sony'den alınıyor.
+    var completing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val background = Tokens.Color.bg.toArgb()
     val failures = pageProblems()
@@ -312,6 +349,7 @@ private fun PsnWebLogin(
                                     onRedirect = { url ->
                                         // Hesap kimliği alınırken sayfa yerine bekleme göstergesi.
                                         visible = false
+                                        completing = true
                                         onRedirect(url)
                                     },
                                     onVisible = { visible = true },
@@ -341,8 +379,8 @@ private fun PsnWebLogin(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     CircularProgressIndicator(color = Tokens.Color.accent)
-                    BodyText(stringResource(R.string.psn_loading))
-                    BodyText(stringResource(R.string.psn_loading_hint), align = TextAlign.Center)
+                    BodyText(stringResource(if (completing) R.string.psn_completing else R.string.psn_loading))
+                    if (!completing) BodyText(stringResource(R.string.psn_loading_hint), align = TextAlign.Center)
                 }
                 failure?.let { (problem, detail) ->
                     Column(

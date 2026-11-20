@@ -70,6 +70,13 @@
     <string name="psn_page_failed">Sony\'nin giriş sayfası açılamadı</string>
     <string name="psn_page_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapıp adresi buraya yapıştırabilirsin.</string>
     <string name="psn_retry">Yeniden dene</string>
+    <string name="psn_completing">Giriş tamamlanıyor…</string>
+    <string name="psn_error_timeout">Sony\'den zamanında yanıt gelmedi. Bağlantını kontrol edip yeniden dene.</string>
+    <string name="psn_error_no_code">Sony giriş kodunu göndermedi.</string>
+    <string name="psn_error_refused">Sony girişi kabul etmedi.</string>
+    <string name="psn_error_rate_limited">Sony çok sayıda deneme yüzünden girişi geçici olarak durdurdu. Birkaç dakika bekleyip yeniden dene.</string>
+    <string name="psn_error_http">Sony\'nin sunucusu şu an yanıt vermiyor (HTTP %1$s).</string>
+    <string name="psn_error_bad_response">Sony\'den beklenmeyen bir yanıt geldi.</string>
     <string name="psn_browser">Tarayıcıda aç</string>
     <string name="psn_browser_reopen">Tarayıcıyı yeniden aç</string>
     <string name="psn_browser_title">Tarayıcıda giriş</string>
