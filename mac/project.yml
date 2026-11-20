@@ -75,7 +75,7 @@ targets:
         # Sparkle: güncellemeler en son GitHub sürümündeki appcast.xml'den okunur, bu anahtarla imzalanmış olmalı
         # (özel anahtar depoda değil; scripts/package-mac.sh imzalar).
         SUFeedURL: https://github.com/yorulmazsinan/couchsubs/releases/latest/download/appcast.xml
-        SUPublicEDKey: GRsdOlnDQSm2yPnUTF/VoD/0202u2J0GPmJ8CCzVdfc=
+        SUPublicEDKey: hZ5yMZAZtlZZuf2lmp46zoV7K5BPyhcliz4J0b9ljQg=
         SUEnableAutomaticChecks: true
         # Uygulama uzun süre açık kalınca da yeni sürüm görünsün: saatte bir.
         SUScheduledCheckInterval: 3600
