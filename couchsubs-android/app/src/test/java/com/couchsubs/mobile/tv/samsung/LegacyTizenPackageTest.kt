@@ -50,7 +50,7 @@ class LegacyTizenPackageTest {
         val withoutComments = adapted.replace(Regex("<!--[\\s\\S]*?-->"), "")
         assertFalse(withoutComments.contains("network.public"))
         assertFalse(withoutComments.contains("<tizen:metadata"))
-        for (kept in listOf("tv.window", "tv.inputdevice", "application.launch", "privilege/internet", "network.get"))
+        for (kept in listOf("tv.window", "tv.inputdevice", "application.launch", "internet", "network.get"))
             assertTrue(kept, withoutComments.contains("http://tizen.org/privilege/$kept\""))
         assertTrue(withoutComments.contains("required_version=\"2.4\""))
         // Satır silinince boş satır kalmaz, XML hâlâ ayrışır.
