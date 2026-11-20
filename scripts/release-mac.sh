@@ -3,6 +3,7 @@
 # Sürümün imzalı ve Apple onaylı Mac paketini (zip, DMG, appcast.xml) bu Mac'te üretir.
 # Anahtar zincirindeki Developer ID sertifikasını ve notarytool profilini (couchsubs) kullanır.
 # Kullanım: release-mac.sh <sürümün Android TV APK'sı>
+# MACOS_CERT_P12 vb. depo sırları tanımlıysa release.yml bunu CI'da yapar, bu betik gerekmez (docs/mac-ci-imza.md).
 # TV_HELPER_RUN=<run id>: kurulum yardımcısını belirli bir release iş akışı çalışmasından al (verilmezse son başarılı).
 set -e
 setopt pipefail

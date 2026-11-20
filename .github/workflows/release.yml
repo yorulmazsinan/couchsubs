@@ -3,11 +3,15 @@
 # Beta etiketleri de (ör. v0.1.0-beta.6) "en son sürüm" olarak yayınlanır: README'deki
 # releases/latest/download/… bağlantıları ön sürümleri görmez. Dosya adları sürüm taşımaz, bağlantılar hep çalışır.
 #
-# Mac imzası ve Apple onayı isteğe bağlıdır; şu depo sırları tanımlıysa yapılır:
-#   MAC_CERTIFICATE_P12       Developer ID Application sertifikası (.p12, base64)
-#   MAC_CERTIFICATE_PASSWORD  .p12 dosyasının parolası
-#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   notarytool için (uygulamaya özel parola)
-# Sırlar yoksa Mac paketi imzasız çıkar.
+# Mac imzası, Apple onayı, DMG ve Sparkle appcast'i şu altı depo sırrı tanımlıysa CI'da yapılır (hazırlanışı:
+# docs/mac-ci-imza.md):
+#   MACOS_CERT_P12          Developer ID Application kimliği (.p12, base64)
+#   MACOS_CERT_PASSWORD     .p12 dosyasının parolası
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   App Store Connect API anahtarı (notarytool için; .p8 içeriği)
+#   SPARKLE_ED_PRIVATE_KEY  Sparkle güncelleme imzası için ed25519 özel anahtarı (PEM)
+# Sırlar eksikse Mac paketi imzasız çıkar (uyarı verilir); imzalı paket eskisi gibi scripts/release-mac.sh ile elle
+# yüklenir. Sürüm önce taslak açılır, bütün dosyalar yüklenip denetlenince "en son sürüm" yapılır. Her dosyaya
+# derleme kanıtı (build provenance) eklenir: gh attestation verify <dosya> -R yorulmazsinan/couchsubs
 name: release
 
 on:
@@ -33,9 +37,31 @@ jobs:
   mac:
     needs: android
     runs-on: macos-26
-    env:
-      HAS_SIGNING: ${{ secrets.MAC_CERTIFICATE_P12 != '' }}
+    outputs:
+      signed: ${{ steps.secrets.outputs.signed }}
     steps:
+      - name: İmza sırları
+        id: secrets
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          MISSING=""
+          for NAME in MACOS_CERT_P12 MACOS_CERT_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 SPARKLE_ED_PRIVATE_KEY; do
+            [ -n "${!NAME}" ] || MISSING="$MISSING $NAME"
+          done
+          if [ -z "$MISSING" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Mac paketi CI'da imzalanıp Apple'a onaylatılacak."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Mac imzasız::Eksik sır:$MISSING. Mac paketi imzasız çıkar; imzalı ZIP, DMG ve appcast.xml scripts/release-mac.sh ile elle yüklenmeli (docs/mac-ci-imza.md)."
+          fi
+
       - uses: actions/checkout@v4
 
       - name: chiaki-ng
@@ -63,43 +89,74 @@ jobs:
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version
 
-      - name: İmza sertifikası
-        if: env.HAS_SIGNING == 'true'
+      # Geçici anahtar zinciri: Developer ID kimliği ve notarytool profili (API anahtarıyla) yalnız bu işte yaşar,
+      # son adımda silinir. package-mac.sh release-mac.sh ile aynı imzayı (sıkılaştırılmış çalışma, zaman damgası,
+      # mac/CouchSubs/CouchSubs.entitlements) atar, ZIP ve DMG'yi onaylatıp zımbalar, appcast.xml'i imzalar.
+      - name: İmza sertifikası ve Apple onayı
+        if: steps.secrets.outputs.signed == 'true'
         env:
-          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
-          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
+          umask 077
           KC="$RUNNER_TEMP/imza.keychain-db"
           KCPW="$(openssl rand -hex 16)"
+          echo "::add-mask::$KCPW"
           security create-keychain -p "$KCPW" "$KC"
           security set-keychain-settings -lut 21600 "$KC"
           security unlock-keychain -p "$KCPW" "$KC"
-          echo "$MAC_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -P "$MAC_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
-          rm "$RUNNER_TEMP/cert.p12"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -f pkcs12 -k "$KC" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" >/dev/null
+          # shellcheck disable=SC2046
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           ID="$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application: .*"' | head -1 | tr -d '"')"
-          [ -n "$ID" ] || { echo "Developer ID Application sertifikası bulunamadı"; exit 1; }
-          xcrun notarytool store-credentials couchsubs --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_PASSWORD" --keychain "$KC"
+          [ -n "$ID" ] || { echo "::error::.p12 içinde Developer ID Application kimliği yok."; exit 1; }
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun notarytool store-credentials couchsubs --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" --keychain "$KC"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle-ed25519.pem"
           {
             echo "DEVELOPER_ID=$ID"
             echo "NOTARY_PROFILE=couchsubs"
             echo "NOTARY_KEYCHAIN=$KC"
+            echo "SPARKLE_KEY=$RUNNER_TEMP/sparkle-ed25519.pem"
           } >> "$GITHUB_ENV"
 
       - name: Paketle
-        run: ANDROID_APK="$(ls android-apk/*.apk | head -1)" ./scripts/package-mac.sh
+        run: |
+          APKS=(android-apk/*.apk)
+          ANDROID_APK="${APKS[0]}" ./scripts/package-mac.sh
+
+      - name: İmzalı paketi denetle
+        if: steps.secrets.outputs.signed == 'true'
+        run: |
+          for F in dist/CouchSubs-macos.dmg dist/appcast.xml; do
+            [ -s "$F" ] || { echo "::error::$F üretilmedi; imzalı sürüm Mac dosyaları eksik yayınlanmaz."; exit 1; }
+          done
+          xcrun stapler validate dist/CouchSubs-macos.dmg
+          spctl --assess --type open --context context:primary-signature --verbose dist/CouchSubs-macos.dmg
 
       - uses: actions/upload-artifact@v4
         with:
           name: couchsubs-mac
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/CouchSubs-macos.dmg
+            dist/appcast.xml
           if-no-files-found: error
+
+      - name: Anahtar zincirini sil
+        if: always() && steps.secrets.outputs.signed == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/imza.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/sparkle-ed25519.pem" "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12"
 
   tv:
     runs-on: ubuntu-latest
@@ -126,6 +183,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: [windows, mac, tv, android]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      MAC_SIGNED: ${{ needs.mac.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -135,21 +198,51 @@ jobs:
 
       - name: Dosyaları hazırla
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          VERSION="${VERSION%%-*}"
           mkdir -p out
           cp LICENSE THIRD-PARTY-NOTICES.md artifacts/couchsubs-windows/
           # Sabit adlar: README'deki tek tıkla indirme bağlantıları her sürümde aynı kalır.
           (cd artifacts/couchsubs-windows && zip -qr "$GITHUB_WORKSPACE/out/CouchSubs-windows-x64.zip" .)
           cp artifacts/couchsubs-mac/*.zip out/CouchSubs-macos.zip
+          # İmzalı derlemede DMG ve Sparkle appcast'i de CI'dan gelir (appcast bu ZIP'in imzasını taşır).
+          if [ "$MAC_SIGNED" = true ]; then
+            cp artifacts/couchsubs-mac/CouchSubs-macos.dmg artifacts/couchsubs-mac/appcast.xml out/
+          fi
           cp artifacts/couchsubs-tv/* artifacts/couchsubs-android/*.apk out/
           cp artifacts/couchsubs-windows-installer/* out/
-          (cd out && sha256sum * > SHA256SUMS.txt)
+          (cd out && sha256sum -- * > SHA256SUMS.txt)
           ls -l out
 
+      # Derleme kanıtı: her dosyanın bu depo, etiket ve iş akışı çalışmasından çıktığı Sigstore ile imzalanır.
+      - name: Derleme kanıtı
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/*
+
+      # Önce taslak: dosyalar tek tek yüklenir (ağ hatasında yeniden denenir), hepsi sürümde görülünce yayınlanıp
+      # "en son sürüm" yapılır. Yarıda kalan yükleme latest'i bozmaz; appcast.xml en son yüklenir.
       - name: Sürümü yayınla
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" out/* --title "CouchSubs ${GITHUB_REF_NAME#v}" \
-            --notes-file docs/surum-notlari.md --latest
+          TAG="$GITHUB_REF_NAME"
+          gh release create "$TAG" --draft --title "CouchSubs ${TAG#v}" --notes-file docs/surum-notlari.md
+          upload() {
+            for TRY in 1 2 3 4 5; do
+              gh release upload "$TAG" "$1" --clobber && return 0
+              echo "::warning::$(basename "$1") yüklenemedi (deneme $TRY), yeniden deneniyor."
+              sleep $((TRY * 10))
+            done
+            echo "::error::$(basename "$1") yüklenemedi; sürüm taslak kaldı."
+            return 1
+          }
+          for F in out/*; do
+            [ "$(basename "$F")" = appcast.xml ] || upload "$F"
+          done
+          [ ! -f out/appcast.xml ] || upload out/appcast.xml
+          WANT="$(find out -maxdepth 1 -type f -printf '%f\n' | sort)"
+          HAVE="$(gh release view "$TAG" --json assets -q '.assets[].name' | sort)"
+          [ "$WANT" = "$HAVE" ] || { echo "::error::Sürümdeki dosyalar eksik:"; diff <(echo "$WANT") <(echo "$HAVE"); exit 1; }
+          gh release edit "$TAG" --draft=false --latest
+          if [ "$MAC_SIGNED" != true ]; then
+            echo "::warning title=Mac elle::Sürüm imzasız Mac ZIP'iyle yayınlandı; imzalı ZIP, DMG ve appcast.xml scripts/release-mac.sh ile yüklenmeli."
+          fi
