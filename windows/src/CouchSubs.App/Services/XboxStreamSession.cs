@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using CouchSubs.Core;
 using CouchSubs.RemotePlay;
 using CouchSubs.Shell;
@@ -25,6 +26,11 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private TaskCompletionSource<bool>? browserEnded;
     private bool started;
     private int frameBusy;
+    /// <summary>İlk kare gelene kadar anahtar kare isteği ve tanı satırı (bkz. <see cref="XboxFirstFrameWatch"/>).</summary>
+    private XboxFirstFrameWatch? watch;
+    private DispatcherTimer? watchTimer;
+    private long connectedAt;
+    private bool keyframeReady;
 
     public event Action<Frame>? FrameReceived;
     public event Action<SessionState>? StateChanged;
@@ -203,6 +209,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                         Log("WebRTC bağlandı");
                         Interlocked.CompareExchange(ref streamingSince, Environment.TickCount64, 0);
                         StateChanged?.Invoke(SessionState.Streaming);
+                        StartWatch();
                     }
                     else if (state is "closed" or "failed" or "error")
                     {
@@ -211,6 +218,27 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                         endReason ??= detail;
                         browserEnded?.TrySetResult(true);
                     }
+                    break;
+                case "keyframeReady":
+                    keyframeReady = true;
+                    break;
+                case "firstFrame":
+                    if (watch is { FrameSeen: false } seen)
+                    {
+                        seen.FrameArrived();
+                        Log(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                            $"ilk kare {message.GetProperty("width").GetInt32()}x{message.GetProperty("height").GetInt32()}, bağlantıdan {(Environment.TickCount64 - connectedAt) / 1000.0:0.0} sn sonra, keyframe isteği {seen.KeyframesRequested}"));
+                    }
+                    StopWatch();
+                    break;
+                case "stats":
+                    if (watch is null) break;
+                    var video = message.GetProperty("video");
+                    var picture = XboxStreamStats.Picture(video.GetProperty("readyState").GetInt32(), video.GetProperty("width").GetInt32(),
+                        video.GetProperty("height").GetInt32(), video.TryGetProperty("visibility", out var visibility) ? visibility.GetString() : null,
+                        video.GetProperty("callbacks").GetInt64());
+                    Log(XboxStreamStats.Describe(TimeSpan.FromMilliseconds(Environment.TickCount64 - connectedAt), watch.FrameSeen,
+                        watch.KeyframesRequested, message.GetProperty("stats"), picture));
                     break;
                 case "rpc":
                     var id = message.GetProperty("id").GetInt32();
@@ -238,6 +266,42 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Other, error.Message));
             browserEnded?.TrySetResult(true);
         }
+    }
+
+    /// <summary>
+    /// Bağlantıdan sonra 500 ms'de bir: görüntü gelene kadar oynatıcıya anahtar kare isteği ve getStats tanısı sorulur.
+    /// Arayüz iş parçacığında çalışır (OnMessage ve WebView2 gibi).
+    /// </summary>
+    private void StartWatch()
+    {
+        StopWatch();
+        watch = new XboxFirstFrameWatch();
+        connectedAt = Environment.TickCount64;
+        var view = browser;
+        watchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        watchTimer.Tick += (_, _) =>
+        {
+            if (watch is null || browser != view || view?.CoreWebView2 is null) { StopWatch(); return; }
+            var step = watch.Tick(TimeSpan.FromMilliseconds(Environment.TickCount64 - connectedAt), keyframeReady);
+            try
+            {
+                if (step.RequestKeyframe)
+                {
+                    if (watch.KeyframesRequested == 1) Log("ilk kare bekleniyor: Xbox'tan anahtar kare isteniyor");
+                    view.CoreWebView2.PostWebMessageAsJson("{\"kind\":\"keyframe\"}");
+                }
+                if (step.LogStats) view.CoreWebView2.PostWebMessageAsJson("{\"kind\":\"stats\"}");
+            }
+            catch { /* Oynatıcı bu arada kapandı. */ }
+            if (watch.FrameSeen) StopWatch();
+        };
+        watchTimer.Start();
+    }
+
+    private void StopWatch()
+    {
+        watchTimer?.Stop();
+        watchTimer = null;
     }
 
     /// <summary>
@@ -292,6 +356,9 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
 
     private void ClosePlayer()
     {
+        StopWatch();
+        watch = null;
+        keyframeReady = false;
         browserEnded?.TrySetResult(true);
         browserEnded = null;
         window?.Close();

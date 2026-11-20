@@ -1,0 +1,118 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+
+namespace CouchSubs.Shell;
+
+/// <summary>Bir saat adımında yapılacaklar: Xbox'tan anahtar kare istenir mi, tanı satırı yazılır mı.</summary>
+public readonly record struct XboxWatchStep(bool RequestKeyframe, bool LogStats);
+
+/// <summary>
+/// Xbox görüntüsü başlayana kadar yapılanlar (#403, #530). Xbox kare onayı alamazsa oturumu ~60 sn sonra kapatır;
+/// onay yalnız gösterilen karede gider, kare hiç gelmezse onay da gitmez. İlk kare gelene kadar kontrol kanalından
+/// anahtar kare istenir (xbox-xcloud-player Channel/Control.ts <c>requestKeyframeRequest</c>; XStreaming de ister)
+/// ve bağlantıdan 10 sn sonra, sonra 10 sn'de bir tanı satırı yazılır. Android'deki XboxFirstFrameWatch'un aynısı.
+/// </summary>
+public sealed class XboxFirstFrameWatch
+{
+    public static readonly TimeSpan KeyframeInterval = TimeSpan.FromMilliseconds(2500);
+    /// <summary>Bu süreden sonra anahtar kare istenmez; tanı satırları sürer.</summary>
+    public static readonly TimeSpan KeyframeWindow = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan StatsDelay = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan StatsInterval = TimeSpan.FromSeconds(10);
+
+    private TimeSpan? lastKeyframe;
+    private TimeSpan nextStats = StatsDelay;
+
+    /// <summary>İlk kare geldi; bundan sonra hiçbir şey yapılmaz.</summary>
+    public bool FrameSeen { get; private set; }
+    public int KeyframesRequested { get; private set; }
+
+    public void FrameArrived() => FrameSeen = true;
+
+    /// <param name="sinceConnected">Bağlantıdan (input kanalı açıldı) bu yana geçen süre.</param>
+    /// <param name="keyframeReady">Görüntü parçası geldi ve kontrol kanalı açık.</param>
+    public XboxWatchStep Tick(TimeSpan sinceConnected, bool keyframeReady)
+    {
+        if (FrameSeen) return default;
+        var keyframe = keyframeReady && sinceConnected <= KeyframeWindow
+            && (lastKeyframe is not { } last || sinceConnected - last >= KeyframeInterval);
+        if (keyframe)
+        {
+            lastKeyframe = sinceConnected;
+            KeyframesRequested++;
+        }
+        var stats = sinceConnected >= nextStats;
+        if (stats)
+        {
+            // Saat takıldıysa kaçan satırlar art arda yazılmaz.
+            while (nextStats <= sinceConnected) nextStats += StatsInterval;
+        }
+        return new XboxWatchStep(keyframe, stats);
+    }
+}
+
+/// <summary>WebRTC getStats özetini tek günlük satırına çevirir. Android'deki XboxStreamStats ile aynı biçim.</summary>
+public static class XboxStreamStats
+{
+    /// <summary>Oynatıcı sayfasındaki video öğesinin durumu.</summary>
+    public static string Picture(int readyState, int width, int height, string? visibility, long frameCallbacks) =>
+        string.Create(CultureInfo.InvariantCulture,
+            $"görüntü readyState {readyState}, {width}x{height}, görünürlük {visibility ?? "?"}, kare geri çağrısı {frameCallbacks}");
+
+    /// <param name="stats">getStats raporunun girdileri (inbound-rtp, candidate-pair, local/remote-candidate, transport).</param>
+    public static string Describe(TimeSpan sinceConnected, bool frameSeen, int keyframes, JsonElement stats, string picture)
+    {
+        var entries = stats.ValueKind == JsonValueKind.Array ? stats.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object).ToList() : [];
+        var line = new StringBuilder();
+        line.Append(CultureInfo.InvariantCulture, $"tanı ({(long)sinceConnected.TotalSeconds} sn, {(frameSeen ? "ilk kare geldi" : "ilk kare yok")}): keyframe isteği {keyframes}; ");
+        var video = entries.FirstOrDefault(e => Text(e, "type") == "inbound-rtp" && (Text(e, "kind") ?? Text(e, "mediaType")) == "video");
+        if (video.ValueKind == JsonValueKind.Object)
+        {
+            line.Append(CultureInfo.InvariantCulture,
+                $"video paket {Number(video, "packetsReceived")}, bayt {Number(video, "bytesReceived")}, kayıp {Number(video, "packetsLost")}, " +
+                $"çözülen {Number(video, "framesDecoded")}, düşen {Number(video, "framesDropped")}, anahtar kare {Number(video, "keyFramesDecoded")}, " +
+                $"PLI {Number(video, "pliCount")}, çözücü {Text(video, "decoderImplementation") ?? "?"}; ");
+        }
+        else line.Append("video yok; ");
+        var pair = SelectedPair(entries);
+        if (pair.ValueKind == JsonValueKind.Object)
+        {
+            var local = ById(entries, Text(pair, "localCandidateId"));
+            var remote = ById(entries, Text(pair, "remoteCandidateId"));
+            line.Append(CultureInfo.InvariantCulture,
+                $"aday yerel {Field(local, "candidateType")}/{Field(local, "protocol")} ağ {Field(local, "networkType")}, uzak {Field(remote, "candidateType")}, durum {Text(pair, "state") ?? "?"}; ");
+        }
+        else line.Append("aday seçilmedi; ");
+        line.Append(picture);
+        return line.ToString();
+    }
+
+    private static JsonElement SelectedPair(List<JsonElement> entries)
+    {
+        foreach (var transport in entries.Where(e => Text(e, "type") == "transport"))
+        {
+            var pair = ById(entries, Text(transport, "selectedCandidatePairId"));
+            if (pair.ValueKind == JsonValueKind.Object) return pair;
+        }
+        var pairs = entries.Where(e => Text(e, "type") == "candidate-pair").ToList();
+        return pairs.FirstOrDefault(p => p.TryGetProperty("selected", out var s) && s.ValueKind == JsonValueKind.True) is { ValueKind: JsonValueKind.Object } selected
+            ? selected
+            : pairs.FirstOrDefault(p => p.TryGetProperty("nominated", out var n) && n.ValueKind == JsonValueKind.True && Text(p, "state") == "succeeded");
+    }
+
+    private static JsonElement ById(List<JsonElement> entries, string? id) =>
+        id is null ? default : entries.FirstOrDefault(e => Text(e, "id") == id);
+
+    private static string Field(JsonElement entry, string name) => entry.ValueKind == JsonValueKind.Object ? Text(entry, name) ?? "?" : "?";
+
+    private static string? Text(JsonElement entry, string name) =>
+        entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static string Number(JsonElement entry, string name) =>
+        entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            ? ((long)value.GetDouble()).ToString(CultureInfo.InvariantCulture)
+            : "?";
+}
