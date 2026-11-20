@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Görev/ekran yazısı kutusu ile altyazı üst üste binmez (tv-webos/app.js avoidRegions): görev satırı altyazıya bitişik
-// olduğunda altyazı yalnız gerektiği kadar, aralarında küçük bir boşlukla kayar.
+// olduğunda görev kutusu yalnız gerektiği kadar, aralarında küçük bir boşlukla kayar. Altyazının yeri hiç değişmez.
 // node --test scripts/tv-screen-text-apart.test.js — tarayıcı yolu: COUCHSUBS_TEST_BROWSER.
 'use strict';
 const test = require('node:test');
@@ -47,9 +47,15 @@ function render() {
     var mission = box('auto-mission', 700, Math.round(before.bottom - 10), 520, 40);
     avoidRegions();
     var after = sub.getBoundingClientRect(), m = mission.getBoundingClientRect();
-    result.below = { subBottom: after.bottom, missionTop: m.top, shift: after.top - before.top };
-    // Kutu kalkınca altyazı yerine döner.
+    result.below = { subBottom: after.bottom, missionTop: m.top, shift: after.top - before.top,
+      missionShift: m.top - Math.round(before.bottom - 10) };
+    // Görev kutusu altyazının üstünde başlarsa yukarı kayar.
+    var upper = box('auto-upper', 700, Math.round(before.top - 30), 520, 40);
+    avoidRegions();
+    var u = upper.getBoundingClientRect();
+    result.above = { missionBottom: u.bottom, subTop: sub.getBoundingClientRect().top };
     $('regions').removeChild(mission); delete regionBoxes['auto-mission'];
+    $('regions').removeChild(upper); delete regionBoxes['auto-upper'];
     avoidRegions();
     result.back = sub.getBoundingClientRect().top - before.top;
     // Yatayda ayrı duran kutu altyazıyı kaydırmaz.
@@ -78,10 +84,12 @@ function render() {
 if (process.env.CI) assert.ok(browser, 'CI: gerçek yerleşim testi için Chrome/Edge gerekli');
 test('görev kutusu ile altyazı üst üste binmez', { skip: !browser && 'Chrome/Edge bulunamadı' }, () => {
   const r = render();
-  // Altyazı yukarı kayar, görev kutusunun üstünde en az küçük bir boşluk kalır; gereğinden fazla kaymaz.
-  assert.ok(r.below.shift < 0, JSON.stringify(r));
+  // Altyazı yerinde kalır; görev kutusu altyazının altına kayar, arada küçük bir boşluk kalır, gereğinden fazla kaymaz.
+  assert.equal(r.below.shift, 0);
+  assert.ok(r.below.missionShift > 0, JSON.stringify(r));
   assert.ok(r.below.subBottom <= r.below.missionTop - 4, JSON.stringify(r));
   assert.ok(r.below.missionTop - r.below.subBottom <= 12, JSON.stringify(r));
+  assert.ok(r.above.missionBottom <= r.above.subTop - 4, JSON.stringify(r));
   assert.equal(r.back, 0);
   assert.equal(r.side, 0);
 });

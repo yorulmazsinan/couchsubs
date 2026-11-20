@@ -1152,9 +1152,9 @@
   }
 
   // --- Ekran yazısı ile altyazının ayrımı ---
-  // Görev/hedef satırı çoğu oyunda altyazıya bitişik (ikisi de altta ortada). Ek alan ve ekran yazısı kutuları kendi
-  // yerinde durur; altyazı kutusu onlarla üst üste binecekse yalnız gerektiği kadar (aradaki küçük boşlukla) yukarı ya da
-  // aşağı kaydırılır. Kaydırma ekranı aşacaksa ekranın içinde kalan en yakın yere kadar kayar.
+  // Görev/hedef satırı çoğu oyunda altyazıya bitişik (ikisi de altta ortada). Altyazının yeri kullanıcının seçimidir ve
+  // hiçbir ekran yazısı onu değiştirmez: altyazıyla üst üste binecek ek alan/ekran yazısı kutusu kendisi, yalnız
+  // gerektiği kadar (aralarında küçük boşlukla) altyazıdan uzağa kayar; kaydığı yer ekranın dışındaysa öbür yana.
   var AVOID_GAP = 0.006;
   var setApart = true;
 
@@ -1164,51 +1164,38 @@
     el.style.transform = value;
   }
 
-  function regionRects() {
-    var rects = [];
+  function regionParts() {
+    var parts = [];
     for (var id in regionBoxes) {
-      // Oyun telefonu bilerek altyazının altında kalır; altyazıyı kaydırmaz.
+      // Oyun telefonu bilerek altyazının altında kalır; kaydırılmaz.
       if (!Object.prototype.hasOwnProperty.call(regionBoxes, id) || id === 'game-phone') continue;
       var host = regionBoxes[id];
-      var parts = host.className === 'region-blocks' ? host.children : [host];
-      for (var i = 0; i < parts.length; i++) {
-        var r = parts[i].getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) rects.push(r);
-      }
+      var list = host.className === 'region-blocks' ? host.children : [host];
+      for (var i = 0; i < list.length; i++) parts.push(list[i]);
     }
-    return rects;
+    return parts;
   }
 
   function avoidRegions() {
+    var parts = regionParts();
+    for (var i = 0; i < parts.length; i++) setShift(parts[i], 0);
     var el = $('subtitle');
-    if (!el || !$('subtitle-text')) return;
-    setShift(el, 0);
-    if (el.className === 'hidden') return;
+    if (!el || !$('subtitle-text') || el.className === 'hidden' || !parts.length) return;
     var sub = $('subtitle-text').getBoundingClientRect();
     if (!(sub.height > 0)) return;
-    var rects = regionRects();
-    if (!rects.length) return;
     var height = document.documentElement.clientHeight || window.innerHeight || 1080;
     var gap = Math.max(4, Math.round(height * AVOID_GAP));
-    var dy = 0;
-    for (var pass = 0; pass < 6; pass++) {
-      var top = sub.top + dy;
-      var bottom = sub.bottom + dy;
-      var hit = null;
-      for (var i = 0; i < rects.length; i++) {
-        var r = rects[i];
-        if (r.right <= sub.left || r.left >= sub.right) continue;
-        if (r.bottom + gap <= top || r.top - gap >= bottom) continue;
-        hit = r;
-        break;
-      }
-      if (!hit) break;
-      // Kutu altyazının altındaysa altyazı yukarı, üstündeyse aşağı kayar.
-      if ((hit.top + hit.bottom) / 2 >= (top + bottom) / 2) dy -= bottom - (hit.top - gap);
-      else dy += (hit.bottom + gap) - top;
+    for (var j = 0; j < parts.length; j++) {
+      var r = parts[j].getBoundingClientRect();
+      if (!(r.width > 0) || r.right <= sub.left || r.left >= sub.right) continue;
+      if (r.bottom + gap <= sub.top || r.top - gap >= sub.bottom) continue;
+      var up = sub.top - gap - r.bottom;
+      var down = sub.bottom + gap - r.top;
+      var above = (r.top + r.bottom) / 2 < (sub.top + sub.bottom) / 2;
+      var dy = above ? up : down;
+      if (r.top + dy < 0 || r.bottom + dy > height) dy = above ? down : up;
+      setShift(parts[j], dy);
     }
-    dy = Math.max(-sub.top, Math.min(height - sub.bottom, dy));
-    setShift(el, dy);
   }
 
   function hideRegions() {
