@@ -6,9 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Uzun oyunda bağlanıp kopma döngüsü (bütün uygulamalar, #593):** Wi-Fi'da kısa bir paket kaybından sonra görüntü donup her dakika yeniden bağlanma döngüsüne girilmesi giderildi. PS5'ten istenen tam kare artık gelene kadar yineleniyor, gönderme kuyruğu taşmıyor, görüntü donarsa uygulama hemen kesmeden 15 saniye bekliyor ve yeniden bağlanırken PS5'e nefes alacak zaman bırakıyor.
-- **Hazır paketten daha çok satır (bütün uygulamalar):** Yazı tanıma bir iki harfi yanlış okuduğunda (yutulan harf, I/l/1, O/0 karışması) satır yine paketteki çevirisiyle bulunuyor; ilgisiz bir satıra eşleşme azaldı.
-- **2016 Samsung TV'lere kurulum (Android telefon, #621):** Tizen 2.x TV'lerde "install failed[118]" hatası için paket bu TV'lerin kabul ettiği biçimde hazırlanıyor.
+- **Android TV'de siyah ekran (TV uygulaması 0.9.42, #643):** Katman modunda altyazı sayfası art arda kapanınca CouchSubs artık oyunun üstüne açılıp görüntüyü karartmıyor; katman kapanır, neden ekranda yazar, oyun görüntüsü yerinde kalır. Katman, sayfası yüklenene kadar hiçbir şey çizmez.
+- **Altyazı konuşana göre renkli (Windows, Mac, iPhone, Android):** "Ad: söz" biçimindeki altyazılarda konuşanın adı kendi renginde görünür; aynı kişi hep aynı renktedir. Ayarlardan kapatılabilir.
+- **Ekran yazıları kendiliğinden çevriliyor (Windows, deneysel):** Görev kutusu, yardım yazısı ve gelen mesaj gibi ekranda beliren yazılar bulunur, Türkçesi özgün yazının yerinde, onun rengi ve boyutuyla görünür. Ayarlar › "Ekran yazılarını otomatik çevir" ile kapatılabilir.
+- **GTA 6'da hazır ek alanlar (Windows, Mac, iPhone, Android):** GTA 6 seçilince yardım kutusu ve mesajlar için ek alanlar kendiliğinden açık gelir; ayar yapmak gerekmez.
+- **Altyazı kutusu yazıya oturuyor (TV uygulaması 0.9.42):** İki satıra bölünen altyazıda siyah zemin artık yalnız yazıyı kaplıyor.
+- **Samsung "Sunucu bakım altında (1544007)" (#637, #511):** TV'de CouchSubs kurulu değilse açma komutu gönderilmiyor, uyarı çıkmıyor; uygulama "TV uygulaması eksik" diyor.
+- **"TV'de test et" (#645):** TV bağlı değilse ne yapılacağı yazıyor; TV'deki 6 haneli kodun bir yere yazılmadığı, açılan pencerede onaylandığı açıkça söyleniyor.
+
+**beta.62'de gelenler:** uzun oyunda bağlanıp kopma döngüsünün giderilmesi (#593), bir iki harfi yanlış okunan satırların hazır paketten bulunması, 2016 Samsung TV'lere kurulum düzeltmesi (Android telefon, #621).
 
 **beta.61'de gelenler:** GTA 6'da oyun telefonu çevirisi (deneysel, katkı: lones8888), GTA 6 için 39 bin satırlık topluluk çevirisi, altyazı okunmayınca yedek yakalama ve "oyunun altyazısını açın" ipucu, Android'de yeni paket güncelleme ekranı, Android TV'de uygulamanın kapanmaması (TV uygulaması 0.9.41), Linux sunucu düzeltmeleri.
 
