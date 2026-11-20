@@ -38,22 +38,30 @@ internal sealed class WakePolicy
 }
 
 /// <summary>
-/// Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, en çok 30 sn (Mac'teki ReconnectPolicy ile aynı kural).
-/// Aralık bağlanınca hemen değil, oturum <see cref="StableAfter"/> kadar sürdükten sonra kapanınca baştan başlar. Eskiden her
-/// bağlanışta sıfırlanıyordu: PS5 oturumu açılıp birkaç saniyede düşürünce (ör. "açıldıktan 3-4 sn sonra kapanıyor")
-/// 2 sn sonra yeniden bağlanılıyor, PS5'te ikinci hesap durmadan girip çıkıyordu.
+/// Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, 32, en çok 60 sn (Mac ve Android'deki ReconnectPolicy ile
+/// aynı kural). Aralık bağlanınca hemen değil, oturum <see cref="StableAfter"/> kadar sürdükten sonra kapanınca baştan
+/// başlar. Eskiden her bağlanışta sıfırlanıyordu: PS5 oturumu açılıp birkaç saniyede düşürünce (ör. "açıldıktan 3-4 sn
+/// sonra kapanıyor") 2 sn sonra yeniden bağlanılıyor, PS5'te ikinci hesap durmadan girip çıkıyordu.
+///
+/// Akış sürerken kopan oturumdan sonra en az 8 sn beklenir; aralık ancak 5 dk süren oturumdan sonra baştan başlar. Eskiden
+/// 60 sn yetiyordu ve en çok 30 sn beklenirdi: kablosuz ağ bozulunca oturumlar birer dakika sürüp düşüyor, her seferinde
+/// 2 sn sonra yeniden deneniyordu. Yeni oturum istekleri PS5'in eski oturumu bırakmasını beklemeden geldikçe PS5 30 sn ile
+/// birkaç dakika yanıt vermiyordu (GitHub #593).
 /// </summary>
 internal sealed class ReconnectPolicy
 {
-    public static readonly TimeSpan StableAfter = TimeSpan.FromSeconds(60);
+    public static readonly TimeSpan StableAfter = TimeSpan.FromMinutes(5);
+    public const int MaxDelay = 60;
+    /// <summary>Akış sürerken kopan oturumdan sonraki en kısa bekleme: 2 &lt;&lt; 2 = 8 sn.</summary>
+    public const int AfterDropAttempt = 2;
     private int attempt;
     private long? connectedAt;
 
-    /// <param name="inUse">Uzaktan Oynatma başka cihazda: sık denemek boşuna, en az 8 sn beklenir (8, 16, 30).</param>
+    /// <param name="inUse">Uzaktan Oynatma başka cihazda: sık denemek boşuna, en az 8 sn beklenir (8, 16, 32).</param>
     public int NextDelay(bool inUse = false)
     {
         if (inUse) attempt = Math.Max(attempt, 2);
-        var delay = Math.Min(30, 2 << attempt);
+        var delay = Math.Min(MaxDelay, 2 << attempt);
         attempt = Math.Min(attempt + 1, 5);
         return delay;
     }
@@ -66,10 +74,15 @@ internal sealed class ReconnectPolicy
 
     public void Connected(long nowMs) => connectedAt = nowMs;
 
-    /// <summary>Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder.</summary>
+    /// <summary>Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder. Bağlı oturum
+    /// kapandıysa PS5 eski oturumu bıraksın diye en az 8 sn beklenir.</summary>
     public void Ended(long nowMs)
     {
-        if (connectedAt is { } at && nowMs - at >= (long)StableAfter.TotalMilliseconds) attempt = 0;
+        if (connectedAt is { } at)
+        {
+            if (nowMs - at >= (long)StableAfter.TotalMilliseconds) attempt = 0;
+            attempt = Math.Max(attempt, AfterDropAttempt);
+        }
         connectedAt = null;
     }
 }
@@ -127,33 +140,47 @@ internal sealed class QualityFallback
 
 /// <summary>
 /// Bağlı oturumda PS5'ten görüntü gelmiyor mu (Mac'teki PictureWatchdog ve Android'deki eşi ile aynı kural).
-/// libchiaki bir karenin FEC onarımı tutmayınca PS5'ten bir kez yeni anahtar kare (IDR) ister ve o gelene kadar bütün
-/// kareleri atlar (enable_idr_on_fec_failure). İstenen IDR karesinin kendisi de bozuk gelirse yeniden istemez ("Video FEC
-/// failure, already waiting for requested IDR"): bağlantı açık kalır, ama bir daha hiç kare gelmez. Kablosuz ağda bu
-/// birkaç dakikada bir olur; altyazı duruyor, TV bağlı görünüyor ve ancak uygulamayı kapatıp açmak düzeltiyordu.
-/// Bağlıyken <see cref="StallAfter"/> boyunca hiç görüntü gelmezse oturum yeniden kurulur; yeni oturum anahtar kareyle başlar.
+/// libchiaki bir karenin FEC onarımı tutmayınca PS5'ten yeni anahtar kare (IDR) ister ve o gelene kadar bütün kareleri
+/// atlar (enable_idr_on_fec_failure). İstek ya da IDR karesi kaybolursa eskiden bir daha istenmiyordu: bağlantı açık
+/// kalıyor, ama bir daha hiç kare gelmiyordu. chiaki-stream-recovery.patch ile istek saniyede bir yinelenir. Bağlıyken
+/// görüntü <see cref="StallAfter"/> (oturumda henüz görüntü gelmediyse <see cref="FirstPictureAfter"/>) boyunca gelmezse
+/// oturum yine yeniden kurulur; yeni oturum anahtar kareyle başlar. <see cref="StallAfter"/> eskiden 8 sn'ydi: ağ birkaç
+/// saniye bozulunca IDR yinelenmeden oturum kapatılıyor, PS5 ardından 30 sn ile birkaç dakika yanıt vermiyordu (GitHub #593).
 /// </summary>
 internal sealed class PictureWatchdog
 {
-    /// <summary>IDR ile olağan toparlanma bir saniyeden kısa sürer; bundan uzun boşluk takılmadır.</summary>
-    public static readonly TimeSpan StallAfter = TimeSpan.FromSeconds(8);
+    /// <summary>Saniyede bir yinelenen IDR isteğine ve libchiaki'nin 5 sn'lik yeniden gönderme süresine yer kalır.</summary>
+    public static readonly TimeSpan StallAfter = TimeSpan.FromSeconds(15);
+    /// <summary>Bağlandıktan sonra ilk görüntü bu sürede gelmezse takılma sayılır.</summary>
+    public static readonly TimeSpan FirstPictureAfter = TimeSpan.FromSeconds(8);
     /// <summary>Yeniden bağlanırken ana ekranda "Yeniden bağlanılıyor… (…)" içinde görünen neden.</summary>
     public const string Reason = "no picture from the PS5";
 
     private readonly Lock gate = new();
     /// <summary>Bağlıyken son görüntünün (ya da bağlanmanın) anı (ms); bağlı değilken null.</summary>
     private long? since;
+    /// <summary>Bu oturumda görüntü geldi mi.</summary>
+    private bool hasPicture;
 
     /// <summary>Oturum bağlandı: süre bağlanma anından sayılır (ilk kare hiç gelmezse de yakalanır).</summary>
     public void Connected(long nowMs)
     {
-        lock (gate) since = nowMs;
+        lock (gate)
+        {
+            since = nowMs;
+            hasPicture = false;
+        }
     }
 
     /// <summary>Görüntü geldi (kare iş parçacığından).</summary>
     public void Picture(long nowMs)
     {
-        lock (gate) if (since is not null) since = nowMs;
+        lock (gate)
+        {
+            if (since is null) return;
+            since = nowMs;
+            hasPicture = true;
+        }
     }
 
     /// <summary>Oturum kapandı ya da yeniden kuruluyor.</summary>
@@ -162,14 +189,15 @@ internal sealed class PictureWatchdog
         lock (gate) since = null;
     }
 
-    /// <summary>Bağlıyken <see cref="StallAfter"/>'dan uzun süredir görüntü yoksa boşluğun süresi; yoksa null.</summary>
+    /// <summary>Bağlıyken <see cref="StallAfter"/>'dan (oturumda henüz görüntü yoksa <see cref="FirstPictureAfter"/>'dan)
+    /// uzun süredir görüntü yoksa boşluğun süresi; yoksa null.</summary>
     public TimeSpan? Stalled(long nowMs)
     {
         lock (gate)
         {
             if (since is not { } last) return null;
             var gap = TimeSpan.FromMilliseconds(nowMs - last);
-            return gap >= StallAfter ? gap : null;
+            return gap >= (hasPicture ? StallAfter : FirstPictureAfter) ? gap : null;
         }
     }
 }

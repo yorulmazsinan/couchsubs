@@ -87,10 +87,10 @@ public class WakePolicyTests
 public class ReconnectPolicyTests
 {
     [Fact]
-    public void BackoffDoublesUpToThirtySeconds()
+    public void BackoffDoublesUpToSixtySeconds()
     {
         var policy = new ReconnectPolicy();
-        Assert.Equal([2, 4, 8, 16, 30, 30, 30], Enumerable.Range(0, 7).Select(_ => policy.NextDelay()));
+        Assert.Equal([2, 4, 8, 16, 32, 60, 60], Enumerable.Range(0, 7).Select(_ => policy.NextDelay()));
     }
 
     [Fact]
@@ -112,17 +112,35 @@ public class ReconnectPolicyTests
         Assert.Equal(2, policy.NextDelay());
         policy.Connected(10_000);
         policy.Ended(14_000);
-        Assert.Equal(4, policy.NextDelay());
+        // Bağlı oturum kopunca PS5 eski oturumu bıraksın diye en az 8 sn.
+        Assert.Equal(8, policy.NextDelay());
         policy.Connected(20_000);
         policy.Ended(20_000 + (long)ReconnectPolicy.StableAfter.TotalMilliseconds);
-        Assert.Equal(2, policy.NextDelay());
+        Assert.Equal(8, policy.NextDelay());
+        // Bağlanamayan denemeler büyümeye devam eder.
+        Assert.Equal(16, policy.NextDelay());
+    }
+
+    /// <summary>Birer dakika süren oturumlar aralığı sıfırlıyor, her dakika bağlanıp kopuluyordu (GitHub #593, iPad).</summary>
+    [Fact]
+    public void MinuteLongSessionsKeepBackingOff()
+    {
+        var policy = new ReconnectPolicy();
+        var delays = Enumerable.Range(0, 4).Select(round =>
+        {
+            var connected = round * 1_000_000L;
+            policy.Connected(connected);
+            policy.Ended(connected + 90_000);
+            return policy.NextDelay();
+        }).ToList();
+        Assert.Equal([8, 16, 32, 60], delays);
     }
 
     [Fact]
     public void InUseWaitsAtLeastEightSeconds()
     {
         var policy = new ReconnectPolicy();
-        Assert.Equal([8, 16, 30], Enumerable.Range(0, 3).Select(_ => policy.NextDelay(inUse: true)));
+        Assert.Equal([8, 16, 32], Enumerable.Range(0, 3).Select(_ => policy.NextDelay(inUse: true)));
     }
 }
 
@@ -171,14 +189,24 @@ public class PictureWatchdogTests
     /// oturum hiç yeniden kurulmuyor, altyazı ancak uygulamayı kapatıp açınca dönüyordu.
     /// </summary>
     [Fact]
-    public void ConnectedWithoutPictureForEightSecondsIsStalled()
+    public void ConnectedWithoutPictureForFifteenSecondsIsStalled()
     {
         var watchdog = new PictureWatchdog();
         watchdog.Connected(0);
         for (var second = 1; second <= 120; second++) watchdog.Picture(second * 1000);
         // İki dakika görüntü geldi, sonra kesildi.
-        Assert.Null(watchdog.Stalled(127_000));
-        Assert.Equal(PictureWatchdog.StallAfter, watchdog.Stalled(128_000));
+        Assert.Null(watchdog.Stalled(134_000));
+        Assert.Equal(PictureWatchdog.StallAfter, watchdog.Stalled(135_000));
+    }
+
+    /// <summary>GitHub #593: libchiaki IDR'yi saniyede bir yeniden isterken 8-14 sn'lik boşluk oturumu kapatmaz.</summary>
+    [Fact]
+    public void IdrRetryWindowIsNotAStall()
+    {
+        var watchdog = new PictureWatchdog();
+        watchdog.Connected(0);
+        watchdog.Picture(1000);
+        Assert.Null(watchdog.Stalled(15_000));
     }
 
     /// <summary>Olağan FEC duraklaması (IDR bir saniyeden kısa sürede gelir) oturumu yeniden kurdurmaz.</summary>
@@ -198,7 +226,8 @@ public class PictureWatchdogTests
     {
         var watchdog = new PictureWatchdog();
         watchdog.Connected(0);
-        Assert.NotNull(watchdog.Stalled((long)PictureWatchdog.StallAfter.TotalMilliseconds));
+        Assert.Null(watchdog.Stalled((long)PictureWatchdog.FirstPictureAfter.TotalMilliseconds - 1));
+        Assert.NotNull(watchdog.Stalled((long)PictureWatchdog.FirstPictureAfter.TotalMilliseconds));
     }
 
     /// <summary>Bağlı değilken görüntü beklenmez; geç gelen eski kare de bekçiyi kurmaz.</summary>

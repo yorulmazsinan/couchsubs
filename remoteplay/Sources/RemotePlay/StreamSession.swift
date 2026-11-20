@@ -23,22 +23,32 @@ struct FrameThrottle {
     }
 }
 
-/// Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, en çok 30 sn.
+/// Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, 32, en çok 60 sn (Android ve Windows'taki
+/// ReconnectPolicy ile aynı kural).
 ///
 /// Aralık bağlanınca hemen değil, oturum `stableAfter` kadar sürdükten sonra kapanınca baştan başlar. Eskiden her
 /// bağlanışta sıfırlanıyordu: PS5 oturumu açılıp birkaç saniyede düşürünce (ör. aynı ikinci hesapla bağlı başka bir
 /// cihaz) telefon 2 sn sonra yeniden bağlanıyor, PS5'te ikinci hesap durmadan girip çıkıyordu.
+///
+/// Akış sürerken kopan oturumdan sonra en az 8 sn beklenir; aralık ancak 5 dk süren oturumdan sonra baştan başlar.
+/// Eskiden 60 sn yetiyordu ve en çok 30 sn beklenirdi: kablosuz ağ bozulunca oturumlar birer dakika sürüp düşüyor, her
+/// seferinde 2 sn sonra yeniden deneniyor, "her dakika bağlanıp kopuyor" döngüsü uzun süre sürüyordu (TestFlight, iPad).
+/// Yeni oturum istekleri PS5'in eski oturumu bırakmasını beklemeden geldikçe PS5 30 sn ile birkaç dakika yanıt
+/// vermiyordu (GitHub #593).
 struct ReconnectPolicy {
-    static let stableAfter: TimeInterval = 60
+    static let stableAfter: TimeInterval = 5 * 60
+    static let maxDelay = 60
+    /// Akış sürerken kopan oturumdan sonraki en kısa bekleme: `2 << afterDropAttempt` = 8 sn.
+    static let afterDropAttempt = 2
     private var attempt = 0
     private var connectedAt: Date?
 
-    /// `inUse`: Uzaktan Oynatma başka cihazda; sık denemek boşuna, en az 8 sn beklenir (8, 16, 30). Hemen en uzuna
+    /// `inUse`: Uzaktan Oynatma başka cihazda; sık denemek boşuna, en az 8 sn beklenir (8, 16, 32). Hemen en uzuna
     /// atlanmaz: telefonun kendi eski oturumu PS5'te birkaç saniye daha açık görünebilir.
     mutating func nextDelay(inUse: Bool = false) -> Int {
         if inUse { attempt = max(attempt, 2) }
         defer { attempt = min(attempt + 1, 5) }
-        return min(30, 2 << attempt)
+        return min(Self.maxDelay, 2 << attempt)
     }
 
     mutating func reset() {
@@ -48,9 +58,13 @@ struct ReconnectPolicy {
 
     mutating func connected(at now: Date = Date()) { connectedAt = now }
 
-    /// Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder.
+    /// Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder. Bağlı oturum kapandıysa
+    /// PS5 eski oturumu bıraksın diye en az 8 sn beklenir.
     mutating func ended(at now: Date = Date()) {
-        if let connectedAt, now.timeIntervalSince(connectedAt) >= Self.stableAfter { attempt = 0 }
+        if let connectedAt {
+            if now.timeIntervalSince(connectedAt) >= Self.stableAfter { attempt = 0 }
+            attempt = max(attempt, Self.afterDropAttempt)
+        }
         connectedAt = nil
     }
 }
@@ -141,14 +155,17 @@ struct QualityFallback {
 
 /// Bağlı oturumda PS5'ten görüntü gelmiyor mu (Windows'taki PictureWatchdog ve Android'deki eşi ile aynı kural).
 ///
-/// libchiaki bir karenin FEC onarımı tutmayınca PS5'ten bir kez yeni anahtar kare (IDR) ister ve o gelene kadar bütün
-/// kareleri atlar (`enable_idr_on_fec_failure`). İstenen IDR karesinin kendisi de bozuk gelirse yeniden istemez
-/// ("Video FEC failure, already waiting for requested IDR"): bağlantı açık kalır, ama bir daha hiç kare gelmez. Kablosuz
-/// ağda bu birkaç dakikada bir olur; altyazı duruyor, TV bağlı görünüyor ve ancak uygulamayı kapatıp açmak düzeltiyordu.
-/// Bağlıyken `stallAfter` boyunca hiç görüntü gelmezse oturum yeniden kurulur; yeni oturum anahtar kareyle başlar.
+/// libchiaki bir karenin FEC onarımı tutmayınca PS5'ten yeni anahtar kare (IDR) ister ve o gelene kadar bütün kareleri
+/// atlar (`enable_idr_on_fec_failure`). İstek ya da IDR karesi kaybolursa eskiden bir daha istenmiyordu: bağlantı açık
+/// kalıyor, ama bir daha hiç kare gelmiyordu. chiaki-stream-recovery.patch ile istek saniyede bir yinelenir. Bağlıyken
+/// görüntü `stallAfter` (oturumda henüz görüntü gelmediyse `firstPictureAfter`) boyunca gelmezse oturum yine yeniden
+/// kurulur; yeni oturum anahtar kareyle başlar. `stallAfter` eskiden 8 sn'ydi: ağ birkaç saniye bozulunca IDR yinelenmeden
+/// oturum kapatılıyor, PS5 ardından 30 sn ile birkaç dakika yanıt vermiyordu (GitHub #593).
 struct PictureWatchdog {
-    /// IDR ile olağan toparlanma bir saniyeden kısa sürer; bundan uzun boşluk takılmadır.
-    static let stallAfter: TimeInterval = 8
+    /// Saniyede bir yinelenen IDR isteğine ve libchiaki'nin 5 sn'lik yeniden gönderme süresine yer kalır.
+    static let stallAfter: TimeInterval = 15
+    /// Bağlandıktan sonra ilk görüntü bu sürede gelmezse takılma sayılır.
+    static let firstPictureAfter: TimeInterval = 8
     /// Yeniden bağlanırken ana ekranda "Yeniden bağlanılıyor… (…)" içinde görünen neden.
     static let reason = "no picture from the PS5"
     /// Art arda bu kadar oturumda hiç görüntü gelmezse yeniden bağlanma bırakılır (Android'deki eşi ile aynı).
@@ -200,11 +217,12 @@ struct PictureWatchdog {
     /// Oturum kapandı ya da yeniden kuruluyor.
     mutating func ended() { since = nil }
 
-    /// Bağlıyken `stallAfter`'dan uzun süredir görüntü yoksa boşluğun süresi (sn); yoksa nil.
+    /// Bağlıyken `stallAfter`'dan (oturumda henüz görüntü yoksa `firstPictureAfter`'dan) uzun süredir görüntü yoksa
+    /// boşluğun süresi (sn); yoksa nil.
     func stalled(at now: Date = Date()) -> TimeInterval? {
         guard let since else { return nil }
         let gap = now.timeIntervalSince(since)
-        return gap >= Self.stallAfter ? gap : nil
+        return gap >= (hasPicture ? Self.stallAfter : Self.firstPictureAfter) ? gap : nil
     }
 }
 

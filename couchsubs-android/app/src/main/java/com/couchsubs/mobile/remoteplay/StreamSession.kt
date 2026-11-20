@@ -161,23 +161,31 @@ class CrashRetryLimit {
 }
 
 /**
- * Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, en çok 30 sn (Mac/iPhone ve Windows ile aynı). Aralık
+ * Bağlantı koptuğunda yeniden deneme aralıkları: 2, 4, 8, 16, 32, en çok 60 sn (Mac/iPhone ve Windows ile aynı). Aralık
  * bağlanınca hemen değil, oturum [STABLE_AFTER_MS] kadar sürdükten sonra kapanınca baştan başlar. Eskiden her bağlanışta
  * sıfırlanıyordu: PS5 oturumu açılıp birkaç saniyede düşürünce 2 sn sonra yeniden bağlanılıyor, PS5'te ikinci hesap
  * durmadan girip çıkıyordu.
+ *
+ * Akış sürerken kopan oturumdan sonra en az 8 sn beklenir; aralık ancak 5 dk süren oturumdan sonra baştan başlar. Eskiden
+ * 60 sn yetiyordu ve en çok 30 sn beklenirdi: kablosuz ağ bozulunca oturumlar birer dakika sürüp düşüyor, her seferinde
+ * 2 sn sonra yeniden deneniyor, bağlan-kop döngüsü uzun süre sürüyordu (Redmi Pad, iPad). Yeni oturum istekleri PS5'in
+ * eski oturumu bırakmasını beklemeden geldikçe PS5 30 sn ile birkaç dakika yanıt vermiyordu (GitHub #593).
  */
 class ReconnectPolicy {
     companion object {
-        const val STABLE_AFTER_MS = 60_000L
+        const val STABLE_AFTER_MS = 5 * 60_000L
+        const val MAX_DELAY_SECONDS = 60
+        /** Akış sürerken kopan oturumdan sonraki en kısa bekleme: 2 shl 2 = 8 sn. */
+        const val AFTER_DROP_ATTEMPT = 2
     }
 
     private var attempt = 0
     private var connectedAt: Long? = null
 
-    /** [inUse]: Uzaktan Oynatma başka cihazda; sık denemek boşuna, en az 8 sn beklenir (8, 16, 30). */
+    /** [inUse]: Uzaktan Oynatma başka cihazda; sık denemek boşuna, en az 8 sn beklenir (8, 16, 32). */
     fun nextDelaySeconds(inUse: Boolean = false): Int {
         if (inUse) attempt = maxOf(attempt, 2)
-        val delay = minOf(30, 2 shl attempt)
+        val delay = minOf(MAX_DELAY_SECONDS, 2 shl attempt)
         attempt = minOf(attempt + 1, 5)
         return delay
     }
@@ -191,10 +199,16 @@ class ReconnectPolicy {
         connectedAt = nowMs
     }
 
-    /** Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder. */
+    /**
+     * Oturum kapandı: uzun sürdüyse aralık baştan başlar, kısa sürdüyse büyümeye devam eder. Bağlı oturum kapandıysa PS5
+     * eski oturumu bıraksın diye en az 8 sn beklenir.
+     */
     fun ended(nowMs: Long) {
         val at = connectedAt
-        if (at != null && nowMs - at >= STABLE_AFTER_MS) attempt = 0
+        if (at != null) {
+            if (nowMs - at >= STABLE_AFTER_MS) attempt = 0
+            attempt = maxOf(attempt, AFTER_DROP_ATTEMPT)
+        }
         connectedAt = null
     }
 }
@@ -272,16 +286,17 @@ class QualityFallback {
 
 /**
  * Bağlı oturumda PS5'ten görüntü gelmiyor mu (Mac ve Windows'taki PictureWatchdog ile aynı kural).
- * libchiaki bir karenin FEC onarımı tutmayınca PS5'ten bir kez yeni anahtar kare (IDR) ister ve o gelene kadar bütün
- * kareleri atlar (enable_idr_on_fec_failure). İstenen IDR karesinin kendisi de bozuk gelirse yeniden istemez ("Video FEC
- * failure, already waiting for requested IDR"): bağlantı açık kalır, ama bir daha hiç kare gelmez; altyazı ancak
- * uygulamayı kapatıp açınca dönüyordu. Bağlıyken [STALL_AFTER_MS] boyunca hiç görüntü gelmezse oturum yeniden kurulur;
- * yeni oturum anahtar kareyle başlar.
+ * libchiaki bir karenin FEC onarımı tutmayınca PS5'ten yeni anahtar kare (IDR) ister ve o gelene kadar bütün kareleri
+ * atlar (enable_idr_on_fec_failure). İstek ya da IDR karesi kaybolursa eskiden bir daha istenmiyordu: bağlantı açık
+ * kalıyor, ama bir daha hiç kare gelmiyordu. chiaki-stream-recovery.patch ile istek saniyede bir yinelenir. Bağlıyken
+ * [STALL_AFTER_MS] boyunca hiç görüntü gelmezse oturum yine yeniden kurulur; yeni oturum anahtar kareyle başlar.
+ * [STALL_AFTER_MS] eskiden 8 sn'ydi: ağ birkaç saniye bozulunca IDR yinelenmeden oturum kapatılıyor, PS5 ardından 30 sn
+ * ile birkaç dakika yanıt vermiyordu (GitHub #593).
  */
 class PictureWatchdog {
     companion object {
-        /** IDR ile olağan toparlanma bir saniyeden kısa sürer; bundan uzun boşluk takılmadır. */
-        const val STALL_AFTER_MS = 8_000L
+        /** Saniyede bir yinelenen IDR isteğine ve libchiaki'nin 5 sn'lik yeniden gönderme süresine yer kalır. */
+        const val STALL_AFTER_MS = 15_000L
         /** Bağlandıktan sonra ilk kare bu sürede gelmezse çözücü türü değiştirilip yeniden denenir. */
         const val FIRST_PICTURE_MS = 5_000L
         /** Art arda bu kadar oturumda hiç görüntü gelmezse yeniden bağlanma bırakılır. */

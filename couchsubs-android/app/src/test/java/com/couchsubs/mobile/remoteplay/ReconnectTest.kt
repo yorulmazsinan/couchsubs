@@ -14,16 +14,38 @@ class ReconnectTest {
         assertEquals(2, policy.nextDelaySeconds())
         policy.connected(10_000)
         policy.ended(14_000)
-        assertEquals(4, policy.nextDelaySeconds())
+        // Bağlı oturum kopunca PS5 eski oturumu bıraksın diye en az 8 sn.
+        assertEquals(8, policy.nextDelaySeconds())
         policy.connected(20_000)
         policy.ended(20_000 + ReconnectPolicy.STABLE_AFTER_MS)
-        assertEquals(2, policy.nextDelaySeconds())
+        assertEquals(8, policy.nextDelaySeconds())
+        // Bağlanamayan denemeler büyümeye devam eder.
+        assertEquals(16, policy.nextDelaySeconds())
+    }
+
+    /** Redmi Pad, iPad: birer dakika süren oturumlar aralığı sıfırlıyor, her dakika bağlanıp kopuyordu. */
+    @Test
+    fun minuteLongSessionsKeepBackingOff() {
+        val policy = ReconnectPolicy()
+        val delays = List(4) { round ->
+            val connected = round * 1_000_000L
+            policy.connected(connected)
+            policy.ended(connected + 90_000)
+            policy.nextDelaySeconds()
+        }
+        assertEquals(listOf(8, 16, 32, 60), delays)
+    }
+
+    @Test
+    fun backoffDoublesUpToSixtySeconds() {
+        val policy = ReconnectPolicy()
+        assertEquals(listOf(2, 4, 8, 16, 32, 60, 60), List(7) { policy.nextDelaySeconds() })
     }
 
     @Test
     fun inUseWaitsAtLeastEightSeconds() {
         val policy = ReconnectPolicy()
-        assertEquals(listOf(8, 16, 30), List(3) { policy.nextDelaySeconds(inUse = true) })
+        assertEquals(listOf(8, 16, 32), List(3) { policy.nextDelaySeconds(inUse = true) })
     }
 
     /** Kablosuz ağda akış sık kopuyordu (GitHub #388, #401): on dakikada iki kopmadan sonra 720p istenir. */

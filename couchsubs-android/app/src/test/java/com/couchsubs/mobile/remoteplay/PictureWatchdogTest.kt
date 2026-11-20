@@ -13,13 +13,22 @@ class PictureWatchdogTest {
      * oturum hiç yeniden kurulmuyor, altyazı ancak uygulamayı kapatıp açınca dönüyordu.
      */
     @Test
-    fun connectedWithoutPictureForEightSecondsIsStalled() {
+    fun connectedWithoutPictureForFifteenSecondsIsStalled() {
         val watchdog = PictureWatchdog()
         watchdog.connected(0)
         for (second in 1..120) watchdog.picture(second * 1000L)
         // İki dakika görüntü geldi, sonra kesildi.
-        assertNull(watchdog.stalledMs(127_000))
-        assertEquals(PictureWatchdog.STALL_AFTER_MS, watchdog.stalledMs(128_000))
+        assertNull(watchdog.stalledMs(134_000))
+        assertEquals(PictureWatchdog.STALL_AFTER_MS, watchdog.stalledMs(135_000))
+    }
+
+    /** GitHub #593: libchiaki IDR'yi saniyede bir yeniden isterken 8-14 sn'lik boşluk oturumu kapatmaz. */
+    @Test
+    fun idrRetryWindowIsNotAStall() {
+        val watchdog = PictureWatchdog()
+        watchdog.connected(0)
+        watchdog.picture(1000)
+        assertNull(watchdog.stalledMs(15_000))
     }
 
     /** Olağan FEC duraklaması (IDR bir saniyeden kısa sürede gelir) oturumu yeniden kurdurmaz. */

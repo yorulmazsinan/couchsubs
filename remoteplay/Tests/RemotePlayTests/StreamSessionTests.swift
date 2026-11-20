@@ -19,9 +19,9 @@ final class FrameThrottleTests: XCTestCase {
 }
 
 final class ReconnectPolicyTests: XCTestCase {
-    func testBackoffDoublesUpToThirtySeconds() {
+    func testBackoffDoublesUpToSixtySeconds() {
         var policy = ReconnectPolicy()
-        XCTAssertEqual((0..<7).map { _ in policy.nextDelay() }, [2, 4, 8, 16, 30, 30, 30])
+        XCTAssertEqual((0..<8).map { _ in policy.nextDelay() }, [2, 4, 8, 16, 32, 60, 60, 60])
     }
 
     func testResetStartsOver() {
@@ -42,15 +42,39 @@ final class ReconnectPolicyTests: XCTestCase {
             policy.ended(at: connected.addingTimeInterval(5))
             delays.append(policy.nextDelay())
         }
-        XCTAssertEqual(delays, [2, 4, 8, 16, 30, 30])
+        // Bağlı oturum kopunca PS5 eski oturumu bıraksın diye en az 8 sn.
+        XCTAssertEqual(delays, [8, 16, 32, 60, 60, 60])
+    }
+
+    /// TestFlight (iPad): kablosuz ağ bozulunca oturumlar birer dakika sürüp düşüyordu; 60 sn'lik oturum aralığı
+    /// sıfırladığı için her seferinde 2 sn sonra yeniden bağlanılıyor, "her dakika bağlanıp kopuyor" döngüsü sürüyordu.
+    func testMinuteLongSessionsKeepBackingOff() {
+        var policy = ReconnectPolicy()
+        let start = Date(timeIntervalSince1970: 0)
+        var delays: [Int] = []
+        for round in 0..<4 {
+            let connected = start.addingTimeInterval(Double(round) * 1000)
+            policy.connected(at: connected)
+            policy.ended(at: connected.addingTimeInterval(90))
+            delays.append(policy.nextDelay())
+        }
+        XCTAssertEqual(delays, [8, 16, 32, 60])
     }
 
     func testAStableSessionStartsTheBackoffOver() {
         var policy = ReconnectPolicy()
-        _ = policy.nextDelay(); _ = policy.nextDelay(); _ = policy.nextDelay()
+        _ = policy.nextDelay(); _ = policy.nextDelay(); _ = policy.nextDelay(); _ = policy.nextDelay()
         let connected = Date(timeIntervalSince1970: 0)
         policy.connected(at: connected)
         policy.ended(at: connected.addingTimeInterval(ReconnectPolicy.stableAfter + 1))
+        XCTAssertEqual(policy.nextDelay(), 8)
+        // Bağlanamayan (oturumu hiç açılmayan) denemeler en kısadan başlamaz, büyümeye devam eder.
+        XCTAssertEqual(policy.nextDelay(), 16)
+    }
+
+    func testFailedConnectAttemptsStartAtTwoSeconds() {
+        var policy = ReconnectPolicy()
+        policy.ended()
         XCTAssertEqual(policy.nextDelay(), 2)
     }
 
@@ -58,7 +82,7 @@ final class ReconnectPolicyTests: XCTestCase {
         var policy = ReconnectPolicy()
         XCTAssertEqual(policy.nextDelay(inUse: true), 8)
         XCTAssertEqual(policy.nextDelay(inUse: true), 16)
-        XCTAssertEqual(policy.nextDelay(inUse: true), 30)
+        XCTAssertEqual(policy.nextDelay(inUse: true), 32)
     }
 }
 
@@ -100,13 +124,22 @@ final class PictureWatchdogTests: XCTestCase {
 
     /// Hata: istenen IDR karesi de bozuk gelince libchiaki yeniden istemiyor, bağlantı açık kalıp hiç kare gelmiyordu;
     /// oturum hiç yeniden kurulmuyor, altyazı ancak uygulamayı kapatıp açınca dönüyordu.
-    func testConnectedWithoutPictureForEightSecondsIsStalled() {
+    func testConnectedWithoutPictureForFifteenSecondsIsStalled() {
         var watchdog = PictureWatchdog()
         watchdog.connected(at: start)
         for second in 1...120 { watchdog.picture(at: start.addingTimeInterval(Double(second))) }
         // İki dakika görüntü geldi, sonra kesildi.
-        XCTAssertNil(watchdog.stalled(at: start.addingTimeInterval(127)))
-        XCTAssertEqual(watchdog.stalled(at: start.addingTimeInterval(128)), PictureWatchdog.stallAfter)
+        XCTAssertNil(watchdog.stalled(at: start.addingTimeInterval(134)))
+        XCTAssertEqual(watchdog.stalled(at: start.addingTimeInterval(135)), PictureWatchdog.stallAfter)
+    }
+
+    /// GitHub #593: ağ birkaç saniye bozulunca oturum 8 sn'de kapatılıyordu; libchiaki IDR'yi saniyede bir yeniden
+    /// isterken 8-14 sn'lik boşluk oturumu kapatmaz.
+    func testIDRRetryWindowIsNotAStall() {
+        var watchdog = PictureWatchdog()
+        watchdog.connected(at: start)
+        watchdog.picture(at: start.addingTimeInterval(1))
+        XCTAssertNil(watchdog.stalled(at: start.addingTimeInterval(1 + 14)))
     }
 
     /// Olağan FEC duraklaması (IDR bir saniyeden kısa sürede gelir) oturumu yeniden kurdurmaz.
@@ -122,7 +155,8 @@ final class PictureWatchdogTests: XCTestCase {
     func testNoFirstPictureIsStalled() {
         var watchdog = PictureWatchdog()
         watchdog.connected(at: start)
-        XCTAssertNotNil(watchdog.stalled(at: start.addingTimeInterval(PictureWatchdog.stallAfter)))
+        XCTAssertNil(watchdog.stalled(at: start.addingTimeInterval(PictureWatchdog.firstPictureAfter - 1)))
+        XCTAssertNotNil(watchdog.stalled(at: start.addingTimeInterval(PictureWatchdog.firstPictureAfter)))
     }
 
     /// Hata: hiç görüntü gelmeyen oturum sonsuza dek yeniden kuruluyordu ("Yeniden bağlanılıyor…"). Art arda 3

@@ -1,0 +1,166 @@
+diff --git a/lib/include/chiaki/videoreceiver.h b/lib/include/chiaki/videoreceiver.h
+--- a/lib/include/chiaki/videoreceiver.h
++++ b/lib/include/chiaki/videoreceiver.h
+@@ -37,6 +37,7 @@
+ 	ChiakiBitstream bitstream;
+ 	ChiakiMutex waiting_for_idr_mutex;
+ 	bool waiting_for_idr;
++	uint64_t idr_request_last_ms; // when the IDR being waited for was last requested
+ 	ChiakiMutex frames_lost_mutex;
+ } ChiakiVideoReceiver;
+ 
+diff --git a/lib/src/reorderqueue.c b/lib/src/reorderqueue.c
+--- a/lib/src/reorderqueue.c
++++ b/lib/src/reorderqueue.c
+@@ -34,7 +34,9 @@
+ #define REORDER_QUEUE_INIT(bits) \
+ static bool seq_num_##bits##_gt(uint64_t a, uint64_t b) { return chiaki_seq_num_##bits##_gt((ChiakiSeqNum##bits)a, (ChiakiSeqNum##bits)b); } \
+ static bool seq_num_##bits##_lt(uint64_t a, uint64_t b) { return chiaki_seq_num_##bits##_lt((ChiakiSeqNum##bits)a, (ChiakiSeqNum##bits)b); } \
+-static uint64_t seq_num_##bits##_add(uint64_t a, uint64_t b) { return (uint64_t)((ChiakiSeqNum##bits)a + (ChiakiSeqNum##bits)b); } \
++/* the sum is cast back: uint16_t operands are promoted to int, so 0xffff + 1 was 0x10000 and the packet \
++ * at the wrapped begin failed the equality in ge() and was dropped (64 bit compare of 0 with 0x10000) */ \
++static uint64_t seq_num_##bits##_add(uint64_t a, uint64_t b) { return (uint64_t)(ChiakiSeqNum##bits)((ChiakiSeqNum##bits)a + (ChiakiSeqNum##bits)b); } \
+ \
+ CHIAKI_EXPORT ChiakiErrorCode chiaki_reorder_queue_init_##bits(ChiakiReorderQueue *queue, size_t size_exp, ChiakiSeqNum##bits seq_num_start) \
+ { \
+@@ -184,6 +186,8 @@
+ 
+ 	if(queue->drop_cb)
+ 		queue->drop_cb(seq_num, entry->user, queue->drop_cb_user);
++	// the drop callback freed it: a later peek or pull must not return it (chiaki-ng 727917c0)
++	entry->set = false;
+ 
+ 	// reduce count if necessary
+ 	if(index == queue->count - 1)
+diff --git a/lib/src/takion.c b/lib/src/takion.c
+--- a/lib/src/takion.c
++++ b/lib/src/takion.c
+@@ -45,7 +45,9 @@
+ #define TAKION_REORDER_QUEUE_SIZE_EXP 4 // => 16 entries
+ #define TAKION_AV_VIDEO_REORDER_QUEUE_SIZE_EXP 6 // => 64 entries
+ #define TAKION_AV_REORDER_TIMEOUT_US 16000 // ~1 frame at 60fps
+-#define TAKION_SEND_BUFFER_SIZE 16
++// Unacknowledged reliable packets kept for resending. 16 overflowed during loss bursts and the IDR
++// request was dropped untracked, leaving the picture frozen (CouchSubs GitHub #593, chiaki-ng 3e1a24dd)
++#define TAKION_SEND_BUFFER_SIZE 1024
+ 
+ #define TAKION_POSTPONE_PACKETS_SIZE 32
+ 
+diff --git a/lib/src/takionsendbuffer.c b/lib/src/takionsendbuffer.c
+--- a/lib/src/takionsendbuffer.c
++++ b/lib/src/takionsendbuffer.c
+@@ -12,7 +12,9 @@
+ #define TAKION_DATA_RESEND_TIMEOUT_MS 200
+ #define TAKION_DATA_RESEND_WAKEUP_TIMEOUT_MS (TAKION_DATA_RESEND_TIMEOUT_MS/2)
+ #define TAKION_DATA_RESEND_TRIES_MAX 25
+-#define TAKION_SEND_BUFFER_SIZE 16
++// Unacknowledged reliable packets kept for resending. 16 overflowed during loss bursts and the IDR
++// request was dropped untracked, leaving the picture frozen (CouchSubs GitHub #593, chiaki-ng 3e1a24dd)
++#define TAKION_SEND_BUFFER_SIZE 1024
+ 
+ #endif
+ 
+diff --git a/lib/src/videoreceiver.c b/lib/src/videoreceiver.c
+--- a/lib/src/videoreceiver.c
++++ b/lib/src/videoreceiver.c
+@@ -1,10 +1,15 @@
+ // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+ 
+ #include <chiaki/videoreceiver.h>
++#include <chiaki/time.h>
+ #include "../include/chiaki/session.h"
+ 
+ #include <string.h>
+ 
++// While waiting for a requested IDR frame, request it again this often, in case the request
++// or the IDR frame itself was lost; otherwise the picture stays frozen (chiaki-ng 8134f458)
++#define VIDEO_IDR_RETRY_INTERVAL_MS 1000
++
+ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *video_receiver);
+ 
+ static void add_ref_frame(ChiakiVideoReceiver *video_receiver, int32_t frame)
+@@ -54,6 +59,7 @@
+ 	chiaki_bitstream_init(&video_receiver->bitstream, video_receiver->log, video_receiver->session->connect_info.video_profile.codec);
+ 	chiaki_mutex_init(&video_receiver->waiting_for_idr_mutex, false);
+ 	video_receiver->waiting_for_idr = false;
++	video_receiver->idr_request_last_ms = 0;
+ 	chiaki_mutex_init(&video_receiver->frames_lost_mutex, false);
+ }
+ 
+@@ -70,9 +76,34 @@
+ {
+ 	chiaki_mutex_lock(&video_receiver->waiting_for_idr_mutex);
+ 	video_receiver->waiting_for_idr = waiting_for_idr;
++	if(waiting_for_idr)
++		video_receiver->idr_request_last_ms = chiaki_time_now_monotonic_ms();
+ 	chiaki_mutex_unlock(&video_receiver->waiting_for_idr_mutex);
+ }
+ 
++/**
++ * While waiting for an IDR frame, request it again once VIDEO_IDR_RETRY_INTERVAL_MS has passed
++ * since it was last requested.
++ */
++static void video_receiver_retry_idr_request(ChiakiVideoReceiver *video_receiver)
++{
++	chiaki_mutex_lock(&video_receiver->waiting_for_idr_mutex);
++	uint64_t now_ms = chiaki_time_now_monotonic_ms();
++	bool due = video_receiver->waiting_for_idr
++		&& now_ms - video_receiver->idr_request_last_ms >= VIDEO_IDR_RETRY_INTERVAL_MS;
++	if(due)
++		video_receiver->idr_request_last_ms = now_ms;
++	chiaki_mutex_unlock(&video_receiver->waiting_for_idr_mutex);
++	if(!due)
++		return;
++
++	ChiakiErrorCode err = stream_connection_send_idr_request(&video_receiver->session->stream_connection);
++	if(err == CHIAKI_ERR_SUCCESS)
++		CHIAKI_LOGI(video_receiver->log, "Still waiting for IDR frame, requested it again");
++	else
++		CHIAKI_LOGW(video_receiver->log, "Still waiting for IDR frame and the request could not be sent again: %s", chiaki_error_string(err));
++}
++
+ CHIAKI_EXPORT bool chiaki_video_receiver_get_waiting_for_idr(ChiakiVideoReceiver *video_receiver)
+ {
+ 	bool waiting_for_idr;
+@@ -158,8 +189,13 @@
+ 			CHIAKI_LOGW(video_receiver->log, "Video receiver could not flush frame.");
+ 
+ 		ChiakiSeqNum16 next_frame_expected = (ChiakiSeqNum16)(video_receiver->frame_index_prev_complete + 1);
++		// While waiting for a requested IDR frame, skipped P-frames don't move frame_index_prev_complete,
++		// so every new frame was reported corrupt again as one more reliable packet (30 a second). On a lossy
++		// link they filled the Takion send buffer and pushed out the IDR request itself (CouchSubs GitHub #593).
++		// The IDR request, repeated once a second, already covers these frames.
+ 		if(chiaki_seq_num_16_gt(frame_index, next_frame_expected)
+-			&& !(frame_index == 1 && video_receiver->frame_index_cur < 0)) // ok for frame 1
++			&& !(frame_index == 1 && video_receiver->frame_index_cur < 0) // ok for frame 1
++			&& !chiaki_video_receiver_get_waiting_for_idr(video_receiver))
+ 		{
+ 			CHIAKI_LOGW(video_receiver->log, "Detected missing or corrupt frame(s) from %d to %d", next_frame_expected, (int)frame_index);
+ 			err = stream_connection_send_corrupt_frame(&video_receiver->session->stream_connection, next_frame_expected, frame_index - 1);
+@@ -200,7 +236,9 @@
+ 		if (flush_result == CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FEC_FAILED)
+ 		{
+ 			ChiakiSeqNum16 next_frame_expected = (ChiakiSeqNum16)(video_receiver->frame_index_prev_complete + 1);
+-			stream_connection_send_corrupt_frame(&video_receiver->session->stream_connection, next_frame_expected, video_receiver->frame_index_cur);
++			// already waiting for a requested IDR: the repeated IDR request covers this frame (see above)
++			if(!chiaki_video_receiver_get_waiting_for_idr(video_receiver))
++				stream_connection_send_corrupt_frame(&video_receiver->session->stream_connection, next_frame_expected, video_receiver->frame_index_cur);
+ 			if(video_receiver->session->connect_info.enable_idr_on_fec_failure)
+ 			{
+ 				bool waiting_for_idr = chiaki_video_receiver_get_waiting_for_idr(video_receiver);
+@@ -222,6 +260,7 @@
+ 				else
+ 				{
+ 					CHIAKI_LOGW(video_receiver->log, "Video FEC failure, already waiting for requested IDR");
++					video_receiver_retry_idr_request(video_receiver);
+ 				}
+ 				ChiakiEvent event = { 0 };
+ 				event.type = CHIAKI_EVENT_VIDEO_FEC_FAILURE;
+@@ -256,6 +295,7 @@
+ 			else
+ 			{
+ 				CHIAKI_LOGV(video_receiver->log, "Skipping P-frame %d while waiting for IDR", (int)video_receiver->frame_index_cur);
++				video_receiver_retry_idr_request(video_receiver);
+ 				video_receiver->frame_index_prev = video_receiver->frame_index_cur;
+ 				return CHIAKI_ERR_SUCCESS;
+ 			}
