@@ -52,6 +52,24 @@ public sealed class PackUpdaterTests : IDisposable
         return File.Exists(file) ? File.ReadAllText(file) : null;
     }
 
+    /// <summary>
+    /// Paket dosyasının değiştirilmesini engeller. Windows'ta açık dosyanın (FileShare.Delete yok) üstüne taşıma yapılamaz;
+    /// macOS ve Linux'ta rename açık dosyayı umursamaz, orada klasör salt okunur yapılır (yazma ve taşıma ikisi de düşer).
+    /// </summary>
+    private static IDisposable BlockReplacement(string file)
+    {
+        if (OperatingSystem.IsWindows()) return new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var directory = Path.GetDirectoryName(file)!;
+        var mode = File.GetUnixFileMode(directory);
+        File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        return new Restore(() => File.SetUnixFileMode(directory, mode));
+    }
+
+    private sealed class Restore(Action action) : IDisposable
+    {
+        public void Dispose() => action();
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(root, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -85,8 +103,7 @@ public sealed class PackUpdaterTests : IDisposable
         var installedBefore = Assert.Single(updater.InstalledPacks);
 
         server.Add("gta-6", 2, "two");
-        var file = Path.Combine(Packs, "gta-6.json.gz");
-        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (BlockReplacement(Path.Combine(Packs, "gta-6.json.gz")))
         {
             var failed = await updater.RefreshAsync(force: true);
 
