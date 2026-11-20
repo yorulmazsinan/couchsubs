@@ -867,6 +867,7 @@
   // condensed, align, upper}. Büyük harf çeviriyi bilgisayar zaten büyütür. Alanları göndermeyen eski bilgisayarda
   // kutu eskisi gibi siyah kalır.
   var STYLED_MIN_SCALE = 0.8;
+  var STYLED_LABEL_MIN_SCALE = 0.6;
   var CONDENSED_FONT = '"Roboto Condensed", "Arial Narrow", "Helvetica Neue Condensed", "LG Smart UI Condensed", sans-serif';
 
   function hexAlpha(hex, alpha) {
@@ -952,9 +953,17 @@
       var size = Math.max(floor, Math.min(96, Math.round(line * 0.95)));
       // Özgün görünüşlü yazı özgün genişlikte kalır: Türkçe uzunsa önce satır kırılır, sığmazsa yazı en çok %20 küçülür,
       // yine sığmazsa kutu aşağı uzar.
-      if (styled) floor = Math.max(SCREEN_MIN_FONT, Math.round(size * STYLED_MIN_SCALE));
+      // Menü şeridindeki kısa etiket ("OFF" → "KAPALI", en çok iki sözcük) tek satır kalır, şeridin dışına taşmaz: gerekirse
+      // yazı en çok %40 küçülür.
+      var label = styled && item.text.indexOf('\n') < 0 && item.text.split(/\s+/).length <= 2;
+      if (styled) floor = Math.max(label ? 10 : SCREEN_MIN_FONT, Math.round(size * (label ? STYLED_LABEL_MIN_SCALE : STYLED_MIN_SCALE)));
+      if (label) el.style.whiteSpace = 'nowrap';
       el.style.fontSize = size + 'px';
       host.appendChild(el);
+      while (label && el.scrollWidth > el.clientWidth && size > floor) {
+        size = Math.max(floor, size - 1);
+        el.style.fontSize = size + 'px';
+      }
       // Türkçe çoğu zaman İngilizceden uzundur: kutu biraz uzayabilir, daha fazlası için yazı küçülür.
       var limit = Math.min(available, phone || styled ? boxHeight + 1 : Math.max(boxHeight * 1.5, line * 2.6));
       while (el.scrollHeight > limit && size > floor) {

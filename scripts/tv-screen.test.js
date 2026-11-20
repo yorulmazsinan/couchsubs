@@ -108,6 +108,14 @@ function render(width, height) {
           surface:{background:'#f0f0f0', foreground:'#101010', flat:true}, style:{bold:true, condensed:true, align:'right', upper:true}},
         {text:"Vicki patronunu soyup parayı paylaşmak istiyor. Onunla Delights'ta buluş.", box:{left:.05,top:.135,right:.25,bottom:.16}, line:.02,
           surface:{background:'#1a1c20', foreground:'#ffffff', flat:false}, style:{bold:false, condensed:false, align:'left', upper:false}}]});
+      // Tekerlek menü şeridi: dar kutuda "KAPALI" tek satır, şeride sığar.
+      showRegion({id:'auto-2', text:'KAPALI', box:{left:.40,top:.30,right:.43,bottom:.32}, blocks:[
+        {text:'KAPALI', box:{left:.40,top:.30,right:.43,bottom:.32}, line:.018,
+          surface:{background:'#202020', foreground:'#ffffff', flat:true}, style:{bold:true, condensed:true, align:'center', upper:true}}]});
+      var strip = regionBoxes['auto-2'].firstChild;
+      result.strip = {scroll: strip.scrollWidth, client: strip.clientWidth, height: strip.getBoundingClientRect().height,
+        white: getComputedStyle(strip).whiteSpace};
+      showRegion({id:'auto-2', text:''});
       result.styled = Array.from($('regions').querySelectorAll('.item')).slice(-2).map(function (el) {
         var cs = getComputedStyle(el), b = el.getBoundingClientRect();
         return {background:cs.backgroundColor, color:cs.color, weight:cs.fontWeight, align:cs.textAlign,
@@ -271,6 +279,8 @@ test('TV ekran çevirisi: ' + width + '×' + height, {skip: !browser && 'Chrome/
     assert.ok(reply.bottom <= next.top);
     assert.equal(r.afterPhone, 'Ahıra git');
     assert.equal(r.normalColor, 'rgba(0, 0, 0, 0.97)');
+    assert.equal(r.strip.white, 'nowrap');
+    assert.ok(r.strip.scroll <= r.strip.client + 1, JSON.stringify(r.strip));
     const [title, body] = r.styled;
     assert.equal(title.background, 'rgb(240, 240, 240)');
     assert.equal(title.color, 'rgb(16, 16, 16)');
