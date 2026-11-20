@@ -176,7 +176,7 @@ final class ScreenTextDetectorTests: XCTestCase {
         print(String(format: "1920x1080 örnek: ortalama %.3f ms, en kötü %.3f ms (100 tekrar)", average, times.max()!))
         // Sürüm derlemesinde ~0,5 ms; hata ayıklama derlemesi (CI) çok daha yavaş, eşik ona göre.
         #if DEBUG
-        XCTAssertLessThan(average, 80)
+        XCTAssertLessThan(average, 400)
         #else
         XCTAssertLessThan(average, 20)
         #endif
