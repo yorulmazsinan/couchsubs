@@ -174,7 +174,12 @@ final class ScreenTextDetectorTests: XCTestCase {
         }
         let average = times.reduce(0, +) / Double(times.count)
         print(String(format: "1920x1080 örnek: ortalama %.3f ms, en kötü %.3f ms (100 tekrar)", average, times.max()!))
+        // Sürüm derlemesinde ~0,5 ms; hata ayıklama derlemesi (CI) çok daha yavaş, eşik ona göre.
+        #if DEBUG
+        XCTAssertLessThan(average, 80)
+        #else
         XCTAssertLessThan(average, 20)
+        #endif
     }
 
     func testNoiseRules() {
