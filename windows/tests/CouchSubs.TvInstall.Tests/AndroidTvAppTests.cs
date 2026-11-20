@@ -20,10 +20,27 @@ public class AndroidTvAppTests
     public void RecordOfAnUninstalledAppIsALeftover() =>
         Assert.True(AndroidTvApp.IsLeftover(Installed.Replace("installed=true", "installed=false")));
 
+    // #528: TV uygulamayı yalnız ana kullanıcıdan (User 0) kaldırmış, çocuk/ikincil profilde kurulu kalmış.
     [Fact]
-    public void AppInstalledForAnotherProfileIsNotALeftover() =>
-        Assert.False(AndroidTvApp.IsLeftover(Installed.Replace("installed=true", "installed=false") +
-                                             "\n      User 10: ceDataInode=678 installed=true hidden=false\n"));
+    public void AppRemovedOnlyFromMainUserIsALeftoverThatCanBeBroughtBack()
+    {
+        var multiProfile = Installed.Replace("installed=true", "installed=false") +
+                           "\n      User 10: ceDataInode=678 installed=true hidden=false\n";
+        Assert.True(AndroidTvApp.IsLeftover(multiProfile));
+        Assert.True(AndroidTvApp.CanInstallExisting(multiProfile));
+        Assert.False(AndroidTvApp.CanInstallExisting(Installed.Replace("installed=true", "installed=false")));
+    }
+
+    [Fact]
+    public void AppInstalledForMainUserIsNotALeftoverEvenIfAnotherProfileLacksIt() =>
+        Assert.False(AndroidTvApp.IsLeftover(Installed + "\n      User 10: ceDataInode=678 installed=false hidden=false\n"));
+
+    [Fact]
+    public void InstallExistingOutputIsRead()
+    {
+        Assert.True(AndroidTvApp.InstallExistingSucceeded("Package com.couchsubs.tv installed for user: 0\n"));
+        Assert.False(AndroidTvApp.InstallExistingSucceeded("Failure [NameNotFoundException]"));
+    }
 
     [Fact]
     public void MissingPackageOrOldOutputWithoutUserLinesIsNotALeftover()

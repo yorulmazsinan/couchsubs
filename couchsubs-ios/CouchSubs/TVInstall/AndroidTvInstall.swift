@@ -279,6 +279,33 @@ final class AndroidTvInstaller {
     }
 
     static func versionFromDumpsys(_ output: String) -> String? { match(#"versionName=(\S+)"#, output) }
+    /// dumpsys'teki kullanıcı satırları ("User 0: ceDataInode=… installed=true …"): kullanıcı numarası → kurulu mu.
+    private static func usersFromDumpsys(_ output: String) -> [String: Bool] {
+        guard let regex = try? NSRegularExpression(pattern: #"^\s*User (\d+):.*?\binstalled=(true|false)\b"#,
+                                                   options: .anchorsMatchLines) else { return [:] }
+        var users: [String: Bool] = [:]
+        for found in regex.matches(in: output, range: NSRange(output.startIndex..., in: output)) {
+            guard let user = Range(found.range(at: 1), in: output), let value = Range(found.range(at: 2), in: output) else { continue }
+            if users[String(output[user])] == nil { users[String(output[user])] = output[value] == "true" }
+        }
+        return users
+    }
+
+    /// dumpsys sürüm söylüyor ama uygulama TV'nin ana kullanıcısında (User 0) kurulu değil: kaydı kalmış (#352, #389) ya da
+    /// TV uygulamayı yalnız ana kullanıcıdan kaldırmış, çocuk/ikincil profilde bırakmış (#528). Kullanıcı satırı yoksa
+    /// (eski Android) kalıntı sayılmaz. Android'deki AndroidTvInstaller.isLeftover ile aynıdır.
+    static func isLeftover(_ output: String) -> Bool {
+        guard versionFromDumpsys(output) != nil else { return false }
+        let users = usersFromDumpsys(output)
+        guard !users.isEmpty else { return false }
+        return users["0"] == false || !users.values.contains(true)
+    }
+    /// Kalıntı ama APK başka bir profilde kurulu: `pm install-existing --user 0` ile APK göndermeden geri getirilir (#528).
+    static func canInstallExisting(_ output: String) -> Bool { isLeftover(output) && usersFromDumpsys(output).values.contains(true) }
+    static let installExistingCommand = "shell:pm install-existing --user 0 \(packageName)"
+    static func installExistingSucceeded(_ output: String) -> Bool { output.contains("installed for user") }
+    /// TV'de kurulu CouchSubs sürümü; yoksa ya da yalnız kaydı kalmışsa nil.
+    static func installedVersionFromDumpsys(_ output: String) -> String? { isLeftover(output) ? nil : versionFromDumpsys(output) }
     static func installedFromPlay(_ output: String) -> Bool { match(#"installerPackageName=(\S+)"#, output) == "com.android.vending" }
     static func looksFailed(_ output: String) -> Bool {
         ["Error", "Exception", "Unknown", "not allowed"].contains { output.range(of: $0, options: .caseInsensitive) != nil }
@@ -313,7 +340,7 @@ final class AndroidTvInstaller {
         let adb = try AdbConnection.connect(host: host, port: port, key: try adbKey(),
                                             onApprovalNeeded: { throw AndroidInstallFailure(error: .notApproved, detail: "onay gerekiyor") })
         defer { adb.close() }
-        return Self.versionFromDumpsys(try adb.run("shell:dumpsys package \(Self.packageName)"))
+        return Self.installedVersionFromDumpsys(try adb.run("shell:dumpsys package \(Self.packageName)"))
     }
 
     /// Uygulama eksikse ya da eskiyse kurar ve açar. `allowReplace`: TV'deki başka imzalı kopya kaldırılsın mı.
@@ -348,9 +375,16 @@ final class AndroidTvInstaller {
         defer { adb.close() }
         log.write("ADB bağlantısı kuruldu (\(adb.secure ? "TLS" : "düz"), en çok \(adb.maxData) bayt).")
         progress(.reading)
-        let dumpsys = try adb.run("shell:dumpsys package \(Self.packageName)")
-        let installed = Self.versionFromDumpsys(dumpsys)
+        var dumpsys = try adb.run("shell:dumpsys package \(Self.packageName)")
+        if Self.canInstallExisting(dumpsys) {
+            // TV uygulamayı yalnız ana kullanıcıdan kaldırmış, başka profilde duruyor: APK göndermeden geri getirilir (#528).
+            let existing = (try? adb.run(Self.installExistingCommand)) ?? ""
+            log.write("CouchSubs TV başka bir profilde kurulu; ana kullanıcıya geri getiriliyor: \(existing.trimmingCharacters(in: .whitespacesAndNewlines))")
+            if Self.installExistingSucceeded(existing) { dumpsys = try adb.run("shell:dumpsys package \(Self.packageName)") }
+        }
+        let installed = Self.installedVersionFromDumpsys(dumpsys)
         let fromPlay = Self.installedFromPlay(dumpsys)
+        if Self.isLeftover(dumpsys) { log.write("TV'de CouchSubs'ın kaydı kalmış ama uygulama kurulu değil; yeniden kuruluyor.") }
         log.write("TV'deki CouchSubs: \(installed ?? "yok")\(fromPlay ? " (Google Play'den)" : "")")
         if let installed, let version, !Versions.isNewer(version, than: installed) {
             grantOverlay(adb)
@@ -377,7 +411,7 @@ final class AndroidTvInstaller {
             throw AndroidInstallFailure(error: Self.isStorageProblem(output) ? .notEnoughSpace : .installFailed, detail: trimmed.isEmpty ? "TV yanıt vermedi" : trimmed)
         }
         grantOverlay(adb)
-        let after = Self.versionFromDumpsys((try? adb.run("shell:dumpsys package \(Self.packageName)")) ?? "")
+        let after = Self.installedVersionFromDumpsys((try? adb.run("shell:dumpsys package \(Self.packageName)")) ?? "")
         launch(adb)
         return Result(version: after ?? version ?? "", installed: true)
     }
@@ -396,7 +430,7 @@ final class AndroidTvInstaller {
         let deadline = Date().addingTimeInterval(playWait)
         while Date() < deadline {
             Thread.sleep(forTimeInterval: playPoll)
-            let now = Self.versionFromDumpsys(try adb.run("shell:dumpsys package \(Self.packageName)"))
+            let now = Self.installedVersionFromDumpsys(try adb.run("shell:dumpsys package \(Self.packageName)"))
             if let now, now != before {
                 log.write("Play'den kuruldu: \(now)")
                 grantOverlay(adb)

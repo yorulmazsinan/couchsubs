@@ -45,19 +45,33 @@ class AndroidTvInstaller(
 
         fun versionFromDumpsys(output: String): String? = versionName.find(output)?.groupValues?.get(1)
 
-        private val userInstalled = Regex("""^\s*User \d+:.*?\binstalled=(true|false)\b""", RegexOption.MULTILINE)
+        private val userInstalled = Regex("""^\s*User (\d+):.*?\binstalled=(true|false)\b""", RegexOption.MULTILINE)
+
+        /** dumpsys'teki kullanıcı satırları: kullanıcı numarası -> kurulu mu. */
+        private fun usersFromDumpsys(output: String): Map<String, Boolean> =
+            userInstalled.findAll(output).associate { it.groupValues[1] to (it.groupValues[2] == "true") }
 
         /**
-         * dumpsys sürüm söylüyor ama uygulama hiçbir kullanıcıda kurulu değil (kullanıcı satırlarının hepsi installed=false):
-         * TV'den kaldırılan uygulamanın kaydı kalmış (veri saklanarak kaldırma, arşivleme). Önceden "kurulu" sayılıyor,
-         * kurulum atlanıyordu (#352, #389). Kullanıcı satırı yoksa (eski Android) kalıntı sayılmaz.
+         * dumpsys sürüm söylüyor ama uygulama TV'nin ana kullanıcısında (User 0) kurulu değil: TV'den kaldırılan
+         * uygulamanın kaydı kalmış (veri saklanarak kaldırma, arşivleme; #352, #389) ya da TV uygulamayı yalnız ana
+         * kullanıcıdan kaldırmış, çocuk/ikincil profilde kurulu kalmış (#528). Önceden "kurulu" sayılıyor, kurulum
+         * atlanıyor, `am start` hata veriyordu. Kullanıcı satırı yoksa (eski Android) kalıntı sayılmaz.
          * Masaüstündeki AndroidTvApp.IsLeftover ile aynıdır.
          */
         fun isLeftover(output: String): Boolean {
             if (versionFromDumpsys(output) == null) return false
-            val users = userInstalled.findAll(output).map { it.groupValues[1] }.toList()
-            return users.isNotEmpty() && users.all { it == "false" }
+            val users = usersFromDumpsys(output)
+            if (users.isEmpty()) return false
+            return users["0"] == false || users.values.none { it }
         }
+
+        /** Kalıntı ama APK başka bir profilde kurulu: `pm install-existing --user 0` ile APK göndermeden geri getirilir (#528). */
+        fun canInstallExisting(output: String): Boolean = isLeftover(output) && usersFromDumpsys(output).values.any { it }
+
+        const val INSTALL_EXISTING_COMMAND = "shell:pm install-existing --user 0 $PACKAGE_NAME"
+
+        /** `pm install-existing` başarılı mı ("Package com.couchsubs.tv installed for user: 0")? */
+        fun installExistingSucceeded(output: String): Boolean = output.contains("installed for user")
 
         /** TV'de kurulu CouchSubs sürümü; yoksa ya da yalnız kaydı kalmışsa null. */
         fun installedVersionFromDumpsys(output: String): String? = versionFromDumpsys(output)?.takeUnless { isLeftover(output) }
@@ -176,7 +190,13 @@ class AndroidTvInstaller(
         }.use { adb ->
             log.write("ADB bağlantısı kuruldu (${if (adb.secure) "TLS" else "düz"}, en çok ${adb.maxData} bayt).")
             progress(InstallStep.READING)
-            val dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
+            var dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
+            if (canInstallExisting(dumpsys)) {
+                // TV uygulamayı yalnız ana kullanıcıdan kaldırmış, başka profilde duruyor: APK göndermeden geri getirilir (#528).
+                val existing = runCatching { adb.run(INSTALL_EXISTING_COMMAND) }.getOrDefault("")
+                log.write("CouchSubs TV başka bir profilde kurulu; ana kullanıcıya geri getiriliyor: ${existing.trim()}")
+                if (installExistingSucceeded(existing)) dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
+            }
             val installed = installedVersionFromDumpsys(dumpsys)
             val fromPlay = installedFromPlay(dumpsys)
             if (isLeftover(dumpsys)) log.write("TV'de CouchSubs'ın kaydı kalmış ama uygulama kurulu değil; yeniden kuruluyor.")

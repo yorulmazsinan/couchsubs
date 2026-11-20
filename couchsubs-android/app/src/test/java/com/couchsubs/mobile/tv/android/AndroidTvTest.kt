@@ -102,9 +102,72 @@ class AndroidTvTest {
         assertEquals("0.9.18", AndroidTvInstaller.installedVersionFromDumpsys(installed))
         assertTrue(AndroidTvInstaller.isLeftover(leftover))
         assertNull(AndroidTvInstaller.installedVersionFromDumpsys(leftover))
-        // Başka bir profilde kuruluysa kalıntı değildir; kullanıcı satırı olmayan eski çıktı da öyle.
-        assertFalse(AndroidTvInstaller.isLeftover(leftover + "    User 10: ceDataInode=2 installed=true\n"))
+        assertFalse(AndroidTvInstaller.canInstallExisting(leftover))
+        // Kullanıcı satırı olmayan eski çıktı kalıntı değildir; ana kullanıcıda kuruluysa başka profil önemsizdir.
         assertFalse(AndroidTvInstaller.isLeftover("    versionName=0.9.18\n"))
+        assertFalse(AndroidTvInstaller.isLeftover(installed + "    User 10: ceDataInode=2 installed=false\n"))
+    }
+
+    // #528: TV uygulamayı yalnız ana kullanıcıdan (User 0) kaldırmış, çocuk/ikincil profilde kurulu kalmış.
+    private val multiProfile = """
+        Packages:
+          Package [com.couchsubs.tv] (5d1c2a7):
+            userId=10123
+            versionCode=918 minSdk=24 targetSdk=34
+            versionName=0.9.18
+            installerPackageName=null
+            User 0: ceDataInode=0 installed=false hidden=false suspended=false distractionFlags=0 stopped=true notLaunched=true enabled=0 instant=false virtual=false
+            User 10: ceDataInode=48213 installed=true hidden=false suspended=false distractionFlags=0 stopped=false notLaunched=false enabled=0 instant=false virtual=false
+    """.trimIndent()
+
+    @Test
+    fun appRemovedOnlyFromMainUserCountsAsNotInstalled() {
+        assertTrue(AndroidTvInstaller.isLeftover(multiProfile))
+        assertNull(AndroidTvInstaller.installedVersionFromDumpsys(multiProfile))
+        assertTrue(AndroidTvInstaller.canInstallExisting(multiProfile))
+        assertTrue(AndroidTvInstaller.installExistingSucceeded("Package com.couchsubs.tv installed for user: 0\n"))
+        assertFalse(AndroidTvInstaller.installExistingSucceeded("Failure [NameNotFoundException]"))
+    }
+
+    @Test
+    fun appRemovedOnlyFromMainUserIsBroughtBackWithoutApk() {
+        val key = tempKey()
+        var restored = false
+        val adbd = FakeAdbd(services = { service, _ ->
+            when {
+                service.startsWith("shell:dumpsys") ->
+                    if (restored) multiProfile.replace("User 0: ceDataInode=0 installed=false", "User 0: ceDataInode=0 installed=true")
+                    else multiProfile
+                service == AndroidTvInstaller.INSTALL_EXISTING_COMMAND -> { restored = true; "Package com.couchsubs.tv installed for user: 0\n" }
+                else -> ""
+            }
+        }).start()
+        val result = installer(adbd, key, mutableListOf()).ensureInstalled({ apk }, "0.9.18")
+        assertEquals(AndroidTvInstaller.Result("0.9.18", false), result)
+        assertTrue(adbd.opened.contains(AndroidTvInstaller.INSTALL_EXISTING_COMMAND))
+        assertFalse(adbd.opened.any { it.startsWith("exec:cmd package install ") })
+        assertTrue(adbd.opened.any { it.startsWith("shell:am start -n") })
+        adbd.join()
+    }
+
+    @Test
+    fun appRemovedOnlyFromMainUserIsInstalledWhenInstallExistingFails() {
+        val key = tempKey()
+        var installed = false
+        val adbd = FakeAdbd(services = { service, _ ->
+            when {
+                service.startsWith("shell:dumpsys") ->
+                    if (installed) multiProfile.replace("User 0: ceDataInode=0 installed=false", "User 0: ceDataInode=0 installed=true")
+                    else multiProfile
+                service == AndroidTvInstaller.INSTALL_EXISTING_COMMAND -> "Error: unknown command\n"
+                service.startsWith("exec:cmd package install ") -> { installed = true; "Success\n" }
+                else -> ""
+            }
+        }).start()
+        val result = installer(adbd, key, mutableListOf()).ensureInstalled({ apk }, "0.9.18")
+        assertEquals(AndroidTvInstaller.Result("0.9.18", true), result)
+        assertTrue(adbd.opened.any { it.startsWith("exec:cmd package install ") })
+        adbd.join()
     }
 
     @Test
