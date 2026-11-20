@@ -27,8 +27,9 @@ const cases = {
   above: { text: LONG, box: box(.5), placement: 'above' },
   coverBand: { text: LONG, box: box(.5), band: true },
   // Canlı yayında görüldü: İngilizce satır geniş (ekranın %60'ı), çeviri 42 karakterle iki dar satıra bölününce kutu
-  // yazıdan her yanda ~%20 genişti. Örtüde de kutu yazıya oturmalı (yazı örtü genişliğinde tek satır).
-  coverFit: { text: 'Yerel bağımlılar ona katalitik konvertörü eksik bir araba bulabilirler.',
+  // yazıdan her yanda ~%20 genişti. Örtüde de kutu yazıya oturmalı (çeviri örtü genişliğinde tek satır).
+  // Metin her yazı tipinde (Linux'taki geniş yazı tiplerinde de) tek satıra sığacak uzunlukta.
+  coverFit: { text: 'Yerel bağımlılar ona katalitik konvertörü eksik araba bulur.',
     box: { left: .2, top: .85, right: .8, bottom: .89 }, fit: true },
   fixedFit: { text: 'Yerel bağımlılar ona katalitik konvertörü eksik bir araba bulabilirler.', placement: 'fixed', fit: true },
 };
@@ -146,6 +147,7 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
         const empty = r[key].width - r[key].padding - r[key].textWidth;
         assert.ok(empty <= 4, key + ' ' + JSON.stringify(r[key]));
       }
+      assert.equal(r.coverFit.lines, 1, JSON.stringify(r.coverFit));
       // Örtü yine İngilizce satırı kaplar.
       assert.ok(r.coverFit.left <= .2 * width + 1 && r.coverFit.right >= .8 * width - 1, JSON.stringify(r.coverFit));
     });
