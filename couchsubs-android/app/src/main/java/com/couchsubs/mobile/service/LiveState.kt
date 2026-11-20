@@ -34,6 +34,10 @@ data class LiveStatus(
     val packInUse: String? = null,
     val error: String? = null,
     val framesReceived: Long = 0,
+    /** Görüntünün bu bağlantıda ilk geldiği an (duvar saati, ms); bağlı değilken null. */
+    val framesSince: Long? = null,
+    /** Görüntü bir dakikadır geliyor ama tek satır gösterilmedi: "oyunun kendi altyazısını açın" (bkz. SubtitleOffTip). */
+    val subtitleOffTip: Boolean = false,
     /** Okumanın başladığı an (duvar saati, ms); süre göstergesi için. */
     val startedAt: Long = 0,
     /** Seçili çeviri motorunun görünen adı ("DeepL", "Ücretsiz"). */
@@ -60,6 +64,18 @@ data class LiveStatus(
      */
     enum class ScreenState { IDLE, WORKING, SHOWN }
 
+    /** Kare sayacı güncellendi ([now]: duvar saati, ms): görüntü süresi ve "altyazıyı açın" ipucu yeniden hesaplanır. */
+    fun withFrames(frames: Long, now: Long): LiveStatus {
+        val since = com.couchsubs.mobile.remoteplay.SubtitleOffTip.framesSince(framesSince, streaming, framesReceived, frames, now)
+        return copy(framesReceived = frames, framesSince = since,
+            subtitleOffTip = running && !demo &&
+                com.couchsubs.mobile.remoteplay.SubtitleOffTip.visible(streaming, shownLines > 0, since?.let { now - it }))
+    }
+
+    /** Bağlantı durumu değişti: koptuysa görüntü süresi baştan sayılır, ipucu kalkar. */
+    fun withStreaming(streaming: Boolean): LiveStatus =
+        if (streaming) copy(streaming = true) else copy(streaming = false, framesSince = null, subtitleOffTip = false)
+
     fun phoneEvent(event: com.couchsubs.mobile.core.SubtitleEvent): LiveStatus = when (event) {
         is com.couchsubs.mobile.core.SubtitleEvent.Subtitle ->
             copy(current = event.text, previous = if (event.replaces || current.isEmpty()) previous else current)
@@ -83,6 +99,7 @@ object LiveState {
     fun shown(pair: ShownPair, packTitle: String?) = state.update {
         // Paketten gelen son satırın oyunu, oturum boyunca "… paketi kullanılıyor" olarak kalır.
         it.copy(recent = (listOf(pair) + it.recent).take(RECENT), packInUse = packTitle ?: it.packInUse,
-            shownLines = it.shownLines + 1, packLines = it.packLines + if (pair.origin == "paket") 1 else 0)
+            shownLines = it.shownLines + 1, packLines = it.packLines + if (pair.origin == "paket") 1 else 0,
+            subtitleOffTip = false)
     }
 }

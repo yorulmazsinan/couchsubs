@@ -307,6 +307,8 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,
                 hasSubtitle = current != null, streaming = status.streaming))
             NoteTile(stringResource(R.string.psn_main_account), Tokens.Color.secondary)
+        // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
+        if (status.subtitleOffTip) NoteTile(stringResource(R.string.subtitle_off_tip), Tokens.Color.secondary)
         if (!status.demo) GameSection(status)
         Tile(Modifier.fillMaxWidth()) {
             TileLabel(stringResource(R.string.running_now))

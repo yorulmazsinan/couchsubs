@@ -342,6 +342,13 @@ private struct LiveSubtitlesTile: View {
                                                            streaming: model.sessionState == .streaming) {
                 HintText(text: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game.")
             }
+            // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
+            if model.showsSubtitleOffTip {
+                HintText(text: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio.")
+                if model.settings.watchSubtitleBackground {
+                    HintText(text: "“Watch subtitle background” is on: only text on GTA 6’s dark subtitle panel is read. Set the game’s subtitle background to Solid or turn this setting off.")
+                }
+            }
             if model.lastTranslation.isEmpty {
                 HintText(text: "Subtitles will appear here while you play.")
             } else {

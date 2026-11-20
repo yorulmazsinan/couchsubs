@@ -210,6 +210,7 @@
     <string name="psn_password_safe_note">Giriş Sony\'nin sayfasında yapılır</string>
     <string name="psn_why">Neden ikinci hesap?</string>
     <string name="psn_why_body">Remote Play aynı hesapla bağlanınca oynadığın oturumu ve kolunu devralır. İkinci hesap yalnız görüntüyü alır; sen kendi hesabınla, kendi kolunla oynamaya devam edersin. Hesap ücretsizdir, PS Plus gerekmez.</string>
+    <string name="subtitle_off_tip">Oyunun kendi altyazısını açın: CouchSubs sesi değil, ekrandaki İngilizce altyazıyı okur.</string>
     <string name="psn_main_account">Oynarken kolu açınca PS5\'te ANA hesabınızı seçin. CouchSubs\'ın giriş yaptığı ikinci hesapla oynamayın, yoksa kol kendiliğinden kapanır ya da oyunda çalışmaz.</string>
     <string name="pair_found">%1$s bulundu</string>
     <string name="pair_same_wifi">%1$s · aynı Wi-Fi</string>

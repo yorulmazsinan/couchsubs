@@ -442,7 +442,7 @@ class TranslationService : Service() {
                 PlayedGame.consoleReported(null)
                 regionWatcher?.reset()
             }
-            LiveState.update { it.copy(phase = describe(state), streaming = state == SessionState.Streaming) }
+            LiveState.update { it.withStreaming(state == SessionState.Streaming).copy(phase = describe(state)) }
         }
         // Oynanan oyun (PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan; bkz. PlayedGame): havuza giden
         // satırlar bu oyunla gider. Klipte oyun aranmaz, sorulmaz.
@@ -498,7 +498,8 @@ class TranslationService : Service() {
             source.start()
         }
         background.scheduleWithFixedDelay({
-            session?.let { s -> LiveState.update { it.copy(framesReceived = s.framesReceived) } }
+            // Kare sayacıyla "oyunun kendi altyazısını açın" ipucu da güncellenir (SubtitleOffTip; GitHub #503, #566).
+            session?.let { s -> LiveState.update { it.withFrames(s.framesReceived, System.currentTimeMillis()) } }
         }, 2, 2, TimeUnit.SECONDS)
         background.scheduleWithFixedDelay({ writeHealth() }, SessionHealth.INTERVAL_MS, SessionHealth.INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
@@ -818,7 +819,7 @@ class TranslationService : Service() {
         wakeLock?.takeIf { it.isHeld }?.release()
         wifiLocks.forEach { lock -> runCatching { if (lock.isHeld) lock.release() } }
         wifiLocks = emptyList()
-        LiveState.update { it.copy(running = false, phase = "", streaming = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
+        LiveState.update { it.copy(running = false, phase = "", streaming = false, framesSince = null, subtitleOffTip = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
         super.onDestroy()
     }
 }

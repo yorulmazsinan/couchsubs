@@ -91,6 +91,10 @@ final class PhoneModel: ObservableObject {
     @Published private(set) var lastFromPack = false
     /// Bu oturumda çevrilen satırlar (en yenisi başta), nereden geldikleriyle.
     @Published private(set) var recentLines: [RecentLine] = []
+    /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı gösterilmedi: "oyunun kendi altyazısını açın"
+    /// ipucu (CouchSubsCore SubtitleOffTip; GitHub #503, #566, #572).
+    @Published private(set) var showsSubtitleOffTip = false
+    private var subtitleOffTip = SubtitleOffTip()
     /// Bu oturumdaki satır sayısı ve paketten gelenler ("Hazır çeviriden 47 / 50").
     @Published private(set) var sessionLines = 0
     @Published private(set) var sessionPackLines = 0
@@ -557,6 +561,8 @@ final class PhoneModel: ObservableObject {
         startedAt = Date()
         runningSince = startedAt
         recentLines = []
+        subtitleOffTip.reset()
+        updateSubtitleOffTip()
         lastMetrics = nil
         sessionLines = 0
         sessionPackLines = 0
@@ -601,6 +607,8 @@ final class PhoneModel: ObservableObject {
         isRunning = false
         onlineIssue = nil
         sessionState = .disconnected(.stopped)
+        subtitleOffTip.reset()
+        updateSubtitleOffTip()
         phoneHide()
         keepScreenAwake(false)
     }
@@ -752,6 +760,8 @@ final class PhoneModel: ObservableObject {
             SubtitleLog.write("PS5: Uzaktan Oynatma PS5'te çöktü (Remote Play on Console has crashed); PS5 tamamen kapatılıp açılmalı")
         }
         sessionState = state
+        subtitleOffTip.connectionChanged(streaming: state == .streaming)
+        updateSubtitleOffTip()
         // Akış sürerken kendiliğinden koptu (kullanıcı durdurmadı): tercih açıksa bildirim (uygulama etkin değilse).
         if wasStreaming, isRunning, case .disconnected(let reason) = state, reason != .stopped, notifiesDisconnect {
             onConnectionLost()
@@ -811,8 +821,16 @@ final class PhoneModel: ObservableObject {
         return watcher
     }
 
+    /// Kare geldi, satır gösterildi ya da bağlantı değişti: ipucu yeniden değerlendirilir (deneme modunda görünmez).
+    private func updateSubtitleOffTip() {
+        let visible = isRunning && !demoMode && subtitleOffTip.visible(now: Date(), streaming: sessionState == .streaming)
+        if visible != showsSubtitleOffTip { showsSubtitleOffTip = visible }
+    }
+
     private func handle(_ frame: CGImage, capturedAt: Int) async {
         framePreview.image = frame
+        subtitleOffTip.frameArrived(at: Date(), streaming: sessionState == .streaming)
+        updateSubtitleOffTip()
         guard let current = pipeline else { return }
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         let areas = settings.activeExtraAreas
@@ -865,6 +883,8 @@ final class PhoneModel: ObservableObject {
         }
         recentLines.insert(RecentLine(id: sessionLines, source: source, translation: translation, fromPack: fromPack), at: 0)
         if recentLines.count > 30 { recentLines.removeLast() }
+        subtitleOffTip.lineShown()
+        updateSubtitleOffTip()
     }
 
     /// Okuma hattı oyun paketlerine bakıyor mu: ayar açık ve İngilizce→Türkçe (paketler herkese ücretsiz).

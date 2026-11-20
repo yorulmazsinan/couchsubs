@@ -390,6 +390,17 @@ public class AppControllerTests
     public void MainAccountTipShowsBeforeFirstSubtitleAndWhenConnectionDrops(bool ps5, bool hasSubtitle, bool streaming, bool expected) =>
         Assert.Equal(expected, AppController.MainAccountTipVisible(ps5, hasSubtitle, streaming));
 
+    /// <summary>"Oyunun kendi altyazısını açın": görüntü bir dakikadır geliyor ama tek satır yok (Mac/iPhone
+    /// SubtitleOffTipTests, Android SubtitleOffTipTest ile aynı; GitHub #503, #566, #572).</summary>
+    [Theory]
+    [InlineData(true, false, 60.0, true)]
+    [InlineData(true, false, 59.9, false)]
+    [InlineData(true, true, 600.0, false)]
+    [InlineData(false, false, 600.0, false)]
+    [InlineData(true, false, null, false)]
+    public void SubtitleOffTipShowsAfterAMinuteOfPictureWithoutAnyLine(bool streaming, bool sawLine, double? seconds, bool expected) =>
+        Assert.Equal(expected, SubtitleOffTip.IsVisible(streaming, sawLine, seconds is { } value ? TimeSpan.FromSeconds(value) : null));
+
     [Fact]
     public async Task ReloadGamePacksRefreshesInstalledPacksAfterWritingAUserPack()
     {
@@ -1319,6 +1330,37 @@ public class AppControllerRunTests
         var moved = controller.Console!.WithHost("192.168.1.77");
         services.Streams[0].EmitMoved(moved);
         Assert.Equal("192.168.1.77", controller.Console!.Host);
+        controller.Dispose();
+    }
+
+    /// <summary>Görüntü bir dakikadır geliyor ama tek satır yok: "oyunun kendi altyazısını açın" ipucu (#503, #566, #572).</summary>
+    [Fact]
+    public async Task SubtitleOffTipAppearsAfterAMinuteOfFramesAndResetsWhenConnectionDrops()
+    {
+        var (controller, services, _) = Ready();
+        var now = new DateTime(2026, 11, 20, 12, 0, 0, DateTimeKind.Utc);
+        controller.Clock = () => now;
+        await controller.StartAsync();
+        var stream = services.Streams[0];
+        stream.Emit(SessionState.Streaming);
+        var frame = new Frame(new byte[4 * 4 * 4], 4, 4, 16);
+        stream.Emit(frame);
+        now += TimeSpan.FromSeconds(59);
+        stream.Emit(frame);
+        Assert.False(controller.ShowsSubtitleOffTip);
+        now += TimeSpan.FromSeconds(2);
+        stream.Emit(frame);
+        Assert.True(controller.ShowsSubtitleOffTip);
+        // Bağlantı kopunca ipucu kalkar, görüntü süresi baştan sayılır.
+        stream.Emit(SessionState.Disconnected(DisconnectKind.Network));
+        Assert.False(controller.ShowsSubtitleOffTip);
+        stream.Emit(SessionState.Streaming);
+        stream.Emit(frame);
+        now += TimeSpan.FromSeconds(30);
+        stream.Emit(frame);
+        Assert.False(controller.ShowsSubtitleOffTip);
+        controller.Stop();
+        Assert.False(controller.ShowsSubtitleOffTip);
         controller.Dispose();
     }
 

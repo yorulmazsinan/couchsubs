@@ -415,6 +415,26 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// (Play yorumu 20 Kas, #231, #5). İpucu eskiden yalnız ilk altyazıdan önce görünüyordu; artık bağlantı koptuğunda da görünür.
     /// </summary>
     public static bool MainAccountTipVisible(bool ps5, bool hasSubtitle, bool streaming) => ps5 && (!hasSubtitle || !streaming);
+    /// <summary>
+    /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı okunmadı: "oyunun kendi altyazısını açın" ipucu
+    /// (<see cref="SubtitleOffTip"/>; GitHub #503, #554, #566, #572).
+    /// </summary>
+    public bool ShowsSubtitleOffTip { get => showsSubtitleOffTip; private set => Set(ref showsSubtitleOffTip, value, [nameof(ShowsSubtitleBackgroundTip)]); }
+    /// <summary>İpucu görünürken GTA 6 altyazı zemini izleme açıksa ayrıca söylenir: zemin yoksa bütün satırlar atlanır.</summary>
+    public bool ShowsSubtitleBackgroundTip => showsSubtitleOffTip && settings.WatchSubtitleBackground;
+    private bool showsSubtitleOffTip;
+    /// <summary>Görüntünün bu bağlantıda ilk geldiği an (bağlantı koparsa sıfırlanır).</summary>
+    private DateTime? framesSince;
+    /// <summary>Bu çeviride en az bir altyazı satırı gösterildi.</summary>
+    private bool sawLineThisRun;
+
+    /// <summary>Kare geldi ya da satır gösterildi: ipucu yeniden değerlendirilir (arayüz iş parçacığında).</summary>
+    private void UpdateSubtitleOffTip(bool frameArrived = false)
+    {
+        if (frameArrived && isRunning && sessionState.Phase == SessionPhase.Streaming) framesSince ??= Clock();
+        ShowsSubtitleOffTip = isRunning && !subtitlesPaused && SubtitleOffTip.IsVisible(sessionState.Phase == SessionPhase.Streaming,
+            sawLineThisRun, framesSince is { } since ? Clock() - since : null);
+    }
     /// <summary>TV'ye giden son satırın ölçümleri tek satırda ("OCR 40 ms · Çeviri 300 ms · Gecikme 520 ms"); satır gelene kadar boş.</summary>
     public string MetricsText { get => metricsText; private set => Set(ref metricsText, value); }
     /// <summary>Çevrilen satırlar, en yenisi başta (bu ve önceki oturumlar). Değişince bu özellik bildirilir.</summary>
@@ -1508,6 +1528,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             server.SendStyle(settings.Style);
             SubtitlesPaused = false;
             MetricsText = "";
+            framesSince = null;
+            sawLineThisRun = false;
+            ShowsSubtitleOffTip = false;
             MakePipeline();
             if (settings.Dubbing.Enabled && DubbingInstalled) MakeDubber()?.Prepare();
             SubtitleLog.Write($"oturum başladı: {settings.SourceLanguage}→{settings.TargetLanguage}, "
@@ -1697,6 +1720,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         StopGameSense();
         EndGameAreas();
         pipeline?.Reset();
+        framesSince = null;
+        ShowsSubtitleOffTip = false;
         if (pipeline is not null) SubtitleLog.Write("oturum bitti");
         pipeline = null;
         UpdateRegionWatcher();
@@ -2181,6 +2206,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 }
                 LastSource = source;
                 LastTranslation = translation;
+                sawLineThisRun = true;
+                UpdateSubtitleOffTip();
                 if (box is not null) lastSubtitleBox = box;
                 AddToHistory(source, translation, origin);
             });
@@ -2451,6 +2478,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (state.Reason?.Kind == DisconnectKind.ConsoleRemotePlayCrashed && SessionState.Reason?.Kind != DisconnectKind.ConsoleRemotePlayCrashed)
             SubtitleLog.Write("PS5: Uzaktan Oynatma PS5'te çöktü (Remote Play on Console has crashed); PS5 tamamen kapatılıp açılmalı");
         SessionState = state;
+        // Bağlantı kopunca görüntü süresi baştan sayılır.
+        if (state.Phase != SessionPhase.Streaming) framesSince = null;
+        UpdateSubtitleOffTip();
         UpdateTroubleClocks();
         if (!IsXbox) UpdateGameProbe(state.Phase == SessionPhase.Streaming);
         else if (state.Phase == SessionPhase.Streaming && !xboxNameChecked)
@@ -2478,7 +2508,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var arrived = Environment.TickCount64;
         try
         {
-            post(() => LastFrame = frame);
+            post(() =>
+            {
+                LastFrame = frame;
+                UpdateSubtitleOffTip(frameArrived: true);
+            });
             // Duraklatıldıysa kare yalnız ek bölgeler ve serbest alan için saklanır; altyazı okunmaz.
             if (subtitlesPaused) return;
             // Önceki kare hâlâ işleniyorsa bu kare atlanır; okuma kareleri biriktirmez.

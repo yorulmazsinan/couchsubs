@@ -243,6 +243,11 @@ struct RunningScreen: View {
                     MobileNote(text: String(localized: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game."),
                                tone: Mobile.Palette.secondary)
                 }
+                // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
+                if model.showsSubtitleOffTip {
+                    MobileNote(text: String(localized: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio."),
+                               tone: Mobile.Palette.secondary)
+                }
                 GameSection(choice: model.gameChoice, areas: model.gameAreas)
             }
             Tile {

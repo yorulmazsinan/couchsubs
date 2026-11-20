@@ -576,6 +576,10 @@ final class AppModel: ObservableObject {
     @Published var tvClients = 0
     @Published var lastSource = ""
     @Published var lastTranslation = ""
+    /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı gösterilmedi: "oyunun kendi altyazısını açın"
+    /// ipucu (CouchSubsCore SubtitleOffTip; GitHub #503, #566, #572).
+    @Published private(set) var showsSubtitleOffTip = false
+    private var subtitleOffTip = SubtitleOffTip()
     /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json); kaçırılan satır ana pencereden ve "Geçmiş"ten
     /// yeniden okunur.
     @Published var history = SubtitleHistory()
@@ -1522,6 +1526,8 @@ final class AppModel: ObservableObject {
         makePipeline()
         sessionStartedAt = Date()
         lastMetrics = nil
+        subtitleOffTip.reset()
+        updateSubtitleOffTip()
         if settings.dubbing.enabled, dubbingModelReady { makeDubber().prepare() }
         SubtitleLog.write("oturum başladı: CouchSubs \(AppIdentity.version), \(settings.sourceLanguage)→\(settings.targetLanguage), "
             + "motor: \(onlineTranslationActive ? settings.onlineEngine.rawValue : "ücretsiz"), paketler: \(settings.gamePacks ? "açık" : "kapalı"), "
@@ -1748,6 +1754,8 @@ final class AppModel: ObservableObject {
         pipeline.onPair = { [weak self, weak pipeline] source, translation in
             self?.lastSource = source
             self?.lastTranslation = translation
+            self?.subtitleOffTip.lineShown()
+            self?.updateSubtitleOffTip()
             self?.addToHistory(source: source, translation: translation, origin: pipeline?.lastOrigin == "paket" ? .pack : .engine)
             if let self { self.gameChoice.noteLine(fromPack: pipeline?.lastOrigin == "paket", packs: self.packs) }
             if let box = pipeline?.lastBox { self?.lastSubtitleBox = box }
@@ -2001,6 +2009,8 @@ final class AppModel: ObservableObject {
         isRunning = false
         onlineIssue = nil
         sessionState = .disconnected(.stopped)
+        subtitleOffTip.reset()
+        updateSubtitleOffTip()
         updateClickThroughHotkey()
         overlayHide()
     }
@@ -2020,6 +2030,8 @@ final class AppModel: ObservableObject {
             }
         }
         sessionState = state
+        subtitleOffTip.connectionChanged(streaming: state == .streaming)
+        updateSubtitleOffTip()
         updateGameProbe(connected: state == .streaming)
         // Bağlantı koptuysa TV'de eski altyazı kalmasın.
         if case .disconnected = state {
@@ -2151,8 +2163,16 @@ final class AppModel: ObservableObject {
         store.save(moved, for: StoreKey.console)
     }
 
+    /// Kare geldi, satır gösterildi ya da bağlantı değişti: ipucu yeniden değerlendirilir (deneme modunda görünmez).
+    private func updateSubtitleOffTip() {
+        let visible = isRunning && !demoMode && subtitleOffTip.visible(now: Date(), streaming: sessionState == .streaming)
+        if visible != showsSubtitleOffTip { showsSubtitleOffTip = visible }
+    }
+
     private func handle(_ frame: CGImage, capturedAt: Int) async {
         lastFrame = frame
+        subtitleOffTip.frameArrived(at: Date(), streaming: sessionState == .streaming)
+        updateSubtitleOffTip()
         guard pipeline != nil else { return }
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         let areas = settings.activeExtraAreas

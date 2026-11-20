@@ -281,6 +281,13 @@
                         <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
                                    Text="{t:T 'When you turn on the controller to play, choose your MAIN account on the PS5. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.'}"
                                    Visibility="{Binding ShowsMainAccountTip, Converter={StaticResource VisibleIf}}" />
+                        <!-- Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572). -->
+                        <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="{t:T 'Turn on the game\'s own subtitles: CouchSubs reads the English subtitles on screen, not the audio.'}"
+                                   Visibility="{Binding ShowsSubtitleOffTip, Converter={StaticResource VisibleIf}}" />
+                        <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="{t:T '“Watch subtitle background” is on: only text on GTA 6’s dark subtitle panel is read. Set the game’s subtitle background to Solid or turn this setting off.'}"
+                                   Visibility="{Binding ShowsSubtitleBackgroundTip, Converter={StaticResource VisibleIf}}" />
                         <TextBlock x:Name="LiveLine" Text="{Binding LastTranslation}" Style="{StaticResource LiveText}" Foreground="{DynamicResource accentTextBrush}" Margin="0,4,0,0"
                                    Visibility="{Binding LastTranslation, Converter={StaticResource VisibleIf}}" />
                         <TextBlock Text="{Binding LastSource}" Style="{StaticResource CaptionText}" Margin="0,8,0,0"
