@@ -70,6 +70,10 @@ final class PhoneModel: ObservableObject {
     @Published private(set) var demoMode = false
     @Published private(set) var sessionState: SessionState = .disconnected(.stopped)
     @Published private(set) var tvClients = 0
+    /// Çeviri bir süredir sürüyor ama TV uygulaması bağlanmadı: TV kartının altında ne yapılacağı söylenir.
+    @Published private(set) var tvWaitingLong = false
+    private var tvWaitTask: Task<Void, Never>?
+    static let tvWaitLimit: Duration = .seconds(30)
     @Published private(set) var lastSource = ""
     @Published private(set) var lastTranslation = ""
     /// Bu ve önceki oturumlarda çevrilen son 200 altyazı (history.json; "Geçmiş" ekranı).
@@ -164,6 +168,7 @@ final class PhoneModel: ObservableObject {
     private let defaults: UserDefaults
     private var server = SubtitleServer(port: AppIdentity.serverPort)
     private var serverStarted = false
+    private var serverRestarting = false
     @Published private(set) var serverPort: UInt16 = AppIdentity.serverPort
     private var session: StreamControlling?
     private var keeper: KeeperControlling?
@@ -354,10 +359,14 @@ final class PhoneModel: ObservableObject {
                     guard let self else { return }
                     let connected = self.tvClients == 0 && count > 0
                     self.tvClients = count
+                    if count > 0 { self.tvWaitingLong = false }
                     // TV uygulaması her bağlandığında sürümüne bakılır (eskiyse ana ekranda güncelleme önerilir).
                     if connected { Task { await self.checkTVApp() } }
                 }
             }
+        }
+        server.onListenerFailed = { [weak self] reason in
+            Task { @MainActor [weak self] in self?.serverDropped(reason) }
         }
         server.sendsToTV = settings.output.showsOnTV
         server.onEvent = { [weak self] event in
@@ -504,7 +513,8 @@ final class PhoneModel: ObservableObject {
         isStarting = true
         defer { isStarting = false }
         await refreshTranslatorStatus()
-        try? await startServer()
+        // Eskiden hata try? ile yutuluyordu: sunucu açılamazsa çeviri "sürüyor" görünüp TV hiç bağlanamıyordu.
+        await ensureServer()
         server.sendStyle(settings.style)
         makePipeline()
         let session: StreamControlling
@@ -553,6 +563,7 @@ final class PhoneModel: ObservableObject {
         packInUse = nil
         keepScreenAwake(true)
         startHealth()
+        watchTVConnection()
         if notifiesDisconnect { requestNotificationPermission() }
         onAnalytics(.sessionStart(output: settings.output.rawValue))
     }
@@ -566,6 +577,9 @@ final class PhoneModel: ObservableObject {
         }
         healthTask?.cancel()
         healthTask = nil
+        tvWaitTask?.cancel()
+        tvWaitTask = nil
+        tvWaitingLong = false
         SessionHealth.saveMark(nil, defaults)
         runningSince = nil
         packInUse = nil
@@ -596,6 +610,8 @@ final class PhoneModel: ObservableObject {
     /// oturumu kapatılıp açılmaz: eskiden her dönüşte kapatılıyor, PS5'te ikinci hesap girip çıkıyordu.
     func becameActive(afterBackground: Bool = true) {
         if afterBackground { onResumedFromBackground() }
+        // iOS askıdayken altyazı sunucusunun dinleyicisini kapatabiliyor; dönüşte açık değilse yeniden açılır.
+        if afterBackground, isRunning || serverStarted, !server.isListening { Task { await ensureServer() } }
         guard isRunning else { return }
         if afterBackground { markBackground(false) }
         if afterBackground || !Self.isLive(sessionState) { session?.reconnectNow() }
@@ -1252,6 +1268,71 @@ final class PhoneModel: ObservableObject {
     }
 
     // MARK: - Sunucu
+
+    /// Sunucu açık değilse açar (ilk kez ya da iOS dinleyiciyi kapattıktan sonra); port değiştiyse TV'yi açık tutan
+    /// görev yeni adresle yeniden kurulur. Hata günlüklere yazılır.
+    private func ensureServer() async {
+        if serverStarted, server.isListening { return }
+        // Düşme bildirimi ve öne gelme aynı anda yeniden açmaya kalkmasın.
+        guard !serverRestarting else { return }
+        serverRestarting = true
+        defer { serverRestarting = false }
+        let previousPort = serverPort
+        if serverStarted {
+            serverStarted = false
+            server.stop()
+        }
+        do {
+            try await startServer()
+        } catch {
+            RemotePlayLog.write("Altyazı sunucusu açılamadı: \(error)")
+            SubtitleLog.write("Altyazı sunucusu açılamadı; TV bağlanamaz: \(error)")
+            return
+        }
+        guard isRunning else { return }
+        // stop() eşleştirme oturumunu da kapatır; çeviri sürüyorsa yeniden açılır.
+        server.pairing.setSession(true)
+        if serverPort != previousPort, keeper != nil {
+            keeper?.stop()
+            keeper = nil
+            startKeeper()
+        }
+    }
+
+    private func serverDropped(_ reason: String) {
+        RemotePlayLog.write("Altyazı sunucusu kapandı (\(reason)); yeniden açılıyor")
+        SubtitleLog.write("Altyazı sunucusu kapandı (\(reason)); yeniden açılıyor")
+        Task { await ensureServer() }
+    }
+
+    /// Çeviri başladıktan bir süre sonra TV uygulaması hâlâ bağlanmadıysa tanı satırı yazılır ve TV kartı ne yapılacağını
+    /// söyler. TestFlight'ta "Hazır" görünen telefonda TV kartı "TV uygulaması bekleniyor"da kalıyordu, iz yoktu.
+    private func watchTVConnection() {
+        tvWaitTask?.cancel()
+        tvWaitingLong = false
+        guard settings.output.showsOnTV, !demoMode else { return }
+        tvWaitTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.tvWaitLimit)
+            guard !Task.isCancelled, let self, self.isRunning, self.tvClients == 0 else { return }
+            self.tvWaitingLong = true
+            let line = self.tvConnectionDiagnostic()
+            RemotePlayLog.write(line)
+            SubtitleLog.write(line)
+            InstallLog.shared.write(line)
+        }
+    }
+
+    /// TV bağlanmadığında neye bakılacağı: sunucu dinliyor mu, hangi adresi veriyor, TV kayıtlı mı, TV'yi açık tutan
+    /// görev var mı, TV uygulaması eski mi (anahtarsız istemci).
+    func tvConnectionDiagnostic() -> String {
+        // Günlük satırı (ekran metni değil): 1 = evet, 0 = hayır.
+        func flag(_ value: Bool) -> String { value ? "1" : "0" }
+        let tvText = tv.map { "\($0.brand.rawValue) \($0.host)" } ?? "-"
+        let address = tv.map { serverAddress(for: $0) } ?? "http://\(NetworkAddress.near(nil) ?? "?"):\(serverPort)"
+        return "TV bağlanmadı (\(Int(Self.tvWaitLimit.components.seconds)) sn): sunucu dinliyor=\(flag(server.isListening)) "
+            + "adres=\(address) TV=\(tvText) eşli=\(flag(hasTV)) TV görevi=\(flag(keeper != nil)) "
+            + "eski TV uygulaması=\(flag(server.hasLegacyClient)) çıkış=\(settings.output.rawValue)"
+    }
 
     private func startServer() async throws {
         guard !serverStarted else { return }

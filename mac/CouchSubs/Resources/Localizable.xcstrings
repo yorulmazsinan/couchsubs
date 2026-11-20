@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "The TV app has not connected. Open CouchSubs on the TV and keep the phone and the TV on the same Wi-Fi. If it still waits, check that CouchSubs is allowed in Settings › Privacy & Security › Local Network on this iPhone, then stop and start translating again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The TV app has not connected. Open CouchSubs on the TV and keep the phone and the TV on the same Wi-Fi. If it still waits, check that CouchSubs is allowed in Settings › Privacy & Security › Local Network on this iPhone, then stop and start translating again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV uygulaması bağlanmadı. TV'de CouchSubs'ı açın; telefon ve TV aynı Wi-Fi'da olsun. Yine bekliyorsa bu iPhone'da Ayarlar › Gizlilik ve Güvenlik › Yerel Ağ'da CouchSubs'a izin verildiğini kontrol edin, sonra çeviriyi durdurup yeniden başlatın."
+          }
+        }
+      }
+    },
     "Sign out of PSN and reset the account": {
       "localizations": {
         "en": {

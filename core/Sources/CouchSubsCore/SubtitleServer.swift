@@ -198,6 +198,13 @@ public final class SubtitleServer: @unchecked Sendable {
         queue.sync { clients.count - viewers.count }
     }
 
+    /// Dinleyici açık ve bağlantı kabul ediyor. iPhone'da uygulama arka planda askıya alınınca iOS dinleyiciyi
+    /// kapatabiliyor; eskiden bu sessiz kalıyor, sunucu "başlamış" sayıldığı için TV bir daha bağlanamıyordu.
+    public var isListening: Bool { queue.sync { listening } }
+    private var listening = false
+    /// Hazır olduktan sonra dinleyici düştü (neden); çağıran `start()` ile yeniden açabilir. Sunucunun kuyruğunda çağrılır.
+    public var onListenerFailed: (@Sendable (String) -> Void)?
+
     /// OBS'de "Tarayıcı kaynağı" olarak eklenen altyazı katmanı (`GET /obs`).
     public static let obsOverlay: Data = {
         guard let url = Bundle.module.url(forResource: "obs-overlay", withExtension: "html"),
@@ -224,10 +231,23 @@ public final class SubtitleServer: @unchecked Sendable {
             // Durum değişiklikleri seri kuyrukta gelir; devamı yalnız bir kez çağırmak için saklanır.
             startContinuation = continuation
             listener.stateUpdateHandler = { [weak self] state in
-                guard let self, let continuation = self.startContinuation else { return }
+                guard let self else { return }
+                guard let continuation = self.startContinuation else {
+                    // Açıldıktan sonra düşen dinleyici (stop() ile kapatılan .cancelled olur, o sayılmaz).
+                    if case .failed(let error) = state, self.listener === listener {
+                        self.listening = false
+                        self.pingTimer?.cancel()
+                        self.pingTimer = nil
+                        listener.cancel()
+                        self.onListenerFailed?(error.localizedDescription)
+                    }
+                    return
+                }
                 switch state {
                 case .ready:
                     self.startContinuation = nil
+                    self.listening = true
+                    self.pingTimer?.cancel()
                     self.startPing()
                     continuation.resume(returning: listener.port?.rawValue ?? 0)
                 case .failed(let error), .waiting(let error):
@@ -248,6 +268,7 @@ public final class SubtitleServer: @unchecked Sendable {
     public func stop() {
         pairing.setSession(false)
         queue.sync {
+            listening = false
             pingTimer?.cancel()
             pingTimer = nil
             listener?.cancel()

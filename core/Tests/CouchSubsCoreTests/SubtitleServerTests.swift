@@ -45,6 +45,22 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("data:") && $0.contains("\"text\":\"Merhaba dostum\"") && $0.contains("\"replace\":true") })
     }
 
+    /// Telefon, sunucu düştüyse (iOS arka planda dinleyiciyi kapatır) bunu `isListening` ile anlar ve aynı nesneyi
+    /// yeniden başlatır; yeniden başlatılan sunucu yine bağlantı kabul eder.
+    func testIsListeningFollowsStartStopAndRestart() async throws {
+        let server = SubtitleServer(port: 0)
+        XCTAssertFalse(server.isListening)
+        _ = try await server.start()
+        XCTAssertTrue(server.isListening)
+        server.stop()
+        XCTAssertFalse(server.isListening)
+        let port = try await server.start()
+        defer { server.stop() }
+        XCTAssertTrue(server.isListening)
+        let (_, response) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/hello")!)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    }
+
     /// TV yarı açık bağlantıyı adlı "ping" olayının gelmemesinden anlar; yorum satırını EventSource görmez.
     func testPingIsSentAsNamedEvent() async throws {
         let server = SubtitleServer(port: 0, pingInterval: 0.05)

@@ -307,6 +307,10 @@ struct RunningScreen: View {
                         .font(Mobile.TypeScale.title).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // TV uygulaması 30 saniyede bağlanmadıysa ne yapılacağı (tanı satırı günlüklere yazılır).
+            if model.settings.output.showsOnTV, model.tvWaitingLong, model.tvClients == 0 {
+                MobileNote(text: String(localized: "The TV app has not connected. Open CouchSubs on the TV and keep the phone and the TV on the same Wi-Fi. If it still waits, check that CouchSubs is allowed in Settings › Privacy & Security › Local Network on this iPhone, then stop and start translating again."))
+            }
             Text("Keep CouchSubs open on the screen while you play. iOS stops the connection when the app goes to the background; the screen stays on while translating.")
                 .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
         } bottom: {
