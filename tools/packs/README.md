@@ -15,7 +15,7 @@ yazılır. Kaynaklar ve lisansları THIRD-PARTY-NOTICES.md'de.
 
 `server/pool` Worker'ı (`src/autopack.js`) bu dosyadaki temizlik kurallarıyla her gece 03:02–05:57 UTC arasında (beş dakikada bir) kendisi
 paket üretir: en az 2 kurulumun okuduğu satırlar, oyun başına en az 300 temiz satır olunca `pool-<oyun kimliği>` paketi
-(Workers AI, `@cf/google/gemma-4-26b-a4b-it`), R2'ye ve `index.json`'a. Elle paket (aşağıdaki akış) her zaman öncelikli:
+(Workers AI, `@cf/zai-org/glm-5.3-flash`), R2'ye ve `index.json`'a. Elle paket (aşağıdaki akış) her zaman öncelikli:
 elle paket yüklenince `server/pool/scripts/build-known.mjs` ile `auto/known-keys.bin` yenilenir, otomatik paket o satırları
 bırakır. Elle akış daha iyi çeviri (Claude + sözlük + denetim) gerektiğinde kullanılır.
 

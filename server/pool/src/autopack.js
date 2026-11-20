@@ -44,7 +44,7 @@ export const JOB_NIGHTLY = 2000;
 export const LAST_HOUR_UTC = 5;
 export const LAST_MINUTE_UTC = 52;
 export const BATCH = 40;
-export const MODEL = "@cf/google/gemma-4-26b-a4b-it";
+export const MODEL = "@cf/zai-org/glm-5.3-flash";
 export const SOURCE = `CouchSubs havuzu (en az ${MIN_INSTALLS} oyuncu) + Workers AI (${MODEL})`;
 /** Oyunu bilinmeyen satırların ortak paketi (title_id NULL). PS5'in keşif yanıtı çalışan oyunu bildirmediği için
  *  satırların çoğu oyunsuz gelir; uygulamalar sunucudaki her paketi indirdiğinden bu paket de herkese gider. Oyunu
