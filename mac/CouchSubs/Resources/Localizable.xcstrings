@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental)."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samsung TV'ler ve akıllı monitörler (2016 ve sonrası; 2016–2018 modelleri deneysel)."
+          }
+        }
+      }
+    },
+    "This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Samsung TV is too old for the CouchSubs TV app (2016 models and later are supported)."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu Samsung TV, CouchSubs TV uygulaması için çok eski (2016 ve sonraki modeller destekleniyor)."
+          }
+        }
+      }
+    },
+    "CouchSubs opens its waiting screen on the TV. Even if it mentions a computer, that is not an error: the TV is waiting for the phone. Now tap Start translating on the home screen; the TV finds this phone by itself.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CouchSubs opens its waiting screen on the TV. Even if it mentions a computer, that is not an error: the TV is waiting for the phone. Now tap Start translating on the home screen; the TV finds this phone by itself."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TV'de CouchSubs'ın bekleme ekranı açılır. Bilgisayardan söz etse bile bu bir hata değil: TV telefonu bekliyor. Şimdi ana ekranda Çeviriyi başlat'a dokunun; TV bu telefonu kendisi bulur."
+          }
+        }
+      }
+    },
     "I use a paid Gemini API key": {
       "localizations": {
         "en": {
@@ -12148,22 +12196,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "CouchSubs TV uygulamasını Samsung TV'nize bilgisayar olmadan, bu telefondan kurar. Telefon ve TV aynı Wi-Fi'da olmalı."
-          }
-        }
-      }
-    },
-    "Samsung TVs and smart monitors (2017 and later).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Samsung TVs and smart monitors (2017 and later)."
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Samsung TV'ler ve akıllı monitörler (2017 ve sonrası)."
           }
         }
       }
