@@ -289,6 +289,9 @@ private struct AreaCards: View {
         }
         ExtraAreasCard()
         Card {
+            SwitchRow(title: "Use ready areas for known games", isOn: $model.settings.gameAreaPresets)
+            HintText(text: "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.")
+            Divider().overlay(Color.csBorder)
             SwitchRow(title: "Automatically translate the GTA 6 phone (experimental)", isOn: $model.settings.autoReadGamePhone)
         }
         Card(title: "Translate the screen (⌥⌘T)") {

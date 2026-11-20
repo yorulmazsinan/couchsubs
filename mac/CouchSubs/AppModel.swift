@@ -2194,8 +2194,9 @@ final class AppModel: ObservableObject {
         updateSubtitleOffTip()
         guard pipeline != nil else { return }
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
-        let areas = settings.activeExtraAreas
+        // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         let pose = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        let areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
         if regionWatcher == nil, !areas.isEmpty || pose != nil, let pipeline {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
         }

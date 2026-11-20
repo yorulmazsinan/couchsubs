@@ -84,6 +84,10 @@ struct ProfileScreen: View {
                 toggleRow("Color by speaker", "Each speaker's name and line keep their own color.",
                           isOn: $model.settings.speakerColors)
                 RowDivider()
+                toggleRow("Use ready areas for known games",
+                          "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.",
+                          isOn: $model.settings.gameAreaPresets)
+                RowDivider()
                 toggleRow("Check unchanged subtitle areas more often",
                           "When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.",
                           isOn: $model.settings.fastSubtitleDetection)

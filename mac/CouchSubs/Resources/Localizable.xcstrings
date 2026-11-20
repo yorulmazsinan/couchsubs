@@ -1,38 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Color by speaker": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Color by speaker"
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Konuşana göre renk"
-          }
-        }
-      }
-    },
-    "Each speaker's name and line keep their own color.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Each speaker's name and line keep their own color."
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Her konuşanın adı ve satırı kendi renginde görünür."
-          }
-        }
-      }
-    },
     "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio.": {
       "localizations": {
         "en": {
@@ -45,6 +13,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oyunun kendi altyazısını açın: CouchSubs sesi değil, ekrandaki İngilizce altyazıyı okur."
+          }
+        }
+      }
+    },
+    "Use ready areas for known games": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use ready areas for known games"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilinen oyunlarda hazır alanları kullan"
+          }
+        }
+      }
+    },
+    "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a game with ready areas (such as GTA 6) is being played, its help box and messages are read and translated automatically. Your own extra areas take precedence."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hazır alanı olan bir oyun (ör. GTA 6) oynanırken yardım kutusu ve mesajlar kendiliğinden okunup çevrilir. Kendi ek alanlarınız varsa onlar kullanılır."
           }
         }
       }
