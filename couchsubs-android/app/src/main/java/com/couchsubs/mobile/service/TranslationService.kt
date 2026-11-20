@@ -373,6 +373,9 @@ class TranslationService : Service() {
             val before = LiveState.status.value.connectedTvs
             LiveState.update { it.copy(connectedTvs = count) }
             if (before == 0 && count > 0) Telemetry.event(Telemetry.TV_CONNECTED, "count" to count)
+            // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (liste "yok" demiş olsa da).
+            if (count > 0) settings.installedTv?.takeIf { it.brand == com.couchsubs.mobile.tv.TvBrand.SAMSUNG }
+                ?.let { if (settings.samsungAppSeenHost != it.host) settings.samsungAppSeenHost = it.host }
         }
         subtitleServer.onEvent = { event ->
             LiveState.update { it.phoneEvent(event) }

@@ -135,6 +135,58 @@ public static class SamsungMessages
     }
 }
 
+/// <summary>
+/// CouchSubs TV uygulamasının kurulu olduğu bilinen Samsung TV'ler: uygulama o TV'den daha önce bağlandı ya da bu cihaz
+/// oraya kurdu. Böyle bir TV'de açma komutundan önce TV'nin kurulu uygulama listesine bakılmaz (bkz.
+/// <see cref="SamsungClient.LaunchAsync"/>): listenin geliştirici moduyla kurulan uygulamayı içerdiği gerçek TV'de
+/// doğrulanmadı; içermiyorsa bekçi uygulamayı hiç açmıyor, TV kendi girişine geçince (Anynet+) altyazı geri gelmiyordu.
+/// Uygulama katmanı bilgiyi yükler (<see cref="Mark"/>) ve değişince saklar (<see cref="Changed"/>).
+/// </summary>
+public static class SamsungAppKnowledge
+{
+    private static readonly HashSet<string> hosts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Yeni bir TV "kurulu" olarak işaretlendi (saklamak için).</summary>
+    public static Action<string>? Changed { get; set; }
+    /// <summary>Sahadan öğrenmek için günlük satırı (ör. liste "yok" diyor ama uygulama daha önce bağlandı).</summary>
+    public static Action<string>? Log { get; set; }
+
+    public static bool IsKnown(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        lock (hosts) return hosts.Contains(host.Trim());
+    }
+
+    /// <summary>TV uygulaması bu TV'de kurulu: bağlandı ya da kuruldu. Yeni bilgiyse <see cref="Changed"/> çağrılır.</summary>
+    public static void Mark(string? host, bool notify = true)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return;
+        bool added;
+        lock (hosts) added = hosts.Add(host.Trim());
+        if (added && notify) Changed?.Invoke(host.Trim());
+    }
+
+    public static void Forget(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return;
+        lock (hosts) hosts.Remove(host.Trim());
+    }
+
+    /// <summary>Açma komutundan önce TV'nin kurulu uygulama listesine bakılsın mı: yalnız kurulu olduğu bilinmeyen TV'de.</summary>
+    public static bool ChecksList(bool knownInstalled) => !knownInstalled;
+
+    /// <summary>
+    /// Açma kararı. Kurulu olduğu bilinen TV'de liste ne derse desin eski yol (DEEP_LINK) gönderilir; bilinmeyen TV'de
+    /// listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen değer gönderilecek tür, gönderilmeyecekse null.
+    /// </summary>
+    public static string? ActionFor(bool knownInstalled, SamsungAppPresence? presence)
+    {
+        if (knownInstalled) return "DEEP_LINK";
+        if (presence is { IsInstalled: false }) return null;
+        return SamsungMessages.ActionType(presence?.AppType);
+    }
+}
+
 /// <summary>TV'nin kurulu uygulama listesine göre CouchSubs TV uygulamasının durumu.</summary>
 public sealed record SamsungAppPresence(bool IsInstalled, int? AppType)
 {
@@ -183,8 +235,16 @@ public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : I
     public const string AppId = "CouchSubsT.CouchSubs";
 
     private ClientWebSocket? socket;
+    private readonly string? host;
+    /// <summary>Liste "yok" dediği hâlde bağlanmış uygulama günlüğe çalışma boyunca bir kez yazılır.</summary>
+    private static int probed;
 
-    public SamsungClient(LgTv tv, string? token) : this(SamsungMessages.Url(tv.Host, token)) { }
+    public SamsungClient(LgTv tv, string? token) : this(SamsungMessages.Url(tv.Host, token)) { host = tv.Host; }
+
+    /// <summary>
+    /// TV uygulamasının bu TV'de kurulu olduğu biliniyor mu; verilmezse <see cref="SamsungAppKnowledge"/>'a sorulur.
+    /// </summary>
+    public bool? KnownInstalled { get; init; }
 
     /// <summary>Bağlanır ve jetonu döner. Kullanıcı TV'de onay verene kadar bekler.</summary>
     public async Task<string> ConnectAsync(CancellationToken cancellationToken = default)
@@ -241,8 +301,19 @@ public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : I
     public async Task LaunchAsync(string appId, IReadOnlyDictionary<string, string> parameters, CancellationToken cancellationToken = default)
     {
         if (socket is null) throw new SsapException("cannot connect");
+        // Uygulama bu TV'den daha önce bağlandıysa ya da bu cihaz kurduysa listeye bakılmaz, eskisi gibi doğrudan açılır:
+        // listenin geliştirici moduyla kurulan uygulamayı içerdiği gerçek TV'de doğrulanmadı (beta.63'te içermeyen TV'de
+        // bekçi uygulamayı hiç açmıyordu).
+        var known = KnownInstalled ?? SamsungAppKnowledge.IsKnown(host);
+        if (!SamsungAppKnowledge.ChecksList(known))
+        {
+            var direct = Encoding.UTF8.GetBytes(SamsungMessages.Launch(appId, parameters, SamsungAppKnowledge.ActionFor(true, null)!));
+            await socket.SendAsync(direct, WebSocketMessageType.Text, true, cancellationToken);
+            await ProbeListAsync(socket, appId, cancellationToken);
+            return;
+        }
         var presence = await InstalledAppAsync(socket, appId, cancellationToken);
-        if (presence is { IsInstalled: false }) throw new SsapException("not installed");
+        if (SamsungAppKnowledge.ActionFor(false, presence) is null) throw new SsapException("not installed");
         if (socket.State != WebSocketState.Open)
         {
             // Zaman aşımında iptal edilen okuma ClientWebSocket'i kapatır; DEEP_LINK yeni bağlantıyla gider (jeton aynı,
@@ -254,6 +325,26 @@ public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : I
         }
         var data = Encoding.UTF8.GetBytes(SamsungMessages.Launch(appId, parameters, SamsungMessages.ActionType(presence?.AppType)));
         await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sahadan öğrenmek için: kurulu olduğu bilinen TV'de açma komutu gittikten sonra listeye bir kez bakılır; liste
+    /// uygulamayı içermiyorsa günlüğe yazılır. Sonucu açmayı etkilemez, hata vermez.
+    /// </summary>
+    private async Task ProbeListAsync(ClientWebSocket open, string appId, CancellationToken cancellationToken)
+    {
+        if (SamsungAppKnowledge.Log is not { } log || Interlocked.Exchange(ref probed, 1) != 0) return;
+        try
+        {
+            var presence = await InstalledAppAsync(open, appId, cancellationToken);
+            log(presence switch
+            {
+                null => $"Samsung {host}: kurulu uygulama listesi yanıtsız; uygulama daha önce bağlandığı için doğrudan açıldı.",
+                { IsInstalled: false } => $"Samsung {host}: kurulu uygulama listesinde CouchSubs YOK ama uygulama daha önce bağlandı/kuruldu; doğrudan açıldı.",
+                _ => $"Samsung {host}: kurulu uygulama listesinde CouchSubs var (app_type {presence.AppType?.ToString() ?? "?"}).",
+            });
+        }
+        catch (Exception) { /* yalnız günlük içindir */ }
     }
 
     /// <summary>TV'nin kurulu uygulama listesine göre durum; TV <paramref name="timeout"/> içinde yanıtlamazsa null.</summary>

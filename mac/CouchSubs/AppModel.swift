@@ -904,7 +904,13 @@ final class AppModel: ObservableObject {
             }
         }
 
-        server.onClientsChanged = { [weak self] count in self?.tvClients = count }
+        server.onClientsChanged = { [weak self] count in
+            self?.tvClients = count
+            // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (bekçi listeye bakmadan açar).
+            if count > 0, let tv = self?.tv, tv.brand == .samsung { SamsungAppKnowledge.shared.mark(host: tv.host) }
+        }
+        // Bu Mac'in daha önce kurduğu Samsung uygulaması da bilinen sayılır.
+        if let tv, tv.brand == .samsung, installedAppVersion != nil { SamsungAppKnowledge.shared.mark(host: tv.host) }
         server.sendsToTV = settings.output.showsOnTV
         server.speakerColors = settings.speakerColors
         server.onEvent = { [weak self] event in
@@ -1210,6 +1216,7 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in self?.installEvent(event) }
             }
             store.save(result.version, for: StoreKey.tvAppVersion)
+            SamsungAppKnowledge.shared.mark(host: tv.host)
             tvApp = .upToDate(result.version)
             if result.installed { await openTVAppAfterInstall(tv) }
         } catch let failure as DevModeFailure where remembered && failure.error == .unreachable {

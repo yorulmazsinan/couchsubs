@@ -203,6 +203,77 @@ public final class SamsungTokenHolder: @unchecked Sendable {
     }
 }
 
+/// CouchSubs TV uygulamasının kurulu olduğu bilinen Samsung TV'ler: uygulama o TV'den daha önce bağlandı ya da bu cihaz
+/// oraya kurdu. Böyle bir TV'de açma komutundan önce TV'nin kurulu uygulama listesine bakılmaz (bkz.
+/// `SamsungClient.launch`): listenin geliştirici moduyla kurulan uygulamayı içerdiği gerçek TV'de doğrulanmadı;
+/// içermiyorsa bekçi uygulamayı hiç açmıyor, TV kendi girişine geçince (Anynet+) altyazı geri gelmiyordu.
+/// Bilgi `UserDefaults`'ta saklanır (Windows'taki SamsungAppKnowledge ile aynı kural).
+public final class SamsungAppKnowledge: @unchecked Sendable {
+    public static let shared = SamsungAppKnowledge()
+    static let storeKey = "samsungAppKnownHosts"
+
+    private let lock = NSLock()
+    private let defaults: UserDefaults?
+    private var hosts: Set<String>
+    private var probed = false
+
+    /// `defaults` nil ise bilgi yalnız bellekte tutulur (testler).
+    init(defaults: UserDefaults? = .standard) {
+        self.defaults = defaults
+        hosts = Set(defaults?.stringArray(forKey: Self.storeKey) ?? [])
+    }
+
+    private static func normalized(_ host: String?) -> String? {
+        guard let text = host?.trimmingCharacters(in: .whitespaces).lowercased(), !text.isEmpty else { return nil }
+        return text
+    }
+
+    public func isKnown(host: String?) -> Bool {
+        guard let host = Self.normalized(host) else { return false }
+        return lock.withLock { hosts.contains(host) }
+    }
+
+    /// TV uygulaması bu TV'de kurulu: bağlandı ya da kuruldu.
+    public func mark(host: String?) {
+        guard let host = Self.normalized(host) else { return }
+        lock.withLock {
+            guard hosts.insert(host).inserted else { return }
+            defaults?.set(hosts.sorted(), forKey: Self.storeKey)
+        }
+    }
+
+    public func forget(host: String?) {
+        guard let host = Self.normalized(host) else { return }
+        lock.withLock {
+            guard hosts.remove(host) != nil else { return }
+            defaults?.set(hosts.sorted(), forKey: Self.storeKey)
+        }
+    }
+
+    /// Sahadan öğrenmek için yapılan liste sorgusu çalışma boyunca bir kez yapılır.
+    func takeProbe() -> Bool {
+        lock.withLock {
+            if probed { return false }
+            probed = true
+            return true
+        }
+    }
+
+    /// Açma komutundan önce TV'nin kurulu uygulama listesine bakılsın mı: yalnız kurulu olduğu bilinmeyen TV'de.
+    static func checksList(knownInstalled: Bool) -> Bool { !knownInstalled }
+
+    /// Açma kararı. Kurulu olduğu bilinen TV'de liste ne derse desin eski yol (DEEP_LINK) gönderilir; bilinmeyen TV'de
+    /// listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen değer gönderilecek tür, gönderilmeyecekse nil.
+    static func action(knownInstalled: Bool, presence: SamsungAppPresence?) -> String? {
+        if knownInstalled { return "DEEP_LINK" }
+        switch presence {
+        case .missing: return nil
+        case .installed(let type): return SamsungMessages.actionType(appType: type)
+        case nil: return SamsungMessages.actionType(appType: nil)
+        }
+    }
+}
+
 /// Samsung TV ile uzaktan kumanda WebSocket'i üzerinden konuşur. İlk bağlantıda TV izin sorar.
 public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @unchecked Sendable {
     /// `notInstalled`: TV'nin kurulu uygulama listesinde CouchSubs yok; açma komutu gönderilmedi.
@@ -212,6 +283,8 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
     private let approvalTimeout: Duration
     private var session: URLSession!
     private var socket: URLSessionWebSocketTask?
+    /// TV uygulamasının bu TV'de kurulu olduğu biliniyor mu; nil ise `SamsungAppKnowledge.shared`'a sorulur.
+    public var knownInstalled: Bool?
 
     public convenience init(tv: LGTV, token: String?) {
         self.init(url: SamsungMessages.url(host: tv.host, token: token))
@@ -275,12 +348,36 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
     /// izinsiz istekleri reddediyor.
     public func launch(appId: String, params: [String: Any]) async throws {
         guard let socket else { throw SamsungError.cannotConnect }
+        // Uygulama bu TV'den daha önce bağlandıysa ya da bu cihaz kurduysa listeye bakılmaz, eskisi gibi doğrudan açılır:
+        // listenin geliştirici moduyla kurulan uygulamayı içerdiği gerçek TV'de doğrulanmadı (beta.63'te içermeyen TV'de
+        // bekçi uygulamayı hiç açmıyordu).
+        let host = url?.host
+        let known = knownInstalled ?? SamsungAppKnowledge.shared.isKnown(host: host)
+        if !SamsungAppKnowledge.checksList(knownInstalled: known) {
+            let direct = SamsungMessages.launch(appId: appId, params: params, actionType: "DEEP_LINK")
+            try await socket.send(.string(String(decoding: direct, as: UTF8.self)))
+            await probeList(appId: appId, socket: socket, host: host)
+            return
+        }
         let presence = await installedApp(appId: appId, socket: socket)
-        if presence == .missing { throw SamsungError.notInstalled }
-        var appType: Int?
-        if case .installed(let type) = presence { appType = type }
-        let message = SamsungMessages.launch(appId: appId, params: params, actionType: SamsungMessages.actionType(appType: appType))
+        guard let action = SamsungAppKnowledge.action(knownInstalled: false, presence: presence) else { throw SamsungError.notInstalled }
+        let message = SamsungMessages.launch(appId: appId, params: params, actionType: action)
         try await socket.send(.string(String(decoding: message, as: UTF8.self)))
+    }
+
+    /// Sahadan öğrenmek için: kurulu olduğu bilinen TV'de açma komutu gittikten sonra listeye bir kez bakılır; liste
+    /// uygulamayı içermiyorsa günlüğe yazılır. Sonucu açmayı etkilemez.
+    private func probeList(appId: String, socket: URLSessionWebSocketTask, host: String?) async {
+        guard SamsungAppKnowledge.shared.takeProbe() else { return }
+        let tv = host ?? "?"
+        switch await installedApp(appId: appId, socket: socket) {
+        case nil:
+            SubtitleLog.write("Samsung \(tv): kurulu uygulama listesi yanıtsız; uygulama daha önce bağlandığı için doğrudan açıldı.")
+        case .missing:
+            SubtitleLog.write("Samsung \(tv): kurulu uygulama listesinde CouchSubs YOK ama uygulama daha önce bağlandı/kuruldu; doğrudan açıldı.")
+        case .installed(let type):
+            SubtitleLog.write("Samsung \(tv): kurulu uygulama listesinde CouchSubs var (app_type \(type.map(String.init) ?? "?")).")
+        }
     }
 
     /// TV'nin kurulu uygulama listesine göre durum; TV 3 saniyede yanıtlamazsa nil.

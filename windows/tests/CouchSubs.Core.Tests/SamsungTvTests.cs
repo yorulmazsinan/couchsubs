@@ -33,6 +33,42 @@ public class SamsungTvTests
     /// TV'nin kurulu uygulama listesine bakılır.
     /// </summary>
     [Fact]
+    public void KnownInstalledAppLaunchesWithoutTheList()
+    {
+        // Uygulama bu TV'den daha önce bağlandı ya da bu cihaz kurdu: listeye bakılmaz, liste "yok" dese de açılır.
+        Assert.False(SamsungAppKnowledge.ChecksList(knownInstalled: true));
+        Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(true, SamsungAppPresence.Missing));
+        Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(true, null));
+        // Hiç bağlanmamış ve kurulum kaydı yok: liste belirler; listede yoksa komut gönderilmez (#637).
+        Assert.True(SamsungAppKnowledge.ChecksList(knownInstalled: false));
+        Assert.Null(SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Missing));
+        Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Installed(2)));
+        Assert.Equal("NATIVE_LAUNCH", SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Installed(4)));
+        Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(false, null));
+    }
+
+    [Fact]
+    public void ConnectedTvIsRememberedAsInstalled()
+    {
+        var host = "192.0.2." + Random.Shared.Next(1, 250);
+        var saved = new List<string>();
+        var before = SamsungAppKnowledge.Changed;
+        SamsungAppKnowledge.Changed = saved.Add;
+        try
+        {
+            Assert.False(SamsungAppKnowledge.IsKnown(host));
+            SamsungAppKnowledge.Mark(host);
+            SamsungAppKnowledge.Mark(host);
+            Assert.True(SamsungAppKnowledge.IsKnown(" " + host + " "));
+            Assert.Equal([host], saved);
+            SamsungAppKnowledge.Forget(host);
+            Assert.False(SamsungAppKnowledge.IsKnown(host));
+            Assert.False(SamsungAppKnowledge.IsKnown(null));
+        }
+        finally { SamsungAppKnowledge.Changed = before; }
+    }
+
+    [Fact]
     public void InstalledAppListDecidesLaunch()
     {
         var request = JsonNode.Parse(SamsungMessages.InstalledAppsRequest)!;

@@ -22,6 +22,8 @@ public static class StoreKeys
     public const string TvDevKey = "tvDevKey";
     /// <summary>Samsung ve Android TV'ye CouchSubs'ın kurduğu sürüm (LG'de sürüm TV'den okunur).</summary>
     public const string TvAppVersion = "tvAppVersion";
+    /// <summary>TV uygulamasının daha önce bağlandığı Samsung TV'nin adresi (bkz. SamsungAppKnowledge).</summary>
+    public const string TvAppSeen = "tvAppSeen";
     /// <summary>LG geliştirici modu süresinin son uzatıldığı an.</summary>
     public const string DevSessionRenewed = "devSessionRenewed";
     public static string DevSessionRenewedFor(string host) => $"{DevSessionRenewed}.{host.Trim().ToLowerInvariant()}";

@@ -154,4 +154,34 @@ final class SamsungTVTests: XCTestCase {
         let saved = LGTV(name: "Salon", host: "1.1.1.1", brand: .lg)
         XCTAssertNil(TVLocator.moved(saved, among: [LGTV(name: "Salon", host: "1.1.1.2", brand: .samsung)]))
     }
+
+    func testKnownInstalledAppLaunchesWithoutTheList() {
+        // Uygulama bu TV'den daha önce bağlandı ya da bu cihaz kurdu: listeye bakılmaz, liste "yok" dese de açılır.
+        XCTAssertFalse(SamsungAppKnowledge.checksList(knownInstalled: true))
+        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: true, presence: .missing), "DEEP_LINK")
+        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: true, presence: nil), "DEEP_LINK")
+        // Hiç bağlanmamış ve kurulum kaydı yok: liste belirler; listede yoksa komut gönderilmez (#637).
+        XCTAssertTrue(SamsungAppKnowledge.checksList(knownInstalled: false))
+        XCTAssertNil(SamsungAppKnowledge.action(knownInstalled: false, presence: .missing))
+        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: .installed(appType: 2)), "DEEP_LINK")
+        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: .installed(appType: 4)), "NATIVE_LAUNCH")
+        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: nil), "DEEP_LINK")
+    }
+
+    func testConnectedTVIsRememberedAsInstalled() throws {
+        let suite = "samsung-knowledge-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let knowledge = SamsungAppKnowledge(defaults: defaults)
+        XCTAssertFalse(knowledge.isKnown(host: "192.168.1.40"))
+        knowledge.mark(host: " 192.168.1.40 ")
+        XCTAssertTrue(knowledge.isKnown(host: "192.168.1.40"))
+        // Bilgi kalıcıdır: uygulama yeniden açılınca da bilinir.
+        XCTAssertTrue(SamsungAppKnowledge(defaults: defaults).isKnown(host: "192.168.1.40"))
+        knowledge.forget(host: "192.168.1.40")
+        XCTAssertFalse(SamsungAppKnowledge(defaults: defaults).isKnown(host: "192.168.1.40"))
+        XCTAssertFalse(knowledge.isKnown(host: nil))
+        XCTAssertTrue(knowledge.takeProbe())
+        XCTAssertFalse(knowledge.takeProbe())
+    }
 }

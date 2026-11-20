@@ -145,6 +145,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             store.Save(StoreKeys.XboxConsole, xboxConsole);
         }
         tv =store.Load<LgTv>(StoreKeys.Tv);
+        LoadSamsungAppKnowledge();
         var loaded = settingsStore.Load();
         settings = loaded.WithCuratedModels() with
         {
@@ -945,6 +946,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var (version, installed) = await services.InstallSamsungAppAsync(target.Host, bundled, open, e => post(() => InstallEvent(e)));
             version = string.IsNullOrWhiteSpace(version) ? bundled.Version : version;
             store.Save(StoreKeys.TvAppVersion, version);
+            SamsungAppKnowledge.Mark(target.Host);
             TvApp = new TvAppState(TvAppKind.UpToDate, version);
             if (installed) await OpenTvAppAfterInstallAsync(target);
         }
@@ -1504,7 +1506,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         xboxGeneration++;
         services.Xbox?.Clear();
         foreach (var key in new[] { StoreKeys.AccountId, StoreKeys.Console, StoreKeys.ConsoleKind, StoreKeys.ConsoleKindLocked, StoreKeys.XboxToken, StoreKeys.XboxConsole,
-                     StoreKeys.Tv, StoreKeys.TvKey, StoreKeys.TvDevKey, StoreKeys.TvAppVersion, StoreKeys.SetupComplete, StoreKeys.LoginPasscode }) store.Remove(key);
+                     StoreKeys.Tv, StoreKeys.TvKey, StoreKeys.TvDevKey, StoreKeys.TvAppVersion, StoreKeys.TvAppSeen, StoreKeys.SetupComplete, StoreKeys.LoginPasscode }) store.Remove(key);
+        SamsungAppKnowledge.Forget(tv?.Host);
         accountId = null;
         console = null;
         consoleKind = GameConsoleKind.PlayStation;
@@ -2779,8 +2782,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         serverStarted = true;
     }
 
+    /// <summary>
+    /// Samsung'da TV uygulamasının kurulu olduğu bilgisi yüklenir: uygulama o TV'den daha önce bağlandıysa
+    /// (<see cref="StoreKeys.TvAppSeen"/>) ya da bu bilgisayar kurduysa (<see cref="StoreKeys.TvAppVersion"/>). Bilinen
+    /// TV'de bekçi uygulamayı listeye bakmadan açar.
+    /// </summary>
+    private void LoadSamsungAppKnowledge()
+    {
+        SamsungAppKnowledge.Changed = host => store.Save(StoreKeys.TvAppSeen, host);
+        SamsungAppKnowledge.Log = SubtitleLog.Write;
+        SamsungAppKnowledge.Mark(store.Load<string>(StoreKeys.TvAppSeen), notify: false);
+        if (tv is { Brand: TvBrand.Samsung } known && InstalledAppVersion is not null) SamsungAppKnowledge.Mark(known.Host, notify: false);
+    }
+
     private void OnClientsChanged(int count) => post(() =>
     {
+        // TV uygulaması bağlandı: bu TV'de kurulu olduğu artık biliniyor (liste "yok" demiş olsa da).
+        if (count > 0 && tv is { Brand: TvBrand.Samsung } connected) SamsungAppKnowledge.Mark(connected.Host);
         TvClients = count;
         UpdateTroubleClocks();
     });

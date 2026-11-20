@@ -56,6 +56,29 @@ object TvSessionLauncher {
      * ve bilinmeyen DEEP_LINK.
      */
     fun samsungActionType(appType: Int?): String = if (appType == 4) "NATIVE_LAUNCH" else "DEEP_LINK"
+
+    /**
+     * TV uygulamasının bu Samsung TV'de kurulu olduğu biliniyor mu: bu telefon kurdu ya da sürümünü TV'den okudu
+     * ([InstalledTv.version]), ya da uygulama bu TV'den daha önce bağlandı ([seenHost]). Bilinen TV'de açma komutundan
+     * önce TV'nin kurulu uygulama listesine bakılmaz: listenin geliştirici moduyla kurulan uygulamayı içerdiği gerçek
+     * TV'de doğrulanmadı; içermiyorsa telefon uygulamayı hiç açmıyordu (beta.63).
+     */
+    fun samsungKnownInstalled(tv: InstalledTv, seenHost: String?): Boolean =
+        tv.brand == TvBrand.SAMSUNG && (!tv.version.isNullOrEmpty() || (!seenHost.isNullOrEmpty() && seenHost == tv.host))
+
+    /**
+     * Açma kararı (Windows ve Mac/iPhone'daki SamsungAppKnowledge ile aynı). Kurulu olduğu bilinen TV'de liste ne derse
+     * desin eski yol (DEEP_LINK); bilinmeyen TV'de listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen
+     * değer gönderilecek tür, gönderilmeyecekse null.
+     */
+    fun samsungAction(knownInstalled: Boolean, presence: SamsungAppPresence?): String? = when {
+        knownInstalled -> "DEEP_LINK"
+        presence?.installed == false -> null
+        else -> samsungActionType(presence?.appType)
+    }
+
+    /** Sahadan öğrenmek için yapılan liste sorgusu çalışma boyunca bir kez yapılır. */
+    private val samsungProbed = java.util.concurrent.atomic.AtomicBoolean(false)
     fun registerMessage(key: String?): String {
         val payload = JSONObject().put("forcePairing", false).put("pairingType", "PROMPT")
             .put("manifest", JSONObject().put("manifestVersion", 1).put("appVersion", "1.0")
@@ -104,11 +127,24 @@ object TvSessionLauncher {
                 var sent = false
                 // Samsung: kurulu uygulama listesinin yanıtı bekleniyor mu. Yanıt 3 saniyede gelmezse eski yol (DEEP_LINK).
                 val awaitingList = java.util.concurrent.atomic.AtomicBoolean(false)
+                // Uygulamanın bu TV'de kurulu olduğu biliniyorsa listeye bakılmaz, eskisi gibi doğrudan açılır.
+                val known = samsungKnownInstalled(tv, settings.samsungAppSeenHost)
+                // Bilinen TV'de açma komutundan sonra, yalnız günlük için listeye bir kez bakılıyor mu.
+                val probing = java.util.concurrent.atomic.AtomicBoolean(false)
                 fun samsungLaunch(webSocket: WebSocket, presence: SamsungAppPresence?) {
                     if (!awaitingList.getAndSet(false)) return
                     // Kurulu değilken DEEP_LINK gönderilirse Smart Hub uygulamayı mağazada arıyor ve TV'de "Sunucu bakım
                     // altında (1544007)" çıkıyordu (#402, #511, #637); listede yoksa hiçbir şey gönderilmez.
-                    if (presence?.installed != false) sent = webSocket.send(launchMessage(tv.brand, server, key, samsungActionType(presence?.appType)))
+                    samsungAction(false, presence)?.let { sent = webSocket.send(launchMessage(tv.brand, server, key, it)) }
+                    webSocket.close(1000, null)
+                }
+                fun samsungProbeDone(webSocket: WebSocket, presence: SamsungAppPresence?) {
+                    if (!probing.getAndSet(false)) return
+                    android.util.Log.i("CouchSubsTvLaunch", when {
+                        presence == null -> "Samsung ${tv.host}: kurulu uygulama listesi yanıtsız; uygulama daha önce bağlandığı için doğrudan açıldı."
+                        !presence.installed -> "Samsung ${tv.host}: kurulu uygulama listesinde CouchSubs YOK ama uygulama daha önce bağlandı/kuruldu; doğrudan açıldı."
+                        else -> "Samsung ${tv.host}: kurulu uygulama listesinde CouchSubs var (app_type ${presence.appType ?: "?"})."
+                    })
                     webSocket.close(1000, null)
                 }
                 val socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
@@ -122,6 +158,10 @@ object TvSessionLauncher {
                                 samsungInstalledApp(text)?.let { samsungLaunch(webSocket, it) }
                                 return
                             }
+                            if (probing.get()) {
+                                samsungInstalledApp(text)?.let { samsungProbeDone(webSocket, it) }
+                                return
+                            }
                             val message = JSONObject(text)
                             val approved = if (tv.brand == TvBrand.LG) message.optString("type") == "registered" else message.optString("event") == "ms.channel.connect"
                             if (approved && !registered && active()) {
@@ -129,7 +169,13 @@ object TvSessionLauncher {
                                 val received = if (tv.brand == TvBrand.LG) message.optJSONObject("payload")?.optString("client-key") else message.optJSONObject("data")?.optString("token")
                                 if (!received.isNullOrEmpty()) settings.secrets.put(tokenKey, received)
                                 certificatePin?.let { settings.secrets.put(pinKey, it) }
-                                if (tv.brand == TvBrand.SAMSUNG) {
+                                if (tv.brand == TvBrand.SAMSUNG && known) {
+                                    sent = webSocket.send(launchMessage(tv.brand, server, key, samsungAction(true, null)!!))
+                                    if (samsungProbed.compareAndSet(false, true) && webSocket.send(SAMSUNG_INSTALLED_APPS_REQUEST)) {
+                                        probing.set(true)
+                                        Thread { Thread.sleep(3000); samsungProbeDone(webSocket, null) }.apply { isDaemon = true }.start()
+                                    } else webSocket.close(1000, null)
+                                } else if (tv.brand == TvBrand.SAMSUNG) {
                                     awaitingList.set(true)
                                     if (!webSocket.send(SAMSUNG_INSTALLED_APPS_REQUEST)) samsungLaunch(webSocket, null)
                                     else Thread { Thread.sleep(3000); samsungLaunch(webSocket, null) }.apply { isDaemon = true }.start()

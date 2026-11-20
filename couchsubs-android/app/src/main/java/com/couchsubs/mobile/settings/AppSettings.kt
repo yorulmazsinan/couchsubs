@@ -487,6 +487,14 @@ class AppSettings(context: Context) : AreaStore {
      * Bu telefonun TV uygulamasını kurduğu (ya da sürümüne baktığı) TV: marka, adres ve TV'deki sürüm. Uygulama açılınca
      * ve TV her bağlandığında bu TV'deki sürüme bakılır; telefondaki paketten eskiyse güncelleme önerilir.
      */
+    /**
+     * TV uygulamasının daha önce bağlandığı Samsung TV'nin adresi: o TV'de uygulamanın kurulu olduğu bilinir, açma
+     * komutundan önce TV'nin kurulu uygulama listesine bakılmaz (bkz. TvSessionLauncher.samsungKnownInstalled).
+     */
+    var samsungAppSeenHost: String?
+        get() = prefs.getString("tvApp.samsungSeenHost", null)
+        set(value) = prefs.edit().putString("tvApp.samsungSeenHost", value).apply()
+
     var installedTv: InstalledTv?
         get() {
             val brand = prefs.getString("tvApp.brand", null)?.let { runCatching { enumValueOf<TvBrand>(it) }.getOrNull() } ?: return null

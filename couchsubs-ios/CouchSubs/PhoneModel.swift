@@ -373,6 +373,8 @@ final class PhoneModel: ObservableObject {
                     let connected = self.tvClients == 0 && count > 0
                     self.tvClients = count
                     if count > 0 { self.tvWaitingLong = false }
+                    // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (bekçi listeye bakmadan açar).
+                    if count > 0, let tv = self.tv, tv.brand == .samsung { SamsungAppKnowledge.shared.mark(host: tv.host) }
                     // TV uygulaması her bağlandığında sürümüne bakılır (eskiyse ana ekranda güncelleme önerilir).
                     if connected { Task { await self.checkTVApp() } }
                 }
@@ -1308,6 +1310,8 @@ final class PhoneModel: ObservableObject {
         if !force, let last = tvAppCheckedAt, Date().timeIntervalSince(last) < 60 { return }
         let target: (TVBrand, String, UInt16?)
         if let installed = installedTVApp {
+            // Bu telefonun daha önce kurduğu Samsung uygulaması kurulu bilinir (bekçi listeye bakmadan açar).
+            if installed.brand == .samsung { SamsungAppKnowledge.shared.mark(host: installed.host) }
             target = (installed.brand, installed.host, installed.port)
         } else if let tv, !tv.host.isEmpty {
             target = (tv.brand, tv.host, nil)
@@ -1349,6 +1353,8 @@ final class PhoneModel: ObservableObject {
 
     private func saveInstalledTVApp(_ value: InstalledTVApp) {
         installedTVApp = value
+        // Bu telefonun kurduğu ya da sürümünü TV'den okuduğu Samsung uygulaması kurulu bilinir.
+        if value.brand == .samsung { SamsungAppKnowledge.shared.mark(host: value.host) }
         if let data = try? JSONEncoder().encode(value) { defaults.set(data, forKey: StoreKey.tvAppInstalled) }
     }
 

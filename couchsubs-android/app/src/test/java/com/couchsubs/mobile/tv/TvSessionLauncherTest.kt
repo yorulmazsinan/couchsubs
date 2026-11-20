@@ -29,6 +29,25 @@ class TvSessionLauncherTest {
         val native = JSONObject(TvSessionLauncher.launchMessage(TvBrand.SAMSUNG, "http://1.2.3.4:8787", "k", "NATIVE_LAUNCH"))
         assertEquals("NATIVE_LAUNCH", native.getJSONObject("params").getJSONObject("data").getString("action_type"))
     }
+    /** beta.63: liste geliştirici moduyla kurulan uygulamayı içermiyorsa telefon uygulamayı hiç açmıyordu. */
+    @Test fun samsungKnownInstalledAppLaunchesWithoutTheList() {
+        val missing = TvSessionLauncher.SamsungAppPresence(false, null)
+        // Uygulama bu TV'den daha önce bağlandı ya da bu telefon kurdu: liste "yok" dese de açılır.
+        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(true, missing))
+        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(true, null))
+        // Hiç bağlanmamış ve kurulum kaydı yok: liste belirler; listede yoksa komut gönderilmez (#637).
+        assertNull(TvSessionLauncher.samsungAction(false, missing))
+        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 2)))
+        assertEquals("NATIVE_LAUNCH", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 4)))
+        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, null))
+
+        val unknown = InstalledTv(TvBrand.SAMSUNG, "192.168.1.40")
+        assertFalse(TvSessionLauncher.samsungKnownInstalled(unknown, null))
+        assertFalse(TvSessionLauncher.samsungKnownInstalled(unknown, "192.168.1.41"))
+        assertTrue(TvSessionLauncher.samsungKnownInstalled(unknown, "192.168.1.40"))
+        assertTrue(TvSessionLauncher.samsungKnownInstalled(unknown.copy(version = "0.9.44"), null))
+        assertFalse(TvSessionLauncher.samsungKnownInstalled(InstalledTv(TvBrand.LG, "192.168.1.40", version = "0.9.44"), "192.168.1.40"))
+    }
     @Test fun registrationUsesPreviouslyApprovedTvCredential() {
         val payload = JSONObject(TvSessionLauncher.registerMessage("stored-tv-key")).getJSONObject("payload")
         assertEquals("stored-tv-key", payload.getString("client-key"))
