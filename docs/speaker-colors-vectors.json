@@ -1,0 +1,96 @@
+{
+ "palette": [
+  "#FFD54F",
+  "#4FC3F7",
+  "#81C784",
+  "#FF8A65",
+  "#CE93D8",
+  "#F06292",
+  "#4DD0E1",
+  "#AED581",
+  "#FFB74D",
+  "#90CAF9"
+ ],
+ "families": {
+  "#FFD54F": "A",
+  "#FFB74D": "A",
+  "#FF8A65": "A",
+  "#4FC3F7": "B",
+  "#4DD0E1": "B",
+  "#90CAF9": "B",
+  "#81C784": "C",
+  "#AED581": "C",
+  "#CE93D8": "D",
+  "#F06292": "D"
+ },
+ "sequence": [
+  {
+   "name": "Mattia",
+   "color": "#90CAF9"
+  },
+  {
+   "name": "Lucia",
+   "color": "#F06292"
+  },
+  {
+   "name": "Mattla",
+   "color": "#90CAF9"
+  },
+  {
+   "name": "Mattia.",
+   "color": "#90CAF9"
+  },
+  {
+   "name": "MATTIA",
+   "color": "#90CAF9"
+  },
+  {
+   "name": "Boobie",
+   "color": "#FFD54F"
+  },
+  {
+   "name": "Jason",
+   "color": "#AED581"
+  },
+  {
+   "name": "Cal",
+   "color": "#4FC3F7"
+  },
+  {
+   "name": "Raul",
+   "color": "#81C784"
+  },
+  {
+   "name": "Brian",
+   "color": "#FF8A65"
+  },
+  {
+   "name": "Mattia",
+   "color": "#90CAF9"
+  },
+  {
+   "name": "Lucia:",
+   "color": "#F06292"
+  },
+  {
+   "name": "Jasen",
+   "color": "#AED581"
+  },
+  {
+   "name": "Dre'Quan",
+   "color": "#CE93D8"
+  },
+  {
+   "name": "Bae-Luxe",
+   "color": "#4DD0E1"
+  },
+  {
+   "name": "Lori",
+   "color": "#FFB74D"
+  },
+  {
+   "name": "Cal",
+   "color": "#4FC3F7"
+  }
+ ]
+}
