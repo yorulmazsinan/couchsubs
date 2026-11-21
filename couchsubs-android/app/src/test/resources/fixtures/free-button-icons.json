@@ -1,0 +1,70 @@
+{
+  "about": "Görüntüden tuş simgesi bulma (ButtonIcons.markFree): tuş çubuğu, satır başı/sonu, yanlış okunmuş simge, renksiz simge (#860). Mac FreeButtonIconsTests.swift, Windows FreeButtonIconsTests.cs ve Android FreeButtonIconsTest.kt aynı dosyayı okur. Kare width×height; her 'rings' x'i, top'tan başlayan size×size, 3 piksel kalın bir halkanın sol kenarı (zemin 'background', halka 'ink'; verilmezse siyah zemin, beyaz halka). Sözcük kutuları [sol, sağ], üst 0.25, alt 0.75. 'markFree': ButtonIcons.markFree sonucu ('￼' simge imi; 'icons' simgelerin okunan halleri, yoksa simge yok). 'screen': 'Ekranı çevir' gruplarının parçaları ve kutunun sağ kenarının en çok nereye kadar gidebileceği.",
+  "frame": { "width": 400, "height": 40, "top": 11, "size": 18 },
+  "cases": [
+    {
+      "name": "tuş çubuğunda sözcük arasındaki simge",
+      "rings": [191],
+      "words": [["SET", 0.05, 0.15], ["DESTINATION", 0.17, 0.45], ["EXIT", 0.55, 0.65]],
+      "markFree": { "text": "SET DESTINATION ￼ EXIT", "icons": [""] }
+    },
+    {
+      "name": "boş aralık simge değil",
+      "rings": [],
+      "words": [["SET", 0.05, 0.15], ["DESTINATION", 0.17, 0.45], ["EXIT", 0.55, 0.65]],
+      "markFree": { "text": "SET DESTINATION EXIT" }
+    },
+    {
+      "name": "sıradan cümlenin ortasındaki şekil aranmaz (harita işareti)",
+      "rings": [191],
+      "words": [["your", 0.05, 0.15], ["vehicle", 0.17, 0.45], ["for", 0.55, 0.65]],
+      "markFree": { "text": "your vehicle for" }
+    },
+    {
+      "name": "satırın solundaki okunmamış simge",
+      "rings": [92],
+      "words": [["Pick", 0.30, 0.40], ["up", 0.42, 0.47]],
+      "markFree": { "text": "￼ Pick up", "icons": [""] }
+    },
+    {
+      "name": "tuş çubuğunda harf okunmuş simge (✕ 'e')",
+      "rings": [178],
+      "words": [["OFFER", 0.05, 0.20], ["RIDE", 0.22, 0.40], ["e", 0.45, 0.50], ["LUCIA", 0.56, 0.75]],
+      "markFree": { "text": "OFFER RIDE ￼ LUCIA", "icons": ["e"] }
+    },
+    {
+      "name": "karenin iki kenarındaki simgeler",
+      "rings": [4, 377],
+      "words": [["SELECT", 0.075, 0.7], ["ITEM", 0.73, 0.9275]],
+      "markFree": { "text": "￼ SELECT ITEM ￼", "icons": ["", ""] }
+    },
+    {
+      "name": "yan yana iki omuz tuşu kendi simgeleriyle",
+      "rings": [122, 150],
+      "words": [["SELECT", 0.05, 0.26], ["L1", 0.30, 0.355], ["R1", 0.37, 0.43]],
+      "markFree": { "text": "SELECT ￼ ￼", "icons": ["L1", "R1"] }
+    },
+    {
+      "name": "doğrulanmayan simge yazı olarak kalır",
+      "rings": [150],
+      "words": [["SELECT", 0.05, 0.26], ["○", 0.30, 0.355], ["R1", 0.37, 0.43]],
+      "markFree": { "text": "SELECT ○ ￼", "icons": ["R1"] }
+    },
+    {
+      "name": "#860 mavi haritada beyaz L3 '13' okundu: simge çeviriye girmez, kutu simgeden önce biter",
+      "background": [9, 115, 234],
+      "ink": [255, 255, 255],
+      "rings": [179],
+      "words": [["RECENTER", 0.05, 0.40], ["13", 0.45, 0.49]],
+      "screen": { "paragraphs": ["RECENTER"], "maxRight": 0.4475 }
+    },
+    {
+      "name": "renkli şekil (portre, harita parçası) satır ucunda simge sayılmaz",
+      "background": [9, 115, 234],
+      "ink": [255, 140, 0],
+      "rings": [179],
+      "words": [["RECENTER", 0.05, 0.40], ["13", 0.45, 0.49]],
+      "screen": { "paragraphs": ["RECENTER 13"], "maxRight": 0.49 }
+    }
+  ]
+}

@@ -8,6 +8,9 @@
 //   frame-regression record <kare klasörü>
 //       Her karenin altyazı alanındaki Vision okumasını <klasör>/ocr/<id>.json'a yazar (Android ve Windows aynı
 //       okumalarla kendi seçim mantığını koşar).
+//   frame-regression record-screen <kare klasörü>
+//       Ekran yazısı denetimli karelerin bütün kare, ekran yazısı alanları ve hazır alan okumalarını
+//       <klasör>/ocr/screen/<id>.json'a yazar (Android ekran yazısı hattını aynı okumalarla koşar).
 //   frame-regression ocr <resim> [sol,üst,sağ,alt]
 //       Etiketleme yardımı: bütün karenin (ya da alanın) satırları kutularıyla, telefon ve harita kartı.
 
@@ -26,6 +29,7 @@ struct Main {
             switch command {
             case "run": try await run(arguments)
             case "record": try record(arguments)
+            case "record-screen": try recordScreen(arguments)
             case "ocr": try ocr(arguments)
             default: usage()
             }
@@ -36,7 +40,7 @@ struct Main {
     }
 
     static func usage() -> Never {
-        print("kullanım: frame-regression run <klasör> [--json <dosya>] [--core <ad>] [-v] | record <klasör> | ocr <resim> [l,t,r,b]")
+        print("kullanım: frame-regression run <klasör> [--json <dosya>] [--core <ad>] [-v] | record <klasör> | record-screen <klasör> | ocr <resim> [l,t,r,b]")
         exit(64)
     }
 
@@ -76,6 +80,43 @@ struct Main {
             try encoder.encode(fixture).write(to: out.appendingPathComponent("\(frame.id).json"))
         }
         print("\(manifest.frames.count) karenin okuması \(out.path) klasörüne yazıldı")
+    }
+
+    /// Ekran yazısı denetimli karelerin (`screen`) okumaları <klasör>/ocr/screen/<id>.json'a: bütün kare ("Ekranı
+    /// çevir"), ekran yazısı bulucusunun alanları (otomatik ekran yazısı) ve oyunun hazır alanları. Android aynı okumalarla
+    /// kendi ekran yazısı hattını koşar (ScreenFramesTest.kt); kutular okunan görüntüye oranla.
+    @MainActor
+    static func recordScreen(_ arguments: [String]) throws {
+        guard let path = arguments.first else { usage() }
+        let directory = URL(fileURLWithPath: path)
+        let manifest = try Manifest.load(directory)
+        let out = directory.appendingPathComponent("ocr/screen")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let reader = VisionReader(language: "en")
+        var count = 0
+        for frame in manifest.frames where frame.screen != nil {
+            guard let image = Images.load(directory.appendingPathComponent(frame.file)) else { continue }
+            let whole = try reader.readLines(image, deep: false)
+            let detector = ScreenTextDetector()
+            var time = 1_000
+            for _ in 0..<12 {
+                detector.sample(image, now: time, excluded: [CropRegion()])
+                time += ScreenTextDetector.sampleIntervalMs
+            }
+            func area(_ area: ExtraArea) throws -> ScreenFixture.Area {
+                let reading = try reader.readLines(RegionCropper.crop(image, to: area.region), deep: false)
+                let r = area.region
+                return ScreenFixture.Area(id: area.id, region: [r.left, r.top, r.right, r.bottom].map(OcrFixture.round),
+                                          menu: area.menu, lines: reading.lines.map(OcrFixture.Line.init))
+            }
+            let fixture = ScreenFixture(id: frame.id, lines: whole.lines.map(OcrFixture.Line.init),
+                                        areas: try detector.areas.map(area), presets: try GameAreaPresets.areas(frame.game).map(area))
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            try encoder.encode(fixture).write(to: out.appendingPathComponent("\(frame.id).json"))
+            count += 1
+        }
+        print("\(count) ekran karesinin okuması \(out.path) klasörüne yazıldı")
     }
 
     static func ocr(_ arguments: [String]) throws {
@@ -161,6 +202,26 @@ struct OcrFixture: Encodable {
     var lines: [Line]
 
     static func rounded(_ box: TextBox) -> [Double] {
-        [box.left, box.top, box.right, box.bottom].map { ($0 * 100_000).rounded() / 100_000 }
+        [box.left, box.top, box.right, box.bottom].map(round)
     }
+
+    static func round(_ value: Double) -> Double { (value * 100_000).rounded() / 100_000 }
+}
+
+/// testdata/frames/ocr/screen/<id>.json: ekran yazısı karesinin okumaları (bkz. `recordScreen`).
+struct ScreenFixture: Encodable {
+    struct Area: Encodable {
+        var id: String
+        /// Alanın karedeki yeri [sol, üst, sağ, alt]; satır kutuları alana oranla.
+        var region: [Double]
+        var menu: Bool
+        var lines: [OcrFixture.Line]
+    }
+    var id: String
+    /// Bütün karenin okuması ("Ekranı çevir"), kareye oranla.
+    var lines: [OcrFixture.Line]
+    /// Ekran yazısı bulucusunun alanları (otomatik ekran yazısı).
+    var areas: [Area]
+    /// Oyunun hazır alanları (`GameAreaPresets`).
+    var presets: [Area]
 }

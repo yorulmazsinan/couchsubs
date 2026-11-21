@@ -59,7 +59,7 @@ object ScreenTranslation {
         progress: (List<Item>) -> Unit = {},
     ): List<Item> {
         val items = mutableListOf<Item>()
-        val all = withImages(groups(reading, wholeScreen = true, handset = phone, frame = frame), frame)
+        val all = withImages(groups(reading, wholeScreen = true, handset = phone, frame = frame, color = color), frame)
         val chat = chatTitle(all)
         for (group in all) {
             if (cancelled()) return present(items, phone)
@@ -96,7 +96,7 @@ object ScreenTranslation {
     ): List<Item> {
         if (!translator.translatesTogether)
             return translateGroups(reading, { translator.translate(it) }, cancelled, frame, color, phone, memory, progress)
-        val groups = withImages(groups(reading, wholeScreen = true, handset = phone, frame = frame), frame)
+        val groups = withImages(groups(reading, wholeScreen = true, handset = phone, frame = frame, color = color), frame)
         // Simgeler çeviride uydurma adlarla korunur (IconText). Sözlükteki kısa arayüz etiketleri ("SCROLL", "SEND",
         // "BACK") ve telefondaki kişi adları çevirmene gitmez; fiyatlar adla korunur (PriceText).
         val prepared = groups.map { group -> group.paragraphs.map { IconText.protect(it) } }
@@ -350,6 +350,8 @@ object ScreenTranslation {
         reading: Reading, keepPrompts: Boolean = false, keepIdentifiers: Boolean = false, wholeScreen: Boolean = false,
         handset: ScreenPhoneCard.Handset? = null,
         frame: GrayFrame? = null,
+        /** [frame]'in (x, y) noktasının rengi (0xRRGGBB); renksiz simge denetimi için ([ButtonIcons.isColourless]). */
+        color: ((Int, Int) -> Int)? = null,
     ): List<Group> {
         var marked = (if (wholeScreen) Reading(reading.lines.map(::repaired)) else reading).withButtonIcons()
         // "Ekranı çevir": tuş çubukları atılmaz, etiketlerine bölünür ([promptPieces]); fiyatlar düzelir ([PriceText.repair]).
@@ -361,6 +363,19 @@ object ScreenTranslation {
             // Menü şeridinin sekmeleri ("JASON & LUCIA   MAP   BRIEF") tek satır okunsa da ayrı ayrı çevrilir (#859).
             val aspect = if (frame != null && frame.height > 0) frame.width.toDouble() / frame.height else 16.0 / 9.0
             marked = Reading(marked.lines.flatMap { menuPieces(it, aspect, frame) })
+        }
+        // Kare varsa yalnız aksi halde atılacak kumanda ipuçlarında simgeye görüntüden bakılır. "Ekranı çevir": satır
+        // ucundaki kısa parça ("RECENTER 13", "EXIT O") okunmuş bir tuş simgesi olabilir; görüntüden renksiz simge olarak
+        // doğrulanırsa simge olur, kutunun dışında kalır (#860; Mac ve Windows ile aynı).
+        if (frame != null) {
+            marked = Reading(marked.lines.map { line ->
+                when {
+                    !line.icons.isNullOrEmpty() -> line
+                    ButtonPrompts.isPrompt(line.text) -> ButtonIcons.markFree(line, frame, color)
+                    wholeScreen && hasShortEdge(line) -> ButtonIcons.markFree(line, frame, color, monochrome = true)
+                    else -> line
+                }
+            })
         }
         val lines = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise(keepIdentifiers).lines
             .filter { it.box != null && ScreenText.isWords(it.text) }
@@ -431,6 +446,12 @@ object ScreenTranslation {
         val digits = plain.count { it.isDigit() }
         if (letters != 0 && digits * 2 <= letters) return false
         return plain.split(Regex("\\s+")).none { PriceText.isMoney(it) }
+    }
+
+    /** Satırın ilk ya da son parçası en çok iki harflik (okunmuş tuş simgesi olabilir: "13", "O", "®"). */
+    internal fun hasShortEdge(line: TextLine): Boolean {
+        val parts = line.text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return parts.size >= 2 && (parts.last().length <= 2 || parts.first().length <= 2)
     }
 
     // --- Menü şeridi, özel adlar, kenardaki tuş simgesi (#856, #859, #860) ---

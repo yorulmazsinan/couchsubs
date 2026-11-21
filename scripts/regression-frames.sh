@@ -18,7 +18,8 @@
 # sınıflaması, kutu örtme, telefon çevirisi senaryosu ya da ekran yazısı (menü sekmeleri, görev listesi; "Ekranı çevir",
 # otomatik ekran yazısı ve hazır alanlar) geriledi. Sürüm iş akışı (release.yml) bu betiği zorunlu
 # kapı olarak koşar. Yalnız macOS (Apple Vision); Android ve Windows aynı okumalarla (testdata/frames/ocr) kendi
-# testlerinde koşar.
+# testlerinde koşar. Ekran yazısı ölçütünü Android ScreenFramesTest.kt testdata/frames/ocr/screen okumalarıyla koşar
+# (kareler değişince yeniden kaydı: tools/frame-regression → frame-regression record-screen testdata/frames).
 
 set -euo pipefail
 

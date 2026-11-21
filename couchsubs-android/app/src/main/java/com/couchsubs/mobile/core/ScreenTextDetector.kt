@@ -510,11 +510,12 @@ object AutoText {
         'Ρ' to 'P', 'Τ' to 'T', 'Χ' to 'X', 'Υ' to 'Y', 'ο' to 'o',
     )
     private val keyNames = Regex("^(?:[LR][123]?|[LR]B|[LR]T|△|□|○|✕)$")
+    private val dimension = Regex("^[0-9][A-Za-z]$")
     private val shortWords = setOf("OF", "TO", "ON", "UP", "IN", "IT", "AT", "BY", "OR", "GO", "NO", "MY", "ME", "US", "WE",
         "BE", "DO", "SO", "AN", "AS", "IS", "A", "I")
 
     fun clean(reading: Reading, menu: Boolean): Reading {
-        val lines = reading.lines.mapNotNull { line(it) }
+        val lines = reading.lines.mapNotNull { line(it, menu) }
         val body = lines.any { l -> l.text.any { it.isLowerCase() } && l.text.count { it.isLetter() } >= 8 }
         // Alandaki satırların yarısından alçak, büyük harfli satır logo ya da marka yazısıdır ("REPUBLIC OF GAMERS").
         val heights = lines.mapNotNull { l -> l.box?.let { it.bottom - it.top } }.sorted()
@@ -527,10 +528,12 @@ object AutoText {
 
     private fun isLatin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĞğİıŞş"
 
-    private fun line(line: TextLine): TextLine? {
-        // Eğik ya da perspektifli satır (sözcüklerin dikey ortaları kayıyor) oyun dünyasındadır (poster, tabela).
+    private fun line(line: TextLine, menu: Boolean): TextLine? {
+        // Eğik ya da perspektifli satır (sözcüklerin dikey ortaları kayıyor) oyun dünyasındadır (poster, tabela). Menüde
+        // aranmaz (Mac ve Windows gibi): menü arayüzdür, yazı tanıma uzun satırın sözcük kutularını biraz oynatır (GTA 6
+        // haritasındaki görev açıklamasının orta satırı eğik sayılıp atılıyordu).
         val words = line.words
-        if (words != null && words.size >= 2) {
+        if (!menu && words != null && words.size >= 2) {
             val first = words.minBy { it.box.left }.box
             val last = words.maxBy { it.box.right }.box
             val height = words.map { it.box.bottom - it.box.top }.sorted()[words.size / 2]
@@ -542,8 +545,10 @@ object AutoText {
         val tokens = text.split(' ').filter { it.isNotEmpty() }.toMutableList()
         var before = 0
         var after = 0
-        // Baştaki simge okuması: en çok iki karakter, ardından büyük harfle başlayan sözcük; kısa etikette.
+        // Baştaki simge okuması: en çok iki karakter, ardından büyük harfle başlayan sözcük; kısa etikette. Rakamla başlayan
+        // harfli parça ("2D VIEW", "3D") sözcüktür.
         if (tokens.size in 2..6 && tokens[0].length <= 2 && ButtonIcons.MARKER !in tokens[0] && !keyNames.matches(tokens[0]) &&
+            !dimension.matches(tokens[0]) &&
             tokens[0].uppercase() !in shortWords && tokens[1].first().isUpperCase()) {
             before = text.indexOf(tokens[1])
             tokens.removeAt(0)

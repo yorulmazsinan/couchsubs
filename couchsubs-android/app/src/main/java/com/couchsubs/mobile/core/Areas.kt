@@ -372,9 +372,11 @@ class RegionWatcher(
          */
         fun candidate(
             reading: Reading, region: CropRegion, frame: GrayFrame? = null, keepPrompts: Boolean = false, auto: Boolean = false,
-            styled: Boolean = false,
+            styled: Boolean = false, color: ((Int, Int) -> Int)? = null,
         ): Candidate {
-            val marked = reading.withButtonIcons()
+            // Fiilsiz yerlerdeki simgeler (tuş çubuğu, satır ucu) karede doğrulanır; otomatik alanda yalnız renksiz simgeler
+            // ([color]), satır ucundaki simge çeviriye girmez (Mac ve Windows ile aynı).
+            val marked = if (frame == null) reading.withButtonIcons() else reading.withButtonIcons(frame, color, monochrome = auto)
             val stylish = auto || styled
             // Menü şeridinin sekmeleri tek satır okunsa da ayrı satırlardır (#859); kutular alana oranlı.
             val aspect = (region.right - region.left) * 16 / maxOf(1e-6, (region.bottom - region.top) * 9)
@@ -406,6 +408,8 @@ class RegionWatcher(
             // katılıp ikisi tek kutuda, görev resminin üstünde çiziliyordu (#856).
             val cards = if (lines.isNotEmpty() && boxes.size == lines.size) MissionCard.find(lines, region.box) else emptyList()
             val groups = when {
+                // Otomatik ve hazır alan: kısa etiketler kendi bloğu, uzun yazı paragraf ([autoGroups]; Mac ve Windows gibi).
+                stylish && lines.isNotEmpty() && boxes.size == lines.size -> autoGroups(lines, keepPrompts, cards)
                 cards.isNotEmpty() -> {
                     val taken = cards.flatMap { it.all }.toSet()
                     val rest = lines.indices.filter { it !in taken }.map { lines[it] }
@@ -414,7 +418,7 @@ class RegionWatcher(
                 lines.size > 1 && boxes.size == lines.size -> ScreenTranslation.groupLines(lines)
                 else -> emptyList()
             }
-            if (groups.size > 1 && groups.size < ScreenTranslation.MAX_GROUPS) {
+            if ((stylish && groups.isNotEmpty()) || (groups.size > 1 && groups.size < ScreenTranslation.MAX_GROUPS)) {
                 paragraphs = groups.flatMap { it.paragraphs }
                 icons = groups.flatMap { group -> group.icons ?: group.paragraphs.map { emptyList<IconSlot>() } }
                 var start = 0
@@ -430,6 +434,48 @@ class RegionWatcher(
                 !MissionCard.inHelpCorner(card.all.map { lines[it].box!! }.reduce { a, b -> a.union(b) }.placedIn(region.box))
             }
             return Candidate(paragraphs, box, lineHeight, key, cut, blocks, textKey(paragraphs), missionCard = missionCard)
+        }
+
+        /** Kısa etiket satırı: en çok bu kadar sözcük. */
+        private const val LABEL_WORDS = 5
+
+        /**
+         * Otomatik ve hazır alanın grupları (Mac RegionWatcher.autoGroups, Windows AutoGroups ile aynı): gruplar önce
+         * birlikte kurulur; bütün satırları kısa etiket olan grup (menü sütunu, tuş etiketleri) satır satır bloktur, uzun
+         * satırı olan grup paragraftır, başındaki BÜYÜK HARF başlık ise kendi bloğudur. Önceden hazır alanda alt alta tuş
+         * etiketleri ("RECENTER", "2D VIEW") tek kutuda tek cümle gibi çevriliyordu. [menu] dışında satır yükseklikleri
+         * ±%15'ten çok farklı paragraf (eğik ya da ölçekli dünya yazısı: poster, tabela) çevrilmez.
+         */
+        internal fun autoGroups(lines: List<TextLine>, menu: Boolean = false, cards: List<MissionCard.Card> = emptyList()): List<ScreenTranslation.Group> {
+            fun isLabel(line: TextLine) = line.text.split(Regex("\\s+")).count { it.isNotEmpty() } <= LABEL_WORDS
+            fun isTitle(line: TextLine) = line.text.any { it.isLetter() } && line.text.none { it.isLowerCase() }
+            fun inside(line: TextBox, group: TextBox): Boolean {
+                val x = (line.left + line.right) / 2
+                val y = (line.top + line.bottom) / 2
+                return x >= group.left - 1e-6 && x <= group.right + 1e-6 && y >= group.top - 1e-6 && y <= group.bottom + 1e-6
+            }
+            fun single(line: TextLine): ScreenTranslation.Group {
+                val icons = ScreenText.paragraphIcons(listOf(line))
+                val box = line.box!!
+                return ScreenTranslation.Group(ScreenText.paragraphs(listOf(line)), box, box.bottom - box.top,
+                    if (icons.any { it.isNotEmpty() }) icons else null)
+            }
+            val groups = cards.flatMap { MissionCard.groups(it, lines) }.toMutableList()
+            val taken = cards.flatMap { it.all }.toSet()
+            val rest = lines.indices.filter { it !in taken }.map { lines[it] }
+            for (group in ScreenTranslation.groupLines(rest)) {
+                val own = rest.filter { inside(it.box!!, group.box) }
+                if (own.all(::isLabel)) {
+                    groups += own.map(::single)
+                    continue
+                }
+                val heights = own.filter { !isLabel(it) }.map { it.box!!.bottom - it.box!!.top }
+                if (!menu && heights.size >= 2 && heights.max() > heights.min() * (1.15 / 0.85)) continue
+                val titles = own.takeWhile { isTitle(it) && isLabel(it) }
+                groups += titles.map(::single)
+                if (titles.isEmpty()) groups += group else groups += ScreenTranslation.groupLines(own.drop(titles.size))
+            }
+            return groups.withIndex().sortedWith(compareBy({ it.value.box.top }, { it.value.box.left }, { it.index })).map { it.value }
         }
 
         /**
@@ -810,7 +856,8 @@ class RegionWatcher(
         val own = subtitleEcho?.filter(reading, area.region.box, geometry) ?: reading
         val text = if (area.auto) AutoText.clean(own, area.menu) else own
         val preset = GameAreaPresets.isPreset(area.id)
-        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = preset)
+        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = preset,
+            color = crop.color)
         if (area.auto) {
             // Menü dışındaki otomatik alanın türü okunan yazıdan çıkar (yardım/eylem ya da diğer); kapalı tür gürültü gibi
             // çizilmez, bulucuya bildirilir.

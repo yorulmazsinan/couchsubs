@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-# Platform eşitliği denetimi (KALICI KURAL: Windows = Mac, Android = iPhone). İki karşılaştırma yapar:
+# Platform eşitliği denetimi (KALICI KURAL: Windows = Mac, Android = iPhone). Üç karşılaştırma yapar (üçüncüsü:
+# CAPABILITIES, ortak çekirdek yeteneklerinin ve ortak deneme dosyalarının her platformda bulunması):
 #  1. Masaüstü ayarları: Windows UserSettings kaydının (windows/src/CouchSubs.Shell/Contracts.cs) alanları ile Mac'in
 #     kullandığı ortak UserSettings'in (core/.../AppSettings.swift) alanları. Ad büyük/küçük harf gözetmeden eşlenir.
 #  2. Telefon ayar ekranları: iPhone Profil/Ayarlar ekranlarının (couchsubs-ios/CouchSubs/UI/Profile.swift, DubbingTile.swift) kullandığı
@@ -22,6 +23,78 @@ IOS_SCREENS = [ROOT / "couchsubs-ios" / "CouchSubs" / "UI" / name for name in ("
 ANDROID_SCREENS = [ROOT / "couchsubs-android" / "app" / "src" / "main" / "java" / "com" / "couchsubs" / "mobile" / "ui" / name
                    for name in ("ProfileScreens.kt", "DubbingTile.kt", "LocalAiSection.kt")]
 ANDROID_EN = ROOT / "couchsubs-android" / "app" / "src" / "main" / "res" / "values-en" / "strings.xml"
+CORE_FIXTURES = ROOT / "core" / "Tests" / "CouchSubsCoreTests" / "Fixtures"
+ANDROID_FIXTURES = ROOT / "couchsubs-android" / "app" / "src" / "test" / "resources" / "fixtures"
+
+_CORE = "core/Sources/CouchSubsCore/"
+_WIN = "windows/src/CouchSubs.Core/"
+_DROID = "couchsubs-android/app/src/main/java/com/couchsubs/mobile/core/"
+_CORE_TESTS = "core/Tests/CouchSubsCoreTests/"
+_WIN_TESTS = "windows/tests/CouchSubs.Core.Tests/"
+_DROID_TESTS = "couchsubs-android/app/src/test/java/com/couchsubs/mobile/core/"
+
+# 3. Ortak çekirdek yetenekleri: her yetenek her platformda (Mac/iPhone ortak çekirdeği, Windows, Android) kodda bulunmalı
+# ve ortak deneme dosyasını okuyan testi olmalı. (platform, dosya, düzenli ifade) üçlüleri; biri eksikse denetim kırmızı.
+# Android'de "RECENTER 13" gibi yanlış okunmuş tuş simgesi kutuda kalıyordu: markFree yalnız Mac ve Windows'taydı (#860).
+CAPABILITIES = {
+    "Görüntüden tuş simgesi bulma (markFree)": [
+        ("mac", _CORE + "ButtonIcons.swift", r"static func markFree\("),
+        ("windows", _WIN + "ButtonIcons.cs", r"public static TextLine MarkFree\("),
+        ("android", _DROID + "ButtonIcons.kt", r"fun markFree\("),
+    ],
+    "Renksiz simge denetimi (portre/harita simge sayılmaz)": [
+        ("mac", _CORE + "ButtonIcons.swift", r"static func isColourless\("),
+        ("windows", _WIN + "ButtonIcons.cs", r"static bool IsColourless\("),
+        ("android", _DROID + "ButtonIcons.kt", r"fun isColourless\("),
+    ],
+    "\"Ekranı çevir\"de satır ucundaki kısa parçayı görüntüden doğrulama (hasShortEdge)": [
+        ("mac", _CORE + "ScreenTranslation.swift", r"hasShortEdge\(line\) \? ButtonIcons\.markFree"),
+        ("windows", _WIN + "ScreenTranslation.cs", r"HasShortEdge\(line\) \? ButtonIcons\.MarkFree"),
+        ("android", _DROID + "ScreenTranslation.kt", r"hasShortEdge\(line\) -> ButtonIcons\.markFree"),
+    ],
+    "Ek alanda görüntüden tuş simgesi (otomatik alanda yalnız renksiz)": [
+        ("mac", _CORE + "RegionWatcher.swift", r"withButtonIcons\(frame: frame, monochrome: auto\)"),
+        ("windows", _WIN + "RegionWatcher.cs", r"WithButtonIcons\(frame, monochrome: auto\)"),
+        ("android", _DROID + "Areas.kt", r"withButtonIcons\(frame, color, monochrome = auto\)"),
+    ],
+    "Otomatik/hazır alanda kısa etiketler ayrı blok (autoGroups)": [
+        ("mac", _CORE + "RegionWatcher.swift", r"static func autoGroups\("),
+        ("windows", _WIN + "RegionWatcher.cs", r"AutoGroups\("),
+        ("android", _DROID + "Areas.kt", r"fun autoGroups\("),
+    ],
+    "Ortak deneme dosyası free-button-icons.json": [
+        ("mac", _CORE_TESTS + "FreeButtonIconsTests.swift", r"free-button-icons\.json"),
+        ("windows", _WIN_TESTS + "FreeButtonIconsTests.cs", r"free-button-icons\.json"),
+        ("android", _DROID_TESTS + "FreeButtonIconsTest.kt", r"free-button-icons\.json"),
+    ],
+    "Ortak deneme dosyası screen-menu.json": [
+        ("mac", _CORE_TESTS + "ScreenMenuBarTests.swift", r"screen-menu\.json"),
+        ("windows", _WIN_TESTS + "ScreenMenuBarTests.cs", r"screen-menu\.json"),
+        ("android", _DROID_TESTS + "ScreenMenuBarTest.kt", r"screen-menu\.json"),
+    ],
+    "Ortak deneme dosyası mission-card.json": [
+        ("mac", _CORE_TESTS + "MissionCardTests.swift", r"mission-card\.json"),
+        ("windows", _WIN_TESTS + "MissionCardTests.cs", r"mission-card\.json"),
+        ("android", _DROID_TESTS + "MissionCardTest.kt", r"mission-card\.json"),
+    ],
+    "Gerçek kare ekran yazısı ölçütü (menü, görev listesi)": [
+        ("mac", "tools/frame-regression/Sources/frame-regression/ScreenCheck.swift", r"func checkScreen\("),
+        ("android", _DROID_TESTS + "ScreenFramesTest.kt", r"ocr/screen/"),
+    ],
+}
+
+
+def capabilities(problems):
+    for name, places in CAPABILITIES.items():
+        for platform, path, pattern in places:
+            file = ROOT / path
+            if not file.is_file() or not re.search(pattern, file.read_text()):
+                problems.append(f"Ortak yetenek '{name}': {platform} tarafında yok ({path}).")
+    # Android'in deneme dosyaları çekirdeğinkilerin kopyasıdır; ayrışırsa üç platform aynı vakaları koşmuyor demektir.
+    for copy in sorted(ANDROID_FIXTURES.iterdir()):
+        original = CORE_FIXTURES / copy.name
+        if original.is_file() and original.read_bytes() != copy.read_bytes():
+            problems.append(f"Ortak deneme dosyası {copy.name}: Android kopyası çekirdektekinden farklı; yeniden kopyalayın.")
 
 
 def body(text, start):
@@ -126,11 +199,14 @@ def main():
     compare("Telefon ayar ekranları (iPhone Profile.swift ↔ Android ProfileScreens.kt)", "iphone", ios, "android",
             set(android), mobile_rules, problems)
 
+    capabilities(problems)
+
     if problems:
         print("Platform eşitliği denetimi başarısız (KALICI KURAL: Windows = Mac, Android = iPhone):")
         print("\n".join("  - " + p for p in problems))
         sys.exit(1)
-    print(f"Tamam: {len(win)} Windows / {len(core)} ortak ayar alanı, {len(ios)} iPhone / {len(android)} Android ayar metni eşit.")
+    print(f"Tamam: {len(win)} Windows / {len(core)} ortak ayar alanı, {len(ios)} iPhone / {len(android)} Android ayar metni eşit; "
+          f"{len(CAPABILITIES)} ortak yetenek her platformda.")
 
 
 main()

@@ -272,7 +272,16 @@ object ButtonIcons {
      * kare gri olduğundan simge de gri kesilir.
      */
     fun crop(frame: GrayFrame, box: TextBox): String? {
-        if (!frame.isValid) return null
+        val icon = locate(frame, box) ?: return null
+        return "data:image/png;base64," +
+            Base64.getEncoder().encodeToString(png(frame, icon.left, icon.top, icon.width, icon.height))
+    }
+
+    /** Karede bulunan simge: kesilecek parça (piksel, kırpma payıyla) ve simgenin kendi genişliği/yüksekliği. */
+    private class Located(val left: Int, val top: Int, val width: Int, val height: Int, val inkWidth: Int, val inkHeight: Int)
+
+    private fun locate(frame: GrayFrame, box: TextBox): Located? {
+        if (!frame.isValid || !box.left.isFinite() || !box.top.isFinite() || !box.right.isFinite() || !box.bottom.isFinite()) return null
         val x0 = floor(box.left * frame.width).toInt().coerceIn(0, frame.width)
         val x1 = ceil(box.right * frame.width).toInt().coerceIn(0, frame.width)
         val y0 = floor(box.top * frame.height).toInt().coerceIn(0, frame.height)
@@ -318,8 +327,174 @@ object ButtonIcons {
         val right = minOf(frame.width, x0 + end + margin)
         val cropTop = maxOf(0, y0 + top - margin)
         val cropBottom = minOf(frame.height, y0 + bottom + margin)
-        return "data:image/png;base64," +
-            Base64.getEncoder().encodeToString(png(frame, left, cropTop, right - left, cropBottom - cropTop))
+        return Located(left, cropTop, right - left, cropBottom - cropTop, end - start, bottom - top)
+    }
+
+    /**
+     * Kutudaki parlak piksellerin çoğu renksiz mi (kumanda simgesi beyaz/gri; portre, harita renkli). [color]: karenin
+     * (x, y) noktasının rengi (0xRRGGBB); renk yoksa karar verilemez, simge sayılmaz (Mac isColourless, Windows
+     * IsColourless ile aynı eşikler).
+     */
+    internal fun isColourless(frame: GrayFrame, color: ((Int, Int) -> Int)?, box: TextBox): Boolean {
+        if (color == null || !frame.isValid) return false
+        val x0 = maxOf(0, floor(box.left * frame.width).toInt())
+        val x1 = minOf(frame.width, ceil(box.right * frame.width).toInt())
+        val y0 = maxOf(0, floor(box.top * frame.height).toInt())
+        val y1 = minOf(frame.height, ceil(box.bottom * frame.height).toInt())
+        if (x1 - x0 < 2 || y1 - y0 < 2) return false
+        // Zemin: kutunun kenarındaki noktaların ortancası. Beyaz simgenin kenarı zeminle karışır (mavi haritada mavimsi);
+        // zeminle beyaz arasındaki karışım renkli sayılmaz (#860: GTA 6 haritasında L3/R3 simgesi tanınmıyordu).
+        val reds = ArrayList<Int>()
+        val greens = ArrayList<Int>()
+        val blues = ArrayList<Int>()
+        for (y in y0 until y1) for (x in x0 until x1) {
+            if (y != y0 && y != y1 - 1 && x != x0 && x != x1 - 1) continue
+            val rgb = color(x, y)
+            reds.add((rgb shr 16) and 0xff)
+            greens.add((rgb shr 8) and 0xff)
+            blues.add(rgb and 0xff)
+        }
+        fun median(values: ArrayList<Int>): Int { values.sort(); return values[values.size / 2] }
+        val br = median(reds)
+        val bg = median(greens)
+        val bb = median(blues)
+        val baseLuma = (299 * br + 587 * bg + 114 * bb) / 1000
+        var bright = 0
+        var coloured = 0
+        for (y in y0 until y1) for (x in x0 until x1) {
+            val rgb = color(x, y)
+            val r = (rgb shr 16) and 0xff
+            val g = (rgb shr 8) and 0xff
+            val b = rgb and 0xff
+            val luma = (299 * r + 587 * g + 114 * b) / 1000
+            if (luma < 110) continue
+            bright++
+            if (maxOf(r, g, b) - minOf(r, g, b) <= 60) continue
+            // Karışım muafiyeti yalnız koyu zeminde: kenarına kadar dolu renkli portre simge değildir.
+            if (baseLuma >= 110) { coloured++; continue }
+            // Zeminle beyazın karışımı mı: karışım oranı parlaklıktan, beklenen renk ondan.
+            val share = if (baseLuma >= 250) 1.0 else ((luma - baseLuma).toDouble() / (255 - baseLuma)).coerceIn(0.0, 1.0)
+            fun expected(channel: Int) = channel * (1 - share) + 255 * share
+            val distance = maxOf(abs(r - expected(br)), abs(g - expected(bg)), abs(b - expected(bb)))
+            if (distance > 60) coloured++
+        }
+        return bright > 0 && coloured * 4 < bright
+    }
+
+    /** Tuş çubuğunda yanlış okunmuş omuz tuşu: L1/R1 "11", L2 "12", L3 "13"... */
+    private val shoulderMisreads = setOf("11", "12", "13", "21", "22", "23")
+
+    /**
+     * Ek alanlardaki tuş çubuklarında ve satır uçlarında yalnız kareden doğrulanan simgeler işaretlenir ([mark] fiil
+     * kalıbını zaten kapsar): büyük harfli tuş çubuğunda ("SET DESTINATION ✕ EXIT ○", "OFFER RIDE e LUCIA") sözcük
+     * arasındaki simge genişliğinde boşluk, tek harf ya da harfsiz parça, sonundaki simge; satırın başındaki simge
+     * ("△ Pick up"). Sıradan cümlenin ortasındaki boşluk aranmaz: orada harita işareti ya da renkli ad durur. Mac
+     * ButtonIcons.markFree ve Windows ButtonIcons.MarkFree ile aynı kurallar ve eşikler.
+     *
+     * [monochrome]: otomatik bulunan ekran yazısında ve "Ekranı çevir"deki satır uçlarında yalnız renksiz (beyaz/gri;
+     * [color] gerekir) ve satır yüksekliğinin en az %60'ı kadar simgeler kabul edilir; satırın solunda ya da sonunda
+     * simge aranmaz, satırın başındaki ve sonundaki simge çeviriye taşınmaz (kutu simgeden sonra başlar, önce biter).
+     * Görev kutusundaki portre ve harita parçası simge sanılıp çevirinin içine kesiliyordu; "RECENTER 13" gibi yanlış
+     * okunmuş simge kutuda kalıyordu (#860).
+     */
+    fun markFree(line: TextLine, frame: GrayFrame, color: ((Int, Int) -> Int)? = null, monochrome: Boolean = false): TextLine {
+        val lineBox = line.box ?: return line
+        if (!line.icons.isNullOrEmpty() || !frame.isValid || frame.width < 8 || frame.height < 8) return line
+        val given = line.words
+        val measured = !given.isNullOrEmpty()
+        val words = if (given != null && given.isNotEmpty()) given else estimate(line.text, lineBox)
+        val width = frame.width.toDouble()
+        val lineHeight = lineBox.bottom - lineBox.top
+        val linePx = lineHeight * frame.height
+        if (words.isEmpty() || linePx < 6) return line
+        val head = words.map { it.text }.filter { it.length > 1 && it.uppercase() !in names }.joinToString("")
+        val bar = head.count { it.isLetter() } >= 2 && head == head.uppercase()
+        val spanX = linePx * 1.8 / width
+        val symbol = MARKER.toString()
+        val tokens = mutableListOf<String>()
+        val icons = mutableListOf<IconSlot>()
+        fun padded(left: Double, right: Double) = TextBox(
+            left.coerceIn(0.0, 1.0), (lineBox.top - lineHeight * 0.3).coerceIn(0.0, 1.0),
+            right.coerceIn(0.0, 1.0), (lineBox.bottom + lineHeight * 0.3).coerceIn(0.0, 1.0),
+        )
+        fun hasIcon(box: TextBox): Boolean {
+            val ink = locate(frame, box) ?: return false
+            if (ink.inkHeight < linePx * (if (monochrome) 0.6 else 0.5) || ink.inkHeight > linePx * 2.2) return false
+            val aspect = ink.inkWidth.toDouble() / ink.inkHeight
+            return aspect in 0.6..2.4 && (!monochrome || isColourless(frame, color, box))
+        }
+        fun addEdge(left: Double, right: Double) {
+            val box = padded(left, right)
+            if (hasIcon(box)) {
+                tokens.add(symbol)
+                icons.add(IconSlot(box, ""))
+            }
+        }
+        // Satırın solundaki simge (okunmamış): "△ Pick up".
+        if (!monochrome && !isIconToken(words[0].text) && lineBox.left > 0) addEdge(lineBox.left - spanX, lineBox.left - spanX * 0.08)
+        for ((i, word) in words.withIndex()) {
+            if (bar && i > 0 && tokens.lastOrNull() != symbol) {
+                val left = words[i - 1].box.right
+                val gap = word.box.left - left
+                if (gap * width > linePx * 0.9) addEdge(left + gap * 0.1, word.box.left - gap * 0.1)
+            }
+            val core = word.text.trim { it in BRACKETS }
+            val named = core.uppercase() in names
+            val hasLettersOrDigits = core.any { it.isLetter() || it.isDigit() }
+            // Tuş çubuğunda tek harf/rakam ya da yanlış okunmuş omuz tuşu ("11", "12"); satır sonundaki harf+rakam ("C3",
+            // "13"): yuvarlak L3/R3 simgesinin okunuşu (#860). Tuş çubuğu dışında: satır başında simge gibi parça.
+            val suspicious = if (bar) {
+                named || core.length == 1 || core in shoulderMisreads ||
+                    (i == words.size - 1 && i > 0 && core.length == 2 && core.last().isDigit()) ||
+                    (core.length <= 2 && !hasLettersOrDigits)
+            } else {
+                i == 0 && words.size >= 2 && isIconToken(word.text)
+            }
+            if (suspicious) {
+                val halfWidth = (word.box.right - word.box.left) / 2
+                var left = if (i > 0) minOf(word.box.left, (words[i - 1].box.right + word.box.left) / 2) else word.box.left - halfWidth
+                var right = if (i + 1 < words.size) maxOf(word.box.right, (word.box.right + words[i + 1].box.left) / 2)
+                    else word.box.right + halfWidth
+                // Yazı tanıma yalnız içteki harfleri kutulayabilir: dış çerçeveye pay bırak, iki düğme arasındaki ortayı geçme.
+                val measuredButton = named && measured
+                if (measuredButton) {
+                    val rim = linePx * 0.3 / width
+                    left = maxOf(left, word.box.left - rim)
+                    right = minOf(right, word.box.right + rim)
+                }
+                val box = padded(left, right)
+                if (hasIcon(box)) {
+                    if (measuredButton || tokens.lastOrNull() != symbol) {
+                        tokens.add(symbol)
+                        icons.add(IconSlot(box, core))
+                    }
+                    continue
+                }
+                // Tanınmayan harfsiz parça ("•", "*"): simge değil, yazı da değil.
+                if (!named && !hasLettersOrDigits && core !in setOf("+", "/", "&", "-")) continue
+            }
+            tokens.add(word.text)
+        }
+        // Tuş çubuğunun sonundaki simge: "SELECT ✕".
+        if (!monochrome && bar && tokens.isNotEmpty() && tokens.last() != symbol && lineBox.right < 1) {
+            addEdge(lineBox.right + spanX * 0.08, lineBox.right + spanX)
+        }
+        if (icons.isEmpty()) return line
+        if (monochrome) {
+            // Satırın başındaki ve sonundaki simge çeviriye taşınmaz: oyunun kendi simgesi yerinde görünür kalır, çeviri
+            // kutusu simgeden sonra başlar (önce biter). Yazının ortasındaki simge korunur.
+            val kept = tokens.toMutableList()
+            val slots = icons.toMutableList()
+            while (kept.firstOrNull() == symbol && kept.size > 1) { kept.removeAt(0); slots.removeAt(0) }
+            while (kept.lastOrNull() == symbol && kept.size > 1) { kept.removeAt(kept.size - 1); slots.removeAt(slots.size - 1) }
+            if (kept.size == tokens.size) return TextLine(tokens.joinToString(" "), line.box, icons = icons, confidence = line.confidence)
+            val texts = kept.filter { it != symbol }.toSet()
+            val boxes = words.filter { it.text in texts }.map { it.box }
+            val box = if (boxes.isEmpty()) lineBox
+                else TextBox(maxOf(lineBox.left, boxes.first().left), lineBox.top, minOf(lineBox.right, boxes.last().right), lineBox.bottom)
+            return TextLine(kept.joinToString(" "), box, icons = slots.takeIf { it.isNotEmpty() }, confidence = line.confidence)
+        }
+        return TextLine(tokens.joinToString(" "), line.box, icons = icons, confidence = line.confidence)
     }
 
     /** Kesilmiş simgeler: kutusu verilen her simge kareden kesilir (bkz. [crop]). */

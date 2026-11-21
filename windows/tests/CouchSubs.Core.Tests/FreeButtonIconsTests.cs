@@ -31,6 +31,74 @@ public class FreeButtonIconsTests
     private static TextLine Line(params TextWord[] words) =>
         new(string.Join(' ', words.Select(word => word.Text)), new TextBox(words[0].Box.Left, 0.25, words[^1].Box.Right, 0.75), null, words);
 
+    /// <summary>
+    /// Ortak vakalar core/Tests/CouchSubsCoreTests/Fixtures/free-button-icons.json (Mac FreeButtonIconsTests.swift ve
+    /// Android FreeButtonIconsTest.kt aynı dosyayı okur).
+    /// </summary>
+    [Fact]
+    public async Task SharedCasesMatchMacAndAndroid()
+    {
+        using var fixture = System.Text.Json.JsonDocument.Parse(File.ReadAllText(PackFixtures.Path("free-button-icons.json")));
+        var root = fixture.RootElement;
+        var layout = root.GetProperty("frame");
+        int width = layout.GetProperty("width").GetInt32(), height = layout.GetProperty("height").GetInt32();
+        int top = layout.GetProperty("top").GetInt32(), size = layout.GetProperty("size").GetInt32();
+        static int[] Rgb(System.Text.Json.JsonElement item, string name, int[] fallback) =>
+            item.TryGetProperty(name, out var value) ? [.. value.EnumerateArray().Select(v => v.GetInt32())] : fallback;
+        var cases = root.GetProperty("cases").EnumerateArray().ToList();
+        Assert.True(cases.Count >= 10);
+        foreach (var item in cases)
+        {
+            var name = item.GetProperty("name").GetString()!;
+            var background = Rgb(item, "background", [0, 0, 0]);
+            var ink = Rgb(item, "ink", [255, 255, 255]);
+            var frame = Frame.Blank(width, height);
+            void Paint(int x, int y, int[] color)
+            {
+                var i = (y * frame.Stride) + (x * 4);
+                frame.Pixels[i] = (byte)color[2];
+                frame.Pixels[i + 1] = (byte)color[1];
+                frame.Pixels[i + 2] = (byte)color[0];
+                frame.Pixels[i + 3] = 255;
+            }
+            for (var y = 0; y < height; y++)
+                for (var x = 0; x < width; x++) Paint(x, y, background);
+            foreach (var x0 in item.GetProperty("rings").EnumerateArray().Select(v => v.GetInt32()))
+                for (var y = top; y < top + size; y++)
+                    for (var x = x0; x < x0 + size; x++)
+                        if (x - x0 < 3 || x0 + size - x <= 3 || y - top < 3 || top + size - y <= 3) Paint(x, y, ink);
+            var source = Line([.. item.GetProperty("words").EnumerateArray()
+                .Select(w => Word(w[0].GetString()!, w[1].GetDouble(), w[2].GetDouble()))]);
+            if (item.TryGetProperty("markFree", out var expected))
+            {
+                var marked = ButtonIcons.MarkFree(source, frame);
+                Assert.True(expected.GetProperty("text").GetString() == marked.Text, $"{name}: {marked.Text}");
+                if (expected.TryGetProperty("icons", out var icons))
+                {
+                    Assert.Equal(icons.EnumerateArray().Select(v => v.GetString()), marked.Icons!.Select(icon => icon.Text));
+                    Assert.All(ButtonIcons.WithImages(marked.Icons!, frame), icon =>
+                    {
+                        Assert.InRange(icon.Box.Left, 0, 1);
+                        Assert.InRange(icon.Box.Right, 0, 1);
+                        Assert.NotNull(icon.Image);
+                    });
+                }
+                else
+                {
+                    Assert.Same(source, marked);
+                }
+            }
+            if (item.TryGetProperty("screen", out var screen))
+            {
+                var items = await ScreenTranslation.TranslateAsync(frame, new LinesReader(new Reading([source])), new FakeTranslator());
+                Assert.Equal(screen.GetProperty("paragraphs").EnumerateArray().Select(v => v.GetString()),
+                             items.SelectMany(i => i.Source.Split('\n')));
+                var maxRight = screen.GetProperty("maxRight").GetDouble();
+                Assert.All(items, i => Assert.True(i.Icons is null && i.Box.Right <= maxRight + 1e-9, $"{name}: {i.Box}"));
+            }
+        }
+    }
+
     [Fact]
     public void ButtonBarGapWithAnIconIsMarked()
     {

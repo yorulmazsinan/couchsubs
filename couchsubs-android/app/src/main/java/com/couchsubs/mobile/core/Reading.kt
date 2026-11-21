@@ -128,6 +128,14 @@ class Reading(lines: List<TextLine>) {
     fun withButtonIcons() = Reading(ButtonIcons.joinHints(this).lines.map { ButtonIcons.mark(it) })
 
     /**
+     * [withButtonIcons], ayrıca fiilsiz yerlerdeki simgeler (tuş çubuğu, satır başı) [frame]'den (okunan görüntü)
+     * doğrulanarak işaretlenir ([ButtonIcons.markFree]). [monochrome]: yalnız renksiz simgeler (otomatik ekran yazısı;
+     * [color] gerekir). Mac ve Windows WithButtonIcons(frame) ile aynı.
+     */
+    fun withButtonIcons(frame: GrayFrame, color: ((Int, Int) -> Int)? = null, monochrome: Boolean = false) =
+        Reading(withButtonIcons().lines.map { ButtonIcons.markFree(it, frame, color, monochrome) })
+
+    /**
      * Aynı satırda yan yana okunan parçalar soldan sağa tek satır olur. Renkli konuşan adını ("Arthur:", RDR2) yazı
      * tanıma cümleden ayrı okuyabiliyor; parçalar yalnız üst kenarlarına göre dizilince ad cümlenin sonuna düşüyor ya da
      * ayrı blok sayılıp atılıyordu. Yatayda aralarında en çok [ROW_GAP] (alan genişliğine oranla) olan parçalar
