@@ -423,6 +423,58 @@ public class SessionReasonTests
     }
 }
 
+public class ConsoleSearchStateTests
+{
+    /// Arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki kopma eskiden
+    /// "PS5 … adresinde bulunamadı" oluyordu. Bağlanınca PS5'e ulaşıldığı bilinir.
+    [Fact]
+    public void ConnectedSessionDropIsNotLabelledNotFound()
+    {
+        var search = new ConsoleSearchState();
+        search.Searched(answered: false);
+        var network = new DisconnectReason(DisconnectKind.Network);
+        Assert.Equal(DisconnectKind.NotFound, search.Classify(network, "192.168.1.70").Kind);
+        search.Connected();
+        Assert.Equal(network, search.Classify(network, "192.168.1.70"));
+        var stall = new DisconnectReason(DisconnectKind.Other, PictureWatchdog.Reason);
+        Assert.Equal(stall, search.Classify(stall, "192.168.1.70"));
+    }
+
+    [Fact]
+    public void UnansweredSearchAfterConnectingIsNotFoundAgain()
+    {
+        var search = new ConsoleSearchState();
+        search.Connected();
+        search.Searched(answered: false);
+        Assert.Equal(new DisconnectReason(DisconnectKind.NotFound, "10.0.0.2"), search.Classify(new DisconnectReason(DisconnectKind.Network), "10.0.0.2"));
+        var refused = new DisconnectReason(DisconnectKind.Refused);
+        Assert.Equal(refused, search.Classify(refused, "10.0.0.2"));
+    }
+
+    [Fact]
+    public void DiagnosisIsWrittenOnFirstAndEveryFifthUnansweredSearch()
+    {
+        var search = new ConsoleSearchState();
+        var written = Enumerable.Range(0, 11).Select(_ => search.Searched(answered: false)).ToArray();
+        Assert.Equal([true, false, false, false, true, false, false, false, false, true, false], written);
+        Assert.Equal(11, search.Unanswered);
+        Assert.False(search.Searched(answered: true));
+        Assert.Equal(0, search.Unanswered);
+        Assert.True(search.Searched(answered: false));
+        search.Reset();
+        Assert.True(search.Answered);
+        Assert.Equal(0, search.Unanswered);
+    }
+
+    [Fact]
+    public void DeviceDiagnosticsLine()
+    {
+        Assert.Equal("açık tanıtıcı 37/-; IPv4 Wi-Fi 192.168.1.23/24", DeviceDiagnostics.Describe(37, null, ["Wi-Fi 192.168.1.23/24"]));
+        Assert.Equal("açık tanıtıcı 255/256; IPv4 ağı yok", DeviceDiagnostics.Describe(255, 256, []));
+        Assert.StartsWith("açık tanıtıcı ", DeviceDiagnostics.Line());
+    }
+}
+
 public class RegistrationReasonTests
 {
     [Fact]

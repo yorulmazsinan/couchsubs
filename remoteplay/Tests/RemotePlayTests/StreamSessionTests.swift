@@ -513,3 +513,66 @@ final class CrashRetryLimitTests: XCTestCase {
         XCTAssertTrue(limit.crashed())
     }
 }
+
+final class ConsoleSearchStateTests: XCTestCase {
+    /// Arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki kopma eskiden
+    /// "PS5 … adresinde bulunamadı" oluyordu. Bağlanınca PS5'e ulaşıldığı bilinir.
+    func testConnectedSessionDropIsNotLabelledNotFound() {
+        var search = ConsoleSearchState()
+        _ = search.searched(answered: false)
+        XCTAssertEqual(search.classify(.network, host: "192.168.1.70"), .notFound("192.168.1.70"))
+        search.connected()
+        XCTAssertEqual(search.classify(.network, host: "192.168.1.70"), .network)
+        XCTAssertEqual(search.classify(.other(PictureWatchdog.reason), host: "192.168.1.70"), .other(PictureWatchdog.reason))
+    }
+
+    /// Bağlandıktan sonraki aramada da yanıt yoksa (PS5 gerçekten ağdan düştü) yine "bulunamadı".
+    func testUnansweredSearchAfterConnectingIsNotFoundAgain() {
+        var search = ConsoleSearchState()
+        search.connected()
+        _ = search.searched(answered: false)
+        XCTAssertEqual(search.classify(.network, host: "10.0.0.2"), .notFound("10.0.0.2"))
+        XCTAssertEqual(search.classify(.refused, host: "10.0.0.2"), .refused)
+    }
+
+    func testDiagnosisIsWrittenOnFirstAndEveryFifthUnansweredSearch() {
+        var search = ConsoleSearchState()
+        let written = (1...11).map { _ in search.searched(answered: false) }
+        XCTAssertEqual(written, [true, false, false, false, true, false, false, false, false, true, false])
+        XCTAssertEqual(search.unanswered, 11)
+        XCTAssertFalse(search.searched(answered: true))
+        XCTAssertEqual(search.unanswered, 0)
+        XCTAssertTrue(search.searched(answered: false))
+    }
+
+    func testResetForgetsUnansweredSearch() {
+        var search = ConsoleSearchState()
+        _ = search.searched(answered: false)
+        search.reset()
+        XCTAssertTrue(search.answered)
+        XCTAssertEqual(search.unanswered, 0)
+    }
+}
+
+final class DeviceDiagnosticsTests: XCTestCase {
+    func testLineFormat() {
+        XCTAssertEqual(DeviceDiagnostics.describe(openFiles: 37, limit: 256, networks: ["en0 192.168.1.23/24"]),
+                       "açık tanıtıcı 37/256; IPv4 en0 192.168.1.23/24")
+        XCTAssertEqual(DeviceDiagnostics.describe(openFiles: 255, limit: 256, networks: []), "açık tanıtıcı 255/256; IPv4 ağı yok")
+    }
+
+    func testOpenFileCountSeesNewDescriptors() {
+        let before = DeviceDiagnostics.openFileCount()
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(pipe(&fds), 0)
+        defer { close(fds[0]); close(fds[1]) }
+        XCTAssertEqual(DeviceDiagnostics.openFileCount(), before + 2)
+    }
+
+    func testRaiseKeepsLimitAtLeastWanted() {
+        var limit = rlimit()
+        XCTAssertEqual(getrlimit(RLIMIT_NOFILE, &limit), 0)
+        let raised = DeviceDiagnostics.raiseOpenFileLimit()
+        XCTAssertGreaterThanOrEqual(raised, Int(min(limit.rlim_max, DeviceDiagnostics.wantedOpenFiles)))
+    }
+}

@@ -138,6 +138,86 @@ sealed class SessionState {
 }
 
 /**
+ * Son PS5 aramasının sonucu ve "bulunamadı" etiketi (Mac/iPhone ve Windows'taki ConsoleSearchState ile aynı kural).
+ * Oturum ağ hatasıyla düşer ve PS5 son aramada da yanıt vermediyse neden "bulunamadı"dır. Eskiden aramanın sonucu PS5'e
+ * bağlanınca unutulmuyordu: arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki her
+ * kopma (görüntü bekçisininki dahil) "PS5 … adresinde bulunamadı" diye gösteriliyordu (X'te bildirim, iPad, 60-70 dk
+ * sonra). Art arda yanıtsız aramalarda bu cihazın ağ durumu günlüğe yazılır (bkz. [DeviceDiagnostics]).
+ */
+class ConsoleSearchState {
+    companion object {
+        /** İlk yanıtsız aramada ve sonra her bu kadar yanıtsız aramada bir tanı satırı yazılır. */
+        const val DIAGNOSE_EVERY = 5
+    }
+
+    /** Son aramada PS5 yanıt verdi mi (ya da o aramadan sonra PS5'e bağlanıldı mı). */
+    var answered = true
+        private set
+    /** Art arda yanıtsız arama sayısı. */
+    var unanswered = 0
+        private set
+
+    fun reset() {
+        answered = true
+        unanswered = 0
+    }
+
+    /** Arama bitti; tanı satırı yazılacaksa true. */
+    fun searched(answered: Boolean): Boolean {
+        this.answered = answered
+        if (answered) {
+            unanswered = 0
+            return false
+        }
+        unanswered++
+        return unanswered == 1 || unanswered % DIAGNOSE_EVERY == 0
+    }
+
+    /** Oturum bağlandı: PS5'e ulaşılıyor, sonraki kopma "bulunamadı" sayılmaz. */
+    fun connected() {
+        answered = true
+        unanswered = 0
+    }
+
+    fun classify(state: SessionState.Disconnected, host: String): SessionState.Disconnected =
+        if (!answered && (state.kind == DisconnectKind.NETWORK || state.kind == DisconnectKind.OTHER))
+            SessionState.Disconnected(DisconnectKind.NOT_FOUND, host) else state
+}
+
+/**
+ * PS5 aramaya yanıt vermeyince bu cihazın kendi ağ durumu (Mac/iPhone ve Windows'taki DeviceDiagnostics ile aynı satır):
+ * açık dosya tanıtıcısı sayısı ve sınırı, IPv4 ağları. "PS5 ağdan düştü" ile "bu cihaz PS5'e paket gönderemiyor"
+ * günlükten ayrılsın.
+ */
+object DeviceDiagnostics {
+    fun line(): String = describe(openFiles(), openFileLimit(), ipv4Networks())
+
+    fun describe(openFiles: Int, limit: Int?, networks: List<String>): String =
+        "açık tanıtıcı $openFiles/${limit?.toString() ?: "-"}; " +
+            if (networks.isEmpty()) "IPv4 ağı yok" else "IPv4 " + networks.joinToString(", ")
+
+    private fun openFiles(): Int = java.io.File("/proc/self/fd").list()?.size ?: -1
+
+    private fun openFileLimit(): Int? = try {
+        java.io.File("/proc/self/limits").readLines().firstOrNull { it.startsWith("Max open files") }
+            ?.split(Regex("\\s{2,}"))?.getOrNull(1)?.trim()?.toIntOrNull()
+    } catch (error: Exception) {
+        null
+    }
+
+    private fun ipv4Networks(): List<String> = try {
+        java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { adapter ->
+                adapter.interfaceAddresses.filter { it.address is java.net.Inet4Address }
+                    .map { "${adapter.name} ${it.address.hostAddress}/${it.networkPrefixLength}" }
+            }
+    } catch (error: Exception) {
+        listOf("okunamadı (${error.javaClass.simpleName})")
+    }
+}
+
+/**
  * PS5'teki Uzaktan Oynatma çöktüyse ([DisconnectKind.CONSOLE_RP_CRASHED]) kaç kez yeniden denenir (Mac/iPhone ve
  * Windows'taki CrashRetryLimit ile aynı kural). PS5 tamamen kapatılıp açılmadan her oturum isteği aynı yanıtı alır; eskiden
  * sonsuza kadar "yeniden bağlanılıyor" deneniyordu (GitHub #519). Art arda [MAX_RETRIES] denemeden sonra durulur ve
@@ -433,7 +513,8 @@ class StreamSession(
     private var running = false
     private var generation = 0
     private var nextRelocate = 0L
-    private var searchAnswered = true
+    /** Son aramanın sonucu ve "bulunamadı" etiketi (yalnız kuyrukta). */
+    private val search = ConsoleSearchState()
 
     /** Yalnız kuyrukta okunur/yazılır. */
     private var native = 0L
@@ -446,6 +527,7 @@ class StreamSession(
             wakePolicy.reset()
             watchdog.reset()
             crashLimit.reset()
+            search.reset()
             connect(current)
         }
     }
@@ -497,7 +579,11 @@ class StreamSession(
             if (atHost != null) Log.i(TAG, "PS5 ${console.host} adresinde başka PS5 yanıt verdi (${atHost.name}), ${console.name} aranıyor")
             relocate() ?: atHost
         }
-        searchAnswered = info != null
+        if (search.searched(answered = info != null)) {
+            val text = "PS5 aranıyor: art arda ${search.unanswered}. yanıtsız arama; bu cihaz: ${DeviceDiagnostics.line()}"
+            Log.w(TAG, text)
+            Backend.breadcrumb(text)
+        }
         val action = wakePolicy.action(info?.isAwake)
         Log.i(TAG, if (info == null) "PS5 ${console.host} aramaya yanıt vermedi, yine de bağlanılıyor"
             else "PS5 ${info.name} ${info.host} " + when {
@@ -605,6 +691,7 @@ class StreamSession(
                 policy.connected(SystemClock.elapsedRealtime())
                 wakePolicy.streamed()
                 crashLimit.reset()
+                search.connected()
                 streaming = true
                 watchdog.connected(SystemClock.elapsedRealtime())
                 emit(SessionState.Streaming)
@@ -731,8 +818,7 @@ class StreamSession(
 
     private fun scheduleReconnect(current: Int, state: SessionState.Disconnected) {
         // Ağ hatasıyla düştüyse ve PS5 aramaya da yanıt vermediyse neden "bulunamadı"dır.
-        val classified = if (!searchAnswered && (state.kind == DisconnectKind.NETWORK || state.kind == DisconnectKind.OTHER))
-            SessionState.Disconnected(DisconnectKind.NOT_FOUND, console.host) else state
+        val classified = search.classify(state, console.host)
         emit(classified)
         if (!isCurrent(current)) return
         queue.schedule({ connect(current) }, policy.nextDelaySeconds(inUse = state.kind == DisconnectKind.IN_USE).toLong(), TimeUnit.SECONDS)

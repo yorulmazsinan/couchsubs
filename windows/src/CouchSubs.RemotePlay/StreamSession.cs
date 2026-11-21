@@ -8,6 +8,93 @@ using CouchSubs.Core;
 namespace CouchSubs.RemotePlay;
 
 /// <summary>
+/// Son PS5 aramasının sonucu ve "bulunamadı" etiketi (Mac/iPhone ve Android'deki ConsoleSearchState ile aynı kural).
+/// Oturum ağ hatasıyla düşer ve PS5 son aramada da yanıt vermediyse neden "bulunamadı"dır. Eskiden aramanın sonucu PS5'e
+/// bağlanınca unutulmuyordu: arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki her
+/// kopma (görüntü bekçisininki dahil) "PS5 … adresinde bulunamadı" diye gösteriliyordu (X'te bildirim, iPad, 60-70 dk
+/// sonra). Art arda yanıtsız aramalarda bu cihazın ağ durumu günlüğe yazılır (bkz. <see cref="DeviceDiagnostics"/>).
+/// </summary>
+internal sealed class ConsoleSearchState
+{
+    /// <summary>İlk yanıtsız aramada ve sonra her bu kadar yanıtsız aramada bir tanı satırı yazılır.</summary>
+    public const int DiagnoseEvery = 5;
+
+    /// <summary>Son aramada PS5 yanıt verdi mi (ya da o aramadan sonra PS5'e bağlanıldı mı).</summary>
+    public bool Answered { get; private set; } = true;
+
+    /// <summary>Art arda yanıtsız arama sayısı.</summary>
+    public int Unanswered { get; private set; }
+
+    public void Reset()
+    {
+        Answered = true;
+        Unanswered = 0;
+    }
+
+    /// <returns>Tanı satırı yazılacaksa true.</returns>
+    public bool Searched(bool answered)
+    {
+        Answered = answered;
+        if (answered)
+        {
+            Unanswered = 0;
+            return false;
+        }
+        Unanswered++;
+        return Unanswered == 1 || Unanswered % DiagnoseEvery == 0;
+    }
+
+    /// <summary>Oturum bağlandı: PS5'e ulaşılıyor, sonraki kopma "bulunamadı" sayılmaz.</summary>
+    public void Connected()
+    {
+        Answered = true;
+        Unanswered = 0;
+    }
+
+    public DisconnectReason Classify(DisconnectReason reason, string host) => StreamSession.Classify(reason, Answered, host);
+}
+
+/// <summary>
+/// PS5 aramaya yanıt vermeyince bu cihazın kendi ağ durumu (Mac/iPhone ve Android'deki DeviceDiagnostics ile aynı satır):
+/// açık tanıtıcı sayısı ve IPv4 ağları. "PS5 ağdan düştü" ile "bu cihaz PS5'e paket gönderemiyor" günlükten ayrılsın.
+/// Windows'ta süreç başına tanıtıcı sınırı yoktur; sınır yerine "-" yazılır.
+/// </summary>
+internal static class DeviceDiagnostics
+{
+    public static string Line()
+    {
+        int handles;
+        try { handles = System.Diagnostics.Process.GetCurrentProcess().HandleCount; }
+        catch { handles = -1; }
+        return Describe(handles, null, Ipv4Networks());
+    }
+
+    public static string Describe(int openFiles, int? limit, IReadOnlyList<string> networks) =>
+        $"açık tanıtıcı {openFiles}/{(limit is { } value ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-")}; "
+        + (networks.Count == 0 ? "IPv4 ağı yok" : "IPv4 " + string.Join(", ", networks));
+
+    private static List<string> Ipv4Networks()
+    {
+        var result = new List<string>();
+        try
+        {
+            foreach (var adapter in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (adapter.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up
+                    || adapter.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+                foreach (var unicast in adapter.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) continue;
+                    result.Add($"{adapter.Name} {unicast.Address}/{unicast.PrefixLength}");
+                }
+            }
+        }
+        catch (Exception error) { result.Add($"okunamadı ({error.GetType().Name})"); }
+        return result;
+    }
+}
+
+/// <summary>
 /// Dinlenme modundaki PS5 uyandırılsın mı (Mac/iPhone ve Android'deki WakePolicy ile aynı kural). Yalnız kullanıcı çeviriyi
 /// başlattıktan sonra, PS5'e henüz bağlanılmamışken uyandırılır. Eskiden yeniden bağlanma döngüsü de uyandırıyordu: oyuncu
 /// PS5'i kapatınca (dinlenme modu) uygulama birkaç saniye sonra PS5'i yeniden açıp bağlanıyor, TV kapalıyken "PS5 bağlı"
@@ -383,6 +470,7 @@ public sealed class StreamSession : IStreamSession
             policy.Reset();
             wakePolicy.Reset();
             crashLimit.Reset();
+            search.Reset();
             Connect(current);
         });
     }
@@ -463,7 +551,8 @@ public sealed class StreamSession : IStreamSession
                 RemotePlayLog.Note($"PS5 oturumu: {console.Host} adresinde başka PS5 yanıt verdi ({atHost.Name}), {console.Name} aranıyor");
             info = Relocate() ?? atHost;
         }
-        searchAnswered = info is not null;
+        if (search.Searched(answered: info is not null))
+            RemotePlayLog.Note($"PS5 aranıyor: art arda {search.Unanswered}. yanıtsız arama; bu cihaz: {DeviceDiagnostics.Line()}");
         var action = wakePolicy.Decide(info?.IsAwake);
         RemotePlayLog.Note(info is null
             ? $"PS5 oturumu: {console.Host} aramaya yanıt vermedi, yine de bağlanılıyor"
@@ -485,8 +574,8 @@ public sealed class StreamSession : IStreamSession
         }
     }
 
-    /// <summary>Son aramada PS5 yanıt verdi mi (yalnız kuyrukta).</summary>
-    private bool searchAnswered = true;
+    /// <summary>Son aramanın sonucu ve "bulunamadı" etiketi (yalnız kuyrukta).</summary>
+    private readonly ConsoleSearchState search = new();
 
     /// <summary>Oturum ağ hatasıyla düştüyse ve PS5 aramaya da yanıt vermediyse neden "bulunamadı"dır (adresle).
     /// Eskiden ikisi de yalnız "Yeniden bağlanılıyor…" idi.</summary>
@@ -556,6 +645,7 @@ public sealed class StreamSession : IStreamSession
                     policy.Connected(Environment.TickCount64);
                     wakePolicy.Streamed();
                     crashLimit.Reset();
+                    search.Connected();
                     streaming = true;
                     watchdog.Connected(Environment.TickCount64);
                     Emit(SessionState.Streaming);
@@ -656,7 +746,7 @@ public sealed class StreamSession : IStreamSession
 
     private void ScheduleReconnect(int current, DisconnectReason reason)
     {
-        reason = Classify(reason, searchAnswered, console.Host);
+        reason = search.Classify(reason, console.Host);
         Emit(new SessionState(SessionPhase.Disconnected, reason));
         if (!IsCurrent(current)) return;
         var delay = policy.NextDelay(inUse: reason.Kind == DisconnectKind.InUse);

@@ -243,6 +243,51 @@ struct PictureWatchdog {
     }
 }
 
+/// Son PS5 aramasının sonucu ve "bulunamadı" etiketi (Windows ve Android'deki ConsoleSearchState ile aynı kural).
+///
+/// Oturum ağ hatasıyla düşer ve PS5 son aramada da yanıt vermediyse neden `.notFound`'dur. Eskiden aramanın sonucu PS5'e
+/// bağlanınca unutulmuyordu: arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki her
+/// kopma (görüntü bekçisininki dahil) "PS5 … adresinde bulunamadı" diye gösteriliyordu (X'te bildirim, iPad, 60-70 dk
+/// kesintisiz çeviriden sonra). Bağlanınca PS5'e ulaşıldığı bilinir.
+///
+/// Art arda yanıtsız aramalarda bu cihazın ağ durumu (açık dosya tanıtıcısı ve sınırı, IPv4 ağları) günlüğe yazılır:
+/// "PS5 ağdan düştü" ile "bu cihaz soket açamıyor ya da ağı değişti" bir sonraki bildirimde günlükten ayrılsın.
+struct ConsoleSearchState {
+    /// İlk yanıtsız aramada ve sonra her bu kadar yanıtsız aramada bir tanı satırı yazılır.
+    static let diagnoseEvery = 5
+    /// Son aramada PS5 yanıt verdi mi (ya da o aramadan sonra PS5'e bağlanıldı mı).
+    private(set) var answered = true
+    /// Art arda yanıtsız arama sayısı.
+    private(set) var unanswered = 0
+
+    /// Kullanıcı başlattı.
+    mutating func reset() {
+        answered = true
+        unanswered = 0
+    }
+
+    /// Arama bitti. Tanı satırı yazılacaksa true.
+    mutating func searched(answered: Bool) -> Bool {
+        self.answered = answered
+        guard !answered else {
+            unanswered = 0
+            return false
+        }
+        unanswered += 1
+        return unanswered == 1 || unanswered % Self.diagnoseEvery == 0
+    }
+
+    /// Oturum bağlandı: PS5'e ulaşılıyor, sonraki kopma "bulunamadı" sayılmaz.
+    mutating func connected() {
+        answered = true
+        unanswered = 0
+    }
+
+    func classify(_ reason: DisconnectReason, host: String) -> DisconnectReason {
+        DisconnectReason.classify(reason, searchAnswered: answered, host: host)
+    }
+}
+
 /// Bağlantının neden koptuğu; kullanıcıya anlatılabilecek biçimde.
 public enum DisconnectReason: Equatable, Sendable {
     case stopped
@@ -492,8 +537,8 @@ public final class StreamSession: @unchecked Sendable {
 
     /// Yalnız `queue` üzerinde değişir (PS5'in adresi değişirse; Windows'taki gibi).
     private var console: RegisteredConsole
-    /// Son aramada PS5 yanıt verdi mi (yalnız `queue`).
-    private var searchAnswered = true
+    /// Son aramanın sonucu ve "bulunamadı" etiketi (yalnız `queue`).
+    private var search = ConsoleSearchState()
     /// Tüm ağı taramak pahalı; PS5 kapalıyken her yeniden denemede yapılmaz.
     private var nextRelocate = Date.distantPast
     private let accountId: Data
@@ -536,11 +581,13 @@ public final class StreamSession: @unchecked Sendable {
     }
 
     public func start() {
+        DeviceDiagnostics.raiseOpenFileLimitOnce()
         let current = bump(running: true)
         queue.async { [weak self] in
             self?.policy.reset()
             self?.wakePolicy.reset()
             self?.crashLimit.reset()
+            self?.search.reset()
             self?.watch { $0.reset() }
             self?.connect(current)
         }
@@ -607,7 +654,9 @@ public final class StreamSession: @unchecked Sendable {
             }
             info = relocate() ?? atHost
         }
-        searchAnswered = info != nil
+        if search.searched(answered: info != nil) {
+            RemotePlayLog.write("PS5 aranıyor: art arda \(search.unanswered). yanıtsız arama; bu cihaz: \(DeviceDiagnostics.line())")
+        }
         let action = wakePolicy.action(awake: info?.isAwake)
         if let info {
             let detail = info.isAwake ? "uyanık" : action == .wake ? "dinlenmede, uyandırılıyor" : "dinlenmede, açılması bekleniyor"
@@ -723,6 +772,7 @@ public final class StreamSession: @unchecked Sendable {
                 self.policy.connected()
                 self.wakePolicy.streamed()
                 self.crashLimit.reset()
+                self.search.connected()
                 self.streaming = true
                 self.watch { $0.connected() }
                 self.emit(.streaming)
@@ -823,7 +873,7 @@ public final class StreamSession: @unchecked Sendable {
     private func scheduleReconnect(_ current: Int, reason: DisconnectReason, initialized: Bool = true, box failed: ChiakiSessionBox? = nil) {
         // Başlatılamamış kutunun join edilecek iş parçacığı yok; yalnız belleği bırakılır.
         if let failed, !initialized { failed.markUnused() }
-        emit(.disconnected(DisconnectReason.classify(reason, searchAnswered: searchAnswered, host: console.host)))
+        emit(.disconnected(search.classify(reason, host: console.host)))
         guard isCurrent(current) else { return }
         let delay = policy.nextDelay(inUse: reason == .inUse)
         RemotePlayLog.write("PS5 oturumu: \(delay) sn sonra yeniden denenecek")
