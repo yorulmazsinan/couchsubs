@@ -67,6 +67,16 @@ CAPABILITIES = {
         ("windows", _WIN_TESTS + "FreeButtonIconsTests.cs", r"free-button-icons\.json"),
         ("android", _DROID_TESTS + "FreeButtonIconsTest.kt", r"free-button-icons\.json"),
     ],
+    "Arayüz sözlüğü: tuş çubuğu sözlük biçimiyle, menü etiketi özgün biçimiyle (translate / translateLabel / translateLabelLoosely)": [
+        ("mac", _CORE + "UiCommands.swift", r"static func translateLabelLoosely\("),
+        ("windows", _WIN + "UiCommands.cs", r"public static string\? TranslateLabelLoosely\("),
+        ("android", _DROID + "UiCommands.kt", r"fun translateLabelLoosely\("),
+    ],
+    "Ortak deneme dosyası ui-commands.json": [
+        ("mac", _CORE_TESTS + "UiCommandsTests.swift", r"ui-commands\.json"),
+        ("windows", _WIN_TESTS + "UiCommandsTests.cs", r"ui-commands\.json"),
+        ("android", _DROID_TESTS + "UiCommandsTest.kt", r"ui-commands\.json"),
+    ],
     "Ortak deneme dosyası screen-menu.json": [
         ("mac", _CORE_TESTS + "ScreenMenuBarTests.swift", r"screen-menu\.json"),
         ("windows", _WIN_TESTS + "ScreenMenuBarTests.cs", r"screen-menu\.json"),

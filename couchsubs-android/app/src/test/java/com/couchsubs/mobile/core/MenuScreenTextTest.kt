@@ -71,14 +71,14 @@ class MenuScreenTextTest {
 
     @Test
     fun uiCommandsKeepTheOriginalCase() {
-        assertEquals("KAPALI", UiCommands.translate("OFF"))
-        assertEquals("Kapalı", UiCommands.translate("Off"))
-        assertEquals("kapalı", UiCommands.translate("off"))
-        assertEquals("AÇIK", UiCommands.translate("ON"))
-        assertEquals("KIYAFETLER", UiCommands.translate("OUTFITS"))
-        assertEquals("İSTATİSTİKLER", UiCommands.translate("STATS"))
-        assertEquals("SEÇ ${ButtonIcons.MARKER}", UiCommands.translate("SELECT ${ButtonIcons.MARKER}"))
-        assertNull(UiCommands.translate("Open the door"))
+        assertEquals("KAPALI", UiCommands.translateLabel("OFF"))
+        assertEquals("Kapalı", UiCommands.translateLabel("Off"))
+        assertEquals("kapalı", UiCommands.translateLabel("off"))
+        assertEquals("AÇIK", UiCommands.translateLabel("ON"))
+        assertEquals("KIYAFETLER", UiCommands.translateLabel("OUTFITS"))
+        assertEquals("İSTATİSTİKLER", UiCommands.translateLabel("STATS"))
+        assertEquals("SEÇ ${ButtonIcons.MARKER}", UiCommands.translateLabelLoosely("SELECT ${ButtonIcons.MARKER}"))
+        assertNull(UiCommands.translateLabel("Open the door"))
     }
 
     // --- Ek alan hattı ---

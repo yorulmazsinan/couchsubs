@@ -1,0 +1,37 @@
+{
+  "about": "Arayüz sözlüğü (UiCommands). Mac UiCommandsTests.swift, Windows UiCommandsTests.cs ve Android UiCommandsTest.kt aynı dosyayı okur. 'translate': tuş çubuğu; yalnız BÜYÜK HARFLİ komutlar, sözlükteki biçimiyle ('Hedef belirle'), simgeler ('￼') yerinde. 'translateLabel': menü etiketi; komutlar ve etiketler, biçim Türkçe kurallarıyla korunur (i → İ, ı → I). 'translateLabelLoosely': etiket, yazı tanımanın kattığı en çok iki harflik kırıntıyla. null: sözlükte yok.",
+  "translate": [
+    { "text": "SET DESTINATION ￼ EXIT ￼", "expected": "Hedef belirle ￼ Çıkış ￼" },
+    { "text": "OPEN ￼", "expected": "Aç ￼" },
+    { "text": "REFUEL", "expected": "Yakıt al" },
+    { "text": "INSPECT", "expected": "İncele" },
+    { "text": "2D VIEW", "expected": "2B görünüm" },
+    { "text": "Refuel", "expected": null },
+    { "text": "OFF", "expected": null },
+    { "text": "Open the door", "expected": null },
+    { "text": "LAUNCH ROCKETS ￼ EXIT", "expected": null }
+  ],
+  "translateLabel": [
+    { "text": "OFF", "expected": "KAPALI" },
+    { "text": "Off", "expected": "Kapalı" },
+    { "text": "off", "expected": "kapalı" },
+    { "text": "ON", "expected": "AÇIK" },
+    { "text": "OUTFITS", "expected": "KIYAFETLER" },
+    { "text": "STATS", "expected": "İSTATİSTİKLER" },
+    { "text": "INSPECT", "expected": "İNCELE" },
+    { "text": "inspect", "expected": "incele" },
+    { "text": "SET DESTINATION", "expected": "HEDEF BELİRLE" },
+    { "text": "Settings", "expected": "Ayarlar" },
+    { "text": "Мар", "expected": "Harita" },
+    { "text": "2D VIEW", "expected": "2B GÖRÜNÜM" },
+    { "text": "Open the door", "expected": null }
+  ],
+  "translateLabelLoosely": [
+    { "text": "pi Settings", "expected": "Ayarlar" },
+    { "text": "1 Map", "expected": "Harita" },
+    { "text": "R3 SELECT", "expected": "R3 SEÇ" },
+    { "text": "EXIT OR", "expected": "ÇIKIŞ OR" },
+    { "text": "SELECT ￼", "expected": "SEÇ ￼" },
+    { "text": "Open the door", "expected": null }
+  ]
+}

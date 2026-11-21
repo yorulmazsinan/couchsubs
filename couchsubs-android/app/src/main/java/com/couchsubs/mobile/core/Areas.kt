@@ -1109,7 +1109,7 @@ class RegionWatcher(
                 plain.isEmpty() || untouched.matches(plain) -> piece.text
                 // Yalnız özel adlardan oluşan sekme ("JASON & LUCIA") çevrilmez (#859).
                 ScreenTranslation.keepsNames(plain) -> piece.text
-                else -> UiCommands.translate(marked)?.let { ui ->
+                else -> UiCommands.translateLabelLoosely(marked)?.let { ui ->
                     // Sözlük çevirisindeki simge imleri yeniden adlara döner (çevirinin simge yerleri korunur).
                     var k = 0
                     buildString { for (c in ui) if (c == ButtonIcons.MARKER && k < piece.names.size) append(piece.names[k++]) else append(c) }

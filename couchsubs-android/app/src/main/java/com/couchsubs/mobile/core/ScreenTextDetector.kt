@@ -565,7 +565,7 @@ object AutoText {
         }
         val cleaned = tokens.joinToString(" ")
         // Güveni düşük okuma çevrilmez; arayüz sözlüğünde birebir olan kısa etiket ("1 Мар" → "Map") yine de kalır.
-        if ((line.confidence ?: 1f) < 0.5f && UiCommands.translate(cleaned) == null) return null
+        if ((line.confidence ?: 1f) < 0.5f && UiCommands.translateLabelLoosely(cleaned) == null) return null
         if (before == 0 && after == 0) return line.copy(text = text)
         // Kutunun atılan kısmı karakter oranıyla daraltılır (stil örneklemesi simgeyi yazı saymasın).
         val box = line.box?.let { b ->

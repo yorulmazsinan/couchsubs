@@ -141,7 +141,7 @@ object ScreenTranslation {
         // "JASON & LUCIA" gibi yalnız özel adlardan oluşan sekme/başlık çevrilmez (#859).
         keepsNames(paragraph) -> paragraph
         paragraph.indexOf(ButtonIcons.MARKER) >= 0 -> null
-        else -> UiCommands.translate(paragraph)
+        else -> UiCommands.translateLabel(paragraph)
     }
 
     /** Telefondaki sohbetin başlığı (kişi adı); sohbet listesinde ya da telefonsuz karede boş. */

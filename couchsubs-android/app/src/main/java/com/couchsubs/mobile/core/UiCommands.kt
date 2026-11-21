@@ -39,7 +39,13 @@ object UiCommands {
         "GET OUT" to "İn", "STEAL" to "Çal", "HACK" to "Hackle", "LOOT" to "Yağmala", "COLLECT" to "Topla",
         // GTA 6 telefonu ve bar menüsü ("SCROLL / SEND / BACK", "TIP $10 / ORDER / BARTENDER").
         "SEND" to "Gönder", "TIP" to "Bahşiş ver", "BARTENDER" to "Barmen",
-        // Menü terimleri (ekran yazısı menüleri: tekerlek menü, duraklatma menüsü, ayarlar).
+    )
+
+    /**
+     * Menülerin kısa etiketleri (ayar değerleri, sekme ve düğme adları); yalnız [translateLabel]'da aranır. [commands]'ta
+     * olan etiketin orada kayıtlı Türkçesi kullanılır (Mac ve Windows: UiCommands ile aynı).
+     */
+    private val labels: Map<String, String> = mapOf(
         "ON" to "Açık", "OFF" to "Kapalı", "LOAD" to "Yükle", "SETTINGS" to "Ayarlar", "MAP" to "Harita",
         "RESUME" to "Sürdür", "QUIT" to "Çık", "NEXT" to "İleri", "PREVIOUS" to "Önceki", "ALL" to "Tümü",
         "NONE" to "Hiçbiri", "DEFAULT" to "Varsayılan", "APPLY" to "Uygula", "RESET" to "Sıfırla",
@@ -47,36 +53,83 @@ object UiCommands {
         "STATS" to "İstatistikler", "GAME" to "Oyun",
     )
 
+    private fun joined(parts: List<String>) =
+        parts.joinToString(" ${ButtonIcons.MARKER} ").split(' ').filter { it.isNotEmpty() }.joinToString(" ")
+
+    private fun trimmed(text: String) = text.trim().trim('.', ',', ':', '!', '?').trim()
+
     /**
-     * Etiketin Türkçesi: simgelerle ([ButtonIcons.MARKER]) ayrılan her parça sözlükte olan bir komutsa simgeler yerinde
-     * kalarak çevrilir. Parçalardan biri sözlükte yoksa ya da sıradan cümleyse ("Open the door") null.
+     * Tuş çubuğunun Türkçesi: simgelerle ([ButtonIcons.MARKER]) ayrılan her parça sözlükte olan BÜYÜK HARFLİ bir
+     * komutsa simgeler yerinde kalarak sözlükteki biçimiyle çevrilir ("SET DESTINATION ✕" → "Hedef belirle ✕"); tek
+     * başına komut da ("REFUEL"). Parçalardan biri sözlükte yoksa ya da sıradan cümleyse ("Open the door") null. Mac ve
+     * Windows UiCommands.translate ile aynı; önceden Android büyük harfli komutu büyük harfle ("HEDEF BELİRLE") veriyordu.
      */
     fun translate(paragraph: String): String? {
-        val parts = paragraph.split(ButtonIcons.MARKER)
         val translated = mutableListOf<String>()
         var any = false
-        for (part in parts) {
-            val words = part.trim().trim('.', ',', ':', '!', '?').trim()
+        for (part in paragraph.split(ButtonIcons.MARKER)) {
+            val words = trimmed(part)
             if (words.isEmpty()) {
                 translated.add("")
                 continue
             }
-            if (words.none { it.isLetter() }) return null
-            val turkishText = commands[words.uppercase(Locale.ROOT)] ?: return null
-            translated.add(cased(turkishText, words))
+            if (words.none { it.isLetter() } || words != words.uppercase(Locale.ROOT)) return null
+            translated.add(commands[words] ?: return null)
             any = true
         }
-        if (!any) return null
-        return translated.joinToString(" ${ButtonIcons.MARKER} ").split(' ').filter { it.isNotEmpty() }.joinToString(" ")
+        return if (any) joined(translated) else null
     }
 
-    /** Özgünün harf biçimi: BÜYÜK, küçük ya da baş harfi büyük. */
-    private fun cased(value: String, original: String): String {
-        val letters = original.filter { it.isLetter() }
-        return when {
-            letters.all { it.isUpperCase() } -> value.uppercase(turkish)
-            letters.all { it.isLowerCase() } -> value.lowercase(turkish)
-            else -> value.replaceFirstChar { it.titlecase(turkish) }
+    /** Yazı tanımanın Kiril harfle okuduğu Latin harfler ("Мар" → "Map"). */
+    private fun latin(text: String): String = text.map { c ->
+        when (c) {
+            'А' -> 'A'; 'В' -> 'B'; 'Е' -> 'E'; 'К' -> 'K'; 'М' -> 'M'; 'Н' -> 'H'; 'О' -> 'O'; 'Р' -> 'P'; 'С' -> 'C'
+            'Т' -> 'T'; 'Х' -> 'X'; 'а' -> 'a'; 'е' -> 'e'; 'о' -> 'o'; 'р' -> 'p'; 'с' -> 'c'; 'х' -> 'x'; 'у' -> 'y'
+            else -> c
         }
+    }.joinToString("")
+
+    /**
+     * Menüdeki kısa etiketin Türkçesi ("OFF" → "KAPALI", "Off" → "Kapalı", "off" → "kapalı"): etiketin tamamı sözlükte
+     * olmalı (büyük/küçük harf fark etmez); biçimi Türkçe kurallarıyla korunur (i → İ, ı → I). Sözlükte yoksa null.
+     */
+    fun translateLabel(label: String): String? {
+        val words = trimmed(label)
+        if (words.none { it.isLetter() }) return null
+        val key = latin(words).uppercase(Locale.ROOT)
+        val turkishText = commands[key] ?: labels[key] ?: return null
+        val letters = words.filter { it.isLetter() }
+        return when {
+            letters.all { it.isUpperCase() } -> turkishText.uppercase(turkish)
+            letters.all { it.isLowerCase() } -> turkishText.lowercase(turkish)
+            else -> turkishText
+        }
+    }
+
+    /**
+     * [translateLabel], yazı tanımanın etikete kattığı kırıntıyla da: simge imleriyle ayrılan her parça ayrı aranır;
+     * baştaki ya da sondaki en çok iki harflik kırıntı (simgenin yanlış okunuşu: "pi Settings", "EXIT OR") olduğu gibi
+     * kalır (baştaki tuş adı değilse atılır). Bir parça bulunmazsa null (Mac ve Windows ile aynı).
+     */
+    fun translateLabelLoosely(label: String): String? {
+        if (label.contains(ButtonIcons.MARKER)) {
+            val done = mutableListOf<String>()
+            var any = false
+            for (part in label.split(ButtonIcons.MARKER)) {
+                if (part.isBlank()) { done.add(""); continue }
+                done.add(translateLabelLoosely(part) ?: return null)
+                any = true
+            }
+            return if (any) joined(done) else null
+        }
+        translateLabel(label)?.let { return it }
+        val words = label.trim().split(' ').filter { it.isNotEmpty() }
+        if (words.size < 2) return null
+        // Baştaki kırıntı tuş adıysa ("R3 LOOK BEHIND") kalır; değilse ("1 Map", "pi Settings") atılır.
+        if (words[0].length <= 2) translateLabel(words.drop(1).joinToString(" "))?.let { rest ->
+            return if (ButtonIcons.isButtonName(words[0])) words[0] + " " + rest else rest
+        }
+        if (words.last().length <= 2) translateLabel(words.dropLast(1).joinToString(" "))?.let { return it + " " + words.last() }
+        return null
     }
 }
