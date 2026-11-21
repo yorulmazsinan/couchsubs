@@ -333,6 +333,30 @@ static void cs_crash_write_summary(cs_out *out, const wchar_t *dump_name, const 
 			cs_out_str(out, "=");
 			cs_out_hex(out, values[i], 16);
 		}
+		/* Hatalı komutun baytları: JIT kodu hiçbir modülde değildir, döküm de onu içermez; komut buradan çözülür
+		 * (hangi yazmaç adres, hangisi sıra; GitHub #903). "|" RIP'in yeridir. */
+		cs_out_str(out, "\r\nKomut baytları (RIP-16 | RIP+32):\r\n  ");
+		static unsigned char code[48];
+		SIZE_T code_read = 0;
+		int code_start = 16;
+		if(!ReadProcessMemory(GetCurrentProcess(), (const void *)(ULONG_PTR)(context->Rip - 16), code, sizeof(code), &code_read)
+				|| code_read != sizeof(code))
+		{
+			/* RIP'in önü okunamayan sayfada: yalnız RIP'ten sonrası. */
+			code_start = 0;
+			if(!ReadProcessMemory(GetCurrentProcess(), (const void *)(ULONG_PTR)context->Rip, code, 32, &code_read))
+				code_read = 0;
+		}
+		if(!code_read)
+			cs_out_str(out, "(okunamadı)");
+		for(SIZE_T i = 0; i < code_read; i++)
+		{
+			static const char digits[] = "0123456789ABCDEF";
+			char text[3] = { digits[code[i] >> 4], digits[code[i] & 0xF], ' ' };
+			if((int)i == code_start)
+				cs_out_str(out, "| ");
+			cs_out_bytes(out, text, 3);
+		}
 		/* Yığındaki, yüklü bir modülün içine düşen değerler: dönüş adresleri büyük olasılıkla bunlardır. Döküm
 		 * paylaşılamasa da hatanın hangi bileşenlerden geçtiği buradan görülür. */
 		cs_out_str(out, "\r\nYığındaki modül adresleri:\r\n");

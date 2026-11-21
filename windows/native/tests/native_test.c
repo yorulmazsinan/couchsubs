@@ -146,6 +146,17 @@ static void test_reason_is_read_from_log(void)
 	CHECK(!cs_reason_from_log(NULL, &reason));
 }
 
+/* Mac/iPhone'daki VideoSampleSizeTests ile aynı (GitHub #855). */
+static void test_sample_size_guard(void)
+{
+	CHECK(!cs_sample_size_plausible(0));
+	CHECK(!cs_sample_size_plausible((size_t)-1));
+	CHECK(!cs_sample_size_plausible((size_t)1 << 63));
+	CHECK(!cs_sample_size_plausible(CS_MAX_SAMPLE_BYTES + 1));
+	CHECK(cs_sample_size_plausible(1));
+	CHECK(cs_sample_size_plausible(2000000));
+}
+
 static void test_throttle_thirty_fps_at_four(void)
 {
 	cs_throttle throttle;
@@ -374,6 +385,7 @@ int main(int argc, char **argv)
 	CHECK(cs_init() == 0);
 	test_reason_is_read_from_log();
 	test_throttle_thirty_fps_at_four();
+	test_sample_size_guard();
 	test_quit_reasons();
 	test_fixture_decodes(argv[1]);
 	test_garbage_does_not_crash();

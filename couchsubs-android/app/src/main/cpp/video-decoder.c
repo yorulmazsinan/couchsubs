@@ -29,6 +29,9 @@
 #define COLOR_FORMAT_YUV420_FLEXIBLE 0x7F420888
 /* Altyazı okumaya yetmeyecek kadar küçük kare okunmaz. */
 #define MIN_FRAME_SIDE 16
+/* Bir H.264 karesinin en büyük kabul edilen boyu; 1080p anahtar kare birkaç MB'ı geçmez (Mac/iPhone'da
+ * StreamSession.maxSampleBytes, Windows'ta couchsubs_native.c ile aynı; GitHub #855). */
+#define MAX_SAMPLE_BYTES ((size_t)64 << 20)
 
 static const char *const SOFTWARE_DECODERS[] = { "c2.android.avc.decoder", "OMX.google.h264.decoder", NULL };
 
@@ -267,6 +270,12 @@ bool couchsubs_video_decoder_video_sample(uint8_t *buf, size_t buf_size, int32_t
 	(void)frame_recovered;
 	bool result = true;
 	CouchSubsVideoDecoder *decoder = user;
+	if(!buf || buf_size == 0 || buf_size > MAX_SAMPLE_BYTES)
+	{
+		/* false: libchiaki karenin işlenmediğini bilir, yeni anahtar kare ister. */
+		CHIAKI_LOGW(decoder->log, "Video decoder: implausible sample size (%zu), dropped", buf_size);
+		return false;
+	}
 	chiaki_mutex_lock(&decoder->codec_mutex);
 	/* libchiaki başlığı (SPS/PPS) profil başında bir kez verir ve dönüş değerine bakmaz: başlık yitirilirse ya da
 	 * çözücü sonradan yeniden kurulursa (yazılım çözücüye geçiş) çözücü hiç kare çıkaramaz, bağlantı açıkken görüntü
