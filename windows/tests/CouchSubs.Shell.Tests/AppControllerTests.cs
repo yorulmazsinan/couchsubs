@@ -1218,7 +1218,7 @@ public class AppControllerRunTests
     }
 
     /// DM'de bildirildi: "Görüntü kaynağı" ayarı bulunamıyordu. Ana ekrandaki satır seçili kaynağı gösterir (Ayarlar'daki
-    /// seçeneklerle aynı ad); Xbox'ta seçim olmadığından satır yoktur.
+    /// seçeneklerle aynı ad); Xbox'ta da (#853) seçim olduğundan satır vardır.
     [Fact]
     public void PictureSourceTitleFollowsTheSelectedSource()
     {
@@ -1310,6 +1310,63 @@ public class AppControllerRunTests
         Assert.Equal([first, second], services.CaptureWindowStreams);
         Assert.Equal(2, services.Streams.Count);
         Assert.True(controller.IsRunning);
+        controller.Dispose();
+    }
+
+    /// #853: Xbox seçiliyken OBS/oyun penceresi (Xbox uygulaması, play.xbox.com, capture card) seçilirse CouchSubs Xbox'a
+    /// hiç bağlanmaz (Xbox tek bağlantıya izin verir, kullanıcının oturumu düşerdi); Microsoft girişi ve Xbox seçimi gerekmez.
+    [Fact]
+    public async Task XboxWithSelectedWindowReadsOnlyTheWindowAndNeverConnectsToTheXbox()
+    {
+        var target = new WindowCaptureTarget("msedge", "Xbox Cloud Gaming");
+        var store = new MemoryStore();
+        store.Save(StoreKeys.ConsoleKind, GameConsoleKind.Xbox);
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { XboxFrameSource = XboxFrameSource.CaptureWindow, CaptureWindow = target, Output = SubtitleOutput.Computer });
+        var xbox = new FakeXbox([]);
+        var services = new FakeServices { Xbox = xbox };
+        var controller = AppControllerTests.Make(services, store, settings);
+        try
+        {
+            Assert.True(controller.IsXbox);
+            Assert.True(controller.XboxReadsWindow);
+            Assert.False(controller.NeedsXboxLink);
+            Assert.True(controller.CanStart);
+            Assert.Equal(OnboardingStep.Done, controller.Step);
+            Assert.Equal("OBS projector or game window", controller.PictureSourceTitle);
+
+            await controller.StartAsync();
+            Assert.True(controller.IsRunning);
+            Assert.Equal([target], services.CaptureWindowStreams);
+            Assert.Empty(xbox.LegacyFrameRateRequests);
+
+            // Xbox bağlantısına dönülünce giriş ve Xbox seçimi yine gerekir.
+            controller.Settings = controller.Settings with { XboxFrameSource = XboxFrameSource.Xbox };
+            Assert.False(controller.XboxReadsWindow);
+            Assert.True(controller.NeedsXboxLink);
+            Assert.False(controller.CanStart);
+            Assert.Equal("Xbox (this app connects)", controller.PictureSourceTitle);
+        }
+        finally { controller.Dispose(); }
+    }
+
+    /// #853: sihirbazın Xbox girişi adımındaki "Bilgisayarda Xbox uygulaması/play.xbox.com ile mi oynuyorsunuz?" kurulumu
+    /// bitirir; Microsoft girişi istenmez, TV yoksa altyazı bilgisayar ekranında.
+    [Fact]
+    public void XboxWizardWindowChoiceFinishesSetupWithoutSignIn()
+    {
+        var controller = AppControllerTests.Make(new FakeServices { Xbox = new FakeXbox([]) });
+        controller.SelectConsoleKind(GameConsoleKind.Xbox);
+        controller.Advance();
+        Assert.Equal(OnboardingStep.PsnLogin, controller.Step);
+        controller.UseXboxWindow();
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.Equal(XboxFrameSource.CaptureWindow, controller.Settings.XboxFrameSource);
+        Assert.Equal(SubtitleOutput.Computer, controller.Settings.Output);
+        Assert.False(controller.NeedsXboxLink);
+        Assert.False(controller.CanStart);
+        controller.Settings = controller.Settings with { CaptureWindow = new WindowCaptureTarget("XboxPcApp", "Xbox") };
+        Assert.True(controller.CanStart);
         controller.Dispose();
     }
 

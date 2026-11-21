@@ -87,6 +87,20 @@ struct XboxLoginStep: View {
                     HintText(text: "Sign-in did not finish. You can try again.")
                     Button("Show log file") { showXboxLogFile() }.buttonStyle(.secondary)
                 }
+                // #853: oyun bu bilgisayardaki Xbox uygulamasında / play.xbox.com'da (ya da capture card ile OBS'te)
+                // oynanıyorsa CouchSubs Xbox'a bağlanmaz, yalnız seçilen pencereyi okur; Microsoft girişi atlanır.
+                Card {
+                    HStack {
+                        Text("Playing with the Xbox app or play.xbox.com on this computer?").font(.csBody.weight(.semibold))
+                        Spacer()
+                        Button("Select") {
+                            task?.cancel()
+                            model.useXboxWindow()
+                        }
+                        .buttonStyle(.secondary)
+                    }
+                    HintText(text: "CouchSubs reads only the window you select in Settings › Picture source (the Xbox app, play.xbox.com or OBS with a capture card). It doesn't connect to the Xbox, so no Microsoft sign-in is needed and your Xbox session isn't interrupted.")
+                }
             }
         }
         .onDisappear { task?.cancel() }

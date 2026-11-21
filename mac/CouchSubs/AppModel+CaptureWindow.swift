@@ -8,16 +8,22 @@ import RemotePlay
 /// kullanıcının Ayarlar › Görüntü kaynağı'nda seçtiği OBS projektöründen ya da oyun penceresinden okunur. Yakalama
 /// `RemotePlayWindowStream`'dedir; kareler konsol akışıyla aynı okuma hattına gider.
 extension AppModel {
-    /// Görüntü seçilen pencereden okunuyor (Xbox'ta görüntü kaynağı ayarı geçerli değildir).
-    var readsCaptureWindow: Bool { !isXbox && settings.frameSource == .captureWindow }
+    /// Xbox seçili ve görüntü seçilen OBS/oyun penceresinden okunuyor (#853; Windows'taki `XboxReadsWindow`): oyun Xbox
+    /// uygulamasında, play.xbox.com'da ya da capture card ile OBS'te oynanır; CouchSubs Xbox'a bağlanmaz (Xbox aynı anda
+    /// tek bağlantıya izin verir), Microsoft girişi ve Xbox seçimi gerekmez.
+    var readsXboxWindow: Bool { isXbox && settings.xboxFrameSource == .captureWindow }
+
+    /// Görüntü seçilen pencereden okunuyor (PS5'te ya da Xbox'ta).
+    var readsCaptureWindow: Bool { isXbox ? readsXboxWindow : settings.frameSource == .captureWindow }
 
     /// PS5 dışındaki kaynaklarda görüntü hazır mı: Remote Play penceresi her zaman, seçilen pencere yalnız bir pencere
     /// seçildiyse (seçim yokken bütün masaüstü okunmaz), PS5 hesap ve eşleşme varsa.
     var pictureSourceReady: Bool {
+        if isXbox { return readsXboxWindow ? settings.captureWindow?.isComplete == true : xboxSignedIn && xboxConsole != nil }
         switch settings.frameSource {
-        case .remotePlayWindow: true
-        case .captureWindow: settings.captureWindow?.isComplete == true
-        case .ps5: console != nil && accountId != nil
+        case .remotePlayWindow: return true
+        case .captureWindow: return settings.captureWindow?.isComplete == true
+        case .ps5: return console != nil && accountId != nil
         }
     }
 
@@ -28,6 +34,27 @@ extension AppModel {
         settings.frameSource = .captureWindow
         if !hasTV { settings.output = .computer }
         step = .done
+    }
+
+    /// Sihirbazın Xbox girişi adımındaki "Bilgisayarda Xbox uygulaması/play.xbox.com ile mi oynuyorsunuz?" (#853; Windows
+    /// `UseXboxWindow` ile aynı): Microsoft girişi, Xbox seçimi ve TV adımı atlanır, kurulum biter; pencere Ayarlar ›
+    /// Görüntü kaynağı'nda seçilir. CouchSubs Xbox'a bağlanmaz. TV eşleşmemişse altyazı bilgisayar ekranında gösterilir.
+    func useXboxWindow() {
+        settings.xboxFrameSource = .captureWindow
+        if !hasTV { settings.output = .computer }
+        step = .done
+    }
+
+    /// Ana ekrandaki "Görüntü kaynağı" satırının değeri, konsol türüne göre (Xbox'ta da seçim var, #853).
+    var pictureSourceName: String {
+        isXbox ? Self.xboxPictureSourceTitle(settings.xboxFrameSource) : Self.pictureSourceTitle(settings.frameSource)
+    }
+
+    static func xboxPictureSourceTitle(_ source: XboxFrameSource) -> String {
+        switch source {
+        case .xbox: String(localized: "Xbox (this app connects)")
+        case .captureWindow: String(localized: "OBS projector or game window")
+        }
     }
 
     /// Ayarlardaki listeye girecek açık pencereler (kendi pencerelerimiz, başlıksızlar ve küçükler hariç).

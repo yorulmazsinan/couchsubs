@@ -98,6 +98,15 @@ public enum FrameSource: String, Codable, CaseIterable {
     case ps5, remotePlayWindow, captureWindow
 }
 
+/// Xbox seçiliyken görüntünün nereden okunduğu (#853). `xbox`: CouchSubs Xbox'a kendisi bağlanır (Microsoft girişi ve
+/// seçilmiş Xbox). `captureWindow`: oyun bu bilgisayardaki Xbox uygulamasında, play.xbox.com'da ya da capture card ile
+/// OBS'te oynanır; CouchSubs Xbox'a hiç bağlanmaz, yalnız seçilen pencereyi (`captureWindow`) okur. Xbox aynı anda tek
+/// uzaktan oynatma bağlantısına izin verdiği için CouchSubs bağlanırsa kullanıcının oturumu düşerdi. Yalnız masaüstü:
+/// telefonda okunacak pencere yoktur. Eski kayıtlar `xbox` ile açılır.
+public enum XboxFrameSource: String, Codable, CaseIterable {
+    case xbox, captureWindow
+}
+
 /// Görüntü pencereden okunurken hangi Remote Play uygulamasının penceresi: hangisi açıksa (Sony'nin PS Remote Play'i ya
 /// da açık kaynak chiaki-ng), yalnız Sony'ninki ya da yalnız chiaki-ng'ninki. Eski kayıtlar "hangisi açıksa" ile açılır.
 public enum RemotePlayApp: String, Codable, CaseIterable {
@@ -211,6 +220,8 @@ public struct UserSettings: Codable, Equatable {
     public var appearance = AppAppearance.dark
     /// Görüntü PS5 bağlantısından mı, bu bilgisayardaki PS Remote Play penceresinden mi okunur.
     public var frameSource = FrameSource.ps5
+    /// Xbox seçiliyken görüntü Xbox bağlantısından mı, seçilen pencereden mi okunur (bkz. `XboxFrameSource`).
+    public var xboxFrameSource = XboxFrameSource.xbox
     /// Pencereden okunurken hangi Remote Play uygulaması (bkz. `RemotePlayApp`).
     public var remotePlayApp = RemotePlayApp.automatic
     /// OBS ya da başka bir açık pencere seçildiyse yalnız bu pencere okunur (varsayılan nil; masaüstünde).
@@ -277,6 +288,7 @@ public struct UserSettings: Codable, Equatable {
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         frameSource = (try? values.decodeIfPresent(FrameSource.self, forKey: .frameSource)) ?? defaults.frameSource
+        xboxFrameSource = (try? values.decodeIfPresent(XboxFrameSource.self, forKey: .xboxFrameSource)) ?? defaults.xboxFrameSource
         remotePlayApp = (try? values.decodeIfPresent(RemotePlayApp.self, forKey: .remotePlayApp)) ?? defaults.remotePlayApp
         captureWindow = try? values.decodeIfPresent(WindowCaptureTarget.self, forKey: .captureWindow)
         areaProfiles = Array(((try? values.decodeIfPresent([AreaProfile].self, forKey: .areaProfiles)) ?? defaults.areaProfiles)

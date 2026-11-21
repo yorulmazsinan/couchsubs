@@ -213,6 +213,15 @@ public static class TranslationEngines
 public enum FrameSource { Ps5, RemotePlayWindow, CaptureWindow }
 
 /// <summary>
+/// Xbox seçiliyken görüntünün nereden okunduğu (#853; Mac'teki XboxFrameSource ile aynı). <c>Xbox</c>: CouchSubs Xbox'a
+/// kendisi bağlanır (Microsoft girişi ve seçilmiş Xbox). <c>CaptureWindow</c>: oyun bu bilgisayardaki Xbox uygulamasında,
+/// play.xbox.com'da ya da capture card ile OBS'te oynanır; CouchSubs Xbox'a hiç bağlanmaz, yalnız seçilen pencereyi
+/// (<see cref="UserSettings.CaptureWindow"/>) okur. Xbox aynı anda tek uzaktan oynatma bağlantısına izin verdiği için
+/// CouchSubs bağlanırsa kullanıcının oturumu düşerdi. Eski ayar dosyaları Xbox bağlantısıyla açılır.
+/// </summary>
+public enum XboxFrameSource { Xbox, CaptureWindow }
+
+/// <summary>
 /// Kullanıcının açıkça seçtiği OBS projektörü veya oyun penceresi. PID/handle saklanmaz (yeniden açılışta değişir);
 /// hem süreç adı hem pencere başlığı eşleşmelidir. Pencere bulunmazsa başka kaynağa geçilmez.
 /// </summary>
@@ -404,6 +413,8 @@ public sealed record UserSettings
     public AppAppearance Appearance { get; init; } = AppAppearance.Dark;
     /// <summary>Görüntü PS5 bağlantısından mı, bu bilgisayardaki Remote Play penceresinden mi okunur.</summary>
     public FrameSource FrameSource { get; init; } = FrameSource.Ps5;
+    /// <summary>Xbox seçiliyken görüntü Xbox bağlantısından mı, seçilen pencereden mi okunur (bkz. <see cref="Shell.XboxFrameSource"/>).</summary>
+    public XboxFrameSource XboxFrameSource { get; init; } = XboxFrameSource.Xbox;
     /// <summary>Xbox karelerini #244 öncesindeki 200 ms aralıkla al; varsayılan 66 ms.</summary>
     public bool XboxLegacyFrameRate { get; init; }
     /// <summary>Xbox Remote Play oyun sesini bu bilgisayarda çal; eski ayarlarda açıktır.</summary>

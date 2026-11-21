@@ -137,7 +137,7 @@ struct MainControls: View {
                 if model.demoMode {
                     StatusTile(symbol: "play.rectangle", title: "Demo mode", value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning))
-                } else if model.isXbox {
+                } else if model.isXbox && !model.readsXboxWindow {
                     StatusTile(symbol: "gamecontroller", title: "Xbox · Beta", value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning)) {
                         // Microsoft girişi ya da Xbox seçimi eksikse buradan tamamlanır.
@@ -148,7 +148,7 @@ struct MainControls: View {
                         ReconnectButton()
                     }
                 } else {
-                    StatusTile(symbol: "gamecontroller", title: model.settings.frameSource == .captureWindow ? "Selected window" : "PS5",
+                    StatusTile(symbol: "gamecontroller", title: model.readsCaptureWindow ? "Selected window" : "PS5",
                                value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning)) {
                         ReconnectButton()
@@ -168,9 +168,10 @@ struct MainControls: View {
                 if model.isXbox {
                     // Xbox'ta görüntü kaynağı seçimi yok (Windows'taki gibi gizli); konsol türü gösterilir.
                     InfoRow("Console", value: String(localized: "Xbox Series / Xbox One (Beta)"), action: { model.openSettings(.console) })
-                } else {
-                    InfoRow("Picture source", value: pictureSourceName, action: { model.openSettings(.source) })
+                    InfoDivider()
                 }
+                // Xbox'ta da görüntü kaynağı seçilir (#853): Xbox bağlantısı ya da OBS/oyun penceresi.
+                InfoRow("Picture source", value: model.pictureSourceName, action: { model.openSettings(.source) })
                 InfoDivider()
                 InfoRow("Translation", value: engineName, action: { model.openSettings(.translation) })
                 InfoDivider()
@@ -178,10 +179,6 @@ struct MainControls: View {
             }
             MainWarnings()
         }
-    }
-
-    private var pictureSourceName: String {
-        AppModel.pictureSourceTitle(model.settings.frameSource)
     }
 
     private var engineName: String {

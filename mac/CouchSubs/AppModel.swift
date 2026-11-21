@@ -589,9 +589,10 @@ final class AppModel: ObservableObject {
             }
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
-            let xboxAudioChanged = isXbox && settings.xboxAudioOnDevice != oldValue.xboxAudioOnDevice
-            let captureWindowChanged = settings.frameSource == .captureWindow && settings.captureWindow != oldValue.captureWindow
-            if settings.frameSource != oldValue.frameSource || windowAppChanged || captureWindowChanged || xboxAudioChanged, isRunning {
+            let xboxAudioChanged = isXbox && !readsXboxWindow && settings.xboxAudioOnDevice != oldValue.xboxAudioOnDevice
+            let captureWindowChanged = readsCaptureWindow && settings.captureWindow != oldValue.captureWindow
+            let sourceChanged = isXbox ? settings.xboxFrameSource != oldValue.xboxFrameSource : settings.frameSource != oldValue.frameSource
+            if sourceChanged || windowAppChanged || captureWindowChanged || xboxAudioChanged, isRunning {
                 // Görüntü kaynağı (ya da okunan Remote Play uygulaması, Xbox'ta ses çıkışı) değişti: çeviri yeniden başlar.
                 // TV uygulaması kapatılmaz; kapanıp yeniden açılsa TV girişi gidip gelirdi.
                 stop(closingTVApp: false)
@@ -835,7 +836,7 @@ final class AppModel: ObservableObject {
         let xboxLinked = xboxToken != nil && xboxConsole != nil
         // Xbox'ta kurulum yalnız sihirbazın sonuna gelindiyse bitmiştir (iPhone'daki kural).
         let ready = platform == .xbox
-            ? xboxLinked && store.load(Bool.self, for: StoreKey.setupComplete) == true
+            ? (xboxLinked || loaded.xboxFrameSource == .captureWindow) && store.load(Bool.self, for: StoreKey.setupComplete) == true
             : Self.setupIsComplete(store: store, accountId: accountId, console: console, paired: paired,
                                    readsWindow: loaded.frameSource != .ps5)
         self.tvKeySaved = tvKeySaved
@@ -1289,7 +1290,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Konsol Xbox ama Microsoft girişi ya da Xbox seçimi eksik: Ayarlar'da "Xbox'ı bağla" görünür.
-    var needsXboxLink: Bool { isXbox && (!xboxSignedIn || xboxConsole == nil) }
+    /// Görüntü seçilen pencereden okunuyorsa Xbox'a bağlanılmaz, bağlama gerekmez (#853).
+    var needsXboxLink: Bool { isXbox && !readsXboxWindow && (!xboxSignedIn || xboxConsole == nil) }
 
     /// Ayarlar › Konsol › "Xbox'ı bağla": sihirbaz Microsoft girişinden (giriş varsa Xbox seçiminden) açılır.
     func linkXbox() { step = xboxSignedIn ? .console : .psnLogin }
@@ -1903,8 +1905,9 @@ final class AppModel: ObservableObject {
         // Düğmeye iki kez basılması ya da beklerken tekrar çağrılması ikinci bir oturum açmaz.
         guard !isRunning, !isStarting, canStart || demoMode else { return }
         // PS5'e bağlanmak için eşleşmiş PS5 ve ikinci hesap gerekir; PS Remote Play penceresinden okumak için gerekmez.
-        // Xbox (Beta) için Microsoft girişi ve seçilmiş Xbox gerekir; görüntü kaynağı ayarı Xbox'ta geçerli değildir.
-        let xbox = isXbox && !demoMode && xboxSignedIn ? xboxConsole : nil
+        // Xbox (Beta) bağlantısı için Microsoft girişi ve seçilmiş Xbox gerekir.
+        // Xbox'ta seçilen pencere okunuyorsa (#853) Xbox'a hiç bağlanılmaz: Xbox aynı anda tek bağlantıya izin verir.
+        let xbox = isXbox && !demoMode && xboxSignedIn && !readsXboxWindow ? xboxConsole : nil
         let readsWindow = !isXbox && settings.frameSource == .remotePlayWindow && !demoMode
         let captureTarget = readsCaptureWindow && !demoMode ? settings.captureWindow : nil
         guard demoMode || readsWindow || captureTarget != nil || (isXbox ? xbox != nil : console != nil && accountId != nil) else { return }
@@ -1961,7 +1964,7 @@ final class AppModel: ObservableObject {
         if !demoMode {
             gameAreas.start()
             // Remote Play penceresinden okurken PS5 eşleşmesi olmayabilir; son oyun o zaman PS5 adı olmadan hatırlanır.
-            let consoleName = xbox.map { $0.name.isEmpty ? "Xbox" : $0.name } ?? console.map { $0.name.isEmpty ? $0.host : $0.name }
+            let consoleName = xbox.map { $0.name.isEmpty ? "Xbox" : $0.name } ?? (isXbox ? nil : console.map { $0.name.isEmpty ? $0.host : $0.name })
             gameChoice.start(console: consoleName) { [weak self] in
                 guard let self else { return false }
                 return self.settings.askGame && self.settings.sharePool
@@ -2070,7 +2073,7 @@ final class AppModel: ObservableObject {
     /// Çeviri başlatılabilir mi: görüntü kaynağı hazır (PS5 kurulu ya da PS Remote Play penceresi seçili) ve altyazının
     /// gideceği bir yer var (TV eşleşmiş ya da bilgisayar ekranı seçili).
     var canStart: Bool {
-        (isXbox ? xboxSignedIn && xboxConsole != nil : pictureSourceReady) && settings.output.hasDestination(hasTV: hasTV)
+        pictureSourceReady && settings.output.hasDestination(hasTV: hasTV)
     }
 
     /// TV uygulamasını başlatır ve açık tutar; TV kapalıysa açıldığında bağlanır. Altyazı TV'ye gitmiyorsa ya da TV
@@ -2108,7 +2111,7 @@ final class AppModel: ObservableObject {
     /// TV'de oynayıp Mac'e dokunmayınca ekran kendi ayarıyla (prizdeyken çoğu zaman 10 dakika) kapanıyor, altyazı
     /// kesiliyordu. PS5'ten doğrudan okunup yalnız TV'ye gönderiliyorsa ekran kendi ayarıyla kapanabilir.
     var keepsDisplayOn: Bool {
-        (!isXbox && settings.frameSource != .ps5) || settings.output.showsOnComputer
+        (!isXbox && settings.frameSource != .ps5) || readsXboxWindow || settings.output.showsOnComputer
     }
 
     /// Mac'in boşta uyuması (ve gerekiyorsa ekranın kapanması) engellenir; çeviri sürerken ayar değişince yeniden kurulur.
@@ -2887,12 +2890,12 @@ final class AppModel: ObservableObject {
     /// Ana ekrandaki PS5 durumu (eşleşmiş PS5'in adıyla).
     var ps5StatusText: String {
         if demoMode { return String(localized: "Sample pictures") }
+        if readsCaptureWindow {
+            return Self.captureWindowStatusText(sessionState, running: isRunning, target: settings.captureWindow)
+        }
         if isXbox { return Self.xboxStatusText(sessionState, running: isRunning, console: xboxConsole, signedIn: xboxSignedIn) }
         if settings.frameSource == .remotePlayWindow {
             return Self.windowStatusText(sessionState, running: isRunning, installed: !remotePlayMissing)
-        }
-        if settings.frameSource == .captureWindow {
-            return Self.captureWindowStatusText(sessionState, running: isRunning, target: settings.captureWindow)
         }
         return Self.statusText(sessionState, running: isRunning, pairedName: console.map { $0.name.isEmpty ? "PS5" : $0.name })
     }

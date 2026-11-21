@@ -87,6 +87,15 @@ CAPABILITIES = {
         ("windows", _WIN_TESTS + "MissionCardTests.cs", r"mission-card\.json"),
         ("android", _DROID_TESTS + "MissionCardTest.kt", r"mission-card\.json"),
     ],
+    # Yalnız masaüstü (#853): Xbox seçiliyken görüntü Xbox uygulaması / play.xbox.com / capture card ile OBS penceresinden
+    # okunur, CouchSubs Xbox'a bağlanmaz. iPhone ve Android'de okunacak bilgisayar penceresi yoktur; telefonlarda bu seçim
+    # bilinçli olarak yoktur (Android = iPhone eşitliği bozulmaz). Windows = Mac eşitliği burada denetlenir.
+    "Xbox'ta seçilen pencereden okuma, Xbox'a bağlanmadan (yalnız masaüstü)": [
+        ("mac", "mac/CouchSubs/AppModel+CaptureWindow.swift", r"var readsXboxWindow: Bool"),
+        ("mac", "mac/CouchSubs/UI/XboxViews.swift", r"model\.useXboxWindow\(\)"),
+        ("windows", "windows/src/CouchSubs.Shell/AppController.cs", r"public bool XboxReadsWindow =>"),
+        ("windows", "windows/src/CouchSubs.App/Views/Steps/XboxLoginStep.xaml.cs", r"Controller\.UseXboxWindow\(\)"),
+    ],
     "Gerçek kare ekran yazısı ölçütü (menü, görev listesi)": [
         ("mac", "tools/frame-regression/Sources/frame-regression/ScreenCheck.swift", r"func checkScreen\("),
         ("android", _DROID_TESTS + "ScreenFramesTest.kt", r"ocr/screen/"),

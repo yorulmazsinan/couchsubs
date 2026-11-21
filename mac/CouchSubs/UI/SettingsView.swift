@@ -152,8 +152,14 @@ private struct SettingsPage: View {
             case .obs: OBSCard()
             case .console: ConsoleSettingsCard()
             case .source:
-                // Xbox'ta (Beta) görüntü hep Xbox'ın ev yayınından gelir; kaynak seçimi yerine oyun sesi ayarı durur.
-                if model.isXbox { XboxSoundCard() } else { FrameSourceCard() }
+                // Xbox'ta (Beta) görüntü Xbox'ın ev yayınından ya da seçilen pencereden (#853) gelir; Xbox bağlantısında oyun
+                // sesi ayarı da durur.
+                if model.isXbox {
+                    XboxFrameSourceCard()
+                    if !model.readsXboxWindow { XboxSoundCard() }
+                } else {
+                    FrameSourceCard()
+                }
                 DemoModeCard()
             case .ps5: LoginPasscodeCard()
             case .about:
@@ -798,6 +804,24 @@ private struct FrameSourceCard: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Xbox seçiliyken "Görüntüyü al" (#853; Windows'taki Görüntü kaynağı kartının Xbox seçenekleri): CouchSubs Xbox'a kendisi
+/// bağlanır ya da oyun Xbox uygulamasında / play.xbox.com'da / capture card ile OBS'te oynanır ve CouchSubs yalnız seçilen
+/// pencereyi okur; o zaman Xbox'a hiç bağlanmaz (Xbox aynı anda tek bağlantıya izin verir, kullanıcının oturumu düşerdi).
+private struct XboxFrameSourceCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Card {
+            Picker("Read the picture from", selection: $model.settings.xboxFrameSource) {
+                Text("Xbox (this app connects)").tag(XboxFrameSource.xbox)
+                Text("OBS projector or game window").tag(XboxFrameSource.captureWindow)
+            }
+            HintText(text: "If you play in the Xbox app, on play.xbox.com or with a capture card in OBS, choose this window; CouchSubs doesn't connect to the Xbox separately (the Xbox allows only one connection at a time).")
+            if model.readsXboxWindow { CaptureWindowPanel() }
         }
     }
 }

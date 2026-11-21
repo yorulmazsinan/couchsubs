@@ -119,7 +119,6 @@ public partial class SettingsWindow : Window
         GameAreaPresets.IsChecked = settings.GameAreaPresets;
         ShowPacks();
         AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
-        FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.FrameSource.ToString());
         RemotePlayAppChoice.SelectedItem = RemotePlayAppChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.RemotePlayApp.ToString());
         XboxAudioOnComputer.IsChecked = settings.XboxAudioOnComputer;
         XboxLegacyFrameRate.IsChecked = settings.XboxLegacyFrameRate;
@@ -160,14 +159,25 @@ public partial class SettingsWindow : Window
     /// <summary>Remote Play uygulaması seçimi ve ipuçları yalnız seçili görüntü kaynağına göre görünür.</summary>
     private void ShowFrameSource()
     {
-        if (controller.IsXbox) return;
-        var window = controller.Settings.FrameSource == FrameSource.RemotePlayWindow;
-        var capture = controller.Settings.FrameSource == FrameSource.CaptureWindow;
+        // Xbox'ta (#853) seçenekler "Xbox (bu uygulama bağlanır)" ve "OBS projektörü veya oyun penceresi"; PS5'inkiler gizli.
+        var xbox = controller.IsXbox;
+        var settings = controller.Settings;
+        var selectedTag = xbox ? (settings.XboxFrameSource == XboxFrameSource.CaptureWindow ? "CaptureWindow" : "Xbox") : settings.FrameSource.ToString();
+        XboxSourceItem.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
+        Ps5SourceItem.Visibility = RemotePlaySourceItem.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
+        var wasLoading = loading;
+        loading = true;
+        FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == selectedTag);
+        loading = wasLoading;
+        XboxWindowHint.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
+        XboxPictureSourceCard.Visibility = xbox && !controller.XboxReadsWindow ? Visibility.Visible : Visibility.Collapsed;
+        var window = !xbox && settings.FrameSource == FrameSource.RemotePlayWindow;
+        var capture = xbox ? controller.XboxReadsWindow : settings.FrameSource == FrameSource.CaptureWindow;
         RemotePlayAppPanel.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         WindowSourceHint.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         CaptureWindowPanel.Visibility = capture ? Visibility.Visible : Visibility.Collapsed;
         if (capture) RefreshCaptureWindows();
-        Ps5SourceHint.Visibility = window || capture ? Visibility.Collapsed : Visibility.Visible;
+        Ps5SourceHint.Visibility = xbox || window || capture ? Visibility.Collapsed : Visibility.Visible;
         SonyInstallRow.Visibility = ChiakiInstallRow.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         var sony = controller.RemotePlayInstalled(RemotePlayApp.Sony);
         var chiaki = controller.RemotePlayInstalled(RemotePlayApp.Chiaki);
@@ -198,8 +208,6 @@ public partial class SettingsWindow : Window
         ConsoleXboxLink.Content = Localizer.Current[controller.HasXboxAccount ? "Choose your Xbox" : "Sign in with Microsoft"];
         ConsoleXboxLink.Style = (Style)FindResource(controller.NeedsXboxLink ? "PrimaryButton" : "SecondaryButton");
         ConsoleXboxSignedIn.Visibility = controller.HasXboxAccount ? Visibility.Visible : Visibility.Collapsed;
-        PlayStationPictureSourceCard.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
-        XboxPictureSourceCard.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
         ShowFrameSource();
         PasscodeTab.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -231,9 +239,12 @@ public partial class SettingsWindow : Window
 
     private void OnFrameSource(object sender, SelectionChangedEventArgs e)
     {
-        if (FrameSourceChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
-        Update(s => s with { FrameSource = Enum.Parse<FrameSource>(tag) });
-        ShowFrameSource();
+        if (loading || FrameSourceChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        if (controller.IsXbox)
+            Update(s => s with { XboxFrameSource = tag == "CaptureWindow" ? XboxFrameSource.CaptureWindow : XboxFrameSource.Xbox });
+        else
+            Update(s => s with { FrameSource = Enum.Parse<FrameSource>(tag) });
+        ShowConsole();
     }
 
     private void OnXboxLegacyFrameRate(object sender, RoutedEventArgs e) =>

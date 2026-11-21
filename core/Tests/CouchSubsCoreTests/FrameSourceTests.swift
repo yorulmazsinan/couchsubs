@@ -51,4 +51,20 @@ final class FrameSourceTests: XCTestCase {
             XCTAssertEqual(try JSONDecoder().decode(UserSettings.self, from: data).frameSource, source)
         }
     }
+
+    /// #853: Xbox'ta görüntü seçilen pencereden de okunabilir; eski ve bilinmeyen kayıtlar Xbox bağlantısıyla açılır.
+    func testXboxFrameSourceDefaultsToTheXboxAndRoundTrips() throws {
+        XCTAssertEqual(UserSettings().xboxFrameSource, .xbox)
+        let old = try JSONDecoder().decode(UserSettings.self, from: Data(#"{"frameSource":"captureWindow","gamePacks":false}"#.utf8))
+        XCTAssertEqual(old.xboxFrameSource, .xbox)
+        let unknown = try JSONDecoder().decode(UserSettings.self, from: Data(#"{"xboxFrameSource":"xcloud","targetLanguage":"de"}"#.utf8))
+        XCTAssertEqual(unknown.xboxFrameSource, .xbox)
+        XCTAssertEqual(unknown.targetLanguage, "de")
+        for source in XboxFrameSource.allCases {
+            var settings = UserSettings()
+            settings.xboxFrameSource = source
+            let data = try JSONEncoder().encode(settings)
+            XCTAssertEqual(try JSONDecoder().decode(UserSettings.self, from: data).xboxFrameSource, source)
+        }
+    }
 }

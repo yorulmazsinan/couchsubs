@@ -692,16 +692,21 @@
                             </StackPanel>
                         </StackPanel>
                     </c:Card>
-                    <c:Card x:Name="PlayStationPictureSourceCard">
+                    <!-- "Görüntüyü al": PS5'te PS5 / Remote Play penceresi / OBS veya oyun penceresi; Xbox'ta Xbox (bu uygulama
+                         bağlanır) / OBS veya oyun penceresi (#853: Xbox uygulaması, play.xbox.com, capture card; Xbox'a bağlanılmaz). -->
+                    <c:Card x:Name="PictureSourceCard">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{t:T 'Read the picture from'}" VerticalAlignment="Center" Margin="0,0,12,0" />
                                 <ComboBox x:Name="FrameSourceChoice" SelectionChanged="OnFrameSource" MinWidth="260">
-                                    <ComboBoxItem Content="{t:T 'The PS5 (second account)'}" Tag="Ps5" />
-                                    <ComboBoxItem Content="{t:T 'Remote Play window on this PC'}" Tag="RemotePlayWindow" />
+                                    <ComboBoxItem x:Name="XboxSourceItem" Content="{t:T 'Xbox (this app connects)'}" Tag="Xbox" />
+                                    <ComboBoxItem x:Name="Ps5SourceItem" Content="{t:T 'The PS5 (second account)'}" Tag="Ps5" />
+                                    <ComboBoxItem x:Name="RemotePlaySourceItem" Content="{t:T 'Remote Play window on this PC'}" Tag="RemotePlayWindow" />
                                     <ComboBoxItem Content="{t:T 'OBS projector or game window'}" Tag="CaptureWindow" />
                                 </ComboBox>
                             </StackPanel>
+                            <TextBlock x:Name="XboxWindowHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'If you play in the Xbox app, on play.xbox.com or with a capture card in OBS, choose this window; CouchSubs doesn\'t connect to the Xbox separately (the Xbox allows only one connection at a time).'}" />
                             <StackPanel x:Name="RemotePlayAppPanel" Orientation="Horizontal" Margin="0,12,0,0">
                                 <TextBlock Text="{t:T 'Remote Play app'}" VerticalAlignment="Center" Margin="0,0,12,0" />
                                 <ComboBox x:Name="RemotePlayAppChoice" SelectionChanged="OnRemotePlayApp" MinWidth="260">
@@ -743,7 +748,7 @@
                             </Grid>
                         </StackPanel>
                     </c:Card>
-                    <c:Card x:Name="XboxPictureSourceCard" Visibility="Collapsed">
+                    <c:Card x:Name="XboxPictureSourceCard" Visibility="Collapsed" Margin="0,12,0,0">
                         <StackPanel>
                             <CheckBox x:Name="XboxAudioOnComputer" Content="{t:T 'Play Xbox sound on this computer'}"
                                       Checked="OnXboxAudioOnComputer" Unchecked="OnXboxAudioOnComputer" />
