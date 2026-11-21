@@ -18,6 +18,21 @@ final class FrameThrottleTests: XCTestCase {
     }
 }
 
+final class VideoSampleSizeTests: XCTestCase {
+    /// iPhone 1.0.3 çökmesi: libchiaki'den eksi (üst biti dolu `size_t`) boy gelince `Data(bytes:count:)` tuzağa düşüyordu.
+    func testRejectsNegativeEmptyAndHugeSizes() {
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: -1))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: Int(bitPattern: UInt(1) << 63)))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: 0))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: StreamSession.maxSampleBytes + 1))
+    }
+
+    func testAcceptsRealFrames() {
+        XCTAssertTrue(StreamSession.isPlausibleSample(size: 1))
+        XCTAssertTrue(StreamSession.isPlausibleSample(size: 2_000_000))
+    }
+}
+
 final class ReconnectPolicyTests: XCTestCase {
     func testBackoffDoublesUpToSixtySeconds() {
         var policy = ReconnectPolicy()
