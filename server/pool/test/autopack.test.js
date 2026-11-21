@@ -784,6 +784,14 @@ test("translation prompt asks for natural Turkish swearing, kept speaker labels 
   // Eski istem "fucking = siktiğimin" diyordu; yeni istem kelimesi kelimesine çeviriyi yasaklar.
   assert.doesNotMatch(text, /fucking = siktiğimin/);
   assert.match(text, /never word by word/);
+  // Küfür asla sansürlenmez: düşürme/yumuşatma yasak, eski örtmece eşlemeleri kalmadı.
+  assert.match(text, /Swearing: never censor/);
+  assert.match(text, /Never drop a swear word, never soften it/);
+  assert.match(text, /"my fucking car" = "amına koyduğumun arabası"/);
+  assert.doesNotMatch(text, /usually dropped/);
+  assert.doesNotMatch(text, /= "lanet olası arabam"/);
+  assert.doesNotMatch(text, /"damn" = "Kahretsin"/);
+  assert.doesNotMatch(text, /"pislik"\s*\//);
   assert.match(text, /Never translate it as "zenci"/);
   assert.match(text, /Keep a character-name label exactly as it is/);
   assert.match(text, /output an empty string ""/);
