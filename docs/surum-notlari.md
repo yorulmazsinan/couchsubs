@@ -6,16 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **"Ekranı çevir" çevirileri yazının kendi yerinde ve stilinde:** Çeviriler artık ayrı bir kutuda değil, okunan yazının yerinde, renk ve hizasıyla çiziliyor. GTA 6'da telefon açıksa mesajlar telefonun yanında, telefon boyunda bir mesaj kartında gösteriliyor: üstte kişi adı, gelen mesajlar solda, giden mesajlar sağda.
-- **Başka sohbete geçip yeniden basınca yeni sohbet çevriliyor:** Önceden ikinci basış çevirileri yalnız kaldırıyordu.
-- **Tuş çubukları ve seçenekler:** SCROLL / SEND / BACK gibi etiketler ve TIP / ORDER gibi seçenekler ayrı ayrı çevriliyor; tuş simgeleri (R1, △, ✕ …) olduğu gibi kalıyor.
-- **Fiyatlar:** "$200" gibi fiyatlar artık "SSSS" okunmuyor ve çeviride bozulmuyor.
-- **Xbox (Beta):** Görüntü kesilince ana ekran "bağlı" demiyor; "Xbox'tan görüntü gelmiyor. Yeniden bağlanılıyor…" yazıyor, TV'deki altyazı temizleniyor ve oturum kendiliğinden yeniden kuruluyor.
-- **PS5 bağlantısı:** Bağlıyken kopan PS5 artık "bulunamadı" diye gösterilmiyor; kopma nedenini ayırmak için günlüğe ağ durumu yazılıyor.
-- **Çeviri anahtarı:** Anahtar test edilirken "Testing…" görünüyor; güvenli depoya kaydedilemeyen anahtar için ayrı uyarı çıkıyor; ücretsiz çeviriye geçişin nedeni günlüğe yazılıyor. (Katkı: @omersukruvarol, #591)
-- **TV uygulaması 0.9.50.**
+- **LG'de siyah ekran (TV uygulaması 0.9.53):** Son güncellemeden sonra bazı LG TV'lerde çeviri başlayınca PS5 görüntüsü gelmeyip ekran siyah kalabiliyordu. Önceki sürümde eklenen ses önlemleri artık görüntü gelmeden hiçbir şey yapmıyor; görüntüyü bozarlarsa kendiliğinden kapanıp eski yola dönülüyor.
+- **Samsung'da parlaklığın sürekli bir an oynaması (TV uygulaması 0.9.52):** 4K Samsung TV'lerde ve ultra geniş monitörlerde PS5 penceresi birkaç saniyede bir boşuna yeniden isteniyordu. Düzeltildi.
+- **Samsung ultra geniş monitörde küçük görüntü (#304, TV uygulaması 0.9.51):** Monitör ekranını 1920x1080 bildirse de panelin gerçek ölçüsü okunuyor; görüntü dolmazsa kumandadaki Sarı tuş sıradaki yolu deniyor.
+- **GTA 6 telefon mesajları:** "Ekranı çevir"in mesaj kartı eğik telefonda, kesik ve uzun mesajlarda daha sağlam; otomatik telefon okumasında mesajlar artık birleşmiyor, kısa yanıtlar kaybolmuyor. (Windows tarafındaki düzeltme katkısı: @erayslyrt00, #773)
 
-**beta.71'de gelenler:** LG'de PS tuşuna basınca çevirinin kaybolmaması (TV uygulaması 0.9.49), LG Oyun Yöneticisi açıklaması.
+**beta.72'de gelenler:** "Ekranı çevir" çevirilerinin yazının kendi yerinde ve stilinde çizilmesi, GTA 6 telefon mesaj kartı, Xbox'ta görüntü kesilince yeniden bağlanma, PS5 "bulunamadı" düzeltmesi.
+
+**Daha önce (beta.71):** LG'de PS tuşuna basınca çevirinin kaybolmaması (TV uygulaması 0.9.49), LG Oyun Yöneticisi açıklaması.
 
 **Daha önce (beta.70):** "Ekranı çevir"in GTA 6 telefon mesajlarını yeniden çevirmesi, görev yazısının konuşmanın yerine geçmemesi, LG'de ses için önlemler (TV uygulaması 0.9.48), 2016 Samsung TV'lerde elle kurulan uygulamanın korunması (#638).
 
