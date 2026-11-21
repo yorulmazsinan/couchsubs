@@ -23,6 +23,16 @@ final class AndroidTVKeeperTests: XCTestCase {
         XCTAssertEqual(AndroidTvInstaller.startCommand("{\"a\":\"b\"}\nreboot"), plain)
     }
 
+    /// Çalışan TV uygulamasına adres ekranı öne çekmeden yayınla bildirilir ("TV'de bağlı, panelde sub 0": eski adrese bağlı
+    /// kalan uygulama). Windows'taki AddressCommand ve Android telefondaki addressCommand ile aynı.
+    func testAddressCommandCarriesTheServerAddressWithoutStartingTheScreen() {
+        let params = AndroidTvInstaller.launchParams(server: "http://192.168.1.124:8787")
+        XCTAssertEqual(AndroidTvInstaller.addressCommand(params),
+                       #"shell:am broadcast -a com.couchsubs.tv.action.ADDRESS -n com.couchsubs.tv/.AddressReceiver --es params '{"server":"http://192.168.1.124:8787"}'"#)
+        XCTAssertNil(AndroidTvInstaller.addressCommand(nil))
+        XCTAssertNil(AndroidTvInstaller.addressCommand(#"{"server":"x'; reboot; '"}"#))
+    }
+
     private final class Calls: @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String] = []

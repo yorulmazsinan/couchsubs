@@ -113,9 +113,24 @@ public class MainActivity extends Activity implements TvPage.Host {
     private static final Handler RELEASE = new Handler(Looper.getMainLooper());
     private int releaseGeneration;
 
+    /** Açık CouchSubs ekranı (yoksa null): bilgisayarın/telefonun adres yayını ona iletilir (bkz. AddressReceiver). */
+    private static volatile MainActivity current;
+
+    /** Bilgisayar/telefon adresini bildirdi: açık sayfa o adrese geçer; ekran ve görüntü modu değişmez. */
+    static void deliver(String params) {
+        MainActivity activity = current;
+        if (activity == null) return;
+        activity.runOnUiThread(() -> {
+            if (activity.page == null || activity.isFinishing()) return;
+            activity.launchParams = params;
+            activity.page.relaunch(params);
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        current = this;
         Intent intent = getIntent();
         launchParams = paramsOf(intent);
         TvPage.storeDisplayMode(this, intent.getStringExtra(EXTRA_DISPLAY_MODE));
@@ -940,6 +955,7 @@ public class MainActivity extends Activity implements TvPage.Host {
 
     @Override
     protected void onDestroy() {
+        if (current == this) current = null;
         handler.removeCallbacksAndMessages(null);
         releaseHdmi(true, "closed");
         if (page != null) page.destroy();

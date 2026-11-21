@@ -221,9 +221,28 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         {
             running = "";
         }
-        if (IsRunning(running)) return AlreadyRunning;
+        if (IsRunning(running))
+        {
+            // Çalışan uygulama bize bağlı değil (bekçi yalnız o zaman açar): kayıtlı eski bir adrese (bu bilgisayarın eski
+            // portu, başka bir CouchSubs) bağlı kalmış olabilir. Adres ekranı öne çekmeden bildirilir (TV 0.9.63+; eskisi yok sayar).
+            if (AddressCommand(launchParams) is { } address)
+            {
+                try { await adb.RunAsync(address, cancellationToken: cancellationToken); }
+                catch (Exception error) when (error is not OperationCanceledException and not AndroidInstallException) { }
+            }
+            return AlreadyRunning;
+        }
         return (await adb.RunAsync(StartCommand(launchParams), cancellationToken: cancellationToken)).Trim();
     }
+
+    /// <summary>
+    /// TV'de çalışan CouchSubs'a adresi bildiren yayın (TV uygulamasındaki AddressReceiver): ekranı öne çekmez, görüntü
+    /// modunu değiştirmez. Parametre yoksa ya da kabukta güvenle gönderilemiyorsa (tek tırnak, satır sonu) null.
+    /// Mac/iPhone ve Android telefondaki addressCommand ile aynı.
+    /// </summary>
+    public static string? AddressCommand(string? launchParams) =>
+        string.IsNullOrEmpty(launchParams) || launchParams.IndexOfAny(['\'', '\n', '\r', '\0']) >= 0 ? null
+            : $"shell:am broadcast -a {PackageName}.action.ADDRESS -n {PackageName}/.AddressReceiver --es params '{launchParams}'";
 
     private Task<AdbConnection> ConnectAsync(CancellationToken cancellationToken) =>
         AdbConnection.ConnectAsync(host, port, LoadOrCreateKey(keyDirectory), OnApprovalNeeded, cancellationToken: cancellationToken);

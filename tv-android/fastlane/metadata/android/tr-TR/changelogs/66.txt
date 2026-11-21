@@ -1,0 +1,1 @@
+0.9.63: Uygulama açıkken kayıtlı eski bir adrese bağlı kalırsa (TV'de "bağlı", altyazı gelmiyor) bilgisayar/telefon kendi adresini ekranı öne çekmeden bildiriyor; altyazı yeniden geliyor.

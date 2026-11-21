@@ -433,4 +433,15 @@ class AndroidTvTest {
         assertEquals(plain, AndroidTvInstaller.startCommand("{\"a\":\"b\"}\nreboot"))
         assertEquals(null, AndroidTvInstaller.launchParams("http://x\"y"))
     }
+
+    /** Çalışan TV uygulamasına adres ekranı öne çekmeden yayınla bildirilir (Windows/Mac ve iPhone'la aynı komut). */
+    @Test
+    fun addressCommandCarriesOnlySafeLaunchParams() {
+        val params = AndroidTvInstaller.launchParams("http://192.168.1.124:8787")
+        assertEquals(
+            """shell:am broadcast -a com.couchsubs.tv.action.ADDRESS -n com.couchsubs.tv/.AddressReceiver --es params '{"server":"http://192.168.1.124:8787"}'""",
+            AndroidTvInstaller.addressCommand(params))
+        assertEquals(null, AndroidTvInstaller.addressCommand(null))
+        assertEquals(null, AndroidTvInstaller.addressCommand("""{"server":"x'; reboot; '"}"""))
+    }
 }

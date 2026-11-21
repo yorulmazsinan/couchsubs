@@ -487,6 +487,14 @@ final class AndroidTvInstaller {
         return "\(command) --es params '\(launchParams)'"
     }
 
+    /// TV'de çalışan CouchSubs'a adresi bildiren yayın (TV uygulamasındaki AddressReceiver): ekranı öne çekmez, görüntü
+    /// modunu değiştirmez. Parametre yoksa ya da kabukta güvenle gönderilemiyorsa nil (Windows'taki AddressCommand ile aynı).
+    static func addressCommand(_ launchParams: String?) -> String? {
+        guard let launchParams, !launchParams.isEmpty,
+              !launchParams.contains(where: { $0 == "'" || $0.isNewline || $0 == "\0" }) else { return nil }
+        return "shell:am broadcast -a \(packageName).action.ADDRESS -n \(packageName)/.AddressReceiver --es params '\(launchParams)'"
+    }
+
     /// Yalnız sunucu adresi gider; erişim anahtarı gitmez (Android TV kullanıcı onaylı eşleştirmeyle bağlanır).
     static func launchParams(server: String) -> String? {
         guard let data = try? JSONSerialization.data(withJSONObject: ["server": server], options: [.withoutEscapingSlashes]) else { return nil }
@@ -502,7 +510,12 @@ final class AndroidTvInstaller {
                                             onApprovalNeeded: { throw AndroidInstallFailure(error: .notApproved, detail: "onay gerekiyor") },
                                             connectTimeout: connectTimeout)
         defer { adb.close() }
-        if AndroidTVApp.isRunning((try? adb.run(AndroidTVApp.runningCommand)) ?? "") { return AndroidTVApp.alreadyRunning }
+        if AndroidTVApp.isRunning((try? adb.run(AndroidTVApp.runningCommand)) ?? "") {
+            // Çalışan uygulama telefona bağlı değil (bekçi yalnız o zaman açar): kayıtlı eski bir adrese bağlı kalmış olabilir.
+            // Adres ekranı öne çekmeden bildirilir (TV 0.9.63+; eski TV uygulaması yok sayar). Windows/Mac ve Android'le aynı.
+            if let address = Self.addressCommand(launchParams) { _ = try? adb.run(address) }
+            return AndroidTVApp.alreadyRunning
+        }
         return try adb.run(Self.startCommand(launchParams)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

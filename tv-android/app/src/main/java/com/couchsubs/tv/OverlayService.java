@@ -44,6 +44,15 @@ public class OverlayService extends Service implements TvPage.Host {
 
     /** Servis çalışıyor mu; MainActivity yeniden açıldığında katmanı kapatmak için bakar. */
     static volatile boolean running;
+    /** Çalışan katman (yoksa null): bilgisayarın/telefonun adres yayını ona iletilir (bkz. AddressReceiver). */
+    private static volatile OverlayService current;
+
+    /** Bilgisayar/telefon adresini bildirdi: katmandaki sayfa o adrese geçer; TV'nin girişi değişmez. */
+    static void deliver(String params) {
+        OverlayService service = current;
+        if (service == null) return;
+        service.ui.post(() -> { if (service.page != null) service.page.relaunch(params); });
+    }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private WindowManager windows;
@@ -111,6 +120,7 @@ public class OverlayService extends Service implements TvPage.Host {
                 return START_NOT_STICKY;
             }
             running = true;
+            current = this;
         } else if (params != null && !params.isEmpty()) {
             // CouchSubs yeni adresle yeniden başlatıldı; TV başka bir uygulamaya geçmiş olabilir, giriş yeniden açılır.
             tunedPort = 0;
@@ -297,6 +307,7 @@ public class OverlayService extends Service implements TvPage.Host {
     @Override
     public void onDestroy() {
         running = false;
+        if (current == this) current = null;
         ui.removeCallbacksAndMessages(null);
         if (page != null) {
             try { windows.removeView(page.webView); } catch (RuntimeException ignored) { /* pencere zaten yok */ }

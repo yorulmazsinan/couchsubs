@@ -267,8 +267,22 @@ public class AdbConnectionTests
         await using (var adb = await AdbConnection.ConnectAsync("127.0.0.1", tv.Port, key, () => { }))
             result = await AndroidTvInstaller.OpenOnAsync(adb, "{\"server\":\"http://192.168.1.4:8787\"}");
         Assert.Equal(AndroidTvInstaller.AlreadyRunning, result);
-        Assert.Equal([AndroidTvInstaller.RunningCommand], tv.OpenedServices);
+        // am start gitmez; çalışan uygulamaya adres ekranı öne çekmeden yayınla bildirilir (eski bir adrese bağlı kalmış
+        // olabilir: "TV'de bağlı, panelde sub 0").
+        Assert.Equal([AndroidTvInstaller.RunningCommand,
+            "shell:am broadcast -a com.couchsubs.tv.action.ADDRESS -n com.couchsubs.tv/.AddressReceiver --es params '{\"server\":\"http://192.168.1.4:8787\"}'"],
+            tv.OpenedServices);
+        Assert.DoesNotContain(tv.OpenedServices, service => service.StartsWith("shell:am start", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("{\"server\":\"x'; reboot; '\"}", null)]
+    [InlineData("{\"server\":\"http://10.0.0.2:8787\"}",
+        "shell:am broadcast -a com.couchsubs.tv.action.ADDRESS -n com.couchsubs.tv/.AddressReceiver --es params '{\"server\":\"http://10.0.0.2:8787\"}'")]
+    public void AddressCommandQuotesTheParams(string? launchParams, string? expected) =>
+        Assert.Equal(expected, AndroidTvInstaller.AddressCommand(launchParams));
 
     [Fact]
     public async Task OpenStartsTheAppWhenItIsClosed()
