@@ -1,4 +1,4 @@
-# GTA 6 havuz eklenmesi, düzeltilmesi ve kod düzeltmeleri (39.186 satır)
+# GTA 6 havuz eklenmesi, düzeltilmesi ve kod düzeltmeleri (43.130 satır)
 
 Dosya: `gta-tr-havuz-katki.json.gz` · biçim 2 · 43.130 satır + 17.286 cümle parçası + bulanık imza (kısa satırlar dahil).
 

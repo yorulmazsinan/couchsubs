@@ -118,6 +118,18 @@ class SubtitleServerTest {
         assertEquals(listOf(SubtitleEvent.Subtitle("Merhaba", 1000), SubtitleEvent.Cleared), events)
     }
 
+    /** Altyazının oyundaki yeri olayla da gider (Mac/Windows'taki pencere "Yazı kadar" kutuyu onu örtecek kadar büyütür). */
+    @Test
+    fun localListenerGetsTheSubtitleBox() {
+        val server = SubtitleServer(0)
+        server.sendsToTv = false
+        val events = mutableListOf<SubtitleEvent>()
+        server.onEvent = { events.add(it) }
+        val box = TextBox(0.25, 0.8, 0.75, 0.9)
+        server.sendSubtitle("Merhaba", 4000, box)
+        assertEquals(listOf(SubtitleEvent.Subtitle("Merhaba", 4000, box = box)), events)
+    }
+
     /** Ekranın büyük kısmını kaplayan opak kutu TV'ye gitmez (LG'de "siyah ekran"; Windows/Mac ile aynı kural). */
     @Test
     fun dropsBoxesCoveringMostOfTheScreen() {

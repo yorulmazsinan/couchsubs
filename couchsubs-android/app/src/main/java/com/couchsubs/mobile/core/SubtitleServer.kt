@@ -52,8 +52,12 @@ interface SubtitleSender {
 
 /** Sunucudan geçen ve telefon ekranındaki altyazı görünümünün de gösterdiği olay. */
 sealed class SubtitleEvent {
-    /** [replaces]: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer. */
-    data class Subtitle(val text: String, val durationMs: Int, val replaces: Boolean = false) : SubtitleEvent()
+    /**
+     * [replaces]: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer. [box]: oyundaki
+     * altyazının karedeki yeri (Mac ve Windows'taki altyazı penceresi "Yazı kadar" kutuyu onu örtecek kadar büyütür; telefon
+     * ekranı oyunun üstünde durmadığından kullanmaz, iPhone'daki gibi).
+     */
+    data class Subtitle(val text: String, val durationMs: Int, val replaces: Boolean = false, val box: TextBox? = null) : SubtitleEvent()
     data object Cleared : SubtitleEvent()
     /** Ek alanın (görev, telefon, bildirim) çevirisi; [text] boşsa o alanın kutusu kalkar. */
     /** [blocks]: alandaki ayrı yazı gruplarının çevirileri kendi yerleri ve (otomatik ekran yazısında) özgün stilleriyle. */
@@ -309,7 +313,7 @@ class SubtitleServer(
 
     override fun sendSubtitle(text: String, durationMs: Int, box: TextBox?, replaces: Boolean) {
         broadcast(subtitleFrame(text, durationMs, box, clock(), replaces = replaces, speakerColors = speakerColors), subtitle = true)
-        onEvent?.invoke(SubtitleEvent.Subtitle(text, durationMs, replaces))
+        onEvent?.invoke(SubtitleEvent.Subtitle(text, durationMs, replaces, box))
     }
 
     override fun clear() {

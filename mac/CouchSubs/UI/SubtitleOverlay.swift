@@ -230,6 +230,24 @@ final class SubtitleOverlayController {
     }
 }
 
+/// "Yazı kadar" örtü kutusu: en az `minimum` boyunda (oyundaki altyazı ve pay), ama genişliği pencereye sığar; taşan kutu
+/// pencerenin kenarında kesilirdi (Windows: SubtitleOverlayWindow'daki `room`). Yazı kutunun ortasında kalır. `minimum` nil ise
+/// kutu yazı kadardır.
+struct CoverFrame: Layout {
+    var minimum: CGSize?
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let child = subviews.first?.sizeThatFits(proposal) ?? .zero
+        guard let minimum else { return child }
+        let room = proposal.width.map { $0.isFinite ? $0 : minimum.width } ?? minimum.width
+        return CGSize(width: max(child.width, min(minimum.width, room)), height: max(child.height, minimum.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: proposal)
+    }
+}
+
 /// Yazı ölçeği ve ekran boyu (pencerenin bulunduğu ekrana göre).
 @MainActor
 final class OverlayGeometry: ObservableObject {
@@ -422,20 +440,18 @@ struct SubtitleOverlayView: View {
         // kısa kalınca oyunun altyazısı kutunun yanlarından taşıyordu; çeviri daha uzunsa kutu yine yazı kadar büyür.
         let covers = !band && current && !line.paragraphs && style.placement == .cover && model.overlayCover?.text == line.text
         let cover: CGSize? = covers ? OverlayCover.size(of: model.overlayCover?.box, screen: geometry.screen, scale: scale) : nil
-        let minWidth: CGFloat? = cover?.width
-        let minHeight: CGFloat? = cover?.height
         let shown: Double = line.fading ? 0 : opacity
         let colored = model.settings.speakerColors && !line.paragraphs
         let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor), book: model.speakerBook)
             .font(.system(size: size, weight: weight))
-        return text
+        let padded = text
             .multilineTextAlignment(alignment)
             .lineSpacing(size * 0.3)
             .shadow(color: .black, radius: shadowRadius, x: 0, y: shadowRadius)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, vertical)
             .padding(.horizontal, horizontal)
-            .frame(minWidth: minWidth, minHeight: minHeight)
+        return CoverFrame(minimum: cover) { padded }
             .frame(maxWidth: band ? .infinity : nil)
             .background(Color.black.opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
             .opacity(shown)
