@@ -687,11 +687,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var windowAppChanged = ReadsRemotePlayWindow && old.RemotePlayApp != value.RemotePlayApp;
             var captureWindowChanged = ReadsCaptureWindow && old.CaptureWindow != value.CaptureWindow;
             var xboxFrameRateChanged = IsXbox && !XboxReadsWindow && old.XboxLegacyFrameRate != value.XboxLegacyFrameRate;
-            var xboxAudioChanged = IsXbox && !XboxReadsWindow && old.XboxAudioOnComputer != value.XboxAudioOnComputer;
+            // Xbox sesi: oturum yeniden kurulmaz, yalnız yerel ses açılır/kısılır (pencereden okurken oturum sesi yoktur,
+            // çağrı bir şey yapmaz). Eskiden akış kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu bırakmadan gelen
+            // yeni istekte hizmetini başlatamıyor, bağlantı geri gelmiyordu (#871).
+            if (old.XboxAudioOnComputer != value.XboxAudioOnComputer) session?.SetPlayAudio(value.XboxAudioOnComputer);
             var sourceChanged = IsXbox ? old.XboxFrameSource != value.XboxFrameSource : old.FrameSource != value.FrameSource;
-            if (isRunning && (sourceChanged || windowAppChanged || captureWindowChanged || xboxFrameRateChanged || xboxAudioChanged))
+            if (isRunning && (sourceChanged || windowAppChanged || captureWindowChanged || xboxFrameRateChanged))
             {
-                // Görüntü kaynağı, Xbox kare aralığı ya da Xbox ses çıkışı değişti: akış yeni seçimle yeniden başlar.
+                // Görüntü kaynağı ya da Xbox kare aralığı değişti: akış yeni seçimle yeniden başlar.
                 // TV uygulaması kapatılmaz; kapanıp yeniden açılsa TV girişi gidip gelirdi.
                 StopForRestart();
                 _ = StartAsync().ContinueWith(task => RemotePlayLog.Note($"Çeviri yeniden başlatılamadı: {task.Exception?.GetBaseException().Message}"),

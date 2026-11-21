@@ -521,6 +521,15 @@ class AppSettings(context: Context) : AreaStore {
         return listener
     }
 
+    /** "Xbox sesini bu cihazda çal" değişince çağrılır; çeviri sürerken yalnız yerel ses açılır/kısılır (#871). */
+    fun onXboxAudioChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "xboxAudioOnDevice") action()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return listener
+    }
+
     /** Görünüm ayarı değişince (ölçek, renk) çağrılır; çeviri sürerken TV'ye yeni görünüm gider. */
     fun onStyleChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->

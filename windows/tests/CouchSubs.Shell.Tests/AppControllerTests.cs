@@ -54,6 +54,9 @@ internal sealed class FakeStream : IStreamSession
     public void Dispose() { }
     public void Emit(SessionState state) => StateChanged?.Invoke(state);
     public void Emit(Frame frame) => FrameReceived?.Invoke(frame);
+    /// <summary>Çeviri sürerken verilen ses ayarları (Xbox).</summary>
+    public List<bool> PlayAudioChanges { get; } = [];
+    public void SetPlayAudio(bool enabled) => PlayAudioChanges.Add(enabled);
 }
 
 internal sealed class FakeKeeper : IKeeper
@@ -661,6 +664,32 @@ public class AppControllerTests
             await controller.StartAsync();
             Assert.Equal([legacyFrameRate], xbox.LegacyFrameRateRequests);
             Assert.Equal(legacyFrameRate, savedSettings.Load().XboxLegacyFrameRate);
+        }
+        finally { controller.Dispose(); }
+    }
+
+    /// <summary>#871: ses ayarı çeviri sürerken değişince akış yeniden kurulmaz (Xbox yeni oturumda hizmetini başlatamıyordu).</summary>
+    [Fact]
+    public async Task XboxAudioSettingChangesSoundWithoutNewSession()
+    {
+        var store = new MemoryStore();
+        store.Save(StoreKeys.ConsoleKind, GameConsoleKind.Xbox);
+        store.Save(StoreKeys.XboxToken, "{}");
+        store.Save(StoreKeys.XboxConsole, new XboxConsole("F4", "Xbox", "XboxSeriesX", true));
+        var savedSettings = new MemorySettings();
+        savedSettings.Save(new UserSettings { Output = SubtitleOutput.Computer });
+        var xbox = new FakeXbox([]);
+        var controller = Make(new FakeServices { Xbox = xbox }, store, savedSettings);
+        try
+        {
+            await controller.StartAsync();
+            Assert.Single(xbox.Streams);
+            Assert.True(xbox.Streams[0].PlayAudio);
+            controller.Settings = controller.Settings with { XboxAudioOnComputer = false };
+            await Task.Delay(50);
+            Assert.Single(xbox.Streams);
+            Assert.True(xbox.Streams[0].Stream.Started);
+            Assert.Equal([false], xbox.Streams[0].Stream.PlayAudioChanges);
         }
         finally { controller.Dispose(); }
     }
@@ -2839,10 +2868,13 @@ internal sealed class FakeXbox(IReadOnlyList<XboxConsole> consoles) : IXboxServi
     public Task<XboxLoginChallenge> BeginLoginAsync() => throw new NotSupportedException();
     public Task<string> CompleteLoginAsync() => throw new NotSupportedException();
     public Task<IReadOnlyList<XboxConsole>> DiscoverAsync(string token) => Task.FromResult(consoles);
+    public List<(bool PlayAudio, FakeStream Stream)> Streams { get; } = [];
     public IStreamSession MakeStream(XboxConsole console, string token, bool legacyFrameRate, bool playAudio)
     {
         LegacyFrameRateRequests.Add(legacyFrameRate);
-        return new FakeStream();
+        var stream = new FakeStream();
+        Streams.Add((playAudio, stream));
+        return stream;
     }
 }
 

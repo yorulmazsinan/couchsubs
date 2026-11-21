@@ -46,6 +46,9 @@ interface FrameSource {
 
     /** Oturum yeniden denemeyi kendisi bıraktı (kullanıcı durdurmadı); ana ekranda "Yeniden bağlan" hemen görünür. */
     val hasGivenUp: Boolean get() = false
+
+    /** Xbox: "Xbox sesini bu cihazda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır (#871). */
+    fun setPlayAudio(enabled: Boolean) {}
 }
 
 /** PS5 oturumunun yerine kare kaynağı kuran üretici (yalnız geliştirme yapısında kullanılır). */

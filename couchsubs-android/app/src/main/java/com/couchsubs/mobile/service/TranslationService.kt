@@ -446,6 +446,7 @@ class TranslationService : Service() {
     private var begun = false
     @Volatile private var styleListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     @Volatile private var targetListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    @Volatile private var xboxAudioListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -664,6 +665,8 @@ class TranslationService : Service() {
         styleListener = settings.onStyleChanged { server?.sendStyle(settings.style) }
         // Çeviri sürerken hedef TV'ye (ya da telefona) çevrilirse altyazı hemen oraya gider (iPhone ile aynı).
         targetListener = settings.onTargetChanged { server?.sendsToTv = settings.target.showsOnTv }
+        // Xbox sesi çeviri sürerken hemen değişir; Xbox'a yeni oturum açılmaz (#871, iPhone/Mac/Windows ile aynı).
+        xboxAudioListener = settings.onXboxAudioChanged { session?.setPlayAudio(settings.xboxAudioOnDevice) }
         region = settings.region
         extraAreas = settings.extraAreas.watched(settings.areaPreset)
         fullScreenArea = settings.areaPreset == com.couchsubs.mobile.core.AreaPreset.FULL
@@ -1408,6 +1411,8 @@ class TranslationService : Service() {
         styleListener = null
         targetListener?.let(settings::removeListener)
         targetListener = null
+        xboxAudioListener?.let(settings::removeListener)
+        xboxAudioListener = null
         areasListener?.let(settings::removeListener)
         areasListener = null
         resetGamePhone()

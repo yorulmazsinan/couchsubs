@@ -211,7 +211,9 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         {
             await browser.CoreWebView2.Profile.SetPermissionStateAsync(
                 CoreWebView2PermissionKind.Autoplay, "https://couchsubs-xbox.local",
-                playAudio ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Default);
+                // Her zaman izinli: ses kapalı başlayıp çeviri sürerken açılınca da çalabilsin (susturma sayfadaki ses
+                // öğesinde, #871).
+                CoreWebView2PermissionState.Allow);
         }
         catch (Exception error)
         {
@@ -223,7 +225,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         {
             try
             {
-                if (result.IsSuccess) browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "start", legacyFrameRate, playAudio }));
+                if (result.IsSuccess) browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "start", legacyFrameRate, playAudio = playAudioNow }));
                 else browserEnded?.TrySetResult(true);
             }
             catch { browserEnded?.TrySetResult(true); }
@@ -552,6 +554,27 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     public void ReconnectNow()
     {
         if (!cancel.IsCancellationRequested) browserEnded?.TrySetResult(true);
+    }
+
+    /// <summary>Oyun sesi bu bilgisayarda çalınır; çeviri sürerken <see cref="SetPlayAudio"/> ile değişir.</summary>
+    private volatile bool playAudioNow = playAudio;
+
+    /// <summary>
+    /// "Xbox sesini bu bilgisayarda çal" çeviri sürerken değişti: oynatıcı sayfasındaki ses öğesi yalnız açılır ya da
+    /// kısılır, Xbox'a yeni oturum açılmaz. Eskiden ayar değişince akış kapatılıp hemen yeniden açılıyordu; Xbox eski
+    /// oturumu bırakmadan gelen yeni istekte uzaktan oynatma hizmetini başlatamıyor, bağlantı geri gelmiyordu (#871).
+    /// </summary>
+    public void SetPlayAudio(bool enabled)
+    {
+        if (playAudioNow == enabled) return;
+        playAudioNow = enabled;
+        Log(enabled ? "oyun sesi açıldı (ayar, oturum sürüyor)" : "oyun sesi kapatıldı (ayar, oturum sürüyor)");
+        var view = browser;
+        view?.Dispatcher.InvokeAsync(() =>
+        {
+            try { if (browser == view) view.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "audio", playAudio = enabled })); }
+            catch (Exception error) { Log($"ses ayarı oynatıcıya iletilemedi: {error.Message}"); }
+        });
     }
 
     public void Dispose()

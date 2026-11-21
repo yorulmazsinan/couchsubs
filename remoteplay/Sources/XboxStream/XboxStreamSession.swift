@@ -71,8 +71,10 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
     private var picture = XboxPictureWatch()
 
-    /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı).
-    private let playAudio: Bool
+    /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı). Çeviri sürerken `setPlayAudio` ile değişir.
+    private var playAudio: Bool
+    /// Xbox'tan gelen ses parçası; ayar değişince yalnız bu açılıp kapatılır.
+    private var audioTrack: RTCMediaStreamTrack?
 
     /// Ekran metinleri uygulamanın kataloğundan gelir. `describe`: yeniden denenirken gösterilen durum; `stopped`: yayın
     /// durunca (denemeler bitti ya da konsol reddetti) nedenin türüne göre gösterilen metin (ikinci değer kısaltılmış neden).
@@ -123,6 +125,21 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     }
 
     private func log(_ text: String) { RemotePlayLog.write("Xbox: \(text)") }
+
+    /// "Xbox sesini bu cihazda çal" çeviri sürerken değişti: yalnız yerel ses açılır ya da kısılır, Xbox'a yeni oturum
+    /// açılmaz. Eskiden ayar değişince yayın kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu kapatmadan gelen yeni
+    /// istekte uzaktan oynatma hizmetini başlatamıyor, bağlantı kopup geri gelmiyordu (#871).
+    public func setPlayAudio(_ enabled: Bool) {
+        let track = locked { () -> RTCMediaStreamTrack? in
+            guard playAudio != enabled else { return nil }
+            playAudio = enabled
+            return audioTrack
+        }
+        guard let track else { return }
+        track.isEnabled = enabled
+        Self.setAudio(enabled)
+        log(enabled ? "oyun sesi açıldı (ayar, oturum sürüyor)" : "oyun sesi kapatıldı (ayar, oturum sürüyor)")
+    }
 
     public func start() {
         guard task == nil else { return }
@@ -251,6 +268,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             pendingAcks = []
             watch = nil
             videoTrack = nil
+            audioTrack = nil
         }
         let (peer, channels, id) = locked { () -> (RTCPeerConnection?, [RTCDataChannel], String?) in
             let result = (self.peer, Array(self.channels.values), self.sessionId)
@@ -314,6 +332,10 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         videoInit.direction = .recvOnly
         let audio = connection.addTransceiver(of: .audio, init: audioInit)
         let video = connection.addTransceiver(of: .video, init: videoInit)
+        let playAudio = locked { () -> Bool in
+            audioTrack = audio?.receiver.track
+            return self.playAudio
+        }
         audio?.receiver.track?.isEnabled = playAudio
         Self.setAudio(playAudio)
         log(playAudio ? "oyun sesi bu cihazda çalınır" : "oyun sesi kapalı (ayar)")

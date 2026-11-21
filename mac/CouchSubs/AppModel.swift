@@ -150,6 +150,12 @@ protocol StreamControlling: AnyObject {
     func reconnectNow()
     /// Oturum yeniden denemeyi kendisi bıraktı (kullanıcı durdurmadı); `reconnectNow` artık bir şey yapmaz.
     var hasGivenUp: Bool { get }
+    /// Xbox: "Xbox sesini bu bilgisayarda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır (#871).
+    func setPlayAudio(_ enabled: Bool)
+}
+
+extension StreamControlling {
+    func setPlayAudio(_ enabled: Bool) {}
 }
 
 /// TV uygulamasını açık tutan görevli (gerçekte `TVKeeper`).
@@ -589,11 +595,14 @@ final class AppModel: ObservableObject {
             }
             if settings.appearance != oldValue.appearance { settings.appearance.apply() }
             let windowAppChanged = settings.frameSource == .remotePlayWindow && settings.remotePlayApp != oldValue.remotePlayApp
-            let xboxAudioChanged = isXbox && !readsXboxWindow && settings.xboxAudioOnDevice != oldValue.xboxAudioOnDevice
+            // Xbox sesi: oturum yeniden kurulmaz, yalnız yerel ses açılır/kısılır (pencereden okurken oturum sesi yoktur,
+            // çağrı bir şey yapmaz). Eskiden yayın kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu bırakmadan gelen
+            // yeni istekte hizmetini başlatamıyor, bağlantı geri gelmiyordu (#871).
+            if settings.xboxAudioOnDevice != oldValue.xboxAudioOnDevice { session?.setPlayAudio(settings.xboxAudioOnDevice) }
             let captureWindowChanged = readsCaptureWindow && settings.captureWindow != oldValue.captureWindow
             let sourceChanged = isXbox ? settings.xboxFrameSource != oldValue.xboxFrameSource : settings.frameSource != oldValue.frameSource
-            if sourceChanged || windowAppChanged || captureWindowChanged || xboxAudioChanged, isRunning {
-                // Görüntü kaynağı (ya da okunan Remote Play uygulaması, Xbox'ta ses çıkışı) değişti: çeviri yeniden başlar.
+            if sourceChanged || windowAppChanged || captureWindowChanged, isRunning {
+                // Görüntü kaynağı (ya da okunan Remote Play uygulaması) değişti: çeviri yeniden başlar.
                 // TV uygulaması kapatılmaz; kapanıp yeniden açılsa TV girişi gidip gelirdi.
                 stop(closingTVApp: false)
                 Task { await start() }

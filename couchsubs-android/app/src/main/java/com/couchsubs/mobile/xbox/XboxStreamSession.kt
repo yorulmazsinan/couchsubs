@@ -51,8 +51,28 @@ class XboxStreamSession(
      * sürerken sesi istemciye verip TV'yi susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir. Mikrofon her durumda
      * kapalıdır, yerel ses parçası eklenmez: Xbox'a ses gönderilmez.
      */
-    private val playAudio: Boolean = true,
+    playAudio: Boolean = true,
 ) : FrameSource {
+    /** Çeviri sürerken [setPlayAudio] ile değişir. */
+    @Volatile private var playAudio = playAudio
+    /** Xbox'tan gelen ses parçası ve ses birimi; ayar değişince yalnız bunlar açılıp kapatılır. */
+    @Volatile private var audioTrack: MediaStreamTrack? = null
+    @Volatile private var audioModule: JavaAudioDeviceModule? = null
+
+    /**
+     * "Xbox sesini bu cihazda çal" çeviri sürerken değişti: yalnız yerel ses açılır ya da kısılır, Xbox'a yeni oturum
+     * açılmaz. Eskiden (Mac ve Windows'ta) ayar değişince yayın kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu
+     * bırakmadan gelen yeni istekte uzaktan oynatma hizmetini başlatamıyor, bağlantı geri gelmiyordu (#871).
+     */
+    override fun setPlayAudio(enabled: Boolean) {
+        if (playAudio == enabled) return
+        playAudio = enabled
+        audioModule?.setSpeakerMute(!enabled)
+        val track = audioTrack ?: return
+        runCatching { track.setEnabled(enabled) }
+        log(if (enabled) "oyun sesi açıldı (ayar, oturum sürüyor)" else "oyun sesi kapatıldı (ayar, oturum sürüyor)")
+    }
+
     private companion object {
         const val TAG = "CouchSubsXbox"
         const val ICE_GATHER_MS = 5000L
@@ -276,6 +296,8 @@ class XboxStreamSession(
                 setSpeakerMute(!playAudio)
                 setMicrophoneMute(true)
             }
+        // Yerel nesne fabrikada yaşar (release yalnız bu başvuruyu bırakır); susturma çeviri sürerken buradan değişir.
+        audioModule = audio
         return PeerConnectionFactory.builder()
             .setAudioDeviceModule(audio)
             // EGL bağlamı yok: donanım çözücüsü kareyi bellekte verir, Y düzlemi doğrudan okunur.
@@ -383,7 +405,9 @@ class XboxStreamSession(
             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
         val video = connection.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY))
+        audioTrack = audio?.receiver?.track()
         audio?.receiver?.track()?.setEnabled(playAudio)
+        audioModule?.setSpeakerMute(!playAudio)
         log(if (playAudio) "oyun sesi bu telefonda çalınır" else "oyun sesi kapalı (ayar)")
         val track = (video?.receiver?.track() as? VideoTrack)
             ?: throw XboxException(XboxError.SERVICE, "Görüntü alıcısı kurulamadı")
@@ -595,10 +619,13 @@ class XboxStreamSession(
             channels.values.forEach { runCatching { it.unregisterObserver(); it.dispose() } }
             channels.clear()
         }
+        // Parça bağlantıyla birlikte kapanır; kapanmış parçaya dokunulmaz.
+        audioTrack = null
         peer?.let { runCatching { it.dispose() } }
         peer = null
         factory?.let { runCatching { it.dispose() } }
         factory = null
+        audioModule = null
         ended = null
     }
 

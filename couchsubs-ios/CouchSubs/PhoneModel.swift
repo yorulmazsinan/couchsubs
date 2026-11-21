@@ -67,6 +67,8 @@ final class PhoneModel: ObservableObject {
             if translationChanged { Task { await refreshTranslatorStatus() } }
             if settings.readsGamePhone != oldValue.readsGamePhone { configureGamePhone() }
             if settings.dubbing != oldValue.dubbing { dubbingSettingsChanged() }
+            // Xbox sesi çeviri sürerken hemen değişir; Xbox'a yeni oturum açılmaz (#871).
+            if settings.xboxAudioOnDevice != oldValue.xboxAudioOnDevice { session?.setPlayAudio(settings.xboxAudioOnDevice) }
             if settings.misreadWaitMs != oldValue.misreadWaitMs || settings.partialWaitMs != oldValue.partialWaitMs {
                 pipeline?.applyWaits(from: settings)
             }

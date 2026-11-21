@@ -204,6 +204,9 @@ final class FakeStream: StreamControlling {
     func reconnectNow() { reconnects += 1 }
     /// Oturum yeniden denemeyi bıraktı (PS5'te Uzaktan Oynatma çöktü, Xbox denemeleri bitti).
     var hasGivenUp = false
+    /// Çeviri sürerken verilen ses ayarları (Xbox).
+    var playAudioChanges: [Bool] = []
+    func setPlayAudio(_ enabled: Bool) { playAudioChanges.append(enabled) }
 }
 
 final class FakeKeeper: KeeperControlling {

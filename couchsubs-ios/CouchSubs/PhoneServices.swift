@@ -16,6 +16,12 @@ protocol StreamControlling: AnyObject {
     func reconnectNow()
     /// Oturum yeniden denemeyi kendisi bıraktı (kullanıcı durdurmadı); `reconnectNow` artık bir şey yapmaz.
     var hasGivenUp: Bool { get }
+    /// Xbox: "Xbox sesini bu cihazda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır, yeni oturum açılmaz (#871).
+    func setPlayAudio(_ enabled: Bool)
+}
+
+extension StreamControlling {
+    func setPlayAudio(_ enabled: Bool) {}
 }
 
 /// TV uygulamasını açık tutan görevli (gerçekte `TVKeeper`).

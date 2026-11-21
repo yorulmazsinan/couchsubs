@@ -206,6 +206,15 @@
       playAudio = message.playAudio !== false;
       start().catch(fail);
     }
+    else if (message.kind === 'audio') {
+      // Çeviri sürerken ses ayarı değişti: yalnız ses öğesi açılır/kısılır, oturum yeniden kurulmaz (#871).
+      playAudio = message.playAudio !== false;
+      const audio = player?._audioComponent?._audioRender;
+      if (audio) {
+        audio.muted = !playAudio;
+        if (playAudio && audio.paused) audio.play().catch(error => log('ses çalınamadı: ' + error));
+      }
+    }
     else if (message.kind === 'stop') stop();
   });
   window.addEventListener('error', event => log('hata: ' + (event.error?.stack || event.error || event.message)));

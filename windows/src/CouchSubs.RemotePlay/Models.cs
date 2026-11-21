@@ -166,4 +166,9 @@ public interface IStreamSession : IDisposable
     /// (ana ekrandaki "Yeniden bağlan"; Mac, iPhone ve Android ile aynı).
     /// </summary>
     bool HasGivenUp => false;
+    /// <summary>
+    /// Xbox: "Xbox sesini bu bilgisayarda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır, Xbox'a yeni oturum
+    /// açılmaz (#871; Mac, iPhone ve Android ile aynı).
+    /// </summary>
+    void SetPlayAudio(bool enabled) { }
 }

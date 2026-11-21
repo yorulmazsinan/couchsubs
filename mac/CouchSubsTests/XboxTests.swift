@@ -209,12 +209,15 @@ final class XboxModelTests: XCTestCase {
         await settle()
         XCTAssertEqual(model.ps5StatusText, String(localized: "Connected"))
 
-        // Ses ayarı değişince yayın yeni seçimle yeniden başlar.
+        // #871: ses ayarı değişince yayın yeniden kurulmaz (Xbox yeni oturumda hizmetini başlatamıyordu); yalnız yerel ses kısılır.
         model.settings.xboxAudioOnDevice = false
-        await settle()
-        for _ in 0..<40 where services.xboxStreams.count < 2 { await settle() }
-        XCTAssertEqual(services.xboxStreams.count, 2)
-        XCTAssertFalse(services.xboxStreams[0].stream.started)
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(services.xboxStreams.count, 1)
+        XCTAssertTrue(services.xboxStreams[0].stream.started)
+        XCTAssertEqual(services.xboxStreams[0].stream.playAudioChanges, [false])
+        model.stop()
+        // Sonraki başlatmada yeni ayarla açılır.
+        await model.start()
         XCTAssertFalse(services.xboxStreams[1].playAudio)
         model.stop()
     }
