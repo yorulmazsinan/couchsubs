@@ -39,8 +39,9 @@ extension AppModel {
         guard settings.output.showsOnComputer || streamWindowOpen else { return }
         let now = overlayClock()
         switch event {
-        case .subtitle(let text, let durationMs, let paragraphs, let replaces):
+        case .subtitle(let text, let durationMs, let paragraphs, let replaces, let box):
             overlayScreenUntil = 0
+            overlayCover = box.map { (text: text, box: $0) }
             overlayStack.stackPrevious = settings.style.stackPrevious
             overlayStack.show(text, durationMs: durationMs, paragraphs: paragraphs, replaces: replaces, now: now)
         // "Ekranı çevir": çeviriler satır satır gösterilir. Hemen ardından gelen "temizle" ("Ekran çevriliyor…" yazısı

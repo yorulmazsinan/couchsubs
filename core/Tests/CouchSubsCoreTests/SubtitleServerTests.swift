@@ -397,6 +397,16 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertEqual(received.all, [.subtitle(text: "Merhaba", durationMs: 4000, paragraphs: false), .clear])
     }
 
+    /// Altyazının oyundaki yeri pencereye de gider: "Yazı kadar" kutu oyunun altyazısını örtecek kadar büyür.
+    func testLocalListenerGetsTheSubtitleBox() {
+        let server = SubtitleServer(port: 0)
+        let received = LockedEvents()
+        server.onEvent = { received.append($0) }
+        let box = TextBox(left: 0.25, top: 0.8, right: 0.75, bottom: 0.9)
+        server.sendSubtitle("Merhaba", durationMs: 4000, box: box)
+        XCTAssertEqual(received.all, [.subtitle(text: "Merhaba", durationMs: 4000, paragraphs: false, box: box)])
+    }
+
     /// "Ekranı çevir" sonuçları da pencereye gider: altyazı yalnız bilgisayardayken (TV yok) hiçbir yerde görünmüyordu.
     func testLocalListenerGetsScreenTranslations() {
         let server = SubtitleServer(port: 0)

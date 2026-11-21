@@ -47,6 +47,24 @@ public static class OverlayPlacement
     public static double HeightScaleFor(double height, double baseHeight) =>
         double.IsFinite(height) && double.IsFinite(baseHeight) && baseHeight > 0 ? ClampHeightScale(height / baseHeight) : 1;
 
+    /// <summary>"Yazı kadar" kutunun oyundaki altyazıyı örterken her yana bıraktığı pay (1080 satırlık ekranda piksel).</summary>
+    public const double CoverMargin = 8;
+
+    /// <summary>
+    /// "Yazı kadar" zeminde kutunun oyundaki altyazıyı örtmesi için en küçük dış boyu: altyazının karedeki kutusu ekran
+    /// boyuyla çarpılır (oyun görüntüsü ekranı kaplıyor sayılır), her yana <see cref="CoverMargin"/> eklenir. Kutu yoksa,
+    /// boşsa ya da altyazı olamayacak kadar yüksekse (karenin yarısından fazla) null; kutu eskisi gibi yazı kadar kalır.
+    /// </summary>
+    public static (double Width, double Height)? CoverSize(CouchSubs.Core.TextBox? box, double screenWidth, double screenHeight, double scale)
+    {
+        if (box is not { } b || !double.IsFinite(scale) || scale <= 0) return null;
+        var width = (b.Right - b.Left) * screenWidth;
+        var height = (b.Bottom - b.Top) * screenHeight;
+        if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0 || b.Bottom - b.Top > 0.5) return null;
+        var margin = 2 * CoverMargin * scale;
+        return (width + margin, height + margin);
+    }
+
     /// <summary>
     /// Kayıtlı yer ya da çalışma alanının altında ortada, %70 genişlikte. Kayıt bir ekranın adını taşıyorsa ve o ekran
     /// bağlıysa yer o ekrana göre hesaplanır (ekranların dizilişi değişse de pencere aynı ekranda kalır); ekran artık

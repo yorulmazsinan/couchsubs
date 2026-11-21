@@ -93,7 +93,8 @@ public enum SubtitleEventKind { Subtitle, Clear, Screen, ScreenClear, Region, Re
 /// <summary>Sunucudan geçen ve bilgisayar ekranındaki altyazı penceresinin de gösterdiği olay.</summary>
 /// <param name="Replaces">Satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.</param>
 /// <param name="Id">Ek alan olayında alanın kimliği (<see cref="SubtitleEventKind.Region"/>; metin boşsa kutu kalkar).</param>
-/// <param name="Box">Ek alan olayında yazının karedeki yeri.</param>
+/// <param name="Box">Ek alan olayında yazının karedeki yeri; altyazı olayında oyundaki altyazının karedeki yeri (bilgisayardaki
+/// pencere "Yazı kadar" kutuyu onu örtecek kadar büyütür).</param>
 /// <param name="Blocks">Ek alan olayında ayrı yazı gruplarının çevirileri (otomatik ekran yazısında stilleriyle).</param>
 public sealed record SubtitleEvent(SubtitleEventKind Kind, string Text = "", int DurationMs = 0, bool Paragraphs = false, bool Replaces = false,
                                    string? Id = null, TextBox? Box = null, IReadOnlyList<ScreenTranslation.Item>? Blocks = null)
@@ -306,7 +307,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (SpeakerColors && Core.SpeakerColors.Speakers(text) is { Count: > 0 } speakers)
             json["speakers"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = SpeakerBook.Color(name)! }).ToList();
         Broadcast(Frame("subtitle", json), subtitle: true);
-        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Subtitle, text, durationMs, paragraphs, replaces));
+        EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Subtitle, text, durationMs, paragraphs, replaces, Box: box));
     }
 
     /// <summary>Dört basamağa yuvarlanır (decimal: JSON'da 0.8 olarak yazılsın).</summary>

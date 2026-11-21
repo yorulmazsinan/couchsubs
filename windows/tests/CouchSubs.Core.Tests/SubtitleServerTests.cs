@@ -349,6 +349,18 @@ public class SubtitleServerTests
         Assert.Equal([new SubtitleEvent(SubtitleEventKind.Subtitle, "Merhaba", 4000, true), SubtitleEvent.Cleared], received);
     }
 
+    /// <summary>Altyazının oyundaki yeri bilgisayardaki pencereye de gider: "Yazı kadar" kutu oyunun altyazısını örtecek kadar büyür.</summary>
+    [Fact]
+    public void LocalListenerGetsTheSubtitleBox()
+    {
+        using var server = new SubtitleServer(0);
+        var received = new List<SubtitleEvent>();
+        server.EventSent += received.Add;
+        var box = new TextBox(0.25, 0.8, 0.75, 0.9);
+        server.SendSubtitle("Merhaba", 4000, box);
+        Assert.Equal(box, Assert.Single(received).Box);
+    }
+
     /// <summary>"Ekranı çevir" sonuçları da pencereye gider: altyazı yalnız bilgisayardayken (TV yok) hiçbir yerde görünmüyordu.</summary>
     [Fact]
     public void LocalListenerGetsScreenTranslations()

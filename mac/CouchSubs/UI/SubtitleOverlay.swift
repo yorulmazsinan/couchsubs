@@ -158,6 +158,8 @@ final class SubtitleOverlayController {
         let screen = panel.screen ?? NSScreen.main
         let scale = (screen?.frame.height ?? 1080) / 1080
         if geometry.scale != scale { geometry.scale = scale }
+        let size = screen?.frame.size ?? CGSize(width: 1920, height: 1080)
+        if geometry.screen != size { geometry.screen = size }
         let height = (baseHeight(panel, fontSize: fontSize) * CGFloat(heightScale)).rounded()
         var frame = panel.frame
         guard abs(frame.height - height) > 0.5 else { return }
@@ -228,10 +230,12 @@ final class SubtitleOverlayController {
     }
 }
 
-/// Yazı ölçeği (pencerenin bulunduğu ekrana göre).
+/// Yazı ölçeği ve ekran boyu (pencerenin bulunduğu ekrana göre).
 @MainActor
 final class OverlayGeometry: ObservableObject {
     @Published var scale: CGFloat = 1
+    /// Pencerenin bulunduğu ekranın boyu (nokta): oyundaki altyazının ekrandaki boyu buna göre hesaplanır.
+    @Published var screen = CGSize(width: 1920, height: 1080)
 }
 
 struct OverlayActions {
@@ -414,6 +418,12 @@ struct SubtitleOverlayView: View {
         // Bant: kutu pencerenin tüm genişliğini kaplar, oyundaki İngilizce yazıyı yan yana da gizler.
         let band = style.backgroundShape == .band
         let corner: CGFloat = band ? 0 : 10 * scale
+        // "Yazı kadar" ve örtü: güncel satırın kutusu en az oyundaki altyazının ekrandaki kutusu kadar (her yana pay). Çeviri
+        // kısa kalınca oyunun altyazısı kutunun yanlarından taşıyordu; çeviri daha uzunsa kutu yine yazı kadar büyür.
+        let covers = !band && current && !line.paragraphs && style.placement == .cover && model.overlayCover?.text == line.text
+        let cover: CGSize? = covers ? OverlayCover.size(of: model.overlayCover?.box, screen: geometry.screen, scale: scale) : nil
+        let minWidth: CGFloat? = cover?.width
+        let minHeight: CGFloat? = cover?.height
         let shown: Double = line.fading ? 0 : opacity
         let colored = model.settings.speakerColors && !line.paragraphs
         let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor), book: model.speakerBook)
@@ -425,6 +435,7 @@ struct SubtitleOverlayView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, vertical)
             .padding(.horizontal, horizontal)
+            .frame(minWidth: minWidth, minHeight: minHeight)
             .frame(maxWidth: band ? .infinity : nil)
             .background(Color.black.opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
             .opacity(shown)

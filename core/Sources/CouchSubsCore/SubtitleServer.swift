@@ -96,8 +96,9 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
 
 /// Sunucudan geçen ve bilgisayar ekranındaki altyazı penceresinin de gösterdiği olay.
 public enum SubtitleEvent: Equatable, Sendable {
-    /// `replaces`: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer.
-    case subtitle(text: String, durationMs: Int, paragraphs: Bool, replaces: Bool = false)
+    /// `replaces`: satır öncekinin uzamış ya da düzelmiş okumasıdır; öncekinin üstüne yığılmaz, yerine geçer. `box`: oyundaki
+    /// altyazının karedeki yeri; pencere "Yazı kadar" kutuyu onu örtecek kadar büyütür (bkz. `OverlayCover`).
+    case subtitle(text: String, durationMs: Int, paragraphs: Bool, replaces: Bool = false, box: TextBox? = nil)
     case clear
     /// "Ekranı çevir" sonuçları: grupların çevirisi, yukarıdan aşağı, her biri ayrı satırda; `items` her birini yeri ve
     /// özgün stiliyle taşır (yayın penceresi onları kendi yerinde çizer, telefon kartı dahil).
@@ -359,7 +360,7 @@ public final class SubtitleServer: @unchecked Sendable {
             if !speakers.isEmpty { json["speakers"] = speakers.map { ["name": $0.name, "color": $0.color] } }
         }
         broadcast(event: "subtitle", json: json)
-        onEvent?(.subtitle(text: text, durationMs: durationMs, paragraphs: false, replaces: replaces))
+        onEvent?(.subtitle(text: text, durationMs: durationMs, paragraphs: false, replaces: replaces, box: box))
     }
 
     /// Dört basamağa yuvarlanır; Decimal, JSON'da 0.80000000000000004 yerine 0.8 yazılsın diye.

@@ -46,6 +46,8 @@ public sealed partial class SubtitleOverlayWindow : Window
     private readonly DesktopRegionsPanel regionsPanel;
     /// <summary>Görünen satırların kutuları; solan satırın animasyonu yeniden çizimde baştan başlamasın.</summary>
     private readonly Dictionary<int, Border> boxes = [];
+    /// <summary>Son altyazının metni ve oyundaki yeri: "Yazı kadar" zeminde o satırın kutusu oyunun altyazısını örter.</summary>
+    private (string Text, CouchSubs.Core.TextBox Box)? subtitleBox;
     private readonly Grid adjustLayer = new() { Visibility = Visibility.Collapsed };
     /// <summary>Başka bir tam ekran ya da üstte duran pencere öne gelince altyazıyı yeniden en üste koyar.</summary>
     private readonly TopmostKeeper topmost;
@@ -154,6 +156,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         {
             case SubtitleEventKind.Subtitle:
                 screenUntil = 0;
+                subtitleBox = e.Box is { } subtitleArea ? (e.Text, subtitleArea) : null;
                 stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
                 break;
             // "Ekranı çevir": çeviriler satır satır gösterilir. Hemen ardından gelen "temizle" ("Ekran çevriliyor…"
@@ -312,15 +315,34 @@ public sealed partial class SubtitleOverlayWindow : Window
         };
         // Konuşana göre renk: "Ad: …" satırı o konuşanın renginde (ayar kapalıysa düz metin).
         SpeakerText.Fill(text, wrapped.Text, line.Text, controller.Settings.SpeakerColors, controller.SpeakerBook);
+        var padding = current ? new Thickness(26 * scale, 10 * scale, 26 * scale, 10 * scale) : new Thickness(20 * scale, 6 * scale, 20 * scale, 6 * scale);
+        // "Yazı kadar" ve örtü: güncel satırın kutusu en az oyundaki altyazının ekrandaki kutusu kadar (her yana pay). Çeviri kısa
+        // kalınca oyunun altyazısı kutunun yanlarından taşıyordu; çeviri daha uzunsa kutu yine yazı kadar büyür (TV'deki örtü gibi).
+        UIElement content = text;
+        if (!band && current && !line.Paragraphs && style.Placement == SubtitlePlacement.Cover
+            && subtitleBox is { } cover && cover.Text == line.Text
+            && OverlayPlacement.CoverSize(cover.Box, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight, scale) is { } area)
+        {
+            // Kutu pencereye sığar (yanlarda 24 birim boşluk ve kutunun dolgusu); taşan kutuyu WPF sola yaslayıp keserdi.
+            var room = double.IsFinite(Width) ? Math.Max(0, Width - 2 * 24 * scale - padding.Left - padding.Right) : double.PositiveInfinity;
+            text.HorizontalAlignment = HorizontalAlignment.Center;
+            text.VerticalAlignment = VerticalAlignment.Center;
+            content = new Grid
+            {
+                MinWidth = Math.Min(Math.Max(0, area.Width - padding.Left - padding.Right), room),
+                MinHeight = Math.Max(0, area.Height - padding.Top - padding.Bottom),
+                Children = { text },
+            };
+        }
         return new Border
         {
             Background = new SolidColorBrush(Color.FromArgb((byte)Math.Round(alpha * 255), 0, 0, 0)),
             CornerRadius = new CornerRadius(band ? 0 : 10 * scale),
-            Padding = current ? new Thickness(26 * scale, 10 * scale, 26 * scale, 10 * scale) : new Thickness(20 * scale, 6 * scale, 20 * scale, 6 * scale),
+            Padding = padding,
             Margin = new Thickness(band ? -24 * scale : 0, 14 * scale, band ? -24 * scale : 0, 0),
             HorizontalAlignment = band ? HorizontalAlignment.Stretch : HorizontalAlignment.Center,
             Opacity = line.Role switch { SubtitleStack.Role.Current => 1, SubtitleStack.Role.Previous => 0.6, _ => 0.45 },
-            Child = text,
+            Child = content,
         };
     }
 

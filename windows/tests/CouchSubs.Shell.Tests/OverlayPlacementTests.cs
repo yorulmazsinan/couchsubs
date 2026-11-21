@@ -17,6 +17,32 @@ public class OverlayPlacementTests
         Assert.Equal(1032 - 1032 * 0.04 - Height, placed.Top, 6);
     }
 
+    /// <summary>"Yazı kadar" kutu oyundaki altyazının ekrandaki boyu kadar, her yana 8 piksel (1080p'ye göre) pay.</summary>
+    [Fact]
+    public void CoverSizeIsTheSubtitleOnScreenPlusMargin()
+    {
+        var box = new CouchSubs.Core.TextBox(0.25, 0.75, 0.75, 0.875);
+        var full = OverlayPlacement.CoverSize(box, 1920, 1080, 1);
+        Assert.NotNull(full);
+        Assert.Equal(976.0, full.Value.Width);
+        Assert.Equal(151.0, full.Value.Height);
+        // 4K'da (ölçek 2) pay da iki katı.
+        var large = OverlayPlacement.CoverSize(box, 3840, 2160, 2);
+        Assert.NotNull(large);
+        Assert.Equal(1952.0, large.Value.Width);
+        Assert.Equal(302.0, large.Value.Height);
+    }
+
+    /// <summary>Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.</summary>
+    [Theory]
+    [InlineData(0.4, 0.8, 0.4, 0.9)]
+    [InlineData(0.2, 0.1, 0.8, 0.9)]
+    public void CoverSizeIgnoresBoxesThatAreNotASubtitle(double left, double top, double right, double bottom)
+    {
+        Assert.Null(OverlayPlacement.CoverSize(new CouchSubs.Core.TextBox(left, top, right, bottom), 1920, 1080, 1));
+        Assert.Null(OverlayPlacement.CoverSize(null, 1920, 1080, 1));
+    }
+
     [Fact]
     public void NothingSavedOpensAtBottomCenter() => AssertDefault(OverlayPlacement.Place(null, Screen, Work, Height));
 

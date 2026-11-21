@@ -798,6 +798,8 @@ final class AppModel: ObservableObject {
         overlayAdjusting = false
     }
     var overlayStack = SubtitleStack()
+    /// Son altyazının metni ve oyundaki yeri: "Yazı kadar" zeminde o satırın kutusu oyunun altyazısını örter (bkz. OverlayCover).
+    var overlayCover: (text: String, box: TextBox)?
     /// "Yayın penceresi" açık: altyazı bilgisayar ekranında gösterilmese de satırlar yığına gelir (bkz. StreamWindow.swift).
     @Published var streamWindowOpen = false {
         didSet {
