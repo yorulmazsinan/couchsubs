@@ -189,39 +189,41 @@ fun GameProfilesTile() {
         TileLabel(stringResource(R.string.game_profiles_title))
         Text(stringResource(R.string.game_profiles_body), style = Tokens.Type.caption, color = Tokens.Color.secondary)
         for (profile in profiles) key(profile.key) {
+            // Düzenlenen profilin yerinde düzenleyici durur. "return@key" D8'de APK derlemesini bozuyordu
+            // (NON_LOCAL_RETURN; android-app iş akışı #798'den beri kırmızıydı).
             if (editing?.key == profile.key) {
                 Editor()
-                return@key
-            }
-            var menu by remember { mutableStateOf(false) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(profile.game, style = Tokens.Type.body, color = Tokens.Color.text, maxLines = 1)
-                    if (profile.key == active) {
-                        Text(stringResource(R.string.game_profiles_in_use), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+            } else {
+                var menu by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(profile.game, style = Tokens.Type.body, color = Tokens.Color.text, maxLines = 1)
+                        if (profile.key == active) {
+                            Text(stringResource(R.string.game_profiles_in_use), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+                        }
                     }
-                }
-                if (profile.key != active) {
-                    GhostButton(stringResource(R.string.area_profile_use)) {
-                        areas.use(profile.key, settings)
-                        edits++
+                    if (profile.key != active) {
+                        GhostButton(stringResource(R.string.area_profile_use)) {
+                            areas.use(profile.key, settings)
+                            edits++
+                        }
                     }
-                }
-                Box {
-                    GhostButton(stringResource(R.string.game_profiles_more), color = Tokens.Color.secondary) { menu = true }
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem({ Text(stringResource(R.string.game_profiles_rename)) }, {
-                            menu = false
-                            begin(ProfileEditing(profile.key, false), profile.game)
-                        })
-                        DropdownMenuItem({ Text(stringResource(R.string.game_profiles_duplicate)) }, {
-                            menu = false
-                            begin(ProfileEditing(profile.key, true), "")
-                        })
-                        DropdownMenuItem({ Text(stringResource(R.string.area_profile_delete), color = Tokens.Color.danger) }, {
-                            menu = false
-                            deleting = profile
-                        })
+                    Box {
+                        GhostButton(stringResource(R.string.game_profiles_more), color = Tokens.Color.secondary) { menu = true }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem({ Text(stringResource(R.string.game_profiles_rename)) }, {
+                                menu = false
+                                begin(ProfileEditing(profile.key, false), profile.game)
+                            })
+                            DropdownMenuItem({ Text(stringResource(R.string.game_profiles_duplicate)) }, {
+                                menu = false
+                                begin(ProfileEditing(profile.key, true), "")
+                            })
+                            DropdownMenuItem({ Text(stringResource(R.string.area_profile_delete), color = Tokens.Color.danger) }, {
+                                menu = false
+                                deleting = profile
+                            })
+                        }
                     }
                 }
             }
