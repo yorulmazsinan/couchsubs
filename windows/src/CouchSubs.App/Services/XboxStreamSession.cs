@@ -36,6 +36,13 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private long connectionFrames;
     private long firstFrameAt;
     private CancellationTokenSource? keepaliveCancel;
+    /// <summary>
+    /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (bkz. <see cref="XboxPictureWatch"/>). Oynatıcı saniyede
+    /// bir video öğesinin yeni kare sayısını (requestVideoFrameCallback) bildirir; donmuş video öğesi kare sayılmaz.
+    /// </summary>
+    private XboxPictureWatch? pictureWatch;
+    private DispatcherTimer? pictureTimer;
+    private long pictureCallbacks;
 
     public event Action<Frame>? FrameReceived;
     public event Action<SessionState>? StateChanged;
@@ -214,7 +221,13 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     break;
                 case "state":
                     var state = message.GetProperty("state").GetString();
-                    if (state == "connected")
+                    pictureWatch?.IceChanged(XboxPictureWatch.IceFrom(state), Environment.TickCount64);
+                    if (state == "connected" && connectedAt != 0)
+                    {
+                        // Takılan bağlantı toparlandı: ilk kare saati ve canlı tutma baştan başlatılmaz.
+                        Log("WebRTC yeniden bağlandı");
+                    }
+                    else if (state == "connected")
                     {
                         Log("WebRTC bağlandı");
                         Interlocked.CompareExchange(ref streamingSince, Environment.TickCount64, 0);
@@ -251,6 +264,13 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                             $"ilk kare {message.GetProperty("width").GetInt32()}x{message.GetProperty("height").GetInt32()}, bağlantıdan {(Environment.TickCount64 - connectedAt) / 1000.0:0.0} sn sonra, keyframe isteği {seen.KeyframesRequested}"));
                     }
                     StopWatch();
+                    StartPictureWatch();
+                    break;
+                case "picture":
+                    // Oynatıcının saniyelik bildirimi: video öğesine yeni kare geldiyse görüntü akıyor.
+                    var callbacks = message.GetProperty("callbacks").GetInt64();
+                    if (callbacks > pictureCallbacks) pictureWatch?.FrameArrived(Environment.TickCount64);
+                    pictureCallbacks = callbacks;
                     break;
                 case "stats":
                     // İlk kare beklenirken saat sorar; görüntü geldikten sonra bağlantı takılınca oynatıcı kendisi gönderir.
@@ -324,6 +344,48 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     {
         watchTimer?.Stop();
         watchTimer = null;
+    }
+
+    /// <summary>
+    /// İlk kareden sonra saniyede bir: görüntü kesildiyse ana ekranda uyarı (TV'deki altyazı temizlenir), uzun sürdüyse
+    /// oynatıcı kapatılır ve oturum yeniden denenir. Arayüz iş parçacığında çalışır.
+    /// </summary>
+    private void StartPictureWatch()
+    {
+        StopPictureWatch();
+        var current = pictureWatch = new XboxPictureWatch();
+        current.FrameArrived(Environment.TickCount64);
+        var ended = browserEnded;
+        pictureTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        pictureTimer.Tick += (_, _) =>
+        {
+            if (pictureWatch != current || browserEnded != ended) { StopPictureWatch(); return; }
+            var verdict = current.Tick(Environment.TickCount64);
+            switch (verdict.Kind)
+            {
+                case XboxPictureVerdictKind.Warn:
+                    Log($"görüntü kesildi ({XboxPictureWatch.WarnAfterMs / 1000} sn kare yok ya da bağlantı takıldı); toparlanması bekleniyor");
+                    StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Other, Localizer.Current["No picture from the Xbox. Reconnecting…"]));
+                    break;
+                case XboxPictureVerdictKind.Recovered:
+                    Log("görüntü yeniden geliyor");
+                    StateChanged?.Invoke(SessionState.Streaming);
+                    break;
+                case XboxPictureVerdictKind.Stalled:
+                    Log($"{verdict.Reason}; oturum yeniden kuruluyor");
+                    endReason ??= Localizer.Current["No picture from the Xbox. Reconnecting…"];
+                    StopPictureWatch();
+                    ended?.TrySetResult(true);
+                    break;
+            }
+        };
+        pictureTimer.Start();
+    }
+
+    private void StopPictureWatch()
+    {
+        pictureTimer?.Stop();
+        pictureTimer = null;
     }
 
     /// <summary>
@@ -426,6 +488,9 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         connectedAt = 0;
         StopWatch();
         watch = null;
+        StopPictureWatch();
+        pictureWatch = null;
+        pictureCallbacks = 0;
         keyframeReady = false;
         browserEnded?.TrySetResult(true);
         browserEnded = null;

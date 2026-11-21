@@ -18,6 +18,8 @@ public enum XboxErrorKind: String, Sendable {
     case timeout
     case network
     case service
+    /// Görüntü geldikten sonra kesildi: bağlantı açık görünse de oturum yeniden kurulur (bkz. `XboxPictureWatch`).
+    case noPicture
 }
 
 public struct XboxError: Error, Sendable {

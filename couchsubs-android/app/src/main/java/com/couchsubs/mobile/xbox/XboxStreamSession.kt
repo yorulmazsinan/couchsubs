@@ -2,7 +2,8 @@
 // Xbox ev yayını (Beta): Windows'taki XboxStreamSession + player.html'in telefondaki karşılığı. Görüntü yerel
 // libwebrtc'yle alınır; kareler OCR hattına doğrudan parlaklık (Y) düzlemi olarak gider (bkz. docs/superpowers/specs/
 // 2026-11-16-telefon-xbox-design.md). Oyun sesi ayar açıksa telefonda çalınır (bkz. playAudio); mikrofon açılmaz,
-// kumanda girdisi gönderilmez.
+// kumanda girdisi gönderilmez. İlk kareden sonra görüntü kesilirse (ICE DISCONNECTED'da takılı kalsa da) uyarı
+// gösterilir ve oturum yeniden kurulur (XboxPictureWatch.kt).
 package com.couchsubs.mobile.xbox
 
 import android.content.Context
@@ -274,10 +275,13 @@ class XboxStreamSession(
     private fun negotiate(id: String) {
         val negotiatedFrames = frameCounter.beginSession()
         frameSession = negotiatedFrames
+        // İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
+        val watchPicture = XboxPictureWatch()
         val sink = VideoSink { frame ->
             if (stopped.get()) return@VideoSink
             val sessionFrames = frameCounter.recordFrame(negotiatedFrames) ?: return@VideoSink
             val now = SystemClock.elapsedRealtime()
+            watchPicture.frameArrived(now)
             if (sessionFrames == 1L) {
                 firstFrameAt = now
                 val waited = watch?.let { current ->
@@ -319,7 +323,15 @@ class XboxStreamSession(
         )).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
         val connection = pcFactory.createPeerConnection(config, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) { log("ICE: $state") }
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
+                log("ICE: $state")
+                watchPicture.iceChanged(when (state) {
+                    PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> XboxPictureWatch.Ice.CONNECTED
+                    PeerConnection.IceConnectionState.DISCONNECTED -> XboxPictureWatch.Ice.DISCONNECTED
+                    PeerConnection.IceConnectionState.FAILED -> XboxPictureWatch.Ice.FAILED
+                    else -> XboxPictureWatch.Ice.OTHER
+                }, SystemClock.elapsedRealtime())
+            }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
                 if (state == PeerConnection.IceGatheringState.COMPLETE) gathered.countDown()
@@ -387,6 +399,30 @@ class XboxStreamSession(
             if (frameCounter.framesInSession(negotiatedFrames) == 0L && SystemClock.elapsedRealtime() - negotiatedAt > FIRST_FRAME_MS) {
                 endReason = "Xbox'tan ${FIRST_FRAME_MS / 1000} sn içinde görüntü gelmedi"
                 throw XboxException(XboxError.CONSOLE_UNAVAILABLE, endReason!!)
+            }
+            checkPicture(watchPicture)
+        }
+    }
+
+    /**
+     * Saniyede bir: ilk kareden sonra görüntü kesildiyse ana ekranda uyarı, uzun sürdüyse oturum kapatılır ve yeniden
+     * denenir (bkz. XboxPictureWatch).
+     */
+    private fun checkPicture(watch: XboxPictureWatch) {
+        when (val verdict = watch.tick(SystemClock.elapsedRealtime())) {
+            XboxPictureVerdict.Fine -> {}
+            XboxPictureVerdict.Warn -> {
+                log("görüntü kesildi (${XboxPictureWatch.WARN_AFTER_MS / 1000} sn kare yok ya da ICE takıldı); toparlanması bekleniyor")
+                onState(SessionState.Disconnected(DisconnectKind.OTHER, describe(XboxError.NO_PICTURE)))
+            }
+            XboxPictureVerdict.Recovered -> {
+                log("görüntü yeniden geliyor")
+                onState(SessionState.Streaming)
+            }
+            is XboxPictureVerdict.Stalled -> {
+                log("${verdict.reason}; oturum yeniden kuruluyor")
+                endReason = verdict.reason
+                throw XboxException(XboxError.NO_PICTURE, verdict.reason)
             }
         }
     }

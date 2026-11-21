@@ -41,6 +41,7 @@ enum XboxText {
         case .timeout: return String(localized: "Your Xbox didn't answer. Retrying…")
         case .network: return String(localized: "The Xbox connection dropped. Reconnecting…")
         case .service: return String(localized: "The Xbox service sent an unexpected reply. Retrying…")
+        case .noPicture: return String(localized: "No picture from the Xbox. Reconnecting…")
         }
     }
 }

@@ -7,7 +7,8 @@
 // başlatılmaz, Mac'te ses parçası kapatılır. Kumanda girdisi gönderilmez.
 // Sağlamlık kuralları Windows (#538, #611) ve Android ile aynı (CouchSubsCore XboxSessionHealth): ilk kare gelene kadar
 // anahtar kare istenir ve tanı satırı yazılır; tek başarısız canlı tutma isteği yayını bitirmez, ardışık üçü bitirir;
-// bağlantı bitince özet satırı yazılır; yayın durunca metin nedene göre seçilir.
+// bağlantı bitince özet satırı yazılır; yayın durunca metin nedene göre seçilir. İlk kareden sonra görüntü kesilirse
+// (ICE `disconnected`da takılı kalsa da) uyarı gösterilir ve oturum yeniden kurulur (XboxPictureWatch).
 
 #if os(iOS)
 import AVFoundation
@@ -66,6 +67,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     private var watchTask: Task<Void, Never>?
     private var connectedAt: TimeInterval = 0
     private var videoTrack: RTCVideoTrack?
+    /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
+    private var picture = XboxPictureWatch()
 
     /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı).
     private let playAudio: Bool
@@ -263,6 +266,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             clockStart = ProcessInfo.processInfo.systemUptime
             watch = nil
             connectedAt = 0
+            picture = XboxPictureWatch()
         }
         let config = RTCConfiguration()
         config.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]), RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"])]
@@ -335,7 +339,29 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             if locked({ framesReceived }) == 0 && Date().timeIntervalSince(negotiatedAt) > Self.firstFrameSeconds {
                 throw XboxError(.consoleUnavailable, "Xbox'tan \(Int(Self.firstFrameSeconds)) sn içinde görüntü gelmedi")
             }
+            try checkPicture()
             try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
+
+    private static func nowMs() -> Int { Int(ProcessInfo.processInfo.systemUptime * 1000) }
+
+    /// Saniyede bir: ilk kareden sonra görüntü kesildiyse ana ekranda uyarı, uzun sürdüyse oturum kapatılır ve
+    /// yeniden denenir (bkz. `XboxPictureWatch`). Uyarı sırasında okuma hattı ve TV'deki altyazı temizlenir.
+    private func checkPicture() throws {
+        switch locked({ picture.tick(atMs: Self.nowMs()) }) {
+        case .fine:
+            break
+        case .warn:
+            log("görüntü kesildi (\(XboxPictureWatch.warnAfterMs / 1000) sn kare yok ya da ICE takıldı); toparlanması bekleniyor")
+            onState?(.disconnected(.other(describe(.noPicture))))
+        case .recovered:
+            log("görüntü yeniden geliyor")
+            onState?(.streaming)
+        case let .stalled(reason):
+            log("\(reason); oturum yeniden kuruluyor")
+            locked { if endReason == nil { endReason = reason } }
+            throw XboxError(.noPicture, reason)
         }
     }
 
@@ -503,6 +529,7 @@ extension XboxStreamSession: RTCVideoRenderer {
         let (count, due) = locked { () -> (Int, Bool) in
             framesReceived += 1
             if framesReceived == 1 { firstFrameAt = now }
+            picture.frameArrived(atMs: Int(now * 1000))
             let due = now - lastConverted >= Self.frameInterval
             if due { lastConverted = now }
             if acking {
@@ -554,6 +581,14 @@ extension XboxStreamSession: RTCPeerConnectionDelegate {
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
         log("ICE: \(newState.rawValue)")
+        let ice: XboxPictureWatch.Ice = switch newState {
+        case .connected, .completed: .connected
+        case .disconnected: .disconnected
+        case .failed: .failed
+        default: .other
+        }
+        guard locked({ peer === peerConnection }) else { return }
+        locked { picture.iceChanged(ice, atMs: Self.nowMs()) }
     }
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
         if newState == .complete { locked { gatheringComplete = true } }

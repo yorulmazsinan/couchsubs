@@ -23,6 +23,10 @@
   // İlk kare (#403, #530): Xbox kare onayı alamazsa ~60 sn'de kapatır; onay requestVideoFrameCallback'te gider.
   // Uygulama ilk kare gelene kadar anahtar kare ister ve getStats tanısı sorar (XboxFirstFrameWatch).
   let frameCallbacks = 0;
+  // Görüntü bekçisi (XboxPictureWatch): ilk kareden sonra saniyede bir yeni kare sayısı bildirilir; video öğesi
+  // donunca aynı kare yeniden okumaya gönderilmez (eskiden donmuş görüntü okunmayı sürdürüyor, altyazı takılı kalıyordu).
+  let pictureTimer = 0;
+  let capturedCallbacks = -1;
   let firstFrameSent = false;
   let keyframeReadySent = false;
   const STAT_TYPES = ['inbound-rtp', 'candidate-pair', 'local-candidate', 'remote-candidate', 'transport'];
@@ -47,6 +51,7 @@
       if (!firstFrameSent) {
         firstFrameSent = true;
         send({ kind: 'firstFrame', width: metadata.width || video.videoWidth, height: metadata.height || video.videoHeight });
+        pictureTimer = setInterval(() => send({ kind: 'picture', callbacks: frameCallbacks }), 1000);
       }
       video.requestVideoFrameCallback(onFrame);
     };
@@ -79,6 +84,9 @@
     const now = performance.now();
     if (now - lastFrame < frameMs) return;
     if (frameWaiting && now - frameSentAt < FRAME_WAIT_MS) return;
+    // Kare sayılabiliyorsa yalnız yeni kare okunur.
+    if (firstFrameSent && frameCallbacks === capturedCallbacks) return;
+    capturedCallbacks = frameCallbacks;
     lastFrame = now;
     frameSentAt = now;
     frameWaiting = true;
@@ -162,6 +170,7 @@
   }
   function stop() {
     clearInterval(frameTimer);
+    clearInterval(pictureTimer);
     audioObserver?.disconnect();
     audioObserver = undefined;
     for (const item of pending.values()) item.reject(new Error('Xbox stream stopped'));

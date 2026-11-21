@@ -1062,6 +1062,22 @@
         }
       }
     },
+    "No picture from the Xbox. Reconnecting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No picture from the Xbox. Reconnecting…"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox'tan görüntü gelmiyor. Yeniden bağlanılıyor…"
+          }
+        }
+      }
+    },
     "The Xbox service sent an unexpected reply. Retrying…": {
       "localizations": {
         "en": {

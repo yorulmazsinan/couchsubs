@@ -113,6 +113,76 @@ public struct XboxFirstFrameWatch {
     }
 }
 
+/// Görüntü bekçisinin bir saat adımındaki kararı.
+public enum XboxPictureVerdict: Equatable, Sendable {
+    case fine
+    /// Görüntü `warnAfterMs`'dir gelmiyor ya da ICE bağlantısı takıldı: ana ekranda "bağlı" yerine uyarı (bir kez).
+    case warn
+    /// Uyarıdan sonra görüntü yeniden geliyor: yeniden "bağlı".
+    case recovered
+    /// Oturum kapatılıp yeniden kurulmalı; değer günlükteki neden.
+    case stalled(String)
+}
+
+/// İlk kareden sonra Xbox görüntüsünün kesilip kesilmediği (PS5'teki `PictureWatchdog`un Xbox karşılığı). Eskiden
+/// yayın yalnız WebRTC bağlantısı `failed`/`closed` olunca, input kanalı kapanınca ya da canlı tutma üç kez yanıtsız
+/// kalınca bitiyordu: ICE `disconnected`da takılı kalan ya da kare göndermeyi bırakan yayında ana ekran "bağlı"
+/// diyor, altyazı donuyor ve bir daha gelmiyordu (X'te kullanıcı bildirimi, iPhone + Xbox Series S). Kare
+/// `warnAfterMs` gelmezse (ICE `disconnected` iken 1 sn) uyarı gösterilir; `stallAfterMs` gelmezse ya da ICE
+/// `failed` olursa oturum kapatılıp `XboxSessionMachine`in aralıklarıyla (5, 15, 45 sn) yeniden kurulur. Windows'taki
+/// CouchSubs.Shell/XboxPictureWatch ve Android'deki XboxPictureWatch ile birebir.
+public struct XboxPictureWatch {
+    public static let warnAfterMs = 5000
+    public static let stallAfterMs = 12_000
+    /// ICE `disconnected` iken uyarı için yeterli boşluk (bağlantı takılınca kareler hemen kesilir).
+    public static let iceWarnAfterMs = 1000
+
+    /// RTCIceConnectionState'in bekçiyi ilgilendiren kısmı.
+    public enum Ice: Sendable {
+        case connected, disconnected, failed, other
+    }
+
+    private var lastFrameMs: Int?
+    private var iceLostSinceMs: Int?
+    private var iceFailed = false
+    /// Uyarı gösteriliyor.
+    public private(set) var warned = false
+
+    public init() {}
+
+    public mutating func frameArrived(atMs now: Int) { lastFrameMs = now }
+
+    public mutating func iceChanged(_ state: Ice, atMs now: Int) {
+        switch state {
+        case .connected: iceLostSinceMs = nil
+        case .disconnected: if iceLostSinceMs == nil { iceLostSinceMs = now }
+        case .failed: iceFailed = true
+        case .other: break
+        }
+    }
+
+    /// Saniyede bir çağrılır. İlk kare gelmeden karar verilmez (ilk kare sınırı ayrı).
+    public mutating func tick(atMs now: Int) -> XboxPictureVerdict {
+        guard let last = lastFrameMs else { return .fine }
+        let iceLost = iceLostSinceMs != nil
+        if iceFailed { return .stalled("Xbox ICE bağlantısı koptu (failed)") }
+        let gap = now - last
+        if gap >= Self.stallAfterMs {
+            return .stalled("Xbox'tan \(gap / 1000) sn'dir görüntü gelmiyor (\(iceLost ? "ICE disconnected" : "bağlantı açık görünüyor"))")
+        }
+        let trouble = gap >= Self.warnAfterMs || (iceLost && gap >= Self.iceWarnAfterMs)
+        if trouble, !warned {
+            warned = true
+            return .warn
+        }
+        if !trouble, warned {
+            warned = false
+            return .recovered
+        }
+        return .fine
+    }
+}
+
 /// getStats raporunun bir girdisi (RTCStats: tür, kimlik, alanlar).
 public struct XboxStat {
     public let type: String

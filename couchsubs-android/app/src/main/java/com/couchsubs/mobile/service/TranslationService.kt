@@ -651,6 +651,11 @@ class TranslationService : Service() {
                 regionWatcher?.reset()
                 resetScreenText()
             }
+            // Bağlantı koptuysa (görüntü bekçisi dahil) TV'de eski altyazı kalmasın (iPhone, Mac ve Windows'taki gibi).
+            if (state is SessionState.Disconnected) {
+                pipeline?.reset()
+                server?.clear()
+            }
             LiveState.update { it.withStreaming(state == SessionState.Streaming).copy(phase = describe(state)) }
         }
         // Oynanan oyun (PS5'in bildirdiği, kullanıcının seçtiği ya da paketten tanınan; bkz. PlayedGame): havuza giden
@@ -945,6 +950,7 @@ class TranslationService : Service() {
         XboxError.TIMEOUT -> R.string.xbox_error_timeout
         XboxError.NETWORK -> R.string.xbox_error_network
         XboxError.SERVICE -> R.string.xbox_error_service
+        XboxError.NO_PICTURE -> R.string.xbox_error_no_picture
     })
 
     private fun describe(state: SessionState): String =

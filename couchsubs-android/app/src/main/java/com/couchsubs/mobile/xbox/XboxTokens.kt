@@ -26,6 +26,8 @@ enum class XboxError {
     NETWORK,
     /** Xbox hizmeti beklenmedik yanıt verdi. */
     SERVICE,
+    /** Görüntü geldikten sonra kesildi: bağlantı açık görünse de oturum yeniden kurulur (bkz. XboxPictureWatch). */
+    NO_PICTURE,
 }
 
 class XboxException(val kind: XboxError, message: String, cause: Throwable? = null) : Exception(message, cause)
