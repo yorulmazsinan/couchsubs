@@ -6,14 +6,13 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Windows'ta uyarısız kapanma (#587):** Pencereden okunan kareler bellekte gereğinden uzun tutuluyordu; uzun oturumda bellek hızla büyüyordu. Düzeltildi. Yedek okumalar artık Mac'teki gibi sırayla ve çok daha az bellekle yapılıyor. Uygulama yine beklenmedik biçimde kapanırsa `%LOCALAPPDATA%\CouchSubs\cokme` klasörüne bir çökme kaydı bırakıyor ve sonraki açılışta bunu size gösteriyor. Kayıt hiçbir yere kendiliğinden gönderilmez.
-- **Çeviri iki kez görünmüyor:** Ekran yazılarını otomatik çevir açıkken altyazının çevirisi bazen hem oyunun altyazısının üstünde hem seçtiğiniz yerde görünüyordu. Altyazı artık ekran yazısı olarak ikinci kez çizilmiyor.
-- **Hangi ekran yazıları çevrilsin (deneysel):** "Ekran yazılarını otomatik çevir" açıkken altında ayrı anahtarlar var: Telefon (GTA 6), Görev ve hedef yazısı, Yardım kutuları ve tuş ipuçları, Menüler, Diğer ekran yazıları. Menüler ve Diğer varsayılan olarak kapalı. "Ekranı çevir" her zaman her şeyi çevirir.
-- **Samsung'da TV'ye bağlanamama:** TV ağda yeni bir adres alınca CouchSubs TV uygulaması açılmayabiliyordu. Düzeltildi.
-- **TV eşleştirmesi:** TV yeniden eşleşmek istediğinde eski istek yenisini engellemiyor; onay penceresi yeni kodla açılıyor.
-- **PS5 bağlantısı:** Görüntü bozulduğunda PS5'ten yeni kare daha hızlı isteniyor; birkaç dakikalık oturumlardan sonra yeniden bağlanma beklemesi uzamıyor. Kopma olursa nedeni günlüğe yazılıyor (`remoteplay.log`).
-- **2016 Samsung TV'ler (Tizen 2.4, #638):** Kurulum paketi bu modellerin beklediği biçimde imzalanıyor. Gerçek bir 2016 TV'de denenmedi; sonucu bildirirseniz çok yardımcı olur.
-- **Mac'te pencereden okuma:** Görüntü kaynağı olarak bir pencere (ör. OBS projektörü ya da oyun penceresi) seçilebiliyor.
+- **Ekran çevirisi kapalıyken GTA 6'da menüler ve bildirimler çevrilmiyor:** "Bilinen oyunlarda hazır alanları kullan" ayarı varsayılan olarak açık geliyor ve ekran çevirisi kapalıyken de menüyü ve kenardaki bildirimleri çeviriyordu. Artık varsayılan kapalı; mevcut kurulumlarda ekran çevirisi kapalıysa bir kez kapatılıyor. İsterseniz Ayarlar'dan yeniden açabilirsiniz.
+- **Oyun paketlerinde aynı oyun iki kez görünmüyor:** Her gece büyüyen "(ek satırlar)" yaması artık asıl yamayla tek oyun olarak görünüyor.
+- **Samsung 4K/8K TV'lerde PS5 görüntüsü sol üst çeyrekte kalmıyor (TV uygulaması 0.9.47):** Görüntü penceresi farklı yollarla isteniyor; görüntü yine dolmazsa kumandadaki Sarı tuş sıradaki yolu dener ve seçim saklanır.
+- **LG'de altyazı var ama oyunun sesi yok (TV uygulaması 0.9.47):** TV uygulaması PS5 görüntüsünü açıkça sesli istiyor; bilgi panelinde (kumandada OK) ses durumu görünüyor. Ses soundbar ya da ses sistemindeyse TV'de Dijital Ses Çıkışı'nı Otomatik ya da PCM yapmayı deneyin.
+- **Mac'te LG kurulumu:** Bazı TV yanıtları satırlara doğru bölünüyor.
+
+**beta.68'de gelenler:** Windows'ta uyarısız kapanmaya karşı önlemler ve çökme kaydı (#587), çevirinin iki kez görünmemesi, ekran yazısı türlerinin ayrı açılıp kapanması, Samsung'da yeni adres alan TV'ye bağlanma, TV eşleştirme düzeltmesi, PS5 bağlantı kopmasına karşı önlemler, 2016 Samsung TV'ler için yeni imza (#638).
 
 **beta.67'de gelenler:** İki satırlı altyazının üst satırının da çevrilmesi (#715), Mac'te yazı okuma takılmasında altyazının sürmesi (#678, #679), Mac'te Xbox (Beta), "Paketleri şimdi güncelle", Windows'ta deneme modu.
 
