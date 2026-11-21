@@ -6,10 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **LG'de siyah ekran (TV uygulaması 0.9.53):** Son güncellemeden sonra bazı LG TV'lerde çeviri başlayınca PS5 görüntüsü gelmeyip ekran siyah kalabiliyordu. Önceki sürümde eklenen ses önlemleri artık görüntü gelmeden hiçbir şey yapmıyor; görüntüyü bozarlarsa kendiliğinden kapanıp eski yola dönülüyor.
-- **Samsung'da parlaklığın sürekli bir an oynaması (TV uygulaması 0.9.52):** 4K Samsung TV'lerde ve ultra geniş monitörlerde PS5 penceresi birkaç saniyede bir boşuna yeniden isteniyordu. Düzeltildi.
-- **Samsung ultra geniş monitörde küçük görüntü (#304, TV uygulaması 0.9.51):** Monitör ekranını 1920x1080 bildirse de panelin gerçek ölçüsü okunuyor; görüntü dolmazsa kumandadaki Sarı tuş sıradaki yolu deniyor.
-- **GTA 6 telefon mesajları:** "Ekranı çevir"in mesaj kartı eğik telefonda, kesik ve uzun mesajlarda daha sağlam; otomatik telefon okumasında mesajlar artık birleşmiyor, kısa yanıtlar kaybolmuyor. (Windows tarafındaki düzeltme katkısı: @erayslyrt00, #773)
+- **Başka bir cihazda göster:** Ayarlar'da ve altyazı hedefinde çıkan QR kodu aynı ağdaki bir telefon ya da tabletle okutun; altyazı o cihazın tarayıcısında canlı görünür, uygulama kurmak gerekmez.
+- **Altyazıyı konumlandır:** Altyazı penceresini fareyle taşıyıp kenarlarından boyutlandırın; Enter kaydeder, Esc vazgeçer. Birden çok ekranda seçtiğiniz ekranda kalır.
+- **GTA 6 harita kartı:** Haritada açılan görev/konum kartının başlığı, açıklaması ve ayrıntıları kendi yerlerinde, kendi stilinde çevrilir ("Görev ve hedef yazısı" ayarına bağlı).
+- **TV uygulaması kendiliğinden açılır:** Çeviri başlayınca CouchSubs her TV türünde TV uygulamasını açmayı dener (artık Android TV'de de). Açılamazsa ana ekranda nedeni ve "Otomatik açmayı dene" düğmesi çıkar.
+- **LG'de giriş seçimi (TV uygulaması 0.9.54):** PS5'in girişi daha akıllı seçiliyor; soundbar/AV alıcı girişleri sona kalıyor, görüntü gelmezse sıradaki giriş deneniyor. Kumandada 1–4 girişi elle seçer ve hatırlar, 0 otomatiğe döner.
+- **Samsung 8K (TV uygulaması 0.9.54):** 8K TV'lerde görüntünün sol üstte küçük kalmasına karşı yeni yöntemler; Sarı tuş "Görüntü yöntemi n/5" arasında döner.
+
+**beta.73'te gelenler:** LG'de çeviri başlayınca siyah ekrana karşı önlem, Samsung parlaklık oynaması ve ultra geniş monitör düzeltmesi, GTA 6 telefon kartı iyileştirmesi.
 
 **beta.72'de gelenler:** "Ekranı çevir" çevirilerinin yazının kendi yerinde ve stilinde çizilmesi, GTA 6 telefon mesaj kartı, Xbox'ta görüntü kesilince yeniden bağlanma, PS5 "bulunamadı" düzeltmesi.
 
