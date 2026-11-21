@@ -151,6 +151,11 @@ public final class SubtitlePipeline {
     public var packLookup: ((String) -> PackMatch?)?
     /// Konuşan adı ("ARTHUR: …") TV'ye giden çeviride gösterilir; kapalıysa yalnız cümle gider.
     public var showSpeakerNames = true
+    /// "Yerel modelin çevirdiği satırların başına nokta koy" açıkken `engineMark`.
+    public static let localAIMark = ". "
+    /// Paketten gelmeyen çevirinin (çeviri motoru, önbelleği dahil) başına konan işaret; nil ya da boşsa yok. Paketteki satıra
+    /// konmaz: oyunda hangi satırın paketten, hangisinin motordan geldiği anlaşılır (Ayarlar › Yerel model; Windows ile aynı).
+    public var engineMark: String?
     /// Hedef dil Türkçe: yüksek güvenle Türkçe olan satır (`TurkishText.isSure`) çevirmene gönderilmez (#289). Uygulama
     /// hedef dil Türkçe değilse kapatır.
     public var skipsTurkish = true
@@ -630,7 +635,7 @@ public final class SubtitlePipeline {
             self.work = work
             defer { self.work = nil }
             let sentence = try await work.value
-            let translated = present(sentence, request)
+            let translated = marked(present(sentence, request))
             let finished = now()
             let result = "\(probe.outcome()) \(finished - started) ms"
             guard request.session == session, !request.abandoned else {
@@ -686,6 +691,12 @@ public final class SubtitlePipeline {
     private func measure(_ request: Request, translation: (started: Int, finished: Int)?, origin: LineMetrics.Origin) -> LineMetrics {
         LineMetrics.measure(capturedAt: request.read.capturedAt, ocrMs: request.read.ocrMs, translation: translation, sentAt: now(),
                             confidence: request.read.confidence, origin: origin)
+    }
+
+    /// Motorun çevirdiği satırın başına `engineMark` (paketteki satıra konmaz).
+    private func marked(_ text: String) -> String {
+        guard let mark = engineMark, !mark.isEmpty, !text.hasPrefix(mark) else { return text }
+        return mark + text
     }
 
     private func remember(_ number: Int, _ source: String, _ translation: String?) {

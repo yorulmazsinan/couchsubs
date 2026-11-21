@@ -7,6 +7,15 @@ namespace CouchSubs.Core.Tests;
 /// Mac ile aynı kurallar (core/Tests/CouchSubsCoreTests/SubtitleWrapTests.swift).
 public class SubtitleWrapTests
 {
+    /// <summary>Bilgisayardaki pencerede oyunda tek satır görünen altyazının çevirisi tek satırda kalır (66); telefonda 42.</summary>
+    [Fact]
+    public void Desktop_keeps_a_sixty_char_line_on_one_line()
+    {
+        const string text = "Evet, bazı yerlerin koruması daha fazla. İki taraf da kazandı.";
+        Assert.Single(SubtitleWrap.FitChars(text, SubtitleWrap.DesktopMaxChars).Text.Split('\n'));
+        Assert.Equal(2, SubtitleWrap.Fit(text).Text.Split('\n').Length);
+    }
+
     [Fact]
     public void Short_text_is_untouched() =>
         Assert.Equal(new SubtitleWrap.Result("Gitmeliyiz, hemen.", 1), SubtitleWrap.Fit("Gitmeliyiz, hemen."));

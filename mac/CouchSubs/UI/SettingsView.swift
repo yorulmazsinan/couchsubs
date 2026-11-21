@@ -218,6 +218,8 @@ private struct AppearanceCard: View {
             if model.settings.output.showsOnComputer {
                 HintText(text: "On the computer screen, move and resize the subtitle with the mouse: press Position the subtitles.")
                 Button("Position the subtitles") { model.overlayAdjusting = true }.buttonStyle(.secondary)
+                Toggle("Match the text size to the game subtitles", isOn: $model.settings.style.autoTextSize)
+                HintText(text: "Only in the subtitle window on this computer: the text takes the size of the subtitles in the game. The size above is used until a subtitle is read and is kept within 70–150% of it.")
             }
             Slider(value: Binding(get: { Double(model.settings.style.background) },
                                   set: { model.settings.style.background = Int($0.rounded()) }), in: 0...100) {
@@ -1582,6 +1584,8 @@ private struct LocalAISection: View {
                 ErrorText(error: String(format: String(localized: "This address is not valid. Example: %@"), LocalAIServer.ollamaURL))
             }
             HintText(text: "Type the model name as the server shows it. In Ollama, download it first: ollama pull qwen2.5:7b (downloaded models: ollama list). In LM Studio, load the model and start the local server.")
+            Toggle("Put a dot before lines translated by the local model", isOn: $model.settings.markLocalAILines)
+            HintText(text: "Lines from game packs stay as they are, so you can tell in the game which line came from the local model.")
             if model.hasKey(.local) {
                 HStack(spacing: Theme.space("m")) {
                     DoneLabel(text: String(localized: "Key saved"))

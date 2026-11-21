@@ -33,13 +33,14 @@ public struct CoverFontScale: Equatable, Sendable {
 
     public init() {}
 
-    /// Satırın yazı boyu çarpanı (1 ya da `step`). Yazı boyu ayarı değişince kademe sıfırlanır.
-    public mutating func scale(for text: String, fontSize: Int) -> Double {
+    /// Satırın yazı boyu çarpanı (1 ya da `step`). Yazı boyu ayarı değişince kademe sıfırlanır. `limit`: satır başına karakter
+    /// tabanı (bilgisayardaki pencereler: `SubtitleWrap.desktopMaxChars`).
+    public mutating func scale(for text: String, fontSize: Int, maxChars limit: Int = SubtitleWrap.maxChars) -> Double {
         if self.fontSize != fontSize {
             self.fontSize = fontSize
             shrunk = false
         }
-        if !text.contains("\n"), SubtitleWrap.fit(text).scale < 1 { shrunk = true }
+        if !text.contains("\n"), SubtitleWrap.fit(text, maxChars: limit).scale < 1 { shrunk = true }
         return shrunk ? Self.step : 1
     }
 }

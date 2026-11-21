@@ -13,19 +13,28 @@ namespace CouchSubs.Core;
 public static class SubtitleWrap
 {
     public const int MaxChars = 42;
+    /// <summary>
+    /// Bilgisayardaki altyazı ve yayın penceresinde (Windows, Mac) satır başına en çok karakter: oyunda tek satır görünen
+    /// altyazının çevirisi de tek satırda kalır (oyundaki tek satırların %99'u en çok 66 karakter). Telefon ekranı dar
+    /// olduğu için orada <see cref="MaxChars"/>.
+    /// </summary>
+    public const int DesktopMaxChars = 66;
     public const int MaxLines = 3;
     public const double MinScale = 0.75;
 
     public readonly record struct Result(string Text, double Scale);
 
-    public static Result Fit(string text)
+    public static Result Fit(string text) => FitChars(text, MaxChars);
+
+    /// <summary>Satır başına en çok <paramref name="maxChars"/> karakterle (bilgisayar penceresi: <see cref="DesktopMaxChars"/>).</summary>
+    public static Result FitChars(string text, int maxChars)
     {
         var length = new StringInfo(text).LengthInTextElements;
-        if (length <= MaxChars || text.Contains('\n')) return new Result(text, 1);
+        if (length <= maxChars || text.Contains('\n')) return new Result(text, 1);
         var words = Tokens(text);
         if (words.Count < 2) return new Result(text, 1);
-        var scale = Math.Clamp((double)(MaxChars * MaxLines) / length, MinScale, 1);
-        var cap = (int)Math.Floor(MaxChars / scale);
+        var scale = Math.Clamp((double)(maxChars * MaxLines) / length, MinScale, 1);
+        var cap = (int)Math.Floor(maxChars / scale);
         var lines = Math.Min(MaxLines, Math.Max(2, (int)Math.Ceiling((double)length / cap)));
         return new Result(Balance(words, Math.Min(lines, words.Count)), scale);
     }
@@ -34,10 +43,14 @@ public static class SubtitleWrap
     /// Verilen sabit yazı boyu çarpanıyla bölme ("Örtsün", bkz. <see cref="CoverFontScale"/>): satır başına
     /// <c>MaxChars / scale</c> karakter, en çok 3 satır; daha uzun metinde satırlar uzar, yazı daha fazla küçülmez.
     /// </summary>
-    public static Result Fit(string text, double scale)
+    public static Result Fit(string text, double scale) => Fit(text, scale, MaxChars);
+
+    /// <summary>Sabit yazı boyu çarpanıyla, satır başına en çok <paramref name="maxChars"/> karakter tabanıyla (bilgisayar penceresi:
+    /// <see cref="DesktopMaxChars"/>).</summary>
+    public static Result Fit(string text, double scale, int maxChars)
     {
         scale = double.IsFinite(scale) && scale > 0 ? Math.Min(1, scale) : 1;
-        var cap = (int)Math.Floor(MaxChars / scale);
+        var cap = (int)Math.Floor(Math.Max(1, maxChars) / scale);
         var length = new StringInfo(text).LengthInTextElements;
         if (length <= cap || text.Contains('\n')) return new Result(text, scale);
         var words = Tokens(text);

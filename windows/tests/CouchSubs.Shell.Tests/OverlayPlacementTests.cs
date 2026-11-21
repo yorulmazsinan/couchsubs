@@ -33,6 +33,26 @@ public class OverlayPlacementTests
         Assert.Equal(302.0, large.Value.Height);
     }
 
+    /// <summary>"Yazı boyu oyundaki altyazı kadar": kutu yüksekliklerinin ortancası, seçilen boyun %70–150'si arasında.</summary>
+    [Fact]
+    public void GameTextSizeFollowsTheMedianSubtitleBox()
+    {
+        // Çoğu tek satır (0,04), biri iki satır (0,1): ortanca tek satırın yüksekliği. 0,95 × 0,04 × 1080 = 41,04.
+        Assert.Equal(41.04, OverlayPlacement.GameTextSize([0.04, 0.1, 0.04], 1080, 40), 6);
+        // Ölçüm yoksa seçilen boy; çok büyük ya da küçükse sınırda.
+        Assert.Equal(40.0, OverlayPlacement.GameTextSize([], 1080, 40), 6);
+        Assert.Equal(60.0, OverlayPlacement.GameTextSize([0.2], 1080, 40), 6);
+        Assert.Equal(28.0, OverlayPlacement.GameTextSize([0.01], 1080, 40), 6);
+    }
+
+    /// <summary>Yazı oyundaki kadar büyüyebildiğinde pencere seçilen boyun %150'sine göre yüksek açılır.</summary>
+    [Fact]
+    public void WindowIsTallerWhenTheTextFollowsTheGame()
+    {
+        Assert.Equal(46, OverlayPlacement.WindowFontSize(new CouchSubs.Core.SubtitleStyle()));
+        Assert.Equal(69, OverlayPlacement.WindowFontSize(new CouchSubs.Core.SubtitleStyle(AutoTextSize: true)));
+    }
+
     /// <summary>Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.</summary>
     [Theory]
     [InlineData(0.4, 0.8, 0.4, 0.9)]

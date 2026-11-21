@@ -38,6 +38,10 @@ public enum SubtitleBackgroundShape
 /// <param name="BottomPercent">Sabit yerleşimde altyazının ekranın altından uzaklığı, yüzde.</param>
 /// <param name="Background">Yazının arkasındaki siyah zeminin koyuluğu, yüzde (0: zemin yok).</param>
 /// <param name="BackgroundShape">Zeminin kapladığı alan; eski TV uygulamaları alanı tanımaz, yazı kadar gibi davranır.</param>
+/// <param name="AutoTextSize">
+/// Bilgisayardaki altyazı penceresinde yazı boyu oyundaki altyazının yazı boyu kadar (okunan altyazı kutularından); seçilen
+/// boy altyazı okunana kadar kullanılır ve sınırdır (%70–150). TV'ye gitmez. Eski kayıtlarda yoktur; kapalı başlar.
+/// </param>
 /// <param name="StackPrevious">
 /// Hızlı konuşmada önceki satır(lar) yeni satırın üstünde kısa süre soluk kalsın mı; kapalıysa yeni satır eskisinin
 /// yerine geçer. TV uygulaması 0.9.16 ve sonrası tanır.
@@ -51,7 +55,8 @@ public sealed record SubtitleStyle(
     SubtitleTextColor TextColor = SubtitleTextColor.White,
     TvDisplayMode DisplayMode = TvDisplayMode.InApp,
     bool StackPrevious = true,
-    SubtitleBackgroundShape BackgroundShape = SubtitleBackgroundShape.Fit);
+    SubtitleBackgroundShape BackgroundShape = SubtitleBackgroundShape.Fit,
+    bool AutoTextSize = false);
 
 /// <summary>
 /// Android TV'de PS5 görüntüsünün nasıl gösterildiği. Yalnız Android TV uygulaması kullanır; diğer TV'ler ve OBS

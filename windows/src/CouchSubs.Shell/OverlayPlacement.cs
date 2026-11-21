@@ -47,6 +47,27 @@ public static class OverlayPlacement
     public static double HeightScaleFor(double height, double baseHeight) =>
         double.IsFinite(height) && double.IsFinite(baseHeight) && baseHeight > 0 ? ClampHeightScale(height / baseHeight) : 1;
 
+    /// <summary>Okunan satır yüksekliğinden yazı boyuna geçiş (TV uygulamasının ekran yazısında kullandığı oran).</summary>
+    public const double GameTextRatio = 0.95;
+
+    /// <summary>
+    /// "Yazı boyu oyundaki altyazı kadar": son altyazı kutularının yüksekliklerinin (kareye oranla) ortancası; altyazıların
+    /// çoğu tek satır olduğundan ortanca bir satırın yüksekliğidir. Ekran yüksekliğiyle çarpılıp <see cref="GameTextRatio"/>
+    /// ile yazı boyuna çevrilir ve seçilen boyun (<paramref name="manual"/>) %70–150'si arasında tutulur. Ölçüm yoksa seçilen boy.
+    /// </summary>
+    public static double GameTextSize(IReadOnlyCollection<double> boxHeights, double screenHeight, double manual)
+    {
+        if (boxHeights.Count == 0 || !double.IsFinite(screenHeight) || screenHeight <= 0 || !(manual > 0)) return manual;
+        var sorted = boxHeights.Order().ToArray();
+        var middle = sorted.Length / 2;
+        var median = sorted.Length % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+        return Math.Clamp(GameTextRatio * median * screenHeight, manual * 0.7, manual * 1.5);
+    }
+
+    /// <summary>Pencere yüksekliğinin hesaplandığı yazı boyu: oyundaki kadar açıkken yazı seçilenin %150'sine kadar büyüyebilir.</summary>
+    public static int WindowFontSize(CouchSubs.Core.SubtitleStyle style) =>
+        style.AutoTextSize ? (int)Math.Ceiling(FontSize(style.FontSize) * 1.5) : style.FontSize;
+
     /// <summary>"Yazı kadar" kutunun oyundaki altyazıyı örterken her yana bıraktığı pay (1080 satırlık ekranda piksel).</summary>
     public const double CoverMargin = 8;
 

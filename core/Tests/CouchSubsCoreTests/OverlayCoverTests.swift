@@ -51,4 +51,16 @@ final class OverlayCoverTests: XCTestCase {
         XCTAssertEqual(wrapped.text.split(separator: "\n").count, 3)
         XCTAssertEqual(SubtitleWrap.fit("Çaldın mı?", scale: 1), SubtitleWrap.Result(text: "Çaldın mı?", scale: 1))
     }
+
+    /// Bilgisayar penceresi 3 satırı 66 karakterle sayar: 150 karakter TV/OBS'te bir kademe küçülür, pencerede seçilen boyda kalır.
+    func testDesktopWindowCountsThreeLinesOfSixtySixChars() {
+        let text = String(repeating: "Annenin arabası demiştin hani, unuttun mu yoksa? ", count: 3)
+        var tv = CoverFontScale()
+        var desktop = CoverFontScale()
+        XCTAssertEqual(tv.scale(for: text, fontSize: 46), CoverFontScale.step)
+        XCTAssertEqual(desktop.scale(for: text, fontSize: 46, maxChars: SubtitleWrap.desktopMaxChars), 1)
+        let rows = SubtitleWrap.fit(text, scale: 1, maxChars: SubtitleWrap.desktopMaxChars).text.split(separator: "\n")
+        XCTAssertEqual(rows.count, 3)
+        XCTAssertTrue(rows.allSatisfy { $0.count <= SubtitleWrap.desktopMaxChars })
+    }
 }

@@ -32,4 +32,16 @@ public class CoverFontScaleTests
         Assert.Equal(3, wrapped.Text.Split('\n').Length);
         Assert.Equal(new SubtitleWrap.Result(Short, 1), SubtitleWrap.Fit(Short, 1));
     }
+
+    [Fact]
+    public void Desktop_window_counts_three_lines_of_sixty_six_chars()
+    {
+        // 150 karakter: 3 x 42'ye sığmaz (TV/OBS bir kademe küçülür), 3 x 66'ya sığar (bilgisayar penceresi seçilen boyda kalır).
+        var text = string.Concat(Enumerable.Repeat("Annenin arabası demiştin hani, unuttun mu yoksa? ", 3));
+        Assert.Equal(CoverFontScale.Step, new CoverFontScale().Scale(text, 46));
+        Assert.Equal(1, new CoverFontScale().Scale(text, 46, SubtitleWrap.DesktopMaxChars));
+        var wrapped = SubtitleWrap.Fit(text, 1.0, SubtitleWrap.DesktopMaxChars);
+        Assert.Equal(3, wrapped.Text.Split('\n').Length);
+        Assert.All(wrapped.Text.Split('\n'), row => Assert.True(row.Length <= SubtitleWrap.DesktopMaxChars));
+    }
 }

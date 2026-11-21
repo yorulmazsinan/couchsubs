@@ -223,7 +223,7 @@ public sealed class StreamWindow : Window
         var style = controller.Settings.Style;
         var scale = Scale;
         var current = line.Role == SubtitleStack.Role.Current;
-        var wrapped = line.Wrapped;
+        var wrapped = line.FittedTo(SubtitleWrap.DesktopMaxChars);
         var size = Math.Max(1, OverlayPlacement.FontSize(style.FontSize) * scale * (current ? 1 : 0.8) * wrapped.Scale);
         var boxed = StreamBackgrounds.BoxOpacity(style.Background) > 0;
         var dim = line.Role switch { SubtitleStack.Role.Current => 1.0, SubtitleStack.Role.Previous => 0.6, _ => 0.45 };

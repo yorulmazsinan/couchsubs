@@ -8,6 +8,9 @@ import Foundation
 /// Android (SubtitleWrap.kt), Windows (SubtitleWrap.cs), TV sayfası (tv-webos/app.js) ve OBS sayfası aynı kuralları uygular.
 public enum SubtitleWrap {
     public static let maxChars = 42
+    /// Bilgisayardaki altyazı ve yayın penceresinde (Mac, Windows) satır başına en çok karakter: oyunda tek satır görünen
+    /// altyazının çevirisi de tek satırda kalır (oyundaki tek satırların %99'u en çok 66 karakter). Telefonda `maxChars`.
+    public static let desktopMaxChars = 66
     public static let maxLines = 3
     public static let minScale = 0.75
 
@@ -16,23 +19,25 @@ public enum SubtitleWrap {
         public var scale: Double
     }
 
-    /// Bölünmüş metin ve yazı boyu çarpanı. Zaten satır sonu içeren ya da kısa metin olduğu gibi döner.
-    public static func fit(_ text: String) -> Result {
+    /// Bölünmüş metin ve yazı boyu çarpanı. Zaten satır sonu içeren ya da kısa metin olduğu gibi döner. `limit`: satır
+    /// başına en çok karakter (bilgisayardaki pencereler: `desktopMaxChars`).
+    public static func fit(_ text: String, maxChars limit: Int = maxChars) -> Result {
         let length = text.count
-        if length <= maxChars || text.contains("\n") { return Result(text: text, scale: 1) }
+        if length <= limit || text.contains("\n") { return Result(text: text, scale: 1) }
         let words = tokens(text)
         guard words.count > 1 else { return Result(text: text, scale: 1) }
-        let scale = max(minScale, Double(maxChars * maxLines) / Double(length)).clamped(to: minScale...1)
-        let cap = Int((Double(maxChars) / scale).rounded(.down))
+        let scale = max(minScale, Double(limit * maxLines) / Double(length)).clamped(to: minScale...1)
+        let cap = Int((Double(limit) / scale).rounded(.down))
         let lines = min(maxLines, max(2, Int((Double(length) / Double(cap)).rounded(.up))))
         return Result(text: balance(words, lines: min(lines, words.count)), scale: scale)
     }
 
     /// Verilen sabit yazı boyu çarpanıyla bölme ("Örtsün", bkz. `CoverFontScale`): satır başına `maxChars / scale`
     /// karakter, en çok 3 satır; daha uzun metinde satırlar uzar, yazı daha fazla küçülmez.
-    public static func fit(_ text: String, scale: Double) -> Result {
+    /// `limit`: satır başına karakter tabanı (bilgisayardaki pencereler: `desktopMaxChars`).
+    public static func fit(_ text: String, scale: Double, maxChars limit: Int = maxChars) -> Result {
         let scale = scale.isFinite && scale > 0 ? min(1, scale) : 1
-        let cap = Int((Double(maxChars) / scale).rounded(.down))
+        let cap = Int((Double(max(1, limit)) / scale).rounded(.down))
         if text.count <= cap || text.contains("\n") { return Result(text: text, scale: scale) }
         let words = tokens(text)
         guard words.count > 1 else { return Result(text: text, scale: scale) }

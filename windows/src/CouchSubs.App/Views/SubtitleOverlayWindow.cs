@@ -52,6 +52,8 @@ public sealed partial class SubtitleOverlayWindow : Window
     /// </summary>
     private (string Text, CouchSubs.Core.TextBox? Box, double Scale)? subtitleBox;
     private readonly CoverFontScale coverFont = new();
+    /// <summary>Son 9 altyazı kutusunun yüksekliği (kareye oranla): "Yazı boyu oyundaki altyazı kadar" bunların ortancasını kullanır.</summary>
+    private readonly Queue<double> boxHeights = new();
     private readonly Grid adjustLayer = new() { Visibility = Visibility.Collapsed };
     /// <summary>Başka bir tam ekran ya da üstte duran pencere öne gelince altyazıyı yeniden en üste koyar.</summary>
     private readonly TopmostKeeper topmost;
@@ -162,10 +164,15 @@ public sealed partial class SubtitleOverlayWindow : Window
                 screenUntil = 0;
                 {
                     // "Örtsün": oyundaki altyazının yeri gelmezse son bilinen yer örtülür; yazı seçilen boyda kalır, ancak 3
-                    // satıra sığmazsa bir kademe küçülür (Mac ve TV/OBS sayfası ile aynı).
+                    // satıra sığmazsa bir kademe küçülür (Mac ve TV/OBS sayfası ile aynı; bu pencerede satır başına 66 karakter).
                     var look = controller.Settings.Style;
                     var covering = look.Placement == SubtitlePlacement.Cover && look.BackgroundShape != SubtitleBackgroundShape.Band && !e.Paragraphs;
-                    subtitleBox = (e.Text, e.Box ?? subtitleBox?.Box, covering ? coverFont.Scale(e.Text, look.FontSize) : 1);
+                    subtitleBox = (e.Text, e.Box ?? subtitleBox?.Box, covering ? coverFont.Scale(e.Text, look.FontSize, SubtitleWrap.DesktopMaxChars) : 1);
+                }
+                if (e.Box is { } measured && !e.Paragraphs && measured.Bottom - measured.Top is > 0 and <= 0.25)
+                {
+                    boxHeights.Enqueue(measured.Bottom - measured.Top);
+                    while (boxHeights.Count > 9) boxHeights.Dequeue();
                 }
                 stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
                 break;
@@ -311,10 +318,15 @@ public sealed partial class SubtitleOverlayWindow : Window
         var band = style.BackgroundShape == SubtitleBackgroundShape.Band;
         var coverLine = !band && current && !line.Paragraphs && style.Placement == SubtitlePlacement.Cover
                         && subtitleBox is { } known && known.Text == line.Text ? subtitleBox : null;
-        // Uzun çeviri en çok 3 satıra dengeli bölünür; 3 satıra sığmazsa yazı biraz küçülür (bkz. SubtitleWrap). "Örtsün"de yazı
-        // seçilen boyda kalır, en çok bir kademe küçülür ve satırdan satıra zıplamaz (CoverFontScale).
-        var wrapped = coverLine is { } fixedSize ? SubtitleWrap.Fit(line.Text, fixedSize.Scale) : line.Wrapped;
-        var size = Math.Max(1, OverlayPlacement.FontSize(style.FontSize) * scale * (current ? 1 : 0.8) * wrapped.Scale);
+        // Uzun çeviri en çok 3 satıra dengeli bölünür (bu pencerede satır başına 66 karakter); 3 satıra sığmazsa yazı biraz küçülür
+        // (bkz. SubtitleWrap). "Örtsün"de yazı seçilen boyda kalır, en çok bir kademe küçülür ve satırdan satıra zıplamaz (CoverFontScale).
+        var wrapped = coverLine is { } fixedSize
+            ? SubtitleWrap.Fit(line.Text, fixedSize.Scale, SubtitleWrap.DesktopMaxChars)
+            : line.FittedTo(SubtitleWrap.DesktopMaxChars);
+        // "Yazı boyu oyundaki altyazı kadar": son altyazı kutularından; kapalıysa ya da ölçüm yoksa seçilen boy.
+        var manual = OverlayPlacement.FontSize(style.FontSize) * scale;
+        var textSize = style.AutoTextSize ? OverlayPlacement.GameTextSize(boxHeights, SystemParameters.PrimaryScreenHeight, manual) : manual;
+        var size = Math.Max(1, textSize * (current ? 1 : 0.8) * wrapped.Scale);
         var alpha = Math.Clamp(style.Background, 0, 100) / 100.0 * (current ? 1 : 0.83);
         var text = new TextBlock
         {
@@ -486,7 +498,7 @@ public sealed partial class SubtitleOverlayWindow : Window
     }
 
     /// <summary>Yazı boyundan hesaplanan yükseklik (oran 1).</summary>
-    private double BaseHeight => OverlayPlacement.Height(controller.Settings.Style.FontSize, Scale);
+    private double BaseHeight => OverlayPlacement.Height(OverlayPlacement.WindowFontSize(controller.Settings.Style), Scale);
 
     /// <summary>Kullanıcının üst ya da alt kenardan verdiği yükseklik oranı.</summary>
     private double heightScale = 1;

@@ -377,6 +377,11 @@ public sealed record UserSettings
     /// sonuna eklenir; boşsa hiçbir şey değişmez. Eski ayar dosyalarında yoktur, boş açılır.
     /// </summary>
     public string AiInstruction { get; init; } = "";
+    /// <summary>
+    /// Yerel model seçiliyken paketten gelmeyen çevirinin başına nokta konur (". "): oyunda hangi satırın paketten,
+    /// hangisinin yerel modelden geldiği anlaşılır. Paketten gelen satıra konmaz. Eski ayar dosyalarında yoktur; kapalı başlar.
+    /// </summary>
+    public bool MarkLocalAiLines { get; init; }
     /// <summary>Altyazı TV'de mi, bilgisayar ekranındaki pencerede mi, ikisinde de mi. Eski kayıtlar TV ile açılır.</summary>
     public SubtitleOutput Output { get; init; } = SubtitleOutput.Tv;
     /// <summary>Bilgisayar ekranındaki altyazı penceresi tıklamaları alttaki pencereye (oyun, PS Remote Play) geçirir.</summary>

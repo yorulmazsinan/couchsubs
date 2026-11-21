@@ -190,6 +190,21 @@ public class SubtitlePipelineTests
         Assert.Equal(0.5, box.Top, 9);
     }
 
+    /// <summary>"Yerel modelin çevirdiği satırların başına nokta koy": işaret yalnız motorun çevirdiği satıra konur, paketteki satıra konmaz.</summary>
+    [Fact]
+    public async Task EngineMarkGoesOnlyBeforeEngineLines()
+    {
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Hold the gate.", "Run!", "Run!"), new FakeTranslator(), sender)
+        {
+            EngineMark = SubtitlePipeline.LocalAiMark,
+        };
+        pipeline.PackLookup = text => text == "Run!" ? new PackMatch("Koş!", []) : null;
+        await Run(pipeline, 4);
+        pipeline.Reset();
+        Assert.Equal([". TR: Hold the gate.", "Koş!"], sender.Sent);
+    }
+
     /// <summary>Altyazı günlüğü: ilk kare, ilk yazı, her kararlı satır ve akıbeti (motor ya da paket) yazılır.</summary>
     [Fact]
     public async Task LogsEachLineAndItsOutcome()

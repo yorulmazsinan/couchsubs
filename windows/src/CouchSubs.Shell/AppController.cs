@@ -625,6 +625,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             if (old.Dubbing != value.Dubbing) DubbingSettingsChanged(old.Dubbing);
             if (old.GamePacks != value.GamePacks && pipeline is not null) ConnectPacks(pipeline);
             if (pipeline is not null) pipeline.ShowSpeakerNames = value.ShowSpeakerNames;
+            if (pipeline is not null) pipeline.EngineMark = EngineMarkFor(value);
             server.SpeakerColors = value.SpeakerColors;
             if ((old.MisreadWaitMs != value.MisreadWaitMs || old.PartialWaitMs != value.PartialWaitMs) && pipeline is not null) ApplyWaits(pipeline);
             if (old.SharePool != value.SharePool) services.Pool?.SetEnabled(value.SharePool);
@@ -2911,6 +2912,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var built = new SubtitlePipeline(reader, MakeTranslator(), sender, scheduler)
         {
             ShowSpeakerNames = settings.ShowSpeakerNames,
+            EngineMark = EngineMarkFor(settings),
             SkipsTurkish = settings.TargetLanguage == "tr",
             WatchSubtitleBackground = settings.WatchSubtitleBackground,
             DropsScreenText = () => !demoMode && ScreenText.IsGta(gameSense.Current?.Name),
@@ -3258,6 +3260,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>Çevrimiçi çeviri yalnız İngilizce→Türkçe için ve seçili motor hazırsa açılır.</summary>
+    /// <summary>
+    /// "Yerel modelin çevirdiği satırların başına nokta koy" açık ve çeviriyi yerel model yapıyorsa paketten gelmeyen satırın
+    /// başına konan işaret (sunucuya ulaşılamayınca devreye giren ücretsiz çeviri de motor satırıdır); deneme modunda yok.
+    /// </summary>
+    private string? EngineMarkFor(UserSettings value) =>
+        value.MarkLocalAiLines && !demoMode && value.OnlineTranslation && value.SourceLanguage == "en" && value.TargetLanguage == "tr"
+        && value.OnlineEngine == TranslationEngine.Local && value.LocalAiServer is not null ? SubtitlePipeline.LocalAiMark : null;
+
     public bool OnlineTranslationActive =>
         settings.OnlineTranslation && settings.SourceLanguage == "en" && settings.TargetLanguage == "tr" && IsReady(settings.OnlineEngine);
 

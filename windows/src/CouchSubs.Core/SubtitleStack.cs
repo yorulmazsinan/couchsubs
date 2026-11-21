@@ -29,7 +29,11 @@ public sealed class SubtitleStack
     {
         /// <summary>Görünümde kullanılacak metin ve yazı boyu çarpanı: uzun çeviri en çok 3 satıra dengeli bölünür
         /// (bkz. <see cref="SubtitleWrap"/>). Görev paneli gibi satır satır yazılar olduğu gibi kalır.</summary>
-        public SubtitleWrap.Result Wrapped => Paragraphs ? new SubtitleWrap.Result(Text, 1) : SubtitleWrap.Fit(Text);
+        public SubtitleWrap.Result Wrapped => FittedTo(SubtitleWrap.MaxChars);
+
+        /// <summary><see cref="Wrapped"/> gibi, satır başına en çok <paramref name="maxChars"/> karakterle (bilgisayardaki
+        /// pencereler: <see cref="SubtitleWrap.DesktopMaxChars"/>).</summary>
+        public SubtitleWrap.Result FittedTo(int maxChars) => Paragraphs ? new SubtitleWrap.Result(Text, 1) : SubtitleWrap.FitChars(Text, maxChars);
     }
 
     private sealed record Current(int Id, string Text, bool Paragraphs, double ShownAt, double HideAt, double HoldUntil);

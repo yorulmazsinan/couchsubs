@@ -40,8 +40,11 @@ public struct SubtitleStack: Equatable, Sendable {
 
         /// Görünümde kullanılacak metin ve yazı boyu çarpanı: uzun çeviri en çok 3 satıra dengeli bölünür
         /// (bkz. `SubtitleWrap`). Görev paneli gibi satır satır yazılar olduğu gibi kalır.
-        public var wrapped: SubtitleWrap.Result {
-            paragraphs ? SubtitleWrap.Result(text: text, scale: 1) : SubtitleWrap.fit(text)
+        public var wrapped: SubtitleWrap.Result { fitted(to: SubtitleWrap.maxChars) }
+
+        /// `wrapped` gibi, satır başına en çok `maxChars` karakterle (bilgisayardaki pencereler: `SubtitleWrap.desktopMaxChars`).
+        public func fitted(to maxChars: Int) -> SubtitleWrap.Result {
+            paragraphs ? SubtitleWrap.Result(text: text, scale: 1) : SubtitleWrap.fit(text, maxChars: maxChars)
         }
 
         public init(id: Int, text: String, role: Role, paragraphs: Bool = false, fading: Bool = false) {

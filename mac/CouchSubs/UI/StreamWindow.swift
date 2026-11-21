@@ -138,7 +138,7 @@ struct StreamWindowView: View {
         let style = model.settings.style
         let current = line.role == .current
         // Uzun çeviri en çok 3 satıra dengeli bölünür; 3 satıra sığmazsa yazı biraz küçülür (bkz. SubtitleWrap).
-        let wrapped = line.wrapped
+        let wrapped = line.fitted(to: SubtitleWrap.desktopMaxChars)
         let size = CGFloat(style.fontSize) * scale * (current ? 1 : 0.8) * CGFloat(wrapped.scale)
         // Düz zeminde yarı saydam kutu zeminle karışır, chroma key'i bozar; kutu tam koyu (ya da hiç yok).
         let alpha = StreamBackground.boxOpacity(background: style.background)

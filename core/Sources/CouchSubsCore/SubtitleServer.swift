@@ -55,9 +55,13 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
     /// Hızlı konuşmada önceki satır(lar) yeni satırın üstünde kısa süre soluk kalsın mı; kapalıysa yeni satır eskisinin
     /// yerine geçer. TV uygulaması 0.9.16 ve sonrası tanır (Windows: SubtitleStyle.StackPrevious).
     public var stackPrevious: Bool
+    /// Bilgisayardaki altyazı penceresinde yazı boyu oyundaki altyazının yazı boyu kadar (okunan altyazı kutularından); seçilen
+    /// boy altyazı okunana kadar kullanılır ve sınırdır (%70–150). TV'ye gitmez. Eski kayıtlarda yoktur; kapalı başlar
+    /// (Windows: SubtitleStyle.AutoTextSize).
+    public var autoTextSize: Bool
 
     public init(fontSize: Int = 46, bottomPercent: Int = 7, placement: SubtitlePlacement = .cover, background: Int = 90, backgroundShape: SubtitleBackgroundShape = .fit, bold: Bool = false,
-                textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .inApp, stackPrevious: Bool = true) {
+                textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .inApp, stackPrevious: Bool = true, autoTextSize: Bool = false) {
         self.fontSize = fontSize
         self.bottomPercent = bottomPercent
         self.placement = placement
@@ -67,9 +71,10 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         self.textColor = textColor
         self.displayMode = displayMode
         self.stackPrevious = stackPrevious
+        self.autoTextSize = autoTextSize
     }
 
-    private enum CodingKeys: String, CodingKey { case fontSize, bottomPercent, placement, background, backgroundShape, bold, textColor, displayMode, stackPrevious }
+    private enum CodingKeys: String, CodingKey { case fontSize, bottomPercent, placement, background, backgroundShape, bold, textColor, displayMode, stackPrevious, autoTextSize }
 
     /// Eski sürümün kaydettiği ayarlarda yeni alanlar yoktur; eksikler varsayılanla dolar.
     public init(from decoder: Decoder) throws {
@@ -84,6 +89,7 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         textColor = (try? values.decodeIfPresent(SubtitleTextColor.self, forKey: .textColor)) ?? defaults.textColor
         displayMode = (try? values.decodeIfPresent(TVDisplayMode.self, forKey: .displayMode)) ?? defaults.displayMode
         stackPrevious = try values.decodeIfPresent(Bool.self, forKey: .stackPrevious) ?? defaults.stackPrevious
+        autoTextSize = try values.decodeIfPresent(Bool.self, forKey: .autoTextSize) ?? defaults.autoTextSize
     }
 
     /// TV'ye giden `style` olayının gövdesi.

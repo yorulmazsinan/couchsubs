@@ -17,15 +17,16 @@ public sealed class CoverFontScale
 
     public bool Shrunk { get; private set; }
 
-    /// <summary>Satırın yazı boyu çarpanı (1 ya da <see cref="Step"/>). Yazı boyu ayarı değişince kademe sıfırlanır.</summary>
-    public double Scale(string text, int fontSize)
+    /// <summary>Satırın yazı boyu çarpanı (1 ya da <see cref="Step"/>). Yazı boyu ayarı değişince kademe sıfırlanır.
+    /// <paramref name="maxChars"/>: satır başına karakter tabanı (bilgisayar penceresi <see cref="SubtitleWrap.DesktopMaxChars"/>).</summary>
+    public double Scale(string text, int fontSize, int maxChars = SubtitleWrap.MaxChars)
     {
         if (this.fontSize != fontSize)
         {
             this.fontSize = fontSize;
             Shrunk = false;
         }
-        if (!text.Contains('\n') && SubtitleWrap.Fit(text).Scale < 1) Shrunk = true;
+        if (!text.Contains('\n') && SubtitleWrap.FitChars(text, maxChars).Scale < 1) Shrunk = true;
         return Shrunk ? Step : 1;
     }
 }

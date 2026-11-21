@@ -45,6 +45,8 @@ public partial class SettingsWindow : Window
         var settings = controller.Settings;
         DataContext = controller;
         GeminiPaidTier.IsChecked = settings.GeminiPaidTier;
+        MarkLocalAiLines.IsChecked = settings.MarkLocalAiLines;
+        AutoTextSize.IsChecked = settings.Style.AutoTextSize;
         TextSize.Value = Math.Clamp(settings.Style.FontSize, TextSize.Minimum, TextSize.Maximum);
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
         Position.Value = settings.Style.BottomPercent;
@@ -771,6 +773,18 @@ public partial class SettingsWindow : Window
     /// <summary>Seçili motor (ayarlarda ücretsiz ise Free).</summary>
     private TranslationEngine SelectedEngine =>
         Engine.SelectedItem is ComboBoxItem { Tag: string tag } ? Enum.Parse<TranslationEngine>(tag) : TranslationEngine.Free;
+
+    private void OnAutoTextSize(object sender, RoutedEventArgs e)
+    {
+        if (loading) return;
+        Update(s => s with { Style = s.Style with { AutoTextSize = AutoTextSize.IsChecked == true } });
+    }
+
+    private void OnMarkLocalAiLines(object sender, RoutedEventArgs e)
+    {
+        if (loading) return;
+        Update(s => s with { MarkLocalAiLines = MarkLocalAiLines.IsChecked == true });
+    }
 
     private void OnGeminiPaidTier(object sender, RoutedEventArgs e)
     {

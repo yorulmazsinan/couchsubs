@@ -4,6 +4,14 @@
 import XCTest
 
 final class SubtitleWrapTests: XCTestCase {
+    /// Bilgisayardaki pencerede oyunda tek satır görünen altyazının çevirisi tek satırda kalır (66); telefonda 42
+    /// (Windows: SubtitleWrapTests.Desktop_keeps_a_sixty_char_line_on_one_line).
+    func testDesktopKeepsASixtyCharLineOnOneLine() {
+        let text = "Evet, bazı yerlerin koruması daha fazla. İki taraf da kazandı."
+        XCTAssertEqual(SubtitleWrap.fit(text, maxChars: SubtitleWrap.desktopMaxChars).text.split(separator: "\n").count, 1)
+        XCTAssertEqual(SubtitleWrap.fit(text).text.split(separator: "\n").count, 2)
+    }
+
     func testShortTextIsUntouched() {
         XCTAssertEqual(SubtitleWrap.fit("Gitmeliyiz, hemen."), .init(text: "Gitmeliyiz, hemen.", scale: 1))
     }

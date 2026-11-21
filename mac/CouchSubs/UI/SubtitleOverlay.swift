@@ -55,7 +55,7 @@ final class SubtitleOverlayController {
         guard let model else { return }
         let visible = model.overlayVisible
         let ignoresMouse = model.overlayIgnoresMouse
-        let fontSize = model.settings.style.fontSize
+        let fontSize = OverlayTextSize.windowFontSize(model.settings.style)
         let state = Shown(visible: visible, ignoresMouse: ignoresMouse, adjusting: model.overlayAdjusting, fontSize: fontSize)
         guard state != shown else { return }
         let wasAdjusting = shown?.adjusting ?? false
@@ -89,7 +89,7 @@ final class SubtitleOverlayController {
     /// Yeni yeri, ekranı ve boyu kaydeder (Bitti, çift tık, Enter).
     private func commit() {
         guard let panel, let model else { return }
-        let base = Double(baseHeight(panel, fontSize: model.settings.style.fontSize))
+        let base = Double(baseHeight(panel, fontSize: OverlayTextSize.windowFontSize(model.settings.style)))
         if let memory = OverlayFrameMemory(frame: panel.frame, baseHeight: base, displays: Self.displays()),
            let data = try? JSONEncoder().encode(memory) {
             UserDefaults.standard.set(data, forKey: Self.frameKey)
@@ -132,7 +132,7 @@ final class SubtitleOverlayController {
         panel.onCancel = { [weak model] in model?.overlayAdjusting = false }
         // Kayıtlı ekran bağlıysa ona göre; yoksa eski sürümün pencere kaydı; o da yoksa ana ekranın altında ortada.
         // Pencere artık her taşınışta kendiliğinden kaydedilmez: yalnız Bitti, çift tık ya da Enter kaydeder.
-        let base = Double(baseHeight(panel, fontSize: model.settings.style.fontSize))
+        let base = Double(baseHeight(panel, fontSize: OverlayTextSize.windowFontSize(model.settings.style)))
         if let data = UserDefaults.standard.data(forKey: Self.frameKey),
            let memory = try? JSONDecoder().decode(OverlayFrameMemory.self, from: data),
            let frame = memory.frame(baseHeight: base, displays: Self.displays()) {
@@ -145,7 +145,7 @@ final class SubtitleOverlayController {
                                                                 queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, let model = self.model, let panel = self.panel else { return }
-                self.fit(panel, fontSize: model.settings.style.fontSize)
+                self.fit(panel, fontSize: OverlayTextSize.windowFontSize(model.settings.style))
             }
         }
         self.panel = panel
@@ -177,7 +177,7 @@ final class SubtitleOverlayController {
     private func resizeHeight(_ edge: VerticalEdge) {
         guard let panel, let model, let start = dragStart() else { return }
         let delta = NSEvent.mouseLocation.y - start.mouse.y
-        let base = baseHeight(panel, fontSize: model.settings.style.fontSize)
+        let base = baseHeight(panel, fontSize: OverlayTextSize.windowFontSize(model.settings.style))
         heightScale = OverlayFrameMemory.heightScale(height: Double(start.frame.height + (edge == .top ? delta : -delta)), baseHeight: Double(base))
         let height = (base * CGFloat(heightScale)).rounded()
         var frame = start.frame
@@ -425,10 +425,16 @@ struct SubtitleOverlayView: View {
         let coverLine = !band && current && !line.paragraphs && style.placement == .cover && model.overlayCover?.text == line.text
             ? model.overlayCover : nil
         let cover: CGSize? = coverLine.flatMap { OverlayCover.size(of: $0.box, screen: geometry.screen, scale: scale) }
-        // Uzun çeviri en çok 3 satıra dengeli bölünür; 3 satıra sığmazsa yazı biraz küçülür (bkz. SubtitleWrap). "Örtsün"de
-        // yazı seçilen boyda kalır, en çok bir kademe küçülür ve satırdan satıra zıplamaz (CoverFontScale).
-        let wrapped = coverLine.map { SubtitleWrap.fit(line.text, scale: $0.scale) } ?? line.wrapped
-        let size = CGFloat(style.fontSize) * scale * (current ? 1 : 0.8) * CGFloat(wrapped.scale)
+        // Uzun çeviri en çok 3 satıra dengeli bölünür (bu pencerede satır başına 66 karakter); 3 satıra sığmazsa yazı biraz
+        // küçülür (bkz. SubtitleWrap). "Örtsün"de yazı seçilen boyda kalır, en çok bir kademe küçülür ve satırdan satıra
+        // zıplamaz (CoverFontScale).
+        let wrapped = coverLine.map { SubtitleWrap.fit(line.text, scale: $0.scale, maxChars: SubtitleWrap.desktopMaxChars) }
+            ?? line.fitted(to: SubtitleWrap.desktopMaxChars)
+        // "Yazı boyu oyundaki altyazı kadar": son altyazı kutularından; kapalıysa ya da ölçüm yoksa seçilen boy.
+        let manual = CGFloat(style.fontSize) * scale
+        let textSize = style.autoTextSize
+            ? OverlayTextSize.size(boxHeights: model.overlayBoxHeights, screenHeight: geometry.screen.height, manual: manual) : manual
+        let size = textSize * (current ? 1 : 0.8) * CGFloat(wrapped.scale)
         let alpha = Double(max(0, min(100, style.background))) / 100 * (current ? 1 : 0.83)
         let opacity: Double = switch line.role {
         case .current: 1

@@ -148,6 +148,9 @@ public struct UserSettings: Codable, Equatable {
     /// Ayarlardaki "Ek talimat" (#306): yapay zekâ çevirmeninin (Gemini, OpenAI, Claude, yerel model) sistem talimatının
     /// sonuna eklenir; boşsa hiçbir şey değişmez. Eski kayıtlarda yoktur, boş açılır.
     public var aiInstruction = ""
+    /// Yerel model seçiliyken paketten gelmeyen çevirinin başına nokta konur (". "): oyunda hangi satırın paketten, hangisinin
+    /// yerel modelden geldiği anlaşılır. Paketten gelen satıra konmaz. Eski kayıtlarda yoktur; kapalı başlar (Windows ile aynı).
+    public var markLocalAILines = false
     /// Altyazı TV'de mi, bilgisayar ekranındaki pencerede mi, ikisinde de mi. Eski kayıtlar TV ile açılır.
     public var output = SubtitleOutput.tv
     /// Bilgisayar ekranındaki altyazı penceresi tıklamaları alttaki pencereye (oyun, PS Remote Play) geçirir.
@@ -247,6 +250,7 @@ public struct UserSettings: Codable, Equatable {
         localAIBaseURL = try values.decodeIfPresent(String.self, forKey: .localAIBaseURL) ?? defaults.localAIBaseURL
         localAIModel = try values.decodeIfPresent(String.self, forKey: .localAIModel) ?? defaults.localAIModel
         aiInstruction = (try? values.decodeIfPresent(String.self, forKey: .aiInstruction)) ?? defaults.aiInstruction
+        markLocalAILines = try values.decodeIfPresent(Bool.self, forKey: .markLocalAILines) ?? defaults.markLocalAILines
         output = (try? values.decodeIfPresent(SubtitleOutput.self, forKey: .output)) ?? defaults.output
         overlayClickThrough = try values.decodeIfPresent(Bool.self, forKey: .overlayClickThrough) ?? defaults.overlayClickThrough
         freeAreaTarget = (try? values.decodeIfPresent(ResultTarget.self, forKey: .freeAreaTarget)) ?? defaults.freeAreaTarget

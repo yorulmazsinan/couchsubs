@@ -156,6 +156,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public Func<string, PackPartial?>? PartialPackLookup { get; set; }
     /// <summary>Konuşan adı ("ARTHUR: …") TV'ye giden çeviride gösterilir; kapalıysa yalnız cümle gider.</summary>
     public bool ShowSpeakerNames { get; set; } = true;
+    /// <summary>"Yerel modelin çevirdiği satırların başına nokta koy" açıkken <see cref="EngineMark"/>.</summary>
+    public const string LocalAiMark = ". ";
+    /// <summary>
+    /// Paketten gelmeyen çevirinin (çeviri motoru, önbelleği dahil) başına konan işaret; null ya da boşsa yok. Paketteki
+    /// satıra konmaz: oyunda hangi satırın paketten, hangisinin motordan geldiği anlaşılır (Ayarlar › Yerel model).
+    /// </summary>
+    public string? EngineMark { get; set; }
     /// <summary>
     /// Hedef dil Türkçe: yüksek güvenle Türkçe olan satır (<see cref="TurkishText.IsSure"/>) çevirmene gönderilmez (#289).
     /// Uygulama hedef dil Türkçe değilse kapatır.
@@ -746,7 +753,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
     /// <summary>Kısmi eşleşmenin Türkçesi: paketteki satırlar ve motorun çevirdiği eksik satır, okunan sırayla.</summary>
     private string Combine(PackPartial partial, string sentence) =>
-        string.Join("\n", partial.Lines.Select(line => SpeakerPrefix.Present(line.Turkish ?? sentence, line.Source, ShowSpeakerNames)));
+        string.Join("\n", partial.Lines.Select(line => line.Turkish is { } turkish
+            ? SpeakerPrefix.Present(turkish, line.Source, ShowSpeakerNames)
+            : Marked(SpeakerPrefix.Present(sentence, line.Source, ShowSpeakerNames))));
+
+    /// <summary>Motorun çevirdiği satırın başına <see cref="EngineMark"/> (paketteki satıra konmaz).</summary>
+    private string Marked(string text) =>
+        EngineMark is { Length: > 0 } mark && !text.StartsWith(mark, StringComparison.Ordinal) ? mark + text : text;
 
     // Tam okuma sıradayken geri geldiyse aradaki kısalmış okumaları birleştir; sıra ve okuma zamanı korunur.
     // Gerçek bir boş bölgeyi aşma: sonra gelen kısa metin ayrı bir replik olabilir.
@@ -952,7 +965,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             return;
         }
 
-        var translated = partial is null ? Present(sentence, request) : Combine(partial, sentence);
+        var translated = partial is null ? Marked(Present(sentence, request)) : Combine(partial, sentence);
         var finished = now();
         var result = $"{probe.Outcome()} {now() - started} ms";
         lock (gate)
