@@ -4,16 +4,13 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)
 
-**Bu sürümde yeni**
+**Bu sürümde yeni** (acil düzeltme sürümü)
 
-- **Kısa altyazıların çevrilmemesi (#822):** Bir önceki sürümle gelen tabela süzgeci, ekranın biraz yukarısında duran kısa altyazıları ("Let's go", "No way" gibi) tabela sayıp atıyordu. Gerçek altyazı artık atılmıyor; atılan her yazı nedeniyle birlikte altyazı günlüğüne yazılıyor.
-- **GTA 6 telefonunda çevirinin gelmemesi ya da geç gelmesi:** Telefon bir an görünmeyince gelen çeviri bir sonraki mesaja kadar bekliyordu; düzeltildi. "Ekranı çevir" kartı sohbeti izliyor: başka sohbete geçince kendiliğinden yenileniyor, daha önce açılan sohbetin çevirileri anında geliyor; balonlar aralıklı.
-- **Altyazıyı tam örtme (TV uygulaması 0.9.58):** "İngilizce altyazının üstünde" seçiliyken kutu oyunun altyazısını eni ve boyuyla tamamen örtüyor; yazı boyu sabit kalıyor, satırdan satıra zıplamıyor.
-- **Yalnız OBS (yayın):** Altyazı hedefinde yeni seçenek; TV olmadan altyazı yalnız OBS'teki tarayıcı kaynağına gidiyor. Adres ve Kopyala düğmesi seçenekle birlikte görünüyor.
-- **2015 Samsung TV'ler (Tizen 2.3, #761):** Uygulama birkaç saniye sonra HDMI görüntüsünün altında kalıyordu; görüntü artık üstte, çeviri alttaki şeritte gösteriliyor (elle kurulum, deneysel).
-- **Mac:** Kısayollar Ayarlar › Kısayollar'dan değiştirilebiliyor (Windows ile aynı: ekranı çevir Num 9 ya da ⌃⇧9; önceki sürümden gelenlerde ⌥⌘T de çalışır). Serbest alan, ek alan için "Bu alanı sürekli oku" ve "Sonucu göster", dublajda "Hızlı" ses, paket kapağı seçimi. Ek alanı taşırken Ayarlar'ın titremesi düzeltildi (#802).
-- **Windows:** Ayarlar'dan PS5 ↔ Xbox değiştirme ve Microsoft'tan çıkış; ek alanlar adlı listeye döndü (eski ayarlar korunur). "Yazı kadar" kutusu oyundaki altyazıyı örtüyor (katkı: @lones8888).
-- **GTA 6 topluluk havuzu:** Topluluk satırlarında "zenci" yerine bağlama göre "kanka/lan/herif"; ekrandan yanlış okunmuş 1.265 anlamsız satır temizlendi.
+- **Çevirilerin çoğunun gelmemesi (#822):** GTA 6 gibi satır aralığı geniş iki satırlı altyazılar iki parçaya bölünüyor, çoğu zaman yalnız bir yarısı çevriliyor ya da çeviri hiç oturmuyordu (beta.67'den beri, dört platformda). Düzeltildi; iki satırlı altyazı yeniden tek parça okunuyor.
+- **Menü ve harita çevirilerinin üst üste binmesi (#827, TV uygulaması 0.9.59):** Aynı yazı iki kez çizilmiyor, çeviri kutusu her zeminde tam opak, menü simgeleri açıkta kalıyor; menü etiketleri kısa emir kipiyle çevriliyor ("Para Kazan").
+- **Android TV (TV uygulaması 0.9.60):** TV'nin hata ayıklama iznini sürekli yeniden sorması ve kumandadaki Ayarlar tuşuna basınca CouchSubs'tan çıkılması düzeltildi.
+
+**beta.77'de gelenler:** kısa altyazıların atılmaması, GTA 6 telefon kartının sohbeti izlemesi, altyazıyı tam örtme, "Yalnız OBS (yayın)", Mac kısayolları, 2015 Samsung TV'ler.
 
 **beta.76'da gelenler:** Android TV'de CouchSubs'ın öne gelip kaybolması ve HDR/bildirimde HDMI'a geçme düzeltmesi (TV uygulaması 0.9.56), GTA 6 telefon çevirisinin gidip gelmemesi, telefonlarda Türkçe dublaj.
 
