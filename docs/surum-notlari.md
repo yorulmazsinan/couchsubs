@@ -6,14 +6,18 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **İki satırlı altyazının üst satırı da çevriliyor (Windows, Mac, #715):** beta.64'ten beri, üst satırı uzun alt satırı bir iki sözcük olan altyazılarda yalnız alt satır çevriliyordu. Düzeltildi.
-- **Mac'te "macOS ekrandaki yazıyı okuyamıyor" (#678, #679):** macOS yazı okuma modelini hazırlarken okuma bir iki dakika yanıt vermeyebiliyor. Altyazılar bu sırada yedek bir okuyucuyla sürüyor, macOS toparlanınca kendiliğinden eski okuyucuya dönülüyor. Uyarı çıkarsa uygulamayı kapatmanız gerekmiyor.
-- **Xbox (Beta) Mac'te:** Kurulumun başında konsol olarak Xbox Series / Xbox One seçilebiliyor; Microsoft girişi, Xbox seçimi ve ayarlar Windows'takiyle aynı. Yeni bir özellik; sorun yaşarsanız bildirin.
-- **Oyun paketleri ekranında "Paketleri şimdi güncelle" (Windows, Mac):** Yamaları beklemeden güncelliyor ve bitince neyin güncellendiğini söylüyor.
-- **Deneme modu Windows'ta:** Konsol bağlamadan örnek görüntülerle çeviriyi deneyebilirsiniz.
-- **Ekran yazıları (deneysel):** Oyun dünyasındaki poster, plaka ve tabelalar Mac'te de çevrilmiyor; hazır alanlar yalnız oyunun arayüz kutusunda çeviriyor; görev satırı Mac'te de altyazıdan ayrı gösteriliyor. TV'de ekran yazısı ile altyazı üst üste binmiyor (TV uygulaması 0.9.46).
+- **Windows'ta uyarısız kapanma (#587):** Pencereden okunan kareler bellekte gereğinden uzun tutuluyordu; uzun oturumda bellek hızla büyüyordu. Düzeltildi. Yedek okumalar artık Mac'teki gibi sırayla ve çok daha az bellekle yapılıyor. Uygulama yine beklenmedik biçimde kapanırsa `%LOCALAPPDATA%\CouchSubs\cokme` klasörüne bir çökme kaydı bırakıyor ve sonraki açılışta bunu size gösteriyor. Kayıt hiçbir yere kendiliğinden gönderilmez.
+- **Çeviri iki kez görünmüyor:** Ekran yazılarını otomatik çevir açıkken altyazının çevirisi bazen hem oyunun altyazısının üstünde hem seçtiğiniz yerde görünüyordu. Altyazı artık ekran yazısı olarak ikinci kez çizilmiyor.
+- **Hangi ekran yazıları çevrilsin (deneysel):** "Ekran yazılarını otomatik çevir" açıkken altında ayrı anahtarlar var: Telefon (GTA 6), Görev ve hedef yazısı, Yardım kutuları ve tuş ipuçları, Menüler, Diğer ekran yazıları. Menüler ve Diğer varsayılan olarak kapalı. "Ekranı çevir" her zaman her şeyi çevirir.
+- **Samsung'da TV'ye bağlanamama:** TV ağda yeni bir adres alınca CouchSubs TV uygulaması açılmayabiliyordu. Düzeltildi.
+- **TV eşleştirmesi:** TV yeniden eşleşmek istediğinde eski istek yenisini engellemiyor; onay penceresi yeni kodla açılıyor.
+- **PS5 bağlantısı:** Görüntü bozulduğunda PS5'ten yeni kare daha hızlı isteniyor; birkaç dakikalık oturumlardan sonra yeniden bağlanma beklemesi uzamıyor. Kopma olursa nedeni günlüğe yazılıyor (`remoteplay.log`).
+- **2016 Samsung TV'ler (Tizen 2.4, #638):** Kurulum paketi bu modellerin beklediği biçimde imzalanıyor. Gerçek bir 2016 TV'de denenmedi; sonucu bildirirseniz çok yardımcı olur.
+- **Mac'te pencereden okuma:** Görüntü kaynağı olarak bir pencere (ör. OBS projektörü ya da oyun penceresi) seçilebiliyor.
 
-**beta.66'da gelenler:** Mac'te uygulama içi güncellemenin yeniden gelmesi (#696), Windows kurulumunda "Yükleme Kısmen Başarılı" (#676), elle yazılan TV adresinde Android TV'nin tanınması, LG'de "TV uygulamasını yeniden kur" ve "TV'yi değiştir" (#700).
+**beta.67'de gelenler:** İki satırlı altyazının üst satırının da çevrilmesi (#715), Mac'te yazı okuma takılmasında altyazının sürmesi (#678, #679), Mac'te Xbox (Beta), "Paketleri şimdi güncelle", Windows'ta deneme modu.
+
+**Daha önce (beta.66):** Mac'te uygulama içi güncellemenin yeniden gelmesi (#696), Windows kurulumunda "Yükleme Kısmen Başarılı" (#676), elle yazılan TV adresinde Android TV'nin tanınması, LG'de "TV uygulamasını yeniden kur" ve "TV'yi değiştir" (#700).
 
 **beta.65'te gelenler:** Android TV'de katman modunda altyazının yeniden görünmesi (TV uygulaması 0.9.45), ekran yazılarını otomatik çevirmenin varsayılan kapalı olması (deneysel), Samsung TV'de uygulamanın açılması (#685), LG TV'nin sürekli CouchSubs'a dönmemesi (#688), PSN girişinde "Tarayıcıda giriş yap" (Mac, #683), TV kurulum günlüğü (#686).
 
