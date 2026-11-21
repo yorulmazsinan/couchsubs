@@ -131,7 +131,18 @@ public final class Translator: TextTranslator {
     }
 
     /// Hazır metni Apple'ın çevirisine verir; oturum ilk çağrıda açılır.
+    ///
+    /// Çağrılar tek sıradan geçer (`TranslationGate`). Eskiden ısınma ("Hello") ile ilk altyazı aynı anda gelince ikisi
+    /// de `LanguageAvailability` beklerken oturumu boş görüp ayrı `TranslationSession` açıyordu; biri öbürünün üstüne
+    /// yazılıp çevirisi sürerken bırakılıyordu, aynı oturuma eşzamanlı istek de gidebiliyordu. iPhone'da Translation
+    /// çerçevesinin içinde Swift tuzağıyla kapanma görülüyordu (Crashlytics, 1.0.1–1.0.3).
     private func run(_ input: String) async throws -> String {
+        try await gate.run { try await self.runNow(input) }
+    }
+
+    private let gate = TranslationGate()
+
+    private func runNow(_ input: String) async throws -> String {
         guard #available(macOS 26, iOS 26, *) else { throw TranslatorError.unsupported }
         if session == nil {
             switch await LanguageAvailability().status(from: source, to: target) {
@@ -142,5 +153,68 @@ public final class Translator: TextTranslator {
         }
         guard let session = session as? TranslationSession else { throw TranslatorError.unsupported }
         return try await session.translate(input).targetText
+    }
+}
+
+/// Eşzamansız çağrıları sırayla, birer birer çalıştırır. Sırada bekleyen görev iptal edilirse beklemeyi bırakır
+/// (`CancellationError`); altyazı hattı süren çeviriyi bıraktığında arkadaki istekler takılı kalmaz.
+final class TranslationGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var busy = false
+    private var nextID: UInt64 = 0
+    private var waiters: [(id: UInt64, continuation: CheckedContinuation<Void, Error>)] = []
+
+    func run<T>(_ body: () async throws -> T) async throws -> T {
+        try await enter()
+        defer { leave() }
+        return try await body()
+    }
+
+    private func enter() async throws {
+        let id = makeID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                lock.lock()
+                if Task.isCancelled {
+                    lock.unlock()
+                    continuation.resume(throwing: CancellationError())
+                } else if !busy {
+                    busy = true
+                    lock.unlock()
+                    continuation.resume()
+                } else {
+                    waiters.append((id, continuation))
+                    lock.unlock()
+                }
+            }
+        } onCancel: {
+            cancel(id)
+        }
+    }
+
+    private func makeID() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        nextID += 1
+        return nextID
+    }
+
+    private func cancel(_ id: UInt64) {
+        lock.lock()
+        let waiter = waiters.firstIndex { $0.id == id }.map { waiters.remove(at: $0) }
+        lock.unlock()
+        waiter?.continuation.resume(throwing: CancellationError())
+    }
+
+    private func leave() {
+        lock.lock()
+        guard !waiters.isEmpty else {
+            busy = false
+            lock.unlock()
+            return
+        }
+        let next = waiters.removeFirst()
+        lock.unlock()
+        next.continuation.resume()
     }
 }

@@ -753,6 +753,13 @@ public final class StreamSession: @unchecked Sendable {
         }, user)
         chiaki_session_set_video_sample_cb(box.pointer, { buffer, size, _, _, user in
             guard let buffer, let user else { return true }
+            // libchiaki'nin `size_t` boyu Swift'te `Int`; üst biti dolu (eksi) gelirse `Data(bytes:count:)` önkoşulu
+            // uygulamayı kapatıyordu (iPhone 1.0.3, Crashlytics: EXC_BREAKPOINT, StreamSession.swift:688). Kare atılır;
+            // false, libchiaki'ye karenin işlenmediğini söyler (sonraki kareler için yeni anahtar kare istenir).
+            guard StreamSession.isPlausibleSample(size: size) else {
+                RemotePlayLog.write("PS5 görüntü: geçersiz kare boyu (\(size)), kare atıldı")
+                return false
+            }
             Unmanaged<ChiakiSessionBox>.fromOpaque(user).takeUnretainedValue().owner?.ingest(Data(bytes: buffer, count: size))
             return true
         }, user)
@@ -897,6 +904,14 @@ public final class StreamSession: @unchecked Sendable {
         let delay = policy.nextDelay(inUse: reason == .inUse)
         RemotePlayLog.write("PS5 oturumu: \(delay) sn sonra yeniden denenecek")
         queue.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in self?.connect(current) }
+    }
+
+    /// Bir H.264 karesinin en büyük kabul edilen boyu; 1080p anahtar kare birkaç MB'ı geçmez.
+    static let maxSampleBytes = 64 << 20
+
+    /// libchiaki'den gelen kare boyu makul mü (boş, eksi ya da akla yatmayacak kadar büyük değil).
+    static func isPlausibleSample(size: Int) -> Bool {
+        size > 0 && size <= maxSampleBytes
     }
 
     /// Her kare çözülür (sonraki kareler öncekilere dayanır); görüntü saniyede en çok 20 kez üretilir.
