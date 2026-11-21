@@ -119,7 +119,8 @@ amacına uygun):
   uygulamadan çıkınca çalışma ekranındaki canlı önizleme (PS5/Xbox görüntüsü + canlı altyazı,
   `AVSampleBufferDisplayLayer`) sistemin PiP penceresine geçer (`canStartPictureInPictureAutomaticallyFromInline`);
   önizlemenin altında "Küçük pencereyi aç" düğmesi de var. Apple, PiP için bu arka plan modunu ve `.playback` ses
-  oturumunu şart koşuyor ("Configuring your app for media playback").
+  oturumunu şart koşuyor ("Configuring your app for media playback"). Oturum `.mixWithOthers` ile açılır: telefonda
+  çalan müzik/podcast kesilmez (Xbox sesi telefonda çalıyorsa oturumu WebRTC yönetir).
 - **Xbox oyun sesi**: "Xbox sesini bu cihazda çal" açıkken oyun sesi telefonda gerçekten çalınır; arka planda ve kilitli
   ekranda sürer.
 - Sessiz ses çalınmaz, sesle uygulama ayakta tutulmaz. PiP penceresi kapanınca iOS uygulamayı her zamanki gibi
