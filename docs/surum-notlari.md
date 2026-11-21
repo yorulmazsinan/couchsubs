@@ -6,12 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **"Ekranı çevir" GTA 6'da telefon mesajlarını yine çeviriyor:** beta.68'den beri altyazı akarken telefon kartının alt yarısındaki mesajlar altyazı sanılıp atlanıyordu. Düzeltildi.
-- **Görev yazısı konuşmanın yerine geçmiyor:** Alt tarafta "John'u takip et" gibi bir görev yazısı konuşmayla aynı anda ya da konuşma sürerken çıkınca konuşma çevrilmeyebiliyordu. Artık konuşma çevriliyor, görev yazısı kendi yerinde gösteriliyor.
-- **LG'de ses (TV uygulaması 0.9.48):** TV uygulaması PS5 görüntüsü için TV'den ses önceliği istiyor; TV'nin sesi kendiliğinden kısılırsa bir kez açıyor. Bilgi panelinde (kumandada OK) ses durumu ayrıntılı görünüyor. Altyazı hedefi telefondayken ses gelip TV uygulamasındayken gelmiyorsa bu satırın fotoğrafını paylaşmanız çok yardımcı olur.
-- **2016 Samsung TV'ler (#638):** Elle kurulmuş TV uygulaması güncelleme sırasında silinmiyor. Tizen Studio ile elle kurulum rehberi: [docs/tv-samsung.md](https://github.com/yorulmazsinan/couchsubs/blob/main/docs/tv-samsung.md#2016-modellerde-elle-kurulum-tizen-studio).
+- **LG'de PS tuşuna basınca çeviri kaybolmuyor (TV uygulaması 0.9.49):** PS tuşu TV'yi PS5'in girişine geçirip CouchSubs TV uygulamasını arkaya atıyordu; uygulama 5-6 saniyede geri geliyor, menüye birkaç kez girip çıkınca hiç gelmeyebiliyordu. Artık en geç 2 saniyede geri geliyor, bağlantı hemen yeniden kuruluyor ve ekrandaki son altyazı yeniden gösteriliyor. Başka bir HDMI girişine ya da uygulamaya kendiniz geçtiğinizde buna saygı gösteriliyor.
+- **LG'de Oyun Yöneticisi:** CouchSubs açıkken TV'nin ayar tuşu genel menüyü açar; Oyun Yöneticisi yalnız TV PS5 girişindeyken açılıyor. Oyun modu ya da VRR ayarı için çeviriyi durdurup PS5 girişinde ayarlayın, sonra çeviriyi yeniden başlatın.
 
-**beta.69'da gelenler:** Ekran çevirisi kapalıyken GTA 6'da menülerin çevrilmemesi (hazır alanlar varsayılan kapalı), oyun paketlerinde aynı oyunun tek görünmesi, Samsung 4K/8K TV'lerde görüntünün sol üstte kalmaması ve Sarı tuş (TV uygulaması 0.9.47).
+**beta.70'te gelenler:** "Ekranı çevir"in GTA 6 telefon mesajlarını yeniden çevirmesi, görev yazısının konuşmanın yerine geçmemesi, LG'de ses için önlemler (TV uygulaması 0.9.48), 2016 Samsung TV'lerde elle kurulan uygulamanın korunması (#638).
+
+**Daha önce (beta.69):** Ekran çevirisi kapalıyken GTA 6'da menülerin çevrilmemesi (hazır alanlar varsayılan kapalı), oyun paketlerinde aynı oyunun tek görünmesi, Samsung 4K/8K TV'lerde görüntünün sol üstte kalmaması ve Sarı tuş (TV uygulaması 0.9.47).
 
 **Daha önce (beta.68):** Windows'ta uyarısız kapanmaya karşı önlemler ve çökme kaydı (#587), çevirinin iki kez görünmemesi, ekran yazısı türlerinin ayrı açılıp kapanması, Samsung'da yeni adres alan TV'ye bağlanma, TV eşleştirme düzeltmesi, PS5 bağlantı kopmasına karşı önlemler, 2016 Samsung TV'ler için yeni imza (#638).
 
