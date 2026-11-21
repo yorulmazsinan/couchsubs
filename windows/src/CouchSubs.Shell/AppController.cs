@@ -1858,7 +1858,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         try
         {
             // Uygulama başlatırken kapanırsa günlükte hangi adımda kaldığı görünsün.
-            RemotePlayLog.Note($"Çeviri hazırlanıyor; altyazı: {settings.Output}, TV: {(tv is null ? "yok" : tv.Brand.ToString())}");
+            // Sürüm ve Windows sürümü de: Mac ve iPhone günlüğünde vardı, Windows'ta yoktu; kullanıcının hangi sürümde
+            // koptuğu günlükten görünmüyordu (GitHub #593).
+            RemotePlayLog.Note($"Çeviri hazırlanıyor; CouchSubs {AppVersion.Current(System.Reflection.Assembly.GetEntryAssembly() ?? typeof(AppController).Assembly)}, "
+                               + $"Windows {Environment.OSVersion.Version}; altyazı: {settings.Output}, TV: {(tv is null ? "yok" : tv.Brand.ToString())}");
             RefreshTranslatorStatus();
             try { await StartServerAsync(); } catch { /* port açılamadıysa TV durumu "bekleniyor" kalır */ }
             server.SendStyle(settings.Style);

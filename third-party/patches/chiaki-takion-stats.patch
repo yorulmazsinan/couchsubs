@@ -1,0 +1,120 @@
+diff --git a/lib/include/chiaki/takionsendbuffer.h b/lib/include/chiaki/takionsendbuffer.h
+--- a/lib/include/chiaki/takionsendbuffer.h
++++ b/lib/include/chiaki/takionsendbuffer.h
+@@ -32,6 +32,10 @@
+ 	bool should_stop;
+ 	bool alive; // false after fini: Takion's thread can end before the stream connection sends its disconnect
+ 	ChiakiThread thread;
++	// Only written by the Send Buffer thread, read by the congestion control thread for its log line (32 bit: no torn
++	// reads on 32 bit ARM; it only looks at differences, so wrapping is fine)
++	volatile uint32_t resent; // packets sent again because the console didn't acknowledge them in time
++	volatile uint32_t given_up; // packets dropped after TAKION_DATA_RESEND_TRIES_MAX tries without acknowledgement
+ } ChiakiTakionSendBuffer;
+ 
+ 
+diff --git a/lib/src/congestioncontrol.c b/lib/src/congestioncontrol.c
+--- a/lib/src/congestioncontrol.c
++++ b/lib/src/congestioncontrol.c
+@@ -1,9 +1,16 @@
+ // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+ 
+ #include <chiaki/congestioncontrol.h>
++#include <chiaki/time.h>
+ 
+ #define CONGESTION_CONTROL_INTERVAL_MS 200
+ 
++// While there is loss in either direction, one log line this often says how much: packets from the console that never
++// arrived (measured, before clamping to packet_loss_max) and reliable packets to the console that had to be sent again
++// or were never acknowledged. Silent on a clean network. Tells "the network drops the video" from "the console doesn't
++// get our packets" (heartbeats, IDR requests) apart in a user's log (CouchSubs GitHub #593).
++#define CONGESTION_CONTROL_LOG_INTERVAL_MS 5000
++
+ static void *congestion_control_thread_func(void *user)
+ {
+ 	ChiakiCongestionControl *control = user;
+@@ -13,6 +20,11 @@
+ 	if(err != CHIAKI_ERR_SUCCESS)
+ 		return NULL;
+ 
++	ChiakiTakionSendBuffer *send_buffer = &control->takion->send_buffer;
++	uint64_t log_since_ms = chiaki_time_now_monotonic_ms();
++	uint64_t log_received = 0, log_lost = 0;
++	uint32_t log_resent = send_buffer->resent, log_given_up = send_buffer->given_up;
++
+ 	while(true)
+ 	{
+ 		err = chiaki_bool_pred_cond_timedwait(&control->stop_cond, CONGESTION_CONTROL_INTERVAL_MS);
+@@ -25,6 +37,27 @@
+ 		ChiakiTakionCongestionPacket packet = { 0 };
+ 		uint64_t total = received + lost;
+ 		control->packet_loss = total > 0 ? (double)lost / total : 0;
++
++		log_received += received;
++		log_lost += lost;
++		uint64_t now_ms = chiaki_time_now_monotonic_ms();
++		if(now_ms - log_since_ms >= CONGESTION_CONTROL_LOG_INTERVAL_MS)
++		{
++			uint32_t resent = send_buffer->resent - log_resent;
++			uint32_t given_up = send_buffer->given_up - log_given_up;
++			if(log_lost || resent || given_up)
++			{
++				uint64_t log_total = log_received + log_lost;
++				CHIAKI_LOGI(control->takion->log, "Network in the last %u ms: from the console %llu of %llu packets lost (%.1f%%), "
++					"to the console %u packets sent again and %u never acknowledged",
++					(unsigned int)(now_ms - log_since_ms), (unsigned long long)log_lost, (unsigned long long)log_total,
++					log_total ? 100.0 * (double)log_lost / (double)log_total : 0.0, (unsigned int)resent, (unsigned int)given_up);
++			}
++			log_since_ms = now_ms;
++			log_received = log_lost = 0;
++			log_resent += resent;
++			log_given_up += given_up;
++		}
+ 		if(control->packet_loss > control->packet_loss_max)
+ 		{
+ 			CHIAKI_LOGD(control->takion->log, "Clamping reported packet loss: measured=%.1f%% reported_max=%.1f%%",
+diff --git a/lib/src/takion.c b/lib/src/takion.c
+--- a/lib/src/takion.c
++++ b/lib/src/takion.c
+@@ -214,6 +214,9 @@
+ 	takion->close_socket = info->close_socket;
+ 	takion->version = info->protocol_version;
+ 	takion->disable_audio_video = info->disable_audio_video;
++	// The send buffer itself is set up later on Takion's thread; the congestion control reads these from the start
++	takion->send_buffer.resent = 0;
++	takion->send_buffer.given_up = 0;
+ 
+ 	switch(takion->version)
+ 	{
+diff --git a/lib/src/takionsendbuffer.c b/lib/src/takionsendbuffer.c
+--- a/lib/src/takionsendbuffer.c
++++ b/lib/src/takionsendbuffer.c
+@@ -44,6 +44,8 @@
+ 
+ 	send_buffer->should_stop = false;
+ 	send_buffer->alive = false;
++	send_buffer->resent = 0;
++	send_buffer->given_up = 0;
+ 
+ 	ChiakiErrorCode err = chiaki_mutex_init(&send_buffer->mutex, false);
+ 	if(err != CHIAKI_ERR_SUCCESS)
+@@ -260,6 +262,7 @@
+ 			if(packet->tries >= TAKION_DATA_RESEND_TRIES_MAX)
+ 			{
+ 				CHIAKI_LOGI(send_buffer->log, "Hit max retries of %d tries... giving up on packet with seqnum %#llx", TAKION_DATA_RESEND_TRIES_MAX, (unsigned long long)packet->seq_num);
++				send_buffer->given_up++;
+ 				ChiakiSeqNum32 ack_seq_nums[TAKION_SEND_BUFFER_SIZE];
+ 				size_t ack_seq_nums_count;
+ 				chiaki_mutex_unlock(&send_buffer->mutex);
+@@ -269,7 +272,11 @@
+ 					i-= 1;
+ 				continue;
+ 			}
+-			CHIAKI_LOGI(send_buffer->log, "Takion Send Buffer re-sending packet with seqnum %#llx, tries: %llu", (unsigned long long)packet->seq_num, (unsigned long long)packet->tries);
++			// Verbose: on a lossy network this was 5 lines a second per packet, 63% of a 1 MB remoteplay.log, and pushed
++			// out its beginning (app version, when the trouble started; CouchSubs GitHub #593). Counted instead and
++			// written every 5 s by the congestion control ("Network in the last ...").
++			CHIAKI_LOGV(send_buffer->log, "Takion Send Buffer re-sending packet with seqnum %#llx, tries: %llu", (unsigned long long)packet->seq_num, (unsigned long long)packet->tries);
++			send_buffer->resent++;
+ 			packet->last_send_ms = now;
+ 			chiaki_takion_send_raw(send_buffer->takion, packet->buf, packet->buf_size);
+ 			packet->tries++;
