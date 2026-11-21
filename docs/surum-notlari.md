@@ -4,11 +4,16 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)
 
-**Bu sürümde yeni** (acil düzeltme sürümü)
+**Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **Çevirilerin çoğunun gelmemesi (#822):** GTA 6 gibi satır aralığı geniş iki satırlı altyazılar iki parçaya bölünüyor, çoğu zaman yalnız bir yarısı çevriliyor ya da çeviri hiç oturmuyordu (beta.67'den beri, dört platformda). Düzeltildi; iki satırlı altyazı yeniden tek parça okunuyor.
-- **Menü ve harita çevirilerinin üst üste binmesi (#827, TV uygulaması 0.9.59):** Aynı yazı iki kez çizilmiyor, çeviri kutusu her zeminde tam opak, menü simgeleri açıkta kalıyor; menü etiketleri kısa emir kipiyle çevriliyor ("Para Kazan").
-- **Android TV (TV uygulaması 0.9.60):** TV'nin hata ayıklama iznini sürekli yeniden sorması ve kumandadaki Ayarlar tuşuna basınca CouchSubs'tan çıkılması düzeltildi.
+- **Kısa ve iki satırlı altyazılar:** Telefon bildiriminin altyazı sanılması, pencere kaynağında görev satırının ("Follow the plane") kaçması ve oyunun kendi Türkçe altyazısının yeniden çevrilmesi düzeltildi.
+- **GTA 6 bildirimleri:** Telefon bildirimi ve mesaj önizlemesinin çevirisi ekranın ortasına değil, kendi yerine çiziliyor.
+- **LG'de görüntünün önce gelip sonra siyah kalması (#643, TV uygulaması 0.9.61):** TV uygulamasının ses ayarları varsayılan olarak kapatıldı; görüntü takılırsa kendiliğinden yeniden kuruluyor.
+- **LG + telefon eşleşmesinin tamamlanmaması (#737, TV uygulaması 0.9.62):** Telefondaki eşleşme isteği düşerse TV kendiliğinden yeniden istiyor.
+- **Android TV'de "bağlı ama altyazı gelmiyor" (TV uygulaması 0.9.63):** TV uygulaması eski bir adrese bağlı kalıyordu; bilgisayar artık açık uygulamaya kendi adresini bildiriyor.
+- **Mac/iPhone'da PS5 bağlanırken çökme:** Geçersiz görüntü karesi artık atılıyor; Apple çevirisindeki eşzamanlı oturum sorunu giderildi.
+
+**beta.78'de gelenler:** iki satırlı altyazının yarım okunması (çevirilerin çoğunun gelmemesi) düzeltmesi, menü/harita çevirilerinin üst üste binmemesi, Android TV izin istemi ve Ayarlar tuşu.
 
 **beta.77'de gelenler:** kısa altyazıların atılmaması, GTA 6 telefon kartının sohbeti izlemesi, altyazıyı tam örtme, "Yalnız OBS (yayın)", Mac kısayolları, 2015 Samsung TV'ler.
 
