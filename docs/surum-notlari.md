@@ -6,12 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Başka bir cihazda göster:** Ayarlar'da ve altyazı hedefinde çıkan QR kodu aynı ağdaki bir telefon ya da tabletle okutun; altyazı o cihazın tarayıcısında canlı görünür, uygulama kurmak gerekmez.
-- **Altyazıyı konumlandır:** Altyazı penceresini fareyle taşıyıp kenarlarından boyutlandırın; Enter kaydeder, Esc vazgeçer. Birden çok ekranda seçtiğiniz ekranda kalır.
-- **GTA 6 harita kartı:** Haritada açılan görev/konum kartının başlığı, açıklaması ve ayrıntıları kendi yerlerinde, kendi stilinde çevrilir ("Görev ve hedef yazısı" ayarına bağlı).
-- **TV uygulaması kendiliğinden açılır:** Çeviri başlayınca CouchSubs her TV türünde TV uygulamasını açmayı dener (artık Android TV'de de). Açılamazsa ana ekranda nedeni ve "Otomatik açmayı dene" düğmesi çıkar.
-- **LG'de giriş seçimi (TV uygulaması 0.9.54):** PS5'in girişi daha akıllı seçiliyor; soundbar/AV alıcı girişleri sona kalıyor, görüntü gelmezse sıradaki giriş deneniyor. Kumandada 1–4 girişi elle seçer ve hatırlar, 0 otomatiğe döner.
-- **Samsung 8K (TV uygulaması 0.9.54):** 8K TV'lerde görüntünün sol üstte küçük kalmasına karşı yeni yöntemler; Sarı tuş "Görüntü yöntemi n/5" arasında döner.
+- **Samsung 4K/8K TV'de görüntünün sol üst köşede küçük kalması (TV uygulaması 0.9.55):** Asıl neden bulundu ve giderildi; görüntü artık açılışta, Sarı tuşa basmadan tam ekran geliyor. TV uygulaması bilgisayardaki CouchSubs güncellenince kendiliğinden yeniden kurulur.
+- **Samsung ultra geniş monitör (#304):** Sarı tuş artık her zaman çalışıyor ve "Görüntü yöntemi n/3" arasında 21:9 / 32:9 tam genişlik yöntemlerini deniyor.
+- **Tabela ve tişört yazıları çevrilmiyor:** Altyazı alanına giren sahne yazıları (tabela, tişört, eğik yazı) artık altyazı sayılmıyor; ekranda altyazı yokken TV'ye bir şey gitmiyor.
+- **Yeniden bağlan:** Konsol bağlantısı koparsa ve kendiliğinden toparlanmazsa ana ekranda "Yeniden bağlan" düğmesi çıkıyor; uygulamayı kapatıp açmaya gerek yok. Xbox'ta yeniden bağlanırken eski oturumun yenisini kesmesi düzeltildi.
+
+**beta.74'te gelenler:** QR ile başka cihazda altyazı, "Altyazıyı konumlandır", GTA 6 harita kartı, TV uygulamasının kendiliğinden açılması, LG'de giriş seçimi (1–4 tuşları).
 
 **beta.73'te gelenler:** LG'de çeviri başlayınca siyah ekrana karşı önlem, Samsung parlaklık oynaması ve ultra geniş monitör düzeltmesi, GTA 6 telefon kartı iyileştirmesi.
 
