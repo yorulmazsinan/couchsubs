@@ -6,14 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Samsung 4K/8K TV'de görüntünün sol üst köşede küçük kalması (TV uygulaması 0.9.55):** Asıl neden bulundu ve giderildi; görüntü artık açılışta, Sarı tuşa basmadan tam ekran geliyor. TV uygulaması bilgisayardaki CouchSubs güncellenince kendiliğinden yeniden kurulur.
-- **Samsung ultra geniş monitör (#304):** Sarı tuş artık her zaman çalışıyor ve "Görüntü yöntemi n/3" arasında 21:9 / 32:9 tam genişlik yöntemlerini deniyor.
-- **Tabela ve tişört yazıları çevrilmiyor:** Altyazı alanına giren sahne yazıları (tabela, tişört, eğik yazı) artık altyazı sayılmıyor; ekranda altyazı yokken TV'ye bir şey gitmiyor.
-- **Yeniden bağlan:** Konsol bağlantısı koparsa ve kendiliğinden toparlanmazsa ana ekranda "Yeniden bağlan" düğmesi çıkıyor; uygulamayı kapatıp açmaya gerek yok. Xbox'ta yeniden bağlanırken eski oturumun yenisini kesmesi düzeltildi.
+- **Android TV'de CouchSubs'ın öne gelip hemen kaybolması (TV uygulaması 0.9.56):** Bilgisayar ve telefon, TV uygulaması zaten açıkken onu yeniden açmaya çalışmıyor; açma yalnız uygulama gerçekten kapalıysa ve en çok 3 kez deneniyor. TV uygulamasında kumandadan açılan ekran artık kendiliğinden değişmiyor.
+- **Android TV'de HDR açılınca ya da bildirim gelince HDMI girişine geçme (#794):** TV kendi HDMI ekranını öne çekerse CouchSubs kısa sürede kendini geri getiriyor; altyazı arkada kalmıyor.
+- **GTA 6 telefonu:** Otomatik telefon çevirisi artık gidip gelmiyor (tek karelik ıskada panel kapanmıyor, aynı mesajın biraz farklı okunuşu yeni mesaj sayılmıyor); ana ekrandaki uygulama adları otomatik panelde de çevrilmiyor.
+- **Türkçe dublaj telefonlarda:** Çeviri iPhone ve Android'de telefonun kendi Türkçe sesiyle okunabiliyor (bilgisayarlarda zaten vardı). Windows'ta "Hızlı" sesin duygu etiketlerini de okuması düzeltildi.
 
-- **Oyuna özel ayarlar:** Her oyunun altyazı alanları artık ayrı bir profilde; listede olmayan oyun adıyla eklenebiliyor, profil seçilip yeniden adlandırılabiliyor, çoğaltılıp silinebiliyor. Bir oyunun ayarları artık başka oyununkinin üzerine yazılmıyor. Oyun listesine popüler oyunlar eklendi.
-- **GTA 6 telefonu:** Telefonun ana ekranı (simgeler, bildirimler) artık mesaj kartına girmiyor; yazılar kendi yerinde çevriliyor, uygulama adları çevrilmiyor. Telefon Remote Play ya da OBS penceresinden oynarken de bulunuyor.
-- **Bekleme ayarları:** "Bozuk okunan satır için bekleme" ve "Yarım okunan satır için bekleme" artık Mac'te de var.
+**beta.75'te gelenler:** Samsung 4K/8K'da görüntünün sol üstte küçük kalmasının asıl nedeninin giderilmesi (TV uygulaması 0.9.55), tabela/tişört yazılarının çevrilmemesi, "Yeniden bağlan", oyun profilleri, GTA 6 telefon ana ekranı ve Remote Play penceresi.
 
 **beta.74'te gelenler:** QR ile başka cihazda altyazı, "Altyazıyı konumlandır", GTA 6 harita kartı, TV uygulamasının kendiliğinden açılması, LG'de giriş seçimi (1–4 tuşları).
 
