@@ -20,6 +20,22 @@ enum Images {
         return context.makeImage()!
     }
 
+    /// Karenin `area` alanı (kenarlara oranla) hemen solundaki pikselin rengiyle örtülür: yazı tanıma oradaki yazıyı
+    /// (konuşan adını) okuyamaz.
+    static func hiding(_ image: CGImage, _ area: TextBox) -> CGImage {
+        let width = image.width, height = image.height
+        let data = pixels(image)
+        let x = max(0, Int(area.left * Double(width)) - 4), y = min(height - 1, Int((area.top + area.bottom) / 2 * Double(height)))
+        let i = (y * width + x) * 4
+        let context = rgba(width: width, height: height)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(CGColor(red: Double(data[i]) / 255, green: Double(data[i + 1]) / 255, blue: Double(data[i + 2]) / 255, alpha: 1))
+        // CoreGraphics'in y ekseni aşağıdan yukarı.
+        context.fill(CGRect(x: area.left * Double(width), y: (1 - area.bottom) * Double(height),
+                            width: (area.right - area.left) * Double(width), height: (area.bottom - area.top) * Double(height)))
+        return context.makeImage()!
+    }
+
     static func rgba(width: Int, height: Int) -> CGContext {
         CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!

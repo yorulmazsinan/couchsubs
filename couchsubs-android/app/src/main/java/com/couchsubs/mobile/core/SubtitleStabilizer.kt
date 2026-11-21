@@ -31,6 +31,18 @@ class SubtitleStabilizer(
     companion object {
         /** Bölge bu kadar boş kalırsa altyazı kalkmış sayılır; parlak arka planda kaçan birkaç okuma silmez. */
         const val CLEAR_AFTER_MS = 800
+
+        /**
+         * Okuma, adlı gönderilen satırın ("JASON: Gidelim.") adı okunamamış hali mi ("Gidelim."). Ad sonradan okunan
+         * satırın tersi (bkz. SubtitlePipeline.nameRead): ad bir görünüp bir kaybolunca cümle yeniden çevrilip TV'de
+         * adsız ve adlı iki kez görünmesin (Mac: isUnnamedReread, Windows: IsUnnamedReread).
+         */
+        fun isUnnamedReread(raw: String, sentRaw: String): Boolean {
+            if (sentRaw.isEmpty() || SpeakerPrefix.split(raw) != null) return false
+            val named = SpeakerPrefix.split(sentRaw) ?: return false
+            val rows = TextMatch.normalizeRows(named.body)
+            return rows.isNotEmpty() && TextMatch.isSameSubtitle(TextMatch.normalize(raw), rows)
+        }
         /**
          * Okuma boş döndüğü halde satırın yeri, satır son okunduğundan beri değişmediyse (bölge izi,
          * [RegionSignature.changed]) yazı hâlâ oradadır, yazı tanıma kaçırmıştır: parlak zeminde beyaz yazı saniyelerce
@@ -113,8 +125,9 @@ class SubtitleStabilizer(
         // (altyazılar geçişte üst üste solarken karışan okuma) beklemeden gitmez; geçiş süresinden uzun kararlıysa gider.
         val ready = if (OcrNoise.looksGarbled(rawText)) candidateCount >= stableFrames && time - candidateSince >= GARBLED_STABLE_MS
             else candidateCount >= stableFrames || endsSentence(rawText)
-        // Gönderilenin gürültülü yeniden okuması yeni satır değildir.
-        if (isSame(text, sent)) {
+        // Gönderilenin gürültülü yeniden okuması yeni satır değildir. Adlı gönderilen satırın ("JASON: …") renkli adı bir
+        // karede okunamadıysa adsız okuması da aynı satırdır.
+        if (isSame(text, sent) || isUnnamedReread(rawText, sentRaw)) {
             remember(signature, box)
             return StabilizerAction.None
         }

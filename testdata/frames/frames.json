@@ -891,5 +891,12 @@
       "phone": "gta6-telefon-sohbet-2",
       "gone": "gta6-01-lucia"
     }
+  ],
+  "speakerScenarios": [
+    {
+      "name": "gta6-08-jason (sarı ad ilk karelerde okunmuyor)",
+      "frame": "gta6-08-jason",
+      "nameBox": [0.338, 0.872, 0.397, 0.925]
+    }
   ]
 }

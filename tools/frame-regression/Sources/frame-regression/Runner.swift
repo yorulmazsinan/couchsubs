@@ -52,10 +52,13 @@ struct Summary: Codable {
     var cover: Metric
     /// Telefon çevirisi senaryoları (çeviri gelince telefonda gösteriliyor).
     var phoneTranslation: Metric
+    /// Konuşan adı sonradan okunan satır tek çeviriyle, aynı satırın yerine geçerek gösteriliyor (adsız + adlı iki satır yok).
+    var speaker: Metric
     /// Ekran yazısı: menü sekmeleri ayrı, görev başlığı/açıklaması ayrı, özel ad çevrilmez, fotoğraf örtülmez, özgün renk.
     var screen: Metric
     var frames: [FrameResult]
     var scenarios: [ScenarioResult]
+    var speakerScenarios: [ScenarioResult]
 }
 
 @MainActor
@@ -120,6 +123,11 @@ final class Runner {
         for scenario in manifest.phoneScenarios {
             scenarios.append(await runPhone(scenario))
         }
+        // 5) Konuşan adı sonradan okunan diyalog.
+        var speakers: [ScenarioResult] = []
+        for scenario in manifest.speakerScenarios {
+            speakers.append(await runSpeaker(scenario))
+        }
         let frames = manifest.frames.map { results[$0.id]! }
         func metric(_ values: [Bool]) -> Summary.Metric { Summary.Metric(passed: values.filter { $0 }.count, total: values.count) }
         return Summary(
@@ -130,9 +138,50 @@ final class Runner {
             map: metric(frames.map { $0.mapExpected == $0.mapDetected }),
             cover: metric(frames.compactMap { $0.coverage.map { $0 >= coverPass } }),
             phoneTranslation: metric(scenarios.map(\.passed)),
+            speaker: metric(speakers.map(\.passed)),
             screen: metric(frames.compactMap(\.screen)),
             frames: frames,
-            scenarios: scenarios)
+            scenarios: scenarios,
+            speakerScenarios: speakers)
+    }
+
+    /// Ad örtülü kare (adsız okuma çevrilip gösterilir), sonra aynı kare adıyla: cümle bir kez çevrilmeli, adlı satır
+    /// ekrandakinin yerine geçmeli (ya da yalnız adlı satır gitmeli) ve ad gösterilmeli.
+    private func runSpeaker(_ scenario: SpeakerScenario) async -> ScenarioResult {
+        guard let frame = manifest.frames.first(where: { $0.id == scenario.frame }), let image = images[frame.id],
+              let hide = box(scenario.nameBox), let expected = frame.subtitle, let name = SpeakerPrefix.split(expected)?.name else {
+            return ScenarioResult(name: scenario.name, passed: false, detail: "kare ya da adlı altyazı yok")
+        }
+        let unnamed = Images.hiding(image, hide)
+        let blank = Images.blank(width: image.width, height: image.height)
+        let translator = DictionaryTranslator(words: words)
+        let server = SubtitleRecorder()
+        var now = 1_000_000
+        let queue = ReadQueue(label: "frame-regression-speaker", timeoutMs: 300_000)
+        let pipeline = SubtitlePipeline(reader: reader, translator: translator, server: server, clock: { now }, readQueue: queue)
+        pipeline.holdReadings = false
+        var log: [String] = []
+        pipeline.onLog = { log.append($0) }
+        for (picture, count) in [(unnamed, 4), (image, 10), (blank, 6)] {
+            for _ in 0..<count {
+                await pipeline.process(picture, region: frame.cropRegion)
+                await pipeline.waitForTranslations()
+                now += 100
+            }
+        }
+        let sent = server.sent.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let calls = translator.calls.map(\.source)
+        var problems: [String] = []
+        if sent.isEmpty { problems.append("hiç gönderilmedi") }
+        if calls.count != 1 { problems.append("\(calls.count) çeviri (\(calls.map { "\"\($0)\"" }.joined(separator: ", ")))") }
+        if sent.dropFirst().contains(where: { !$0.replaces }) { problems.append("ikinci gönderim yerine geçmiyor (TV'de iki satır)") }
+        if let last = sent.last, !last.text.hasPrefix(name + ":") { problems.append("ad gösterilmedi (\(last.text))") }
+        if verbose {
+            print("— konuşan adı senaryosu \(scenario.name): \(sent.map { "\"\($0.text)\"\($0.replaces ? " (yerine)" : "")" }.joined(separator: ", "))")
+            for line in log { print("    \(line)") }
+        }
+        return ScenarioResult(name: scenario.name, passed: problems.isEmpty,
+                              detail: problems.isEmpty ? "\(sent.count) gönderim, tek çeviri, ad eklendi" : problems.joined(separator: "; "))
     }
 
     /// Bir oturumun kareleri aynı hattan geçer: her kare ~1 sn ekranda kalır, sonra 0,6 sn boş kare (altyazı kalkar).

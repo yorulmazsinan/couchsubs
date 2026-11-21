@@ -107,11 +107,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private sealed class Request(int number, string source, TextBox? box, int session)
     {
         public int Number { get; } = number;
-        public string Source { get; } = source;
+        /// <summary>Ad sonradan okunursa (<see cref="NameRead"/>) adlı okumaya döner; çeviriye giden cümle aynı kalır.</summary>
+        public string Source { get; set; } = source;
         public TextBox? Box { get; } = box;
         public int Session { get; } = session;
         /// <summary>Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider.</summary>
-        public SpeakerPrefix.Split? Prefix { get; } = SpeakerPrefix.Parse(source);
+        public SpeakerPrefix.Split? Prefix { get; set; } = SpeakerPrefix.Parse(source);
         /// <summary>Satırın ekrandan kalktığı an (hâlâ ekrandaysa null).</summary>
         public long? LeftAt { get; set; }
         /// <summary>Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez.</summary>
@@ -571,6 +572,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private Action? TranslateOrHold(string source, TextBox? box)
     {
         if (RestoreQueued(source)) return null;
+        if (NameRead(source, out var named)) return named;
         // Yeniden okuma denetimi gecikme eklemez; bekleme süreleri 0 olsa da çalışır.
         var enabled = PackLookup is not null || HoldWithoutPacks;
         if (!enabled) { LineLeft(); return Enqueue(source, box); }
@@ -593,6 +595,54 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         held = (source, box, now(), wait, ReadingScore(source), currentRead);
         Write($"bekletiliyor (en çok {wait} ms): {SubtitleLog.Excerpt(source)}");
         return null;
+    }
+
+    /// <summary>
+    /// Konuşan adı sonradan okundu: ilk karede renkli ad okunamayıp cümle adsız gitmiş, sonraki karede aynı cümle
+    /// "JASON: …" diye okunmuş. Bu yeni satır değildir; cümle yeniden çevrilmez, ekrandaki (ya da süren) çeviriye ad
+    /// eklenir ve TV'de aynı satırın yerine geçer. Yoksa her diyalog satırı önce adsız beyaz, sonra adlı renkli iki kez
+    /// görünüyordu (X: "çift altyazı"). Mac/iPhone (nameRead) ve Android (nameRead) aynı kuralı uygular.
+    /// </summary>
+    /// <param name="after">Kilit bırakıldıktan sonra çağrılacak olay (yeni çift).</param>
+    private bool NameRead(string source, out Action? after)
+    {
+        after = null;
+        if (SpeakerPrefix.Parse(source) is not { } prefix) return false;
+        var request = Requests.LastOrDefault(r => r.Session == session && !r.Superseded && !r.Abandoned && r.Partial is null
+            && r.Prefix is null && SameSentence(prefix.Body, r.Source));
+        if (request is not null)
+        {
+            request.Source = source;
+            request.Prefix = prefix;
+            request.LeftAt = null;
+            lineOnScreen = request.Number;
+            lastSent = (source, ReadingScore(source), now());
+            Write(request, $"konuşan adı okundu ({SubtitleLog.Excerpt(prefix.Name)}): çeviri adla gösterilecek, yeniden çevrilmedi");
+            return true;
+        }
+        if (lineOnScreen is not { } shown || shown != lastShown || LastPair is not { } last || SpeakerPrefix.Parse(last.Source) is not null
+            || !SameSentence(prefix.Body, last.Source)) return false;
+        var translated = SpeakerPrefix.Present(last.Translation, source, ShowSpeakerNames);
+        Remember(shown, source, translated);
+        lastSent = (source, ReadingScore(source), now());
+        Write($"#{shown} konuşan adı okundu ({SubtitleLog.Excerpt(prefix.Name)}): ekrandaki çeviriye eklendi, yeniden çevrilmedi");
+        if (translated != last.Translation)
+        {
+            Send(translated, source, 15000, LastBox, replaces: true);
+            var pair = PairShown;
+            after = () => pair?.Invoke(source, translated);
+        }
+        LastPair = (source, translated);
+        return true;
+    }
+
+    /// <summary>Adın ayrıldığı cümle, adsız okunan cümleyle aynı mı (yazı tanıma farkı kadar; olumsuzluk ya da sayı eklenmemiş).</summary>
+    internal static bool SameSentence(string body, string unnamed)
+    {
+        var a = TextMatch.Normalize(body);
+        var b = TextMatch.Normalize(unnamed);
+        if (a.Length == 0 || b.Length == 0) return false;
+        return a == b || (TextMatch.IsSimilar(a, b, 0.9) && !TextMatch.AddsMeaning(body, unnamed) && !TextMatch.AddsMeaning(unnamed, body));
     }
 
     private static bool IsPackedFragment(string source, string previous)
@@ -1004,7 +1054,6 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             return;
         }
 
-        var translated = partial is null ? Present(sentence, request) : Combine(partial, sentence);
         var finished = now();
         var result = $"{probe.Outcome()} {now() - started} ms";
         lock (gate)
@@ -1019,9 +1068,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         TranslationResult?.Invoke(null);
 
         LineMetrics metrics;
+        string translated;
         lock (gate)
         {
             if (request.Session != session || request.Abandoned) return;
+            // Çeviri sürerken konuşan adı okunduysa (NameRead) çeviri adlı okumayla gösterilir.
+            source = request.Source;
+            translated = partial is null ? Present(sentence, request) : Combine(partial, sentence);
             var shouldSend = stabilizer.ShouldSend(input, sentence);
             Remember(request.Number, source, shouldSend ? translated : null);
             if (request.Number <= lastShown || !shouldSend || request.Superseded)

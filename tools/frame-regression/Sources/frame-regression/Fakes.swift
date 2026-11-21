@@ -64,12 +64,12 @@ final class DictionaryTranslator: TextTranslator, @unchecked Sendable {
 
 /// TV yerine: altyazı gönderimlerini kaydeder.
 final class SubtitleRecorder: SubtitleSending {
-    struct Sent { var frame: String; var text: String; var box: TextBox? }
+    struct Sent { var frame: String; var text: String; var box: TextBox?; var replaces = false }
     var current = ""
     private(set) var sent: [Sent] = []
 
     func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool) {
-        sent.append(Sent(frame: current, text: text, box: box))
+        sent.append(Sent(frame: current, text: text, box: box, replaces: replaces))
     }
 
     func clear() {}

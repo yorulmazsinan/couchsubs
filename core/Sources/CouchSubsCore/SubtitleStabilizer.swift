@@ -121,8 +121,9 @@ public struct SubtitleStabilizer {
         let ready = garbled
             ? candidateCount >= stableFrames && time - candidateSince >= Self.garbledStableMs
             : candidateCount >= stableFrames || Self.endsSentence(rawText)
-        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if Self.isSame(text, sent) {
+        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin. Adlı gönderilen
+        // satırın ("JASON: …") renkli adı bir karede okunamadıysa adsız okuması da aynı satırdır.
+        if Self.isSame(text, sent) || Self.isUnnamedReread(rawText, of: sentRaw) {
             remember(signature, box)
             return .none
         }
@@ -179,6 +180,14 @@ public struct SubtitleStabilizer {
     /// Okuma, bu satırların (gürültülü) yeniden okuması mı; sonuna sözcük eklenmiş hali yenidir.
     private static func isSame(_ text: String, _ rows: String) -> Bool {
         !rows.isEmpty && TextMatch.isSameSubtitle(text, rows)
+    }
+
+    /// Okuma, adlı gönderilen satırın ("JASON: Gidelim.") adı okunamamış hali mi ("Gidelim."). Ad sonradan okunan satırın
+    /// tersi (bkz. `SubtitlePipeline.nameRead`): ad bir görünüp bir kaybolunca cümle yeniden çevrilip TV'de adsız ve adlı
+    /// iki kez görünmesin (Windows: IsUnnamedReread, Android: isUnnamedReread).
+    static func isUnnamedReread(_ raw: String, of sentRaw: String) -> Bool {
+        guard !sentRaw.isEmpty, SpeakerPrefix.split(raw) == nil, let named = SpeakerPrefix.split(sentRaw) else { return false }
+        return isSame(TextMatch.normalize(raw), TextMatch.normalizeRows(named.body))
     }
 
     /// Ekrandaki satırı geçmişe yazar (kalktı ya da yerine başkası geldi).

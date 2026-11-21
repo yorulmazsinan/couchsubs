@@ -8,13 +8,16 @@ struct Manifest: Decodable {
     var frames: [Frame]
     /// Telefon çevirisi senaryoları (#801/#822): telefon karesi, telefonun doğrulanamadığı kare, yine telefon karesi.
     var phoneScenarios: [PhoneScenario] = []
+    /// Konuşan adı sonradan okunan diyalog senaryoları (X: "çift altyazı").
+    var speakerScenarios: [SpeakerScenario] = []
 
-    enum CodingKeys: String, CodingKey { case frames, phoneScenarios }
+    enum CodingKeys: String, CodingKey { case frames, phoneScenarios, speakerScenarios }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         frames = try container.decode([Frame].self, forKey: .frames)
         phoneScenarios = try container.decodeIfPresent([PhoneScenario].self, forKey: .phoneScenarios) ?? []
+        speakerScenarios = try container.decodeIfPresent([SpeakerScenario].self, forKey: .speakerScenarios) ?? []
     }
 
     static func load(_ directory: URL) throws -> Manifest {
@@ -56,6 +59,16 @@ struct PhoneScenario: Decodable {
     var phone: String
     /// Telefonun doğrulanamadığı kare (kare geçişi, el titremesi).
     var gone: String
+}
+
+/// Diyalog satırının renkli konuşan adı ilk karelerde okunmuyor (ad örtülmüş kare), sonra okunuyor: aynı cümle yeniden
+/// çevrilmemeli, TV'de adsız ve adlı iki satır olarak görünmemeli; ad ekrandaki satıra eklenmeli (yerine geçerek).
+struct SpeakerScenario: Decodable {
+    var name: String
+    /// Adlı altyazılı kare (`frames` içindeki id).
+    var frame: String
+    /// Konuşan adının karedeki yeri [sol, üst, sağ, alt]; ilk karelerde bu alan çevresinin rengiyle örtülür.
+    var nameBox: [Double]
 }
 
 func box(_ values: [Double]?) -> TextBox? {

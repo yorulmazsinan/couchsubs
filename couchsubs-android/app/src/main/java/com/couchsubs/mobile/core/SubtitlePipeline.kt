@@ -80,10 +80,12 @@ class SubtitlePipeline(
         fun readingTime(text: String) = minOf(8000, 2000 + text.length * 60)
     }
 
-    private class Request(val number: Int, val source: String, val box: TextBox?, val session: Int,
+    private class Request(source: String, val number: Int, val box: TextBox?, val session: Int,
                           val capturedAt: Long? = null, val ocrMs: Int? = null) {
+        /** Ad sonradan okunursa ([nameRead]) adlı okumaya döner; çeviriye giden cümle aynı kalır. */
+        @Volatile var source = source
         /** Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider. */
-        val prefix = SpeakerPrefix.split(source)
+        @Volatile var prefix = SpeakerPrefix.split(source)
         @Volatile var leftAt: Long? = null
         /** Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez. */
         @Volatile var superseded = false
@@ -368,6 +370,7 @@ class SubtitlePipeline(
      */
     private fun translateOrHold(source: String, box: TextBox?): (() -> Unit)? {
         if (restoreQueued(source)) return null
+        nameRead(source)?.let { return it }
         if (!holdReadings) { lineLeft(); return enqueue(source, box) }
         val packed = findPack(source) != null
         // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
@@ -385,6 +388,39 @@ class SubtitlePipeline(
         if (wait <= 0) return enqueue(source, box)
         held = Held(source, box, time, wait, Rereads.score(source), frameAt, frameOcrMs)
         return null
+    }
+
+    /**
+     * Konuşan adı sonradan okundu: ilk karede renkli ad okunamayıp cümle adsız gitmiş, sonraki karede aynı cümle
+     * "JASON: …" diye okunmuş. Bu yeni satır değildir; cümle yeniden çevrilmez, ekrandaki (ya da süren) çeviriye ad
+     * eklenir ve TV'de aynı satırın yerine geçer. Yoksa her diyalog satırı önce adsız beyaz, sonra adlı renkli iki kez
+     * görünüyordu (X: "çift altyazı"). Ad sonradan okunduysa kilit bırakılınca çağrılacak olay (boş da olabilir), yoksa
+     * null döner. Mac/iPhone (nameRead) ve Windows (NameRead) aynı kuralı uygular.
+     */
+    private fun nameRead(source: String): (() -> Unit)? {
+        val prefix = SpeakerPrefix.split(source) ?: return null
+        requests().lastOrNull {
+            it.session == session && !it.superseded && !it.abandoned && it.prefix == null && sameSentence(prefix.body, it.source)
+        }?.let { request ->
+            request.source = source
+            request.prefix = prefix
+            request.leftAt = null
+            lineOnScreen = request.number
+            lastSent = Sent(source, Rereads.score(source), now())
+            return {}
+        }
+        val shown = lineOnScreen ?: return null
+        val lastSource = lastShownSource ?: return null
+        if (shown != lastShown || SpeakerPrefix.split(lastSource) != null || !sameSentence(prefix.body, lastSource)) return null
+        val previous = pairs.lastOrNull { it.number == shown && it.source == lastSource }?.translation ?: return null
+        val translated = SpeakerPrefix.present(previous, source, showSpeakerNames())
+        remember(shown, source, translated)
+        lastSent = Sent(source, Rereads.score(source), now())
+        lastShownSource = source
+        if (translated == previous) return {}
+        send(translated, source, 15000, lastSentBox, true)
+        val pairShown = onPairShown
+        return { pairShown?.invoke(ShownPair(source, translated, "motor", null, null, null, null)) }
     }
 
     // Paket eşleşmesi tek başına eksik parçayı yeni replik yapmaz. Tam kısa cümleler korunur.
@@ -432,7 +468,7 @@ class SubtitlePipeline(
     }
 
     private fun enqueue(source: String, box: TextBox?, capturedAt: Long? = frameAt, ocrMs: Int? = frameOcrMs): (() -> Unit)? {
-        val request = Request(++lastRequested, source, box, session, capturedAt, ocrMs)
+        val request = Request(source, ++lastRequested, box, session, capturedAt, ocrMs)
         lineOnScreen = request.number
         lastSent = Sent(source, Rereads.score(source), now())
         packMatch(request)?.let { return showPacked(request, it) }
@@ -555,7 +591,7 @@ class SubtitlePipeline(
     }
 
     private fun translate(request: Request) {
-        val source = request.source
+        var source = request.source
         val input = request.prefix?.body ?: source
         // Ayrılan ad çevirmene gitmez; cümle içinde geçtiğinde korunsun diye ayrıca bildirilir (#287).
         request.prefix?.let { translator.noteSpeaker(it.name) }
@@ -578,11 +614,14 @@ class SubtitlePipeline(
         }
         if (request.abandoned) return
         onTranslationResult?.invoke(null)
-        val translated = present(sentence, request)
+        var translated: String
         val translationMs = maxOf(0, (now() - started).toInt())
         var total: Int? = null
         synchronized(lock) {
             if (request.session != session || request.abandoned) return
+            // Çeviri sürerken konuşan adı okunduysa ([nameRead]) çeviri adlı okumayla gösterilir.
+            source = request.source
+            translated = present(sentence, request)
             val shouldSend = stabilizer.shouldSend(input, sentence)
             remember(request.number, source, if (shouldSend) translated else null)
             if (request.number <= lastShown || !shouldSend || request.superseded) return
@@ -641,4 +680,12 @@ class SubtitlePipeline(
     fun shutdown() {
         executor.shutdownNow()
     }
+}
+
+/** Adın ayrıldığı cümle, adsız okunan cümleyle aynı mı (yazı tanıma farkı kadar; olumsuzluk ya da sayı eklenmemiş). */
+internal fun sameSentence(body: String, unnamed: String): Boolean {
+    val a = TextMatch.normalize(body)
+    val b = TextMatch.normalize(unnamed)
+    if (a.isEmpty() || b.isEmpty()) return false
+    return a == b || (TextMatch.isSimilar(a, b, 0.9) && !TextMatch.addsMeaning(body, unnamed) && !TextMatch.addsMeaning(unnamed, body))
 }

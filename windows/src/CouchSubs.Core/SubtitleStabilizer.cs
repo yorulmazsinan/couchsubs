@@ -166,8 +166,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         var ready = garbled
             ? candidateCount >= stableFrames && time - candidateSince >= GarbledStableMs
             : candidateCount >= stableFrames || (EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
-        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if (IsSame(text, sent))
+        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin. Adlı gönderilen
+        // satırın ("JASON: …") renkli adı bir karede okunamadıysa adsız okuması da aynı satırdır.
+        if (IsSame(text, sent) || IsUnnamedReread(rawText, sentRaw))
         {
             Remember(signature, box);
             return StabilizerAction.None;
@@ -224,6 +225,17 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         if (garbledPending.Length == 0) return;
         Note = new StabilizerNote(StabilizerNoteKind.GarbledDropped, garbledPending);
         garbledPending = "";
+    }
+
+    /// <summary>
+    /// Okuma, adlı gönderilen satırın ("JASON: Gidelim.") adı okunamamış hali mi ("Gidelim."). Ad sonradan okunan satırın
+    /// tersi (bkz. SubtitlePipeline.NameRead): ad bir görünüp bir kaybolunca cümle yeniden çevrilip TV'de adsız ve adlı
+    /// iki kez görünmesin (Mac: isUnnamedReread, Android: isUnnamedReread).
+    /// </summary>
+    internal static bool IsUnnamedReread(string raw, string sentRaw)
+    {
+        if (sentRaw.Length == 0 || SpeakerPrefix.Parse(raw) is not null || SpeakerPrefix.Parse(sentRaw) is not { } named) return false;
+        return IsSame(TextMatch.Normalize(raw), TextMatch.NormalizeRows(named.Body));
     }
 
     /// <summary>Okuma, bu satırların (gürültülü) yeniden okuması mı; sonuna sözcük eklenmiş hali yenidir.</summary>

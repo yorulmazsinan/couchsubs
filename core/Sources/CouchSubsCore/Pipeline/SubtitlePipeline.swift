@@ -57,11 +57,12 @@ public final class SubtitlePipeline {
     /// Bir çeviri isteği; satır ekrandan kalkınca `leftAt` not edilir.
     private final class Request {
         let number: Int
-        let source: String
+        /// Ad sonradan okunursa (`nameRead`) adlı okumaya döner; çeviriye giden cümle aynı kalır.
+        var source: String
         let box: TextBox?
         let session: Int
         /// Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider.
-        let prefix: SpeakerPrefix.Split?
+        var prefix: SpeakerPrefix.Split?
         /// Satırı kararlı yapan karenin geldiği an, o okumanın süresi ve güveni (ölçümler için).
         let read: ReadInfo
         /// Satırın ekrandan kalktığı an (hâlâ ekrandaysa nil).
@@ -467,6 +468,7 @@ public final class SubtitlePipeline {
     /// çevrilir. Temiz ve tam cümle ya da pakette bulunan satır beklemeden gider (Windows: TranslateOrHold).
     private func translateOrHold(_ source: String, box: TextBox?) {
         if restoreQueued(source) { return }
+        if nameRead(source) { return }
         if !holdReadings { lineLeft(); return enqueue(source, box: box) }
         let packed = findPack(source) != nil
         let time = now()
@@ -483,6 +485,45 @@ public final class SubtitlePipeline {
         guard wait > 0 else { return enqueue(source, box: box) }
         held = Held(source: source, box: box, since: time, wait: wait, score: Rereads.score(source), read: currentRead)
         log("bekletiliyor (en çok \(wait) ms): \(SubtitleLog.excerpt(source))")
+    }
+
+    /// Konuşan adı sonradan okundu: ilk karede renkli ad okunamayıp cümle adsız gitmiş, sonraki karede aynı cümle
+    /// "JASON: …" diye okunmuş. Bu yeni satır değildir; cümle yeniden çevrilmez, ekrandaki (ya da süren) çeviriye ad
+    /// eklenir ve TV'de aynı satırın yerine geçer. Yoksa her diyalog satırı önce adsız beyaz, sonra adlı renkli iki kez
+    /// görünüyordu (X: "çift altyazı"). Windows (NameRead) ve Android (nameRead) aynı kuralı uygular.
+    private func nameRead(_ source: String) -> Bool {
+        guard let prefix = SpeakerPrefix.split(source) else { return false }
+        if let request = requests.last(where: {
+            $0.session == session && !$0.superseded && !$0.abandoned && $0.prefix == nil && Self.sameSentence(prefix.body, $0.source)
+        }) {
+            request.source = source
+            request.prefix = prefix
+            request.leftAt = nil
+            lineOnScreen = request.number
+            lastSent = (source, Rereads.score(source), now())
+            log(request, "konuşan adı okundu (\(SubtitleLog.excerpt(prefix.name))): çeviri adla gösterilecek, yeniden çevrilmedi")
+            return true
+        }
+        guard let shown = lineOnScreen, shown == lastShown, let last = lastPair, SpeakerPrefix.split(last.source) == nil,
+              Self.sameSentence(prefix.body, last.source) else { return false }
+        let translated = SpeakerPrefix.present(last.translation, source: source, show: showSpeakerNames)
+        remember(shown, source, translated)
+        lastSent = (source, Rereads.score(source), now())
+        log("#\(shown) konuşan adı okundu (\(SubtitleLog.excerpt(prefix.name))): ekrandaki çeviriye eklendi, yeniden çevrilmedi")
+        if translated != last.translation {
+            send(translated, source: source, durationMs: 15000, box: lastBox, replaces: true)
+            onPair?(source, translated)
+        }
+        lastPair = (source, translated)
+        return true
+    }
+
+    /// Adın ayrıldığı cümle, adsız okunan cümleyle aynı mı (yazı tanıma farkı kadar; olumsuzluk ya da sayı eklenmemiş).
+    static func sameSentence(_ body: String, _ unnamed: String) -> Bool {
+        let a = TextMatch.normalize(body), b = TextMatch.normalize(unnamed)
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        return a == b || (TextMatch.isSimilar(a, b, threshold: 0.9) && !TextMatch.addsMeaning(body, to: unnamed)
+            && !TextMatch.addsMeaning(unnamed, to: body))
     }
 
     // Paket eşleşmesi tek başına eksik parçayı yeni replik yapmaz. Tam kısa cümleler korunur.
@@ -657,7 +698,7 @@ public final class SubtitlePipeline {
     }
 
     private func translate(_ request: Request) async {
-        let source = request.source
+        var source = request.source
         let started = now()
         let probe = TranslationProbe()
         do {
@@ -669,6 +710,8 @@ public final class SubtitlePipeline {
             self.work = work
             defer { self.work = nil }
             let sentence = try await work.value
+            // Çeviri sürerken konuşan adı okunduysa (`nameRead`) çeviri adlı okumayla gösterilir.
+            source = request.source
             let translated = present(sentence, request)
             let finished = now()
             let result = "\(probe.outcome()) \(finished - started) ms"
