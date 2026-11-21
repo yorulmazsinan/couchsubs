@@ -105,11 +105,17 @@ public sealed class SubtitleBand
 
     private readonly List<(double Top, double Bottom, double Line)> spans = [];
 
-    /// <summary>Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (bir satır boyu payla) düşüyor mu.</summary>
+    /// <summary>
+    /// Hatırlanan yüksekliğin her yanındaki pay (satır boyuna oranla). GTA 6'da görev satırı ("Follow the plane") altyazının
+    /// hemen altında belirir; pencere kaynağında orta noktası bir satır payının hemen dışında kalıyordu (Mac/Android: aynı).
+    /// </summary>
+    public const double Margin = 1.5;
+
+    /// <summary>Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (<see cref="Margin"/> satır boyu payla) düşüyor mu.</summary>
     public bool Contains(TextBox box)
     {
         var middle = (box.Top + box.Bottom) / 2;
-        return spans.Any(span => middle >= span.Top - span.Line && middle <= span.Bottom + span.Line);
+        return spans.Any(span => middle >= span.Top - Margin * span.Line && middle <= span.Bottom + Margin * span.Line);
     }
 
     /// <summary>Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları alana oranlıdır.</summary>

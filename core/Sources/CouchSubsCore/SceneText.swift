@@ -109,10 +109,15 @@ public struct SubtitleBand: Equatable, Sendable {
 
     public init() {}
 
-    /// Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (bir satır boyu payla) düşüyor mu.
+    /// Hatırlanan yüksekliğin her yanındaki pay (satır boyuna oranla). GTA 6'da görev satırı ("Follow the plane") altyazının
+    /// hemen altında belirir; pencere kaynağında orta noktası bir satır payının hemen dışında kalıyor, tek başına geldiğinde
+    /// "karenin ortasında kısa satır" sayılıp atılıyordu (gerçek kare pencere-kare-2-gorev).
+    public static let margin = 1.5
+
+    /// Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (`margin` satır boyu payla) düşüyor mu.
     public func contains(_ box: TextBox) -> Bool {
         let middle = (box.top + box.bottom) / 2
-        return spans.contains { middle >= $0.top - $0.line && middle <= $0.bottom + $0.line }
+        return spans.contains { middle >= $0.top - Self.margin * $0.line && middle <= $0.bottom + Self.margin * $0.line }
     }
 
     /// Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları `area`'ya oranlıdır.

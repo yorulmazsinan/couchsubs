@@ -806,6 +806,60 @@
     }
    ],
    "subtitle": "Brian's doing us a favor, you know?"
+  },
+  {
+   "name": "GTA 6 telefon bildirimi: tek sözcüklük gönderen adı geniş boşlukla alttaki satıra katılmaz, altyazı yok (gerçek kare gta6-n4-bildirim)",
+   "lines": [
+    {
+     "text": "Cal",
+     "box": [
+      0.95058,
+      0.58201,
+      0.97674,
+      0.62963
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Checked th",
+     "box": [
+      0.9157,
+      0.68158,
+      0.99855,
+      0.73545
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 pencere kaynağında altyazının hemen altındaki tek başına görev satırı kalır (gerçek kare pencere-kare-2-gorev)",
+   "before": [
+    {
+     "text": "Lucia: Could I have another ice water, please?",
+     "box": [
+      0.2292,
+      0.2657,
+      0.7708,
+      0.3257
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "Follow the plane",
+     "box": [
+      0.4208,
+      0.3743,
+      0.5764,
+      0.4171
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Follow the plane"
   }
  ]
 }

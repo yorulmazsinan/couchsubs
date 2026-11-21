@@ -72,6 +72,13 @@ class Reading(lines: List<TextLine>) {
         const val LINE_GAP = 0.8
         const val CONTINUATION_GAP = 1.3
 
+        /**
+         * [CONTINUATION_GAP] yalnız üstteki satır en az bu kadar sözcükken geçerlidir: altyazının sarılmış ilk satırı uzundur.
+         * Tek sözcüklük üst satır (GTA 6 telefon bildiriminde gönderenin adı "Cal", altında "Checked th…") geniş boşlukla
+         * alttakine katılınca altyazı seçiliyordu (gerçek kare gta6-n4-bildirim; Mac/Windows: aynı eşik).
+         */
+        const val CONTINUATION_MIN_WORDS = 3
+
         fun fromText(text: String) = Reading(text.replace("\r\n", "\n").split('\n').map { TextLine(it.trim()) })
 
         /** Aynı satırdaki iki sözcük arasındaki boşluk ayrı yazılara mı işaret ediyor (menü ile gösterge gibi). */
@@ -231,7 +238,8 @@ class Reading(lines: List<TextLine>) {
         val height = maxOf(own, previous)
         val upper = block.last().text
         val continuing = continues(upper, text)
-        if (box.top - last.bottom > height * (if (continuing) CONTINUATION_GAP else LINE_GAP) || box.top < last.top) return false
+        val wide = continuing && wordCount(upper) >= CONTINUATION_MIN_WORDS
+        if (box.top - last.bottom > height * (if (wide) CONTINUATION_GAP else LINE_GAP) || box.top < last.top) return false
         val comparable = wordCount(text) >= 3 && wordCount(upper) >= 3 && !continuing
         if (comparable && maxOf(own, previous) > 1.25 * minOf(own, previous)) return false
         val overlap = minOf(box.right, last.right) - maxOf(box.left, last.left)

@@ -24,7 +24,8 @@ class TurkishTextTest {
     }
 
     @Test fun turkishLinesAreSure() {
-        for (text in listOf("Daha Sonra Güncelle", "Sistem Yazillml Güncellem€", "Lütfen bekleyin.", "Ekran görüntüsü kaydedildi")) {
+        for (text in listOf("Daha Sonra Güncelle", "Sistem Yazillml Güncellem€", "Lütfen bekleyin.", "Ekran görüntüsü kaydedildi",
+            "Yardımcı\nolabilir miyim, efendim?", "Merchant: Yardımcı olabilir miyim, efendim?")) {
             assertTrue(text, TurkishText.isSure(text))
         }
     }

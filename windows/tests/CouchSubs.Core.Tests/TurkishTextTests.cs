@@ -12,6 +12,8 @@ public class TurkishTextTests
     [InlineData("Sistem Yazillml Güncellem€")] // Yazı tanıma "Yazılımı Güncellemesi"ni bozmuş.
     [InlineData("Lütfen bekleyin.")]
     [InlineData("Ekran görüntüsü kaydedildi")]
+    [InlineData("Yardımcı\nolabilir miyim, efendim?")]
+    [InlineData("Merchant: Yardımcı olabilir miyim, efendim?")]
     public void TurkishLineIsSure(string text) => Assert.True(TurkishText.IsSure(text));
 
     [Theory]

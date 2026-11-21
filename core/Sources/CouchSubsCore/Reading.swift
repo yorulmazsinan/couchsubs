@@ -247,7 +247,8 @@ public struct Reading: Equatable, Sendable {
         let own = box.bottom - box.top, previous = last.bottom - last.top
         let height = max(own, previous)
         let continuing = continues(block.last!.text, with: text)
-        guard box.top - last.bottom <= height * (continuing ? continuationGap : lineGap), box.top >= last.top else { return false }
+        let wide = continuing && wordCount(block.last!.text) >= continuationMinWords
+        guard box.top - last.bottom <= height * (wide ? continuationGap : lineGap), box.top >= last.top else { return false }
         let comparable = wordCount(text) >= 3 && wordCount(block.last!.text) >= 3 && !continuing
         guard !comparable || max(own, previous) <= 1.25 * min(own, previous) else { return false }
         let overlap = min(box.right, last.right) - max(box.left, last.left)
@@ -263,6 +264,10 @@ public struct Reading: Equatable, Sendable {
     /// Alttaki satır üsttekinin devamıysa (`continues`: cümle bitmemiş, küçük harfle sürüyor) daha geniş boşluk da aynı
     /// bloktur: yarım cümle tek başına altyazı değildir.
     static let continuationGap = 1.3
+    /// `continuationGap` yalnız üstteki satır en az bu kadar sözcükken geçerlidir: altyazının sarılmış ilk satırı uzundur.
+    /// Tek sözcüklük üst satır (GTA 6 telefon bildiriminde gönderenin adı "Cal", altında "Checked th…") geniş boşlukla
+    /// alttakine katılınca üç sözcüklü blok olup altyazı seçiliyordu (gerçek kare gta6-n4-bildirim, beta.78'de gerileme).
+    static let continuationMinWords = 3
 
     private static func wordCount(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
 

@@ -14,12 +14,15 @@ object TurkishText {
 
     /**
      * Havuz süzgecinin sözcüklerine ek, Türkçe arayüzde sık geçen ve İngilizcede olmayan sözcükler (katlanmış hâlleriyle
-     * karşılaştırılır; "sistem" yok: katlanınca İngilizce "system" ile bir harf farklı).
+     * karşılaştırılır; "sistem" yok: katlanınca İngilizce "system" ile bir harf farklı). Ardından oyunun kendi Türkçe
+     * altyazısında sık geçen konuşma sözcükleri (GitHub #337: "Yardımcı olabilir miyim, efendim?" çevrilmeye gidiyordu).
      */
     internal val commonWords = listOf(
         "daha", "sonra", "simdi", "degil", "haydi", "tamam", "evet", "hayir", "devam", "iptal", "giris", "guncelle",
         "guncellemesi", "yazilimi", "kurulum", "sirasinda", "sisteminizi", "sistemindeki", "kapatmayin", "baglanti",
         "baglantinizi", "uzaktan", "oynama", "dosyasi", "gostergesi", "kablosunu", "bir", "canli", "yayin",
+        "efendim", "yardimci", "olabilir", "miyim", "misin", "musun", "nasil", "neden", "burada", "tesekkurler", "merhaba",
+        "gibi", "kadar", "belki", "hemen", "benim", "senin",
     ).map { PoolFilter.fold(it).joinToString("") }
 
     private val known by lazy { PoolFilter.turkishWords + commonWords }

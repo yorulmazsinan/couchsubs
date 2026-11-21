@@ -98,10 +98,10 @@ class SubtitleBand {
 
     private val spans = ArrayList<Span>()
 
-    /** Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (bir satır boyu payla) düşüyor mu. */
+    /** Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine ([MARGIN] satır boyu payla) düşüyor mu. */
     fun contains(box: TextBox): Boolean {
         val middle = (box.top + box.bottom) / 2
-        return spans.any { middle >= it.top - it.line && middle <= it.bottom + it.line }
+        return spans.any { middle >= it.top - MARGIN * it.line && middle <= it.bottom + MARGIN * it.line }
     }
 
     /** Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları [area]'ya oranlıdır. */
@@ -125,5 +125,11 @@ class SubtitleBand {
         const val CAPACITY = 6
         /** Kesin altyazı sayılmak için en az sözcük (noktalaması ya da konuşan adı yoksa). */
         const val SURE_WORDS = 4
+        /**
+         * Hatırlanan yüksekliğin her yanındaki pay (satır boyuna oranla). GTA 6'da görev satırı ("Follow the plane")
+         * altyazının hemen altında belirir; pencere kaynağında orta noktası bir satır payının hemen dışında kalıyordu
+         * (Mac/Windows: aynı).
+         */
+        const val MARGIN = 1.5
     }
 }

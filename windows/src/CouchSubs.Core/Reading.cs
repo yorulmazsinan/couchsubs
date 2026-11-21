@@ -240,6 +240,12 @@ public sealed class Reading
     /// </summary>
     internal const double LineGap = 0.8;
     internal const double ContinuationGap = 1.3;
+    /// <summary>
+    /// <see cref="ContinuationGap"/> yalnız üstteki satır en az bu kadar sözcükken geçerlidir: altyazının sarılmış ilk satırı
+    /// uzundur. Tek sözcüklük üst satır (GTA 6 telefon bildiriminde gönderenin adı "Cal", altında "Checked th…") geniş
+    /// boşlukla alttakine katılınca altyazı seçiliyordu (gerçek kare gta6-n4-bildirim; Mac/Android: aynı eşik).
+    /// </summary>
+    internal const int ContinuationMinWords = 3;
 
     private static bool Belongs(TextBox box, List<TextLine> block, TextBox area, string text)
     {
@@ -247,7 +253,8 @@ public sealed class Reading
         double own = box.Bottom - box.Top, previous = last.Bottom - last.Top;
         var height = Math.Max(own, previous);
         var continuing = Continues(block[^1].Text, text);
-        if (box.Top - last.Bottom > height * (continuing ? ContinuationGap : LineGap) || box.Top < last.Top) return false;
+        var wide = continuing && WordCount(block[^1].Text) >= ContinuationMinWords;
+        if (box.Top - last.Bottom > height * (wide ? ContinuationGap : LineGap) || box.Top < last.Top) return false;
         var comparable = WordCount(text) >= 3 && WordCount(block[^1].Text) >= 3 && !continuing;
         if (comparable && Math.Max(own, previous) > 1.25 * Math.Min(own, previous)) return false;
         var overlap = Math.Min(box.Right, last.Right) - Math.Max(box.Left, last.Left);

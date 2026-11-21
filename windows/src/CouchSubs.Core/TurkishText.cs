@@ -16,13 +16,16 @@ public static class TurkishText
 
     /// <summary>
     /// Havuz süzgecinin sözcüklerine ek, Türkçe arayüzde sık geçen ve İngilizcede olmayan sözcükler (katlanmış hâlleriyle
-    /// karşılaştırılır; "sistem" yok: katlanınca İngilizce "system" ile bir harf farklı).
+    /// karşılaştırılır; "sistem" yok: katlanınca İngilizce "system" ile bir harf farklı). Ardından oyunun kendi Türkçe
+    /// altyazısında sık geçen konuşma sözcükleri (GitHub #337: "Yardımcı olabilir miyim, efendim?" çevrilmeye gidiyordu).
     /// </summary>
     internal static readonly string[] CommonWords = new[]
     {
         "daha", "sonra", "simdi", "degil", "haydi", "tamam", "evet", "hayir", "devam", "iptal", "giris", "guncelle",
         "guncellemesi", "yazilimi", "kurulum", "sirasinda", "sisteminizi", "sistemindeki", "kapatmayin", "baglanti",
         "baglantinizi", "uzaktan", "oynama", "dosyasi", "gostergesi", "kablosunu", "bir",
+        "efendim", "yardimci", "olabilir", "miyim", "misin", "musun", "nasil", "neden", "burada", "tesekkurler", "merhaba",
+        "gibi", "kadar", "belki", "hemen", "benim", "senin",
     }.Select(word => string.Concat(PoolFilter.Fold(word))).ToArray();
 
     private static readonly string[] Known = [.. PoolFilter.TurkishWords, .. CommonWords];

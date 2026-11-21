@@ -31,7 +31,8 @@ final class TurkishTextTests: XCTestCase {
     }
 
     func testTurkishLinesAreSure() {
-        for text in ["Daha Sonra Güncelle", "Sistem Yazillml Güncellem€", "Lütfen bekleyin.", "Ekran görüntüsü kaydedildi"] {
+        for text in ["Daha Sonra Güncelle", "Sistem Yazillml Güncellem€", "Lütfen bekleyin.", "Ekran görüntüsü kaydedildi",
+                     "Yardımcı\nolabilir miyim, efendim?", "Merchant: Yardımcı olabilir miyim, efendim?"] {
             XCTAssertTrue(TurkishText.isSure(text), text)
         }
     }
