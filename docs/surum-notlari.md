@@ -6,10 +6,18 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **LG'de PS tuşuna basınca çeviri kaybolmuyor (TV uygulaması 0.9.49):** PS tuşu TV'yi PS5'in girişine geçirip CouchSubs TV uygulamasını arkaya atıyordu; uygulama 5-6 saniyede geri geliyor, menüye birkaç kez girip çıkınca hiç gelmeyebiliyordu. Artık en geç 2 saniyede geri geliyor, bağlantı hemen yeniden kuruluyor ve ekrandaki son altyazı yeniden gösteriliyor. Başka bir HDMI girişine ya da uygulamaya kendiniz geçtiğinizde buna saygı gösteriliyor.
-- **LG'de Oyun Yöneticisi:** CouchSubs açıkken TV'nin ayar tuşu genel menüyü açar; Oyun Yöneticisi yalnız TV PS5 girişindeyken açılıyor. Oyun modu ya da VRR ayarı için çeviriyi durdurup PS5 girişinde ayarlayın, sonra çeviriyi yeniden başlatın.
+- **"Ekranı çevir" çevirileri yazının kendi yerinde ve stilinde:** Çeviriler artık ayrı bir kutuda değil, okunan yazının yerinde, renk ve hizasıyla çiziliyor. GTA 6'da telefon açıksa mesajlar telefonun yanında, telefon boyunda bir mesaj kartında gösteriliyor: üstte kişi adı, gelen mesajlar solda, giden mesajlar sağda.
+- **Başka sohbete geçip yeniden basınca yeni sohbet çevriliyor:** Önceden ikinci basış çevirileri yalnız kaldırıyordu.
+- **Tuş çubukları ve seçenekler:** SCROLL / SEND / BACK gibi etiketler ve TIP / ORDER gibi seçenekler ayrı ayrı çevriliyor; tuş simgeleri (R1, △, ✕ …) olduğu gibi kalıyor.
+- **Fiyatlar:** "$200" gibi fiyatlar artık "SSSS" okunmuyor ve çeviride bozulmuyor.
+- **Xbox (Beta):** Görüntü kesilince ana ekran "bağlı" demiyor; "Xbox'tan görüntü gelmiyor. Yeniden bağlanılıyor…" yazıyor, TV'deki altyazı temizleniyor ve oturum kendiliğinden yeniden kuruluyor.
+- **PS5 bağlantısı:** Bağlıyken kopan PS5 artık "bulunamadı" diye gösterilmiyor; kopma nedenini ayırmak için günlüğe ağ durumu yazılıyor.
+- **Çeviri anahtarı:** Anahtar test edilirken "Testing…" görünüyor; güvenli depoya kaydedilemeyen anahtar için ayrı uyarı çıkıyor; ücretsiz çeviriye geçişin nedeni günlüğe yazılıyor. (Katkı: @omersukruvarol, #591)
+- **TV uygulaması 0.9.50.**
 
-**beta.70'te gelenler:** "Ekranı çevir"in GTA 6 telefon mesajlarını yeniden çevirmesi, görev yazısının konuşmanın yerine geçmemesi, LG'de ses için önlemler (TV uygulaması 0.9.48), 2016 Samsung TV'lerde elle kurulan uygulamanın korunması (#638).
+**beta.71'de gelenler:** LG'de PS tuşuna basınca çevirinin kaybolmaması (TV uygulaması 0.9.49), LG Oyun Yöneticisi açıklaması.
+
+**Daha önce (beta.70):** "Ekranı çevir"in GTA 6 telefon mesajlarını yeniden çevirmesi, görev yazısının konuşmanın yerine geçmemesi, LG'de ses için önlemler (TV uygulaması 0.9.48), 2016 Samsung TV'lerde elle kurulan uygulamanın korunması (#638).
 
 **Daha önce (beta.69):** Ekran çevirisi kapalıyken GTA 6'da menülerin çevrilmemesi (hazır alanlar varsayılan kapalı), oyun paketlerinde aynı oyunun tek görünmesi, Samsung 4K/8K TV'lerde görüntünün sol üstte kalmaması ve Sarı tuş (TV uygulaması 0.9.47).
 
