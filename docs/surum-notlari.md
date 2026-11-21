@@ -6,13 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Ekran çevirisi kapalıyken GTA 6'da menüler ve bildirimler çevrilmiyor:** "Bilinen oyunlarda hazır alanları kullan" ayarı varsayılan olarak açık geliyor ve ekran çevirisi kapalıyken de menüyü ve kenardaki bildirimleri çeviriyordu. Artık varsayılan kapalı; mevcut kurulumlarda ekran çevirisi kapalıysa bir kez kapatılıyor. İsterseniz Ayarlar'dan yeniden açabilirsiniz.
-- **Oyun paketlerinde aynı oyun iki kez görünmüyor:** Her gece büyüyen "(ek satırlar)" yaması artık asıl yamayla tek oyun olarak görünüyor.
-- **Samsung 4K/8K TV'lerde PS5 görüntüsü sol üst çeyrekte kalmıyor (TV uygulaması 0.9.47):** Görüntü penceresi farklı yollarla isteniyor; görüntü yine dolmazsa kumandadaki Sarı tuş sıradaki yolu dener ve seçim saklanır.
-- **LG'de altyazı var ama oyunun sesi yok (TV uygulaması 0.9.47):** TV uygulaması PS5 görüntüsünü açıkça sesli istiyor; bilgi panelinde (kumandada OK) ses durumu görünüyor. Ses soundbar ya da ses sistemindeyse TV'de Dijital Ses Çıkışı'nı Otomatik ya da PCM yapmayı deneyin.
-- **Mac'te LG kurulumu:** Bazı TV yanıtları satırlara doğru bölünüyor.
+- **"Ekranı çevir" GTA 6'da telefon mesajlarını yine çeviriyor:** beta.68'den beri altyazı akarken telefon kartının alt yarısındaki mesajlar altyazı sanılıp atlanıyordu. Düzeltildi.
+- **Görev yazısı konuşmanın yerine geçmiyor:** Alt tarafta "John'u takip et" gibi bir görev yazısı konuşmayla aynı anda ya da konuşma sürerken çıkınca konuşma çevrilmeyebiliyordu. Artık konuşma çevriliyor, görev yazısı kendi yerinde gösteriliyor.
+- **LG'de ses (TV uygulaması 0.9.48):** TV uygulaması PS5 görüntüsü için TV'den ses önceliği istiyor; TV'nin sesi kendiliğinden kısılırsa bir kez açıyor. Bilgi panelinde (kumandada OK) ses durumu ayrıntılı görünüyor. Altyazı hedefi telefondayken ses gelip TV uygulamasındayken gelmiyorsa bu satırın fotoğrafını paylaşmanız çok yardımcı olur.
+- **2016 Samsung TV'ler (#638):** Elle kurulmuş TV uygulaması güncelleme sırasında silinmiyor. Tizen Studio ile elle kurulum rehberi: [docs/tv-samsung.md](https://github.com/yorulmazsinan/couchsubs/blob/main/docs/tv-samsung.md#2016-modellerde-elle-kurulum-tizen-studio).
 
-**beta.68'de gelenler:** Windows'ta uyarısız kapanmaya karşı önlemler ve çökme kaydı (#587), çevirinin iki kez görünmemesi, ekran yazısı türlerinin ayrı açılıp kapanması, Samsung'da yeni adres alan TV'ye bağlanma, TV eşleştirme düzeltmesi, PS5 bağlantı kopmasına karşı önlemler, 2016 Samsung TV'ler için yeni imza (#638).
+**beta.69'da gelenler:** Ekran çevirisi kapalıyken GTA 6'da menülerin çevrilmemesi (hazır alanlar varsayılan kapalı), oyun paketlerinde aynı oyunun tek görünmesi, Samsung 4K/8K TV'lerde görüntünün sol üstte kalmaması ve Sarı tuş (TV uygulaması 0.9.47).
+
+**Daha önce (beta.68):** Windows'ta uyarısız kapanmaya karşı önlemler ve çökme kaydı (#587), çevirinin iki kez görünmemesi, ekran yazısı türlerinin ayrı açılıp kapanması, Samsung'da yeni adres alan TV'ye bağlanma, TV eşleştirme düzeltmesi, PS5 bağlantı kopmasına karşı önlemler, 2016 Samsung TV'ler için yeni imza (#638).
 
 **beta.67'de gelenler:** İki satırlı altyazının üst satırının da çevrilmesi (#715), Mac'te yazı okuma takılmasında altyazının sürmesi (#678, #679), Mac'te Xbox (Beta), "Paketleri şimdi güncelle", Windows'ta deneme modu.
 
