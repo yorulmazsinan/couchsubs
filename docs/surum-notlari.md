@@ -11,6 +11,10 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 - **Tabela ve tişört yazıları çevrilmiyor:** Altyazı alanına giren sahne yazıları (tabela, tişört, eğik yazı) artık altyazı sayılmıyor; ekranda altyazı yokken TV'ye bir şey gitmiyor.
 - **Yeniden bağlan:** Konsol bağlantısı koparsa ve kendiliğinden toparlanmazsa ana ekranda "Yeniden bağlan" düğmesi çıkıyor; uygulamayı kapatıp açmaya gerek yok. Xbox'ta yeniden bağlanırken eski oturumun yenisini kesmesi düzeltildi.
 
+- **Oyuna özel ayarlar:** Her oyunun altyazı alanları artık ayrı bir profilde; listede olmayan oyun adıyla eklenebiliyor, profil seçilip yeniden adlandırılabiliyor, çoğaltılıp silinebiliyor. Bir oyunun ayarları artık başka oyununkinin üzerine yazılmıyor. Oyun listesine popüler oyunlar eklendi.
+- **GTA 6 telefonu:** Telefonun ana ekranı (simgeler, bildirimler) artık mesaj kartına girmiyor; yazılar kendi yerinde çevriliyor, uygulama adları çevrilmiyor. Telefon Remote Play ya da OBS penceresinden oynarken de bulunuyor.
+- **Bekleme ayarları:** "Bozuk okunan satır için bekleme" ve "Yarım okunan satır için bekleme" artık Mac'te de var.
+
 **beta.74'te gelenler:** QR ile başka cihazda altyazı, "Altyazıyı konumlandır", GTA 6 harita kartı, TV uygulamasının kendiliğinden açılması, LG'de giriş seçimi (1–4 tuşları).
 
 **beta.73'te gelenler:** LG'de çeviri başlayınca siyah ekrana karşı önlem, Samsung parlaklık oynaması ve ultra geniş monitör düzeltmesi, GTA 6 telefon kartı iyileştirmesi.
