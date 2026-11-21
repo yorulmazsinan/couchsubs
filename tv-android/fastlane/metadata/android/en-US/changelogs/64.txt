@@ -1,0 +1,1 @@
+0.9.61: For LG TVs where the picture appears and then stays black: the TV app's unverified sound tweaks are now fully off by default, and if the TV's player stalls the HDMI picture is rebuilt once on its own.

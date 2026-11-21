@@ -1,0 +1,1 @@
+0.9.61: LG TV'lerde görüntü gelip sonra siyah ekranda kalması için: TV uygulamasının doğrulanmamış ses ayarları varsayılan olarak tamamen kapatıldı; TV'nin oynatıcısı takılırsa (stalled) HDMI görüntüsü kendiliğinden bir kez yeniden kuruluyor.

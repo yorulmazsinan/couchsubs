@@ -74,7 +74,8 @@
     played: false, everPlayed: false,
     rebuilds: 0, failures: 0, sincePort: 0, recent: [], reason: '', lastError: '', lastEvent: '',
     lastTime: -1, lastAdvanceAt: 0, advances: 0, playTried: false, sawUnpaused: false,
-    pending: null, building: null, checkTimer: null, soonTimer: null, wasHidden: false
+    pending: null, building: null, checkTimer: null, soonTimer: null, wasHidden: false,
+    stalls: 0, stallNote: '', stallRebuiltAt: 0
   };
 
   function nowMs() { return new Date().getTime(); }
@@ -137,6 +138,20 @@
   // - Ses odağı (webosMediaFocus) ve TV sesini açma (setMuted) varsayılan kapalıdır (COUCHSUBS_SOUND_STEPS ile açılır).
   // Tanı satırında "sx": wait (görüntü bekleniyor), on (adımlar yapıldı), off <neden> (kapatıldı); "rl": bilgisayarın ya
   // da telefonun uygulamayı yeniden açma sayısı (bekçi).
+  //
+  // 0.9.61 (#643, LG 55SK8500PLA, webOS 05.50.70, PS5 HDMI 2, soundbar): "görüntü gelip sonra siyah ekranda kalıyor".
+  // Panel: "hdmi playing rs4 1920x1080 t= · ev stalled · snd on v100 tr1/1 out denied dig denied tv 8 sx on". Görüntü
+  // geldi, 3 sn sonra ses adımları yapıldı (muted/defaultMuted yazıldı, settingsservice iki kez okundu ve reddetti,
+  // com.webos.audio/getVolume okundu), sonra <video> 'stalled' oldu. Hangisinin bozduğu kanıtlanamıyor; bu adımlar hiç
+  // doğrulanmamış tahminlerdi ve ikinci kez görüntü sorunuyla birlikte görüldü (#780). Üstelik bu TV currentTime'ı
+  // ilerletmiyor (t=), <video> rs4 "oynuyor" diyor: gözcü bozulma görmüyor, 'stalled' olayı yalnız denetimi öne
+  // çekiyordu, yani hiçbir şey yapılmıyor ve adımlar da kapanmıyordu. Artık:
+  // - Ses adımlarının hiçbiri (sesli istek, ses parçası, ses ayarı/ses düzeyi okuma, odak, TV sesini açma) varsayılan
+  //   olarak yapılmaz; yalnız window.COUCHSUBS_SOUND_STEPS verilirse yapılır. Tanıda "sx no".
+  // - Görüntü geldikten sonra 'stalled' olayı gelirse 1,5 sn sonra bakılır: sayaç bu arada ilerlediyse görüntü akıyordur,
+  //   dokunulmaz; değilse <video> 0.9.46 yoluyla bir kez yeniden kurulur; sonraki 30 sn 'stalled' olayı yalnız beklenir.
+  //   Tanıda "stall <sayı> <eylem>": rebuilt (yeniden kuruldu), ok (görüntü akıyor), wait (30 sn dolmadı), nopic
+  //   (görüntü hiç gelmemişti, gözcüye bırakıldı), busy (zaten kuruluyor ya da sınır doldu).
   var FOCUS_MAX = 3;
   var MUTE_CHECK_MS = 1500;
   var SOUND_AFTER_MS = 3000;
@@ -147,6 +162,11 @@
     steps: 'wait', why: '', doneFor: null, doneAt: 0, timer: null
   };
   var relaunches = 0;
+  var STALL_CHECK_MS = 1500;
+  var STALL_EVENT_WAIT_MS = 30000;
+
+  // Ses adımları yalnız açıkça istenirse (window.COUCHSUBS_SOUND_STEPS) yapılır.
+  function soundEnabled() { return !!window.COUCHSUBS_SOUND_STEPS; }
 
   // Görüntü SOUND_WATCH_MS içinde ses adımlarından sonra düştü ya da hiç gelmedi: adımlar bu oturumda kapanır.
   function soundOff(why) {
@@ -168,7 +188,7 @@
 
   // Görüntü geldi: adımlar kısa süre sonra, görüntü hâlâ varsa denenir.
   function soundSoon(video) {
-    if (sound.steps === 'off' || sound.timer !== null || sound.doneFor === video) return;
+    if (!soundEnabled() || sound.steps === 'off' || sound.timer !== null || sound.doneFor === video) return;
     sound.timer = setTimeout(function () {
       sound.timer = null;
       if (hdmi.video !== video || sound.steps === 'off' || sound.doneFor === video || !hasFrames(video)) return;
@@ -291,7 +311,7 @@
     if (sound.digital) text += ' dig ' + sound.digital;
     if (sound.volume) text += ' tv ' + sound.volume;
     if (sound.tvMute) text += ' tvmute ' + sound.tvMute;
-    text += ' sx ' + sound.steps + (sound.why ? ' ' + sound.why : '');
+    text += soundEnabled() ? ' sx ' + sound.steps + (sound.why ? ' ' + sound.why : '') : ' sx no';
     return text;
   }
 
@@ -356,6 +376,7 @@
       return function () {
         if (!current()) return;
         hdmi.lastEvent = name;
+        if (name === 'stalled') return onStalled(video);
         checkSoon(1500, false);
       };
     }
@@ -377,6 +398,35 @@
     for (var i = 0; i < events.length; i++) video.addEventListener(events[i], suspect(events[i]));
 
     hdmi.host.appendChild(video);
+  }
+
+  // Görüntü geldikten sonra 'stalled' olayı (#643): sayaç (currentTime) bu 1,5 sn'de ilerlediyse görüntü akıyordur, dokunulmaz;
+  // değilse <video> bir kez yeniden kurulur, sonraki STALL_EVENT_WAIT_MS boyunca olay yalnız beklenir.
+  function onStalled(video) {
+    hdmi.stalls++;
+    if (!hdmi.played) {
+      hdmi.stallNote = 'nopic';
+      return checkSoon(STALL_CHECK_MS, false);
+    }
+    if (hdmi.stallRebuiltAt && nowMs() - hdmi.stallRebuiltAt < STALL_EVENT_WAIT_MS) {
+      hdmi.stallNote = 'wait';
+      return checkSoon(STALL_CHECK_MS, false);
+    }
+    var before = Number(video.currentTime);
+    clearTimeout(hdmi.soonTimer);
+    hdmi.soonTimer = setTimeout(function () {
+      if (hdmi.video !== video || !hdmi.host || pageHidden()) return;
+      if (Number(video.currentTime) > before && health(nowMs()) === '') {
+        hdmi.stallNote = 'ok';
+        return;
+      }
+      if (hdmi.pending !== null || hdmi.building !== null || !schedule('ev stalled', true, true)) {
+        hdmi.stallNote = 'busy';
+        return;
+      }
+      hdmi.stallRebuiltAt = nowMs();
+      hdmi.stallNote = 'rebuilt';
+    }, STALL_CHECK_MS);
   }
 
   // Görüntü sağlamsa '', değilse neden.
@@ -424,6 +474,8 @@
     hdmi.recent.push(nowMs());
     hdmi.reason = reason;
     var old = hdmi.video;
+    // Görüntü 'stalled' oldu: ses adımları (açıkça istendiyse) bu oturumda kapanır, <video> eski yolla kurulur.
+    if (reason === 'ev stalled') soundOff('stalled');
     // Görüntü ses adımlarından kısa süre sonra düştü ya da bu girişte hiç gelmedi: eski yola dönülür.
     if (soundSuspect(old)) soundOff('drop ' + reason);
     else if (!hdmi.played) soundOff('nopic');
@@ -447,8 +499,9 @@
 
   // Yeniden kurmayı sıraya koyar: gittikçe seyrekleşen aralıkla (2, 4, 8… sn; en çok dakikada bir). immediate: bir olayın
   // ardından (öne gelme, ekran koruyucu sorusu) beklemeden; dakikadaki sınır yine geçerlidir.
-  function schedule(reason, immediate) {
-    if (hdmi.pending !== null || hdmi.building !== null || !mayRebuild()) return;
+  // force: beklerken "bozuk görünmüyor" olsa da kurulur (öne gelme, 'stalled' olayı). Sıraya kondu: true.
+  function schedule(reason, immediate, force) {
+    if (hdmi.pending !== null || hdmi.building !== null || !mayRebuild()) return false;
     var delay = immediate ? 0 : BACKOFF_MS[Math.min(hdmi.failures, BACKOFF_MS.length - 1)];
     delay = Math.max(delay, rateWait(nowMs()));
     hdmi.pending = setTimeout(function () {
@@ -456,9 +509,10 @@
       // Arka plandayken kurulmaz; öne gelince yeniden bakılır.
       if (pageHidden() || !hdmi.host) return;
       // Beklerken kendiliğinden düzeldiyse dokunulmaz.
-      if (reason !== 'resume' && health(nowMs()) === '') return;
+      if (!force && reason !== 'resume' && health(nowMs()) === '') return;
       rebuild(reason);
     }, delay);
+    return true;
   }
 
   function tick() {
@@ -540,6 +594,7 @@
     if (hdmi.rebuilds) text += ' · rebuilt ' + hdmi.rebuilds + ' (' + hdmi.reason + ')';
     if (hdmi.lastError) text += ' · last error ' + hdmi.lastError;
     if (hdmi.lastEvent) text += ' · ev ' + hdmi.lastEvent;
+    if (hdmi.stalls) text += ' · stall ' + hdmi.stalls + (hdmi.stallNote ? ' ' + hdmi.stallNote : '');
     if (relaunches) text += ' · rl ' + relaunches;
     if (video) text += ' · ' + audioText(video);
     return text;
