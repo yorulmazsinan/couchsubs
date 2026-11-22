@@ -4,19 +4,17 @@
 <UserControl x:Class="CouchSubs.App.Views.SecondScreenPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
     <StackPanel>
-        <TextBlock Text="{t:T 'Show on another device'}" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,0,0,s'}" />
         <StackPanel x:Name="Ready">
             <!-- Koyu temada da okunsun diye kod beyaz zeminde; büyütülürken yumuşatılmaz. -->
             <Border Background="White" CornerRadius="8" Padding="{t:Sp 'xs'}" HorizontalAlignment="Left" Margin="{t:Sp '0,0,0,s'}">
                 <Image x:Name="Code" Width="180" Height="180" RenderOptions.BitmapScalingMode="NearestNeighbor"
                        AutomationProperties.Name="{t:T 'Show on another device'}" />
             </Border>
-            <DockPanel>
-                <Button x:Name="CopyButton" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="{t:Sp 's,0,0,0'}" Click="OnCopy" />
-                <TextBox x:Name="Address" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
-            </DockPanel>
+            <!-- Adres: kopyala simgesi kutunun içinde (Mac DSCopyField); ayrı Kopyala düğmesi yok. -->
+            <c:CopyField x:Name="Address" />
             <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,s,0,0'}"
                        Text="{t:T 'Scan the code with the camera of a phone or tablet on the same Wi-Fi. While translating, the subtitles appear large in its browser; no app or internet needed.'}" />
         </StackPanel>

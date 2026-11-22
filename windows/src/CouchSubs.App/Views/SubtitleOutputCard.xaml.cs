@@ -66,6 +66,14 @@ public partial class SubtitleOutputCard : UserControl
             SubtitleOutput.Computer => OutputComputer, SubtitleOutput.Both => OutputBoth, SubtitleOutput.Obs => OutputObs, _ => OutputTv,
         }).IsChecked = true;
         ComputerPanel.Visibility = controller.ShowsOnComputer ? Visibility.Visible : Visibility.Collapsed;
+        // Kısa etiketlerin anlamı seçicinin altındaki cümlede (Mac outputHint); bilgisayar ekranında açıklamayı alttaki birim verir.
+        OutputHint.Text = settings.Output switch
+        {
+            SubtitleOutput.Tv => CouchSubs.Core.Localizer.Current["Subtitles are shown on the TV."],
+            SubtitleOutput.Obs => CouchSubs.Core.Localizer.Current["Only for streaming: subtitles go to the OBS overlay."],
+            _ => "",
+        };
+        OutputHint.Visibility = OutputHint.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ObsPanel.Visibility = settings.Output == SubtitleOutput.Obs ? Visibility.Visible : Visibility.Collapsed;
         OutputObsAddress.Text = controller.ObsAddress;
         OutputNetworkObsAddress.Text = controller.NetworkObsAddress ?? "";
@@ -84,24 +92,6 @@ public partial class SubtitleOutputCard : UserControl
     {
         if (loading || controller is null || sender is not RadioButton { Tag: string tag }) return;
         controller.Settings = controller.Settings with { Output = Enum.Parse<SubtitleOutput>(tag) };
-    }
-
-    /// <summary>OBS adresini panoya kopyalar; düğme kısa süre "Kopyalandı" der.</summary>
-    private async void OnCopyObs(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button) return;
-        var address = button == OutputObsCopy ? OutputObsAddress.Text : OutputNetworkObsAddress.Text;
-        try
-        {
-            Clipboard.SetText(address);
-        }
-        catch (System.Runtime.InteropServices.COMException)
-        {
-            return;
-        }
-        button.Content = CouchSubs.Core.Localizer.Current["Copied"];
-        await System.Threading.Tasks.Task.Delay(1500);
-        button.Content = CouchSubs.Core.Localizer.Current["Copy"];
     }
 
     private void OnClickThrough(object sender, RoutedEventArgs e)

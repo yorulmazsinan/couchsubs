@@ -132,7 +132,7 @@ public partial class DubbingCard : UserControl
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var label = new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = Sp.T("0", "0", "s", "0") };
-        var picker = new ComboBox { Margin = Sp.T("0", "0", "xs", "0") };
+        var picker = new ComboBox { Margin = Sp.T("0", "0", "xs", "0"), MinWidth = 0 };
         foreach (var voice in DubbingVoices.All)
             picker.Items.Add(new ComboBoxItem { Content = Label(voice), Tag = voice, IsSelected = voice == selected });
         picker.SelectionChanged += (_, _) =>

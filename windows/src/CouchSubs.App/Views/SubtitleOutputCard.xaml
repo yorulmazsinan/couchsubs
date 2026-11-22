@@ -7,56 +7,58 @@
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:local="clr-namespace:CouchSubs.App.Views">
-    <c:Card>
-        <StackPanel>
-            <TextBlock Text="{t:T 'Show subtitles on'}" Style="{StaticResource CaptionText}" Margin="{t:Sp '0,0,0,xs'}" />
-            <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Stretch">
-                <UniformGrid Rows="1">
-                    <RadioButton x:Name="OutputTv" Content="TV" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
-                    <RadioButton x:Name="OutputComputer" Content="{t:T 'Computer screen'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
-                    <RadioButton x:Name="OutputBoth" Content="{t:T 'Both'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Both" />
-                    <RadioButton x:Name="OutputObs" Content="{t:T 'OBS only (stream)'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Obs" />
-                </UniformGrid>
-            </Border>
+    <!-- Mac OutputSettings: kart başlığı "Altyazıyı göster", kısa etiketli seçici (TV / Bu bilgisayar / İkisi de / OBS), anlamı
+         altındaki cümlede. OBS adresleri kopyala simgesi kutunun içinde olan tam yuvarlak kutularda (CopyField). -->
+    <c:Card Title="{t:T 'Show subtitles on'}">
+        <c:SpacedStack>
+            <StackPanel>
+                <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Stretch">
+                    <UniformGrid Rows="1">
+                        <RadioButton x:Name="OutputTv" Content="TV" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
+                        <RadioButton x:Name="OutputComputer" Content="{t:T 'This computer'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
+                        <RadioButton x:Name="OutputBoth" Content="{t:T 'Both'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Both" />
+                        <RadioButton x:Name="OutputObs" Content="OBS" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Obs" />
+                    </UniformGrid>
+                </Border>
+                <TextBlock x:Name="OutputHint" Style="{StaticResource HintText}" Margin="{t:Sp '0,unitHint,0,0'}" />
+            </StackPanel>
             <!-- "Yalnız OBS (yayın)": TV aranmaz, bilgisayar ekranında pencere açılmaz; altyazı yalnız OBS katmanına gider (Mac ile aynı). -->
-            <StackPanel x:Name="ObsPanel" Margin="{t:Sp '0,s,0,0'}">
-                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,xs'}"
+            <c:SpacedStack x:Name="ObsPanel" Gap="s">
+                <TextBlock Style="{StaticResource HintText}"
                            Text="{t:T 'Subtitles go only to the OBS overlay. The TV is not searched for or opened, and no subtitle window opens on this computer. In OBS add a Browser source with this address (width 1920, height 1080).'}" />
-                <DockPanel Margin="{t:Sp '0,0,0,xs'}">
-                    <Button x:Name="OutputObsCopy" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Padding="{t:Sp 'm,0'}" Margin="{t:Sp 'xs,0,0,0'}" Click="OnCopyObs" />
-                    <TextBox x:Name="OutputObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
-                </DockPanel>
-                <StackPanel x:Name="OutputNetworkObsPanel">
-                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,xs'}"
-                               Text="{t:T 'If OBS runs on another computer, use this address:'}" />
-                    <DockPanel>
-                        <Button x:Name="OutputNetworkObsCopy" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Padding="{t:Sp 'm,0'}" Margin="{t:Sp 'xs,0,0,0'}" Click="OnCopyObs" />
-                        <TextBox x:Name="OutputNetworkObsAddress" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
-                    </DockPanel>
+                <c:CopyField x:Name="OutputObsAddress" />
+                <c:SpacedStack x:Name="OutputNetworkObsPanel" Gap="s">
+                    <TextBlock Style="{StaticResource HintText}" Text="{t:T 'If OBS runs on another computer, use this address:'}" />
+                    <c:CopyField x:Name="OutputNetworkObsAddress" />
+                </c:SpacedStack>
+            </c:SpacedStack>
+            <c:SpacedStack x:Name="ComputerPanel">
+                <c:Unit Title="{t:T 'Computer screen'}">
+                    <StackPanel>
+                        <TextBlock x:Name="WindowHint" Style="{StaticResource HintText}" Margin="{t:Sp '0,0,0,s'}"
+                                   Text="{t:T 'Subtitles appear in a window on this computer, over the game or PS Remote Play.'}" />
+                        <Button x:Name="Adjust" Content="{t:T 'Position the subtitles'}" HorizontalAlignment="Left" Click="OnAdjust" />
+                    </StackPanel>
+                </c:Unit>
+                <StackPanel>
+                    <c:SwitchRow x:Name="ClickThrough" Content="{t:T 'Clicks pass through'}" Checked="OnClickThrough" Unchecked="OnClickThrough" />
+                    <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" Margin="{t:Sp 'xxl,unitHint,0,0'}" />
                 </StackPanel>
-            </StackPanel>
-            <StackPanel x:Name="ComputerPanel" Margin="{t:Sp '0,s,0,0'}">
-                <TextBlock x:Name="WindowHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,s'}"
-                           Text="{t:T 'Subtitles appear in a window on this computer, over the game or PS Remote Play.'}" />
-                <WrapPanel>
-                    <CheckBox x:Name="ClickThrough" Content="{t:T 'Clicks pass through'}" Foreground="{DynamicResource textPrimaryBrush}"
-                              VerticalAlignment="Center" Margin="{t:Sp '0,0,s,xs'}" Checked="OnClickThrough" Unchecked="OnClickThrough" />
-                    <Button x:Name="Adjust" Content="{t:T 'Position the subtitles'}" Padding="{t:Sp 'm,0'}" Margin="{t:Sp '0,0,0,xs'}" Click="OnAdjust" />
-                </WrapPanel>
-                <TextBlock x:Name="ClickThroughHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,0" />
-            </StackPanel>
+            </c:SpacedStack>
             <!-- Ana ekranda: altyazıyı ayrıca bir telefon ya da tablet tarayıcısında göstermek (Ayarlar'da ayrı kart). -->
             <StackPanel x:Name="SecondScreenEntry">
-                <Button x:Name="SecondScreenButton" Content="{t:T 'Show on another device'}" Padding="{t:Sp 'm,0'}" Margin="{t:Sp '0,s,0,0'}"
-                        HorizontalAlignment="Left" Click="OnSecondScreen" />
+                <Button x:Name="SecondScreenButton" Content="{t:T 'Show on another device'}" HorizontalAlignment="Left" Click="OnSecondScreen" />
                 <Popup x:Name="SecondScreenPopup" PlacementTarget="{Binding ElementName=SecondScreenButton}" Placement="Bottom"
                        StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
                     <Border Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1"
-                            CornerRadius="12" Padding="{t:Sp 'm'}" Width="380" Margin="{t:Sp '0,xs,0,0'}">
-                        <local:SecondScreenPanel x:Name="SecondScreenView" />
+                            CornerRadius="{DynamicResource radius.tile}" Padding="{t:Sp 'l'}" Width="380" Margin="{t:Sp '0,xs,0,0'}">
+                        <StackPanel>
+                            <TextBlock Text="{t:T 'Show on another device'}" Style="{StaticResource CardTitleText}" Margin="{t:Sp '0,0,0,l'}" />
+                            <local:SecondScreenPanel x:Name="SecondScreenView" />
+                        </StackPanel>
                     </Border>
                 </Popup>
             </StackPanel>
-        </StackPanel>
+        </c:SpacedStack>
     </c:Card>
 </UserControl>

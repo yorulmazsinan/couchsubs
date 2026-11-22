@@ -129,14 +129,8 @@ public partial class SettingsView : UserControl
         Sections.SelectedIndex = 0;
         // Yazı boyutu, koyuluk ve yazı rengi artık düzenleyicide; eski satırlar gizlenir (ayarın kendisi aynı).
         AppearanceHost.Content = new AppearanceEditor(controller);
-        foreach (var old in new FrameworkElement?[] { TextSize.Parent as FrameworkElement, BackgroundOpacity.Parent as FrameworkElement, TextColor })
-            if (old is not null) old.Visibility = Visibility.Collapsed;
-        if (TextColor.Parent is Panel colorPanel && colorPanel.Children.IndexOf(TextColor) is > 0 and var at && colorPanel.Children[at - 1] is TextBlock colorLabel)
-            colorLabel.Visibility = Visibility.Collapsed;
-        if (TextSize.Parent is Panel { Parent: Panel sizePanel } sizeGrid && sizePanel.Children.IndexOf(sizeGrid) is > 0 and var sizeAt && sizePanel.Children[sizeAt - 1] is TextBlock sizeLabel)
-            sizeLabel.Visibility = Visibility.Collapsed;
-        if (BackgroundOpacity.Parent is Panel { Parent: Panel bgPanel } bgGrid && bgPanel.Children.IndexOf(bgGrid) is > 0 and var bgAt && bgPanel.Children[bgAt - 1] is TextBlock bgLabel)
-            bgLabel.Visibility = Visibility.Collapsed;
+        foreach (var old in new FrameworkElement[] { TextSizeUnit, BackgroundUnit, TextColorUnit })
+            old.Visibility = Visibility.Collapsed;
         RemotePlayAppChoice.SelectedItem = RemotePlayAppChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.RemotePlayApp.ToString());
         XboxAudioOnComputer.IsChecked = settings.XboxAudioOnComputer;
         XboxLegacyFrameRate.IsChecked = settings.XboxLegacyFrameRate;
@@ -148,6 +142,9 @@ public partial class SettingsView : UserControl
         ShowStreamWindowToggle();
         // Akış penceresi kendi düğmesiyle kapanmış olabilir; Ayarlar açılınca düğme güncellenir.
         Loaded += (_, _) => ShowStreamWindowToggle();
+        Glow.Paused = controller.IsRunning;
+        Loaded += (_, _) => MoveSelection(false);
+        NavHost.SizeChanged += (_, _) => MoveSelection(false);
         Unloaded += (_, _) => StopRecording();
         loading = false;
     }
@@ -223,8 +220,11 @@ public partial class SettingsView : UserControl
         ConsolePlayStationHint.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
         ConsoleXboxPanel.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
         ConsoleXboxName.Text = controller.SelectedXboxConsole is { } console ? "  ·  " + (string.IsNullOrEmpty(console.Name) ? "Xbox" : console.Name) : "";
-        ConsoleXboxLink.Content = Localizer.Current[controller.HasXboxAccount ? "Choose your Xbox" : "Sign in with Microsoft"];
-        ConsoleXboxLink.Style = (Style)FindResource(controller.NeedsXboxLink ? "PrimaryButton" : "SecondaryButton");
+        // Microsoft hesap kartı (Mac DSAccountCard): girişliyse "Yeniden Giriş Yap" ve Diğer Giriş Yolları'nda Xbox seçimi ve çıkış.
+        MicrosoftAccount.SignedIn = controller.HasXboxAccount;
+        MicrosoftAccount.HasOthers = controller.HasXboxAccount;
+        if (controller.HasXboxAccount && controller.NeedsXboxLink) MicrosoftAccount.Expanded = true;
+        ConsoleXboxLink.Content = Localizer.Current["Choose your Xbox"];
         ConsoleXboxSignedIn.Visibility = controller.HasXboxAccount ? Visibility.Visible : Visibility.Collapsed;
         ShowFrameSource();
         PasscodeTab.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
@@ -347,6 +347,8 @@ public partial class SettingsView : UserControl
     {
         if (e.PropertyName is nameof(AppController.TvStatusText) or nameof(AppController.TvClients) or nameof(AppController.TvReconnecting))
             Dispatcher.BeginInvoke(ShowTvStatus);
+        // Menü arkasındaki renk geçişi çeviri sürerken durur (işlemci oyuna kalsın).
+        if (e.PropertyName == nameof(AppController.IsRunning)) Dispatcher.BeginInvoke(() => Glow.Paused = controller.IsRunning);
         if (e.PropertyName is nameof(AppController.ObsAddress) or nameof(AppController.NetworkObsAddress) or nameof(AppController.LegacyTvWarning))
         {
             ObsAddress.Text = controller.ObsAddress;
@@ -1195,10 +1197,39 @@ public partial class SettingsView : UserControl
         if (e.OriginalSource != Sections) return;
         foreach (var item in Nav.Children.OfType<Controls.NavItem>())
             item.IsChecked = item.Tag is string tag && tag == Sections.SelectedIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        MoveSelection(true);
         if (Sections.SelectedContent is FrameworkElement page) Theme.Motion.EnterFrom(page, 8, Theme.Motion.Medium);
     }
 
     private void OnEditAppearance(object sender, RoutedEventArgs e) => Sections.SelectedItem = AppearanceSection;
+
+    /// <summary>
+    /// Seçim hapını seçili menü satırına taşır (Mac matchedGeometryEffect): konum ve yükseklik giriş eğrisiyle orta sürede
+    /// kayar; hareket azaltılmışsa ya da Geçiş Animasyonları kapalıysa kısa sürede.
+    /// </summary>
+    private void MoveSelection(bool animate)
+    {
+        var item = Nav.Children.OfType<Controls.NavItem>().FirstOrDefault(i => i.IsChecked == true);
+        if (item is null || !item.IsLoaded || item.ActualHeight <= 0)
+        {
+            Selection.Visibility = Visibility.Hidden;
+            return;
+        }
+        var top = item.TranslatePoint(new Point(0, 0), NavHost).Y;
+        var height = item.ActualHeight;
+        var wasHidden = Selection.Visibility != Visibility.Visible;
+        Selection.Visibility = Visibility.Visible;
+        if (!animate || wasHidden)
+        {
+            SelectionOffset.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            Selection.BeginAnimation(HeightProperty, null);
+            SelectionOffset.Y = top;
+            Selection.Height = height;
+            return;
+        }
+        SelectionOffset.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, Theme.Motion.To(top, Theme.Motion.Medium));
+        Selection.BeginAnimation(HeightProperty, Theme.Motion.To(height, Theme.Motion.Medium));
+    }
 
     /// <summary>
     /// Çeviri hızı: Hızlı (kötü okunan satır beklenmez), Dengeli (önerilen bekleme süreleri), Doğru (cümle tamamlanana
@@ -1622,26 +1653,6 @@ public partial class SettingsView : UserControl
         Leave();
     }
 
-
-    private void OnObsCopy(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Clipboard.SetText(ObsAddress.Text);
-            ObsCopy.Content = Localizer.Current["Copied"];
-        }
-        catch (System.Runtime.InteropServices.COMException) { }
-    }
-
-    private void OnNetworkObsCopy(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Clipboard.SetText(NetworkObsAddress.Text);
-            NetworkObsCopy.Content = Localizer.Current["Copied"];
-        }
-        catch (System.Runtime.InteropServices.COMException) { }
-    }
 
     private void OnStreamBackground(object sender, SelectionChangedEventArgs e)
     {

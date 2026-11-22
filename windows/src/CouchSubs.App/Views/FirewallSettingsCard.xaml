@@ -6,12 +6,11 @@
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              Visibility="Collapsed">
     <c:Card Title="{t:T 'Windows Firewall'}">
-        <StackPanel>
-            <TextBlock x:Name="Status" Style="{StaticResource HintText}" TextWrapping="Wrap" />
-            <TextBlock x:Name="PublicHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}" Visibility="Collapsed"
-                       Foreground="{DynamicResource warningBrush}"
+        <c:SpacedStack>
+            <TextBlock x:Name="Status" Style="{StaticResource HintText}" />
+            <c:Callout x:Name="PublicHint" Visibility="Collapsed"
                        Text="{t:T 'Permission applies only to Private networks. If this is your trusted home network, set it to Private in Windows Settings.'}" />
-            <Button x:Name="Allow" HorizontalAlignment="Left" Margin="{t:Sp '0,s,0,0'}" Content="{t:T 'Allow CouchSubs through Windows Firewall'}" Click="OnAllow" />
-        </StackPanel>
+            <Button x:Name="Allow" HorizontalAlignment="Left" Content="{t:T 'Allow CouchSubs through Windows Firewall'}" Click="OnAllow" />
+        </c:SpacedStack>
     </c:Card>
 </UserControl>

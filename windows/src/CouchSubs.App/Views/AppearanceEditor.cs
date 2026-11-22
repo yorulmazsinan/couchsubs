@@ -64,53 +64,52 @@ public sealed class AppearanceEditor : Grid
     {
         this.controller = controller;
         ColumnDefinitions.Add(new ColumnDefinition());
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Sp.V("l")) });
         ColumnDefinitions.Add(new ColumnDefinition());
         var l = Localizer.Current;
 
-        // Sol: önizleme
+        // Sol: önizleme (Mac: "TV'deki altyazılar" kartı).
         var frame = new Border { Child = previewLines };
         frame.SetResourceReference(StyleProperty, "DeviceFrame");
-        var preview = new StackPanel();
-        preview.Children.Add(Label("SUBTITLES ON THE TV"));
+        var preview = new SpacedStack();
         preview.Children.Add(new AspectBox { Child = frame });
         lowContrast.Text = l["The text color is too close to the background; it may be hard to read on the TV."];
         lowContrast.SetResourceReference(StyleProperty, "ErrorText");
-        lowContrast.Margin = Sp.T("0", "m", "0", "0");
         preview.Children.Add(lowContrast);
-        preview.Children.Add(Hint("The settings apply the same on the TV, phone and computer screen.", new Thickness(0, 16, 0, 0)));
-        var left = Card(preview);
-        left.VerticalAlignment = VerticalAlignment.Top;
+        preview.Children.Add(Hint("The settings apply the same on the TV, phone and computer screen.", new Thickness(0)));
+        var left = new Card { Title = l["Subtitles on the TV"], Content = preview, VerticalAlignment = VerticalAlignment.Top };
         Children.Add(left);
 
-        // Sağ: ayarlar
-        var right = new StackPanel();
-        var sizeHead = new DockPanel();
+        // Sağ: ayarlar; her biri bir birim (başlık üstte, denetim altta, açıklama altında), aralar 24, ayraç yok.
+        var right = new SpacedStack();
+        // Yazı boyutu (DSSliderRow): başlık solda, değer sağda (mono), çubuk altta, uçlarda 16 / 50.
+        var sizeUnit = new StackPanel();
+        var sizeHead = new DockPanel { Margin = Sp.T("0", "0", "0", "unitTitle") };
         sizeValue.SetResourceReference(StyleProperty, "MonoText");
+        sizeValue.VerticalAlignment = VerticalAlignment.Bottom;
         DockPanel.SetDock(sizeValue, Dock.Right);
         sizeHead.Children.Add(sizeValue);
-        sizeHead.Children.Add(new TextBlock { Text = l["Text Size"], FontWeight = FontWeights.SemiBold });
-        right.Children.Add(sizeHead);
-        var sizeRow = new DockPanel { Margin = Sp.T("0", "m", "0", "0") };
-        var small = Hint("A", new Thickness(0, 0, 12, 0));
-        var large = new TextBlock { Text = "A", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = Sp.T("s", "0", "0", "0") };
-        large.SetResourceReference(TextBlock.ForegroundProperty, "textSecondaryBrush");
-        DockPanel.SetDock(small, Dock.Left);
-        DockPanel.SetDock(large, Dock.Right);
-        sizeRow.Children.Add(small);
-        sizeRow.Children.Add(large);
-        sizeRow.Children.Add(size);
-        right.Children.Add(sizeRow);
+        sizeHead.Children.Add(UnitTitle("Text Size"));
+        sizeUnit.Children.Add(sizeHead);
+        sizeUnit.Children.Add(size);
+        var range = new DockPanel();
+        range.SetResourceReference(StyleProperty, "SliderRange");
+        var low = new TextBlock { Text = "16" };
+        low.SetResourceReference(StyleProperty, "SliderRangeText");
+        var high = new TextBlock { Text = "50" };
+        high.SetResourceReference(StyleProperty, "SliderRangeText");
+        DockPanel.SetDock(high, Dock.Right);
+        range.Children.Add(high);
+        range.Children.Add(low);
+        sizeUnit.Children.Add(range);
+        right.Children.Add(sizeUnit);
         size.ValueChanged += (_, e) =>
         {
             sizeValue.Text = Localizer.Current.Format("%lld px", (int)e.NewValue);
             if (!loading) Save(style => style with { FontSize = TvSize((int)e.NewValue) });
             Preview();
         };
-        right.Children.Add(Divider());
 
-        right.Children.Add(new TextBlock { Text = l["Background Color"], FontWeight = FontWeights.SemiBold });
-        backgroundSwatches.Margin = Sp.T("0", "m", "0", "0");
         for (var i = 0; i < Backgrounds.Length; i++)
         {
             var index = i;
@@ -122,24 +121,14 @@ public sealed class AppearanceEditor : Grid
                 Preview();
             }));
         }
-        right.Children.Add(backgroundSwatches);
         backgroundName.SetResourceReference(StyleProperty, "HintText");
-        backgroundName.Margin = Sp.T("0", "m", "0", "0");
-        right.Children.Add(backgroundName);
-        var darkRow = new DockPanel { Margin = Sp.T("0", "m", "0", "0") };
-        var darkLabel = new TextBlock { Text = l["Darkness"], Width = 72, FontSize = 14, FontWeight = FontWeights.Medium, VerticalAlignment = VerticalAlignment.Center };
-        DockPanel.SetDock(darkLabel, Dock.Left);
-        darkRow.Children.Add(darkLabel);
-        darkRow.Children.Add(Segments(["Light", "Medium", "Dark"], darknessButtons, index =>
+        right.Children.Add(Unit("Background Color", backgroundSwatches, backgroundName));
+        right.Children.Add(Unit("Darkness", Segments(["Light", "Medium", "Dark"], darknessButtons, index =>
         {
             SaveBackground();
             Preview();
-        }));
-        right.Children.Add(darkRow);
-        right.Children.Add(Divider());
+        })));
 
-        right.Children.Add(new TextBlock { Text = l["Text Color"], FontWeight = FontWeights.SemiBold });
-        textSwatches.Margin = Sp.T("0", "m", "0", "0");
         for (var i = 0; i < TextColors.Length; i++)
         {
             var index = i;
@@ -155,13 +144,9 @@ public sealed class AppearanceEditor : Grid
                 Preview();
             }));
         }
-        right.Children.Add(textSwatches);
         textName.SetResourceReference(StyleProperty, "HintText");
-        textName.Margin = Sp.T("0", "m", "0", "0");
-        right.Children.Add(textName);
-        right.Children.Add(Divider());
+        right.Children.Add(Unit("Text Color", textSwatches, textName));
 
-        right.Children.Add(new TextBlock { Text = l["Character Name"], FontWeight = FontWeights.SemiBold });
         var modes = Segments(["Same as Text", "Single Color", "By Character"], nameModes, index =>
         {
             nameMode = index;
@@ -169,11 +154,12 @@ public sealed class AppearanceEditor : Grid
             ShowNameArea();
             Preview();
         });
-        modes.Margin = Sp.T("0", "m", "0", "0");
-        right.Children.Add(modes);
+        var nameUnit = new StackPanel();
+        nameUnit.Children.Add(modes);
         nameArea.Margin = Sp.T("0", "m", "0", "0");
-        right.Children.Add(nameArea);
-        var rightCard = Card(right);
+        nameUnit.Children.Add(nameArea);
+        right.Children.Add(Unit("Character Name", nameUnit));
+        var rightCard = new Card { Content = right, VerticalAlignment = VerticalAlignment.Top };
         SetColumn(rightCard, 2);
         Children.Add(rightCard);
 
@@ -379,18 +365,27 @@ public sealed class AppearanceEditor : Grid
         return group;
     }
 
-    private static Border Card(UIElement content)
+    private static TextBlock UnitTitle(string key)
     {
-        var card = new Border { Child = content };
-        card.SetResourceReference(StyleProperty, "CardBorder");
-        return card;
+        var title = new TextBlock { Text = Localizer.Current[key] };
+        title.SetResourceReference(StyleProperty, "UnitTitleText");
+        return title;
     }
 
-    private static TextBlock Label(string key)
+    /// <summary>Ayar birimi (Mac DSUnit): başlık üstte, denetim altta (unitTitle 8), varsa açıklama en altta (unitHint 6).</summary>
+    private static StackPanel Unit(string key, UIElement control, FrameworkElement? hint = null)
     {
-        var label = new TextBlock { Text = Localizer.Current[key], Margin = Sp.T("0", "0", "0", "l") };
-        label.SetResourceReference(StyleProperty, "SectionLabel");
-        return label;
+        var unit = new StackPanel();
+        var title = UnitTitle(key);
+        title.Margin = Sp.T("0", "0", "0", "unitTitle");
+        unit.Children.Add(title);
+        unit.Children.Add(control);
+        if (hint is not null)
+        {
+            hint.Margin = Sp.T("0", "unitHint", "0", "0");
+            unit.Children.Add(hint);
+        }
+        return unit;
     }
 
     private static TextBlock Hint(string key, Thickness margin)
@@ -398,12 +393,5 @@ public sealed class AppearanceEditor : Grid
         var hint = new TextBlock { Text = Localizer.Current[key], Margin = margin, VerticalAlignment = VerticalAlignment.Center };
         hint.SetResourceReference(StyleProperty, "HintText");
         return hint;
-    }
-
-    private static Border Divider()
-    {
-        var line = new Border { Height = 1, Margin = Sp.T("0", "l", "0", "l") };
-        line.SetResourceReference(Border.BackgroundProperty, "borderBrush");
-        return line;
     }
 }

@@ -57,7 +57,6 @@ public partial class SecondScreenPanel : UserControl
         if (address is null || address == shown) return;
         shown = address;
         Address.Text = address;
-        CopyButton.Content = Localizer.Current["Copy"];
         Code.Source = QrBitmap(SecondScreen.QrModules(address));
     }
 
@@ -72,15 +71,5 @@ public partial class SecondScreenPanel : UserControl
         var bitmap = BitmapSource.Create(size, size, 96, 96, PixelFormats.Gray8, null, pixels, size);
         bitmap.Freeze();
         return bitmap;
-    }
-
-    private void OnCopy(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Clipboard.SetText(Address.Text);
-            CopyButton.Content = Localizer.Current["Copied"];
-        }
-        catch (System.Runtime.InteropServices.COMException) { }
     }
 }
