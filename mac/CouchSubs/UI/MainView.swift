@@ -137,7 +137,7 @@ struct MainControls: View {
                 if model.demoMode {
                     StatusTile(symbol: "play.rectangle", title: "Demo mode", value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning))
-                } else if model.isXbox {
+                } else if model.isXbox && !model.readsXboxWindow {
                     StatusTile(symbol: "gamecontroller", title: "Xbox · Beta", value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning)) {
                         // Microsoft girişi ya da Xbox seçimi eksikse buradan tamamlanır.
@@ -148,7 +148,7 @@ struct MainControls: View {
                         ReconnectButton()
                     }
                 } else {
-                    StatusTile(symbol: "gamecontroller", title: model.settings.frameSource == .captureWindow ? "Selected window" : "PS5",
+                    StatusTile(symbol: "gamecontroller", title: model.readsCaptureWindow ? "Selected window" : "PS5",
                                value: model.ps5StatusText,
                                tone: AppModel.ps5Tone(model.sessionState, running: model.isRunning)) {
                         ReconnectButton()
@@ -158,6 +158,8 @@ struct MainControls: View {
                 if model.settings.output.showsOnTV { TVStatusTile() }
             }
             .fixedSize(horizontal: false, vertical: true)
+            // "TV uygulamasını güncelle": ilerleme, eksik adım ve sonuç burada (TV adımına gidilmez).
+            if model.tvAppUpdating && model.settings.output.showsOnTV { TVAppUpdateSection() }
             if model.isRunning && !model.demoMode { GameSection(choice: model.gameChoice, areas: model.gameAreas) }
             // Kurulum bitmeden de uygulama örnek görüntülerle denenebilir.
             if !model.canStart && !model.isRunning && !model.demoMode { DemoModeButton(kind: .ghost) }
@@ -168,9 +170,10 @@ struct MainControls: View {
                 if model.isXbox {
                     // Xbox'ta görüntü kaynağı seçimi yok (Windows'taki gibi gizli); konsol türü gösterilir.
                     InfoRow("Console", value: String(localized: "Xbox Series / Xbox One (Beta)"), action: { model.openSettings(.console) })
-                } else {
-                    InfoRow("Picture source", value: pictureSourceName, action: { model.openSettings(.source) })
+                    InfoDivider()
                 }
+                // Xbox'ta da görüntü kaynağı seçilir (#853): Xbox bağlantısı ya da OBS/oyun penceresi.
+                InfoRow("Picture source", value: model.pictureSourceName, action: { model.openSettings(.source) })
                 InfoDivider()
                 InfoRow("Translation", value: engineName, action: { model.openSettings(.translation) })
                 InfoDivider()
@@ -178,10 +181,6 @@ struct MainControls: View {
             }
             MainWarnings()
         }
-    }
-
-    private var pictureSourceName: String {
-        AppModel.pictureSourceTitle(model.settings.frameSource)
     }
 
     private var engineName: String {
@@ -255,6 +254,21 @@ private struct TestSubtitleButton: View {
     }
 }
 
+/// Ana ekrandaki TV uygulaması güncellemesi: kurulum kartı (ilerleme, Developer Mode adımları, Passphrase, hata ve
+/// "Tekrar dene"); sonuç görününce "Tamam" kartı kapatır.
+private struct TVAppUpdateSection: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.space("s")) {
+            TVAppCard()
+            if case .upToDate = model.tvApp {
+                Button("OK") { model.dismissTVAppUpdate() }.buttonStyle(.secondary)
+            }
+        }
+    }
+}
+
 private struct TVStatusTile: View {
     @EnvironmentObject private var model: AppModel
 
@@ -267,14 +281,21 @@ private struct TVStatusTile: View {
 
     var body: some View {
         if model.hasTV {
-            if model.canReinstallTVApp {
-                // TV uygulaması bağlanmıyor (ör. TV'den kaldırıldı): TV adımı açılır, uygulama yeniden kurulur ya da açılır.
+            if let outdated = model.tvAppOutdated {
+                // TV'deki uygulama bu Mac'teki paketten eski (#884, #891): güncelleme burada başlar, kart altta açılır.
+                StatusTile(symbol: "tv", title: "TV",
+                           value: String(format: String(localized: "TV app is out of date (%@ → %@)"), outdated.installed, outdated.bundled),
+                           tone: .warning) {
+                    Button("Update the TV app") { Task { await model.updateTVApp() } }.buttonStyle(.secondary)
+                        .disabled(model.tvAppUpdating && model.tvApp == .working)
+                    changeTV
+                }
+            } else if model.canReinstallTVApp {
+                // TV uygulaması bağlanmıyor (ör. TV'den kaldırıldı): yeniden kurulum burada başlar, kart altta açılır.
                 StatusTile(symbol: "tv", title: "TV", value: String(localized: "Waiting for the TV app"),
                            tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
-                    Button("Reinstall the TV app") {
-                        model.step = .tv
-                        Task { await model.reinstallTVApp() }
-                    }.buttonStyle(.secondary)
+                    Button("Reinstall the TV app") { Task { await model.updateTVApp() } }.buttonStyle(.secondary)
+                        .disabled(model.tvAppUpdating && model.tvApp == .working)
                     changeTV
                 }
             } else if model.canReconnectTV {
@@ -419,7 +440,7 @@ private struct LiveSubtitlesTile: View {
             if model.isRunning && MainAccountTip.isVisible(ps5: !model.isXbox && model.settings.frameSource == .ps5, demo: model.demoMode,
                                                            hasSubtitle: !model.lastTranslation.isEmpty,
                                                            streaming: model.sessionState == .streaming) {
-                HintText(text: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game.")
+                HintText(text: "To play without the connection dropping: 1. On the PS5, start the game with your MAIN account first. 2. Then start translating. 3. Don't switch users during the game; when you turn on the controller, choose your MAIN account. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game.")
             }
             // Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir.
             if model.showsAutoScreenTextNotice {
@@ -430,9 +451,6 @@ private struct LiveSubtitlesTile: View {
             // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
             if model.showsSubtitleOffTip {
                 HintText(text: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio.")
-                if model.settings.watchSubtitleBackground {
-                    HintText(text: "“Watch subtitle background” is on: only text on GTA 6’s dark subtitle panel is read. Set the game’s subtitle background to Solid or turn this setting off.")
-                }
             }
             if model.lastTranslation.isEmpty {
                 HintText(text: "Subtitles will appear here while you play.")

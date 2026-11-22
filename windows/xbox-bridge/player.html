@@ -29,7 +29,8 @@
   let capturedCallbacks = -1;
   let firstFrameSent = false;
   let keyframeReadySent = false;
-  const STAT_TYPES = ['inbound-rtp', 'candidate-pair', 'local-candidate', 'remote-candidate', 'transport'];
+  // 'codec': anlaşılan görüntü kodeği tanı satırına girer (Xbox görüntü göndermeyince kodek mi, ayrılsın).
+  const STAT_TYPES = ['inbound-rtp', 'candidate-pair', 'local-candidate', 'remote-candidate', 'transport', 'codec'];
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d', { willReadFrequently: true });
   function send(message) { window.chrome.webview.postMessage(message); }
@@ -105,6 +106,16 @@
     player.bind();
     player.setControllerRumble(false);
     player.getDataChannel('control')?.addEventListener('open', notifyKeyframeReady);
+    // Veri kanallarının açılışı ve message kanalının el sıkışması günlüğe girer (telefonlardaki "kanal …" satırları gibi):
+    // HandshakeAck gelmezse oynatıcı kontrol kanalında yetki isteğini göndermez, Xbox da görüntü göndermez.
+    for (const name of ['input', 'control', 'message', 'chat']) {
+      const channel = player.getDataChannel(name);
+      channel?.addEventListener('open', () => log('kanal ' + name + ': open'));
+      channel?.addEventListener('close', () => log('kanal ' + name + ': closed'));
+    }
+    player.getDataChannel('message')?.addEventListener('message', event => {
+      if (typeof event.data === 'string' && event.data.includes('"HandshakeAck"')) log('kanal message: HandshakeAck');
+    });
     player.setSdpHandler(async (_, offer) => {
       try {
         const answer = await rpc('chatSdp', { sdp: offer.sdp });
@@ -194,6 +205,15 @@
       frameMs = message.legacyFrameRate ? 200 : 66;
       playAudio = message.playAudio !== false;
       start().catch(fail);
+    }
+    else if (message.kind === 'audio') {
+      // Çeviri sürerken ses ayarı değişti: yalnız ses öğesi açılır/kısılır, oturum yeniden kurulmaz (#871).
+      playAudio = message.playAudio !== false;
+      const audio = player?._audioComponent?._audioRender;
+      if (audio) {
+        audio.muted = !playAudio;
+        if (playAudio && audio.paused) audio.play().catch(error => log('ses çalınamadı: ' + error));
+      }
     }
     else if (message.kind === 'stop') stop();
   });

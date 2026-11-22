@@ -194,6 +194,7 @@ public class QualityFallbackTests
     [InlineData(DisconnectKind.Rejected, false)]
     [InlineData(DisconnectKind.RegistrationInvalid, false)]
     [InlineData(DisconnectKind.ConsoleRemotePlayCrashed, false)]
+    [InlineData(DisconnectKind.ConsoleClosed, false)]
     [InlineData(DisconnectKind.Stopped, false)]
     public void OnlyNetworkLikeDropsCount(DisconnectKind kind, bool counts) => Assert.Equal(counts, QualityFallback.CountsAsDrop(kind));
 }
@@ -342,6 +343,18 @@ public class DisconnectReasonTests
         Assert.Equal(new DisconnectReason(DisconnectKind.Network), DisconnectReasons.FromNative(NativeMethods.QuitNetwork, null));
         Assert.Equal(new DisconnectReason(DisconnectKind.Other, "Version Mismatch"),
                      DisconnectReasons.FromNative(NativeMethods.QuitOther, "Version Mismatch"));
+    }
+
+    /// <summary>X, 21 Kas: oyun sırasında PS5'te ana hesaba geçince PS5 akışı kendisi kapatıyor. Ağ kopması değildir: ayrı
+    /// neden, PS5'in metni ayrıntıda, "bulunamadı"ya çevrilmez.</summary>
+    [Fact]
+    public void ConsoleClosedStreamIsNotANetworkDrop()
+    {
+        Assert.Equal(new DisconnectReason(DisconnectKind.ConsoleClosed, "Client disconnected"),
+                     DisconnectReasons.FromNative(NativeMethods.QuitConsoleClosed, "Client disconnected"));
+        Assert.Equal(new DisconnectReason(DisconnectKind.ConsoleClosed, ""), DisconnectReasons.FromNative(NativeMethods.QuitConsoleClosed, null));
+        Assert.Equal(DisconnectKind.ConsoleClosed,
+                     StreamSession.Classify(new DisconnectReason(DisconnectKind.ConsoleClosed, "x"), searchAnswered: false, "192.168.1.70").Kind);
     }
 
     /// <summary>GitHub #519: PS5'teki Uzaktan Oynatma çöktüyse İngilizce libchiaki metni değil, ayrı bir neden.</summary>

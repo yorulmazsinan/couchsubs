@@ -471,6 +471,63 @@ class XboxSessionMachineTest {
             XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, "Xbox'tan 20 sn içinde görüntü gelmedi"))
     }
 
+    /** #871: Xbox kartında Xbox'ın JSON hata nesnesi olduğu gibi görünüyordu. */
+    private val cloudServiceTimeout =
+        """{"message":"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\\streaming\\manager"}"""
+
+    @Test fun cloudStreamingServiceTimeoutIsReadableAndNotRetried() {
+        assertEquals("0x8007139F", XboxSessionMachine.errorCode(cloudServiceTimeout))
+        assertEquals(XboxSessionMachine.StopKind.SERVICE_NOT_READY,
+            XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, cloudServiceTimeout))
+        assertEquals(XboxSessionMachine.StopKind.SERVICE_NOT_READY,
+            XboxSessionMachine.stopKind(XboxError.SERVICE, "Xbox service HTTP 500: $cloudServiceTimeout"))
+        assertTrue(XboxSessionMachine.errorMessage(cloudServiceTimeout)!!
+            .startsWith("""Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\streaming"""))
+        // errorDetails olarak da HTTP hatası olarak da gelse yeniden denenmez.
+        val fromState = XboxSessionMachine()
+        fromState.start(); fromState.played()
+        assertEquals(XboxSessionMachine.Action.Retry(null), fromState.status("Provisioning", cloudServiceTimeout))
+        val fromHttp = XboxSessionMachine()
+        assertEquals(XboxSessionMachine.Action.Retry(null), fromHttp.fail(XboxError.SERVICE, "Xbox service HTTP 500: $cloudServiceTimeout"))
+        assertFalse((fromHttp.phase as XboxSessionMachine.Phase.Failed).willRetry)
+    }
+
+    @Test fun unknownXboxErrorShowsOnlyTheCode() {
+        val reason = """{"message":"Agent : -2147024891 : Access is denied."}"""
+        val kind = XboxSessionMachine.stopKind(XboxError.CONSOLE_UNAVAILABLE, reason)
+        assertEquals(XboxSessionMachine.StopKind.START_FAILED, kind)
+        assertEquals("0x80070005", XboxSessionMachine.displayReason(reason, kind, "x"))
+        assertEquals("Conflict", XboxSessionMachine.displayReason("""{"code":"Conflict","message":"x"}""",
+            XboxSessionMachine.StopKind.START_FAILED, "x"))
+        assertEquals("0x8007139F", XboxSessionMachine.errorCode("hr 0x8007139f"))
+        assertEquals(null, XboxSessionMachine.errorCode("""{"code":null,"message":"x"}"""))
+        assertEquals(XboxSessionMachine.StopKind.OTHER, XboxSessionMachine.stopKind(XboxError.SERVICE, """{"message":"something odd"}"""))
+        assertEquals("something odd", XboxSessionMachine.displayReason("""{"message":"something odd"}""", XboxSessionMachine.StopKind.OTHER, "x"))
+        assertEquals("Xbox service HTTP 500", XboxSessionMachine.displayReason("""Xbox service HTTP 500: {"x":1}""", XboxSessionMachine.StopKind.OTHER, "x"))
+        // Bilinmeyen hata yeniden deneme kuralını değiştirmez.
+        assertEquals(XboxSessionMachine.Action.Retry(5000), XboxSessionMachine().fail(XboxError.SERVICE, reason))
+    }
+
+    @Test fun connectionsWithoutPictureStopAfterTwoAttempts() {
+        // Eskiden görüntüsüz her bağlantı ~60 sn sürüp dört kez açılıp kapanıyordu (Xbox'ta "uzaktan oynatma başlatıldı / durduruldu").
+        val m = XboxSessionMachine()
+        assertEquals(XboxSessionMachine.Action.Retry(5000), m.fail(XboxError.NO_FIRST_FRAME, "Xbox'tan 30 sn içinde görüntü gelmedi"))
+        assertEquals(XboxSessionMachine.Action.Retry(null), m.fail(XboxError.NO_FIRST_FRAME, "Xbox WebRTC bağlantısı kesildi (CLOSED)"))
+        assertFalse((m.phase as XboxSessionMachine.Phase.Failed).willRetry)
+        assertEquals(XboxSessionMachine.StopKind.NO_PICTURE,
+            XboxSessionMachine.stopKind(XboxError.NO_FIRST_FRAME, "Xbox WebRTC bağlantısı kesildi (CLOSED)"))
+    }
+
+    @Test fun pictureResetsTheNoPictureStreak() {
+        val m = XboxSessionMachine()
+        assertEquals(XboxSessionMachine.Action.Retry(5000), m.fail(XboxError.NO_FIRST_FRAME, "görüntü yok"))
+        m.start(); m.played(); m.status("Provisioned", null); m.streaming()
+        assertEquals(XboxSessionMachine.Action.Retry(15000), m.fail(XboxError.NO_PICTURE, "kesildi"))
+        m.start(); m.played(); m.status("Provisioned", null)
+        assertEquals(XboxSessionMachine.Action.Retry(45000), m.fail(XboxError.NO_FIRST_FRAME, "görüntü yok"))
+        assertEquals(30_000L, XboxFirstFrameWatch.FIRST_FRAME_LIMIT_MS)
+    }
+
     @Test fun shortReasonIsOneLineAndBounded() {
         assertEquals("NETWORK", XboxSessionMachine.shortReason("  ", "NETWORK"))
         assertEquals("a b", XboxSessionMachine.shortReason("a\n  b", "x"))

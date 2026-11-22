@@ -175,16 +175,43 @@ public enum ButtonIcons {
     /// Sözcük bir kumanda tuşunun adı ya da simgesi mi ("R3", "(L1)", "△").
     static func isButtonName(_ text: String) -> Bool { names.contains(trimming(text, brackets).uppercased()) }
 
+    /// Renkli zeminde (kutu kenarının ortancası) her kanalda zemine bu kadar yakın nokta zemindir, simge sayılmaz.
+    static let baseTolerance = 40
+
     /// Kutudaki parlak piksellerin çoğu renksiz mi (kumanda simgesi beyaz/gri; portre, harita renkli).
     static func isColourless(_ frame: CGImage, _ box: TextBox) -> Bool {
         let rect = GamePhonePixels.rect(box, in: frame)
-        guard let pixels = GamePhonePixels(frame, in: rect) else { return false }
+        guard let pixels = GamePhonePixels(frame, in: rect), pixels.width >= 2, pixels.height >= 2 else { return false }
+        // Zemin: kutunun kenarındaki noktaların ortancası. Beyaz simgenin kenarı zeminle karışır (mavi haritada mavimsi);
+        // zeminle beyaz arasındaki karışım renkli sayılmaz (#860: GTA 6 haritasında L3/R3 simgesi tanınmıyordu).
+        var edge: [(Int, Int, Int)] = []
+        for y in 0..<pixels.height {
+            for x in 0..<pixels.width where y == 0 || y == pixels.height - 1 || x == 0 || x == pixels.width - 1 {
+                let i = (y * pixels.width + x) * 4
+                edge.append((Int(pixels.bytes[i]), Int(pixels.bytes[i + 1]), Int(pixels.bytes[i + 2])))
+            }
+        }
+        func median(_ values: [Int]) -> Int { values.sorted()[values.count / 2] }
+        let base = (median(edge.map(\.0)), median(edge.map(\.1)), median(edge.map(\.2)))
+        let baseLuma = (299 * base.0 + 587 * base.1 + 114 * base.2) / 1000
+        let colourfulBase = max(base.0, base.1, base.2) - min(base.0, base.1, base.2) > 60
         var bright = 0, coloured = 0
         for i in stride(from: 0, to: pixels.bytes.count, by: 4) {
             let r = Int(pixels.bytes[i]), g = Int(pixels.bytes[i + 1]), b = Int(pixels.bytes[i + 2])
-            if (299 * r + 587 * g + 114 * b) / 1000 < 110 { continue }
+            let luma = (299 * r + 587 * g + 114 * b) / 1000
+            // Zeminin kendisi simgenin parçası değildir: parlak renkli zeminde (GTA 6 haritasının açık mavi denizi) zemin
+            // noktaları renkli sayılıyor, haritadaki ✕/○ simgesi tanınmayıp çeviri kutusuna giriyordu.
+            if colourfulBase, max(abs(r - base.0), abs(g - base.1), abs(b - base.2)) <= baseTolerance { continue }
+            if luma < 110 { continue }
             bright += 1
-            if max(r, g, b) - min(r, g, b) > 60 { coloured += 1 }
+            guard max(r, g, b) - min(r, g, b) > 60 else { continue }
+            // Zeminle beyazın karışımı mı: karışım oranı parlaklıktan, beklenen renk ondan. Yalnız koyu zeminde (kenarı
+            // parlak renkle dolu kutu simge değil, resimdir: portre kutuyu kenarına kadar doldurur).
+            guard baseLuma < 110 else { coloured += 1; continue }
+            let share = baseLuma >= 250 ? 1.0 : max(0, min(1, Double(luma - baseLuma) / Double(255 - baseLuma)))
+            let expected = [base.0, base.1, base.2].map { Double($0) * (1 - share) + 255 * share }
+            let distance = zip([r, g, b].map(Double.init), expected).map { abs($0 - $1) }.max()!
+            if distance > 60 { coloured += 1 }
         }
         return bright > 0 && coloured * 4 < bright
     }
@@ -400,7 +427,9 @@ public enum ButtonIcons {
             let core = trimming(word.text, brackets)
             let named = names.contains(core.uppercased())
             let hasLettersOrDigits = core.unicodeScalars.contains { isLetter($0) || $0.properties.generalCategory == .decimalNumber }
+            // Satır sonundaki harf+rakam ("C3", "13"): yuvarlak L3/R3 simgesinin okunuşu (#860).
             let suspicious = bar ? (named || core.utf16.count == 1 || ["11", "12", "13", "21", "22", "23"].contains(core)
+                                     || (i == words.count - 1 && i > 0 && core.utf16.count == 2 && core.last?.isNumber == true)
                                      || (core.utf16.count <= 2 && !hasLettersOrDigits))
                                  : (i == 0 && words.count >= 2 && isIconToken(word.text))
             if suspicious {

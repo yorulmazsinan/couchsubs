@@ -129,8 +129,12 @@ public class DenseMenuTests
         var candidate = RegionWatcher.MakeCandidate(new Reading(Scheme()), new CropRegion(0, 1, 0, 1), frame, auto: true);
         var blocks = candidate.Blocks!;
         string Align(string text) => blocks[Enumerable.Range(0, blocks.Count).First(i => candidate.Paragraphs[blocks[i].Start] == text)].Look!.Align;
-        Assert.Equal("right", Align("HOLSTER (L1)"));
-        Assert.Equal("left", Align("(△) INTERACT"));
+        // Satır ucundaki tuş adı çeviriye ve kutuya girmez, ekranda görünür kalır (#860).
+        Assert.Equal("right", Align("HOLSTER"));
+        Assert.Equal("left", Align("INTERACT"));
+        Assert.DoesNotContain(candidate.Paragraphs, paragraph => paragraph.Contains("(L1)") || paragraph.Contains("(△)"));
+        var holster = blocks.First(block => candidate.Paragraphs[block.Start] == "HOLSTER");
+        Assert.True(holster.Box.Right < 0.45);
         Assert.DoesNotContain("5 / 9", candidate.Paragraphs);
 
         Assert.Equal([("", "HOLSTER", " (L1)")], RegionWatcher.SplitLabel("HOLSTER (L1)"));
@@ -153,9 +157,10 @@ public class DenseMenuTests
         // Tuş adları ve sayaçlar çeviriye gitmez, sözlükteki etiketler de ("SELECT", "BACK").
         Assert.DoesNotContain(translator.Texts, text => text.Contains("(L1)") || text.Contains("1 / 3") || text is "SELECT" or "BACK");
         var sent = server.Blocks.Last(blocks => blocks is not null)!;
-        Assert.EndsWith(" (L1)", sent.Single(block => block.Source == "HOLSTER (L1)").Translation);
-        Assert.Contains(" / ", sent.Single(block => block.Source == "AIM / INTERACT (L2)").Translation);
-        Assert.Equal("SEÇ (✕)", sent.Single(block => block.Source == "SELECT (✕)").Translation);
+        // Tuş adı kutunun dışında kalır (ekranda görünür, #860); etiket çevrilir.
+        Assert.NotNull(sent.Single(block => block.Source == "HOLSTER").Translation);
+        Assert.Contains(" / ", sent.Single(block => block.Source == "AIM / INTERACT").Translation);
+        Assert.Equal("SEÇ", sent.Single(block => block.Source == "SELECT").Translation);
 
         // Menü kapandı, yeniden açıldı: hepsi oturum önbelleğinden.
         await watcher.PassAsync(Pause(-1), []);

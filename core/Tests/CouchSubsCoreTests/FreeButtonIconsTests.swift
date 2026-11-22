@@ -36,6 +36,76 @@ final class FreeButtonIconsTests: XCTestCase {
         TextLine(words.map(\.text).joined(separator: " "), box: words.dropFirst().reduce(words[0].box) { $0.union($1.box) }, words: words)
     }
 
+    private struct Vectors: Decodable {
+        struct Layout: Decodable { let width: Int; let height: Int; let top: Int; let size: Int }
+        struct Marked: Decodable { let text: String; let icons: [String]? }
+        struct Screen: Decodable { let paragraphs: [String]; let maxRight: Double }
+        struct Case: Decodable {
+            let name: String; let rings: [Int]; let background: [Int]?; let ink: [Int]?
+            let words: [[Value]]; let markFree: Marked?; let screen: Screen?
+        }
+        enum Value: Decodable {
+            case text(String), number(Double)
+            init(from decoder: Decoder) throws {
+                let container = try decoder.singleValueContainer()
+                if let text = try? container.decode(String.self) { self = .text(text) } else { self = .number(try container.decode(Double.self)) }
+            }
+            var text: String { if case let .text(value) = self { return value }; return "" }
+            var number: Double { if case let .number(value) = self { return value }; return 0 }
+        }
+        let frame: Layout
+        let cases: [Case]
+    }
+
+    /// Ortak vakalar Fixtures/free-button-icons.json (Windows FreeButtonIconsTests.cs, Android FreeButtonIconsTest.kt aynı
+    /// dosyayı okur).
+    func testSharedCasesMatchWindowsAndAndroid() throws {
+        let url = Bundle.module.url(forResource: "Fixtures", withExtension: nil)!.appendingPathComponent("free-button-icons.json")
+        let vectors = try JSONDecoder().decode(Vectors.self, from: Data(contentsOf: url))
+        XCTAssertGreaterThanOrEqual(vectors.cases.count, 10)
+        let layout = vectors.frame
+        for item in vectors.cases {
+            let background = item.background ?? [0, 0, 0], ink = item.ink ?? [255, 255, 255]
+            let context = CGContext(data: nil, width: layout.width, height: layout.height, bitsPerComponent: 8,
+                                    bytesPerRow: layout.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            let pixels = context.data!.assumingMemoryBound(to: UInt8.self)
+            func paint(_ p: Int, _ color: [Int]) {
+                pixels[p] = UInt8(color[0]); pixels[p + 1] = UInt8(color[1]); pixels[p + 2] = UInt8(color[2]); pixels[p + 3] = 255
+            }
+            for i in 0..<(layout.width * layout.height) { paint(i * 4, background) }
+            let s = layout.size, t = layout.top
+            for x0 in item.rings {
+                for y in t..<(t + s) {
+                    for x in x0..<(x0 + s) where x - x0 < 3 || x0 + s - x <= 3 || y - t < 3 || t + s - y <= 3 {
+                        paint((y * layout.width + x) * 4, ink)
+                    }
+                }
+            }
+            let image = context.makeImage()!
+            let source = line(item.words.map { word($0[0].text, $0[1].number, $0[2].number) })
+            if let expected = item.markFree {
+                let marked = ButtonIcons.markFree(source, frame: image)
+                XCTAssertEqual(marked.text, expected.text, item.name)
+                XCTAssertEqual(marked.icons?.map(\.text), expected.icons, item.name)
+                if expected.icons == nil { XCTAssertEqual(marked, source, item.name) }
+                for icon in ButtonIcons.withImages(marked.icons ?? [], frame: image) {
+                    XCTAssertTrue(icon.box.left >= 0 && icon.box.right <= 1, item.name)
+                    XCTAssertNotNil(icon.image, item.name)
+                }
+            }
+            if let expected = item.screen {
+                let groups = ScreenTranslation.groups(Reading(lines: [source]), frame: image, wholeScreen: true)
+                XCTAssertEqual(groups.flatMap(\.paragraphs), expected.paragraphs, item.name)
+                XCTAssertTrue(groups.allSatisfy { $0.icons == nil && $0.box.right <= expected.maxRight + 1e-9 }, item.name)
+            }
+        }
+    }
+
+    private func line(_ words: [TextWord]) -> TextLine {
+        TextLine(words.map(\.text).joined(separator: " "), box: words.dropFirst().reduce(words[0].box) { $0.union($1.box) }, words: words)
+    }
+
     func testOnlyButtonBarsProbeGapsAndOnlyVisibleIconsChangeTheCandidateKey() {
         let bar = line(word("SET", 0.05, 0.15), word("DESTINATION", 0.17, 0.45), word("EXIT", 0.55, 0.65))
         let visible = frame(191), empty = frame()
@@ -102,10 +172,11 @@ final class FreeButtonIconsTests: XCTestCase {
                                       line(word("Incoming", 0.65, 0.79), word("call", 0.8, 0.89))])
         let candidate = RegionWatcher.candidate(reading, in: full, frame: frame(22))
         XCTAssertEqual(candidate.blocks?.count, 2)
-        XCTAssertEqual(candidate.paragraphs, ["\(marker) Swing", "Incoming call"])
-        let slots = try XCTUnwrap(candidate.icons)
-        XCTAssertNotNil(slots.first?.first?.image)
-        XCTAssertEqual(slots.last?.count, 0)
+        // Satır başındaki tuş simgesi çeviriye girmez, kutunun dışında kalır; ekranda görünür (#860).
+        XCTAssertEqual(candidate.paragraphs, ["Swing", "Incoming call"])
+        XCTAssertNil(candidate.icons)
+        let swing = try XCTUnwrap(candidate.blocks?.first)
+        XCTAssertGreaterThanOrEqual(swing.box.left, 0.11)
     }
 
     /// "Ekranı çevir"de tuş ipucu atılmaz: etiketi kendi kutusunda çevrilir, tuş ("R2") çeviriye girmez ve ekranda

@@ -155,6 +155,7 @@ public final class SubtitleServer: @unchecked Sendable {
             for connection in clients.values { connection.cancel() }
             clients.removeAll()
             viewers.removeAll()
+            legacyClients.removeAll()
             notifyClientsChanged()
         }
     }
@@ -223,9 +224,12 @@ public final class SubtitleServer: @unchecked Sendable {
     /// `/hello` yanıtı: uygulama, eşleştirme gerektiği (`auth`), kurulum kimliği ve bağlı TV sayısı (Windows ve Android ile
     /// aynı biçim). Erişim anahtarını içermez. TV, ağda birden çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si bağlı
     /// olmayanı seçer; onayladığı anahtarı da bu kimlikle eşler.
-    static func helloBody(id: String, tvs: Int) -> String {
+    /// `live`: bu CouchSubs şu an çeviriyor ve altyazıyı TV'ye gönderiyor (1) ya da boşta (0). Aynı ağda iki CouchSubs
+    /// (ör. bilgisayar açık bırakılmış, çeviri telefondan) varken TV kayıtlı ama boştaki CouchSubs'a bağlı kalıyor, TV'de
+    /// "bağlı" görünüp altyazı hiç gelmiyordu; TV çeviren CouchSubs'ı bununla seçer. Alanı tanımayan eski TV yok sayar.
+    static func helloBody(id: String, tvs: Int, live: Bool = false) -> String {
         let escaped = id.filter { $0.isLetter || $0.isNumber || $0 == "-" }
-        return #"{"app":"couchsubs","auth":1,"id":""# + escaped + #"","tvs":"# + String(max(0, tvs)) + "}"
+        return #"{"app":"couchsubs","auth":1,"id":""# + escaped + #"","tvs":"# + String(max(0, tvs)) + #","live":"# + (live ? "1" : "0") + "}"
     }
 
     public var connectedClients: Int {
@@ -238,6 +242,47 @@ public final class SubtitleServer: @unchecked Sendable {
     /// kopsa da son bildirilen akılda kalır. Bekçi (TVKeeper) PS tuşunun TV'yi konsol girişine geçirmesini kullanıcının
     /// başka girişe geçmesinden bununla ayırır (Windows ve Android ile aynı). Eski TV uygulaması bildirmez: nil.
     public var consolePort: Int? { queue.sync { reportedPort } }
+
+    private var reportedVersion: String?
+
+    /// Sürüm bildirmeyen (0.9.69'den eski) TV bağlantıları. Bunlara `clear` geciktirilerek gider (bkz. `legacyClearHold`).
+    private var legacyClients: Set<ObjectIdentifier> = []
+    /// Son `subtitle` olayının eski TV'lerde en az görünmesi gereken an (`legacyClearHold`); sayaç her yeni satırda artar.
+    private var legacyHoldUntil = Date.distantPast
+    private var legacyHoldGeneration = 0
+
+    /// Eski TV uygulamaları (0.9.7'den önce) `clear` gelir gelmez satırı kaldırır. Oyundaki satır ekrandan ~1 sn'de
+    /// kalkınca çevirisi TV'de yalnız bir an görünüyordu: "TV'de test et" yazısı (8 sn, `clear` yok) görünüyor, oyun
+    /// altyazıları hiç görünmüyordu. Yeni TV uygulaması satırı kendisi `min(5000, 2000 + 60 × harf)` ms tutar
+    /// (tv-webos/app.js `holdUntil`); sürüm bildirmeyen bağlantılara `clear` bu süre dolunca gider, arada yeni satır
+    /// gelirse hiç gitmez. Yeni TV'lere ve izleyicilere hemen gider. Windows ve Android ile aynı kural.
+    static func legacyClearHold(textLength: Int) -> TimeInterval {
+        Double(min(5000, 2000 + 60 * max(0, textLength))) / 1000
+    }
+
+    /// Bağlanan TV uygulamasının altyazı akışıyla bildirdiği sürüm (`/events?v=0.9.69`). nil: bu çalışmada henüz TV
+    /// bağlanmadı. Boş: bağlanan TV sürüm bildirmedi, yani 0.9.69'den eski bir TV uygulaması. LG'de geliştirici modu
+    /// kapalıyken ya da anahtar bu cihazda değilken TV'deki sürüm başka yoldan okunamıyor, TV uygulaması eski kalıyor ve
+    /// hiç "TV uygulamasını güncelle" çıkmıyordu (GitHub #884, #891). Windows ve Android ile aynı.
+    public var tvAppVersion: String? { queue.sync { reportedVersion } }
+
+    /// TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) ana iş parçacığında çağrılır.
+    public var onTVAppVersion: (@Sendable (String) -> Void)?
+
+    /// `v` parametresi: yalnız rakam ve nokta, en çok 20 karakter; yoksa ya da bozuksa boş (eski TV sayılır).
+    static func tvAppVersion(_ value: String?) -> String {
+        guard let value, !value.isEmpty, value.count <= 20, value.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) else { return "" }
+        return value
+    }
+
+    /// 0.9.69'den eski TV uygulamaları sürüm bildirmez; ekranda böyle görünür.
+    public static let unreportedTVAppVersion = "< 0.9.69"
+
+    /// TV'nin bildirdiği sürüm (boş: sürüm bildirmeyen eski TV uygulaması) bu cihazdaki TV paketinden eski mi?
+    public static func isTVAppOutdated(reported: String, bundled: String) -> Bool {
+        guard !bundled.isEmpty else { return false }
+        return reported.isEmpty || DevModeInstaller.isNewer(bundled, than: reported)
+    }
 
     /// `hdmi` parametresi: 1-4 arası tek rakam, değilse nil.
     static func hdmiPort(_ value: String?) -> Int? {
@@ -350,6 +395,7 @@ public final class SubtitleServer: @unchecked Sendable {
             clients.values.forEach { $0.cancel() }
             clients.removeAll()
             viewers.removeAll()
+            legacyClients.removeAll()
         }
     }
 
@@ -396,6 +442,8 @@ public final class SubtitleServer: @unchecked Sendable {
             result["style"] = ["align": look.align.rawValue, "bold": look.bold, "condensed": look.condensed, "upper": look.upper]
         }
         if let icons = item.icons, !icons.isEmpty { result["icons"] = Self.json(icons) }
+        // Telefon mesajı kendi balonunda: TV çeviriyi balona sığdırır (eski TV yok sayar, özgün stilde çizer).
+        if item.bubble { result["bubble"] = true }
         return result
     }
 
@@ -585,7 +633,9 @@ public final class SubtitleServer: @unchecked Sendable {
 
         if path == "/pair" {
             if method == "POST" {
-                guard let ticket = pairing.begin() else { respondAndClose(connection, status: "409 Conflict", cors: cors); return }
+                var peer = ""
+                if case let .hostPort(host, _) = connection.endpoint { peer = SubtitleAccess.tvHost(fromPeer: "\(host)") }
+                guard let ticket = pairing.begin(host: peer) else { respondAndClose(connection, status: "409 Conflict", cors: cors); return }
                 if let handler = onPairingRequest { DispatchQueue.main.async { handler(ticket) } }
                 let data = try! JSONSerialization.data(withJSONObject: ["id": ticket.id, "code": ticket.code])
                 respondAndClose(connection, status: "200 OK", data: data, type: "application/json", cors: cors)
@@ -596,8 +646,11 @@ public final class SubtitleServer: @unchecked Sendable {
                     let check = SubtitleAccess.Request(method: "GET", target: "/events?k=\(supplied.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")", origin: request.origin, host: request.host)
                     state = SubtitleAccess.authorize(check, key: key, allowLegacy: false).status == 200 ? "valid" : "expired"
                 } else { state = pairing.poll(request.parameter("id") ?? "") }
-                var result = ["state": state]
+                var result: [String: Any] = ["state": state]
                 if state == "approved" { result["key"] = key }
+                // Eski TV uygulamaları `rejected`'ı tanımaz: `expired` görüp durur. Yenisi `rejected` ile Tamam bekler, yalnız
+                // `expired`'da kendisi yeniden ister (GitHub #737).
+                if state == "rejected" { result = ["state": "expired", "rejected": true] }
                 respondAndClose(connection, status: "200 OK", data: try! JSONSerialization.data(withJSONObject: result), type: "application/json", cors: cors)
             } else { respondAndClose(connection, status: "405 Method Not Allowed", cors: cors) }
             return
@@ -615,7 +668,14 @@ public final class SubtitleServer: @unchecked Sendable {
                 if let handler = onLegacyClient { DispatchQueue.main.async { handler() } }
             }
             if !obs, let port = Self.hdmiPort(request.parameter("hdmi")) { reportedPort = port }
-            openStream(connection, viewer: obs, cors: cors)
+            var unreported = false
+            if !obs {
+                let version = Self.tvAppVersion(request.parameter("v"))
+                reportedVersion = version
+                unreported = version.isEmpty
+                if let handler = onTVAppVersion { DispatchQueue.main.async { handler(version) } }
+            }
+            openStream(connection, viewer: obs, legacy: unreported, cors: cors)
         } else if method == "GET" && path == "/obs" {
             respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == SecondScreen.path {
@@ -623,7 +683,8 @@ public final class SubtitleServer: @unchecked Sendable {
             respondAndClose(connection, status: "200 OK", data: SecondScreen.page, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == "/hello" {
             // TV uygulaması ağdaki bilgisayarı bu yanıtla tanır (bağlantı kuyruğunda: sayaçlar doğrudan okunur).
-            respondAndClose(connection, status: "200 OK", body: Self.helloBody(id: instanceId, tvs: clients.count - viewers.count), cors: cors)
+            respondAndClose(connection, status: "200 OK", body: Self.helloBody(id: instanceId, tvs: clients.count - viewers.count,
+                                                                                   live: tvEnabled && pairing.inSession), cors: cors)
         } else if method == "GET", let file = files[path] {
             respondAndClose(connection, status: "200 OK", data: file.data, type: file.type, cors: cors)
         } else {
@@ -645,7 +706,7 @@ public final class SubtitleServer: @unchecked Sendable {
         connection.send(content: Data(head.utf8) + data, completion: .contentProcessed { _ in connection.cancel() })
     }
 
-    private func openStream(_ connection: NWConnection, viewer: Bool = false, cors: String = "") {
+    private func openStream(_ connection: NWConnection, viewer: Bool = false, legacy: Bool = false, cors: String = "") {
         var head = "HTTP/1.1 200 OK\r\n"
         head += "Content-Type: text/event-stream; charset=utf-8\r\n"
         head += "Cache-Control: no-cache\r\n"
@@ -662,6 +723,7 @@ public final class SubtitleServer: @unchecked Sendable {
         let id = ObjectIdentifier(connection)
         clients[id] = connection
         if viewer { viewers.insert(id) }
+        if legacy { legacyClients.insert(id) }
         notifyClientsChanged()
         watchForClose(connection, id: id)
     }
@@ -673,6 +735,7 @@ public final class SubtitleServer: @unchecked Sendable {
             if isComplete || error != nil {
                 connection.cancel()
                 self.viewers.remove(id)
+                self.legacyClients.remove(id)
                 if self.clients.removeValue(forKey: id) != nil { self.notifyClientsChanged() }
             } else {
                 self.watchForClose(connection, id: id)
@@ -689,19 +752,41 @@ public final class SubtitleServer: @unchecked Sendable {
         let data = Data(Self.frame(event: event, json: json).utf8)
         // Dublaj sesi altyazı yerinden bağımsızdır; yalnız altyazı olayları kapatılır.
         let subtitle = Self.subtitleEvents.contains(event)
-        queue.async { self.sendToAll(data, includingTVs: !subtitle || self.tvEnabled) }
+        let now = Date()
+        let hold = event == "subtitle" ? Self.legacyClearHold(textLength: (json["text"] as? String)?.count ?? 0) : 0
+        queue.async {
+            let tvs = !subtitle || self.tvEnabled
+            if event == "subtitle" {
+                self.legacyHoldGeneration += 1
+                self.legacyHoldUntil = now.addingTimeInterval(hold)
+            }
+            guard event == "clear", tvs, !self.legacyClients.isEmpty, self.legacyHoldUntil > now else {
+                self.sendToAll(data, includingTVs: tvs)
+                return
+            }
+            // Eski TV'ler satırı kendileri tutmaz: `clear` onlara satırın en az görünme süresi dolunca gider.
+            self.sendToAll(data, includingTVs: true, except: self.legacyClients)
+            let generation = self.legacyHoldGeneration
+            self.queue.asyncAfter(deadline: .now() + self.legacyHoldUntil.timeIntervalSince(now)) {
+                guard generation == self.legacyHoldGeneration, self.tvEnabled else { return }
+                self.sendToAll(data, includingTVs: true, only: self.legacyClients)
+            }
+        }
     }
 
     static let subtitleEvents: Set<String> = ["subtitle", "clear", "screen", "screen-clear", "style", "region", "region-clear"]
 
     /// Gönderim hatası alan bağlantı kopmuş sayılır ve listeden çıkarılır. `includingTVs` false ise yalnız izleyiciler
     /// (OBS) alır.
-    private func sendToAll(_ data: Data, includingTVs: Bool = true) {
-        for (id, connection) in clients where includingTVs || viewers.contains(id) {
+    private func sendToAll(_ data: Data, includingTVs: Bool = true, except: Set<ObjectIdentifier> = [],
+                           only: Set<ObjectIdentifier>? = nil) {
+        for (id, connection) in clients where (includingTVs || viewers.contains(id)) && !except.contains(id)
+            && (only?.contains(id) ?? true) {
             connection.send(content: data, completion: .contentProcessed { [weak self] error in
                 guard let self, error != nil else { return }
                 connection.cancel()
                 self.viewers.remove(id)
+                self.legacyClients.remove(id)
                 if self.clients.removeValue(forKey: id) != nil { self.notifyClientsChanged() }
             })
         }

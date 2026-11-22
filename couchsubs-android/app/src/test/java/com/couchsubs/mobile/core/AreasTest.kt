@@ -76,6 +76,9 @@ class AreasTest {
         assertEquals(listOf("NEW OBJECTIVE", "Meet Lamar at the garage.", "Bring the car."), ScreenText.paragraphs(lines))
         assertTrue(ScreenText.isWords("Go home"))
         assertFalse(ScreenText.isWords("23m 9"))
+        // Haritadaki uzaklık göstergedir (X: chiaki); içinde sözcük olan ayrıntı satırı yazıdır.
+        for (distance in listOf("124 ft", "4 ft", "2.4 mi", "1,2 km", "50 yd")) assertFalse(distance, ScreenText.isWords(distance))
+        assertTrue(ScreenText.isWords("Distance 2.4 mi"))
     }
 
     private class Recorder : RegionSender {

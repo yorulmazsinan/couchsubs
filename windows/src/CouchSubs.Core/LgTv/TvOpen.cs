@@ -17,6 +17,14 @@ public enum TvOpenProblem
     DebugOff,
     /// <summary>Android TV: TV bu cihazın hata ayıklama iznini onaylamamış (ADB eşleşmesi yok).</summary>
     DebugNotApproved,
+    /// <summary>Samsung: açma komutu gitti ama TV uygulaması <see cref="TvKeeper.SamsungOpenCheck"/> içinde bağlanmadı (TV komutu yok saydı).</summary>
+    NotOpened,
+    /// <summary>
+    /// Samsung: TV, CouchSubs'ın kurulu olduğunu doğrulamadı (listede yok ya da liste 3 sn'de gelmedi); açma komutu
+    /// gönderilmedi. Kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna bağlanılamıyor
+    /// (AS400)" der (Samsung 7 Series 2018, 21 Kas).
+    /// </summary>
+    NotInstalled,
 }
 
 /// <summary>TV uygulaması bağlı değilken ana ekranda görünen yönlendirme metinleri (Localizable.xcstrings anahtarları).</summary>
@@ -41,8 +49,15 @@ public static class TvOpenText
         TvOpenProblem.NotPaired => "Couldn't open it automatically: this device has no permission from the TV yet. Connect the TV again and allow it on the TV.",
         TvOpenProblem.DebugOff => "Couldn't open it automatically: the TV can't be reached for debugging. Is the TV on, with network debugging on in Developer options?",
         TvOpenProblem.DebugNotApproved => "Couldn't open it automatically: the TV hasn't allowed debugging from this device. Reinstall the TV app and allow it on the TV.",
+        TvOpenProblem.NotOpened => "Couldn't open it automatically: the TV got the open command but didn't open CouchSubs. Open it on the TV with the remote.",
+        TvOpenProblem.NotInstalled => NotInstalledReason,
         _ => null,
     };
+
+    public const string NotInstalledReason = "Couldn't open it automatically: the TV didn't confirm that the CouchSubs TV app is installed, so no open command was sent. Install the TV app, then try again. If the TV shows “Unable to connect to Samsung server” (AS400), the TV can't reach Samsung's servers: check its internet connection and unplug it for 30 seconds.";
+
+    /// <summary>Samsung kurulumu başarısız olunca: TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı ne demek.</summary>
+    public const string SamsungServerHint = "If the TV shows “Unable to connect to Samsung server” (AS400): this warning comes from the TV itself; the TV can't reach Samsung's servers. Check the TV's internet connection, unplug the TV and plug it back in after 30 seconds. To install CouchSubs, enter this device's address as Host PC IP.";
 
     public const string TryButton = "Try opening automatically";
 
@@ -61,7 +76,14 @@ public static class TvOpenText
 /// kadar geçen birkaç saniye de buna yetiyordu. TV uygulaması (0.9.54 ve öncesi) parametreli açılışta kayıtlı katman
 /// tercihine dönüp ekranı kapatıyordu. Artık: bu çeviride bir kez bağlanan uygulama bir daha açılmaz; hiç bağlanmadıysa
 /// en çok <c>maxOpens</c> kez, aralarında en az <c>interval</c>; "Otomatik açmayı dene" ve uykudan dönüş sıfırlar.
-/// Uygulama TV'de zaten çalışıyorsa <c>am start</c> hiç gönderilmez (<see cref="AlreadyRunning"/>) ve açılış sayılmaz.
+/// Uygulama TV'de zaten çalışıyorsa <c>am start</c> hiç gönderilmez (<see cref="AlreadyRunning"/>).
+///
+/// X'te bildirildi (Android TV, beta.77): "izni sürekli yeniden istiyor". Kanıtlı (kod): sınır yalnız gerçekten gönderilen
+/// <c>am start</c>'ları sayıyordu. TV bu cihazı "Her zaman izin ver" işaretlenmeden onayladıysa ya da hiç onaylamadıysa her
+/// deneme "açılamadı" oluyor, uygulama TV'de çalışıp bağlı değilse "zaten açık" oluyor, ikisi de sayılmıyordu: bekçi çeviri
+/// boyunca 30 sn'de bir yeni ADB bağlantısı açıyor, TV her seferinde "Hata ayıklamaya izin verilsin mi?" diye soruyordu.
+/// (ADB anahtarı kalıcıdır; soru anahtar değiştiği için değil, onay kalıcı verilmediği için yineleniyordu.) Artık her ADB
+/// bağlantısı, sonucu ne olursa olsun bir deneme sayılır: çeviri başına en çok <c>maxOpens</c> bağlantı.
 /// </remarks>
 public sealed class AndroidTvOpenRule(int maxOpens = AndroidTvOpenRule.DefaultMaxOpens, TimeSpan? interval = null)
 {
@@ -71,25 +93,33 @@ public sealed class AndroidTvOpenRule(int maxOpens = AndroidTvOpenRule.DefaultMa
     public const string AlreadyRunning = "zaten açık";
 
     private DateTime? lastAttempt;
+    /// <summary>Açılan ADB bağlantıları (açıldı, zaten açık ya da açılamadı); sınır bunu sayar.</summary>
+    public int Attempts { get; private set; }
+    /// <summary>Gerçekten gönderilen <c>am start</c>'lar.</summary>
     public int Opens { get; private set; }
     public bool EverConnected { get; private set; }
 
-    /// <summary>Bu kontrolde açma denensin mi; true dönerse deneme zamanı yazılır.</summary>
+    /// <summary>
+    /// Bu kontrolde ADB bağlantısı açılıp açma denensin mi; true dönerse deneme sayılır. Uygulama bağlıyken hiç bağlantı
+    /// açılmaz.
+    /// </summary>
     public bool ShouldTry(bool connected, DateTime now)
     {
         if (connected) { EverConnected = true; return false; }
-        if (EverConnected || Opens >= maxOpens) return false;
+        if (EverConnected || Attempts >= maxOpens) return false;
         if (lastAttempt is { } last && now - last < (interval ?? DefaultInterval)) return false;
         lastAttempt = now;
+        Attempts++;
         return true;
     }
 
     /// <summary><c>am start</c> gerçekten gönderildi (uygulama kapalıydı).</summary>
     public void Opened() => Opens++;
 
-    /// <summary>"Otomatik açmayı dene" ya da uykudan dönüş: yeniden en çok <c>maxOpens</c> kez, beklemeden.</summary>
+    /// <summary>"Otomatik açmayı dene" ya da uykudan dönüş: yeniden en çok <c>maxOpens</c> deneme, beklemeden.</summary>
     public void Reset()
     {
+        Attempts = 0;
         Opens = 0;
         EverConnected = false;
         lastAttempt = null;

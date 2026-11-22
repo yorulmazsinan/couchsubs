@@ -285,6 +285,9 @@ public enum AIRequest {
         "Doesn't 00k good."); translate the line the speaker clearly meant. \
         A subtitle may continue the previous one (it starts in lowercase or with a word like "and"); \
         translate it so that it reads as that continuation. \
+        Short menu items, objectives and button labels without a subject ("Make Money", "Find Donnie's Package") \
+        are commands to the player: translate them as short singular informal imperatives ("Para Kazan", \
+        "Donnie'nin Paketini Bul"), never polite or plural forms such as "Para Kazanın". \
         Reply with only the translation, no explanations, notes or quotes.
         """
 

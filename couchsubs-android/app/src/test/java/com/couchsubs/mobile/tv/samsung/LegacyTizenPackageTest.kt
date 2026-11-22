@@ -56,7 +56,35 @@ class LegacyTizenPackageTest {
         javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(adapted.byteInputStream())
     }
 
-    /** Yalın paket (#638): SHA-256 imzalı tam paket de yalın [118] alırsa denenir. */
+    /**
+     * Tizen 2.x'e giden config.xml, #71'de 40KU7000'de çalışan paketinkiyle (testdata/tizen/config-71.xml) öğe öğe ve
+     * öznitelik öznitelik aynıdır; yalnız widget sürümü farklıdır. Windows'taki LegacyTizenPackageTests ile aynı vaka.
+     */
+    @Test
+    fun tizen2ConfigIssue71dekiyleAyni() {
+        val working = listOf("../../testdata/tizen/config-71.xml", "../testdata/tizen/config-71.xml", "testdata/tizen/config-71.xml")
+            .map(::File).first { it.exists() }.readText()
+        assertEquals(shape(working), shape(configOf(LegacyTizenPackage.adapt(wgt(config)))))
+    }
+
+    /** config.xml'in öğeleri sırasıyla: ad, öznitelikler (widget sürümü hariç) ve metin; açıklamalar yok. */
+    private fun shape(config: String): List<String> {
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        val root = factory.newDocumentBuilder().parse(config.byteInputStream()).documentElement
+        val out = mutableListOf<String>()
+        fun walk(element: org.w3c.dom.Element) {
+            val attributes = (0 until element.attributes.length).map { element.attributes.item(it) }
+                .filter { !(element === root && it.nodeName == "version") && !it.nodeName.startsWith("xmlns") }
+                .map { "${it.nodeName}=${it.nodeValue}" }.sorted()
+            val children = (0 until element.childNodes.length).map { element.childNodes.item(it) }.filterIsInstance<org.w3c.dom.Element>()
+            out += "${element.nodeName} ${attributes.joinToString(" ")}" + if (children.isEmpty()) " :" + element.textContent.trim() else ""
+            children.forEach(::walk)
+        }
+        walk(root)
+        return out
+    }
+
+    /** Yalın paket (#638): SHA-512 imzalı tam paket yalın [118] alırsa denenir. */
     @Test
     fun yalinPakettenProfilVeIkiIzinDeCikar() {
         val adapted = configOf(LegacyTizenPackage.adapt(wgt(config), lean = true))

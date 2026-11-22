@@ -20,6 +20,8 @@ import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.account.Backend
 import com.couchsubs.mobile.account.SessionHealth
 import com.couchsubs.mobile.account.Telemetry
+import com.couchsubs.mobile.core.ConnectStep
+import com.couchsubs.mobile.core.ConnectingHint
 import com.couchsubs.mobile.core.CropRegion
 import com.couchsubs.mobile.core.PhoneChatMemory
 import com.couchsubs.mobile.core.ScreenPhoneFollow
@@ -127,7 +129,9 @@ class TranslationService : Service() {
          */
         fun resolvePairing(id: String, accept: Boolean) {
             val pairing = liveServer?.pairing
+            val host = pairing?.pending?.takeIf { it.id == id }?.host.orEmpty()
             val resolved = pairing?.resolve(id, accept) == true
+            if (resolved && accept) adoptPairedTv(host)
             Log.i(TAG, "TV eşleştirme isteği ${if (accept) "onaylandı" else "reddedildi"}${if (resolved) "" else " (istek artık geçerli değil)"}")
             // Onaylanan istek geçersizdiyse (süresi doldu, TV yeniden denedi) bekleyen yeni istek hemen gösterilir; yeni
             // istek yoksa "süresi doldu" yazılır (iPhone ve Mac ile aynı).
@@ -137,6 +141,28 @@ class TranslationService : Service() {
         }
 
         @Volatile private var pairingWatch: Thread? = null
+
+        /**
+         * TV'nin kendisi başlattığı eşleşme onaylandı: TV, listeden seçilmiş gibi kaydedilir (adres, marka, ad; TV izni/jetonu
+         * TV açılırken alınır; bkz. [com.couchsubs.mobile.tv.PairedTv]) ve çeviri sürüyorsa TV bekçisi bu TV için kurulur.
+         * Eskiden yalnız altyazı anahtarı TV'ye gidiyordu: TV kaydı olmadığı için bekçi (otomatik açma) hiç çalışmıyor, ana
+         * ekranda TV kartı çıkmıyordu (Mac, iPhone, Windows ile aynı).
+         */
+        private fun adoptPairedTv(host: String) {
+            val settings = Services.settings
+            if (!com.couchsubs.mobile.tv.PairedTv.shouldAdopt(host, settings.installedTv)) return
+            Thread({
+                val found = runCatching { com.couchsubs.mobile.tv.PairedTv.identify(host) }.getOrNull()
+                if (found == null) { Log.i(TAG, "Eşleşen TV'nin türü anlaşılamadı ($host); TV kaydedilmedi"); return@Thread }
+                if (!com.couchsubs.mobile.tv.PairedTv.shouldAdopt(host, settings.installedTv)) return@Thread
+                settings.installedTv = com.couchsubs.mobile.tv.TvChoice.select(null, found)
+                settings.tvName = found.name
+                // "Yalnız bu telefonda" seçiliyken TV eşlenirse altyazı TV'ye gider (TV seçilince olduğu gibi).
+                if (!settings.target.showsOnTv) settings.target = com.couchsubs.mobile.settings.SubtitleTarget.TV
+                Log.i(TAG, "Eşleşen TV kaydedildi: ${found.brand} ${found.host}")
+                current?.let { service -> service.server?.accessKey?.let { key -> service.launchTv(key) } }
+            }, "CouchSubs paired TV").apply { isDaemon = true }.start()
+        }
 
         /**
          * Arayüzdeki isteği sunucudaki bekleyen istekle eşitler. İstek geldiğinde, bir ekran öne geldiğinde ve istek
@@ -321,16 +347,34 @@ class TranslationService : Service() {
                 hasKey = settings.secrets.get("tv.control.${tv.brand}.${tv.host}") != null)
             if (LiveState.status.value.tvOpenProblem != shown) LiveState.update { it.copy(tvOpenProblem = shown) }
         }
+        // Samsung: önce geliştirici bağlantısı (sdb `was_execute`); sdb portu kapalıysa beklemeden uzaktan kumandaya geçilir.
+        val openWithSdb: () -> Boolean = {
+            val tv = settings.installedTv
+            tv != null && tv.brand == com.couchsubs.mobile.tv.TvBrand.SAMSUNG &&
+                com.couchsubs.mobile.tv.android.AndroidTvInstaller.isReachable(tv.host, com.couchsubs.mobile.tv.samsung.SdbConnection.PORT) &&
+                com.couchsubs.mobile.tv.samsung.SamsungInstaller(
+                    host = tv.host,
+                    profilesDirectory = java.io.File(noBackupFilesDir, "samsung"),
+                    adbKey = { com.couchsubs.mobile.tv.samsung.AdbKey.loadOrCreate(java.io.File(noBackupFilesDir, "sdb/adbkey")) },
+                    certificates = com.couchsubs.mobile.tv.samsung.SamsungCertificates(),
+                    signIn = null,
+                    log = com.couchsubs.mobile.tv.samsung.InstallLog(java.io.File(filesDir, "tvinstall.log")),
+                ).openApp()
+        }
+        // Gönderilmeyen açma isteği (kurulu olduğu doğrulanmadı) tvinstall.log'a da yazılır (Windows/Mac/iPhone ile aynı).
+        val tvInstallLog = com.couchsubs.mobile.tv.samsung.InstallLog(java.io.File(filesDir, "tvinstall.log"))
         Thread({ runCatching {
             com.couchsubs.mobile.tv.TvSessionLauncher.launch(settings, subtitlePort, key,
                 adbKeyFile = java.io.File(noBackupFilesDir, "adb/adbkey"), connected = connected,
-                log = { Log.i(TAG, it) }, onOpenResult = report, active = active)
+                log = { Log.i(TAG, it) }, onOpenResult = report, openWithSdb = openWithSdb, installLog = tvInstallLog::write, active = active)
             // LG: PS tuşu TV'yi PS5'in girişine geçirince uygulama geri getirilir (Windows/Mac/iPhone bekçisiyle aynı).
             com.couchsubs.mobile.tv.TvSessionLauncher.keepLgOpen(settings, subtitlePort, key, consolePort = { server?.consolePort },
                 log = { Log.i(TAG, it) }, onOpenResult = report) { active() && settings.target.showsOnTv }
             // Samsung: TV uygulaması bağlı değilken arada bir (ya da "Otomatik açmayı dene"de hemen) yeniden açılır.
             com.couchsubs.mobile.tv.TvSessionLauncher.keepSamsungOpen(settings, subtitlePort, key, connected = connected,
-                log = { Log.i(TAG, it) }, onOpenResult = report, active = { active() && settings.target.showsOnTv })
+                log = { Log.i(TAG, it) }, onOpenResult = report, openWithSdb = openWithSdb,
+                lastResult = { LiveState.status.value.tvOpenProblem }, installLog = tvInstallLog::write,
+                active = { active() && settings.target.showsOnTv })
         } }, "CouchSubs TV launch").apply { isDaemon = true }.start()
     }
     private lateinit var settings: AppSettings
@@ -350,6 +394,8 @@ class TranslationService : Service() {
     private val background = Executors.newSingleThreadScheduledExecutor { Thread(it, "CouchSubs background").apply { isDaemon = true } }
     private val reading = AtomicBoolean(false)
     private var lastRead = 0L
+    /** Günlüğe son yazılan menü durumu: menüdeyken altyazı okunmaz, günlükte görünsün (Mac/iPhone ile aynı satırlar). */
+    @Volatile private var loggedMenu = false
     private var lastSignature = 0L
     private var lastReading = com.couchsubs.mobile.core.Reading.Empty
     @Volatile private var lastOcrMs: Int? = null
@@ -365,6 +411,8 @@ class TranslationService : Service() {
     @Volatile private var presetAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
     /** Altyazı hattının altyazıdan ayırdığı görev satırının ek alanı ([com.couchsubs.mobile.core.MissionLine]); yoksa boş. */
     @Volatile private var missionAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
+    /** Altyazı hattının altyazıdan ayırdığı kenar bildirimlerinin ek alanları ([com.couchsubs.mobile.core.ScreenNotices]); yoksa boş. */
+    @Volatile private var noticeAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
     @Volatile private var playedGame: String? = null
 
     /**
@@ -373,11 +421,12 @@ class TranslationService : Service() {
      * okunmaz (Mac ve Windows ile aynı).
      */
     private val phoneTracker = com.couchsubs.mobile.core.GamePhoneTracker()
+    /** Altyazı okumasının gördüğü telefon (ekranındaki satırlar altyazı sayılmaz) ve en son ne zaman arandığı. */
+    @Volatile private var subtitlePhone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null
+    private var subtitlePhoneAt = Long.MIN_VALUE / 2
     @Volatile private var playsGta6 = false
     @Volatile private var phoneTracking = false
     @Volatile private var phoneOpen = false
-    /** "Altyazı zeminini izle": yeniden kullanılan okumada zeminin durumu (yalnız okuma iş parçacığında). */
-    private val panelWatch = com.couchsubs.mobile.core.SubtitleBackground.Watch()
 
     /**
      * Ekranda beliren yazı kutularını bulan ("Ekran yazılarını otomatik çevir"); bulduğu geçici alanlar ek alanlarla
@@ -405,6 +454,7 @@ class TranslationService : Service() {
     private var begun = false
     @Volatile private var styleListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     @Volatile private var targetListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    @Volatile private var xboxAudioListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -603,6 +653,11 @@ class TranslationService : Service() {
             syncPairing(subtitleServer.pairing)
         }
         subtitleServer.onLegacyClient = { LiveState.update { it.copy(legacyTv = true) }; Log.i(TAG, "TV uygulamasını güncelleyin; geçiş bağlantısı.") }
+        // TV uygulaması sürümünü akışla bildirir; eskiyse ana ekran "TV uygulamasını güncelle" der (#884, #891).
+        subtitleServer.onTvAppVersion = { version ->
+            runCatching { com.couchsubs.mobile.tv.TvAppUpdate.reported(applicationContext, version) }
+                .onFailure { Log.w(TAG, "TV uygulaması sürümü işlenemedi: ${it.message}") }
+        }
         subtitleServer.sendsToTv = settings.target.showsOnTv
         subtitleServer.speakerColors = settings.speakerColors
         subtitleServer.setApart = settings.setTextApart
@@ -623,6 +678,8 @@ class TranslationService : Service() {
         styleListener = settings.onStyleChanged { server?.sendStyle(settings.style) }
         // Çeviri sürerken hedef TV'ye (ya da telefona) çevrilirse altyazı hemen oraya gider (iPhone ile aynı).
         targetListener = settings.onTargetChanged { server?.sendsToTv = settings.target.showsOnTv }
+        // Xbox sesi çeviri sürerken hemen değişir; Xbox'a yeni oturum açılmaz (#871, iPhone/Mac/Windows ile aynı).
+        xboxAudioListener = settings.onXboxAudioChanged { session?.setPlayAudio(settings.xboxAudioOnDevice) }
         region = settings.region
         extraAreas = settings.extraAreas.watched(settings.areaPreset)
         fullScreenArea = settings.areaPreset == com.couchsubs.mobile.core.AreaPreset.FULL
@@ -687,7 +744,13 @@ class TranslationService : Service() {
                     listOf(com.couchsubs.mobile.core.ExtraArea(com.couchsubs.mobile.core.MissionLine.AREA_ID, "Mission", region, auto = true))
                 else emptyList()
             }
+            // "Tam ekran" alanda ekranın kenarındaki bildirim kartı (sağ altta mesaj önizlemesi, solda kayan bildirim) altyazıya
+            // girmez; kendi yerinde ve özgün stilinde gösterilir, ekranın ortasına çizilmez (Windows ve Mac ile aynı).
+            noticeAreas = emptyList()
+            onNoticesChanged = { areas -> noticeAreas = areas }
             onPackMissed = { text -> linePool.offer(text) }
+            // Altyazı alanında okunup sahne yazısı sayılan bloklar nedeniyle günlüğe (GitHub #822).
+            onLog = { Log.i(TAG, it) }
             onPairShown = { pair ->
                 LiveState.shown(pair, pair.packId?.let { packTitles?.get(it) ?: it })
                 // Türkçe dublaj (iPhone ve masaüstüyle aynı): yeni altyazının cümleleri telefonun Türkçe sesiyle okunur.
@@ -765,20 +828,42 @@ class TranslationService : Service() {
             else if (screenRefreshRequested.compareAndSet(true, false)) startScreen(frame, refresh = true)
             else followTick(frame, now)
             // Menü açıkken (tekerlek, duraklatma menüsü) altyazı okunmaz: menünün alt ortadaki etiketleri altyazı sanılmasın.
-            if (!reading.get() && !detector.menu && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
+            val inMenu = detector.menu
+            if (inMenu != loggedMenu) {
+                loggedMenu = inMenu
+                Log.i(TAG, if (inMenu) "ekran menüsü açık: altyazı okunmuyor" else "ekran menüsü kapandı: altyazı okunuyor")
+            }
+            // Atlanan kareler sessizlik özetinde sayılır (bkz. SubtitlePipeline.skipForMenu).
+            if (inMenu) pipeline?.skipForMenu()
+            if (!reading.get() && !inMenu && now - lastRead >= 1000 / MAX_READS_PER_SECOND) {
                 val area = region
                 // Karenin geldiği an: gecikme buradan TV'ye gidene kadar ölçülür (hattın saatiyle).
                 val capturedAt = com.couchsubs.mobile.core.monotonicClock()
+                // Karede GTA 6 telefonu açıksa ekranındaki satırlar altyazı değildir; telefon seyrek aranır, bulunan yer
+                // sonraki okumalara da geçerlidir (Mac, Windows: SubtitlePipeline.findsPhone). Yalnız GTA 6'da ve telefon
+                // ayarı açıkken: başka oyunda (ya da karanlık sahnede) yanlış bulunan telefon alt şeritteki altyazıyı silmesin.
+                if (!playsGta6 || !settings.readsGamePhone) subtitlePhone = null
+                else if (now - subtitlePhoneAt >=com.couchsubs.mobile.core.GamePhoneTracker.INTERVAL_MS || now < subtitlePhoneAt) {
+                    subtitlePhoneAt = now
+                    subtitlePhone = try {
+                        com.couchsubs.mobile.core.ScreenPhoneCard.phone(com.couchsubs.mobile.ocr.LivePhoneImage(frame))
+                    } catch (error: Exception) {
+                        null
+                    }
+                }
+                val phone = subtitlePhone
                 SubtitleReader.copyRegion(frame, area)?.let { pixels ->
                     lastRead = now
                     reading.set(true)
-                    ocr.execute { read(pixels, area, capturedAt) }
+                    ocr.execute { read(pixels, area, capturedAt, phone) }
                 }
             }
             offerGamePhone(frame)
             offerScreenText(frame)
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
-            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + autoAreas, { r ->
+            // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz.
+            val notices = if (phoneOpen) emptyList() else noticeAreas
+            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
                 }
@@ -808,6 +893,7 @@ class TranslationService : Service() {
                 reconnectOffer.update(state == SessionState.Streaming, now)
                 session?.hasGivenUp == true
             }
+            connectingHandler.post { connectingChanged(state) }
             LiveState.update {
                 it.withStreaming(state == SessionState.Streaming)
                     .copy(phase = describe(state), notLiveSince = reconnectOffer.notLiveSince, gaveUp = gaveUp)
@@ -1026,6 +1112,7 @@ class TranslationService : Service() {
                             ScreenPhoneFollow.Step.KEEP -> keepScreen(generation)
                             ScreenPhoneFollow.Step.REFRESH -> screenRefreshRequested.set(true)
                             ScreenPhoneFollow.Step.STOP -> hideScreen()
+                            ScreenPhoneFollow.Step.HIDE -> hidePhoneBubbles(generation)
                         }
                     }
                 } catch (error: Exception) {
@@ -1037,6 +1124,24 @@ class TranslationService : Service() {
         } catch (error: java.util.concurrent.RejectedExecutionException) {
             followBusy.set(false)
         }
+    }
+
+    /**
+     * Telefonun ekranı değişti (sohbet kaydı/değişti): balonların üstündeki çeviriler hemen kalkar, telefon dışındaki
+     * çeviriler kalır; ekran durulunca yeniden çevrilir (Mac ile aynı).
+     */
+    private fun hidePhoneBubbles(generation: Int) {
+        val items = screenShown
+        val kept = items.filter { !it.bubble }
+        if (kept.size == items.size) return
+        screenShown = kept
+        if (kept.isEmpty()) {
+            server?.clearScreen()
+            return
+        }
+        val milliseconds = ScreenTranslation.displayMilliseconds(kept)
+        server?.sendScreen(kept, milliseconds)
+        scheduleScreenExpiry(kept, milliseconds, generation)
     }
 
     /** Telefon kartı izlenirken telefon aynı: sonuçlar süresi dolmak üzereyse yeniden gönderilip uzatılır. */
@@ -1056,7 +1161,8 @@ class TranslationService : Service() {
             screenFollow = null
             return
         }
-        val follow = screenFollow ?: ScreenPhoneFollow()
+        // Çeviriler balonların üstündeyken (kartsız) sohbet kayınca/değişince hemen kalkar (ScreenPhoneFollow.Step.HIDE).
+        val follow = screenFollow ?: ScreenPhoneFollow(hidesOnChange = !settings.phoneChatCard)
         follow.settled(look.first, look.second)
         screenFollow = follow
     }
@@ -1128,7 +1234,7 @@ class TranslationService : Service() {
                 val phone = com.couchsubs.mobile.core.ScreenPhoneCard.phone(
                     CopiedPhoneImage(pixels.width, pixels.height, pixels))
                 val items = ScreenTranslation.translate(reading, translator, { screenGeneration.get() != generation }, pixels.gray,
-                    pixels.color, phone, memory) { shown ->
+                    pixels.color, phone, memory, settings.phoneChatCard) { shown ->
                     if (screenGeneration.get() != generation) return@translate
                     // İzlemenin yenilemesinde aynı çeviriler yeniden gönderilmez (TV'de kart yeniden çizilmesin).
                     if (refresh && shown == screenShown) return@translate
@@ -1164,7 +1270,8 @@ class TranslationService : Service() {
         server?.sendSubtitle(message, 6000)
     }
 
-    private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long) {
+    private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long,
+                     phone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null) {
         try {
             // Bölge değişmediyse (aynı altyazı duruyor) yeniden okunmaz; son okuma hattı yine besler (kararlılık ve
             // silme saate bağlıdır, Windows'taki ReadScheduler gibi). Aynı okuma en çok 20 kare (hızlı okumada 2) kullanılır.
@@ -1172,15 +1279,7 @@ class TranslationService : Service() {
             // Bekleme ayarları çeviri sürerken de değişebilir (Ayarlar'daki kaydırıcılar); her karede güncel değer uygulanır.
             current.applyWaits(settings.misreadWaitMs, settings.partialWaitMs)
             val maxReuse = if (settings.fastSubtitleDetection) FAST_MAX_REUSE else DEFAULT_MAX_REUSE
-            var reused = pixels.signature == lastSignature && reusedReads < maxReuse
-            // "Altyazı zeminini izle" (GTA 6): yalnız koyu lacivert zeminin üstündeki satırlar hatta girer. Aynı okuma yeniden
-            // kullanılırken zemin yeniden sınanır; zemin yeni bir satırın altına geldiyse kare yeniden okunur.
-            val watchPanel = settings.watchSubtitleBackground
-            if (!watchPanel) panelWatch.reset()
-            val onPanel: (com.couchsubs.mobile.core.Reading) -> com.couchsubs.mobile.core.Reading =
-                { com.couchsubs.mobile.core.SubtitleBackground.filter(it, pixels.width, pixels.height, pixels.color) }
-            val step = if (reused && watchPanel) panelWatch.reuse(lastReading, onPanel) else null
-            if (reused && watchPanel && step == null) reused = false
+            val reused = pixels.signature == lastSignature && reusedReads < maxReuse
             reusedReads = if (reused) reusedReads + 1 else 0
             val started = com.couchsubs.mobile.core.monotonicClock()
             if (!reused) readStartedAt = started
@@ -1189,12 +1288,11 @@ class TranslationService : Service() {
             lastSignature = pixels.signature
             lastReading = result
             lastOcrMs = ocrMs
-            val visible = if (!watchPanel) result else step?.visible ?: panelWatch.read(result, onPanel)
-            // Zemin kalktıysa bu boşluk bir OCR kaçağı değildir: bölge izi verilmez, satır hemen silinir.
-            current.process(visible, area.box,
-                if (step?.panelLeft == true) null else com.couchsubs.mobile.core.RegionSignature.of(pixels.nv21, pixels.width, pixels.height),
-                capturedAt, ocrMs)
+            current.process(result, area.box,
+                com.couchsubs.mobile.core.RegionSignature.of(pixels.nv21, pixels.width, pixels.height),
+                capturedAt, ocrMs, phone, reused = reused)
         } catch (error: java.util.concurrent.TimeoutException) {
+            pipeline?.noteReadFailure(error)
             // Okuma süresinde bitmedi: takılan tanıyıcı bırakılır, sonraki kare yenisiyle okunur (yoksa yeni okuma da
             // aynı tanıyıcının arkasında beklerdi; #679).
             Log.w(TAG, "OCR: okuma süresinde bitmedi; okuyucu yeniden kuruldu", error)
@@ -1205,6 +1303,7 @@ class TranslationService : Service() {
             }
         } catch (error: Exception) {
             Log.w(TAG, "OCR", error)
+            pipeline?.noteReadFailure(error)
         } finally {
             readStartedAt = 0L
             reading.set(false)
@@ -1262,6 +1361,7 @@ class TranslationService : Service() {
         XboxError.NETWORK -> R.string.xbox_error_network
         XboxError.SERVICE -> R.string.xbox_error_service
         XboxError.NO_PICTURE -> R.string.xbox_error_no_picture
+        XboxError.NO_FIRST_FRAME -> R.string.xbox_error_no_first_frame
     })
 
     private fun describe(state: SessionState): String =
@@ -1269,8 +1369,46 @@ class TranslationService : Service() {
         if (state is SessionState.Disconnected && state.kind == DisconnectKind.OTHER && settings.xbox && state.detail != null) state.detail
         else describePs(state)
 
+    /**
+     * "Bağlanıyor…"un başladığı an (ms; bağlanmıyorsa 0). 30 sn geçince durum satırında nedeni söylenir
+     * ([ConnectingHint]; Mac, iPhone ve Windows ile aynı); metin saniyede bir [connectingTick] ile yenilenir.
+     */
+    @Volatile private var connectingSince = 0L
+    private val connectingHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val connectingTick = object : Runnable {
+        override fun run() {
+            if (connectingSince == 0L) return
+            val phase = describe(SessionState.Connecting)
+            LiveState.update { if (it.streaming || it.phase == phase) it else it.copy(phase = phase) }
+            connectingHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun connectingChanged(state: SessionState) {
+        val connecting = state == SessionState.Connecting && !settings.xbox && !demo
+        if (!connecting) {
+            connectingSince = 0L
+            connectingHandler.removeCallbacks(connectingTick)
+        } else if (connectingSince == 0L) {
+            connectingSince = System.currentTimeMillis()
+            connectingHandler.postDelayed(connectingTick, 1000)
+        }
+    }
+
+    private fun connectingText(): String {
+        val base = getString(R.string.phase_connecting)
+        val since = connectingSince
+        if (since == 0L) return base
+        val reason = ConnectingHint.reason(System.currentTimeMillis() - since, session?.connectStep) ?: return base
+        return base + "\n" + getString(when (reason) {
+            ConnectStep.WAKING -> R.string.connecting_hint_waking
+            ConnectStep.OPENING -> R.string.connecting_hint_opening
+            ConnectStep.NO_ANSWER -> R.string.connecting_hint_no_answer
+        })
+    }
+
     private fun describePs(state: SessionState): String = when (state) {
-        SessionState.Connecting -> getString(R.string.phase_connecting)
+        SessionState.Connecting -> connectingText()
         SessionState.Streaming -> getString(R.string.phase_streaming)
         is SessionState.Disconnected -> when (state.kind) {
             DisconnectKind.IN_USE -> getString(R.string.phase_in_use)
@@ -1287,6 +1425,8 @@ class TranslationService : Service() {
             DisconnectKind.NO_PICTURE -> getString(R.string.phase_no_picture)
             // Eskiden İngilizce "Remote Play on Console has crashed" ile sonsuza kadar yeniden bağlanılıyordu (GitHub #519).
             DisconnectKind.CONSOLE_RP_CRASHED -> getString(R.string.phase_console_rp_crashed)
+            // PS5 akışı kendisi kapattı (ör. oyun sırasında PS5'te kullanıcı değişti): eskiden "kabloyla bağla" deniyordu.
+            DisconnectKind.CONSOLE_CLOSED -> getString(R.string.phase_console_closed)
             DisconnectKind.CONSOLE_ASLEEP -> getString(R.string.phase_asleep)
             DisconnectKind.LOGIN_PASSCODE -> getString(R.string.phase_passcode)
             DisconnectKind.LOGIN_PASSCODE_INCORRECT -> getString(R.string.phase_passcode_incorrect)
@@ -1356,6 +1496,8 @@ class TranslationService : Service() {
         styleListener = null
         targetListener?.let(settings::removeListener)
         targetListener = null
+        xboxAudioListener?.let(settings::removeListener)
+        xboxAudioListener = null
         areasListener?.let(settings::removeListener)
         areasListener = null
         resetGamePhone()
@@ -1366,6 +1508,7 @@ class TranslationService : Service() {
         regionReader = null
         session?.dispose()
         session = null
+        connectingHandler.post { connectingChanged(SessionState.Disconnected(DisconnectKind.STOPPED)) }
         sourceFactory = null
         pipeline?.reset()
         pipeline?.shutdown()

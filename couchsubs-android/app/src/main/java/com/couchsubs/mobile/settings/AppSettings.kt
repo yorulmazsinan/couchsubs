@@ -364,12 +364,12 @@ class AppSettings(context: Context) : AreaStore {
         set(value) = prefs.edit().putBoolean("autoReadGamePhone", value).apply()
 
     /**
-     * "Altyazı zeminini izle (GTA 6, deneysel)": yalnız GTA 6'nın koyu lacivert opak altyazı zeminindeki yazı çevrilir
-     * (Mac/Windows watchSubtitleBackground); varsayılan kapalı.
+     * "Ekranı çevir"de GTA 6 telefonunun mesajları telefonun yanındaki kartta gösterilir. Kapalıyken (varsayılan) her
+     * mesajın çevirisi kendi balonunun üstünde, balonun renginde, yerindedir (Mac/Windows phoneChatCard).
      */
-    var watchSubtitleBackground: Boolean
-        get() = prefs.getBoolean("watchSubtitleBackground", false)
-        set(value) = prefs.edit().putBoolean("watchSubtitleBackground", value).apply()
+    var phoneChatCard: Boolean
+        get() = prefs.getBoolean("phoneChatCard", false)
+        set(value) = prefs.edit().putBoolean("phoneChatCard", value).apply()
 
     /** Bu PS5'te son seçilen oyun ("Hangi oyunu oynuyorsunuz?" kartının ilk önerisi). */
     fun lastGame(console: String): String? = prefs.getString("lastGame.$console", null)
@@ -516,6 +516,15 @@ class AppSettings(context: Context) : AreaStore {
     fun onTargetChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "target") action()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return listener
+    }
+
+    /** "Xbox sesini bu cihazda çal" değişince çağrılır; çeviri sürerken yalnız yerel ses açılır/kısılır (#871). */
+    fun onXboxAudioChanged(action: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "xboxAudioOnDevice") action()
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return listener

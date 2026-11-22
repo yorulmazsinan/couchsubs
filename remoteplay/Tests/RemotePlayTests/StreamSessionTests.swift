@@ -18,6 +18,21 @@ final class FrameThrottleTests: XCTestCase {
     }
 }
 
+final class VideoSampleSizeTests: XCTestCase {
+    /// iPhone 1.0.3 çökmesi: libchiaki'den eksi (üst biti dolu `size_t`) boy gelince `Data(bytes:count:)` tuzağa düşüyordu.
+    func testRejectsNegativeEmptyAndHugeSizes() {
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: -1))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: Int(bitPattern: UInt(1) << 63)))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: 0))
+        XCTAssertFalse(StreamSession.isPlausibleSample(size: StreamSession.maxSampleBytes + 1))
+    }
+
+    func testAcceptsRealFrames() {
+        XCTAssertTrue(StreamSession.isPlausibleSample(size: 1))
+        XCTAssertTrue(StreamSession.isPlausibleSample(size: 2_000_000))
+    }
+}
+
 final class ReconnectPolicyTests: XCTestCase {
     func testBackoffDoublesUpToSixtySeconds() {
         var policy = ReconnectPolicy()
@@ -362,7 +377,24 @@ final class DisconnectReasonTests: XCTestCase {
         XCTAssertEqual(DisconnectReason.notFound("192.168.1.5").logName, "notFound")
         XCTAssertEqual(DisconnectReason.rejected(0x80108b12).logName, "rejected 0x80108b12")
         XCTAssertEqual(DisconnectReason.other("no picture from the PS5").logName, "other: no picture from the PS5")
-        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED), .network)
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN), .network)
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED), .network)
+    }
+
+    /// X, 21 Kas: oyun sırasında PS5'te ana hesaba geçince PS5 akışı kendisi kapatıyor. Bu ağ kopması değildir: ayrı neden,
+    /// PS5'in metni günlükte, 720p'ye düşürme sayılmaz, "bulunamadı"ya da çevrilmez.
+    func testConsoleClosedStreamIsNotANetworkDrop() {
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, remoteText: "Client disconnected"),
+                       .consoleClosed("Client disconnected"))
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN, remoteText: "Server shutting down"),
+                       .consoleClosed("Server shutting down"))
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED), .consoleClosed(""))
+        XCTAssertEqual(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, sessionRequestHint: nil,
+                                        remoteText: "x"), .consoleClosed("x"))
+        XCTAssertFalse(QualityFallback.countsAsDrop(.consoleClosed("x")))
+        XCTAssertEqual(DisconnectReason.classify(.consoleClosed("x"), searchAnswered: false, host: "192.168.1.70"), .consoleClosed("x"))
+        XCTAssertEqual(DisconnectReason.consoleClosed("x").logName, "consoleClosed: x")
+        XCTAssertEqual(DisconnectReason.consoleClosed("").logName, "consoleClosed")
     }
 
     /// GitHub #519: PS5'teki Uzaktan Oynatma çöktüyse İngilizce libchiaki metni (.other) değil, ayrı bir neden.
@@ -574,5 +606,31 @@ final class DeviceDiagnosticsTests: XCTestCase {
         XCTAssertEqual(getrlimit(RLIMIT_NOFILE, &limit), 0)
         let raised = DeviceDiagnostics.raiseOpenFileLimit()
         XCTAssertGreaterThanOrEqual(raised, Int(min(limit.rlim_max, DeviceDiagnostics.wantedOpenFiles)))
+    }
+}
+
+/// X, 21 Kas: "çeviri başlayınca konsol kapanıyor". libchiaki'de PS5'i bekleme moduna alan tek istek ctrl'deki GOTO_BED
+/// (0x50) iletisidir (`chiaki_session_goto_bed` / `chiaki_ctrl_goto_bed`); `chiaki_session_stop` bunu göndermez, yalnız
+/// chiaki-ng arayüzü kapanırken isteğe bağlı çağırır. CouchSubs PS5'i hiçbir zaman kapatmamalı ya da bekleme moduna
+/// almamalı (yeniden bağlanırken eski oturum kapatılırken de): dört platformun kaynağında bu çağrı bulunmaz.
+final class NoRestModeRequestTests: XCTestCase {
+    func testNoPlatformPutsThePS5IntoRestMode() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let folders = ["remoteplay/Sources", "windows/native", "windows/src", "couchsubs-android/app/src/main",
+                       "mac/CouchSubs", "couchsubs-ios/CouchSubs"]
+        let extensions: Set<String> = ["swift", "c", "h", "cs", "kt", "java"]
+        var scanned = 0
+        for folder in folders {
+            let base = root.appendingPathComponent(folder)
+            guard let files = FileManager.default.enumerator(at: base, includingPropertiesForKeys: nil) else { continue }
+            for case let file as URL in files where extensions.contains(file.pathExtension) {
+                guard !file.path.contains("/bin/"), !file.path.contains("/obj/"), !file.path.contains("/build/") else { continue }
+                let text = try String(contentsOf: file, encoding: .utf8)
+                scanned += 1
+                XCTAssertFalse(text.contains("goto" + "_bed"), "\(file.path) PS5'i bekleme moduna alıyor")
+            }
+        }
+        XCTAssertGreaterThan(scanned, 50)
     }
 }

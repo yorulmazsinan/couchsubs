@@ -273,10 +273,6 @@
                                       Checked="OnFastSubtitleDetection" Unchecked="OnFastSubtitleDetection" />
                             <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,16"
                                        Text="{t:T 'When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.'}" />
-                            <CheckBox x:Name="WatchSubtitleBackground" Content="{t:T 'Watch subtitle background (GTA 6 experimental)'}"
-                                      Checked="OnWatchSubtitleBackground" Unchecked="OnWatchSubtitleBackground" />
-                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,6,0,16"
-                                       Text="{t:T 'In GTA 6, set the subtitle background to Solid. Only text on the dark blue subtitle panel will be translated.'}" />
                             <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,0,0,12"
                                        Text="{t:T 'These waits only delay lines that were read badly; most lines are shown without waiting. A shorter wait shows those lines sooner but lets more wrong translations through.'}" />
                             <TextBlock Text="{t:T 'Wait for a misread line'}" Margin="0,0,0,8" />
@@ -583,7 +579,15 @@
                         </StackPanel>
                     </c:Card>
                     <c:Card x:Name="ScreenCard" Margin="0,12,0,0">
-                        <TextBlock x:Name="ScreenHint" Style="{StaticResource HintText}" TextWrapping="Wrap" />
+                        <StackPanel>
+                            <TextBlock x:Name="ScreenHint" Style="{StaticResource HintText}" TextWrapping="Wrap" />
+                            <!-- "Ekranı çevir"de GTA 6 telefonu: kapalıyken her mesaj kendi balonunun üstünde (Mac, iPhone, Android ile aynı) -->
+                            <CheckBox x:Name="PhoneChatCard" Content="{t:T 'Show GTA 6 phone translations in a card next to the phone'}"
+                                      Foreground="{DynamicResource textPrimaryBrush}" Margin="0,12,0,0"
+                                      Checked="OnPhoneChatCard" Unchecked="OnPhoneChatCard" />
+                            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Text="{t:T 'Off: each message is translated on top of its own bubble, in the bubble\'s colours.'}" />
+                        </StackPanel>
                     </c:Card>
                     <c:Card x:Name="FreeAreaCard" Margin="0,12,0,0">
                         <StackPanel>
@@ -700,16 +704,21 @@
                             </StackPanel>
                         </StackPanel>
                     </c:Card>
-                    <c:Card x:Name="PlayStationPictureSourceCard">
+                    <!-- "Görüntüyü al": PS5'te PS5 / Remote Play penceresi / OBS veya oyun penceresi; Xbox'ta Xbox (bu uygulama
+                         bağlanır) / OBS veya oyun penceresi (#853: Xbox uygulaması, play.xbox.com, capture card; Xbox'a bağlanılmaz). -->
+                    <c:Card x:Name="PictureSourceCard">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{t:T 'Read the picture from'}" VerticalAlignment="Center" Margin="0,0,12,0" />
                                 <ComboBox x:Name="FrameSourceChoice" SelectionChanged="OnFrameSource" MinWidth="260">
-                                    <ComboBoxItem Content="{t:T 'The PS5 (second account)'}" Tag="Ps5" />
-                                    <ComboBoxItem Content="{t:T 'Remote Play window on this PC'}" Tag="RemotePlayWindow" />
+                                    <ComboBoxItem x:Name="XboxSourceItem" Content="{t:T 'Xbox (this app connects)'}" Tag="Xbox" />
+                                    <ComboBoxItem x:Name="Ps5SourceItem" Content="{t:T 'The PS5 (second account)'}" Tag="Ps5" />
+                                    <ComboBoxItem x:Name="RemotePlaySourceItem" Content="{t:T 'Remote Play window on this PC'}" Tag="RemotePlayWindow" />
                                     <ComboBoxItem Content="{t:T 'OBS projector or game window'}" Tag="CaptureWindow" />
                                 </ComboBox>
                             </StackPanel>
+                            <TextBlock x:Name="XboxWindowHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                       Text="{t:T 'If you play in the Xbox app, on play.xbox.com or with a capture card in OBS, choose this window; CouchSubs doesn\'t connect to the Xbox separately (the Xbox allows only one connection at a time).'}" />
                             <StackPanel x:Name="RemotePlayAppPanel" Orientation="Horizontal" Margin="0,12,0,0">
                                 <TextBlock Text="{t:T 'Remote Play app'}" VerticalAlignment="Center" Margin="0,0,12,0" />
                                 <ComboBox x:Name="RemotePlayAppChoice" SelectionChanged="OnRemotePlayApp" MinWidth="260">
@@ -730,6 +739,9 @@
                                 </DockPanel>
                                 <TextBlock x:Name="CaptureWindowEmpty" Style="{StaticResource HintText}" Margin="0,8,0,0"
                                            Text="{t:T 'No suitable windows found. Open OBS or the game first, then refresh.'}" />
+                                <!-- OBS'in Program/Önizleme projektörü CouchSubs'ın OBS katmanını da içerir (OwnSubtitles). -->
+                                <TextBlock x:Name="SourceProjectorHint" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Visibility="Collapsed" Text="{t:T 'If you use the CouchSubs OBS overlay, select the Source Projector of your capture card source as the video source: in OBS, right-click the source › Open Source Projector › New window. The Program and Preview projectors also contain CouchSubs\' own subtitles.'}" />
                             </StackPanel>
                             <!-- Kurulu olanlar "Kurulu", olmayanlar resmi indirme sayfasına giden düğmeyle (ikisi de denenebilir). -->
                             <Grid x:Name="SonyInstallRow" Margin="0,12,0,0">
@@ -751,7 +763,7 @@
                             </Grid>
                         </StackPanel>
                     </c:Card>
-                    <c:Card x:Name="XboxPictureSourceCard" Visibility="Collapsed">
+                    <c:Card x:Name="XboxPictureSourceCard" Visibility="Collapsed" Margin="0,12,0,0">
                         <StackPanel>
                             <CheckBox x:Name="XboxAudioOnComputer" Content="{t:T 'Play Xbox sound on this computer'}"
                                       Checked="OnXboxAudioOnComputer" Unchecked="OnXboxAudioOnComputer" />

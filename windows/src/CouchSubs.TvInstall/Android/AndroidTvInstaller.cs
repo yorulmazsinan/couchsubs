@@ -221,9 +221,28 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         {
             running = "";
         }
-        if (IsRunning(running)) return AlreadyRunning;
+        if (IsRunning(running))
+        {
+            // Çalışan uygulama bize bağlı değil (bekçi yalnız o zaman açar): kayıtlı eski bir adrese (bu bilgisayarın eski
+            // portu, başka bir CouchSubs) bağlı kalmış olabilir. Adres ekranı öne çekmeden bildirilir (TV 0.9.63+; eskisi yok sayar).
+            if (AddressCommand(launchParams) is { } address)
+            {
+                try { await adb.RunAsync(address, cancellationToken: cancellationToken); }
+                catch (Exception error) when (error is not OperationCanceledException and not AndroidInstallException) { }
+            }
+            return AlreadyRunning;
+        }
         return (await adb.RunAsync(StartCommand(launchParams), cancellationToken: cancellationToken)).Trim();
     }
+
+    /// <summary>
+    /// TV'de çalışan CouchSubs'a adresi bildiren yayın (TV uygulamasındaki AddressReceiver): ekranı öne çekmez, görüntü
+    /// modunu değiştirmez. Parametre yoksa ya da kabukta güvenle gönderilemiyorsa (tek tırnak, satır sonu) null.
+    /// Mac/iPhone ve Android telefondaki addressCommand ile aynı.
+    /// </summary>
+    public static string? AddressCommand(string? launchParams) =>
+        string.IsNullOrEmpty(launchParams) || launchParams.IndexOfAny(['\'', '\n', '\r', '\0']) >= 0 ? null
+            : $"shell:am broadcast -a {PackageName}.action.ADDRESS -n {PackageName}/.AddressReceiver --es params '{launchParams}'";
 
     private Task<AdbConnection> ConnectAsync(CancellationToken cancellationToken) =>
         AdbConnection.ConnectAsync(host, port, LoadOrCreateKey(keyDirectory), OnApprovalNeeded, cancellationToken: cancellationToken);
@@ -236,20 +255,46 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, "adbkey");
         var key = RSA.Create();
+        var corrupt = false;
         if (File.Exists(path))
         {
+            // Okuma hatası (G/Ç) yükselir: okunamayan anahtarın üstüne yenisi yazılmaz.
+            var pem = File.ReadAllText(path);
             try
             {
-                key.ImportFromPem(File.ReadAllText(path));
+                key.ImportFromPem(pem);
                 if (key.KeySize == 2048) return key;
             }
-            catch (CryptographicException) { /* bozuk dosya: yenisi üretilir */ }
+            catch (Exception error) when (error is CryptographicException or ArgumentException) { /* bozuk dosya: yenisi üretilir */ }
+            corrupt = true;
         }
         key.Dispose();
         key = RSA.Create(2048);
-        File.WriteAllText(path, key.ExportPkcs8PrivateKeyPem());
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        return key;
+        // Önce geçici dosyaya yazılır, sonra yerine taşınır: yarım kalan yazma anahtarı bozmaz. Aynı anda iki işlem (Mac'te
+        // kurulum yardımcısı ve bekçinin yardımcısı) anahtar üretirse ilk yazılan kalır, ikincisi onu okur; yoksa TV'nin
+        // onayladığı anahtarın üstüne başkası yazılır, TV yeniden sorar.
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        File.WriteAllText(temporary, key.ExportPkcs8PrivateKeyPem());
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        if (corrupt)
+        {
+            // Bozuk dosyanın yerine.
+            File.Move(temporary, path, overwrite: true);
+            return key;
+        }
+        try
+        {
+            File.Move(temporary, path, overwrite: false);
+            return key;
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            File.Delete(temporary);
+            key.Dispose();
+            var existing = RSA.Create();
+            existing.ImportFromPem(File.ReadAllText(path));
+            return existing;
+        }
     }
 
     [GeneratedRegex(@"versionName=(\S+)")]

@@ -1,0 +1,1061 @@
+{
+  "about": "Gerçek kare gerileme seti (scripts/regression-frames.sh). Kareler kullanıcıların GitHub'a yüklediği ekran görüntüleri ve yorumsuz oynanış videolarından tek tek alındı; kanal filigranı ve anlatıcı yazıları bulanıklaştırıldı, kişisel bilgi taşıyan kare yok. Pencere varyantları gerçek karenin sentetik pencere çerçevesine (başlık çubuğu, siyah şerit) sarılmasıdır. Kutular kareye oranla [sol, üst, sağ, alt].",
+  "frames": [
+    {
+      "id": "gta6-01-lucia",
+      "file": "gta6-01-lucia.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=345s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Lucia: Could I have another ice water, please?",
+      "subtitleBox": [
+        0.303,
+        0.88,
+        0.697,
+        0.924
+      ]
+    },
+    {
+      "id": "gta6-02-yolanda",
+      "file": "gta6-02-yolanda.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=390s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Yolanda: You can look out there all day, girl.",
+      "subtitleBox": [
+        0.313,
+        0.879,
+        0.689,
+        0.924
+      ]
+    },
+    {
+      "id": "gta6-03-iki-satir",
+      "file": "gta6-03-iki-satir.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=480s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "CO Wilson: Somebody named \"Gates.\" I don't know anything about her…",
+      "subtitleBox": [
+        0.243,
+        0.833,
+        0.757,
+        0.919
+      ]
+    },
+    {
+      "id": "gta6-04-stefanie",
+      "file": "gta6-04-stefanie.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=600s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Stefanie Gates: Do you mind if I call you Lucia,",
+      "signs": [
+        "INMATE",
+        "2500"
+      ],
+      "subtitleBox": [
+        0.301,
+        0.88,
+        0.7,
+        0.923
+      ]
+    },
+    {
+      "id": "gta6-05-tabela",
+      "file": "gta6-05-tabela.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=750s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Cop: Hey, you, stay there!",
+      "signs": [
+        "No Worries"
+      ],
+      "subtitleBox": [
+        0.39,
+        0.877,
+        0.614,
+        0.924
+      ]
+    },
+    {
+      "id": "gta6-06-kisa",
+      "file": "gta6-06-kisa.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=795s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Lucia: Okay, okay.",
+      "subtitleBox": [
+        0.422,
+        0.877,
+        0.58,
+        0.926
+      ]
+    },
+    {
+      "id": "gta6-07-tisort",
+      "file": "gta6-07-tisort.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1020s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Cal: Dude, I been running stop signs my whole life and look at me.",
+      "signs": [
+        "BORN TO FISH",
+        "FORCED TO WORK"
+      ],
+      "subtitleBox": [
+        0.22,
+        0.877,
+        0.783,
+        0.926
+      ]
+    },
+    {
+      "id": "gta6-08-jason",
+      "file": "gta6-08-jason.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1245s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Jason: Jus- Just be quiet. Donnie's up.",
+      "subtitleBox": [
+        0.335,
+        0.87,
+        0.665,
+        0.927
+      ]
+    },
+    {
+      "id": "gta6-09-iki-satir",
+      "file": "gta6-09-iki-satir.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1560s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Donnie: Gotta go! We gotta get the fuck outta here, man! Vámonos!",
+      "subtitleBox": [
+        0.25,
+        0.836,
+        0.75,
+        0.917
+      ]
+    },
+    {
+      "id": "gta6-10-kisa",
+      "file": "gta6-10-kisa.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1875s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Donnie: Fuckers.",
+      "subtitleBox": [
+        0.428,
+        0.878,
+        0.574,
+        0.919
+      ]
+    },
+    {
+      "id": "gta6-11-narcos",
+      "file": "gta6-11-narcos.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2100s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Brian: I see. Yeah. Mm-hmm. Yeah, we still got paid.",
+      "signs": [
+        "NARCOS"
+      ],
+      "subtitleBox": [
+        0.381,
+        0.836,
+        0.622,
+        0.922
+      ]
+    },
+    {
+      "id": "gta6-12-kisa-yukarida",
+      "file": "gta6-12-kisa-yukarida.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2190s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Jason: Yeah. Yeah.",
+      "note": "iki konuşmacı: alttaki gri satır ayrı kişinin",
+      "subtitleBox": [
+        0.442,
+        0.836,
+        0.553,
+        0.922
+      ]
+    },
+    {
+      "id": "gta6-13-gps",
+      "file": "gta6-13-gps.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2280s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Cal: \"I will chase you to the end of earth\"-pissed?",
+      "signs": [
+        "Turn Right"
+      ],
+      "subtitleBox": [
+        0.287,
+        0.869,
+        0.713,
+        0.93
+      ]
+    },
+    {
+      "id": "gta6-14-iki-satir",
+      "file": "gta6-14-iki-satir.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2550s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Lucia: All good. It's gonna take more than that skank to put me in a bad mood today.",
+      "subtitleBox": [
+        0.221,
+        0.836,
+        0.779,
+        0.922
+      ]
+    },
+    {
+      "id": "gta6-15-soru",
+      "file": "gta6-15-soru.jpg",
+      "source": "youtube.com/watch?v=-D_wt4GXmNw&t=620s — GTA 6 Walkthrough Part 3 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Lucia: How bad is it?",
+      "subtitleBox": [
+        0.41,
+        0.882,
+        0.59,
+        0.916
+      ]
+    },
+    {
+      "id": "gta6-16-uzun-ad",
+      "file": "gta6-16-uzun-ad.jpg",
+      "source": "youtube.com/watch?v=-D_wt4GXmNw&t=440s — GTA 6 Walkthrough Part 3 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Officer Gutierrez: Go Narcos. Always.",
+      "subtitleBox": [
+        0.372,
+        0.834,
+        0.631,
+        0.921
+      ]
+    },
+    {
+      "id": "gta6-17-iki-satir",
+      "file": "gta6-17-iki-satir.jpg",
+      "source": "youtube.com/watch?v=-D_wt4GXmNw&t=2420s — GTA 6 Walkthrough Part 3 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Lucia: We don't have a car, food, clothes that dont have blood on them.",
+      "subtitleBox": [
+        0.333,
+        0.834,
+        0.668,
+        0.919
+      ]
+    },
+    {
+      "id": "gta6-18-kisa",
+      "file": "gta6-18-kisa.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1332s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Cal: Let's not.",
+      "subtitleBox": [
+        0.439,
+        0.877,
+        0.564,
+        0.916
+      ]
+    },
+    {
+      "id": "gta6-19-gece",
+      "file": "gta6-19-gece.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2211s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Cal: What did he say?",
+      "subtitleBox": [
+        0.406,
+        0.88,
+        0.594,
+        0.922
+      ]
+    },
+    {
+      "id": "gta6-20-gorev",
+      "file": "gta6-20-gorev.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1110s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "subtitle": "Follow the plane",
+      "note": "görev satırı altyazı yerinde, tek başına",
+      "subtitleBox": [
+        0.439,
+        0.941,
+        0.559,
+        0.979
+      ]
+    },
+    {
+      "id": "gta6-n1-kitap",
+      "file": "gta6-n1-kitap.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2820s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "signs": [
+        "DESIGN",
+        "A LIBERTY CITY MEMOIR",
+        "Fig 1"
+      ],
+      "note": "altyazı yok; elde kitap kapağı"
+    },
+    {
+      "id": "gta6-n2-boya",
+      "file": "gta6-n2-boya.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2910s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "signs": [
+        "HIGH ENDURANCE PAINT",
+        "WOOD - METAL • PLASTIC",
+        "READY TO USE"
+      ],
+      "note": "altyazı yok; boya kutuları"
+    },
+    {
+      "id": "gta6-n3-ipucu",
+      "file": "gta6-n3-ipucu.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=705s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "note": "altyazı yok; kumanda ipucu (Hold L2 to aim) çevrilmez"
+    },
+    {
+      "id": "gta6-n4-bildirim",
+      "file": "gta6-n4-bildirim.jpg",
+      "source": "youtube.com/watch?v=-D_wt4GXmNw&t=1280s — GTA 6 Walkthrough Part 3 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "note": "altyazı yok; sağ altta telefon bildirimi"
+    },
+    {
+      "id": "gta6-n5-tisort",
+      "file": "gta6-n5-tisort.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1362s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "signs": [
+        "FISH WANT ME",
+        "WOMEN SCARE ME",
+        "BROOKS BOATWORKS"
+      ],
+      "note": "altyazı yok; tişört ve tabela"
+    },
+    {
+      "id": "gta6-n6-sahne",
+      "file": "gta6-n6-sahne.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1515s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary)",
+      "game": "GTA 6",
+      "signs": [
+        "RUS"
+      ],
+      "note": "altyazı yok"
+    },
+    {
+      "id": "gta6-telefon-sohbet-1",
+      "file": "gta6-telefon-sohbet-1.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=106s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "phone": "chat",
+      "note": "telefon açık, mesajlaşma"
+    },
+    {
+      "id": "gta6-telefon-sohbet-2",
+      "file": "gta6-telefon-sohbet-2.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=202s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "phone": "chat",
+      "note": "telefon açık, uzun mesaj"
+    },
+    {
+      "id": "gta6-telefon-sohbet-1-tam",
+      "file": "gta6-telefon-sohbet-1.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=106s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "region": [0, 0, 1, 1],
+      "phone": "chat",
+      "note": "telefon açık, altyazı alanı Tam ekran: telefonun mesajları altyazı sayılmamalı (X, beta.79: bütün sohbet ekranın ortasında tek uzun satır)"
+    },
+    {
+      "id": "gta6-telefon-sohbet-2-tam",
+      "file": "gta6-telefon-sohbet-2.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=202s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "region": [0, 0, 1, 1],
+      "phone": "chat",
+      "note": "telefon açık, altyazı alanı Tam ekran: telefonun mesajları altyazı sayılmamalı (X, beta.79: bütün sohbet ekranın ortasında tek uzun satır)"
+    },
+    {
+      "id": "gta6-telefon-ana-1",
+      "file": "gta6-telefon-ana-1.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=46s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "phone": "home",
+      "note": "telefon ana ekranı"
+    },
+    {
+      "id": "gta6-telefon-ana-2",
+      "file": "gta6-telefon-ana-2.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=622s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "phone": "home",
+      "note": "telefon ana ekranı, karanlık oda"
+    },
+    {
+      "id": "gta6-harita-kart",
+      "file": "gta6-harita-kart.jpg",
+      "source": "youtube.com/watch?v=V2n5XU2lsiM&t=214s — GTA 6 phone features video (anlatıcı yazıları bulanıklaştırıldı)",
+      "game": "GTA 6",
+      "mapCard": true,
+      "note": "harita, seçili yerin kartı (başlık, açıklama, ayrıntı): kartın parçaları kartın kendi yerinde ayrı çevrilir; kartın solundaki harita yazıları (124 ft, simge) karta katılmaz, kart çevirisi sola kayıp onları örtmez (X: chiaki); harita üstündeki tuş ipuçları denizin renginde çizilir, ✕/○ gibi simgeler kutunun dışında kalır",
+      "screen": {
+        "blocks": [
+          "MAP",
+          "BRIEF",
+          "PROGRESS",
+          "LEROY'S",
+          "Nautical-themed souvenir store selling accessories and summer wear.",
+          "STYLE",
+          "SOUVENIR",
+          "RECENTER",
+          "2D VIEW",
+          "ADD MARKER",
+          "SET DESTINATION",
+          "EXIT"
+        ],
+        "keep": ["JASON & LUCIA"],
+        "clear": [[0.474, 0.509, 0.536, 0.571], [0.483, 0.43, 0.531, 0.505], [0.9594, 0.7009, 0.9781, 0.7343], [0.9594, 0.7602, 0.9781, 0.7935], [0.9594, 0.8194, 0.9781, 0.8528], [0.9594, 0.8787, 0.9781, 0.912], [0.9594, 0.938, 0.9781, 0.9713]]
+      }
+    },
+    {
+      "id": "gta6-menu-harita",
+      "file": "gta6-menu-harita.jpg",
+      "source": "sentetik: GitHub #856/#859/#860 (hv1911) TV fotoğraflarındaki GTA 6 harita menüsünün düzeni; görev portresi fotoğraftan kesildi",
+      "game": "GTA 6",
+      "mapCard": true,
+      "note": "üst menü sekmeleri ayrı çevrilir, JASON & LUCIA çevrilmez; görev başlığı ve açıklaması ayrı, portre örtülmez; sağ alttaki tuş ipuçlarında simge (L3, R3, □, ✕, ○) örtülmez (#860)",
+      "screen": {
+        "blocks": [
+          "JASON & LUCIA",
+          "MAP",
+          "BRIEF",
+          "PROGRESS",
+          "ISLAND DREAMS",
+          "Keep an eye on the bachelor party while searching Kenton's dive spot for treasure.",
+          "RECENTER",
+          "2D VIEW",
+          "ADD MARKER",
+          "SET DESTINATION",
+          "EXIT"
+        ],
+        "keep": [
+          "JASON & LUCIA"
+        ],
+        "clear": [
+          [
+            0.1469,
+            0.1815,
+            0.1844,
+            0.25
+          ],
+          [
+            0.9406,
+            0.7241,
+            0.9583,
+            0.7556
+          ],
+          [
+            0.9406,
+            0.7722,
+            0.9583,
+            0.8037
+          ],
+          [
+            0.9406,
+            0.8204,
+            0.9583,
+            0.8519
+          ],
+          [
+            0.9406,
+            0.8685,
+            0.9583,
+            0.9
+          ],
+          [
+            0.9406,
+            0.9167,
+            0.9583,
+            0.9481
+          ]
+        ]
+      }
+    },
+    {
+      "id": "gta6-menu-gorevler",
+      "file": "gta6-menu-gorevler.jpg",
+      "source": "sentetik: GitHub #856 (hv1911) görev listesi düzeni; görev fotoğrafları bu setin GTA 6 karelerinden kesildi",
+      "game": "GTA 6",
+      "mapCard": true,
+      "note": "görev listesi: her görevin başlığı ve açıklaması kendi yerinde, fotoğraflar örtülmez; sekmeler ayrı",
+      "screen": {
+        "blocks": [
+          "JASON & LUCIA",
+          "MAP",
+          "BRIEF",
+          "PROGRESS",
+          "ISLAND DREAMS",
+          "Keep an eye on the bachelor party while searching Kenton's dive spot for treasure.",
+          "HIGH TIDE",
+          "Meet Boobie at the marina and pick up the package before the coast guard arrives.",
+          "DOWN BY THE DOCKS",
+          "Follow the cargo truck to Port Gellhorn and find out who is buying the stolen goods."
+        ],
+        "keep": [
+          "JASON & LUCIA"
+        ],
+        "clear": [
+          [
+            0.1458,
+            0.1806,
+            0.2583,
+            0.2917
+          ],
+          [
+            0.1458,
+            0.3287,
+            0.2583,
+            0.4398
+          ],
+          [
+            0.1458,
+            0.4769,
+            0.2583,
+            0.588
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rdr2-01",
+      "file": "rdr2-01.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=600s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "Oh, so no \"Glad you're alright, I was worried, Micah\"?",
+      "subtitleBox": [
+        0.319,
+        0.81,
+        0.681,
+        0.849
+      ]
+    },
+    {
+      "id": "rdr2-02-iki-satir",
+      "file": "rdr2-02-iki-satir.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=960s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "You should eat something now. Get your strength up for the ride back.",
+      "signs": [
+        "SEARCH CABINET"
+      ],
+      "subtitleBox": [
+        0.282,
+        0.81,
+        0.718,
+        0.875
+      ]
+    },
+    {
+      "id": "rdr2-03",
+      "file": "rdr2-03.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1320s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "Miss, now it is gonna be okay.",
+      "subtitleBox": [
+        0.396,
+        0.813,
+        0.604,
+        0.847
+      ]
+    },
+    {
+      "id": "rdr2-04-gorev",
+      "file": "rdr2-04-gorev.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1248s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "Approach the horse",
+      "note": "görev satırı altyazı yerinde",
+      "subtitleBox": [
+        0.428,
+        0.924,
+        0.572,
+        0.958
+      ]
+    },
+    {
+      "id": "rdr2-05-kisa",
+      "file": "rdr2-05-kisa.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1383s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "Adler?",
+      "subtitleBox": [
+        0.473,
+        0.813,
+        0.526,
+        0.844
+      ]
+    },
+    {
+      "id": "rdr2-06",
+      "file": "rdr2-06.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=2760s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Red Dead Redemption 2",
+      "subtitle": "What he did to Annabelle, I can't do neither.",
+      "subtitleBox": [
+        0.349,
+        0.809,
+        0.654,
+        0.851
+      ]
+    },
+    {
+      "id": "elden-01",
+      "file": "elden-01.jpg",
+      "source": "youtube.com/watch?v=bg8i4CvE74M&t=300s — Elden Ring Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Elden Ring",
+      "subtitle": "And one other. Whom grace would again bless.",
+      "subtitleBox": [
+        0.354,
+        0.877,
+        0.648,
+        0.914
+      ]
+    },
+    {
+      "id": "elden-02",
+      "file": "elden-02.jpg",
+      "source": "youtube.com/watch?v=bg8i4CvE74M&t=1020s — Elden Ring Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Elden Ring",
+      "subtitle": "Oh, yes... Tarnished, are we?",
+      "subtitleBox": [
+        0.409,
+        0.875,
+        0.593,
+        0.914
+      ]
+    },
+    {
+      "id": "elden-03",
+      "file": "elden-03.jpg",
+      "source": "youtube.com/watch?v=bg8i4CvE74M&t=2460s — Elden Ring Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Elden Ring",
+      "subtitle": "I dare say your proclivities are far from ideal...",
+      "subtitleBox": [
+        0.356,
+        0.875,
+        0.644,
+        0.914
+      ]
+    },
+    {
+      "id": "elden-n1-hud",
+      "file": "elden-n1-hud.jpg",
+      "source": "youtube.com/watch?v=bg8i4CvE74M&t=2100s — Elden Ring Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Elden Ring",
+      "note": "altyazı yok; savaş göstergeleri"
+    },
+    {
+      "id": "acs-01-ad-ustte",
+      "file": "acs-01-ad-ustte.jpg",
+      "source": "youtube.com/watch?v=RYKMn8wWd1Y&t=540s — Assassin's Creed Shadows Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Assassin's Creed Shadows",
+      "subtitle": "Lord Nobunaga would like to speak with Diogo. Alone.",
+      "subtitleBox": [
+        0.346,
+        0.804,
+        0.654,
+        0.867
+      ]
+    },
+    {
+      "id": "acs-02",
+      "file": "acs-02.jpg",
+      "source": "youtube.com/watch?v=RYKMn8wWd1Y&t=1980s — Assassin's Creed Shadows Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Assassin's Creed Shadows",
+      "subtitle": "You can sit up. How's the rest of you?",
+      "subtitleBox": [
+        0.377,
+        0.802,
+        0.619,
+        0.843
+      ]
+    },
+    {
+      "id": "acs-03-iki-satir",
+      "file": "acs-03-iki-satir.jpg",
+      "source": "youtube.com/watch?v=RYKMn8wWd1Y&t=2100s — Assassin's Creed Shadows Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Assassin's Creed Shadows",
+      "subtitle": "What I should've done at the tomb. Take his life and take back what's ours.",
+      "subtitleBox": [
+        0.37,
+        0.804,
+        0.629,
+        0.87
+      ]
+    },
+    {
+      "id": "acs-04",
+      "file": "acs-04.jpg",
+      "source": "youtube.com/watch?v=RYKMn8wWd1Y&t=1620s — Assassin's Creed Shadows Walkthrough (MKIceAndFire, no commentary)",
+      "game": "Assassin's Creed Shadows",
+      "subtitle": "The box, it cannot be opened.",
+      "subtitleBox": [
+        0.403,
+        0.804,
+        0.597,
+        0.836
+      ]
+    },
+    {
+      "id": "issue-337-turkce",
+      "file": "issue-337-turkce.jpg",
+      "source": "GitHub #337 kullanıcı fotoğrafı (Ghost of Yōtei, monitör)",
+      "game": "Ghost of Yōtei",
+      "note": "oyunun kendi Türkçe altyazısı: çevrilmez"
+    },
+    {
+      "id": "issue-208-tv",
+      "file": "issue-208-tv.jpg",
+      "source": "GitHub #208 kullanıcı fotoğrafı (Ghost of Yōtei, TV)",
+      "game": "Ghost of Yōtei",
+      "note": "Türkçe altyazı karenin üstünde; alttaki alanda yazı yok"
+    },
+    {
+      "id": "pencere-kare-1",
+      "file": "pencere-kare-1.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=345s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (kare)",
+      "game": "GTA 6",
+      "session": "gta6-pencere",
+      "subtitle": "Lucia: Could I have another ice water, please?",
+      "subtitleBox": [
+        0.303,
+        0.7139,
+        0.697,
+        0.7387
+      ]
+    },
+    {
+      "id": "pencere-kare-2-gorev",
+      "file": "pencere-kare-2-gorev.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1110s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (kare)",
+      "game": "GTA 6",
+      "session": "gta6-pencere",
+      "subtitle": "Follow the plane",
+      "note": "altyazı karenin %72-77'sinde: kısa satır sahne yazısı sayılmamalı (#822)",
+      "subtitleBox": [
+        0.439,
+        0.7483,
+        0.559,
+        0.7697
+      ]
+    },
+    {
+      "id": "pencere-kare-3-kisa",
+      "file": "pencere-kare-3-kisa.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=795s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (kare)",
+      "game": "GTA 6",
+      "session": "gta6-pencere",
+      "subtitle": "Lucia: Okay, okay.",
+      "subtitleBox": [
+        0.422,
+        0.7122,
+        0.58,
+        0.7398
+      ]
+    },
+    {
+      "id": "pencere-kare-4-tisort",
+      "file": "pencere-kare-4-tisort.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1362s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (kare)",
+      "game": "GTA 6",
+      "session": "gta6-pencere",
+      "signs": [
+        "FISH WANT ME",
+        "WOMEN SCARE ME",
+        "BROOKS BOATWORKS"
+      ]
+    },
+    {
+      "id": "pencere-kare-5-gorev",
+      "file": "pencere-kare-5-gorev.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=1065s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (kare)",
+      "game": "GTA 6",
+      "session": "gta6-pencere",
+      "subtitle": "Cal: Okay.",
+      "note": "konuşma ve altında görev satırı",
+      "subtitleBox": [
+        0.455,
+        0.7122,
+        0.549,
+        0.7364
+      ]
+    },
+    {
+      "id": "pencere-serit-1",
+      "file": "pencere-serit-1.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1320s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary) — pencere kaynağı varyantı (serit)",
+      "game": "Red Dead Redemption 2",
+      "session": "rdr2-serit",
+      "subtitle": "Miss, now it is gonna be okay.",
+      "subtitleBox": [
+        0.396,
+        0.7348,
+        0.604,
+        0.7602
+      ]
+    },
+    {
+      "id": "pencere-serit-2-gorev",
+      "file": "pencere-serit-2-gorev.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1248s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary) — pencere kaynağı varyantı (serit)",
+      "game": "Red Dead Redemption 2",
+      "session": "rdr2-serit",
+      "subtitle": "Approach the horse",
+      "subtitleBox": [
+        0.428,
+        0.818,
+        0.572,
+        0.8435
+      ]
+    },
+    {
+      "id": "pencere-serit-3-kisa",
+      "file": "pencere-serit-3-kisa.jpg",
+      "source": "youtube.com/watch?v=AcOpiWppO3k&t=1383s — Red Dead Redemption 2 Walkthrough (MKIceAndFire, no commentary) — pencere kaynağı varyantı (serit)",
+      "game": "Red Dead Redemption 2",
+      "session": "rdr2-serit",
+      "subtitle": "Adler?",
+      "subtitleBox": [
+        0.473,
+        0.7348,
+        0.526,
+        0.758
+      ]
+    },
+    {
+      "id": "pencere-baslik-1",
+      "file": "pencere-baslik-1.jpg",
+      "source": "youtube.com/watch?v=bg8i4CvE74M&t=300s — Elden Ring Walkthrough (MKIceAndFire, no commentary) — pencere kaynağı varyantı (baslik)",
+      "game": "Elden Ring",
+      "session": "baslik",
+      "subtitle": "And one other. Whom grace would again bless.",
+      "subtitleBox": [
+        0.3595,
+        0.8816,
+        0.6425,
+        0.9172
+      ]
+    },
+    {
+      "id": "pencere-baslik-2",
+      "file": "pencere-baslik-2.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=600s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (baslik)",
+      "game": "GTA 6",
+      "session": "baslik",
+      "subtitle": "Stefanie Gates: Do you mind if I call you Lucia,",
+      "subtitleBox": [
+        0.3085,
+        0.8844,
+        0.6925,
+        0.9259
+      ]
+    },
+    {
+      "id": "pencere-baslik-3-kisa",
+      "file": "pencere-baslik-3-kisa.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc&t=2190s — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — pencere kaynağı varyantı (baslik)",
+      "game": "GTA 6",
+      "session": "baslik",
+      "subtitle": "Jason: Yeah. Yeah.",
+      "note": "iki konuşmacı: alttaki gri satır ayrı kişinin",
+      "subtitleBox": [
+        0.4442,
+        0.8421,
+        0.551,
+        0.9249
+      ]
+    },
+    {
+      "id": "obs-program-1-ingilizce",
+      "file": "gta6-01-lucia.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — OBS Program projektörü senaryosu, 1: katman henüz boş",
+      "game": "GTA 6",
+      "session": "obs-program",
+      "subtitle": "Lucia: Could I have another ice water, please?",
+      "subtitleBox": [
+        0.303,
+        0.88,
+        0.697,
+        0.924
+      ]
+    },
+    {
+      "id": "obs-program-2-onceki-ceviri",
+      "file": "obs-program-2-onceki-ceviri.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — OBS Program projektörü senaryosu, 2: CouchSubs OBS katmanı önceki satırın çevirisini yukarıda (alttan %20) gösteriyor (sentetik, obs-overlay.html biçemi)",
+      "game": "GTA 6",
+      "session": "obs-program",
+      "subtitle": "Yolanda: You can look out there all day, girl.",
+      "note": "kendi altyazısı (Türkçe) İngilizce bloğa katılmamalı",
+      "signs": [
+        "buzlu",
+        "alabilir"
+      ],
+      "subtitleBox": [
+        0.313,
+        0.879,
+        0.689,
+        0.924
+      ]
+    },
+    {
+      "id": "obs-program-3-ortme",
+      "file": "obs-program-3-ortme.jpg",
+      "source": "youtube.com/watch?v=YDNs_sPEcJc — GTA 6 Walkthrough Part 1 (MKIceAndFire, no commentary) — OBS Program projektörü senaryosu, 3: CouchSubs OBS katmanı çeviriyi İngilizce satırın üstüne örtmüş (sentetik, obs-overlay.html biçemi)",
+      "game": "GTA 6",
+      "session": "obs-program",
+      "note": "karede yalnız kendi altyazımız var: yeniden çevrilmemeli, hiçbir şey gönderilmemeli"
+    },
+    {
+      "id": "gta6-882-arama-1",
+      "file": "gta6-882-arama-1.jpg",
+      "source": "sentetik: gta6-01-lucia karesi + GitHub #882'deki gibi sağ altta arama kartının yanında küçük HUD yazısı (\"Earpc\" / \"ar.\")",
+      "game": "GTA 6",
+      "session": "gta6-882-arama",
+      "subtitle": "Lucia: Could I have another ice water, please?",
+      "mission": false,
+      "note": "konuşmalar değişirken ekranın sağında duran HUD kırıntısı görev satırı sayılıp kendi yerinde çevrilmemeli"
+    },
+    {
+      "id": "gta6-882-arama-2",
+      "file": "gta6-882-arama-2.jpg",
+      "source": "sentetik: gta6-02-yolanda karesi + aynı HUD kırıntısı",
+      "game": "GTA 6",
+      "session": "gta6-882-arama",
+      "subtitle": "Yolanda: You can look out there all day, girl.",
+      "mission": false
+    },
+    {
+      "id": "gta6-882-arama-3",
+      "file": "gta6-882-arama-1.jpg",
+      "source": "sentetik: gta6-882-arama-1 yeniden",
+      "game": "GTA 6",
+      "session": "gta6-882-arama",
+      "subtitle": "Lucia: Could I have another ice water, please?",
+      "mission": false
+    },
+    {
+      "id": "gta6-882-arama-4",
+      "file": "gta6-882-arama-2.jpg",
+      "source": "sentetik: gta6-882-arama-2 yeniden",
+      "game": "GTA 6",
+      "session": "gta6-882-arama",
+      "subtitle": "Yolanda: You can look out there all day, girl.",
+      "mission": false,
+      "note": "eski çekirdekte kırıntı 3 sn sonra auto-mission olup \"kulaklı ar.\" gibi çevriliyordu"
+    },
+    {
+      "id": "gta6-854-kirinti-1",
+      "file": "gta6-854-kirinti-1.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı",
+      "game": "GTA 6",
+      "session": "gta6-854-kirinti",
+      "subtitle": "It's not too far, don't worry. That's why I got Burim here.",
+      "blank": 0,
+      "note": "uzun satır alanın iki yanından taşıyor (\"t's … here\" okunur)"
+    },
+    {
+      "id": "gta6-854-kirinti-2",
+      "file": "gta6-854-kirinti-2.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı; konuşmanın üstüne solan satırdan kalan kırıntı (\"ne ready.\") eklendi",
+      "game": "GTA 6",
+      "session": "gta6-854-kirinti",
+      "signs": [
+        "one ready",
+        "ne ready"
+      ],
+      "note": "konuşma sürüyor: kırıntı tek başına ya da konuşmayla birlikte çevrilmemeli, konuşma atılmamalı (TV'de \"e'ne hazır.\")"
+    },
+    {
+      "id": "gta6-854-gorev-1",
+      "file": "gta6-854-gorev-1.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı; görev satırı tek başına, pembe sözcüğün açık zemindeki ilk harfleri silindi (\"eedboat\" okunur)",
+      "game": "GTA 6",
+      "session": "gta6-854-gorev",
+      "subtitle": "Get in the speedboat",
+      "reads": 2,
+      "blank": 0,
+      "note": "renkli sözcük ilk karelerde bozuk okunuyor"
+    },
+    {
+      "id": "gta6-854-gorev-2",
+      "file": "gta6-854-gorev-2.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı; görev satırı tek başına",
+      "game": "GTA 6",
+      "session": "gta6-854-gorev",
+      "subtitle": "Get in the speedboat",
+      "blank": 0,
+      "note": "doğru okuma gelince bozuk çevirinin yerine yeniden çevrilmeli"
+    },
+    {
+      "id": "gta6-854-gorev-3",
+      "file": "gta6-854-gorev-3.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı",
+      "game": "GTA 6",
+      "session": "gta6-854-gorev",
+      "subtitle": "Somebody's happy to be free, ah?",
+      "note": "görev satırı konuşmanın altında; altyazı konuşmadır"
+    },
+    {
+      "id": "gta6-854-lives-1",
+      "file": "gta6-854-lives-1.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı; \"lives\" sözcüğü yazı belirirken bozuk okunmuş gibi değiştirildi",
+      "game": "GTA 6",
+      "session": "gta6-854-lives",
+      "subtitle": "To the best day of our fucking lives, eh?",
+      "reads": 2,
+      "blank": 0,
+      "note": "ilk iki karede bozuk okunan sözcük (TV'de \"Ijz'lerinin\")"
+    },
+    {
+      "id": "gta6-854-lives-2",
+      "file": "gta6-854-lives-2.jpg",
+      "source": "sentetik: GitHub #854 (son yorum) kullanıcının TV fotoğrafı; oyun alanı kırpılıp 1920x1080'e düzeltildi, CouchSubs'ın kendi çeviri kutuları çevredeki görüntüyle boyandı",
+      "game": "GTA 6",
+      "session": "gta6-854-lives",
+      "subtitle": "To the best day of our fucking lives, eh?",
+      "signs": [
+        "liz"
+      ],
+      "note": "doğru okuma yeniden çevrilmeli (küfür sansürsüz kalır)"
+    }
+  ],
+  "phoneScenarios": [
+    {
+      "name": "telefon-sohbet-1 (bir tur doğrulanamadı)",
+      "phone": "gta6-telefon-sohbet-1",
+      "gone": "gta6-n6-sahne"
+    },
+    {
+      "name": "telefon-sohbet-2 (bir tur doğrulanamadı)",
+      "phone": "gta6-telefon-sohbet-2",
+      "gone": "gta6-01-lucia"
+    }
+  ],
+  "speakerScenarios": [
+    {
+      "name": "gta6-08-jason (sarı ad ilk karelerde okunmuyor)",
+      "frame": "gta6-08-jason",
+      "nameBox": [0.338, 0.872, 0.397, 0.925]
+    }
+  ],
+  "slowReaderScenarios": [
+    {
+      "name": "pencere kaynağı: asıl okuyucu yavaşken (her okuma 11 sn) art arda 2,5 sn'lik satırlar (#822)",
+      "frames": ["pencere-kare-1", "pencere-baslik-2", "pencere-serit-1", "pencere-kare-3-kisa",
+                 "pencere-kare-5-gorev", "pencere-baslik-3-kisa", "pencere-serit-2-gorev", "pencere-baslik-1"],
+      "showMs": 2500,
+      "readMs": 11000,
+      "minCapture": 0.6
+    }
+  ]
+}

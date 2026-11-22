@@ -92,7 +92,8 @@ struct StreamWindowView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background {
                 if !model.overlayPhoneItems.isEmpty { GamePhoneBlocks(items: model.overlayPhoneItems) }
-                let screenText = model.overlayRegions.flatMap { $0.items ?? [] } + model.overlayScreenItems
+                // Aynı yazıyı çizen iki kutudan yalnız biri: "Ekranı çevir" otomatik ekran yazısının üstüne geçer (#827).
+                let screenText = ScreenTranslation.layered(model.overlayRegions.flatMap { $0.items ?? [] } + model.overlayScreenItems)
                 if !screenText.isEmpty { ScreenTextBlocks(items: screenText, avoiding: subtitleFrame) }
             }
         }
@@ -207,7 +208,8 @@ struct GamePhoneBlocks: View {
 }
 
 /// Kendiliğinden bulunan ekran yazısının çevirisi özgün yazının stilinde: zemin ve yazı rengi, kalınlık, dar aile, hiza
-/// (`TextLook`; BÜYÜK HARF çeviriye zaten uygulanmış gelir). Düz zeminde kutu tam opak, değilse %85 opak.
+/// (`TextLook`; BÜYÜK HARF çeviriye zaten uygulanmış gelir). Kutu her zeminde tam opak: özgün yazı arasından görünmez
+/// (#827; "Örtsün" kutusu gibi).
 enum StyledScreenText {
     static func label(_ item: ScreenTranslation.Item, size: CGFloat) -> some View {
         let look = item.look
@@ -223,7 +225,7 @@ enum StyledScreenText {
     }
 
     static func background(_ item: ScreenTranslation.Item) -> Color {
-        color(item.style?.background, fallback: .black).opacity(item.look?.flat == false ? 0.85 : 1)
+        color(item.style?.background, fallback: .black)
     }
 
     static func frameAlignment(_ item: ScreenTranslation.Item) -> Alignment {

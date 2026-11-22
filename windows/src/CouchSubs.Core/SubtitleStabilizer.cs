@@ -109,6 +109,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     private long retryAt;
     /// <summary>Bekleyen (henüz gönderilmemiş) çöp gibi okunan aday; gönderilmeden kalkarsa günlüğe yazılır.</summary>
     private string garbledPending = "";
+    /// <summary>Gönderilen satırın kaç kez aynı okunduğu ve gönderilenden farklı okunan, art arda gelen aynı okuma (düzeltme adayı).</summary>
+    private int sentReads;
+    private (string Text, string Raw, int Count)? correction;
 
     /// <summary>Son <see cref="Feed"/> çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.</summary>
     public StabilizerNote? Note { get; private set; }
@@ -166,11 +169,12 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         var ready = garbled
             ? candidateCount >= stableFrames && time - candidateSince >= GarbledStableMs
             : candidateCount >= stableFrames || (EndsSentence(rawText) && (!cleanFastPathOnly || LooksClean(rawText)));
-        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin.
-        if (IsSame(text, sent))
+        // Gönderilenin gürültülü yeniden okuması yeni satır değildir; TV'de aynı cümle iki kez görünmesin. Adlı gönderilen
+        // satırın ("JASON: …") renkli adı bir karede okunamadıysa adsız okuması da aynı satırdır.
+        if (IsSame(text, sent) || IsUnnamedReread(rawText, sentRaw))
         {
             Remember(signature, box);
-            return StabilizerAction.None;
+            return Corrected(text, rawText) is { } fixedLine ? StabilizerAction.Translate(fixedLine) : StabilizerAction.None;
         }
         if (!ready)
         {
@@ -205,8 +209,63 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         forgotten = "";
         sentRaw = cleanFastPathOnly ? candidateRaw : rawText.Trim();
         sent = TextMatch.NormalizeRows(sentRaw);
+        sentReads = 1;
+        correction = null;
         Remember(signature, box);
         return StabilizerAction.Translate(sentRaw);
+    }
+
+    /// <summary>
+    /// Gönderilen satır ilk karesinde bir sözcüğü bozuk okunmuş olabilir: yazı belirirken (ya da renkli sözcük açık zeminde)
+    /// "lives" "Ijz", "speedboat" "eedboat" okunuyor, satır noktalamayla bittiği için ilk karede gidiyordu. Sonraki
+    /// okumalar aynı satır sayıldığından (<see cref="IsSame"/>) doğrusu hiç çevrilmiyor, TV'de bozuk sözcüklü çeviri
+    /// kalıyordu (GitHub #854, GTA 6). Gönderilenle aynı sayıda sözcüklü, ondan farklı bir okuma art arda en az
+    /// stableFrames kez okunur, puanı da (<see cref="OcrNoise.Score"/>: daha çok düzgün harf) yüksekse ve ya gönderilenden
+    /// daha çok kez okunduysa ya da farklı sözcükleri gönderilenin onarılmış hali ise (<see cref="RepairsWords"/>)
+    /// düzeltmedir: yeniden çevrilir (hat onu gösterilenin yerine koyar). Düzeltilen satır bir daha düzeltilmez. Mac/iPhone
+    /// (SubtitleStabilizer.swift) ve Android (SubtitleStabilizer.kt) aynı kuralı uygular.
+    /// </summary>
+    private string? Corrected(string text, string rawText)
+    {
+        if (sentReads <= 0) return null;
+        var shown = TextMatch.Normalize(sentRaw);
+        if (text == shown)
+        {
+            sentReads++;
+            return null;
+        }
+        var raw = rawText.Trim();
+        correction = correction is { } current && current.Text == text ? (text, raw, current.Count + 1) : (text, raw, 1);
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var old = shown.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (correction is not { } candidate || candidate.Count < stableFrames || words.Length != old.Length
+            || OcrNoise.Score(candidate.Raw) <= OcrNoise.Score(sentRaw)
+            || !(candidate.Count > sentReads || RepairsWords(words, old))) return null;
+        sentRaw = candidate.Raw;
+        sent = TextMatch.NormalizeRows(sentRaw);
+        // Düzeltme kesindir: aynı satır bir daha düzeltilmez (iki okuma arasında gidip gelmesin).
+        sentReads = 0;
+        correction = null;
+        return sentRaw;
+    }
+
+    /// <summary>
+    /// Okumanın gönderilenden farklı her sözcüğü onun onarılmış hali mi: gönderilendeki sözcük ya sözcük değil
+    /// (<see cref="OcrNoise.IsNonWord"/>: "ijz") ya da yenisinin baştan/sondan kesilmiş parçası ("eedboat" → "speedboat").
+    /// </summary>
+    internal static bool RepairsWords(IReadOnlyList<string> words, IReadOnlyList<string> old)
+    {
+        var changed = false;
+        for (var i = 0; i < Math.Min(words.Count, old.Count); i++)
+        {
+            string next = words[i], previous = old[i];
+            if (next == previous) continue;
+            changed = true;
+            var fragment = next.Length > previous.Length
+                && (next.EndsWith(previous, StringComparison.Ordinal) || next.StartsWith(previous, StringComparison.Ordinal));
+            if (!fragment && !(OcrNoise.IsNonWord(previous) && !OcrNoise.IsNonWord(next))) return false;
+        }
+        return changed;
     }
 
     /// <summary>Ekrandaki satır bu karede okundu: bölgenin izi ve satırın yeri saklanır (yer bilinmiyorsa hiçbiri).</summary>
@@ -226,6 +285,17 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         garbledPending = "";
     }
 
+    /// <summary>
+    /// Okuma, adlı gönderilen satırın ("JASON: Gidelim.") adı okunamamış hali mi ("Gidelim."). Ad sonradan okunan satırın
+    /// tersi (bkz. SubtitlePipeline.NameRead): ad bir görünüp bir kaybolunca cümle yeniden çevrilip TV'de adsız ve adlı
+    /// iki kez görünmesin (Mac: isUnnamedReread, Android: isUnnamedReread).
+    /// </summary>
+    internal static bool IsUnnamedReread(string raw, string sentRaw)
+    {
+        if (sentRaw.Length == 0 || SpeakerPrefix.Parse(raw) is not null || SpeakerPrefix.Parse(sentRaw) is not { } named) return false;
+        return IsSame(TextMatch.Normalize(raw), TextMatch.NormalizeRows(named.Body));
+    }
+
     /// <summary>Okuma, bu satırların (gürültülü) yeniden okuması mı; sonuna sözcük eklenmiş hali yenidir.</summary>
     private static bool IsSame(string text, string rows) => rows.Length > 0 && TextMatch.IsSameSubtitle(text, rows);
 
@@ -239,6 +309,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
             sent = "";
             sentRaw = "";
         }
+        sentReads = 0;
+        correction = null;
         lastSeen = null;
         clearPending = false;
     }
@@ -301,6 +373,8 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         var shouldClear = sent.Length > 0 || clearPending;
         sent = "";
         sentRaw = "";
+        sentReads = 0;
+        correction = null;
         clearPending = false;
         return shouldClear ? StabilizerAction.Clear : StabilizerAction.None;
     }

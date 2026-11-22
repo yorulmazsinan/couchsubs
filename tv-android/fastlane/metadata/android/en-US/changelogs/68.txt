@@ -1,0 +1,1 @@
+0.9.65: With two CouchSubs on the same network (for example the computer left open while translating from the phone), the TV no longer stays on the idle one; it switches to the CouchSubs that is translating, so subtitles reach the TV.

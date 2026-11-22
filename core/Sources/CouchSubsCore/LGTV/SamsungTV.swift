@@ -272,20 +272,45 @@ public final class SamsungAppKnowledge: @unchecked Sendable {
     static func checksList(knownInstalled: Bool) -> Bool { !knownInstalled }
 
     /// Açma kararı. Kurulu olduğu bilinen TV'de liste ne derse desin eski yol (DEEP_LINK) gönderilir; bilinmeyen TV'de
-    /// listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen değer gönderilecek tür, gönderilmeyecekse nil.
+    /// listede yoksa (#637) ya da liste 3 saniyede gelmezse gönderilmez: kurulu olmayan uygulamaya giden DEEP_LINK Smart
+    /// Hub'ı mağaza aramasına yolluyor, Samsung'a ulaşamayan TV'de "Samsung sunucusuna bağlanılamıyor (AS400)" çıkıyordu
+    /// (Samsung 7 Series 2018, 21 Kas). Dönen değer gönderilecek tür, gönderilmeyecekse nil (Windows ve Android ile aynı).
     static func action(knownInstalled: Bool, presence: SamsungAppPresence?) -> String? {
         if knownInstalled { return "DEEP_LINK" }
         switch presence {
-        case .missing: return nil
+        case .missing, nil: return nil
         case .installed(let type): return SamsungMessages.actionType(appType: type)
-        case nil: return SamsungMessages.actionType(appType: nil)
         }
+    }
+
+    /// Açma isteği gönderilmediğinde tvinstall.log satırı (Mac'te TVInstallLog, iPhone'da InstallLog bağlar).
+    public static var installLog: (@Sendable (String) -> Void)?
+
+    private var lastNotSent: String?
+
+    /// Gönderilmeyen açma isteği günlüklere yazılır; bekçi her 30 sn'de denediği için aynı satır yinelenmez.
+    func reportNotSent(host: String?, presence: SamsungAppPresence?) {
+        let line = Self.notSentLine(host: host, presence: presence)
+        lock.lock()
+        let repeated = lastNotSent == line
+        lastNotSent = line
+        lock.unlock()
+        if repeated { return }
+        SubtitleLog.write(line)
+        Self.installLog?(line)
+    }
+
+    static func notSentLine(host: String?, presence: SamsungAppPresence?) -> String {
+        let tv = host ?? "?"
+        return presence == nil
+            ? "Samsung \(tv): uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi (kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar)."
+            : "Samsung \(tv): kurulu uygulama listesinde CouchSubs yok; açma isteği gönderilmedi."
     }
 }
 
 /// Samsung TV ile uzaktan kumanda WebSocket'i üzerinden konuşur. İlk bağlantıda TV izin sorar.
 public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @unchecked Sendable {
-    /// `notInstalled`: TV'nin kurulu uygulama listesinde CouchSubs yok; açma komutu gönderilmedi.
+    /// `notInstalled`: TV'nin kurulu uygulama listesinde CouchSubs yok ya da liste yanıtsız; açma komutu gönderilmedi.
     public enum SamsungError: Error { case cannotConnect, rejected, notInstalled }
 
     private let url: URL?
@@ -351,8 +376,9 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
     /// 2. Bu yöntem: önce `ed.installedApp.get` ile uygulamanın kurulu olduğuna bakılır, sonra `ed.apps.launch` TV'nin
     ///    bildirdiği türle (web uygulamasında DEEP_LINK) gönderilir; 2016 ve sonrası Tizen TV'lerde çalışır. Uygulama
     ///    kurulu değilken DEEP_LINK gönderilirse Smart Hub appId'yi mağazada arıyor ve mağazada olmayan CouchSubs için TV'de
-    ///    "Sunucu bakım altında (1544007)" çıkıyordu (#402'de kurulum 118 hatasıyla düşmüştü; #511, #637). Bu yüzden
-    ///    listede yoksa hiçbir şey gönderilmez. Liste 3 saniyede gelmezse (bazı yazılımlar yanıtlamıyor) eski yol, DEEP_LINK.
+    ///    "Sunucu bakım altında (1544007)" ya da "Samsung sunucusuna bağlanılamıyor (AS400)" çıkıyordu (#402'de kurulum 118
+    ///    hatasıyla düşmüştü; #511, #637). Bu yüzden listede yoksa ya da liste 3 saniyede gelmezse hiçbir şey gönderilmez
+    ///    (`SamsungError.notInstalled`); kurulum adımı önerilir.
     /// REST `POST http://TV:8001/api/v2/applications/<id>` kullanılmaz: PAYLOAD taşımaz ve 2019 sonrası yazılımlarda
     /// izinsiz istekleri reddediyor.
     public func launch(appId: String, params: [String: Any]) async throws {
@@ -369,7 +395,10 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
             return
         }
         let presence = await installedApp(appId: appId, socket: socket)
-        guard let action = SamsungAppKnowledge.action(knownInstalled: false, presence: presence) else { throw SamsungError.notInstalled }
+        guard let action = SamsungAppKnowledge.action(knownInstalled: false, presence: presence) else {
+            SamsungAppKnowledge.shared.reportNotSent(host: host, presence: presence)
+            throw SamsungError.notInstalled
+        }
         let message = SamsungMessages.launch(appId: appId, params: params, actionType: action)
         try await socket.send(.string(String(decoding: message, as: UTF8.self)))
     }
@@ -436,6 +465,40 @@ public final class SamsungClient: NSObject, TVControlling, URLSessionDelegate, @
             return (.performDefaultHandling, nil)
         }
         return (.useCredential, URLCredential(trust: trust))
+    }
+}
+
+/// Bekçinin Samsung'da TV uygulamasını açma yolu: önce geliştirici bağlantısı (sdb `0 was_execute`), olmazsa uzaktan kumanda
+/// bağlantısı (8002, ilk bağlantıda TV izin sorar). Samsung önplandaki uygulamayı söylemez; bekçi yalnız açar.
+///
+/// Mac ve Windows sdb'yi Tizen 9.0'da uzaktan kumandayla açma sessizce çalışmadığı için (#412) önce deniyordu; iPhone
+/// (ve Android telefon) yalnız uzaktan kumanda yolunu kullanıyordu: TV komutu alıp açmayınca kullanıcı CouchSubs'ı
+/// kumandayla açmak zorunda kalıyordu (iPhone, TestFlight build 27, 21 Kas). sdb yalnız TV'nin geliştirici modu açık ve
+/// Host PC IP bu cihazsa çalışır (telefondan kurulduysa öyledir); değilse hemen uzaktan kumandaya geçilir.
+public final class SamsungLauncher: TVControlling, @unchecked Sendable {
+    private let openWithSdb: () async -> Bool
+    private let connectRemote: () async throws -> TVControlling
+
+    public init(openWithSdb: @escaping () async -> Bool, connectRemote: @escaping () async throws -> TVControlling) {
+        self.openWithSdb = openWithSdb
+        self.connectRemote = connectRemote
+    }
+
+    public func launch(appId: String, params: [String: Any]) async throws {
+        if await openWithSdb() { return }
+        let remote = try await connectRemote()
+        defer { remote.close() }
+        try await remote.launch(appId: appId, params: params)
+    }
+
+    public func foregroundAppId() async throws -> String { "" }
+
+    public func close() {}
+
+    /// `0 was_execute` yanıtı uygulamanın açıldığını söylüyor mu ("app_id[…] launched"); Windows'taki
+    /// SamsungTvInstaller.Launched ile aynı.
+    public static func sdbLaunched(_ reply: String) -> Bool {
+        reply.contains("] launched") && reply.range(of: "fail", options: .caseInsensitive) == nil
     }
 }
 

@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.58';
+  var APP_VERSION = '0.9.73';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -98,6 +98,39 @@
       (audioContext ? ' ac ' + audioContext.state : '');
     el.textContent = (text ? text + ' · ' : '') + page;
     $('row-platform').style.display = '';
+    fitPanel();
+  }
+
+  // Bilgi paneli ekrana sığmazsa (uzun tanı satırları; Samsung Odyssey G9'da panelin altı ekranın dışında kalıyordu,
+  // oyun modunda daha da büyüyordu, #886) sol üst köşesinden küçültülür: alttaki tuş listesi kesilmez. Ölçü görünen
+  // alandır (sayfa ya da görsel görünüm hangisi küçükse); panelin üst ve sol boşluğu altta ve sağda da bırakılır.
+  var PANEL_MIN_SCALE = 0.5;
+  function setPanelScale(panel, scale) {
+    var value = scale < 1 ? 'scale(' + scale + ')' : '';
+    panel.style.webkitTransformOrigin = panel.style.transformOrigin = '0 0';
+    panel.style.webkitTransform = value;
+    panel.style.transform = value;
+  }
+
+  function fitPanel() {
+    var panel = $('panel');
+    if (!panel || panel.className === 'hidden') return;
+    try {
+      var zoom = window.COUCHSUBS_ZOOM || 1;
+      var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / zoom;
+      var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / zoom;
+      var visual = window.visualViewport;
+      if (visual && visual.height > 0 && visual.width > 0) {
+        width = Math.min(width, visual.width);
+        height = Math.min(height, visual.height);
+      }
+      // Doğal ölçü (offset ölçüleri dönüşümden etkilenmez).
+      var top = panel.offsetTop;
+      var left = panel.offsetLeft;
+      var scale = Math.min(1, (height - top * 2) / panel.offsetHeight, (width - left * 2) / panel.offsetWidth);
+      if (!(scale > 0)) scale = 1;
+      setPanelScale(panel, Math.max(PANEL_MIN_SCALE, Math.round(scale * 1000) / 1000));
+    } catch (e) {}
   }
 
   // Sayfanın oyunun üstüne çizdiği kutular: sayısı ve en büyüğünün ekrana oranı ("ovl 2 max 4%").
@@ -265,6 +298,7 @@
         if (text) setStatus('st-window', text, 'muted');
         // Panelin gerçek ölçüsü HDMI açılırken okunur; Sarı tuş listede ona göre görünür (#304).
         formatKeys();
+        fitPanel();
       });
     } catch (e) {}
   }
@@ -948,6 +982,10 @@
     $('subtitle').className = 'hidden';
     $('subtitle-cover').className = 'hidden';
     hidePrevious();
+    // Altyazıdan kaçmak için kayan görev/ekran yazısı kutusu altyazı kalkınca kendi yerine döner. Eskiden kayık kalıyordu:
+    // görevin Türkçesi bir sonraki altyazıya dek yerinden oynamış duruyor, altındaki İngilizce görev açıkta kalıyordu
+    // (GTA 6, "Search near the turbine").
+    avoidRegions();
   }
 
   // Bilgisayardan gelen "temizle": yazı okunacak kadar görünmediyse kalan süre dolunca kaldırılır.
@@ -1045,25 +1083,22 @@
   }
 
   // Otomatik bulunan ekran yazısı (bilgisayar "auto-<n>" alanı) özgün yazının görünüşüyle gelir: surface {background,
-  // foreground, flat} zemin ve yazı rengi (flat değilse — harita, oyun dünyası — zemin %85 opak), style {bold,
-  // condensed, align, upper}. Büyük harf çeviriyi bilgisayar zaten büyütür. Alanları göndermeyen eski bilgisayarda
+  // foreground, flat} zemin ve yazı rengi, style {bold, condensed, align, upper}. Zemin her yüzeyde (harita, oyun dünyası
+  // da) tam opaktır: önceden düz olmayan zeminde %94 opaktı, altındaki İngilizce harfler ("uture", "KM") seçiliyordu (#827). Büyük harf çeviriyi bilgisayar zaten büyütür. Alanları göndermeyen eski bilgisayarda
   // kutu eskisi gibi siyah kalır.
   var STYLED_MIN_SCALE = 0.8;
   var STYLED_LABEL_MIN_SCALE = 0.6;
-  // Düz olmayan zeminde (harita, bulanık sahne) kaplama: altındaki İngilizce yazı seçilmeyecek kadar koyu.
-  var STYLED_SOFT_ALPHA = 0.94;
+  // GTA 6 telefonunun mesajı kendi balonunun üstünde ("bubble"): Türkçe balona sığana kadar satır kırılır ve yazı en çok
+  // %35 küçülür; okunabilirlik sınırı 1080p'de 18 piksel. Yine sığmazsa balon aşağı doğru uzar (yazı kesilmez).
+  var BUBBLE_MIN_SCALE = 0.65;
+  var BUBBLE_MIN_FONT = 18;
   var CONDENSED_FONT = '"Roboto Condensed", "Arial Narrow", "Helvetica Neue Condensed", "LG Smart UI Condensed", sans-serif';
-
-  function hexAlpha(hex, alpha) {
-    return 'rgba(' + parseInt(hex.substr(1, 2), 16) + ', ' + parseInt(hex.substr(3, 2), 16) + ', ' +
-      parseInt(hex.substr(5, 2), 16) + ', ' + alpha + ')';
-  }
 
   // Öğeye özgün yazının görünüşü uygulandı mı.
   function applyLook(el, item) {
     var surface = item.surface;
     if (!surface || !phoneColor(surface.background) || !phoneColor(surface.foreground)) return false;
-    el.style.backgroundColor = surface.flat === false ? hexAlpha(surface.background, STYLED_SOFT_ALPHA) : surface.background;
+    el.style.backgroundColor = surface.background;
     el.style.color = surface.foreground;
     el.style.textShadow = 'none';
     var style = item.style;
@@ -1108,6 +1143,8 @@
       if (!box || !item.text || tooBig(box)) continue;
       var el = document.createElement('div');
       el.className = item.paragraphs === true ? 'item paragraphs' : 'item';
+      // Özgün yazının yeri: aynı yeri çizen başka katmanın kutusuyla karşılaştırılır (resolveLayers).
+      el.couchsubsBox = box;
       var styled = false;
       if (phone) {
         el.className += ' phone';
@@ -1146,8 +1183,13 @@
       // Özgün yazı tek satırsa ("ROB VICKI'S BOSS" başlığı) Türkçesi de önce tek satırda tutulur, sığmazsa küçülür; en
       // küçük boyda da sığmıyorsa satır kırılır.
       var singleOriginal = boxHeight <= line * 1.6 + 2 * pad * height;
-      var label = styled && item.text.indexOf('\n') < 0 && (item.text.split(/\s+/).length <= 2 || singleOriginal);
+      var bubble = styled && item.bubble === true;
+      var label = styled && !bubble && item.text.indexOf('\n') < 0 && (item.text.split(/\s+/).length <= 2 || singleOriginal);
       if (styled) floor = Math.max(label ? 10 : SCREEN_MIN_FONT, Math.round(size * (label ? STYLED_LABEL_MIN_SCALE : STYLED_MIN_SCALE)));
+      if (bubble) {
+        floor = Math.min(size, Math.max(Math.round(BUBBLE_MIN_FONT * height / 1080), Math.round(size * BUBBLE_MIN_SCALE)));
+        el.className += ' bubble';
+      }
       if (label) {
         el.style.whiteSpace = 'nowrap';
         // Tek satırlık etiket özgün satırın dikey ortasında durur (yazı küçülse de özgün yazının yerinde).
@@ -1193,12 +1235,14 @@
     placeItems(host, items);
     clearTimeout(screenTimer);
     screenTimer = setTimeout(hideScreen, duration || 20000);
+    resolveLayers();
   }
 
   function hideScreen() {
     clearTimeout(screenTimer);
     $('screen').className = 'hidden';
     $('screen').innerHTML = '';
+    resolveLayers();
   }
 
   // --- Ek alanlar ---
@@ -1237,8 +1281,12 @@
       regionBoxes[id] = el;
     }
     $('regions').className = '';
+    // En son gelen alan, kendisiyle aynı yeri çizen eski alanın önüne geçer (resolveLayers).
+    el.couchsubsStamp = ++regionStamp;
+    el.couchsubsBox = box;
     if (kind === 'region-blocks') {
       placeItems(el, blocks, id);
+      resolveLayers();
       avoidRegions();
       return;
     }
@@ -1273,6 +1321,7 @@
       size = Math.max(SCREEN_MIN_FONT, size - 2);
       el.style.fontSize = size + 'px';
     }
+    resolveLayers();
     avoidRegions();
   }
 
@@ -1281,7 +1330,64 @@
     if (!el) return;
     delete regionBoxes[id];
     $('regions').removeChild(el);
+    resolveLayers();
     avoidRegions();
+  }
+
+  // --- Aynı yerde tek çizim (#827) ---
+  // "Ekranı çevir" ve ek alanlar (otomatik ekran yazısı dahil) ayrı katmanlarda çizilir. Aynı yazıyı iki katman birden
+  // çizince (GTA 6 haritası, görev listesi) kutular üst üste biniyor, alttakinin yazısı üsttekinin arasından görünüyordu.
+  // Kutusu başka bir katmanın kutusuyla, küçüğünün alanının en az COVER_SHARE'i kadar örtüşen çeviri gizlenir: "Ekranı
+  // çevir" ekrandayken onunki, ek alanlar arasında en son gelen kalır (yeni olan eskisinin yerine geçer). Ekranı çevir
+  // kalkınca ya da üstteki alan silinince gizlenenler yeniden görünür. Oyun telefonu kartı bu kurala girmez.
+  // Bilgisayardaki kural: ScreenTranslation.coverShare (Mac, iPhone), CoverShare (Windows), COVER_SHARE (Android).
+  var COVER_SHARE = 0.25;
+  var SCREEN_RANK = 1e15;
+  // Görev satırı (auto-mission) ekrandayken onun yerini çizen otomatik ekran yazısı görevin yerine geçmez: menü durumu
+  // bir an açılıp kapanınca görevin kırpık okuması ("arch near the turbi") yeni alan olarak geliyor, görevin Türkçesini
+  // gizliyordu (GTA 6). Görev yalnız "Ekranı çevir"in altında kalır.
+  var MISSION_ID = 'auto-mission';
+  var MISSION_RANK = SCREEN_RANK - 1;
+  var regionStamp = 0;
+
+  function overlapShare(a, b) {
+    var width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    var height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    if (!(width > 0) || !(height > 0)) return 0;
+    var smaller = Math.min((a.right - a.left) * (a.bottom - a.top), (b.right - b.left) * (b.bottom - b.top));
+    return smaller > 0 ? Math.min(1, width * height / smaller) : 0;
+  }
+
+  function layerParts() {
+    var parts = [];
+    var screen = $('screen');
+    if (screen && screen.className !== 'hidden') {
+      for (var i = 0; i < screen.children.length; i++) {
+        var item = screen.children[i];
+        if (item.couchsubsBox) parts.push({ el: item, box: item.couchsubsBox, rank: SCREEN_RANK, layer: 'screen' });
+      }
+    }
+    for (var id in regionBoxes) {
+      if (!Object.prototype.hasOwnProperty.call(regionBoxes, id) || id === 'game-phone') continue;
+      var host = regionBoxes[id];
+      var list = host.className === 'region-blocks' ? host.children : [host];
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].couchsubsBox) parts.push({ el: list[j], box: list[j].couchsubsBox, rank: id === MISSION_ID ? MISSION_RANK : host.couchsubsStamp || 0, layer: id });
+      }
+    }
+    return parts;
+  }
+
+  function resolveLayers() {
+    var parts = layerParts();
+    for (var i = 0; i < parts.length; i++) {
+      var covered = false;
+      for (var j = 0; j < parts.length && !covered; j++) {
+        covered = parts[j].layer !== parts[i].layer && parts[j].rank > parts[i].rank &&
+          overlapShare(parts[i].box, parts[j].box) >= COVER_SHARE;
+      }
+      parts[i].el.style.visibility = covered ? 'hidden' : '';
+    }
   }
 
   // --- Ekran yazısı ile altyazının ayrımı ---
@@ -1300,7 +1406,7 @@
   function regionParts() {
     var parts = [];
     for (var id in regionBoxes) {
-      // Oyun telefonu bilerek altyazının altında kalır; kaydırılmaz.
+      // Oyun telefonu kaydırılmaz; altyazı telefonun üstüne binmez, kendisi kayar (avoidPhone).
       if (!Object.prototype.hasOwnProperty.call(regionBoxes, id) || id === 'game-phone') continue;
       var host = regionBoxes[id];
       var list = host.className === 'region-blocks' ? host.children : [host];
@@ -1312,6 +1418,7 @@
   function avoidRegions() {
     var parts = regionParts();
     for (var i = 0; i < parts.length; i++) setShift(parts[i], 0);
+    avoidPhone();
     var el = $('subtitle');
     if (!el || !$('subtitle-text') || el.className === 'hidden' || !parts.length) return;
     var sub = $('subtitle-text').getBoundingClientRect();
@@ -1331,12 +1438,72 @@
     }
   }
 
+  // --- Altyazı telefonun üstüne binmez ---
+  // Oyun telefonunun çevirisi (game-phone) mesaj balonlarının üstünde, yerinde durur. Altyazı telefonla üst üste
+  // binerse telefonun çevirisi okunmuyordu (X, beta.79: "telefon çevirisi altyazının altında kalıyor"). Altyazı telefonun
+  // yanına (yazının sığdığı, daha geniş boş yana), sığmazsa telefonun üstüne ya da altına kayar; telefon kalkınca yerine
+  // döner. Telefon kutusu balonların toplamıdır.
+  var PHONE_GAP = 0.01;
+
+  function phoneRect() {
+    var host = regionBoxes['game-phone'];
+    if (!host) return null;
+    var list = host.className === 'region-blocks' ? host.children : [host];
+    var rect = null;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i].getBoundingClientRect();
+      if (!(r.width > 0) || !(r.height > 0)) continue;
+      rect = rect ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top),
+        right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom) }
+        : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    }
+    return rect;
+  }
+
+  function setSubtitleShift(dx, dy) {
+    var el = $('subtitle');
+    var value = dx || dy ? 'translate(' + Math.round(dx || 0) + 'px, ' + Math.round(dy || 0) + 'px)' : '';
+    el.style.webkitTransform = value;
+    el.style.transform = value;
+  }
+
+  function avoidPhone() {
+    var el = $('subtitle');
+    if (!el || !$('subtitle-text')) return;
+    setSubtitleShift(0, 0);
+    var phone = el.className === 'hidden' ? null : phoneRect();
+    if (!phone) return;
+    var sub = $('subtitle-text').getBoundingClientRect();
+    if (!(sub.width > 0) || !(sub.height > 0)) return;
+    var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
+    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var gap = Math.max(4, Math.round(width * PHONE_GAP));
+    if (sub.right + gap <= phone.left || sub.left - gap >= phone.right ||
+        sub.bottom + gap <= phone.top || sub.top - gap >= phone.bottom) return;
+    var margin = Math.round(width * SIDE_MIN);
+    var roomLeft = phone.left - gap - margin;
+    var roomRight = width - margin - phone.right - gap;
+    var fitsLeft = sub.width <= roomLeft;
+    var fitsRight = sub.width <= roomRight;
+    if (fitsLeft || fitsRight) {
+      var left = fitsLeft && (!fitsRight || roomLeft >= roomRight);
+      setSubtitleShift(left ? phone.left - gap - sub.right : phone.right + gap - sub.left, 0);
+      return;
+    }
+    // Yanda yer yok: telefonun üstüne, olmazsa altına; ikisi de ekran dışındaysa yerinde kalır.
+    var up = phone.top - gap - sub.bottom;
+    var down = phone.bottom + gap - sub.top;
+    if (sub.top + up >= 0) setSubtitleShift(0, up);
+    else if (sub.bottom + down <= height) setSubtitleShift(0, down);
+  }
+
   function hideRegions() {
     for (var id in regionBoxes) {
       if (Object.prototype.hasOwnProperty.call(regionBoxes, id)) $('regions').removeChild(regionBoxes[id]);
     }
     regionBoxes = {};
     $('regions').className = 'hidden';
+    resolveLayers();
     avoidRegions();
   }
 
@@ -1578,9 +1745,22 @@
   var pairingTimer = null;
   // Eşleştirme kodu ekranda beklerken tarama aynı adresi bulursa bağlantı baştan kurulmaz (kod kaybolmasın).
   var pairingActive = false;
-  // Eşleştirme kendiliğinden yeniden başlamaz (bilgisayarda yeni onay penceresi açılırdı); Tamam ile yeniden denenir.
+  // Reddedilen eşleştirme kendiliğinden yeniden başlamaz (bilgisayarda/telefonda pencere art arda açılırdı); Tamam ile
+  // yeniden denenir.
   var pairingFailed = false;
   function stopPairing() { pairingActive = false; pairingFailed = true; setPairing(t('pairRetry')); }
+  // Süresi dolan ya da telefonda/bilgisayarda düşen istek (çeviri durdurulup başlatıldı, uygulama yeniden açıldı, iki
+  // dakikada onaylanmadı) ve ulaşmayan istek kendiliğinden yeniden gönderilir (GitHub #737). Eskiden TV "Eşleştirme
+  // tamamlanmadı, Tamam'a basın"da kalıyor, yeni istek göndermiyordu; telefonda çeviri sürse de onay penceresi hiç
+  // çıkmıyordu.
+  var PAIR_RETRY_MS = 3000;
+  function retryPairing(address, generation, ms) {
+    pairingActive = false;
+    pairingFailed = false;
+    setPairing(t('pairServer'));
+    clearTimeout(pairingTimer);
+    pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, ms || PAIR_RETRY_MS);
+  }
   // Eşleştirme kodu ve yönlendirmesi bekleme kutusunun dışında, her şeyin üstünde durur (X @Eaglaris, 20 Kas: Android
   // TV'de kod hiç görünmedi, bilgisayarda onaylayınca bağlandı). Kod bekleme kutusunun içindeydi; o kutu katman modunda
   // hep gizli (tv-android/platform.js), panel ya da "görüntü yok" kutusu açılınca da gizleniyor ve bağlanılacak adres
@@ -1633,9 +1813,11 @@
       if (saved) saveServerKey(address, saved);
       var key = serverKey(address);
       if (key) {
-        pairRequest('GET', address, '/pair?validate=1&k=' + encodeURIComponent(key), function (result) {
+        pairRequest('GET', address, '/pair?validate=1&k=' + encodeURIComponent(key), function (result, status) {
           if (generation !== connectionGeneration) return;
           if (result && result.state === 'valid') { remember(key); connectStream(address); }
+          // Yanıt gelmedi (ağ bir an koptu, sunucu yeniden açılıyor): anahtar geçerli olabilir, boşuna onay istenmez.
+          else if (!status) retryPairing(address, generation, 5000);
           else beginPair();
         });
       } else beginPair();
@@ -1661,8 +1843,8 @@
             return;
           }
           if (!ticket || !/^[A-Za-z0-9_-]{22}$/.test(ticket.id || '') || !/^[0-9]{6}$/.test(ticket.code || '')) {
-            stopPairing();
-            pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 15000);
+            // İstek ulaşmadı ya da yanıt bozuk: "tamamlanmadı" denmez, birkaç saniye sonra yeniden denenir.
+            retryPairing(address, generation, 5000);
             return;
           }
           var deadline = Date.now() + 120000;
@@ -1670,13 +1852,17 @@
           setStatus('st-conn', t('pairCode') + ' ' + ticket.code, 'muted');
           function poll() {
             if (generation !== connectionGeneration) return;
-            if (Date.now() >= deadline) { stopPairing(); return; }
+            if (Date.now() >= deadline) { retryPairing(address, generation); return; }
             pairRequest('GET', address, '/pair?id=' + encodeURIComponent(ticket.id), function (result) {
               if (generation !== connectionGeneration) return;
               if (result && result.state === 'approved' && /^[A-Za-z0-9_-]{22}$/.test(result.key || '')) {
                 remember(result.key); setPairing(''); connectStream(address); return;
               }
-              if (result && result.state === 'expired') { stopPairing(); return; }
+              // Reddedildi: Tamam beklenir. Süresi doldu ya da istek düştü: yeni istek gönderilir.
+              if (result && result.state === 'expired') {
+                if (result.rejected === true) stopPairing(); else retryPairing(address, generation);
+                return;
+              }
               pairingTimer = setTimeout(poll, 1500);
             });
           }
@@ -1707,7 +1893,10 @@
     }
     setStatus('st-conn', t('connecting'), 'muted');
     streamPort = shownPort;
-    eventSource = new EventSource(authenticatedUrl(address, '/events' + (shownPort ? '?hdmi=' + shownPort : '')));
+    // Sürüm (v) akışla bildirilir: bilgisayar ve telefon TV'deki uygulamanın eski kaldığını LG geliştirici moduna
+    // bağlanamasa da bununla anlar ve "TV uygulamasını güncelle" der (GitHub #884, #891). 0.9.69'den eski TV
+    // uygulamaları v göndermez; CouchSubs v'siz TV'yi eski sayar.
+    eventSource = new EventSource(authenticatedUrl(address, '/events?v=' + APP_VERSION + (shownPort ? '&hdmi=' + shownPort : '')));
     lastActivity = Date.now();
     eventSource.onopen = function () {
       lastActivity = Date.now();
@@ -2101,6 +2290,8 @@
   var adoptAddress = null;
   // Bağlı olunan CouchSubs kayıtlı kimlik değil (kendisi kapalıyken bulunan): kendi CouchSubs'ı dönünce ona geçilir.
   var fallback = false;
+  // Bağlı olunan CouchSubs /hello'da "live":0 dedi (çeviri yok ya da altyazı TV'ye gitmiyor).
+  var idleServer = false;
   var FALLBACK_SCAN_MS = 60000;
 
   function helloInfo(text) {
@@ -2115,8 +2306,17 @@
   // Taramada bulunanlar ({ address, id, tvs }) arasından bağlanılacak CouchSubs; emin olunamıyorsa null.
   // 1) Kayıtlı kimlik. 2) TV'si bağlı olmayan tek CouchSubs (başka TV'ye hizmet eden, başka evin/odanın kurulumudur).
   // 3) Kayıtlı kimlik varsa başkası seçilmez. 4) İlk kez açılan TV: TV'si bağlı olmayan ilk, o da yoksa ilk bulunan.
-  function pickServer(found, savedId) {
-    var i, idle = [];
+  // Önce çeviren (/hello "live":1) CouchSubs: kayıtlı kimlik çeviriyorsa o; değilse çeviren ve başka TV'ye hizmet etmeyen
+  // (current: şu an bağlı olunan adres, kendi bağlantımız sayılmaz) tek CouchSubs. Kayıtlı CouchSubs boştayken (ör.
+  // bilgisayar açık bırakılmış, çeviri telefondan) TV ona bağlı kalıyor, "bağlı" görünüp altyazı hiç gelmiyordu. live
+  // bildirmeyen eski CouchSubs'ta kural eskisi gibidir.
+  function pickServer(found, savedId, current) {
+    var i, idle = [], live = [];
+    for (i = 0; i < found.length; i++) if (savedId && found[i].id === savedId && found[i].live === 1) return found[i];
+    for (i = 0; i < found.length; i++) {
+      if (found[i].live === 1 && (!(found[i].tvs > 0) || found[i].address === current)) live.push(found[i]);
+    }
+    if (live.length === 1) return live[0];
     for (i = 0; i < found.length; i++) if (savedId && found[i].id === savedId) return found[i];
     for (i = 0; i < found.length; i++) if (!(found[i].tvs > 0)) idle.push(found[i]);
     if (idle.length === 1) return idle[0];
@@ -2135,6 +2335,7 @@
       var id = ok && info.id ? String(info.id) : null;
       if (!id) {
         fallback = false;
+        idleServer = false;
         return;
       }
       if (adopt || !serverId) {
@@ -2143,7 +2344,11 @@
       }
       var wasFallback = fallback;
       fallback = id !== serverId;
+      // Bağlanılan CouchSubs çevirmiyor: ağda çeviren başka bir CouchSubs var mı diye arada bir bakılır (pickServer).
+      var wasIdle = idleServer;
+      idleServer = info.live === 0;
       if (fallback) scheduleScan(wasFallback ? FALLBACK_SCAN_MS : SCAN_SOON_MS);
+      else if (idleServer) scheduleScan(wasIdle ? FALLBACK_SCAN_MS : SCAN_SOON_MS);
     });
   }
 
@@ -2184,7 +2389,7 @@
       var stop = guessed ? Math.min(254, addresses.length) : addresses.length;
       function pump() {
         // Tahminli tarama uzun sürer; bu arada CouchSubs adresini kendisi verip bağlantı açıldıysa tarama bırakılır.
-        if (guessed && !done && !fallback && eventSource && eventSource.readyState === 1) {
+        if (guessed && !done && !fallback && !idleServer && eventSource && eventSource.readyState === 1) {
           done = true;
           scanning = false;
           return;
@@ -2194,19 +2399,21 @@
           tryAddress(addresses[next++]);
         }
         if (done || active || next < stop) return;
-        if (found.length || stop >= addresses.length) return finish(pickServer(found, serverId));
+        if (found.length || stop >= addresses.length) return finish(pickServer(found, serverId, server));
         stop = Math.min(stop + 254, addresses.length);
         pump();
       }
-      // Kayıtlı kimlik bulununca tarama hemen biter; yoksa bütün ağ taranıp aralarından seçilir (eskiden ilk bulunan).
+      // Kayıtlı kimlik bulununca tarama hemen biter (boştaysa bitmez: çeviren başka CouchSubs aranır); yoksa bütün ağ
+      // taranıp aralarından seçilir (eskiden ilk bulunan).
       function tryAddress(address) {
         probe(address, function (ok, info) {
           active--;
           if (done) return;
           if (ok) {
-            var entry = { address: address, id: info.id ? String(info.id) : null, tvs: typeof info.tvs === 'number' ? info.tvs : null };
+            var entry = { address: address, id: info.id ? String(info.id) : null, tvs: typeof info.tvs === 'number' ? info.tvs : null,
+              live: typeof info.live === 'number' ? info.live : null };
             found.push(entry);
-            if (serverId && entry.id === serverId) return finish(entry);
+            if (serverId && entry.id === serverId && entry.live !== 0) return finish(entry);
           }
           pump();
         });
@@ -2215,16 +2422,17 @@
         done = true;
         scanning = false;
         if (!choice) {
-          scheduleScan(fallback ? FALLBACK_SCAN_MS : SCAN_PAUSE_MS);
+          scheduleScan(fallback || idleServer ? FALLBACK_SCAN_MS : SCAN_PAUSE_MS);
           return;
         }
+        if (choice.address === server) idleServer = choice.live === 0;
         // Bulunan adres kaydedilir: TV bir sonraki açılışta eski adrese takılmasın.
         save('server', choice.address);
         // Aynı bilgisayarsa EventSource kendisi yeniden bağlanır; kapanıp vazgeçtiyse (CLOSED) yeniden kurulur.
         // Eşleştirme beklemiyor (ya da Tamam'ı beklemiyor) ve bağlantı da yoksa (bilgisayar kapalıyken /hello yanıtsız
         // kalmıştı) yeniden kurulur.
         if (choice.address !== server || (eventSource ? eventSource.readyState === 2 : !pairingActive && !pairingFailed)) connect(choice.address);
-        else if (fallback) scheduleScan(FALLBACK_SCAN_MS);
+        else if (fallback || idleServer) scheduleScan(FALLBACK_SCAN_MS);
       }
       pump();
     });
@@ -2391,15 +2599,19 @@
     showSubtitle(lastLine.text, left, lastLine.box, lastLine.paragraphs, false, speakerMap(lastLine.speakers));
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) {
+  function pageVisibility(hidden) {
+    if (hidden) {
       noteHidden();
       dropWhileHidden();
     } else {
       if (!resumeAfterHidden()) reviveStream();
       noteVisible();
     }
-  });
+  }
+  // Ekranın görünmez olduğunu document.hidden'dan başka yoldan bilen platform (Android TV: Activity onStop/onStart) çağırır.
+  window.__pageHidden = pageVisibility;
+
+  document.addEventListener('visibilitychange', function () { pageVisibility(document.hidden); });
 
   // --- Panel ve kumanda ---
 
@@ -2457,6 +2669,7 @@
     hidePanelTip();
     $('waiting').className = 'hidden';
     $('panel').className = '';
+    renderDiag();
     clearTimeout(panelTimer);
     if (autoHide) panelTimer = setTimeout(autoHidePanel, 8000);
   }

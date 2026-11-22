@@ -123,6 +123,11 @@ APKS=("$APP"/Contents/Resources/tv-app/*.apk(N))
 if [[ -z "$ALLOW_NO_APK" ]] && (( ${#APKS} == 0 )); then
   echo "Android TV paketi (APK) uygulamada yok: ANDROID_APK=/yol/couchsubs-androidtv.apk ile çalıştırın."; exit 1
 fi
+# Paketlerin sürümü kaynaktaki TV uygulamasıyla aynı olmalı: eski paket TV'yi güncelleyemez ("TV uygulaması eski").
+CHECK_ARGS=()
+[[ -n "$ALLOW_NO_APK" ]] && CHECK_ARGS=(--allow-missing apk)
+python3 scripts/check-tv-packages.py "$APP/Contents/Resources/tv-app" "${CHECK_ARGS[@]}" \
+  || { echo "Uygulamadaki TV paketleri eski: package-tv.sh, package-tizen.sh ve bundle-android-apk.sh ile yeniden üretin."; exit 1; }
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
 mkdir -p dist
 ZIP="dist/CouchSubs-$VERSION-macos.zip"

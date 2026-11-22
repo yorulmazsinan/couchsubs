@@ -102,6 +102,12 @@ function render(width, height) {
     result.legacyLayers = layers();
     fire('region', {id:'game-phone', text:''});
     result.closedLayers = layers();
+    // Oyunun hazır alanı (#856): özgün görünüşlü bloklar kendi yerinde, özgün renginde çizilir; tek siyah kutu değil.
+    fire('region', {id:'preset-help', text:'ADA RÜYALARI', box:box, blocks:[{text:'ADA RÜYALARI', box:box, line:.025,
+      surface:{background:'#0e1f55',foreground:'#ffffff'}, style:{align:'left',bold:true,condensed:true,upper:true}}]});
+    var preset = document.querySelector('#regions .phone.auto');
+    result.preset = preset ? preset.textContent + ' ' + getComputedStyle(preset).backgroundColor : 'yok';
+    fire('region', {id:'preset-help', text:''});
     result.viewport = { width: innerWidth, height: innerHeight };
     document.getElementById('result').textContent = btoa(unescape(encodeURIComponent(JSON.stringify(result))));
   </script>`;
@@ -179,11 +185,13 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
       assert.equal(r.apart, true, 'görev kutusu ile altyazı üst üste binmemeli');
       assert.equal(r.legacy, 'region Eski olay');
       assert.equal(r.afterPhone, 'Görev');
+      assert.equal(r.preset, 'ADA RÜYALARI rgb(14, 31, 85)');
     });
-    await t.test('çakışan telefon yazısı ana altyazının altında kalır', () => {
-      // Görev kutusu kaldırıldı (altyazıyı kaydırmasın); telefon altyazının altında kalır.
-      assert.deepEqual(r.phoneLayers, ['Konuşma sürüyor.', 'Yanıt']);
-      assert.deepEqual(r.legacyLayers, ['Konuşma sürüyor.', 'Eski telefon']);
+    await t.test('altyazı telefonun çevirisinin üstüne binmez, telefon kalkınca yerine döner', () => {
+      // Görev kutusu kaldırıldı (altyazıyı kaydırmasın). Önceden telefon altyazının altında kalıp okunmuyordu (X, beta.79);
+      // artık altyazı telefonun yanına kayar (avoidPhone): telefonun yerinde yalnız telefonun çevirisi görünür.
+      assert.deepEqual(r.phoneLayers, ['Yanıt']);
+      assert.deepEqual(r.legacyLayers, ['Eski telefon']);
       assert.deepEqual(r.closedLayers, ['Konuşma sürüyor.']);
     });
   });

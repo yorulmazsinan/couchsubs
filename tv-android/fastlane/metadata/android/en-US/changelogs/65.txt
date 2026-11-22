@@ -1,0 +1,1 @@
+0.9.62: If the pairing request is dropped on the phone/computer (translation stopped and started again, not approved within two minutes), the TV no longer stays on "Pairing did not finish"; it asks again and the approval window reopens. A rejected request still waits for OK.

@@ -54,6 +54,18 @@ public class SamsungInstallTests
         Assert.Equal(needsProfile, SamsungTvInstaller.NeedsDeviceProfile(platform));
     }
 
+    /// <summary>
+    /// Tizen 2.x cihaz profilini /home/developer'da arar (Samsung'un belgesi, Apps2Samsung, #71); 3.0–4.0 sdk_toolpath'te
+    /// (#890). Android'deki SamsungInstallerTest ve iPhone ile aynı.
+    /// </summary>
+    [Theory]
+    [InlineData("2.4.0", "/opt/usr/apps/tmp", "/home/developer/device-profile.xml")]
+    [InlineData("2.4", "/opt/usr/apps/tmp", "/home/developer/device-profile.xml")]
+    [InlineData("3.0", "/home/owner/share/tmp/sdk_tools", "/home/owner/share/tmp/sdk_tools/device-profile.xml")]
+    [InlineData("4.0", "/home/owner/share/tmp/sdk_tools", "/home/owner/share/tmp/sdk_tools/device-profile.xml")]
+    public void DeviceProfileGoesWhereTheTvReadsIt(string platform, string toolPath, string expected) =>
+        Assert.Equal(expected, SamsungTvInstaller.DeviceProfileRemotePath(platform, toolPath));
+
     [Fact]
     public void InstalledVersionIsReadFromTheAppList()
     {

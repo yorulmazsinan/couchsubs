@@ -1,0 +1,1 @@
+0.9.69: TV uygulaması sürümünü bilgisayara ve telefona bildiriyor; TV'deki uygulama eski kalırsa CouchSubs ana ekranda "TV uygulamasını güncelle" diyor.

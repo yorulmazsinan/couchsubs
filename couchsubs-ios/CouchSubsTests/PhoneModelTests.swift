@@ -29,7 +29,12 @@ private final class FakeServices: PhoneServices {
     func accountId(fromRedirect url: URL) async throws -> Data { Data([1, 2, 3]) }
     func register(host: String, accountId: Data, pin: UInt32) async throws -> RegisteredConsole { try registerResult.get() }
     func discoverTVs() async -> [LGTV] { [] }
-    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing { TVPairing(key: "key", launched: launched) }
+    var paired: [LGTV] = []
+    func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing {
+        paired.append(tv)
+        return TVPairing(key: "key", launched: launched)
+    }
+    func identifyTV(host: String) async -> LGTV? { LGTV(name: "Samsung TV", host: host, brand: .samsung) }
     var streamPasscodes: [String?] = []
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling {
         streamPasscodes.append(loginPasscode)
@@ -149,6 +154,21 @@ final class PhoneModelTests: XCTestCase {
         try await waitForRequest(model, id: next["id"])
         model.resolveTVPairing(try XCTUnwrap(model.tvPairingRequest), accept: false)
         XCTAssertNil(model.tvPairingRequest)
+    }
+
+    /// PR #870 incelemesi: TV'nin başlattığı eşleşme onaylanınca TV kaydedilmiyordu (bekçi ve TV kartı çalışmıyordu). Onaylanan
+    /// TV, elle seçilmiş gibi eşlenir: adres ve marka kayıtlı, izni saklı.
+    func testApprovedTVRequestSavesTheTV() async throws {
+        let model = makeModel()
+        await model.openTVPairing()
+        let (_, ticket) = try await pairCall("POST", model)
+        try await waitForRequest(model, id: ticket["id"])
+        let shown = try XCTUnwrap(model.tvPairingRequest)
+        model.resolveTVPairing(SubtitlePairing.Ticket(id: shown.id, code: shown.code, host: "192.168.1.40"), accept: true)
+        for _ in 0..<50 where !model.hasTV { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(model.hasTV)
+        XCTAssertEqual(model.tv, LGTV(name: "Samsung TV", host: "192.168.1.40", brand: .samsung))
+        XCTAssertEqual(services.paired.map(\.host), ["192.168.1.40"])
     }
 
     /// TV'de Tamam ile yeniden denenince telefondaki istek yenisiyle değişir; eski pencereden verilen onay yok sayılır ve
@@ -360,7 +380,6 @@ final class PhoneModelTests: XCTestCase {
     /// "GTA 6'daki telefonu otomatik çevir": kapalı gelir; yalnız çeviri sürerken, ayar açıkken ve oyun GTA 6 iken izlenir.
     func testGamePhoneIsTrackedOnlyInGTA6WhenTurnedOn() {
         XCTAssertFalse(UserSettings().autoReadGamePhone)
-        XCTAssertFalse(UserSettings().watchSubtitleBackground)
         XCTAssertTrue(PhoneModel.tracksGamePhone(running: true, enabled: true, game: "Grand Theft Auto VI"))
         XCTAssertTrue(PhoneModel.tracksGamePhone(running: true, enabled: true, game: "GTA 6"))
         XCTAssertFalse(PhoneModel.tracksGamePhone(running: true, enabled: false, game: "GTA 6"))
@@ -369,8 +388,10 @@ final class PhoneModelTests: XCTestCase {
         XCTAssertFalse(PhoneModel.tracksGamePhone(running: true, enabled: true, game: nil))
     }
 
-    /// Oyun telefonunun çevirisi telefon ekranında tek kutuda durur; boş liste yalnız o kutuyu kaldırır.
-    func testGamePhoneTranslationIsOneBoxOnThePhoneScreen() {
+    /// Oyun telefonunun çevirisi telefon ekranında her mesaj kendi balonunun yerinde çizilir (bloklar korunur; TV ve
+    /// Android gibi); boş liste yalnız o alanı kaldırır. Bildirim (iPhone, 1.0.5): mesajlar telefonun üstünde tek kutuda
+    /// birleşiyor, kimin ne yazdığı belli olmuyordu.
+    func testGamePhoneMessagesArePlacedOnTheirOwnBubbles() {
         let other = PhoneModel.PhoneRegion(id: "help", text: "Yardım", box: nil)
         let items = [ScreenTranslation.Item(source: "Hi", translation: "Selam", box: TextBox(left: 0.7, top: 0.3, right: 0.9, bottom: 0.35), lineHeight: 0.03),
                      ScreenTranslation.Item(source: "Bye", translation: "Hoşça kal", box: TextBox(left: 0.72, top: 0.4, right: 0.88, bottom: 0.45), lineHeight: 0.03)]
@@ -378,6 +399,12 @@ final class PhoneModelTests: XCTestCase {
         XCTAssertEqual(shown.map(\.id), ["help", "game-phone"])
         XCTAssertEqual(shown.last?.text, "Selam\nHoşça kal")
         XCTAssertEqual(shown.last?.box, TextBox(left: 0.7, top: 0.3, right: 0.9, bottom: 0.45))
+        let placed = PhoneModel.placedItems(shown, screen: [])
+        XCTAssertEqual(placed.map(\.translation), ["Selam", "Hoşça kal"])
+        XCTAssertEqual(placed.map(\.box), items.map(\.box))
+        // "Ekranı çevir" sonucu aynı balonu örterse o balonun telefon bloğu çizilmez, sonuç en üstte.
+        let screen = ScreenTranslation.Item(source: "Hi", translation: "Merhaba", box: items[0].box, lineHeight: 0.03)
+        XCTAssertEqual(PhoneModel.placedItems(shown, screen: [screen]).map(\.translation), ["Hoşça kal", "Merhaba"])
         XCTAssertEqual(PhoneModel.phoneRegions(shown, gamePhone: []), [other])
     }
 

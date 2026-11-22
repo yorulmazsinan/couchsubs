@@ -378,7 +378,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         var size = Math.Max(12, OverlayPlacement.FontSize(style.FontSize) * scale * 0.55);
         // Otomatik bulunan ekran yazısı: çeviri özgün yazının stilinde.
         var apart = controller.Settings.SetTextApart;
-        if (apart && StyledRegionBox.Make(blocks, size, scale, translucent: true) is { } styled) return styled;
+        if (apart && StyledRegionBox.Make(blocks, size, scale) is { } styled) return styled;
         // Ayrık gösterim: stili bilinmeyen ek alan kutusu altyazı kutusuna benzemesin, zeminsiz ve koyu gölgeli.
         if (apart && StyledRegionBox.Plain(text, size, scale, area) is { } plain) return plain;
         var middle = area is { } box ? (box.Left + box.Right) / 2 : 0.5;

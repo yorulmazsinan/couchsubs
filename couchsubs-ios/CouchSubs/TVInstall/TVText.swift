@@ -45,6 +45,7 @@ enum TVText {
     static func details(_ a0: String) -> String { String(format: String(localized: "Details: %@"), a0) }
     static var shareLog: String { String(localized: "Share the install log") }
     static var signinTitle: String { String(localized: "Samsung sign-in") }
+    static var samsungServer: String { String(localized: "If the TV shows “Unable to connect to Samsung server” (AS400): this warning comes from the TV itself; the TV can't reach Samsung's servers. Check the TV's internet connection, unplug the TV and plug it back in after 30 seconds. To install CouchSubs, enter this device's address as Host PC IP.") }
     static var maintenance: String { String(localized: "If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again.") }
     static func errUnreachable(_ a0: String) -> String { String(format: String(localized: "The TV did not accept this phone. In the TV's Developer mode window, check that Host PC IP is this phone's address (%@), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds."), a0) }
     // 26101 reddedilince TV'nin 8001'de söylediği duruma göre (#524, #484).

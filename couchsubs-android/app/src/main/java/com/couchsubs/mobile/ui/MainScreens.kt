@@ -332,14 +332,13 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231, MainAccountTip).
         if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,
                 hasSubtitle = current != null, streaming = status.streaming))
-            NoteTile(stringResource(R.string.psn_main_account), Tokens.Color.secondary)
+            NoteTile(stringResource(R.string.psn_main_account_steps), Tokens.Color.secondary)
         // Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir.
         if (com.couchsubs.mobile.settings.AppSettings.autoScreenTextNotice)
             NoteTile(stringResource(R.string.auto_screen_text_notice), Tokens.Color.secondary)
         // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
         if (status.subtitleOffTip) {
             NoteTile(stringResource(R.string.subtitle_off_tip), Tokens.Color.secondary)
-            if (Services.settings.watchSubtitleBackground) NoteTile(stringResource(R.string.subtitle_background_tip), Tokens.Color.secondary)
         }
         if (!status.demo) GameSection(status)
         Tile(Modifier.fillMaxWidth()) {

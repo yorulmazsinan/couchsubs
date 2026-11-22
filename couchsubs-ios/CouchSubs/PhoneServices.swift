@@ -16,6 +16,15 @@ protocol StreamControlling: AnyObject {
     func reconnectNow()
     /// Oturum yeniden denemeyi kendisi bıraktı (kullanıcı durdurmadı); `reconnectNow` artık bir şey yapmaz.
     var hasGivenUp: Bool { get }
+    /// Xbox: "Xbox sesini bu cihazda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır, yeni oturum açılmaz (#871).
+    func setPlayAudio(_ enabled: Bool)
+    /// PS5: bağlanırken son adım; "Bağlanıyor…" 30 sn'yi geçince nedeni söylenir (Xbox ve deneme modunda yok).
+    var connectStep: ConnectStep? { get }
+}
+
+extension StreamControlling {
+    func setPlayAudio(_ enabled: Bool) {}
+    var connectStep: ConnectStep? { nil }
 }
 
 /// TV uygulamasını açık tutan görevli (gerçekte `TVKeeper`).
@@ -71,6 +80,8 @@ protocol PhoneServices: AnyObject {
     func register(host: String, accountId: Data, pin: UInt32) async throws -> RegisteredConsole
     func discoverTVs() async -> [LGTV]
     func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing
+    /// Eşleşme isteği gönderen TV: marka ve ad adresten yoklanır (bkz. `PairedTV.identify`); tanınmazsa nil.
+    func identifyTV(host: String) async -> LGTV?
     /// `loginPasscode`: PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).
     func makeStream(console: RegisteredConsole, accountId: Data, loginPasscode: String?) -> StreamControlling
     /// `onKey`: TV bağlantıda yeni jeton verdi (Samsung); saklanır.
@@ -85,6 +96,8 @@ protocol PhoneServices: AnyObject {
 }
 
 extension PhoneServices {
+    func identifyTV(host: String) async -> LGTV? { await PairedTV.identify(host: host) }
+
     /// PS5'te o an çalışan oyun: yalnız bağlı PS5'in adresine keşif sorusu gider (ortak havuz için; bkz. `RunningGame`).
     func runningGame(host: String) async -> RunningGame? {
         guard let info = await Console.discover(timeout: .seconds(2), host: host).first else { return nil }
@@ -126,6 +139,8 @@ final class LivePhoneServices: PhoneServices {
             }.value
             return TVPairing(key: "", launched: true)
         case .samsung:
+            // Kurulu olduğu doğrulanmayan uygulamaya açma komutu gitmez (launched false: kurulum adımı); satır tvinstall.log'a.
+            SamsungAppKnowledge.installLog = { InstallLog.shared.write($0) }
             let client = SamsungClient(tv: tv, token: key)
             defer { client.close() }
             let token = try await client.connect()
@@ -154,6 +169,7 @@ final class LivePhoneServices: PhoneServices {
             return AndroidTVKeeper(host: tv.host, port: InstalledTVApp.adbPort(for: tv.host), server: server, appConnected: appConnected,
                                    onOpenResult: onOpenResult)
         case .samsung:
+            SamsungAppKnowledge.installLog = { InstallLog.shared.write($0) }
             let token = SamsungTokenHolder(token: key, onChange: onKey)
             let paired = tv.host
             let locator = TVLocator(tv: tv, connect: { tv in
@@ -169,8 +185,12 @@ final class LivePhoneServices: PhoneServices {
                 }
                 return client
             }, search: { await SamsungDiscovery.search() }, onMoved: onMoved)
-            return TVKeeper(connect: { try await locator.connect() }, appId: AppIdentity.samsungAppId, params: params,
-                            appConnected: appConnected, onOpenResult: onOpenResult)
+            // Önce geliştirici bağlantısı (sdb) denenir (Mac ve Windows ile aynı): uzaktan kumanda bağlantısıyla açmayı bazı
+            // TV'ler sessizce yok sayıyor, kullanıcı CouchSubs'ı kumandayla açmak zorunda kalıyordu (TestFlight build 27).
+            let host = tv.host
+            return TVKeeper(connect: { SamsungLauncher(openWithSdb: { await Self.openSamsungApp(host: host) },
+                                                       connectRemote: { try await locator.connect() }) },
+                            appId: AppIdentity.samsungAppId, params: params, appConnected: appConnected, onOpenResult: onOpenResult)
         case .lg:
             let locator = TVLocator(tv: tv, connect: { tv in
                 let client = SSAPClient(tv: tv, clientKey: key)
@@ -180,6 +200,12 @@ final class LivePhoneServices: PhoneServices {
             return TVKeeper(connect: { try await locator.connect() }, appId: AppIdentity.tvAppId, params: params, consolePort: consolePort,
                             onOpenResult: onOpenResult)
         }
+    }
+
+    /// Kurulu Samsung TV uygulamasını geliştirici bağlantısıyla açar; sdb portu (26101) kapalıysa beklemeden false.
+    static func openSamsungApp(host: String) async -> Bool {
+        guard !host.isEmpty, await DevModeInstaller.isPortOpen(host: host, port: 26101) else { return false }
+        return await Task.detached(priority: .utility) { SamsungInstaller(host: host, signIn: nil).openApp() }.value
     }
 
     func checkDeepLKey(_ key: String) async -> OnlineKeyCheck { await DeepLTranslator.check(key: key) }

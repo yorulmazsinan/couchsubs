@@ -233,4 +233,22 @@ class ScreenTextDetectorTest {
         pass(1)
         assertEquals(listOf("auto-1", "auto-1"), rejected)
     }
+
+    /**
+     * Menü şeridinin sekmeleri arasındaki seçili (renkli, aday olmayan) sekme alanı ortadan bölmez: aynı karo satırında iki
+     * boş karoya kadar aralıklı bileşenler birleşir (#859); başka satırda eski sınır kalır.
+     */
+    @Test
+    fun tabsOnOneRowMergeAcrossTheSelectedTab() {
+        val columns = ScreenTextDetector.COLUMNS
+        val detector = ScreenTextDetector()
+        val row = detector.joined(listOf((14..20).map { columns + it }, (23..29).map { columns + it }))
+        assertEquals(1, row.size)
+        val apart = detector.joined(listOf((14..20).map { columns + it }, (23..29).map { 2 * columns + it }))
+        assertEquals(2, apart.size)
+        // Seçili sekme üç karo genişliğinde: iki geniş bileşen üç boş karo arayla da birleşir.
+        assertEquals(1, detector.joined(listOf((16..22).map { columns + it }, (26..29).map { columns + it })).size)
+        // Tek karoluk tekerlek etiketleri (üç boş karo arayla) ayrı kalır.
+        assertEquals(2, detector.joined(listOf(listOf(columns + 4), listOf(columns + 8))).size)
+    }
 }

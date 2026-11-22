@@ -33,11 +33,12 @@ public static class TextStyleSampler
     /// <paramref name="frame"/>: okunan alanın görüntüsü; <paramref name="box"/> ve <paramref name="lines"/> ona oranla.
     /// <paramref name="lines"/>: bloğun satırları (metni ve kutusu); boşsa yalnız blok kutusu örneklenir.
     /// </summary>
-    public static (PhoneTextStyle Surface, TextLook Look) Sample(Frame frame, TextBox box, IReadOnlyList<TextLine> lines, string source)
+    public static (PhoneTextStyle Surface, TextLook Look) Sample(Frame frame, TextBox box, IReadOnlyList<TextLine> lines, string source,
+                                                                 double flatLimit = FlatDeviation)
     {
         var boxes = lines.Where(line => line.Box is not null).Select(line => line.Box!.Value).ToList();
         if (boxes.Count == 0) boxes = [box];
-        var pixels = new List<(int Luma, byte R, byte G, byte B)>();
+        var pixels = new List<(int Luma, byte R, byte G, byte B, bool Edge)>();
         foreach (var area in boxes) Collect(frame, area, pixels);
         var upper = IsUpper(source);
         var align = Alignment(boxes);
@@ -49,12 +50,35 @@ public static class TextStyleSampler
         var high = pixels.Where(pixel => pixel.Luma > threshold).ToList();
         if (low.Count == 0 || high.Count == 0) return (Neutral, new TextLook(false, condensed, align, upper, false));
         var (ink, ground) = low.Count < high.Count ? (low, high) : (high, low);
+        // Zemin çok olan küme; ama kutunun hemen dışındaki şerit (yazı yok) öteki kümeye yakınsa zemin odur. Sıkı kutudaki
+        // kalın dar yazıda (GTA 6 sekmeleri, tuş ipuçları) harf noktaları zeminden çok olabiliyor, kutu beyaz çiziliyordu
+        // (#860). Kutunun kendi kenarı da çok olan kümedeyse (seçili menü satırının ters renkli zemini kutunun kendisidir,
+        // şeridi değil) çok olan küme zemin kalır.
+        var ring = Surrounding(frame, boxes);
+        if (ring is not null)
+        {
+            var around = (double)ring.Select(p => p.Luma).OrderBy(v => v).ElementAt(ring.Count / 2);
+            var lowFirst = Math.Abs(low.Average(p => p.Luma) - around) <= Math.Abs(high.Average(p => p.Luma) - around);
+            var groundIsLow = low.Count >= high.Count;
+            var edges = pixels.Count(p => p.Edge);
+            var edgeShare = edges == 0 ? 0 : (double)ground.Count(p => p.Edge) / edges;
+            if (lowFirst != groundIsLow && edgeShare < FilledEdge) (ink, ground) = (ground, ink);
+        }
         var bold = (double)ink.Count / pixels.Count >= BoldInk;
         var background = Mean(ground);
         var foreground = Mean(ink);
-        var flat = Deviation(ground) < FlatDeviation;
+        var flat = Deviation(ground) < flatLimit;
+        var shade = ground.Average(pixel => pixel.Luma);
+        // Düz olmayan zeminde kenarlıklı yazı (GTA 6 haritasındaki tuş ipuçları: beyaz harf, koyu kenarlık, açık mavi deniz):
+        // kutunun içinde üç ton var, zemin kümesi harfle denizin karışımı çıkıyor, kutu denizin üstünde açık gri
+        // çiziliyordu. Yazının hemen çevresindeki şerit düzse zemin odur.
+        if (!flat && ring is not null && Deviation(ring) < flatLimit)
+        {
+            background = Mean(ring);
+            shade = ring.Average(pixel => pixel.Luma);
+        }
         if (DesignTokens.Contrast(background, foreground) < 3)
-            foreground = ground.Average(pixel => pixel.Luma) < 128 ? "#FFFFFF" : "#000000";
+            foreground = shade < 128 ? "#FFFFFF" : "#000000";
         return (new PhoneTextStyle(background, foreground), new TextLook(bold, condensed, align, upper, flat));
     }
 
@@ -69,7 +93,7 @@ public static class TextStyleSampler
         return letters.Count > 0 && letters.Count(char.IsUpper) >= UpperShare * letters.Count;
     }
 
-    private static void Collect(Frame frame, TextBox area, List<(int, byte, byte, byte)> pixels)
+    private static void Collect(Frame frame, TextBox area, List<(int Luma, byte R, byte G, byte B, bool Edge)> pixels)
     {
         var left = Math.Clamp(area.Left, 0, 1) * frame.Width;
         var right = Math.Clamp(area.Right, 0, 1) * frame.Width;
@@ -84,12 +108,44 @@ public static class TextStyleSampler
                 var x = Math.Min(frame.Width - 1, (int)(left + (sx + 0.5) * (right - left) / SamplesX));
                 var p = y * frame.Stride + x * 4;
                 byte b = frame.Pixels[p], g = frame.Pixels[p + 1], r = frame.Pixels[p + 2];
-                pixels.Add(((299 * r + 587 * g + 114 * b) / 1000, r, g, b));
+                pixels.Add(((299 * r + 587 * g + 114 * b) / 1000, r, g, b,
+                            sx == 0 || sy == 0 || sx == SamplesX - 1 || sy == SamplesY - 1));
             }
         }
     }
 
-    private static int Otsu(List<(int Luma, byte R, byte G, byte B)> pixels)
+    /// <summary>
+    /// Satır kutularının hemen dışındaki şeridin (üstte ve altta satır yüksekliğinin dörtte biri, yanlarda aynı genişlikte)
+    /// noktaları; şerit kareden taşıyorsa ya da başka satırın kutusuna giriyorsa o parça atlanır.
+    /// </summary>
+    public const double RingShare = 0.25;
+    /// <summary>Kutunun kenar noktalarının en az bu kadarı çok olan kümedeyse kutu dolu bir zemindir (seçili satır); şeride bakılmaz.</summary>
+    public const double FilledEdge = 0.7;
+
+    private static List<(int Luma, byte R, byte G, byte B, bool Edge)>? Surrounding(Frame frame, IReadOnlyList<TextBox> boxes)
+    {
+        var pixels = new List<(int Luma, byte R, byte G, byte B, bool Edge)>();
+        var aspect = (double)frame.Width / Math.Max(1, frame.Height);
+        foreach (var box in boxes)
+        {
+            var dy = (box.Bottom - box.Top) * RingShare;
+            var dx = dy / aspect;
+            TextBox[] strips =
+            [
+                new(box.Left, box.Top - dy, box.Right, box.Top),
+                new(box.Left, box.Bottom, box.Right, box.Bottom + dy),
+                new(box.Left - dx, box.Top, box.Left, box.Bottom),
+                new(box.Right, box.Top, box.Right + dx, box.Bottom),
+            ];
+            foreach (var strip in strips)
+                if (strip.Left >= 0 && strip.Top >= 0 && strip.Right <= 1 && strip.Bottom <= 1
+                    && !boxes.Any(other => ScreenTranslation.Overlap(other, strip) > 0.2))
+                    Collect(frame, strip, pixels);
+        }
+        return pixels.Count < 16 ? null : pixels;
+    }
+
+    private static int Otsu(List<(int Luma, byte R, byte G, byte B, bool Edge)> pixels)
     {
         var histogram = new int[256];
         foreach (var pixel in pixels) histogram[pixel.Luma]++;
@@ -112,12 +168,12 @@ public static class TextStyleSampler
         return threshold;
     }
 
-    private static string Mean(List<(int Luma, byte R, byte G, byte B)> pixels) =>
+    private static string Mean(List<(int Luma, byte R, byte G, byte B, bool Edge)> pixels) =>
         $"#{(int)pixels.Average(p => p.R):X2}{(int)pixels.Average(p => p.G):X2}{(int)pixels.Average(p => p.B):X2}";
 
-    private static double Deviation(List<(int Luma, byte R, byte G, byte B)> pixels)
+    private static double Deviation(List<(int Luma, byte R, byte G, byte B, bool Edge)> pixels)
     {
-        double Spread(Func<(int, byte R, byte G, byte B), double> channel)
+        double Spread(Func<(int, byte R, byte G, byte B, bool), double> channel)
         {
             var mean = pixels.Average(channel);
             return Math.Sqrt(pixels.Average(p => (channel(p) - mean) * (channel(p) - mean)));

@@ -36,6 +36,46 @@ public class ScreenPhoneCardTests
             Unchanged = unchanged, Phone = new ScreenPhoneCard.Placement(role, new TextBox(left, top, right, top + 0.03)),
         };
 
+    /// <summary>
+    /// Kartsız (varsayılan ayar): her mesajın çevirisi kendi balonunun yerinde, kart zemini yok; kişi adı çevrilmediği için
+    /// özgün hâli görünür kalır; telefon dışındaki yazı balon sayılmaz (Mac ile aynı).
+    /// </summary>
+    [Fact]
+    public void WithoutTheCardEachMessageStaysOnItsOwnBubble()
+    {
+        var incoming = OnPhone("Where are you man", "Neredesin adamım", ScreenPhoneCard.Role.Incoming, 0.2);
+        var outgoing = OnPhone("On my way", "Yoldayım", ScreenPhoneCard.Role.Outgoing, 0.3, 0.6, 0.93);
+        var shown = ScreenTranslation.Present([
+            Item("Find the car", "Arabayı bul", 0.30, 0.10, 0.50),
+            OnPhone("Brian", "Brian", ScreenPhoneCard.Role.Header, 0.06, unchanged: true), incoming, outgoing,
+        ], Handset(Upright), card: false);
+        Assert.Equal(["Arabayı bul", "Neredesin adamım", "Yoldayım"], shown.Select(item => item.Translation));
+        Assert.Equal([false, true, true], shown.Select(item => item.Bubble));
+        Assert.DoesNotContain(shown, ScreenPhoneCard.IsBackdrop);
+        Assert.Equal(incoming.Box, shown[1].Box);
+        Assert.Equal(outgoing.Box, shown[2].Box);
+    }
+
+    /// <summary>
+    /// Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkar (Hide), durulunca yeniden çevrilir;
+    /// kartlı izleme eskisi gibi bekler (Mac ile aynı).
+    /// </summary>
+    [Fact]
+    public void InPlaceTranslationsLeaveAsSoonAsTheChatMoves()
+    {
+        byte[] a = [.. Enumerable.Repeat((byte)40, 768)], b = [.. Enumerable.Repeat((byte)200, 768)];
+        var place = new TextBox(0.6, 0.2, 0.8, 0.85);
+        var inPlace = new ScreenPhoneFollow { HidesOnChange = true };
+        var card = new ScreenPhoneFollow();
+        inPlace.Settled(place, a);
+        card.Settled(place, a);
+        Assert.Equal(ScreenPhoneFollow.Step.Keep, inPlace.Next(place, a));
+        Assert.Equal(ScreenPhoneFollow.Step.Hide, inPlace.Next(place, b));
+        Assert.Equal(ScreenPhoneFollow.Step.Refresh, inPlace.Next(place, b));
+        Assert.Equal(ScreenPhoneFollow.Step.Wait, card.Next(place, b));
+        Assert.Equal(ScreenPhoneFollow.Step.Refresh, card.Next(place, b));
+    }
+
     [Fact]
     public void SharedChatVectors()
     {
@@ -432,6 +472,22 @@ public class ScreenPhoneCardTests
             Calls += sources.Count;
             return Task.FromResult<IReadOnlyList<string>>([.. sources.Select(source => "TR " + source)]);
         }
+    }
+
+    /// <summary>
+    /// Telefonun ekranındaki satırlar altyazı hattına girmez; telefonun önünden/altından geçen geniş altyazı girer
+    /// (gerçek kare gta6-telefon-sohbet-2'nin telefonu; Mac ile aynı).
+    /// </summary>
+    [Fact]
+    public void HoldsOnlyTheLinesOnThePhoneScreen()
+    {
+        var phone = Handset([0.50375, 0.12444, 0.46125, 0.68444]);
+        Assert.True(ScreenPhoneCard.Holds(Box([0.39415, 0.47436, 0.54888, 0.52616]), phone));
+        Assert.True(ScreenPhoneCard.Holds(Box([0.47965, 0.17571, 0.5218, 0.19897]), phone));
+        Assert.True(ScreenPhoneCard.Holds(Box([0.3974, 0.74924, 0.4632, 0.79995]), phone));
+        Assert.False(ScreenPhoneCard.Holds(Box([0.30, 0.86, 0.70, 0.91]), phone));
+        Assert.False(ScreenPhoneCard.Holds(Box([0.46, 0.90, 0.54, 0.94]), phone));
+        Assert.False(ScreenPhoneCard.Holds(Box([0.949, 0.93197, 0.99577, 0.95692]), phone));
     }
 
     private sealed class Fixed(string text) : ITextTranslator

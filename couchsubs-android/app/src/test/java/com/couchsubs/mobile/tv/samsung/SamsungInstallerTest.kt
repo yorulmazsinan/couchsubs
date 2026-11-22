@@ -52,6 +52,17 @@ class SamsungInstallerTest {
         }
     }
 
+    /** Tizen 2.x cihaz profilini /home/developer'da arar (Samsung'un belgesi, Apps2Samsung, #71); 3.0–4.0 sdk_toolpath'te (#890). */
+    @Test
+    fun deviceProfileGoesWhereTheTvReadsIt() {
+        assertEquals("/home/developer/device-profile.xml", SamsungInstaller.deviceProfileRemotePath("2.4.0", "/opt/usr/apps/tmp"))
+        assertEquals("/home/developer/device-profile.xml", SamsungInstaller.deviceProfileRemotePath("2.4", "/opt/usr/apps/tmp"))
+        assertEquals("/home/owner/share/tmp/sdk_tools/device-profile.xml",
+            SamsungInstaller.deviceProfileRemotePath("3.0", "/home/owner/share/tmp/sdk_tools"))
+        assertEquals("/home/owner/share/tmp/sdk_tools/device-profile.xml",
+            SamsungInstaller.deviceProfileRemotePath("4.0", "/home/owner/share/tmp/sdk_tools"))
+    }
+
     @Test
     fun installedVersionIsReadFromTheAppList() {
         val rule = "\t------------------------------------------------------------------------"

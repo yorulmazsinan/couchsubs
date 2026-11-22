@@ -16,7 +16,8 @@ namespace CouchSubs.Core;
 /// Kural: ekran yazısı okumasında altyazı alanında altyazı satırının yerine düşen satır (bkz.
 /// <see cref="IsSubtitlePlace"/>), son altyazı satırının hemen üstüne/altına taşan aynı boydaki satır ve altyazı hattının
 /// son <see cref="WindowMs"/> içinde okuduğu metne benzeyen satır atılır. Menü durumunda ve görev satırının kendi alanında
-/// yalnız metin eşleşmesi uygulanır (menü satırları altyazı alanında da olabilir; görev satırı altyazı alanının içindedir). Mac/iPhone (SubtitleEcho.swift) ve
+/// yalnız metin eşleşmesi uygulanır (menü satırları altyazı alanında da olabilir; görev satırı altyazı alanının içindedir).
+/// Karede okunan kendi çevirimiz de (OBS Program projektörü, bkz. <see cref="OwnSubtitles"/>) metinden atılır. Mac/iPhone (SubtitleEcho.swift) ve
 /// Android (SubtitleEcho.kt) aynı kuralları uygular. İş parçacığı güvenlidir.
 /// </para>
 /// </summary>
@@ -44,6 +45,14 @@ public sealed class SubtitleEcho
     private readonly Func<long> clock;
     private readonly List<Line> lines = [];
     private CropRegion? region;
+    private OwnSubtitles? own;
+
+    /// <summary>Altyazı hattının gösterdiği çeviriler (hat verir): karede okunan kendi altyazımız ekran yazısı olarak da çevrilmez.</summary>
+    public OwnSubtitles? Own
+    {
+        get { lock (gate) return own; }
+        set { lock (gate) own = value; }
+    }
 
     public SubtitleEcho(Func<long>? clock = null) => this.clock = clock ?? (() => Environment.TickCount64);
 
@@ -96,6 +105,7 @@ public sealed class SubtitleEcho
     /// <summary><paramref name="text"/> altyazı hattının son <see cref="WindowMs"/> içinde okuduğu bir satıra benziyor ya da onun parçası/bütünü.</summary>
     public bool IsEcho(string text)
     {
+        if (Own?.IsOwn(text) == true) return true;
         var probe = TextMatch.Normalize(IconText.Plain(text));
         if (probe.Length < 3) return false;
         var time = clock();

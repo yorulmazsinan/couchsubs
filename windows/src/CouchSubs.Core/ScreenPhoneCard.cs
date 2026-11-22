@@ -148,6 +148,26 @@ public static class ScreenPhoneCard
         }
     }
 
+    /// <summary>
+    /// Satır (karedeki kutusu) telefonun ekranında mı: düz ekrandaki ortası ekranın içinde ve iki yanı ekranın kenarlarını
+    /// <see cref="SideSlack"/>'ten çok aşmıyor. Altyazı hattı bu satırları okumaz (SubtitlePipeline.FindsPhone). Telefonun
+    /// önünden geçen geniş altyazı satırı telefonun ekranından taşar, telefon yazısı sayılmaz (Mac/iPhone:
+    /// ScreenPhoneCard.holds, Android: ScreenPhoneCard.holds).
+    /// </summary>
+    public static bool Holds(TextBox box, Handset handset)
+    {
+        var flat = handset.Flat(box);
+        var v = (flat.Top + flat.Bottom) / 2;
+        return v >= -ScreenSlack && v <= 1 + BelowSlack && flat.Left >= -SideSlack && flat.Right <= 1 + SideSlack;
+    }
+
+    /// <summary>
+    /// Holds: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını SideSlack kadar aşabilir. Alt kenarda
+    /// pay BelowSlack: telefonun alt gövdesi örtülünce telefon kısa bulunuyor, son mesajlar ekranın altında kalıyordu
+    /// (gerçek kare gta6-telefon-sohbet-2; Mac ile aynı).
+    /// </summary>
+    internal const double ScreenSlack = 0.03, SideSlack = 0.12, BelowSlack = 0.25;
+
     /// <summary>Öğe kartın zemini mi (masaüstü listesi ve düz metin bunu atlar).</summary>
     public static bool IsBackdrop(ScreenTranslation.Item item) => string.IsNullOrWhiteSpace(item.Translation);
 

@@ -1,0 +1,1 @@
+0.9.70: GTA 6'da altyazı artık telefonun çevirisinin üstüne binmiyor; telefonla çakışınca telefonun yanına (yer yoksa üstüne ya da altına) kayıyor, telefon kapanınca yerine dönüyor.

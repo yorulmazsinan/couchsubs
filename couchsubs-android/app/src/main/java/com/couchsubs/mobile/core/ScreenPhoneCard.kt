@@ -136,6 +136,26 @@ object ScreenPhoneCard {
         }
     }
 
+    /**
+     * Satır (karedeki kutusu) telefonun ekranında mı: düz ekrandaki ortası ekranın içinde ve iki yanı ekranın kenarlarını
+     * [SIDE_SLACK]'ten çok aşmıyor. Altyazı hattı bu satırları okumaz ([SubtitlePipeline.process] `phone`). Telefonun
+     * önünden geçen geniş altyazı satırı telefonun ekranından taşar, telefon yazısı sayılmaz (Mac/iPhone, Windows ile aynı).
+     */
+    fun holds(box: TextBox, handset: Handset): Boolean {
+        val flat = handset.flat(box)
+        val v = (flat.top + flat.bottom) / 2
+        return v >= -SCREEN_SLACK && v <= 1 + BELOW_SLACK && flat.left >= -SIDE_SLACK && flat.right <= 1 + SIDE_SLACK
+    }
+
+    /**
+     * [holds]: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını [SIDE_SLACK] kadar aşabilir. Alt
+     * kenarda pay [BELOW_SLACK]: telefonun alt gövdesi örtülünce telefon kısa bulunuyor, son mesajlar ekranın altında
+     * kalıyordu (gerçek kare gta6-telefon-sohbet-2; Mac ile aynı).
+     */
+    const val SCREEN_SLACK = 0.03
+    const val SIDE_SLACK = 0.12
+    const val BELOW_SLACK = 0.25
+
     /** Öğe kartın zemini mi (düz metin bunu atlar). */
     fun isBackdrop(item: ScreenTranslation.Item): Boolean = item.translation.isBlank()
 

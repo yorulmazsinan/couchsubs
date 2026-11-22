@@ -72,6 +72,8 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
     /// Seçilen pencereden kare gelmiyorsa nedeni günlüğe yazılır, siyah kareler uyarılır (bkz. `RemotePlayWindowStream+Selected`).
     var selectedCapture: SelectedCapture?
     var frameWatch: Task<Void, Never>?
+    /// Dakikalık kare sayımı (günlükte "pencere kareleri: N/dk"): kare aralığı bir dahaki sefere günlükte görünsün (#822).
+    let frameCounts = WindowFrameCounts()
 
     init(app: RemotePlayApp = .automatic) {
         bundleIdentifiers = Self.bundleIdentifiers(for: app)
@@ -300,6 +302,7 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
                 try? await Task.sleep(for: .seconds(1))
                 guard let self, self.isCurrent(number) else { return }
                 tick += 1
+                if tick % 60 == 0 { SubtitleLog.write(self.frameCounts.minuteLine()) }
                 let (stream, window) = self.lock.withLock { (self.stream, self.window) }
                 guard let stream, let window else { continue }
                 if self.selected != nil {
@@ -352,11 +355,16 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
         // Değişmeyen ekranda gelen boş kareler okunmaz.
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
            let raw = attachments.first?[.status] as? Int, let status = SCFrameStatus(rawValue: raw), status != .complete {
+            frameCounts.idle()
             return
         }
         capture?.watch.copyStarted(at: capture?.elapsed ?? 0)
         var image: CGImage?
         let status = VTCreateCGImageFromCVPixelBuffer(pixels, options: nil, imageOut: &image)
+        // VideoToolbox'ın görüntüsü ScreenCaptureKit'in karesini (IOSurface) paylaşır; görüntü tutuldukça kare havuza
+        // dönmez. Havuz `queueDepth` karelik: okuma, ek alanlar ve önizleme kareleri tutunca yeni kare gelmiyordu (#822).
+        // Kare kendi belleğimize kopyalanır (1920x1080'de ~8 MB, bir milisaniyeyi bulmaz), havuzun karesi hemen döner.
+        image = image.map { Self.detached($0, from: pixels) ?? $0 }
         capture?.watch.copyEnded()
         guard let image else {
             if let capture, capture.watch.failed("VTCreateCGImageFromCVPixelBuffer: \(status)") {
@@ -368,7 +376,23 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
             noteBlack(Self.isBlack(pixels), capture: capture, stream: stream)
             if capture.watch.frameDelivered() { SubtitleLog.write("pencereden ilk kare: \(image.width)x\(image.height)") }
         }
+        frameCounts.delivered()
         onFrame?(image)
+    }
+
+    /// Görüntünün piksellerini ScreenCaptureKit'in karesinden bağımsız bir kopyaya alır (aynı boyut, renk uzayı, düzen).
+    static func detached(_ image: CGImage, from pixels: CVPixelBuffer) -> CGImage? {
+        guard CVPixelBufferLockBaseAddress(pixels, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
+        let rowBytes = CVPixelBufferGetBytesPerRow(pixels)
+        let height = CVPixelBufferGetHeight(pixels)
+        guard let base = CVPixelBufferGetBaseAddress(pixels), height == image.height, rowBytes >= image.width * 4,
+              let colorSpace = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB),
+              let data = CFDataCreate(nil, base.assumingMemoryBound(to: UInt8.self), rowBytes * height),
+              let provider = CGDataProvider(data: data) else { return nil }
+        return CGImage(width: image.width, height: image.height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes,
+                       space: colorSpace, bitmapInfo: image.bitmapInfo, provider: provider, decode: nil,
+                       shouldInterpolate: false, intent: .defaultIntent)
     }
 
     /// Pencere kapandı ya da Remote Play çıktı: pencere yeniden aranır (çeviri durmaz).

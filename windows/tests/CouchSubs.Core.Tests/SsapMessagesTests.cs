@@ -44,6 +44,28 @@ public class SsapMessagesTests
         Assert.Null(LgDiscovery.HostFromSsdpResponse("HTTP/1.1 200 OK\r\nST: urn:other\r\n\r\n"));
     }
 
+    // Sorulan hedefi aynen geri söyleyen yanıt LG diye doğrulanmaz: Android TV "LG TV" diye listeleniyor, Bağlan "TV yanıt
+    // vermedi" diyordu (X, Toshiba Android TV, Mac'te görüldü; Windows'ta aynı kural).
+    [Fact]
+    public void EchoedSearchTargetIsNotTakenAsLg()
+    {
+        const string lg = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.153:1990/abc/description.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\nSERVER: WebOS/4.4.0 UPnP/1.0\r\n\r\n";
+        Assert.Equal(new LgDiscovery.SsdpHit("192.168.1.153", true), LgDiscovery.HitFromSsdpResponse(lg));
+        const string lgNoServer = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.153:1990/x.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\n\r\n";
+        Assert.True(LgDiscovery.HitFromSsdpResponse(lgNoServer)!.Confirmed);
+        const string echo = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.133:49152/description.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\nUSN: uuid:5f9ec1b3-ed59-1900-4530-00a0ded0e7e6::urn:lge-com:service:webos-second-screen:1\r\nSERVER: Linux/4.9.125 UPnP/1.0 Portable SDK for UPnP devices/1.6.18\r\n\r\n";
+        Assert.Equal(new LgDiscovery.SsdpHit("192.168.1.133", false), LgDiscovery.HitFromSsdpResponse(echo));
+        Assert.Equal(new CouchSubs.Core.LgTv.LgTv("Android TV", "192.168.1.133", TvBrand.AndroidTv), LgDiscovery.ClassifyUnconfirmed("192.168.1.133", null, false, true));
+        Assert.Null(LgDiscovery.ClassifyUnconfirmed("192.168.1.133", null, false, false));
+        Assert.Equal(new CouchSubs.Core.LgTv.LgTv("[LG] webOS TV", "192.168.1.133"), LgDiscovery.ClassifyUnconfirmed("192.168.1.133", "[LG] webOS TV", false, true));
+        Assert.Equal(new CouchSubs.Core.LgTv.LgTv("LG TV", "192.168.1.133"), LgDiscovery.ClassifyUnconfirmed("192.168.1.133", null, true, true));
+        Assert.True(LgDiscovery.IsSsapGreeting("Hello world\n"));
+        Assert.False(LgDiscovery.IsSsapGreeting("Hello World!"));
+        Assert.False(LgDiscovery.IsLgDescription("<root><device><manufacturer>Vestel</manufacturer></device></root>"));
+        // Yanlış etiketlenen Android TV kapalı LG'nin "yeni adresi" sanılmaz.
+        Assert.Null(TvLocator.Moved(new CouchSubs.Core.LgTv.LgTv("[LG] webOS TV", "192.168.1.20"), [new CouchSubs.Core.LgTv.LgTv("Android TV", "192.168.1.133", TvBrand.AndroidTv)]));
+    }
+
     // webOS 3.x (2017) ikinci ekran hedefine cevap vermiyor; "ssdp:all" yanıtı LG olarak tanınır, başka cihaz alınmaz (#498).
     [Fact]
     public void SsdpAllResponseFromOldWebOsIsRecognised()

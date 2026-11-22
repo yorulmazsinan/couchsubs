@@ -252,7 +252,10 @@ struct RunningScreen: View {
                 DemoModeHeader()
             } else {
                 if model.sessionState != .streaming {
-                    MobileNote(text: model.ps5StatusText, tone: Mobile.Palette.secondary)
+                    // Saniyede bir yenilenir: "Bağlanıyor…" 30 sn'yi geçince altında nedeni çıkar.
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        MobileNote(text: model.ps5StatusText, tone: Mobile.Palette.secondary)
+                    }
                     // Oturum yeniden denemeyi bıraktıysa hemen, süren denemelerde 45 sn sonra: uygulamayı kapatıp açmadan
                     // bağlantı baştan kurulur (ReconnectOffer; Android ile aynı).
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -265,7 +268,7 @@ struct RunningScreen: View {
                 // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231).
                 if MainAccountTip.isVisible(ps5: !model.isXbox, demo: model.demoMode, hasSubtitle: !model.recentLines.isEmpty,
                                             streaming: model.sessionState == .streaming) {
-                    MobileNote(text: String(localized: "When you turn on the controller to play, choose your MAIN account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game."),
+                    MobileNote(text: String(localized: "To play without the connection dropping: 1. On the PS5, start the game with your MAIN account first. 2. Then start translating. 3. Don't switch users during the game; when you turn on the controller, choose your MAIN account. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game."),
                                tone: Mobile.Palette.secondary)
                 }
                 // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
@@ -277,10 +280,6 @@ struct RunningScreen: View {
                 if model.showsSubtitleOffTip {
                     MobileNote(text: String(localized: "Turn on the game's own subtitles: CouchSubs reads the English subtitles on screen, not the audio."),
                                tone: Mobile.Palette.secondary)
-                    if model.settings.watchSubtitleBackground {
-                        MobileNote(text: String(localized: "“Watch subtitle background” is on: only text on GTA 6’s dark subtitle panel is read. Set the game’s subtitle background to Solid or turn this setting off."),
-                                   tone: Mobile.Palette.secondary)
-                    }
                 }
                 GameSection(choice: model.gameChoice, areas: model.gameAreas)
             }
@@ -504,7 +503,12 @@ struct SubtitleScreen: View {
             .offset(y: CGFloat(liveOffset) * screenHeight)
             // Ek alanların (görev, telefon, bildirim) çevirisi oyundaki yerinde küçük kutuda (TV'deki gibi).
             GeometryReader { proxy in
-                ForEach(model.phoneRegions) { region in
+                // "Ekranı çevir" ekrandayken onun yazılarının yerindeki ek alan kutusu çizilmez: aynı yazı iki kez üst üste
+                // görünmesin (#827).
+                ForEach(model.phoneRegions.filter { region in
+                    region.items == nil
+                        && (region.box.map { box in !model.screenItems.contains { ScreenTranslation.overlap(box, $0.box) >= ScreenTranslation.coverShare } } ?? true)
+                }) { region in
                     let box = region.box ?? TextBox(left: 0.6, top: 0.05, right: 0.95, bottom: 0.2)
                     Text(verbatim: region.text)
                         .font(Mobile.TypeScale.caption)
@@ -517,10 +521,12 @@ struct SubtitleScreen: View {
                 }
             }
             .allowsHitTesting(false)
-            // "Ekranı çevir" sonuçları: her çeviri kendi yazısının yerinde, aynı boyda ve özgün yazının stilinde (zemin ve
-            // yazı rengi, kalınlık, hiza; TV'deki gibi). GTA 6 telefonunun yazıları yanında mesaj kartı olarak gelir.
+            // Bloklu ek alanlar (GTA 6 telefonunun mesajları, kendiliğinden bulunan ekran yazısı) ve "Ekranı çevir" sonuçları:
+            // her çeviri kendi yazısının yerinde, aynı boyda ve özgün yazının stilinde (zemin ve yazı rengi, kalınlık, hiza;
+            // TV ve Android'deki gibi). Telefonun her mesajı kendi balonunun üstünde, balonun renginde; eskiden bütün sohbet
+            // telefonun üstünde tek siyah kutuda birleşiyordu. "Ekranı çevir" ekrandayken onun yerindeki bloklar çizilmez (#827).
             GeometryReader { proxy in
-                ForEach(Array(model.screenItems.enumerated()), id: \.offset) { _, item in
+                ForEach(Array(PhoneModel.placedItems(model.phoneRegions, screen: model.screenItems).enumerated()), id: \.offset) { _, item in
                     let box = item.box
                     let backdrop = ScreenPhoneCard.isBackdrop(item)
                     let width = backdrop ? proxy.size.width * (box.right - box.left) : max(60, proxy.size.width * (box.right - box.left))
@@ -543,7 +549,7 @@ struct SubtitleScreen: View {
                         .padding(4)
                         .frame(width: width, alignment: frameAlignment)
                         .frame(minHeight: backdrop ? height : 0)
-                        .background((Self.screenColor(item.style?.background) ?? .black).opacity(item.look?.flat == false ? 0.94 : (item.look == nil ? 0.85 : 1)),
+                        .background((Self.screenColor(item.style?.background) ?? .black).opacity(item.look == nil && item.style == nil ? 0.85 : 1),
                                     in: RoundedRectangle(cornerRadius: 4))
                         .fixedSize(horizontal: false, vertical: true)
                         .position(x: proxy.size.width * box.left + width / 2,

@@ -47,6 +47,8 @@ object NativeBridge {
     const val QUIT_RP_CRASHED = 6
     /** PSN üzerinden eşleme reddedildi (CHIAKI_QUIT_REASON_PSN_REGIST_FAILED); QUIT_REFUSED yalnız TCP reddidir. */
     const val QUIT_PSN_REGIST_FAILED = 7
+    /** PS5 akışı kendisi kapattı (CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED / _REMOTE_SHUTDOWN); metin PS5'in nedeni. */
+    const val QUIT_CONSOLE_CLOSED = 8
 
     /** Yerel kütüphane yüklenebildi mi (yalnız Kotlin derlemesinde ya da desteklenmeyen işlemcide false). */
     val available: Boolean by lazy {

@@ -152,8 +152,14 @@ private struct SettingsPage: View {
             case .obs: OBSCard()
             case .console: ConsoleSettingsCard()
             case .source:
-                // Xbox'ta (Beta) görüntü hep Xbox'ın ev yayınından gelir; kaynak seçimi yerine oyun sesi ayarı durur.
-                if model.isXbox { XboxSoundCard() } else { FrameSourceCard() }
+                // Xbox'ta (Beta) görüntü Xbox'ın ev yayınından ya da seçilen pencereden (#853) gelir; Xbox bağlantısında oyun
+                // sesi ayarı da durur.
+                if model.isXbox {
+                    XboxFrameSourceCard()
+                    if !model.readsXboxWindow { XboxSoundCard() }
+                } else {
+                    FrameSourceCard()
+                }
                 DemoModeCard()
             case .ps5: LoginPasscodeCard()
             case .about:
@@ -321,6 +327,9 @@ private struct AreaCards: View {
         Card(title: LocalizedStringKey(HotkeyText.title(model.settings, .screen, String(localized: "Translate the screen (%@)")))) {
             HintText(text: LocalizedStringKey(HotkeyText.sentence(model.settings, .screen,
                 String(localized: "Press %@ while playing: every text on the screen is translated once and shown on the TV in its own place. Press again to remove the translations."))))
+            // Dört platformda aynı ad (iPhone: Profile, Windows: SettingsWindow, Android: ProfileScreens); varsayılan kapalı.
+            SwitchRow(title: "Show GTA 6 phone translations in a card next to the phone", isOn: $model.settings.phoneChatCard)
+            HintText(text: "Off: each message is translated on top of its own bubble, in the bubble's colours.")
         }
         // Serbest alan (Windows: FreeAreaCard): görüntü donar, fareyle seçilen yer bir kez çevrilir.
         Card(title: LocalizedStringKey(HotkeyText.title(model.settings, .freeArea, String(localized: "Free area (%@)")))) {
@@ -800,6 +809,24 @@ private struct FrameSourceCard: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Xbox seçiliyken "Görüntüyü al" (#853; Windows'taki Görüntü kaynağı kartının Xbox seçenekleri): CouchSubs Xbox'a kendisi
+/// bağlanır ya da oyun Xbox uygulamasında / play.xbox.com'da / capture card ile OBS'te oynanır ve CouchSubs yalnız seçilen
+/// pencereyi okur; o zaman Xbox'a hiç bağlanmaz (Xbox aynı anda tek bağlantıya izin verir, kullanıcının oturumu düşerdi).
+private struct XboxFrameSourceCard: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Card {
+            Picker("Read the picture from", selection: $model.settings.xboxFrameSource) {
+                Text("Xbox (this app connects)").tag(XboxFrameSource.xbox)
+                Text("OBS projector or game window").tag(XboxFrameSource.captureWindow)
+            }
+            HintText(text: "If you play in the Xbox app, on play.xbox.com or with a capture card in OBS, choose this window; CouchSubs doesn't connect to the Xbox separately (the Xbox allows only one connection at a time).")
+            if model.readsXboxWindow { CaptureWindowPanel() }
         }
     }
 }
@@ -1290,8 +1317,6 @@ struct TranslationCard: View {
         Card(title: "Advanced") {
             SwitchRow(title: "Check unchanged subtitle areas more often", isOn: $model.settings.fastSubtitleDetection)
             HintText(text: "When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.")
-            SwitchRow(title: "Watch subtitle background (GTA 6 experimental)", isOn: $model.settings.watchSubtitleBackground)
-            HintText(text: "In GTA 6, set the subtitle background to Solid. Only text on the dark blue subtitle panel will be translated.")
             // Windows'taki iki bekleme kaydırıcısı (aynı metin, aralık 0–1 sn, 0,1 sn adım; varsayılan 0,8 ve 0,3 sn).
             HintText(text: "These waits only delay lines that were read badly; most lines are shown without waiting. A shorter wait shows those lines sooner but lets more wrong translations through.")
             WaitSlider(title: "Wait for a misread line", ms: $model.settings.misreadWaitMs)

@@ -45,6 +45,14 @@ public class AiTranslatorTests
         Assert.Equal(2, fake.Requests.Count);
     }
 
+    /// <summary>#827: menü ve görev etiketleri kısa, tekil emir kipinde çevrilir ("Para Kazan"; "Para Kazanın" değil).</summary>
+    [Fact]
+    public void SystemPromptAsksForSingularImperativeLabels()
+    {
+        Assert.Contains("singular informal imperatives", AiRequest.SystemPrompt);
+        Assert.Contains("\"Para Kazan\"", AiRequest.SystemPrompt);
+    }
+
     [Fact]
     public async Task GameCacheAlsoSeparatesSentencePieces()
     {

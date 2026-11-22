@@ -288,11 +288,14 @@ public final class RegionWatcher {
         reads += 1
         onReadMs?(now() - started)
         // Altyazı alanındaki ya da altyazı hattının okuduğu satırlar ekran yazısı değildir; altyazı iki yerde çizilmesin
-        // (bkz. `SubtitleEcho`). Menüde ve görev satırının kendi alanında yalnız metin eşleşmesi uygulanır.
+        // (bkz. `SubtitleEcho`). Menüde, görev satırının ve kenar bildiriminin kendi alanında
+        // yalnız metin eşleşmesi uygulanır.
         let place = TextBox(left: region.left, top: region.top, right: region.right, bottom: region.bottom)
         let geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.areaId
+            && !ScreenNotices.isNotice(id: area.id)
         let own = subtitleEcho?.filter(reading, place: place, geometry: geometry) ?? reading
-        let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu)
+        let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
+                                       styled: GameAreaPresets.isPreset(area.id))
         if state.lastRead == candidate.key {
             state.candidate = nil
             states[area.id] = state
@@ -363,16 +366,27 @@ public final class RegionWatcher {
     /// (okunan alan) kesilir; çeviride yerleri korunur.
     /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
     /// `menu`: otomatik alan menüde; satır yükseklikleri farklı olabilir (başlık, etiket).
+    /// `styled`: oyunun hazır alanı (`GameAreaPresets`): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
+    /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
-                          menu: Bool = false) -> Candidate {
+                          menu: Bool = false, styled: Bool = false) -> Candidate {
+        let styled = auto || styled
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         let marked = reading.withButtonIcons(frame: frame, monochrome: auto)
-        let lines = (auto ? marked : marked.withoutButtonPrompts()).withoutOcrNoise().lines
+        // Menü şeridinin sekmeleri tek satır okunsa da ayrı satırlardır (#859); kutular alana oranlı.
+        let aspect = (region.right - region.left) * 16 / max(1e-6, (region.bottom - region.top) * 9)
+        let read = (auto ? marked : marked.withoutButtonPrompts()).withoutOcrNoise().lines
+            .flatMap { ScreenTranslation.menuPieces($0, aspect: aspect, frame: frame) }
             .filter { ScreenTranslation.isWords($0.text) }
             // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı"), karenin kenarında kesilmiş tek sözcük ve bozuk okuma
             // (düşük güven, tuhaf harfler) atılır.
             .filter { !auto || !(ScreenTextNoise.isOverlay($0.text) || cutAtEdge($0) || ScreenTextNoise.isGarbled($0)) }
+            .filter { !styled || !ScreenTranslation.isClock($0.text) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
+        // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
+        // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+        let lines = ScreenTranslation.withoutDuplicateLines(read.map(ScreenTranslation.withoutEdgeMarks)
+            .map(ScreenTranslation.withoutEdgeIcons))
         var paragraphs = ScreenTranslation.paragraphs(lines)
         let place = TextBox(left: region.left, top: region.top, right: region.right, bottom: region.bottom)
         let boxes = lines.compactMap(\.box)
@@ -386,10 +400,23 @@ public final class RegionWatcher {
         // gibi gruplanır; her grubun çevirisi TV'de kendi yerine konur. Tek grupta (ya da yeri bilinmeyen satır varsa)
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         var blocks: [Block]?
-        let cards = auto && !lines.isEmpty && boxes.count == lines.count ? MissionCard.find(lines, place: place) : []
-        let groups = (auto || lines.count > 1) && !lines.isEmpty && boxes.count == lines.count
-            ? (auto ? autoGroups(lines, menu: menu, cards: cards) : ScreenTranslation.groups(from: lines)) : []
-        if (auto && !groups.isEmpty) || (groups.count > 1 && groups.count < ScreenTranslation.maxGroups) {
+        // Görev kartı her alanda kendi parçalarına ayrılır (başlık, açıklama): hazır ya da kullanıcının alanında da başlık
+        // açıklamaya katılıp ikisi tek kutuda, görev resminin üstünde çiziliyordu (#856).
+        let cards = !lines.isEmpty && boxes.count == lines.count ? MissionCard.find(lines, place: place) : []
+        let groups: [ScreenTranslation.Group]
+        if (styled || lines.count > 1) && !lines.isEmpty && boxes.count == lines.count {
+            if styled {
+                groups = autoGroups(lines, menu: menu, cards: cards)
+            } else {
+                let taken = Set(cards.flatMap(\.all))
+                groups = (cards.flatMap { MissionCard.groups($0, lines) }
+                    + ScreenTranslation.groups(from: lines.indices.filter { !taken.contains($0) }.map { lines[$0] }))
+                    .sorted { $0.box.top < $1.box.top }
+            }
+        } else {
+            groups = []
+        }
+        if (styled && !groups.isEmpty) || (groups.count > 1 && groups.count < ScreenTranslation.maxGroups) {
             paragraphs = groups.flatMap(\.paragraphs)
             icons = groups.flatMap { $0.icons ?? $0.paragraphs.map { _ in [IconSlot]() } }
             var list: [Block] = []
@@ -397,7 +424,7 @@ public final class RegionWatcher {
             for group in groups {
                 var style: PhoneTextStyle?
                 var look: TextLook?
-                if auto, let frame {
+                if styled, let frame {
                     // Çeviri özgün yazının stilinde çizilsin: renkler, kalınlık, dar aile, hiza, büyük harf.
                     let own = lines.filter { inside($0.box!, group.box) }
                     (style, look) = TextStyleSampler.sample(frame, box: group.box, lines: own,
@@ -407,7 +434,7 @@ public final class RegionWatcher {
                                   lineHeight: group.lineHeight * height, style: style, look: look))
                 start += group.paragraphs.count
             }
-            blocks = auto ? alignByNeighbours(list) : list
+            blocks = styled ? alignByNeighbours(list) : list
             key = textKey(paragraphs) + "|" + list.map { String($0.count) }.joined(separator: ",")
         }
         var cut: [[IconSlot]]?
@@ -686,7 +713,9 @@ public final class RegionWatcher {
     private func translate(_ paragraphs: [String]) async throws -> Translation {
         let prepared = paragraphs.map(IconText.protect)
         var result = paragraphs.map { paragraph in
-            packLookup?(IconText.plain(paragraph))?.text ?? (translatesUiCommands ? UiCommands.translate(paragraph) : nil)
+            // Yalnız özel adlardan oluşan yazı ("JASON & LUCIA") çevrilmez (#859).
+            ScreenTranslation.keepsNames(paragraph) ? paragraph
+                : packLookup?(IconText.plain(paragraph))?.text ?? (translatesUiCommands ? UiCommands.translate(paragraph) : nil)
         }
         let readyCount = result.compactMap { $0 }.count
         // Zaten Türkçe olan parça çevrilmez: aslı kalır, tümü öyleyse kutu gösterilmez.
@@ -782,7 +811,10 @@ public final class RegionWatcher {
         for part in parts.joined() {
             let core = part.core.trimmingCharacters(in: .whitespaces)
             guard core.contains(where: \.isLetter), known[core] == nil, !pending.contains(core) else { continue }
-            if let found = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabelLoosely(core) : nil)
+            // Yalnız özel adlardan oluşan sekme ("JASON & LUCIA") çevrilmez (#859).
+            if ScreenTranslation.keepsNames(core) {
+                known[core] = core
+            } else if let found = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabelLoosely(core) : nil)
                 ?? packLookup?(IconText.plain(core))?.text ?? (skipsTurkish && TurkishText.isSure(core) ? core : nil) {
                 known[core] = found
             } else {

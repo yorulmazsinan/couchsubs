@@ -25,6 +25,9 @@ internal static unsafe partial class NativeMethods
     internal const int QuitRpCrashed = 5;
     /// <summary>PSN üzerinden eşleme reddedildi (CHIAKI_QUIT_REASON_PSN_REGIST_FAILED); QuitRefused yalnız TCP reddidir.</summary>
     internal const int QuitPsnRegistFailed = 6;
+    /// <summary>PS5 akışı kendisi kapattı (CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED / _REMOTE_SHUTDOWN); metin
+    /// PS5'in nedenidir.</summary>
+    internal const int QuitConsoleClosed = 7;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct RegisteredConsoleNative

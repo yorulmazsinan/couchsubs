@@ -138,6 +138,7 @@ jobs:
             grep -aq "lenmedi: evet" "$txt" || { echo "işlenmedi satırı yok"; exit 1; }
             grep -aq "m durumu: yaz" "$txt" || { echo "döküm yazılmadı"; exit 1; }
             grep -aiq "kernel32.dll" "$txt" || { echo "modül listesi yok"; exit 1; }
+            grep -aq "^Komut bayt" "$txt" || { echo "komut baytları yok"; exit 1; }
             if [ "$kind" -eq 2 ]; then
               grep -aq "^Mod.*l yok" "$txt" || { echo "adres bir modüle düştü"; exit 1; }
             else
@@ -472,7 +473,7 @@ jobs:
             if ($code -ne 0) { Get-Content $summary.FullName; throw "${kind}: sonraki açılış kaydı bulmadı (çıkış kodu $code)" }
             $text = Get-Content $report -Raw -Encoding UTF8
             $text
-            $expected = @('0xC0000005', 'Sürüm: 0\.1\.0', 'hiçbir yere göndermez', 'Yüklü modüller:', 'coreclr\.dll  \[\d+', 'kernel32\.dll  \[\d+',
+            $expected = @('0xC0000005', 'Sürüm: 0\.1\.0', 'İşlemci: ', 'Komut baytları \(RIP-16 \| RIP\+32\):', 'hiçbir yere göndermez', 'Yüklü modüller:', 'coreclr\.dll  \[\d+', 'kernel32\.dll  \[\d+',
                           'Son günlük satırları \(altyazi\.log\):', 'Windows olay günlüğü:', 'Döküm durumu: yazıldı', 'Tamamlandı:')
             $expected += switch ($kind) {
               'yerel' { 'Modül: couchsubs_native\.dll\+0x', 'Erişim: yazma 0x0000000012345678' }

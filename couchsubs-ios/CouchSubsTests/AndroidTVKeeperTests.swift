@@ -23,6 +23,16 @@ final class AndroidTVKeeperTests: XCTestCase {
         XCTAssertEqual(AndroidTvInstaller.startCommand("{\"a\":\"b\"}\nreboot"), plain)
     }
 
+    /// Çalışan TV uygulamasına adres ekranı öne çekmeden yayınla bildirilir ("TV'de bağlı, panelde sub 0": eski adrese bağlı
+    /// kalan uygulama). Windows'taki AddressCommand ve Android telefondaki addressCommand ile aynı.
+    func testAddressCommandCarriesTheServerAddressWithoutStartingTheScreen() {
+        let params = AndroidTvInstaller.launchParams(server: "http://192.168.1.124:8787")
+        XCTAssertEqual(AndroidTvInstaller.addressCommand(params),
+                       #"shell:am broadcast -a com.couchsubs.tv.action.ADDRESS -n com.couchsubs.tv/.AddressReceiver --es params '{"server":"http://192.168.1.124:8787"}'"#)
+        XCTAssertNil(AndroidTvInstaller.addressCommand(nil))
+        XCTAssertNil(AndroidTvInstaller.addressCommand(#"{"server":"x'; reboot; '"}"#))
+    }
+
     private final class Calls: @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String] = []
@@ -60,23 +70,37 @@ final class AndroidTVKeeperTests: XCTestCase {
         XCTAssertEqual(opened.all.count, 3)
     }
 
-    /// Hiç bağlanmayan uygulama en çok üç kez açılır; TV'de zaten çalışıyorsa (`am start` gönderilmedi) açılış sayılmaz.
-    func testNeverConnectedAppIsOpenedAtMostThreeTimesAndRunningOneIsNotCounted() {
+    /// X (beta.77): "izni sürekli yeniden istiyor". Hiç bağlanmayan uygulama için en çok üç ADB bağlantısı açılır; TV'de zaten
+    /// çalışıyorsa (`am start` gönderilmedi) ya da TV onay sorduysa da sayılır (eskiden sayılmıyor, 30 sn'de bir sınırsız
+    /// bağlantı açılıyor, onaysız TV her seferinde soruyordu).
+    func testAtMostThreeAdbConnectionsEvenWhenTheAppIsRunningOrNotApproved() {
         let opened = Calls()
         let running = Calls()
         let keeper = AndroidTVKeeper(host: "192.168.1.120", port: 5555, server: "http://192.168.1.124:8787",
                                      appConnected: { false }, relaunchInterval: 30,
                                      open: { _, _, _ in
                                          opened.add("try")
-                                         return running.all.last == "1" ? AndroidTVApp.alreadyRunning : "Starting"
+                                         if running.all.last == "approve" { throw AndroidInstallFailure(error: .notApproved, detail: "onay gerekiyor") }
+                                         return AndroidTVApp.alreadyRunning
                                      }, log: { _ in })
         let start = Date()
         running.add("1")
-        for step in 0..<4 { keeper.tick(now: start.addingTimeInterval(Double(step) * 31)) }
-        XCTAssertEqual(opened.all.count, 4)
-        running.add("0")
-        for step in 4..<10 { keeper.tick(now: start.addingTimeInterval(Double(step) * 31)) }
-        XCTAssertEqual(opened.all.count, 7)
+        for step in 0..<20 { keeper.tick(now: start.addingTimeInterval(Double(step) * 31)) }
+        XCTAssertEqual(opened.all.count, 3)
+        running.add("approve")
+        keeper.reconnect()
+        for step in 20..<200 { keeper.tick(now: start.addingTimeInterval(Double(step) * 31)) }
+        XCTAssertEqual(opened.all.count, 6)
+    }
+
+    func testConnectedAppNeverGetsAnAdbConnection() {
+        let opened = Calls()
+        let keeper = AndroidTVKeeper(host: "192.168.1.120", port: 5555, server: "http://192.168.1.124:8787",
+                                     appConnected: { true }, relaunchInterval: 0,
+                                     open: { _, _, _ in opened.add("try"); return "Starting" }, log: { _ in })
+        let start = Date()
+        for step in 0..<100 { keeper.tick(now: start.addingTimeInterval(Double(step) * 5)) }
+        XCTAssertEqual(opened.all.count, 0)
     }
 
     func testClosedAdbIsSilentAndLoggedOnce() {

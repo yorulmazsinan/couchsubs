@@ -5,6 +5,21 @@ import XCTest
 @testable import CouchSubsCore
 
 final class SubtitleLogTests: XCTestCase {
+    /// "oturum başladı" satırında altyazı alanı ve otomatik ekran yazısı görünür (iPhone 1.0.6 günlüğünde yoktu).
+    func testAreaSummaryNamesThePresetAndBounds() {
+        var settings = UserSettings()
+        settings.autoScreenText = true
+        XCTAssertEqual(SubtitleLog.areaSummary(settings), "alan: bottom (0.62-0.97 x 0.14-0.86), otomatik ekran yazısı: açık")
+        settings.selectAreaPreset(.full)
+        settings.autoScreenText = false
+        XCTAssertEqual(SubtitleLog.areaSummary(settings), "alan: full (0.00-1.00 x 0.00-1.00), otomatik ekran yazısı: kapalı")
+    }
+
+    func testMenuStateLines() {
+        XCTAssertEqual(ScreenTextDetector.menuLog(true), "ekran menüsü açık: altyazı okunmuyor")
+        XCTAssertEqual(ScreenTextDetector.menuLog(false), "ekran menüsü kapandı: altyazı okunuyor")
+    }
+
     func testWritesOnlyWhileEnabledAndKeepsOneBackup() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("altyazi-log-\(UUID())")
         let file = folder.appendingPathComponent("altyazi.log")

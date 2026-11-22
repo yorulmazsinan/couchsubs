@@ -82,6 +82,13 @@ final class MissionCardTests: XCTestCase {
         XCTAssertEqual(RegionWatcher.kind(ExtraArea(id: "auto-2", name: ScreenTextDetector.areaName, region: corner, auto: true), help), .help)
     }
 
+    /// Haritadaki uzaklık ("124 ft") göstergedir, çevrilmez (X: chiaki); içinde sözcük olan ayrıntı satırı yazıdır.
+    func testDistanceIsNotWords() {
+        for distance in ["124 ft", "4 ft", "2.4 mi", "1,2 km", "50 yd"] { XCTAssertFalse(ScreenTranslation.isWords(distance), distance) }
+        XCTAssertTrue(ScreenTranslation.isWords("Distance 2.4 mi"))
+        XCTAssertTrue(ScreenTranslation.isWords("Go home"))
+    }
+
     /// Menüler kapalıyken kart boyundaki menü alanı "Görev ve hedef yazısı" açıksa okunur; ekranı kaplayan menü okunmaz.
     func testMenuAreaIsReadForMapCardsOnlyWhenMissionsAreOn() {
         var settings = UserSettings()

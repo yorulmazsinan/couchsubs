@@ -84,7 +84,7 @@ public sealed class ScreenTextDetector
     }
 
     /// <summary>Karo dikdörtgeni (sütun/satır, iki uç dahil).</summary>
-    private readonly record struct Cells(int Left, int Top, int Right, int Bottom)
+    internal readonly record struct Cells(int Left, int Top, int Right, int Bottom)
     {
         public int Area => (Right - Left + 1) * (Bottom - Top + 1);
 
@@ -111,6 +111,17 @@ public sealed class ScreenTextDetector
     private long? lastSample;
     private int counter;
     private bool menu;
+    /// <summary>Menüye girildiği örnekteki bileşenlerin karoları: menü bunlar yerinde durdukça sürer (<see cref="IsMenu"/>).</summary>
+    private HashSet<int> menuAnchors = [];
+    /// <summary>Menüye girilen an ve süresi dolan menünün bittiği an (bundan önce belirmiş yazılar yeniden menü sayılmaz).</summary>
+    private long menuEnteredAt;
+    private long? menuFloor;
+
+    /// <summary>
+    /// Menüde hiçbir yazı değişmeden bu kadar süre geçince menü durumu biter. Karanlık sahnede birlikte beliren sabit HUD
+    /// yazıları da menü sanılabiliyor; menü durumu altyazıyı en çok bu kadar susturur (Mac/iPhone, Android ile aynı).
+    /// </summary>
+    public const int MenuLifeMs = 5000;
 
     /// <summary>Tanı: her örnekte bileşenler, bölgeleri ve kanıtları (gerçek kare doğrulaması günlüğe yazar).</summary>
     internal Action<string>? Diagnose { get; set; }
@@ -219,6 +230,8 @@ public sealed class ScreenTextDetector
             tracked.Clear();
             lastSample = null;
             menu = false;
+            menuAnchors = [];
+            menuFloor = null;
         }
     }
 
@@ -355,7 +368,12 @@ public sealed class ScreenTextDetector
     /// sol kenarı hizalı, aralarında en çok iki boş satır olan en az üç bileşen (sütundaki etiketler: tuş çubuğu). Birleşen
     /// alan ekranın %35'ini aşarsa birleşmez. <c>Aligned</c>: hizalı etiket sütunu (arayüz kanıtı).
     /// </summary>
-    private static (List<(Cells Cells, List<int> Tiles)> Components, List<bool> Aligned) Merge(List<(Cells Cells, List<int> Tiles)> input)
+    /// <summary>Aynı karo satırındaki bileşenler arasında en çok bu kadar sütun (iki uç arası) olunca birleşir.</summary>
+    internal const int RowReach = 3;
+    /// <summary>Aynı satırda iki yanı da en az iki karo genişse (sekme adları) bu kadar sütun aralığa kadar birleşir.</summary>
+    internal const int WideRowReach = 4;
+
+    internal static (List<(Cells Cells, List<int> Tiles)> Components, List<bool> Aligned) Merge(List<(Cells Cells, List<int> Tiles)> input)
     {
         var items = input.Select(item => (item.Cells, Tiles: new List<int>(item.Tiles), Aligned: false)).ToList();
         static Cells Join(Cells a, Cells b) => new(Math.Min(a.Left, b.Left), Math.Min(a.Top, b.Top), Math.Max(a.Right, b.Right), Math.Max(a.Bottom, b.Bottom));
@@ -369,7 +387,12 @@ public sealed class ScreenTextDetector
                     var (a, b) = (items[i].Cells, items[j].Cells);
                     var horizontal = Math.Max(a.Left, b.Left) - Math.Min(a.Right, b.Right) - 1;
                     var vertical = Math.Max(a.Top, b.Top) - Math.Min(a.Bottom, b.Bottom) - 1;
-                    if (horizontal > 2 || vertical > 0 || !Small(Join(a, b))) continue;
+                    // Aynı satırdaki bileşenler (menü şeridinin sekmeleri) iki boş karoya kadar birleşir: seçili sekme renkli
+                    // olduğu için aday olmuyor, iki yanındaki alanlar onu ortadan kesiyordu ("MAP" → "M", #859).
+                    var sameRow = Math.Max(a.Top, b.Top) <= Math.Min(a.Bottom, b.Bottom);
+                    // İki yanı da en az iki karo genişse (sekme adı) üç boş karoya kadar; tek karoluk etiket (tekerlek menü) eskisi gibi.
+                    var wide = a.Right - a.Left >= 1 && b.Right - b.Left >= 1;
+                    if (horizontal > (sameRow ? (wide ? WideRowReach : RowReach) - 1 : 2) || vertical > 0 || !Small(Join(a, b))) continue;
                     items[i] = (Join(a, b), [.. items[i].Tiles, .. items[j].Tiles], items[i].Aligned || items[j].Aligned);
                     items.RemoveAt(j);
                     changed = true;
@@ -424,7 +447,10 @@ public sealed class ScreenTextDetector
     /// <summary>
     /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya da
     /// karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
-    /// menüde gezinirken (seçim çerçevesi değişince) durum korunur.
+    /// menüde gezinirken (seçim çerçevesi değişince) durum, menüye girildiğindeki bileşenlerden biri (karolarının en az
+    /// <see cref="KeepOverlap"/> kadarı) yerinde durdukça korunur (Mac/iPhone ve Android ile aynı). Eskiden yalnız "en az üç
+    /// bileşen ve sakin zemin" yetiyordu: GTA 6 "Gone Fishing" (gece) menüden sonra görev yazısı, PS5 bildirimi ve HUD üç
+    /// bileşen, karanlık zemin sakin sayıldı; menü durumu bitmedi, altyazı bütün oturum okunmadı.
     /// </summary>
     private bool IsMenu(List<(Cells Cells, List<int> Tiles)> components, long now)
     {
@@ -432,9 +458,21 @@ public sealed class ScreenTextDetector
         var inside = components.SelectMany(item => item.Tiles).ToHashSet();
         var outside = Enumerable.Range(0, tiles.Length).Where(index => !inside.Contains(index)).ToList();
         if (outside.Count == 0 || outside.Count(index => tiles[index].Quiet) < MenuQuietShare * outside.Count) return false;
-        if (menu) return true;
+        if (menu && components.Any(item => item.Tiles.Count(menuAnchors.Contains) >= KeepOverlap * item.Tiles.Count))
+        {
+            // Menüde bir şey değişmeden (gezinme, seçim) MenuLifeMs geçti: menü sayılmaz, altyazı yeniden gösterilir. Aynı
+            // yazılar yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla yeniden açılır (menuFloor).
+            var activity = menuAnchors.Count == 0 ? menuEnteredAt : menuAnchors.Max(index => tiles[index].StableSince);
+            if (now - Math.Max(activity, menuEnteredAt) <= MenuLifeMs) return true;
+            menuFloor = now;
+            return false;
+        }
         var appeared = components.Select(item => item.Tiles.Max(index => tiles[index].StableSince)).ToList();
-        return appeared.Max() - appeared.Min() <= MenuTogetherMs;
+        if (appeared.Max() - appeared.Min() > MenuTogetherMs) return false;
+        if (menuFloor is { } floor && appeared.Any(time => time <= floor)) return false;
+        if (!menu) menuEnteredAt = now;
+        menuAnchors = inside;
+        return true;
     }
 
     private void Update(List<(Cells Cells, List<int> Tiles)> components, bool[] candidate, long now, bool inMenu)

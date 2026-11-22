@@ -6,17 +6,21 @@ using System.Text.Json;
 
 namespace CouchSubs.Shell;
 
-/// <summary>Bir saat adımında yapılacaklar: Xbox'tan anahtar kare istenir mi, tanı satırı yazılır mı.</summary>
-public readonly record struct XboxWatchStep(bool RequestKeyframe, bool LogStats);
+/// <summary>Bir saat adımında yapılacaklar: Xbox'tan anahtar kare istenir mi, tanı satırı yazılır mı, ilk kare sınırı doldu mu.</summary>
+public readonly record struct XboxWatchStep(bool RequestKeyframe, bool LogStats, bool NoPicture = false);
 
 /// <summary>
 /// Xbox görüntüsü başlayana kadar yapılanlar (#403, #530). Xbox kare onayı alamazsa oturumu ~60 sn sonra kapatır;
 /// onay yalnız gösterilen karede gider, kare hiç gelmezse onay da gitmez. İlk kare gelene kadar kontrol kanalından
 /// anahtar kare istenir (xbox-xcloud-player Channel/Control.ts <c>requestKeyframeRequest</c>; XStreaming de ister)
-/// ve bağlantıdan 10 sn sonra, sonra 10 sn'de bir tanı satırı yazılır. Android'deki XboxFirstFrameWatch'un aynısı.
+/// ve bağlantıdan 10 sn sonra, sonra 10 sn'de bir tanı satırı yazılır. <see cref="FirstFrameLimit"/> dolunca bir kez
+/// <see cref="XboxWatchStep.NoPicture"/> döner: oturum Xbox'ın kendisi kapatmasını (~60 sn) beklemeden "görüntü gelmedi"
+/// nedeniyle kapatılır (bkz. <see cref="XboxRetryPlan"/>). Android'deki XboxFirstFrameWatch'un aynısı.
 /// </summary>
 public sealed class XboxFirstFrameWatch
 {
+    /// <summary>Bağlantıdan sonra ilk kare için beklenen en uzun süre (Android, iPhone ve Mac'te de 30 sn).</summary>
+    public static readonly TimeSpan FirstFrameLimit = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan KeyframeInterval = TimeSpan.FromMilliseconds(2500);
     /// <summary>Bu süreden sonra anahtar kare istenmez; tanı satırları sürer.</summary>
     public static readonly TimeSpan KeyframeWindow = TimeSpan.FromSeconds(20);
@@ -50,8 +54,12 @@ public sealed class XboxFirstFrameWatch
             // Saat takıldıysa kaçan satırlar art arda yazılmaz.
             while (nextStats <= sinceConnected) nextStats += StatsInterval;
         }
-        return new XboxWatchStep(keyframe, stats);
+        var noPicture = !limitReached && sinceConnected >= FirstFrameLimit;
+        if (noPicture) limitReached = true;
+        return new XboxWatchStep(keyframe, stats, noPicture);
     }
+
+    private bool limitReached;
 }
 
 /// <summary>WebRTC getStats özetini tek günlük satırına çevirir. Android'deki XboxStreamStats ile aynı biçim.</summary>
@@ -74,7 +82,12 @@ public static class XboxStreamStats
             line.Append(CultureInfo.InvariantCulture,
                 $"video paket {Number(video, "packetsReceived")}, bayt {Number(video, "bytesReceived")}, kayıp {Number(video, "packetsLost")}, " +
                 $"çözülen {Number(video, "framesDecoded")}, düşen {Number(video, "framesDropped")}, anahtar kare {Number(video, "keyFramesDecoded")}, " +
-                $"PLI {Number(video, "pliCount")}, çözücü {Text(video, "decoderImplementation") ?? "?"}; ");
+                $"PLI {Number(video, "pliCount")}, çözücü {Text(video, "decoderImplementation") ?? "?"}");
+            // Anlaşılan kodek (Xbox'ın SDP yanıtının seçtiği): "görüntü hiç gelmedi" kodekten mi, ayrılsın.
+            var codec = ById(entries, Text(video, "codecId"));
+            if (codec.ValueKind == JsonValueKind.Object)
+                line.Append((", kodek " + (Text(codec, "mimeType") ?? "?") + " " + Text(codec, "sdpFmtpLine")).TrimEnd());
+            line.Append("; ");
         }
         else line.Append("video yok; ");
         var pair = SelectedPair(entries);

@@ -19,7 +19,7 @@
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|density|fontScale|colorMode|layoutDirection"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape">
@@ -28,5 +28,15 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Bilgisayar/telefon çalışan uygulamaya adresini ADB kabuğundan bildirir (am broadcast); ekranı öne çekmez.
+             DUMP izni kabukta var, sıradan uygulamalarda yok: başka bir uygulama TV'yi başka adrese yönlendiremez. -->
+        <receiver
+            android:name=".AddressReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.couchsubs.tv.action.ADDRESS" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

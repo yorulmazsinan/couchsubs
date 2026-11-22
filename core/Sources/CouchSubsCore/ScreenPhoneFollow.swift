@@ -20,7 +20,13 @@ public final class ScreenPhoneFollow: @unchecked Sendable {
         case keep
         /// Telefon kapandı: kartı kaldır, izlemeyi bırak.
         case stop
+        /// Telefonun ekranı değişti (sohbet kaydı ya da değişti), henüz durulmadı: yerindeki mesaj çevirileri hemen
+        /// kalksın (artık başka balonların üstündeler); durulunca `refresh` gelir. Yalnız `hidesOnChange` açıkken.
+        case hide
     }
+
+    /// Çeviriler balonların üstünde, yerinde (kartsız): ekran değişir değişmez `hide`.
+    public let hidesOnChange: Bool
 
     /// Yoklama aralığı (ms).
     public static let interval = 700
@@ -34,7 +40,9 @@ public final class ScreenPhoneFollow: @unchecked Sendable {
     private var pending: (box: TextBox, signature: [UInt8])?
     private var misses = 0
 
-    public init() {}
+    public init(hidesOnChange: Bool = false) {
+        self.hidesOnChange = hidesOnChange
+    }
 
     /// Ekran bu telefon görüntüsüyle çevrildi (kartın dayandığı hâl).
     public func settled(_ box: TextBox, signature: [UInt8]) {
@@ -65,8 +73,9 @@ public final class ScreenPhoneFollow: @unchecked Sendable {
             pending = nil
             return .refresh
         }
+        let first = pending == nil
         pending = (box, signature)
-        return .wait
+        return hidesOnChange && first ? .hide : .wait
     }
 
     private static func differs(_ a: (box: TextBox, signature: [UInt8]), _ b: (box: TextBox, signature: [UInt8])) -> Bool {

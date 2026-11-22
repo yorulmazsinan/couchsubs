@@ -49,6 +49,13 @@ public static partial class OcrNoise
                 if (kept.Count > 0 && !".?!…,;:".Contains(kept[^1][^1])) kept[^1] += token;
                 continue;
             }
+            // Harfsiz, rakamsız ve yalnız simgeden oluşan parça ("_", "~", "=") yazı tanımanın uydurmasıdır: renkli
+            // sözcüğün açık zeminde kaybolan harfleri "_" okunuyordu ("Get in the _ eedboat", GitHub #854, GTA 6).
+            if (IsSymbolOnly(core))
+            {
+                if (trail.Length > 0 && kept.Count > 0) kept[^1] += trail;
+                continue;
+            }
             if (CleanCore(core) is { } fixedCore)
                 kept.Add(lead + fixedCore + trail);
             else if (trail.Length > 0 && kept.Count > 0)
@@ -101,6 +108,60 @@ public static partial class OcrNoise
         }
         return bad * 6 > good + bad;
     }
+
+    /// <summary>Parça yalnız simgelerden mi oluşuyor (harf ve rakam yok, en az bir <see cref="Symbols"/> imi).</summary>
+    private static bool IsSymbolOnly(string core) =>
+        core.Length > 0 && !core.Any(c => char.IsLetter(c) || char.IsNumber(c)) && core.Any(c => Symbols.Contains(c));
+
+    /// <summary>
+    /// Satır bir okuma kırıntısı mı: altyazı ya da görev değil, ekrandaki küçük bir göstergenin ya da solan satırın yazı
+    /// tanımadan kalan parçası ("one ready.", "ar.", "kulak"). En çok üç sözcüklü ve küçük harfle (ya da harf dışı bir
+    /// imle) başlayan, ya da hiç gerçek sözcük (en az iki harfli, ünlü taşıyan) taşımayan, ya da çöp gibi okunan satır.
+    /// Büyük harfle başlayan kısa konuşma ("Go!", "Okay.") kırıntı değildir. Kırıntı yanındaki uzun konuşmayı "eski"
+    /// gösterip altyazıdan attırmaz, görev satırı da sayılmaz (<see cref="StickyRows"/>, <see cref="MissionLine"/>; GitHub
+    /// #854, #882). Mac/iPhone (OcrNoise.isCrumb) ve Android (OcrNoise.isCrumb) aynı kuralı uygular.
+    /// </summary>
+    public static bool IsCrumb(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0) return true;
+        if (LooksGarbled(trimmed)) return true;
+        var words = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Any(char.IsLetter)).ToList();
+        if (words.Count > 3) return false;
+        var first = trimmed.FirstOrDefault(c => char.IsLetter(c) || char.IsNumber(c));
+        if (first != '\0' && !(char.IsLetter(first) && char.IsUpper(first))) return true;
+        return !words.Any(word =>
+        {
+            var letters = new string(word.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+            return letters.Length >= 2 && letters.IndexOfAny("aeiouyäöüıàáâèéêìíîòóôùúû".ToCharArray()) >= 0;
+        });
+    }
+
+    /// <summary>
+    /// Sözcük (harfleri) İngilizcede bir sözcük olamaz: ünlüsüz (<see cref="Vowelless"/>), İngilizcede hiç yan yana
+    /// gelmeyen iki harf taşıyor ("ijz": "jz") ya da harf-rakam/simge karışık. Yalnız aynı satırın iki okumasından
+    /// hangisinin bozuk olduğuna karar verirken kullanılır (<see cref="SubtitleStabilizer"/>); tek başına satır atmaz.
+    /// </summary>
+    public static bool IsNonWord(string word)
+    {
+        var core = Split(word).Core;
+        var letters = new string(core.Where(char.IsLetter).ToArray());
+        if (letters.Length < 2) return false;
+        if (CleanCore(core) != core || Vowelless(letters)) return true;
+        var lower = letters.ToLowerInvariant();
+        for (var i = 0; i + 1 < lower.Length; i++)
+            if (ImpossiblePairs.Contains(lower.Substring(i, 2))) return true;
+        return false;
+    }
+
+    /// <summary>İngilizce sözcüklerde yan yana gelmeyen harf çiftleri (yazı tanımanın "lives" → "Ijz" gibi uydurmalarında çıkar).</summary>
+    private static readonly HashSet<string> ImpossiblePairs =
+    [
+        "bx", "cj", "cv", "cx", "dx", "fq", "fx", "gq", "gx", "hx", "jc", "jf", "jg", "jq", "js", "jv", "jw", "jx", "jz",
+        "kq", "kx", "mx", "px", "pz", "qb", "qc", "qd", "qf", "qg", "qh", "qj", "qk", "ql", "qm", "qn", "qp", "qr", "qs",
+        "qt", "qv", "qw", "qx", "qy", "qz", "sx", "vb", "vf", "vh", "vj", "vm", "vp", "vq", "vw", "vx", "wx", "xj", "xx",
+        "zj", "zq", "zx",
+    ];
 
     /// <summary>Üç ve daha çok harfli, ünlüsüz ve kısaltma olmayan (tümü büyük harf değil) sözcük: İngilizcede olmaz ("Gtt", "rnnk").</summary>
     private static bool Vowelless(string letters) =>

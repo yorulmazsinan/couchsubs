@@ -35,6 +35,7 @@ public struct MissionLine {
             let text = TextMatch.normalize(line.text)
             guard text.count >= 3 else { continue }
             let placed = box.placed(in: area)
+            guard Self.isCandidate(line.text, box: placed) else { continue }
             if let index = tracks.firstIndex(where: { TextMatch.isSimilar($0.text, text) }) {
                 tracks[index].lastSeen = time
                 tracks[index].box = placed
@@ -57,6 +58,14 @@ public struct MissionLine {
         guard next != region else { return false }
         region = next
         return true
+    }
+
+    /// Satır (kutusu karede) görev olabilir mi. Görev satırı ortadadır ve sözcüklerden oluşur; ekranın bir yanındaki
+    /// HUD yazısı (`ScreenNotices.isNotice`: GTA 6'da arama kartının yanındaki küçük yazı) ya da okuma kırıntısı
+    /// (`OcrNoise.isCrumb`) görev sayılıp kendi yerinde çevrilmez. Kullanıcı bildirimi (GitHub #882, GTA 6): telefon
+    /// araması sürerken arama kartının yanında "kulaklı ar." diye küçük bir çeviri kutusu çıkıyordu.
+    public static func isCandidate(_ text: String, box: TextBox) -> Bool {
+        !ScreenNotices.isNotice(box) && !OcrNoise.isCrumb(text)
     }
 
     public mutating func reset() {

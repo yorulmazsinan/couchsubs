@@ -30,7 +30,8 @@ import android.widget.Toast;
  * TV HDMI'yı kendisi çizdiğinde bu sorun olmaz. "Diğer uygulamaların üzerinde göster" izni gerekir (bilgisayar ADB ile
  * kurarken verir).
  *
- * Pencere odak ve dokunma almaz: kumanda TV'de ve oyunda normal çalışır, CouchSubs'ın kumanda tuşları bu modda yoktur.
+ * Pencere odak almaz: kumanda TV'de ve oyunda normal çalışır, CouchSubs'ın kumanda tuşları bu modda yoktur. Dokunmaya
+ * kapatılmaz (bkz. showWindow: Android 12L+ öyle pencereyi %80 opaklıkla çizer), dokunmalar sayfada yutulur.
  * Altyazıyı uygulama içindeki modla aynı sayfa çizer (TvPage), olaylar yine bilgisayardan SSE ile gelir.
  * Kapatmak için CouchSubs yeniden açılır.
  */
@@ -44,6 +45,15 @@ public class OverlayService extends Service implements TvPage.Host {
 
     /** Servis çalışıyor mu; MainActivity yeniden açıldığında katmanı kapatmak için bakar. */
     static volatile boolean running;
+    /** Çalışan katman (yoksa null): bilgisayarın/telefonun adres yayını ona iletilir (bkz. AddressReceiver). */
+    private static volatile OverlayService current;
+
+    /** Bilgisayar/telefon adresini bildirdi: katmandaki sayfa o adrese geçer; TV'nin girişi değişmez. */
+    static void deliver(String params) {
+        OverlayService service = current;
+        if (service == null) return;
+        service.ui.post(() -> { if (service.page != null) service.page.relaunch(params); });
+    }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private WindowManager windows;
@@ -111,6 +121,7 @@ public class OverlayService extends Service implements TvPage.Host {
                 return START_NOT_STICKY;
             }
             running = true;
+            current = this;
         } else if (params != null && !params.isEmpty()) {
             // CouchSubs yeni adresle yeniden başlatıldı; TV başka bir uygulamaya geçmiş olabilir, giriş yeniden açılır.
             tunedPort = 0;
@@ -130,10 +141,16 @@ public class OverlayService extends Service implements TvPage.Host {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
+        // Pencere bilerek dokunmaya kapatılmaz (FLAG_NOT_TOUCHABLE yok). Android 12L/13+ dokunmayı alttaki uygulamaya
+        // geçiren bindirme penceresinin opaklığını InputManager#getMaximumObscuringOpacityForTouch (varsayılan 0.8) ile
+        // sınırlar (DisplayPolicy.adjustWindowParamsLw, b/218777508): bütün pencere %80 çizilir, "Tam" koyulukta bile
+        // çeviri kutusunun arkasından İngilizce altyazı görünürdü (Philips OLED810 Google TV). Opaklık sayfanın kendi
+        // ayarıdır (Arka plan koyuluğu); pencere hep tam opak. Kumanda tuşları FLAG_NOT_FOCUSABLE ile TV'de ve oyunda
+        // kalır; TV'de dokunmatik yok, olası dokunmalar (fare/hava faresi) yutulur, sayfada tıklanacak bir şey yok.
+        layout.alpha = 1f;
         // Katman da TV'den "en az görüntü işleme" ister (Android 11+); TV destekliyorsa oyun moduna geçer.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
@@ -141,6 +158,7 @@ public class OverlayService extends Service implements TvPage.Host {
             } catch (RuntimeException ignored) {
             }
         }
+        page.webView.setOnTouchListener((view, event) -> true);
         try {
             windows.addView(page.webView, layout);
         } catch (RuntimeException e) {
@@ -297,6 +315,7 @@ public class OverlayService extends Service implements TvPage.Host {
     @Override
     public void onDestroy() {
         running = false;
+        if (current == this) current = null;
         ui.removeCallbacksAndMessages(null);
         if (page != null) {
             try { windows.removeView(page.webView); } catch (RuntimeException ignored) { /* pencere zaten yok */ }

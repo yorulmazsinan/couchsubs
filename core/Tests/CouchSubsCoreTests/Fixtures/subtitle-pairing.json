@@ -114,6 +114,11 @@
       },
       {
         "op": "poll",
+        "state": "rejected"
+      },
+      {
+        "op": "poll",
+        "wrong": true,
         "state": "expired"
       },
       {

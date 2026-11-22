@@ -98,5 +98,9 @@ final class TextStyleSamplerTests: XCTestCase {
         XCTAssertEqual(block.style?.background, "#14161E")
         // Kullanıcının alanında (otomatik değil) tek grup eskisi gibi bloksuzdur.
         XCTAssertNil(RegionWatcher.candidate(reading, in: whole, frame: frame).blocks)
+        // Oyunun hazır alanı (GTA 6 yardım kutusu) otomatik alan gibi özgün stilde çizilir; siyah kutu değil (#856).
+        let preset = RegionWatcher.candidate(reading, in: whole, frame: frame, styled: true)
+        XCTAssertEqual(preset.blocks?.count, 1)
+        XCTAssertEqual(preset.blocks?.first?.style?.background, "#14161E")
     }
 }

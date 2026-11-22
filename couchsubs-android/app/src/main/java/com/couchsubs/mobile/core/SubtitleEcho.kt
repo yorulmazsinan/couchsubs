@@ -76,6 +76,9 @@ class SubtitleEcho(private val clock: () -> Long = monotonicClock) {
     private val lines = mutableListOf<Line>()
     private var region: TextBox? = null
 
+    /** Altyazı hattının gösterdiği çeviriler (hat verir): karede okunan kendi altyazımız ekran yazısı olarak da çevrilmez. */
+    @Volatile var own: OwnSubtitles? = null
+
     /** Altyazı hattı her işlediği karede çağırır: [block] altyazı bloğunun satırları (yeri [region]'a oranla). */
     fun record(block: Reading, region: TextBox) {
         val time = clock()
@@ -113,6 +116,7 @@ class SubtitleEcho(private val clock: () -> Long = monotonicClock) {
 
     /** [text] altyazı hattının son [WINDOW_MS] içinde okuduğu bir satıra benziyor ya da onun parçası/bütünü. */
     fun isEcho(text: String): Boolean {
+        if (own?.isOwn(text) == true) return true
         val probe = TextMatch.normalize(IconText.plain(text))
         if (probe.length < 3) return false
         val time = clock()

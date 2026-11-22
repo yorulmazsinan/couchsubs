@@ -56,6 +56,48 @@ public class SubtitleServerTests
         Assert.Contains(lines, l => l.StartsWith("data:") && l.Contains("\"text\":\"Merhaba dostum\"") && l.Contains("\"replace\":true"));
     }
 
+    /// <summary>Eski TV uygulaması (sürüm bildirmeyen; 0.9.7'den önceki sürümler <c>clear</c> gelir gelmez satırı kaldırır):
+    /// <c>clear</c> ona satırın en az görünme süresi dolunca gider, yeni TV'ye hemen. Arada yeni satır gelirse eski
+    /// <c>clear</c> hiç gitmez (Mac ve Android ile aynı).</summary>
+    [Fact]
+    public async Task ClearReachesOldTvAppsOnlyAfterTheLineWasReadable()
+    {
+        using var server = new SubtitleServer(0);
+        var port = await server.StartAsync();
+        using var old = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        using var fresh = await Http.GetAsync($"http://127.0.0.1:{port}/events?v=0.9.71", HttpCompletionOption.ResponseHeadersRead);
+        await WaitUntil(() => server.ConnectedClients == 2);
+        static async Task<List<(string Line, DateTime At)>> Events(HttpResponseMessage response)
+        {
+            using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
+            var seen = new List<(string, DateTime)>();
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                if (!line.StartsWith("event: ")) continue;
+                seen.Add((line, DateTime.UtcNow));
+                if (line == "event: clear") break;
+            }
+            return seen;
+        }
+        var oldEvents = Events(old);
+        var freshEvents = Events(fresh);
+        var start = DateTime.UtcNow;
+        server.SendSubtitle("Selam", 4000);
+        server.Clear();
+        // Satır kalkmadan yeni satır geldi: eski TV'ye bekleyen clear gitmez, yenisininki süresi dolunca gider.
+        await Task.Delay(500);
+        server.SendSubtitle("Yeni", 4000);
+        server.Clear();
+        var freshSeen = await freshEvents;
+        var oldSeen = await oldEvents;
+        Assert.True((freshSeen.First(e => e.Line == "event: clear").At - start).TotalSeconds < 1, "Yeni TV satırı kendisi tutar");
+        Assert.Equal(2, oldSeen.Count(e => e.Line == "event: subtitle"));
+        // İkinci satır 0,5 sn'de geldi; 4 harf → 2,24 sn tutulur.
+        Assert.True((oldSeen.First(e => e.Line == "event: clear").At - start).TotalSeconds > 2.5);
+        Assert.Equal(TimeSpan.FromMilliseconds(2240), SubtitleServer.LegacyClearHold(4));
+        Assert.Equal(TimeSpan.FromSeconds(5), SubtitleServer.LegacyClearHold(500));
+    }
+
     /// TV uygulaması gösterdiği HDMI girişini akışa bağlanırken bildirir; bekçi PS tuşunu bununla tanır.
     [Fact]
     public async Task RemembersTheHdmiInputTheTvAppShows()
@@ -79,6 +121,35 @@ public class SubtitleServerTests
         Assert.Null(SubtitleServer.ParseHdmiPort("12"));
         Assert.Null(SubtitleServer.ParseHdmiPort(null));
         Assert.Equal(4, SubtitleServer.ParseHdmiPort("4"));
+    }
+
+    /// TV uygulaması sürümünü akışla bildirir; bildirmeyen TV (0.9.69'den eski) eski sayılır, OBS sayılmaz (#884, #891).
+    [Fact]
+    public async Task RemembersTheTvAppVersionAndTreatsSilentTvsAsOld()
+    {
+        using var server = new SubtitleServer(0);
+        var port = await server.StartAsync();
+        Assert.Null(server.TvAppVersion);
+        using (var obs = await Http.GetAsync($"http://127.0.0.1:{port}/events?viewer=obs", HttpCompletionOption.ResponseHeadersRead))
+        {
+            await Task.Delay(100);
+            Assert.Null(server.TvAppVersion);
+        }
+        using (var old = await Http.GetAsync($"http://127.0.0.1:{port}/events?hdmi=2", HttpCompletionOption.ResponseHeadersRead))
+        {
+            await WaitUntil(() => server.TvAppVersion is not null);
+            Assert.Equal("", server.TvAppVersion);
+        }
+        using (var fresh = await Http.GetAsync($"http://127.0.0.1:{port}/events?v=0.9.69&hdmi=2", HttpCompletionOption.ResponseHeadersRead))
+        {
+            await WaitUntil(() => server.TvAppVersion == "0.9.69");
+        }
+        Assert.Equal("", SubtitleServer.ParseTvAppVersion("0.9.70<script>"));
+        Assert.True(SubtitleServer.IsTvAppOutdated("", "0.9.69"));
+        Assert.True(SubtitleServer.IsTvAppOutdated("0.9.49", "0.9.69"));
+        Assert.False(SubtitleServer.IsTvAppOutdated("0.9.69", "0.9.69"));
+        Assert.False(SubtitleServer.IsTvAppOutdated("0.9.70", "0.9.69"));
+        Assert.False(SubtitleServer.IsTvAppOutdated("", ""));
     }
 
     /// Konuşana göre renk açıkken adlı satır "speakers" alanını taşır; kapalıyken ve adsız satırda alan yoktur.
@@ -460,8 +531,13 @@ public class SubtitleServerTests
         var port = await server.StartAsync();
         using var http = new HttpClient();
         var body = await http.GetStringAsync($"http://127.0.0.1:{port}/hello");
-        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"3f2a-b9\",\"tvs\":0}", body);
+        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"3f2a-b9\",\"tvs\":0,\"live\":0}", body);
         Assert.DoesNotContain(server.AccessKey, body);
+        // Çeviri sürüyor ve altyazı TV'ye gidiyor: live 1; altyazı yalnız bilgisayar ekranındaysa 0.
+        server.Pairing.SetSession(true);
+        Assert.EndsWith(",\"live\":1}", await http.GetStringAsync($"http://127.0.0.1:{port}/hello"));
+        server.SendsToTv = false;
+        Assert.EndsWith(",\"live\":0}", await http.GetStringAsync($"http://127.0.0.1:{port}/hello"));
     }
 
     /// <summary>Kurulum kimliği kalıcıdır: aynı ağdaki iki CouchSubs'ı TV bununla ayırır (GitHub #425).</summary>
@@ -472,7 +548,8 @@ public class SubtitleServerTests
         using var second = new SubtitleServer(0);
         Assert.False(string.IsNullOrEmpty(first.InstanceId));
         Assert.Equal(first.InstanceId, second.InstanceId);
-        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"ab\",\"tvs\":2}", SubtitleServer.HelloBody("a\"b", 2));
+        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"ab\",\"tvs\":2,\"live\":0}", SubtitleServer.HelloBody("a\"b", 2));
+        Assert.Equal("{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"x\",\"tvs\":0,\"live\":1}", SubtitleServer.HelloBody("x", 0, true));
     }
 
     // Yeni tarayıcılı TV'ler (Tizen 9.0) yerel ağdaki sunucuya ön istekte izin başlığı ister.

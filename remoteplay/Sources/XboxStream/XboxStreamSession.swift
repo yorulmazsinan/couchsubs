@@ -3,8 +3,9 @@
 // XboxStreamSession.kt). iPhone ve Mac uygulamalarının ortak oturumu; protokol katmanı CouchSubsCore/Xbox'ta.
 // Görüntü yerel WebRTC'yle (stasel/WebRTC) alınır; VideoToolbox'ın verdiği kare CGImage olarak okuma hattına gider.
 // Oyun sesi ayar açıksa (varsayılan açık) bu cihazda çalınır: Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
-// susturabilir. Yerel ses parçası eklenmez, Xbox'a ses gönderilmez. Ayar kapalıyken iPhone'da WebRTC ses birimi hiç
-// başlatılmaz, Mac'te ses parçası kapatılır. Kumanda girdisi gönderilmez.
+// susturabilir. Yerel ses parçası eklenmez, Xbox'a ses gönderilmez. iPhone'da ses mikrofonsuz, yalnız-çalma birimiyle
+// (XboxPlayoutDevice) medya sesi olarak seçili çıkıştan çalar; ayar kapalıyken birim hiç başlatılmaz, Mac'te ses
+// parçası kapatılır. Kumanda girdisi gönderilmez.
 // Sağlamlık kuralları Windows (#538, #611) ve Android ile aynı (CouchSubsCore XboxSessionHealth): ilk kare gelene kadar
 // anahtar kare istenir ve tanı satırı yazılır; tek başarısız canlı tutma isteği yayını bitirmez, ardışık üçü bitirir;
 // bağlantı bitince özet satırı yazılır; yayın durunca metin nedene göre seçilir. İlk kareden sonra görüntü kesilirse
@@ -28,7 +29,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
 
     private static let iceGatherMs = 5000
     private static let keepaliveSeconds: UInt64 = 30
-    private static let firstFrameSeconds: TimeInterval = 20
+    private static let firstFrameSeconds = TimeInterval(XboxFirstFrameWatch.firstFrameLimitMs / 1000)
+    private static let reconnectReason = "Yeniden bağlanılıyor"
     /// Okuma saniyede birkaç kez yapılır; her kareyi CGImage'a çevirmeye gerek yok.
     private static let frameInterval: TimeInterval = 0.066
     /// Kare onayları oynatıcıdaki gibi 16 ms'de bir paketlenir (Input.ts `_inputInterval`).
@@ -70,8 +72,10 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
     private var picture = XboxPictureWatch()
 
-    /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı).
-    private let playAudio: Bool
+    /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı). Çeviri sürerken `setPlayAudio` ile değişir.
+    private var playAudio: Bool
+    /// Xbox'tan gelen ses parçası; ayar değişince yalnız bu açılıp kapatılır.
+    private var audioTrack: RTCMediaStreamTrack?
 
     /// Ekran metinleri uygulamanın kataloğundan gelir. `describe`: yeniden denenirken gösterilen durum; `stopped`: yayın
     /// durunca (denemeler bitti ya da konsol reddetti) nedenin türüne göre gösterilen metin (ikinci değer kısaltılmış neden).
@@ -86,32 +90,29 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         self.stopText = stopped
     }
 
+    #if os(iOS)
+    /// iPhone'da oyun sesi yalnız-çalma birimiyle çalınır (bkz. XboxPlayoutDevice, #907).
+    private static let playout = XboxPlayoutDevice()
+    #endif
+
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
         #if os(iOS)
-        // Ses birimi elle açılır: ayar kapalıyken hiç başlatılmaz (bkz. `setAudio`).
-        let audio = RTCAudioSession.sharedInstance()
-        audio.useManualAudio = true
-        audio.isAudioEnabled = false
-        #endif
+        return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory(),
+                                        audioDevice: playout)
+        #else
         return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
+        #endif
     }()
 
-    /// Oyun sesini açar ya da kapatır. Ses hoparlörden (ya da bağlı kulaklıktan) medya sesi gibi çalınır; WebRTC'nin
-    /// varsayılan görüşme ayarı (voiceChat) sesi kulaklık hoparlörüne verirdi. Yerel ses parçası olmadığından
-    /// mikrofondan Xbox'a hiçbir şey gönderilmez.
+    /// Oyun sesini açar ya da kapatır. Ses medya sesi gibi (.playback) kullanıcının seçtiği çıkıştan çalınır
+    /// (kulaklık, AirPods, Bluetooth hoparlör; yoksa hoparlör). WebRTC'nin varsayılan görüşme birimi (.playAndRecord +
+    /// .defaultToSpeaker, mikrofonlu VoiceProcessingIO) Bluetooth kulaklığı bırakıp sesi hoparlöre veriyordu (#907).
+    /// Mikrofon açılmaz, Xbox'a hiçbir şey gönderilmez.
     private static func setAudio(_ enabled: Bool) {
         // Mac'te ses oturumu yoktur: ses sistemin çıkışından çalınır, kapalıyken ses parçası kapatılır.
         #if os(iOS)
-        let session = RTCAudioSession.sharedInstance()
-        if enabled {
-            let config = RTCAudioSessionConfiguration.webRTC()
-            config.category = AVAudioSession.Category.playAndRecord.rawValue
-            config.categoryOptions = [.defaultToSpeaker, .allowBluetoothA2DP]
-            config.mode = AVAudioSession.Mode.default.rawValue
-            RTCAudioSessionConfiguration.setWebRTC(config)
-        }
-        session.isAudioEnabled = enabled
+        playout.setEnabled(enabled)
         #endif
     }
 
@@ -122,6 +123,21 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     }
 
     private func log(_ text: String) { RemotePlayLog.write("Xbox: \(text)") }
+
+    /// "Xbox sesini bu cihazda çal" çeviri sürerken değişti: yalnız yerel ses açılır ya da kısılır, Xbox'a yeni oturum
+    /// açılmaz. Eskiden ayar değişince yayın kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu kapatmadan gelen yeni
+    /// istekte uzaktan oynatma hizmetini başlatamıyor, bağlantı kopup geri gelmiyordu (#871).
+    public func setPlayAudio(_ enabled: Bool) {
+        let track = locked { () -> RTCMediaStreamTrack? in
+            guard playAudio != enabled else { return nil }
+            playAudio = enabled
+            return audioTrack
+        }
+        guard let track else { return }
+        track.isEnabled = enabled
+        Self.setAudio(enabled)
+        log(enabled ? "oyun sesi açıldı (ayar, oturum sürüyor)" : "oyun sesi kapatıldı (ayar, oturum sürüyor)")
+    }
 
     public func start() {
         guard task == nil else { return }
@@ -140,7 +156,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
 
     /// Uygulama öne gelince: süren el sıkışma ya da bağlantı kapatılıp baştan açılır.
     public func reconnectNow() {
-        locked { if endReason == nil { endReason = "Yeniden bağlanılıyor" } }
+        locked { if endReason == nil { endReason = Self.reconnectReason } }
     }
 
     private var stopped: Bool { locked { machine.phase == .stopped } }
@@ -181,7 +197,11 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
                         break loop
                     }
                 }
-                if !Task.isCancelled && !stopped { throw XboxError(.network, locked { endReason } ?? "Xbox görüntü bağlantısı kapandı") }
+                if !Task.isCancelled && !stopped {
+                    let (reason, noFirstFrame) = locked { (endReason, connectedAt > 0 && framesReceived == 0 && endReason != Self.reconnectReason) }
+                    // Bağlantı kuruldu ama Xbox tek kare göndermeden kapattı: "görüntü gelmedi" sayılır (iki bağlantıda durulur).
+                    throw XboxError(noFirstFrame ? .noFirstFrame : .network, reason ?? "Xbox görüntü bağlantısı kapandı")
+                }
             } catch is CancellationError {
             } catch let error as XboxError {
                 action = decided ?? locked { machine.fail(error.kind, error.message) }
@@ -217,13 +237,19 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         locked { lastError = "\(kind.rawValue): \(detail)" }
         guard !stopped else { return }
         log("kopma (\(kind.rawValue)): \(detail)")
+        if kind == .noFirstFrame {
+            log("Xbox görüntü göndermedi: bağlantı kuruldu ama tek kare gelmedi. Xbox'ta Ayarlar › Cihazlar ve bağlantılar › "
+                + "Uzak özellikler açık mı, Xbox kablolu mu? Tanı satırlarında video bayt 0 ise Xbox hiç görüntü kodlamıyor")
+        }
         let (phase, delays) = locked { (machine.phase, machine.retryDelaysMs) }
         if case let .failed(_, _, true, attempt) = phase, attempt > 0 {
             log("yeniden deneme \(attempt)/\(delays.count): \(delays[attempt - 1] / 1000) sn sonra")
         } else if case .failed = phase, !XboxSessionMachine.fatal.contains(kind) {
             // Denemeler bitti ya da konsol yayını reddetti: yayın durur, yeniden denenmez.
             log("yeniden denenmiyor, yayın durdu")
-            onState?(.disconnected(.other(stopText(XboxStop.classify(detail, kind: kind), XboxStop.shorten(detail, fallback: kind.rawValue)))))
+            // Ham neden (Xbox'ın JSON hata nesnesi) yukarıda günlüğe yazıldı; ekranda yalnız anlaşılır metin ve kod (#871).
+            let stop = XboxStop.classify(detail, kind: kind)
+            onState?(.disconnected(.other(stopText(stop, XboxStop.displayReason(detail, stop, fallback: kind.rawValue)))))
             return
         }
         onState?(.disconnected(.other(describe(kind))))
@@ -240,6 +266,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             pendingAcks = []
             watch = nil
             videoTrack = nil
+            audioTrack = nil
         }
         let (peer, channels, id) = locked { () -> (RTCPeerConnection?, [RTCDataChannel], String?) in
             let result = (self.peer, Array(self.channels.values), self.sessionId)
@@ -303,6 +330,10 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         videoInit.direction = .recvOnly
         let audio = connection.addTransceiver(of: .audio, init: audioInit)
         let video = connection.addTransceiver(of: .video, init: videoInit)
+        let playAudio = locked { () -> Bool in
+            audioTrack = audio?.receiver.track
+            return self.playAudio
+        }
         audio?.receiver.track?.isEnabled = playAudio
         Self.setAudio(playAudio)
         log(playAudio ? "oyun sesi bu cihazda çalınır" : "oyun sesi kapalı (ayar)")
@@ -343,7 +374,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         while !Task.isCancelled && !stopped {
             if locked({ endReason }) != nil { return }
             if locked({ framesReceived }) == 0 && Date().timeIntervalSince(negotiatedAt) > Self.firstFrameSeconds {
-                throw XboxError(.consoleUnavailable, "Xbox'tan \(Int(Self.firstFrameSeconds)) sn içinde görüntü gelmedi")
+                throw XboxError(.noFirstFrame, "Xbox'tan \(Int(Self.firstFrameSeconds)) sn içinde görüntü gelmedi")
             }
             try checkPicture()
             try await Task.sleep(nanoseconds: 1_000_000_000)

@@ -145,6 +145,27 @@ final class ScreenTextDetectorTests: XCTestCase {
         XCTAssertTrue(detector.areas.isEmpty)
     }
 
+    /// Menü şeridinin sekmeleri arasındaki seçili (renkli, aday olmayan) sekme alanı ortadan bölmez: aynı karo satırında
+    /// iki boş karoya kadar aralıklı bileşenler birleşir (#859); başka satırda iki boş karo sınırı kalır.
+    func testTabsOnOneRowMergeAcrossTheSelectedTab() {
+        typealias Cells = ScreenTextDetector.Cells
+        let row = ScreenTextDetector.merged([(Cells(left: 14, top: 1, right: 20, bottom: 1), [1 * 32 + 14]),
+                                             (Cells(left: 23, top: 1, right: 29, bottom: 1), [1 * 32 + 23])])
+        XCTAssertEqual(row.count, 1)
+        XCTAssertEqual(row.first?.cells, Cells(left: 14, top: 1, right: 29, bottom: 1))
+        let apart = ScreenTextDetector.merged([(Cells(left: 14, top: 1, right: 20, bottom: 1), [1 * 32 + 14]),
+                                               (Cells(left: 23, top: 2, right: 29, bottom: 2), [2 * 32 + 23])])
+        XCTAssertEqual(apart.count, 2)
+        // Seçili sekme üç karo genişse: iki yanındaki sekme öbekleri (en az iki karo) yine birleşir.
+        let wide = ScreenTextDetector.merged([(Cells(left: 16, top: 1, right: 22, bottom: 1), [1 * 32 + 16]),
+                                              (Cells(left: 26, top: 1, right: 29, bottom: 1), [1 * 32 + 26])])
+        XCTAssertEqual(wide.count, 1)
+        // Tek karoluk etiketler (tekerlek menü) dört sütun arayla ayrı kalır.
+        let wheel = ScreenTextDetector.merged([(Cells(left: 4, top: 1, right: 4, bottom: 1), [1 * 32 + 4]),
+                                               (Cells(left: 8, top: 1, right: 8, bottom: 1), [1 * 32 + 8])])
+        XCTAssertEqual(wheel.count, 2)
+    }
+
     func testResetForgetsAreas() {
         let detector = ScreenTextDetector()
         run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }

@@ -1,0 +1,21 @@
+[
+ {"input": "[2026-11-22 10:00:00] PS5 kaydı başlıyor: 192.168.1.20, hesap kimliği q83vEjRWeJA=", "expected": "[2026-11-22 10:00:00] PS5 kaydı başlıyor: 192.168.1.20, hesap kimliği ***"},
+ {"input": "[chiaki info] Ctrl connected to 192.168.1.20:9295", "expected": "[chiaki info] Ctrl connected to 192.168.1.20:9295"},
+ {"input": "[chiaki info] Ctrl received valid Session Id: aGVsbG8td29ybGQtMTIz", "expected": "[chiaki info] Ctrl received valid Session Id: ***"},
+ {"input": "[chiaki error] Invalid Session Id \"abc123\" received", "expected": "[chiaki error] Invalid Session Id \"***\" received"},
+ {"input": "RP-RegistKey: 0a1b2c3d4e5f6a7b", "expected": "RP-RegistKey: ***"},
+ {"input": "regist_key=0a1b2c3d rp_key=ffeeddcc morning=00112233", "expected": "regist_key=*** rp_key=*** morning=***"},
+ {"input": "{\"accountId\":\"1234567890123456789\",\"onlineId\":\"oyuncu42\"}", "expected": "{\"accountId\":\"***\",\"onlineId\":\"***\"}"},
+ {"input": "PSN girişi başarısız: https://ca.account.sony.com/api/authz/v3/oauth/authorize?code=v3.AbCdEf&state=xyz&cid=1", "expected": "PSN girişi başarısız: https://ca.account.sony.com/api/authz/v3/oauth/authorize?code=***&state=***&cid=1"},
+ {"input": "access_token=eyJhbGciOiJIUzI1NiJ9 refresh_token=abc", "expected": "access_token=*** refresh_token=***"},
+ {"input": "Authorization: XBL3.0 x=1234;eyJ0eXAiOiJKV1Qi", "expected": "Authorization: *** ***"},
+ {"input": "header Bearer abc.def.ghi", "expected": "header Bearer ***"},
+ {"input": "iletişim: oyuncu.adi+ps@ornek.com.tr yazdı", "expected": "iletişim: ***@*** yazdı"},
+ {"input": "Xbox: kanal control: {\"xuid\":\"2533274812345678\",\"gamertag\":\"Oyuncu\"}", "expected": "Xbox: kanal control: {\"xuid\":\"***\",\"gamertag\":\"***\"}"},
+ {"input": "jeton dizisi: QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0NTY3ODk=", "expected": "jeton dizisi: ***"},
+ {"input": "[chiaki error] Reported Application Reason: 0x80108b12 (Remote Play is disabled)", "expected": "[chiaki error] Reported Application Reason: 0x80108b12 (Remote Play is disabled)"},
+ {"input": "#12 \"Get down! I'm going to the store\" → çeviri 340 ms", "expected": "#12 \"Get down! I'm going to the store\" → çeviri 340 ms"},
+ {"input": "PS5 oturumu: PS5-123 192.168.1.20 dinlenmede, uyandırılıyor", "expected": "PS5 oturumu: PS5-123 192.168.1.20 dinlenmede, uyandırılıyor"},
+ {"input": "Xbox: play yanıtı: oturum 1a2b3c4d…", "expected": "Xbox: play yanıtı: oturum 1a2b3c4d…"},
+ {"input": "/var/mobile/Containers/Data/Application/Library/Logs/CouchSubs/remoteplay.log", "expected": "/var/mobile/Containers/Data/Application/Library/Logs/CouchSubs/remoteplay.log"}
+]

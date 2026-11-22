@@ -26,6 +26,25 @@ final class SpeechScriptTests: XCTestCase {
     func testUnlabeledLinesHaveNoSpeaker() {
         XCTAssertEqual(lines("The bridge is gone.").map(\.speaker), [nil])
     }
+
+    /// Çeviri arka planda yazar, okuma hattı ana iş parçacığında okur; ikisi aynı anda olunca çökmemeli (kapasite dolup
+    /// boşaltılırken de).
+    func testSpeechMemoryIsSafeAcrossThreads() {
+        let memory = SpeechMemory()
+        DispatchQueue.concurrentPerform(iterations: 8) { worker in
+            for index in 0..<2_000 {
+                let text = "line \(worker) \(index)"
+                if worker % 2 == 0 {
+                    memory.store([SpokenLine(english: text, turkish: "satır")], for: text)
+                } else {
+                    _ = memory["line \(worker - 1) \(index)"]
+                }
+            }
+        }
+        memory.store([SpokenLine(english: "Go.", turkish: "Git.")], for: "Go.")
+        XCTAssertEqual(memory["Go."]?.map(\.turkish), ["Git."])
+        XCTAssertNil(memory["never stored"])
+    }
 }
 
 final class SpeechTextTests: XCTestCase {

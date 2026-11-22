@@ -151,7 +151,16 @@ fun List<ExtraArea>.watched(preset: AreaPreset): List<ExtraArea> = if (preset ==
 object ScreenText {
     /** En az iki harfi ve iki harfli bir sözcüğü olan satır yazıdır; geri kalanı sayı ve simgedir. */
     fun isWords(text: String): Boolean =
-        text.count { it.isLetter() } >= 2 && text.split(Regex("\\s+")).any { word -> word.count { it.isLetter() } >= 2 }
+        text.count { it.isLetter() } >= 2 && text.split(Regex("\\s+")).any { word -> word.count { it.isLetter() } >= 2 } &&
+            !isDistance(text)
+
+    private val distance = Regex("""^\s*\d[\d.,]*\s?(ft|m|mi|km|yd|yds)\s*$""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Yalnız sayı ve uzaklık birimi: "124 ft", "4 ft", "2.4 mi", "300m", "1,2 km", "50 yd". Haritada kartın yanındaki
+     * uzaklık göstergedir, çevrilmez (Mac/iPhone ve Windows ile aynı).
+     */
+    fun isDistance(text: String): Boolean = distance.matches(text)
 
     /**
      * Önceki parça cümleyi bitirdiyse ya da kısa bir başlık/menü satırıysa (en çok üç sözcük, virgülsüz) ve yeni satır
@@ -366,14 +375,30 @@ class RegionWatcher(
          * Okumadan çevrilecek parçalar, kutusu (kareye oranla) ve satır yüksekliği. Yazının içindeki kumanda simgeleri
          * [frame]'den (okunan alan) kesilir; çeviride yerleri korunur.
          */
+        /**
+         * [styled]: otomatik alan ya da oyunun hazır alanı ([GameAreaPresets]): saat ve sayaç ("12:00 pm") çevrilmez.
+         * Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
+         */
         fun candidate(
             reading: Reading, region: CropRegion, frame: GrayFrame? = null, keepPrompts: Boolean = false, auto: Boolean = false,
+            styled: Boolean = false, color: ((Int, Int) -> Int)? = null,
         ): Candidate {
-            val marked = reading.withButtonIcons()
+            // Fiilsiz yerlerdeki simgeler (tuş çubuğu, satır ucu) karede doğrulanır; otomatik alanda yalnız renksiz simgeler
+            // ([color]), satır ucundaki simge çeviriye girmez (Mac ve Windows ile aynı).
+            val marked = if (frame == null) reading.withButtonIcons() else reading.withButtonIcons(frame, color, monochrome = auto)
+            val stylish = auto || styled
+            // Menü şeridinin sekmeleri tek satır okunsa da ayrı satırlardır (#859); kutular alana oranlı.
+            val aspect = (region.right - region.left) * 16 / maxOf(1e-6, (region.bottom - region.top) * 9)
             // Menüdeki tuş etiketleri ("HOLSTER (L1)", "SELECT ✕") menü durumunda çevrilir; başka yerde kısa ipucu atılır.
-            val lines = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
+            // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
+            // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+            val lines = ScreenTranslation.withoutDuplicateLines((if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
+                .flatMap { ScreenTranslation.menuPieces(it, aspect, frame) }
+                .map(ScreenTranslation::withoutEdgeMarks)
+                .map(ScreenTranslation::withoutEdgeIcons)
                 .filter { ScreenText.isWords(it.text) }
-                .sortedBy { it.box?.top ?: 0.0 }
+                .filter { !stylish || !ScreenTranslation.isClock(it.text) }
+                .sortedBy { it.box?.top ?: 0.0 })
             var paragraphs = ScreenText.paragraphs(lines)
             val boxes = lines.mapNotNull { it.box }
             val box = boxes.reduceOrNull { a, b -> a.union(b) }?.placedIn(region.box)
@@ -387,19 +412,22 @@ class RegionWatcher(
             // satır varsa) eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar
             // yeniden kurulur.
             var blocks: List<Block>? = null
-            // Otomatik alanda haritanın görev kartı kendi parçalarına ayrılır (başlık, alt başlık, açıklama, ayrıntı;
-            // [MissionCard]); kalan satırlar her zamanki gibi.
-            val cards = if (auto && lines.isNotEmpty() && boxes.size == lines.size) MissionCard.find(lines, region.box) else emptyList()
+            // Haritanın görev kartı her alanda kendi parçalarına ayrılır (başlık, alt başlık, açıklama, ayrıntı;
+            // [MissionCard]); kalan satırlar her zamanki gibi. Hazır ya da kullanıcının alanında da başlık açıklamaya
+            // katılıp ikisi tek kutuda, görev resminin üstünde çiziliyordu (#856).
+            val cards = if (lines.isNotEmpty() && boxes.size == lines.size) MissionCard.find(lines, region.box) else emptyList()
             val groups = when {
+                // Otomatik ve hazır alan: kısa etiketler kendi bloğu, uzun yazı paragraf ([autoGroups]; Mac ve Windows gibi).
+                stylish && lines.isNotEmpty() && boxes.size == lines.size -> autoGroups(lines, keepPrompts, cards)
                 cards.isNotEmpty() -> {
                     val taken = cards.flatMap { it.all }.toSet()
                     val rest = lines.indices.filter { it !in taken }.map { lines[it] }
                     (ScreenTranslation.groupLines(rest) + cards.flatMap { MissionCard.groups(it, lines) }).sortedBy { it.box.top }
                 }
-                lines.size > 1 && boxes.size == lines.size -> ScreenTranslation.groups(reading, keepPrompts)
+                lines.size > 1 && boxes.size == lines.size -> ScreenTranslation.groupLines(lines)
                 else -> emptyList()
             }
-            if (groups.size > 1 && groups.size < ScreenTranslation.MAX_GROUPS) {
+            if ((stylish && groups.isNotEmpty()) || (groups.size > 1 && groups.size < ScreenTranslation.MAX_GROUPS)) {
                 paragraphs = groups.flatMap { it.paragraphs }
                 icons = groups.flatMap { group -> group.icons ?: group.paragraphs.map { emptyList<IconSlot>() } }
                 var start = 0
@@ -415,6 +443,48 @@ class RegionWatcher(
                 !MissionCard.inHelpCorner(card.all.map { lines[it].box!! }.reduce { a, b -> a.union(b) }.placedIn(region.box))
             }
             return Candidate(paragraphs, box, lineHeight, key, cut, blocks, textKey(paragraphs), missionCard = missionCard)
+        }
+
+        /** Kısa etiket satırı: en çok bu kadar sözcük. */
+        private const val LABEL_WORDS = 5
+
+        /**
+         * Otomatik ve hazır alanın grupları (Mac RegionWatcher.autoGroups, Windows AutoGroups ile aynı): gruplar önce
+         * birlikte kurulur; bütün satırları kısa etiket olan grup (menü sütunu, tuş etiketleri) satır satır bloktur, uzun
+         * satırı olan grup paragraftır, başındaki BÜYÜK HARF başlık ise kendi bloğudur. Önceden hazır alanda alt alta tuş
+         * etiketleri ("RECENTER", "2D VIEW") tek kutuda tek cümle gibi çevriliyordu. [menu] dışında satır yükseklikleri
+         * ±%15'ten çok farklı paragraf (eğik ya da ölçekli dünya yazısı: poster, tabela) çevrilmez.
+         */
+        internal fun autoGroups(lines: List<TextLine>, menu: Boolean = false, cards: List<MissionCard.Card> = emptyList()): List<ScreenTranslation.Group> {
+            fun isLabel(line: TextLine) = line.text.split(Regex("\\s+")).count { it.isNotEmpty() } <= LABEL_WORDS
+            fun isTitle(line: TextLine) = line.text.any { it.isLetter() } && line.text.none { it.isLowerCase() }
+            fun inside(line: TextBox, group: TextBox): Boolean {
+                val x = (line.left + line.right) / 2
+                val y = (line.top + line.bottom) / 2
+                return x >= group.left - 1e-6 && x <= group.right + 1e-6 && y >= group.top - 1e-6 && y <= group.bottom + 1e-6
+            }
+            fun single(line: TextLine): ScreenTranslation.Group {
+                val icons = ScreenText.paragraphIcons(listOf(line))
+                val box = line.box!!
+                return ScreenTranslation.Group(ScreenText.paragraphs(listOf(line)), box, box.bottom - box.top,
+                    if (icons.any { it.isNotEmpty() }) icons else null)
+            }
+            val groups = cards.flatMap { MissionCard.groups(it, lines) }.toMutableList()
+            val taken = cards.flatMap { it.all }.toSet()
+            val rest = lines.indices.filter { it !in taken }.map { lines[it] }
+            for (group in ScreenTranslation.groupLines(rest)) {
+                val own = rest.filter { inside(it.box!!, group.box) }
+                if (own.all(::isLabel)) {
+                    groups += own.map(::single)
+                    continue
+                }
+                val heights = own.filter { !isLabel(it) }.map { it.box!!.bottom - it.box!!.top }
+                if (!menu && heights.size >= 2 && heights.max() > heights.min() * (1.15 / 0.85)) continue
+                val titles = own.takeWhile { isTitle(it) && isLabel(it) }
+                groups += titles.map(::single)
+                if (titles.isEmpty()) groups += group else groups += ScreenTranslation.groupLines(own.drop(titles.size))
+            }
+            return groups.withIndex().sortedWith(compareBy({ it.value.box.top }, { it.value.box.left }, { it.index })).map { it.value }
         }
 
         /**
@@ -790,10 +860,13 @@ class RegionWatcher(
         reads++
         // Altyazı alanındaki ya da altyazı hattının okuduğu satırlar ekran yazısı değildir; altyazı iki yerde çizilmesin
         // (bkz. [SubtitleEcho]). Menüde ve görev satırının kendi alanında yalnız metin eşleşmesi uygulanır.
-        val geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.AREA_ID
+        val geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.AREA_ID &&
+            !ScreenNotices.isNotice(area.id)
         val own = subtitleEcho?.filter(reading, area.region.box, geometry) ?: reading
         val text = if (area.auto) AutoText.clean(own, area.menu) else own
-        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto)
+        val preset = GameAreaPresets.isPreset(area.id)
+        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = preset,
+            color = crop.color)
         if (area.auto) {
             // Menü dışındaki otomatik alanın türü okunan yazıdan çıkar (yardım/eylem ya da diğer); kapalı tür gürültü gibi
             // çizilmez, bulucuya bildirilir.
@@ -807,6 +880,9 @@ class RegionWatcher(
                 return
             }
             candidate = styled(candidate, text, area.region, crop.frame, crop.color).copy(auto = true)
+        } else if (preset) {
+            // Oyunun hazır alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda çizilir (siyah kutu değil, #856).
+            candidate = styled(candidate, text, area.region, crop.frame, crop.color)
         }
         if (state.lastRead == candidate.key) {
             state.candidate = null
@@ -1004,7 +1080,9 @@ class RegionWatcher(
         // Zaten Türkçe olan parça çevrilmez: aslı kalır, tümü öyleyse kutu gösterilmez.
         return paragraphs.mapIndexed { i, paragraph ->
             if (started != session) throw CancellationException()
-            packLookup?.invoke(IconText.plain(paragraph))?.text
+            // Yalnız özel adlardan oluşan yazı ("JASON & LUCIA") çevrilmez (#859).
+            if (ScreenTranslation.keepsNames(paragraph)) paragraph
+            else packLookup?.invoke(IconText.plain(paragraph))?.text
                 ?: if (skipsTurkish && TurkishText.isSure(paragraph)) paragraph else engine.translate(prepared[i].text)
         }
     }
@@ -1038,7 +1116,9 @@ class RegionWatcher(
             val plain = IconText.plain(marked).trim()
             piece.result = when {
                 plain.isEmpty() || untouched.matches(plain) -> piece.text
-                else -> UiCommands.translate(marked)?.let { ui ->
+                // Yalnız özel adlardan oluşan sekme ("JASON & LUCIA") çevrilmez (#859).
+                ScreenTranslation.keepsNames(plain) -> piece.text
+                else -> UiCommands.translateLabelLoosely(marked)?.let { ui ->
                     // Sözlük çevirisindeki simge imleri yeniden adlara döner (çevirinin simge yerleri korunur).
                     var k = 0
                     buildString { for (c in ui) if (c == ButtonIcons.MARKER && k < piece.names.size) append(piece.names[k++]) else append(c) }

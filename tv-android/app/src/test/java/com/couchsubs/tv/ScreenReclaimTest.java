@@ -35,6 +35,57 @@ public class ScreenReclaimTest {
         assertFalse(reclaim.shouldReclaim(60_500, false));
     }
 
+    /**
+     * X (TCL Google TV, 0.9.56 sonrası): "ayarlar tuşu uygulamadan atıyor". Kumandada tuşa basılıp hemen ardından ekran
+     * önden çekildiyse (hızlı ayarlar paneli) devralma değildir: geri alınmaz, hak dolmuş olsa da katmana geçilmez.
+     */
+    @Test
+    public void screenOpenedByTheUsersKeyIsNotATakeover() {
+        ScreenReclaim reclaim = new ScreenReclaim();
+        for (long t = 100_000; t < 130_000; t += 5_000) {
+            reclaim.signal(t, 0);
+            reclaim.userKey(t + 200);
+            assertEquals(ScreenReclaim.Action.NONE, reclaim.onTakenAway(t + 400, true));
+        }
+        assertTrue(reclaim.userActedBefore(130_000 - 5_000 + 200 + ScreenReclaim.USER_KEY_MS));
+        assertFalse(reclaim.userActedBefore(130_000 - 5_000 + 200 + ScreenReclaim.USER_KEY_MS + 1));
+        // Tuştan uzun süre sonra gelen devralma yine tanınır.
+        reclaim.userKey(200_000);
+        reclaim.signal(210_000, 0);
+        assertTrue(reclaim.shouldReclaim(210_500, true));
+    }
+
+    /** Girişi açtıran tuş (seçicide 1-4) TV'nin hemen ardından gelen devralmasını kullanıcının işi saydırmaz (#42). */
+    @Test
+    public void keyThatTunedTheInputDoesNotHideTheTakeover() {
+        ScreenReclaim reclaim = new ScreenReclaim();
+        reclaim.userKey(50_000);
+        reclaim.tuned();
+        assertFalse(reclaim.userActedBefore(51_500));
+    }
+
+    /** Aynı boyu ya da aynı izleri yineleyen TV'de (görüntü değişmedi) sinyal olayı sayılmaz; gerçek değişim sayılır. */
+    @Test
+    public void onlyRealSizeOrTrackChangesCount() {
+        ScreenReclaim reclaim = new ScreenReclaim();
+        reclaim.videoSize(60_000, 0, 1920, 1080);
+        reclaim.videoTracks(60_000, 0, "v:1920x1080@60.0;");
+        for (long t = 61_000; t < 70_000; t += 1_000) {
+            reclaim.videoSize(t, 0, 1920, 1080);
+            reclaim.videoTracks(t, 0, "v:1920x1080@60.0;");
+        }
+        assertFalse(reclaim.shouldReclaim(70_100, true));
+        // HDR/çözünürlük değişimi.
+        reclaim.videoSize(80_000, 0, 3840, 2160);
+        assertTrue(reclaim.shouldReclaim(80_500, true));
+        reclaim.videoTracks(90_000, 0, "v:3840x2160@120.0;");
+        assertTrue(reclaim.shouldReclaim(90_500, true));
+        // Giriş yeniden açılınca ilk bildirim değişim sayılmaz.
+        reclaim.tuned();
+        reclaim.videoSize(100_000, 0, 1280, 720);
+        assertFalse(reclaim.shouldReclaim(100_500, true));
+    }
+
     @Test
     public void atMostThreeTimesAMinute() {
         ScreenReclaim reclaim = new ScreenReclaim();

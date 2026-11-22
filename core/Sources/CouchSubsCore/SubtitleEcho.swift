@@ -14,7 +14,8 @@ import Foundation
 /// Kural: ekran yazısı okumasında altyazı alanında altyazı satırının yerine düşen satır (bkz. `isSubtitlePlace`), son
 /// altyazı satırının hemen üstüne/altına taşan aynı boydaki satır ve altyazı hattının son `windowMs` içinde okuduğu metne
 /// benzeyen satır atılır. Menü durumunda ve görev satırının kendi alanında yalnız metin eşleşmesi uygulanır (menü
-/// satırları altyazı alanında da olabilir; görev satırı altyazı alanının içindedir). Windows (SubtitleEcho.cs) ve
+/// satırları altyazı alanında da olabilir; görev satırı altyazı alanının içindedir). Karede okunan kendi çevirimiz de
+/// (OBS Program projektörü, bkz. `OwnSubtitles`) metinden atılır. Windows (SubtitleEcho.cs) ve
 /// Android (SubtitleEcho.kt) aynı kuralları uygular. İş parçacığı güvenlidir.
 public final class SubtitleEcho: @unchecked Sendable {
     /// Altyazı hattının okuduğu metin bu kadar süre hatırlanır (ekran yazısı turu 0,5–1 sn arayla okur).
@@ -40,6 +41,12 @@ public final class SubtitleEcho: @unchecked Sendable {
     private let lock = NSLock()
     private let clock: () -> Int
     private var lines: [Line] = []
+    /// Altyazı hattının gösterdiği çeviriler (hat verir): karede okunan kendi altyazımız ekran yazısı olarak da çevrilmez.
+    public var own: OwnSubtitles? {
+        get { lock.withLock { ownSubtitles } }
+        set { lock.withLock { ownSubtitles = newValue } }
+    }
+    private var ownSubtitles: OwnSubtitles?
     private var region: CropRegion?
 
     public init(clock: @escaping () -> Int = SubtitleStabilizer.uptimeMs) {
@@ -84,6 +91,7 @@ public final class SubtitleEcho: @unchecked Sendable {
 
     /// `text` altyazı hattının son `windowMs` içinde okuduğu bir satıra benziyor ya da onun parçası/bütünü.
     public func isEcho(_ text: String) -> Bool {
+        if own?.isOwn(text) == true { return true }
         let probe = TextMatch.normalize(IconText.plain(text))
         guard probe.count >= 3 else { return false }
         let time = clock()

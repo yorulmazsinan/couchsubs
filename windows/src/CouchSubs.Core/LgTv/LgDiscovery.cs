@@ -32,16 +32,64 @@ public static class LgDiscovery
     public static async Task<IReadOnlyList<LgTv>> SearchAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         var wait = timeout ?? TimeSpan.FromSeconds(3);
-        var hosts = await CollectResponses(SearchTarget, wait, cancellationToken);
+        var hits = await CollectHits(SearchTarget, wait, cancellationToken);
         // Cevap yoksa eski webOS için "ssdp:all": hem çok noktaya yayınla hem ağdaki her adrese tek tek (o TV yalnız
         // doğrudan gönderilen aramaya cevap verdi).
-        if (hosts.Count == 0)
-            hosts = await CollectResponses(AllTarget, wait, cancellationToken,
+        if (hits.Count == 0)
+            hits = await CollectHits(AllTarget, wait, cancellationToken,
                 LocalNetwork.ScanTargets(LocalNetwork.PrivateAddresses()).ToList());
         var tvs = new List<LgTv>();
-        foreach (var host in hosts.Distinct().Order(StringComparer.Ordinal))
-            tvs.Add(new LgTv(await FriendlyName(host) ?? "LG TV", host));
+        foreach (var group in hits.GroupBy(hit => hit.Host).OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var host = group.Key;
+            if (group.Any(hit => hit.Confirmed))
+            {
+                tvs.Add(new LgTv(await FriendlyName(host) ?? "LG TV", host));
+                continue;
+            }
+            var description = DescriptionAsync(host);
+            var greeting = GreetingAsync(host);
+            var android = Task.WhenAll(AndroidPorts.Select(port => IsPortOpenAsync(host, port)));
+            var xml = await description;
+            if (ClassifyUnconfirmed(host, LgNameIn(xml),
+                    IsSsapGreeting(await greeting), (await android).Any(open => open)) is { } tv)
+                tvs.Add(tv);
+        }
         return tvs;
+    }
+
+    /// <summary>
+    /// LG olduğunu SSDP yanıtında söylemeyen adres (yalnız sorulan hedefi geri söyledi; bkz. <see cref="SsdpHit"/>): LG
+    /// cihaz tanımı ya da ikinci ekran sunucusu tanırsa LG, Android TV portu açıksa Android TV, hiçbiri değilse listelenmez.
+    /// Önceden böyle bir adres (Mac'te görülen: Android TV) "LG TV" diye listeleniyor, Bağlan LG eşleştirmesi deneyip
+    /// "TV yanıt vermedi" diyordu; LG bekçisinin taraması da onu kapalı LG'nin "yeni adresi" sanabiliyordu (TvLocator).
+    /// </summary>
+    public static LgTv? ClassifyUnconfirmed(string host, string? lgName, bool ssapGreeting, bool androidPortOpen)
+    {
+        if (lgName is not null) return new LgTv(lgName, host);
+        if (ssapGreeting) return new LgTv("LG TV", host);
+        return androidPortOpen ? new LgTv("Android TV", host, TvBrand.AndroidTv) : null;
+    }
+
+    /// <summary>webOS cihaz tanımı mı (üretici LG ya da model webOS; Mac: LGDiscovery.isLGDescription).</summary>
+    internal static bool IsLgDescription(string xml) =>
+        xml.Contains("<device", StringComparison.OrdinalIgnoreCase) &&
+        (xml.Contains("lg electronics", StringComparison.OrdinalIgnoreCase) || xml.Contains("webos", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>webOS'un ikinci ekran (SSAP) sunucusu düz HTTP isteğine "Hello world" der.</summary>
+    internal static bool IsSsapGreeting(string? reply) =>
+        string.Equals(reply?.Trim(), "hello world", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<string?> DescriptionAsync(string host)
+    {
+        try { return await Http.GetStringAsync($"http://{host}:1990/"); }
+        catch { return null; }
+    }
+
+    private static async Task<string?> GreetingAsync(string host)
+    {
+        try { return await Http.GetStringAsync($"http://{host}:3000/"); }
+        catch { return null; }
     }
 
     /// <summary>Elle yazılan adresteki TV (türü TV'ye sorulur; bkz. <see cref="ManualTvAsync"/>).</summary>
@@ -61,11 +109,20 @@ public static class LgDiscovery
     public static async Task<ManualTv> ManualTvAsync(string host, CancellationToken cancellationToken = default)
     {
         var samsung = SamsungDiscovery.DeviceNameAsync(host, cancellationToken);
-        var lgName = FriendlyName(host);
-        var lgPort = IsPortOpenAsync(host, 3000);
+        var description = DescriptionAsync(host);
+        var greeting = GreetingAsync(host);
         var android = Task.WhenAll(AndroidPorts.Select(port => IsPortOpenAsync(host, port)));
-        return ClassifyManual(host, await samsung, await lgName, await lgPort, (await android).Any(open => open));
+        return ClassifyManual(host, await samsung, LgNameIn(await description), IsSsapGreeting(await greeting),
+            (await android).Any(open => open));
     }
+
+    /// <summary>
+    /// Cihaz tanımı (1990) LG webOS'unsa adı (yoksa "LG TV"), değilse null. Önceden 1990'da adını veren her cihaz ve 3000
+    /// portu açık her cihaz LG sayılıyordu (Mac'teki kural cihaz tanımına ve "Hello world" yanıtına bakıyordu): elle
+    /// adresi yazılan Android TV (X, Toshiba, Windows) LG diye eklenip LG eşleştirmesinde uzun uzun bekliyordu.
+    /// </summary>
+    internal static string? LgNameIn(string? xml) =>
+        xml is not null && IsLgDescription(xml) ? FriendlyNameIn(xml)?.Trim() is { Length: > 0 } name ? name : "LG TV" : null;
 
     /// <summary>
     /// Yoklama sonuçlarından TV: Samsung 8001'de kendini tanıtırsa Samsung; LG cihaz tanımı (1990) ya da ikinci ekran
@@ -124,10 +181,21 @@ public static class LgDiscovery
     /// SSDP yanıtından TV'nin adresini çıkarır; aranan hedef değilse null. "ssdp:all" aramasında her cihaz cevap verir:
     /// yalnız kendini LG webOS TV olarak tanıtan yanıt (bkz. IsLgHeader) alınır.
     /// </summary>
-    public static string? HostFromSsdpResponse(string response, string searchTarget = SearchTarget)
+    public static string? HostFromSsdpResponse(string response, string searchTarget = SearchTarget) =>
+        HitFromSsdpResponse(response, searchTarget)?.Host;
+
+    /// <summary>
+    /// SSDP yanıtındaki aday adres. <c>Confirmed</c>: yanıt kendini LG webOS olarak tanıtıyor: sorulan hedefin adı dışında
+    /// bir başlıkta webOS/LGTV geçiyor (webOS: "SERVER: WebOS/4.4.0 UPnP/1.0") ya da cihaz tanımı webOS'un 1990 portunda.
+    /// Hedefin adında ("...webos-second-screen...") "webos" geçtiği için yalnız onu geri söyleyen yanıt doğrulanmış sayılmaz.
+    /// </summary>
+    public sealed record SsdpHit(string Host, bool Confirmed);
+
+    public static SsdpHit? HitFromSsdpResponse(string response, string searchTarget = SearchTarget)
     {
         string? location = null;
         var isLg = false;
+        var lgHeader = false;
         foreach (var line in response.Split("\r\n"))
         {
             var colon = line.IndexOf(':');
@@ -135,10 +203,13 @@ public static class LgDiscovery
             var name = line[..colon].Trim().ToUpperInvariant();
             var value = line[(colon + 1)..].Trim();
             if (name == "LOCATION") { location = value; continue; }
+            if (name is not ("ST" or "NT" or "USN" or "SERVER")) continue;
             if (name is "ST" or "NT" && value == searchTarget) isLg = true;
-            if (searchTarget == AllTarget && name is "ST" or "NT" or "USN" or "SERVER" && IsLgHeader(value)) isLg = true;
+            if (searchTarget == AllTarget && IsLgHeader(value)) isLg = true;
+            if (IsLgHeader(value.Replace(searchTarget, "", StringComparison.Ordinal))) lgHeader = true;
         }
-        return isLg && Uri.TryCreate(location, UriKind.Absolute, out var url) ? url.Host : null;
+        if (!isLg || !Uri.TryCreate(location, UriKind.Absolute, out var url)) return null;
+        return new SsdpHit(url.Host, lgHeader || url.Port == 1990);
     }
 
     /// <summary>
@@ -150,6 +221,10 @@ public static class LgDiscovery
 
     /// <param name="unicast">Verilirse istek ayrıca bu adreslerin her birine tek tek gönderilir.</param>
     internal static async Task<List<string>> CollectResponses(string searchTarget, TimeSpan timeout, CancellationToken cancellationToken,
+        IReadOnlyList<string>? unicast = null) =>
+        (await CollectHits(searchTarget, timeout, cancellationToken, unicast)).Select(hit => hit.Host).ToList();
+
+    internal static async Task<List<SsdpHit>> CollectHits(string searchTarget, TimeSpan timeout, CancellationToken cancellationToken,
         IReadOnlyList<string>? unicast = null)
     {
         using var udp = new UdpClient(AddressFamily.InterNetwork);
@@ -183,8 +258,12 @@ public static class LgDiscovery
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(timeout);
-        return await ReceiveHosts(token => udp.ReceiveAsync(token), searchTarget, deadline.Token);
+        return await ReceiveHits(token => udp.ReceiveAsync(token), searchTarget, deadline.Token);
     }
+
+    internal static async Task<List<string>> ReceiveHosts(Func<CancellationToken, ValueTask<UdpReceiveResult>> receive,
+        string searchTarget, CancellationToken deadline) =>
+        (await ReceiveHits(receive, searchTarget, deadline)).Select(hit => hit.Host).ToList();
 
     /// <summary>
     /// Süre dolana kadar SSDP yanıtlarını toplar. Windows'ta UDP soketi, daha önce gönderilen bir paket için gelen "port
@@ -192,10 +271,10 @@ public static class LgDiscovery
     /// adreslerde 1900 portu kapalı cihazlar bunu tetikler. Bu hata atlanır, okuma sürer; önceden uygulama çöküyordu (#556).
     /// Başka bir soket hatasında o ana dek bulunanlar döner.
     /// </summary>
-    internal static async Task<List<string>> ReceiveHosts(Func<CancellationToken, ValueTask<UdpReceiveResult>> receive,
+    internal static async Task<List<SsdpHit>> ReceiveHits(Func<CancellationToken, ValueTask<UdpReceiveResult>> receive,
         string searchTarget, CancellationToken deadline)
     {
-        var hosts = new List<string>();
+        var hosts = new List<SsdpHit>();
         while (true)
         {
             UdpReceiveResult result;
@@ -204,7 +283,7 @@ public static class LgDiscovery
             catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset && !deadline.IsCancellationRequested) { continue; }
             catch (SocketException) { break; }
             catch (ObjectDisposedException) { break; }
-            if (HostFromSsdpResponse(Encoding.UTF8.GetString(result.Buffer), searchTarget) is { } host) hosts.Add(host);
+            if (HitFromSsdpResponse(Encoding.UTF8.GetString(result.Buffer), searchTarget) is { } hit) hosts.Add(hit);
         }
         return hosts;
     }
@@ -225,16 +304,14 @@ public static class LgDiscovery
     private static async Task<string?> FriendlyName(string host)
     {
         // webOS cihaz tanımı 1990 numaralı portta yayınlanır; okunamazsa genel ad kullanılır.
-        try
-        {
-            var xml = await Http.GetStringAsync($"http://{host}:1990/");
-            var start = xml.IndexOf("<friendlyName>", StringComparison.Ordinal);
-            var end = start < 0 ? -1 : xml.IndexOf("</friendlyName>", start, StringComparison.Ordinal);
-            return end < 0 ? null : xml[(start + "<friendlyName>".Length)..end];
-        }
-        catch
-        {
-            return null;
-        }
+        var xml = await DescriptionAsync(host);
+        return xml is null ? null : FriendlyNameIn(xml);
+    }
+
+    private static string? FriendlyNameIn(string xml)
+    {
+        var start = xml.IndexOf("<friendlyName>", StringComparison.Ordinal);
+        var end = start < 0 ? -1 : xml.IndexOf("</friendlyName>", start, StringComparison.Ordinal);
+        return end < 0 ? null : xml[(start + "<friendlyName>".Length)..end];
     }
 }

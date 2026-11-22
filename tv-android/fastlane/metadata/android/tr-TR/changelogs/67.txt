@@ -1,0 +1,1 @@
+0.9.64: Katman modunda Arka plan koyuluğu "Tam" seçiliyken çeviri kutusu artık tam opak; arkadaki İngilizce altyazı görünmüyor (Android 12L ve sonrası).

@@ -165,7 +165,11 @@ final class SamsungTVTests: XCTestCase {
         XCTAssertNil(SamsungAppKnowledge.action(knownInstalled: false, presence: .missing))
         XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: .installed(appType: 2)), "DEEP_LINK")
         XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: .installed(appType: 4)), "NATIVE_LAUNCH")
-        XCTAssertEqual(SamsungAppKnowledge.action(knownInstalled: false, presence: nil), "DEEP_LINK")
+        // Liste 3 sn'de gelmedi: kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna
+        // bağlanılamıyor (AS400)" der (Samsung 7 Series 2018); komut gönderilmez, tvinstall.log'a yazılır.
+        XCTAssertNil(SamsungAppKnowledge.action(knownInstalled: false, presence: nil))
+        XCTAssertTrue(SamsungAppKnowledge.notSentLine(host: "1.2.3.4", presence: nil).contains("uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi"))
+        XCTAssertTrue(SamsungAppKnowledge.notSentLine(host: "1.2.3.4", presence: .missing).contains("açma isteği gönderilmedi"))
     }
 
     func testConnectedTVIsRememberedAsInstalled() throws {

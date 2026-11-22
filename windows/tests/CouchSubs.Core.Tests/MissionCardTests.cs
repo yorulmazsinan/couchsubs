@@ -105,4 +105,15 @@ public class MissionCardTests
         Assert.False(ScreenTextKinds.Reads(small, MissionsOff));
         Assert.True(ScreenTextKinds.Reads(wide, _ => true));
     }
+
+    /// <summary>Haritadaki uzaklık ("124 ft") göstergedir, çevrilmez (X: chiaki); içinde sözcük olan ayrıntı satırı yazıdır.</summary>
+    [Theory]
+    [InlineData("124 ft", false)]
+    [InlineData("4 ft", false)]
+    [InlineData("2.4 mi", false)]
+    [InlineData("1,2 km", false)]
+    [InlineData("50 yd", false)]
+    [InlineData("Distance 2.4 mi", true)]
+    [InlineData("Go home", true)]
+    public void DistanceIsNotWords(string text, bool words) => Assert.Equal(words, ScreenTranslation.IsWords(text));
 }

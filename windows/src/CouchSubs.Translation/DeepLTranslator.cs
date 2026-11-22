@@ -86,7 +86,7 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
     public DeepLTranslator(string key, ITextTranslator? fallback, HttpClient? http = null, TranslationCache? cache = null,
         GlossaryStore? glossary = null)
     {
-        _key = key.Trim();
+        _key = DeepLKey.Clean(key);
         _fallback = fallback;
         _http = http ?? SharedClient.Value;
         _cache = cache ?? new TranslationCache();
@@ -109,7 +109,7 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
 
     /// <summary>Ücretsiz anahtarlar ":fx" ile biter ve ayrı adrese gider.</summary>
     internal static Uri BaseUri(string key) =>
-        new(key.Trim().EndsWith(":fx", StringComparison.Ordinal) ? "https://api-free.deepl.com/v2/" : "https://api.deepl.com/v2/");
+        new(DeepLKey.Clean(key).EndsWith(":fx", StringComparison.Ordinal) ? "https://api-free.deepl.com/v2/" : "https://api.deepl.com/v2/");
 
     /// <summary>Konuşan adını öğrenir ("OLD MAN" → "old", "man"); yerel yedek de öğrenir, orada cümle içinde korunur (#287).</summary>
     public void NoteSpeaker(string name)
@@ -239,26 +239,68 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         return [.. list.Select(t => t.Text)];
     }
 
-    /// <summary>Ayarlardaki "Dene" düğmesi: anahtar geçerli mi, bu ay ne kadar kullanıldı.</summary>
+    /// <summary>
+    /// Ayarlardaki "Dene" düğmesi: anahtar geçerli mi, bu ay ne kadar kullanıldı (Mac/iPhone: DeepLTranslator.check, Android:
+    /// KeyCheck.deepLUsage; aynı kurallar). Her hata kendi nedeniyle döner: 401/403 geçersiz, 456 sınır doldu, 429 çok sık
+    /// istek (Busy: anahtar reddedilmedi, kaydedilir), diğer HTTP kodları sunucu hatası, istek hiç ulaşmadıysa ağ hatası.
+    /// 200 yanıtında kullanım alanları eksik ya da beklenmedik biçimdeyse anahtar yine geçerlidir (sınır 0 görünür).
+    /// </summary>
     public static async Task<OnlineKeyCheck> CheckAsync(string key, HttpClient? http = null, CancellationToken cancellationToken = default)
     {
-        key = key.Trim();
+        key = DeepLKey.Clean(key);
         if (key.Length == 0) return new(OnlineKeyState.Invalid);
+        if (!DeepLKey.IsWellFormed(key)) return new(OnlineKeyState.Invalid, Reason: OnlineKeyReason.MalformedKey);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(BaseUri(key), "usage"));
             request.Headers.Authorization = new AuthenticationHeaderValue("DeepL-Auth-Key", key);
             using var response = await (http ?? SharedClient.Value).SendAsync(request, cancellationToken).ConfigureAwait(false);
-            ThrowIfFailed(response);
-            var usage = await response.Content.ReadFromJsonAsync(DeepLJson.Default.UsageResponse, cancellationToken).ConfigureAwait(false);
-            if (usage is null) return new(OnlineKeyState.Unreachable);
-            return new(usage.CharacterLimit > 0 && usage.CharacterCount >= usage.CharacterLimit ? OnlineKeyState.QuotaExceeded : OnlineKeyState.Valid,
-                usage.CharacterCount, usage.CharacterLimit);
+            var status = (int)response.StatusCode;
+            switch (status)
+            {
+                case >= 200 and < 300: break;
+                case 401 or 403: return new(OnlineKeyState.Invalid, Reason: OnlineKeyReason.HttpStatus, Code: status);
+                case 456: return new(OnlineKeyState.QuotaExceeded, Reason: OnlineKeyReason.HttpStatus, Code: status);
+                case 429: return new(OnlineKeyState.Busy, Reason: OnlineKeyReason.RateLimited, Code: status);
+                default: return new(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.HttpStatus, Code: status);
+            }
+            // JSON olmayan 200 yanıtı (otel/kafe ağının giriş sayfası gibi) DeepL'den gelmemiştir: ağ hatası.
+            if (ParseUsage(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)) is not { } usage)
+                return new(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.Network);
+            var (count, limit) = usage;
+            return new(limit > 0 && count >= limit ? OnlineKeyState.QuotaExceeded : OnlineKeyState.Valid, count, limit);
         }
-        catch (DeepLException error) { return new(error.State); }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            return new(OnlineKeyState.Unreachable);
+            return new(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.Network);
+        }
+    }
+
+    /// <summary>
+    /// <c>/v2/usage</c> yanıtı (Mac ve Android'deki çözümlemeyle aynı): alan eksik ya da sayı değilse 0; ondalıklı değer tam
+    /// sayıya, long'a sığmayan değer long.MaxValue'ya indirilir. Gövde JSON nesnesi değilse null.
+    /// </summary>
+    internal static (long Count, long Limit)? ParseUsage(string body)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            return (Number(document.RootElement, "character_count"), Number(document.RootElement, "character_limit"));
+        }
+        catch (System.Text.Json.JsonException) { return null; }
+
+        static long Number(System.Text.Json.JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var value)) return 0;
+            string text;
+            if (value.ValueKind == System.Text.Json.JsonValueKind.Number) text = value.GetRawText();
+            else if (value.ValueKind == System.Text.Json.JsonValueKind.String) text = value.GetString() ?? "";
+            else return 0;
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+            if (long.TryParse(text, System.Globalization.NumberStyles.Integer, invariant, out var exact)) return Math.Max(0, exact);
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Float, invariant, out var number) || double.IsNaN(number) || number <= 0) return 0;
+            return number >= 9.2e18 ? long.MaxValue : (long)number;
         }
     }
 
@@ -295,11 +337,6 @@ internal sealed record TranslateResponse([property: JsonPropertyName("translatio
 
 internal sealed record TranslatedText([property: JsonPropertyName("text")] string Text);
 
-internal sealed record UsageResponse(
-    [property: JsonPropertyName("character_count")] long CharacterCount,
-    [property: JsonPropertyName("character_limit")] long CharacterLimit);
-
 [JsonSerializable(typeof(TranslateRequest))]
 [JsonSerializable(typeof(TranslateResponse))]
-[JsonSerializable(typeof(UsageResponse))]
 internal sealed partial class DeepLJson : JsonSerializerContext;

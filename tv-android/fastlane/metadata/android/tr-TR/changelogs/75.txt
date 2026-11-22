@@ -1,0 +1,1 @@
+0.9.72: Görev/hedef satırının Türkçesi kendi yerinde kalıyor: altyazı kalkınca kaymış durmuyor, aynı satırın yarım okunan ekran yazısı görevi gizlemiyor.

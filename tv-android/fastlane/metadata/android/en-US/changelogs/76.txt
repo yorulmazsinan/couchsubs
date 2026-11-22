@@ -1,0 +1,1 @@
+0.9.73: On some LG TVs the game picture no longer goes black for 2 seconds about once a minute (with the HDR badge reappearing); a healthy picture is left alone.

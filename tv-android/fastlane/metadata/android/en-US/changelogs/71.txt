@@ -1,0 +1,1 @@
+0.9.68: On 21:9 / 32:9 Samsung monitors such as the Odyssey G9, the app uses the whole screen again and the Yellow button makes the game picture fill the screen (after your computer or phone updates the TV app). The info panel shrinks when it does not fit on the screen.

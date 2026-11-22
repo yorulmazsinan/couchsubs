@@ -1,0 +1,1 @@
+0.9.69: The TV app now tells the computer and phone its version; if the app on the TV falls behind, CouchSubs shows "Update the TV app" on its main screen.

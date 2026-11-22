@@ -32,9 +32,19 @@ public sealed class StickyRows
     /// </summary>
     public const int LingerMs = 1200;
 
-    private sealed class Row(string text, long since)
+    /// <summary>
+    /// Konuşmanın üstünde, konuşma yerleştikten en az bu kadar sonra beliren kırıntı satır (<see cref="OcrNoise.IsCrumb"/>)
+    /// altyazıya katılmaz. Altyazının üst satırı alttakinden sonra belirmez; alttaki kırıntı ise iki satırlı altyazının geç
+    /// beliren ikinci satırı olabileceği için <see cref="LingerMs"/> ve devam kuralıyla sınanır.
+    /// </summary>
+    public const int CrumbAboveMs = 500;
+
+    private sealed class Row(string text, string raw, long since)
     {
         public string Text { get; set; } = text;
+        /// <summary>Satırın son okunuşu (ham); kırıntı denetimi için (<see cref="OcrNoise.IsCrumb"/>).</summary>
+        public string Raw { get; set; } = raw;
+        public bool Crumb => OcrNoise.IsCrumb(Raw);
         public long Since { get; } = since;
         public long LastSeen { get; set; } = since;
         /// <summary>Satırın en son büyüdüğü an (yazı yazılır gibi beliren satır).</summary>
@@ -79,7 +89,7 @@ public sealed class StickyRows
             var text = TextMatch.Normalize(line.Text);
             if (text.Length < 3) { matched.Add(null); continue; }
             var row = rows.FirstOrDefault(r => !used.Contains(r) && TextMatch.IsSimilar(text, r.Text));
-            if (row is null) { row = new Row(text, time); rows.Add(row); created.Add(matched.Count); }
+            if (row is null) { row = new Row(text, line.Text, time); rows.Add(row); created.Add(matched.Count); }
             else if (text.Length >= row.Text.Length + 3)
             {
                 // Satır büyüdü (yazı yazılır gibi): yaşı yeniden başlar; okuma sapmaları (kısalıp uzama) saymaz.
@@ -87,6 +97,7 @@ public sealed class StickyRows
                 row.Grown = time;
             }
             row.LastSeen = time;
+            row.Raw = line.Text;
             used.Add(row);
             matched.Add(row);
         }
@@ -96,16 +107,22 @@ public sealed class StickyRows
         for (var i = 0; i < matched.Count; i++)
         {
             if (matched[i] is not { Sticky: false } row || time - row.Since < StickyMs) continue;
-            if (present.Any(other => other.Since - row.Since >= YoungerByMs))
+            // Yanındaki daha yeni satır kırıntıysa (OcrNoise.IsCrumb) kanıt değildir: uzun konuşma solan satırın parçası ya da
+            // HUD kırıntısı yüzünden görev/HUD sayılmasın (GitHub #854).
+            if (present.Any(other => other.Since - row.Since >= YoungerByMs && !other.Crumb))
             {
                 row.Sticky = true;
                 newly.Add(reading.Lines[i].Text);
             }
         }
+        // Konuşan adıyla başlayan satır ("JASON: …") her zaman altyazıdır: görev/HUD sayılıp atılmaz (Mac/iPhone, Android
+        // ile aynı).
+        newly.RemoveAll(text => SpeakerPrefix.Parse(text) is not null);
         NewlySticky = newly;
         var lingering = Lingering(reading, matched);
-        var kept = reading.Lines.Where((_, i) => matched[i] is not { Sticky: true } && !lingering[i]).ToList();
-        Removed = [.. reading.Lines.Where((_, i) => matched[i] is { Sticky: true } || lingering[i])];
+        var spoken = reading.Lines.Select(line => SpeakerPrefix.Parse(line.Text) is not null).ToList();
+        var kept = reading.Lines.Where((_, i) => spoken[i] || matched[i] is not { Sticky: true } && !lingering[i]).ToList();
+        Removed = [.. reading.Lines.Where((_, i) => !spoken[i] && (matched[i] is { Sticky: true } || lingering[i]))];
         rows.RemoveAll(r => time - r.LastSeen > ForgetAfterMs);
         return kept.Count == reading.Lines.Count ? reading : new Reading(kept);
     }
@@ -142,7 +159,13 @@ public sealed class StickyRows
         var live = Enumerable.Range(0, count).Where(i => matched[i] is { Sticky: false }).ToList();
         if (live.Count < 2) return result;
         var settled = live.Where(i => !matched[i]!.Joined).ToList();
-        var youngest = (settled.Count > 0 ? settled : live).Max(i => matched[i]!.Since);
+        // Kırıntı satır (OcrNoise.IsCrumb) "en yeni" sayılmaz: konuşmanın üstünde sonradan beliren okuma kırıntısı
+        // ("one ready.") konuşmayı eski gösterip attırıyor, TV'de konuşmanın yerine kırıntının çevirisi çıkıyordu (GitHub
+        // #854, GTA 6). Kırıntının kendisi konuşma ondan önce yerleşmişse uçta atılır.
+        var substantial = (settled.Count > 0 ? settled : live).Where(i => !matched[i]!.Crumb).ToList();
+        DropLateCrumbs(reading, matched, live, result);
+        if (substantial.Count == 0) return result;
+        var youngest = substantial.Max(i => matched[i]!.Since);
         bool Old(int i) => SpeakerPrefix.Parse(reading.Lines[i].Text) is null
             && ((matched[i]!.Joined && settled.Count > 0) || youngest - matched[i]!.Grown >= LingerMs);
         // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
@@ -154,6 +177,38 @@ public sealed class StickyRows
         }
         for (var k = live.Count - 1; k >= 0 && Old(live[k]); k--) result[live[k]] = true;
         return result;
+    }
+
+    /// <summary>
+    /// Uçtaki kırıntı satır, yanındaki gerçek satır ondan önce yerleşmişse (üstte <see cref="CrumbAboveMs"/>, altta
+    /// <see cref="LingerMs"/>) altyazıya katılmaz. Üstteki satırın devamı olan alt satır (iki satırlı altyazının geç beliren
+    /// ikinci satırı, <see cref="Reading.Continues"/>) kalır.
+    /// </summary>
+    private static void DropLateCrumbs(Reading reading, List<Row?> matched, List<int> live, bool[] result)
+    {
+        if (live.Count < 2) return;
+        bool Late(int position, int ms)
+        {
+            var row = matched[position]!;
+            if (!row.Crumb || SpeakerPrefix.Parse(reading.Lines[position].Text) is not null) return false;
+            return live.Any(other => other != position && !matched[other]!.Crumb && row.Since - matched[other]!.Grown >= ms);
+        }
+        int first = live[0], last = live[^1];
+        if (Late(first, CrumbAboveMs)) result[first] = true;
+        if (Late(last, LingerMs) && !Reading.Continues(reading.Lines[live[^2]].Text, reading.Lines[last].Text)) result[last] = true;
+    }
+
+    /// <summary>
+    /// Satır ne kadar süredir değişmeden okunuyor (milisaniye; son büyümesinden bu yana). Satır bilinmiyorsa (yeni ya da
+    /// en az üç harfli değil) null. <see cref="Reading.SubtitleBlock"/> sabit bloğu (haber bandı) bununla ayırır
+    /// (GitHub #933; Mac: StickyRows.unchangedMs, Android: StickyRows.unchangedMs).
+    /// </summary>
+    public long? UnchangedMs(string line, long time)
+    {
+        var text = TextMatch.Normalize(line);
+        if (text.Length < 3) return null;
+        var row = rows.FirstOrDefault(r => TextMatch.IsSimilar(text, r.Text));
+        return row is null ? null : time - row.Grown;
     }
 
     public void Reset()

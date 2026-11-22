@@ -280,35 +280,38 @@
     for (var id in regions) styleRegion(regions[id]);
   }
 
-  /// Ek alanın kutusu yazının karedeki yerine (box: 0-1 kesirler) oturur; yeri bilinmiyorsa üstte ortadadır.
+  /// Kutunun sayıları geçerli mi (0–1 arası, sağ soldan, alt üstten büyük; TV'deki validBox ile aynı).
+  function validBox(b) {
+    if (!b || typeof b !== 'object' ||
+        ![b.left, b.top, b.right, b.bottom].every(function (n) { return typeof n === 'number' && n >= 0 && n <= 1; })) return null;
+    return b.right > b.left && b.bottom > b.top ? b : null;
+  }
+
+  /// Ek alanın kutusu yazının karedeki yerine (box: 0-1 kesirler) oturur. Yeri bilinmeyen alan çizilmez (showRegion):
+  /// önceden üstte ortaya, sıfır alanlı kutuda ekranın ortasına çiziliyordu (TV ile aynı).
   function styleRegion(node) {
-    if (node.className === 'phone-blocks') return;
+    if (node.className === 'phone-blocks' || !node.box) return;
     var box = node.box;
     delete node.dataset.baseTransform;
     node.style.fontSize = pixels(Math.max(12, baseSize * 0.55));
     node.style.color = line.style.color || '#fff';
     if (pageColor) node.style.background = '#000';
-    if (box) {
-      node.style.left = (box.left * 100) + '%';
-      node.style.top = (box.top * 100) + '%';
-      node.style.transform = '';
-      node.style.minWidth = ((box.right - box.left) * 100) + 'vw';
-      node.style.maxWidth = (Math.max(box.right - box.left, Math.min(0.45, 1 - box.left)) * 100) + 'vw';
-    } else {
-      node.style.left = '50%';
-      node.style.top = '4%';
-      node.style.transform = 'translateX(-50%)';
-      node.style.minWidth = '';
-      node.style.maxWidth = '60vw';
-    }
+    node.style.left = (box.left * 100) + '%';
+    node.style.top = (box.top * 100) + '%';
+    node.style.transform = '';
+    node.style.minWidth = ((box.right - box.left) * 100) + 'vw';
+    node.style.maxWidth = (Math.max(box.right - box.left, Math.min(0.45, 1 - box.left)) * 100) + 'vw';
   }
 
-  /// Ek alan olayı: metin boşsa alanın kutusu kalkar (TV ve uygulama pencereleriyle aynı).
+  /// Ek alan olayı: metin boşsa ya da yeri bilinmiyorsa (geçersiz kutu) alanın kutusu kalkar; çeviri asla ortaya
+  /// çizilmez (TV ve uygulama pencereleriyle aynı).
   function showRegion(id, text, box, blocks) {
     if (!id) return;
     var node = regions[id];
-    if (!text) {
+    box = validBox(box);
+    if (!text || !box) {
       if (node) { regionsBox.removeChild(node); delete regions[id]; }
+      resolveLayers();
       avoidRegions();
       return;
     }
@@ -319,18 +322,25 @@
       regionsBox.appendChild(node);
       regions[id] = node;
     }
-    var auto = setApart && id.indexOf('auto-') === 0;
+    // Otomatik ekran yazısı ve özgün görünüşü taşıyan bloklar (oyunun hazır alanı, #856): her blok kendi yerinde, özgün
+    // renginde (TV ile aynı kural).
+    var auto = setApart && (id.indexOf('auto-') === 0 || (Array.isArray(blocks) && blocks.some(function (b) {
+      return b && b.style && typeof b.style === 'object';
+    })));
+    node.stamp = ++regionStamp;
     if ((id === 'game-phone' || auto) && Array.isArray(blocks) && blocks.length) {
       node.textContent = '';
       node.style.cssText = '';
       node.className = 'phone-blocks';
       for (var i = 0; i < blocks.length; i++) placePhoneBlock(node, blocks[i], auto);
+      resolveLayers();
       avoidRegions();
       if (node.firstChild) return;
     }
     node.className = 'region';
     node.textContent = text;
-    node.box = box || null;
+    resolveLayers();
+    node.box = box;
     styleRegion(node);
     avoidRegions();
   }
@@ -345,7 +355,8 @@
     var surface = item.surface;
     function rgb(value) { return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value); }
     if (surface && rgb(surface.background) && rgb(surface.foreground)) {
-      el.style.backgroundColor = auto && surface.flat === false ? surface.background + 'f0' : surface.background;
+      // Zemin her yüzeyde tam opak: özgün yazı arasından görünmez (#827; TV ile aynı).
+      el.style.backgroundColor = surface.background;
       el.style.color = surface.foreground;
     }
     var look = auto && item.style && typeof item.style === 'object' ? item.style : null;
@@ -368,6 +379,7 @@
       el.appendChild(image); at = icon.at;
     });
     el.appendChild(document.createTextNode(item.text.slice(at)));
+    el.box = b;
     var h = window.innerHeight || 1080, pad = 0.001;
     var left = Math.max(0, b.left - pad), top = Math.max(0, b.top - pad);
     var height = (b.bottom - b.top + 2 * pad) * h;
@@ -393,15 +405,69 @@
     }
   }
 
+  // Aynı yerde tek çizim (#827; TV resolveLayers ile aynı): iki otomatik ekran yazısı alanı aynı yazıyı çizerse (kutuları
+  // küçüğünün alanının en az %25'i kadar örtüşür) en son gelenin bloğu kalır, eskisi gizlenir. Oyun telefonu girmez.
+  var COVER_SHARE = 0.25, regionStamp = 0;
+  function overlapShare(a, b) {
+    var w = Math.min(a.right, b.right) - Math.max(a.left, b.left), hgt = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    if (!(w > 0) || !(hgt > 0)) return 0;
+    var smaller = Math.min((a.right - a.left) * (a.bottom - a.top), (b.right - b.left) * (b.bottom - b.top));
+    return smaller > 0 ? Math.min(1, w * hgt / smaller) : 0;
+  }
+  function resolveLayers() {
+    var parts = [];
+    for (var id in regions) {
+      if (id === 'game-phone' || regions[id].className !== 'phone-blocks') continue;
+      Array.prototype.forEach.call(regions[id].children, function (el) {
+        if (el.box) parts.push({ el: el, box: el.box, rank: regions[id].stamp || 0, id: id });
+      });
+    }
+    parts.forEach(function (part) {
+      var covered = parts.some(function (other) {
+        return other.id !== part.id && other.rank > part.rank && overlapShare(part.box, other.box) >= COVER_SHARE;
+      });
+      part.el.style.visibility = covered ? 'hidden' : '';
+    });
+  }
+
   // Ekran yazısı (görev satırı, ek alan) ile altyazı üst üste binmesin. Altyazının yeri kullanıcının seçimidir, değişmez:
   // çakışan ekran yazısı kutusu yalnız gerektiği kadar (küçük boşlukla) altyazıdan uzağa kayar (TV: avoidRegions).
-  // Oyun telefonu bilerek altyazının altında kalır, kaydırılmaz.
+  // Oyun telefonu kaydırılmaz; altyazı telefonun üstüne binmez, kendisi telefonun yanına (sığmazsa üstüne/altına) kayar
+  // (avoidPhone; TV ile aynı).
   var setApart = true;
   function shiftBox(el, dy) {
     var base = el.dataset.baseTransform !== undefined ? el.dataset.baseTransform : (el.dataset.baseTransform = el.style.transform || '');
     el.style.transform = dy ? (base + ' translateY(' + Math.round(dy) + 'px)').trim() : base;
   }
+  function avoidPhone() {
+    wrap.style.transform = '';
+    var phone = regions['game-phone'];
+    if (!phone || !line.classList.contains('on')) return;
+    var rect = null;
+    Array.prototype.forEach.call(phone.className === 'phone-blocks' ? phone.children : [phone], function (el) {
+      var r = el.getBoundingClientRect();
+      if (!(r.width > 0) || !(r.height > 0)) return;
+      rect = rect ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top), right: Math.max(rect.right, r.right),
+        bottom: Math.max(rect.bottom, r.bottom) } : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    });
+    var sub = line.getBoundingClientRect();
+    if (!rect || !(sub.width > 0) || !(sub.height > 0)) return;
+    var w = window.innerWidth || 1920, h = window.innerHeight || 1080, gap = Math.max(4, Math.round(w * 0.01));
+    if (sub.right + gap <= rect.left || sub.left - gap >= rect.right || sub.bottom + gap <= rect.top || sub.top - gap >= rect.bottom) return;
+    var margin = Math.round(w * 0.02), roomLeft = rect.left - gap - margin, roomRight = w - margin - rect.right - gap;
+    var fitsLeft = sub.width <= roomLeft, fitsRight = sub.width <= roomRight, dx = 0, dy = 0;
+    if (fitsLeft || fitsRight) {
+      dx = fitsLeft && (!fitsRight || roomLeft >= roomRight) ? rect.left - gap - sub.right : rect.right + gap - sub.left;
+    } else if (sub.top + rect.top - gap - sub.bottom >= 0) {
+      dy = rect.top - gap - sub.bottom;
+    } else if (sub.bottom + rect.bottom + gap - sub.top <= h) {
+      dy = rect.bottom + gap - sub.top;
+    }
+    if (dx || dy) wrap.style.transform = 'translate(' + Math.round(dx) + 'px, ' + Math.round(dy) + 'px)';
+  }
+
   function avoidRegions() {
+    avoidPhone();
     var parts = Array.prototype.slice.call(regionsBox.querySelectorAll('.region:not(#phone-region), .phone.auto'));
     parts.forEach(function (el) { shiftBox(el, 0); });
     if (!line.classList.contains('on') || !parts.length) return;

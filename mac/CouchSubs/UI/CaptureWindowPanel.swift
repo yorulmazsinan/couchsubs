@@ -35,6 +35,10 @@ struct CaptureWindowPanel: View {
                 Button("Refresh windows") { Task { await refresh() } }
                     .buttonStyle(.secondary)
             }
+            // OBS'in Program/Önizleme projektörü CouchSubs'ın OBS katmanını da içerir (bkz. `OwnSubtitles`).
+            if CaptureWindows.needsSourceProjectorHint(model.settings.captureWindow) {
+                HintText(text: "If you use the CouchSubs OBS overlay, select the Source Projector of your capture card source as the video source: in OBS, right-click the source › Open Source Projector › New window. The Program and Preview projectors also contain CouchSubs' own subtitles.")
+            }
             if loaded && allowed && open.isEmpty {
                 HintText(text: "No suitable windows found. Open OBS or the game first, then refresh.")
             }

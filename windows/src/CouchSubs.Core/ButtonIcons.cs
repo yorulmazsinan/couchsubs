@@ -296,6 +296,9 @@ public static class ButtonIcons
         return (left, cropTop, right - left, cropBottom - cropTop, end - start, bottom - top);
     }
 
+    /// <summary>Renkli zeminde (kutu kenarının ortancası) her kanalda zemine bu kadar yakın nokta zemindir, simge sayılmaz.</summary>
+    internal const int BaseTolerance = 40;
+
     /// <summary>
     /// Kutuda simge biçiminde bir şekil var mı: zeminden ayrışan, satır yüksekliğinin en az yarısı kadar ve kabaca kare
     /// (düğme dairesi, omuz tuşu kutusu). Boşluk ya da harf kırıntısı simge sayılmaz.
@@ -305,15 +308,42 @@ public static class ButtonIcons
     {
         int left = (int)(box.Left * frame.Width), right = (int)Math.Ceiling(box.Right * frame.Width);
         int top = (int)(box.Top * frame.Height), bottom = (int)Math.Ceiling(box.Bottom * frame.Height);
+        int x0 = Math.Max(0, left), x1 = Math.Min(frame.Width, right), y0 = Math.Max(0, top), y1 = Math.Min(frame.Height, bottom);
+        if (x1 - x0 < 2 || y1 - y0 < 2) return false;
+        // Zemin: kutunun kenarındaki noktaların ortancası. Beyaz simgenin kenarı zeminle karışır (mavi haritada mavimsi);
+        // zeminle beyaz arasındaki karışım renkli sayılmaz (#860: GTA 6 haritasında L3/R3 simgesi tanınmıyordu).
+        var edge = new List<(int R, int G, int B)>();
+        for (var y = y0; y < y1; y++)
+            for (var x = x0; x < x1; x++)
+            {
+                if (y != y0 && y != y1 - 1 && x != x0 && x != x1 - 1) continue;
+                var p = y * frame.Stride + x * 4;
+                edge.Add((frame.Pixels[p + 2], frame.Pixels[p + 1], frame.Pixels[p]));
+            }
+        static int Median(IEnumerable<int> values) { var list = values.OrderBy(v => v).ToList(); return list[list.Count / 2]; }
+        int br = Median(edge.Select(e => e.R)), bg = Median(edge.Select(e => e.G)), bb = Median(edge.Select(e => e.B));
+        var baseLuma = (299 * br + 587 * bg + 114 * bb) / 1000;
+        var colourfulBase = Math.Max(br, Math.Max(bg, bb)) - Math.Min(br, Math.Min(bg, bb)) > 60;
         int bright = 0, coloured = 0;
-        for (var y = Math.Max(0, top); y < Math.Min(frame.Height, bottom); y++)
-            for (var x = Math.Max(0, left); x < Math.Min(frame.Width, right); x++)
+        for (var y = y0; y < y1; y++)
+            for (var x = x0; x < x1; x++)
             {
                 var p = y * frame.Stride + x * 4;
                 int b = frame.Pixels[p], g = frame.Pixels[p + 1], r = frame.Pixels[p + 2];
-                if ((299 * r + 587 * g + 114 * b) / 1000 < 110) continue;
+                var luma = (299 * r + 587 * g + 114 * b) / 1000;
+                // Zeminin kendisi simgenin parçası değildir: parlak renkli zeminde (GTA 6 haritasının açık mavi denizi) zemin
+                // noktaları renkli sayılıyor, haritadaki ✕/○ simgesi tanınmayıp çeviri kutusuna giriyordu.
+                if (colourfulBase && Math.Max(Math.Abs(r - br), Math.Max(Math.Abs(g - bg), Math.Abs(b - bb))) <= BaseTolerance) continue;
+                if (luma < 110) continue;
                 bright++;
-                if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) > 60) coloured++;
+                if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) <= 60) continue;
+                // Karışım muafiyeti yalnız koyu zeminde: kenarına kadar dolu renkli portre simge değildir.
+                if (baseLuma >= 110) { coloured++; continue; }
+                // Zeminle beyazın karışımı mı: karışım oranı parlaklıktan, beklenen renk ondan.
+                var share = baseLuma >= 250 ? 1.0 : Math.Clamp((double)(luma - baseLuma) / (255 - baseLuma), 0, 1);
+                double Expected(int channel) => channel * (1 - share) + 255 * share;
+                var distance = Math.Max(Math.Abs(r - Expected(br)), Math.Max(Math.Abs(g - Expected(bg)), Math.Abs(b - Expected(bb))));
+                if (distance > 60) coloured++;
             }
         return bright > 0 && coloured * 4 < bright;
     }
@@ -386,7 +416,9 @@ public static class ButtonIcons
             // Tuş çubuğunda tek harf/rakam ya da yanlış okunmuş omuz tuşu ("11", "12"); satır başında simge gibi parça.
             var named = Names.Contains(core);
             var suspicious = bar
+                // Satır sonundaki harf+rakam ("C3", "13"): yuvarlak L3/R3 simgesinin okunuşu (#860).
                 ? named || core.Length == 1 || core is "11" or "12" or "13" or "21" or "22" or "23" || (core.Length <= 2 && !core.Any(char.IsLetterOrDigit))
+                  || (i == words.Count - 1 && i > 0 && core.Length == 2 && char.IsDigit(core[^1]))
                 : i == 0 && words.Count >= 2 && IsIconToken(text);
             if (suspicious)
             {

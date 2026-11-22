@@ -226,4 +226,76 @@ public sealed class CrashRecordsTests : IDisposable
         Assert.Equal("0xC0000005", CrashRecords.EventLogCode(["Exception code: 0xc0000005\nFault offset: 0x1"]));
         Assert.Null(CrashRecords.EventLogCode(["no code here"]));
     }
+
+    /// <summary>GitHub #903'teki iki gerçek kaydın (beta.79) erişim satırı ve yazmaçları.</summary>
+    private static string Issue903(string access, string registers) =>
+        "İstisna kodu: 0xC0000005 (erişim ihlali)\r\nİstisna adresi: 0x00007FFF2BEFACA8\r\nModül: modül yok (adres yüklü hiçbir modüle düşmüyor)\r\n" +
+        $"Erişim: {access}\r\nAşama: ilk şans\r\nYazmaçlar:\r\n{registers}\r\nKomut baytları (RIP-16 | RIP+32):\r\n  (okunamadı)\r\n" +
+        "Yığındaki modül adresleri:\r\n  coreclr.dll+0x00185233\r\n";
+
+    private const string FirstCrashRegisters =
+        "  RIP=0x00007FFDC41E349F RSP=0x000000F98947F0B0 RBP=0x00000000003B8010 RAX=0x00000000001B42C4\r\n" +
+        "  RBX=0x0000024833019070 RCX=0x00000000000000E8 RDX=0x00000000003B8010 RSI=0x0000000000001DFC\r\n" +
+        "  RDI=0x000000F98947F0E0 R8=0x0000000000000599 R9=0x00000000001B42C4 R10=0x000000000000077F\r\n" +
+        "  R11=0x00000000001B42C4 R12=0x00000248064579C8 R13=0x00000248064579C8 R14=0x00000247F994CF48\r\n" +
+        "  R15=0x00000247F994CF48";
+
+    private const string SecondCrashRegisters =
+        "  RIP=0x00007FFF2BEFACA8 RSP=0x00000064D8D7ED80 RBP=0x00000000003BBC08 RAX=0x00000000003AA0E7\r\n" +
+        "  RBX=0x000001BE87808820 RCX=0x00000000000001F4 RDX=0x00000000003AA0E6 RSI=0x0000000000001DFC\r\n" +
+        "  RDI=0x00000064D8D7EDB0 R8=0x000000000000042D R9=0x0000000000000036 R10=0x000000000000077F\r\n" +
+        "  R11=0x00000000003AA0E7 R12=0x0000000000000032 R13=0x000001BE517F0EC0 R14=0x000001BE5274A970\r\n" +
+        "  R15=0x00000000003AA0E6";
+
+    /// <summary>
+    /// #903: iki çökmede de .NET'in kaydı AutoLevel'ı gösteriyor ve erişilen adres, dizi göstericisi + sıra + 16 (.NET
+    /// dizisinin verisi) toplamının yalnız alt 32 biti. 1. kayıt: R12 = kare dizisi, RAX = 232 × 7680 + 1201 × 4 (1920
+    /// genişlikte 232. satır, 1201. piksel, okuma). 2. kayıt: R14 = sonuç dizisi, RAX = 500 × 7680 + 569 × 4 + 3 (alfa
+    /// baytı, yazma). Sıra dizinin içinde, gösterici doğru; yalnız adresin üst 32 biti yok.
+    /// </summary>
+    [Fact]
+    public void Issue903AddressesAreTheLow32BitsOfAValidArrayPointer()
+    {
+        var first = Issue903("okuma 0x000000000660BC9C", FirstCrashRegisters);
+        var hit = CrashRecords.TruncatedPointer(CrashRecords.Registers(first), CrashRecords.AccessAddress(first)!.Value)!.Value;
+        Assert.Equal(("R12", "RAX", 0x10), (hit.Base, hit.Index, hit.Offset));
+        Assert.Equal(0x0000024806_60BC9CUL, hit.Intended);
+        Assert.Equal(232UL * 7680 + (1201 * 4), 0x1B42C4UL);
+
+        var second = Issue903("yazma 0x0000000052AF4A67", SecondCrashRegisters);
+        hit = CrashRecords.TruncatedPointer(CrashRecords.Registers(second), CrashRecords.AccessAddress(second)!.Value)!.Value;
+        Assert.Equal(("R14", "RAX", 0x10), (hit.Base, hit.Index, hit.Offset));
+        Assert.Equal(0x000001BE52_AF4A67UL, hit.Intended);
+        Assert.Equal(500UL * 7680 + (569 * 4) + 3, 0x3AA0E7UL);
+
+        Assert.Equal(17, CrashRecords.Registers(second).Count);
+        Assert.Contains("R14 + RAX + 0x10 toplamının (0x000001BE52AF4A67) yalnız alt 32 biti", CrashRecords.Analyze(second));
+    }
+
+    [Fact]
+    public void OrdinaryAccessViolationsAreNotCalledTruncated()
+    {
+        // Bırakılmış belleğe tam (64 bitlik) adresle erişim, boş gösterici ve CI'daki deneme adresi.
+        Assert.Null(CrashRecords.Analyze(Issue903("okuma 0x00000248064579D8", FirstCrashRegisters)));
+        Assert.Null(CrashRecords.Analyze(Issue903("okuma 0x0000000000000010", FirstCrashRegisters)));
+        Assert.Null(CrashRecords.Analyze(Issue903("yazma 0x0000000012345678", SecondCrashRegisters)));
+        Assert.Null(CrashRecords.Analyze("Erişim satırı yok\r\n"));
+    }
+
+    [Fact]
+    public void CompletedSummarySaysTheProcessEndedAndExplainsATruncatedAddress()
+    {
+        var path = Write("cokme-20261122-012737-22936-0", Summary().Replace("Erişim: yürütme 0x000001F2A3B4C5D6\r\nAşama: ilk şans\r\nYazmaçlar:\r\n  RIP=0x000001F2A3B4C5D6 RSP=0x000000A1B2C3D4E0 RBP=0x0000000000000000 RAX=0x0000000000000001\r\n",
+            $"Erişim: yazma 0x0000000052AF4A67\r\nAşama: ilk şans\r\nYazmaçlar:\r\n{SecondCrashRegisters}\r\n", StringComparison.Ordinal));
+        var record = CrashRecords.Parse(path)!;
+        var details = new CrashDetails(_ => null, [],
+            ["[2026-11-22 01:27:47] .NET Runtime:\nDescription: The process was terminated due to an unhandled exception.\nException Info: System.AccessViolationException"]);
+
+        var text = CrashRecords.Complete(record, details);
+
+        Assert.Contains("Çözümleme: erişilen adres 0x0000000052AF4A67, R14 + RAX + 0x10", text);
+        Assert.Contains("Sonuç: süreç bu hatayla kapandı", text);
+        // Olay günlüğünde kapanış yoksa sonuç satırı yazılmaz.
+        Assert.False(CrashRecords.ProcessEnded("[2026-11-22 01:27:51] Windows Error Reporting:\nOlay Adı: APPCRASH"));
+    }
 }

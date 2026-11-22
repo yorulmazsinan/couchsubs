@@ -454,10 +454,12 @@ public sealed partial class RegionWatcher
         if (SubtitleEcho is { } echo)
         {
             var place = new TextBox(area.Region.Left, area.Region.Top, area.Region.Right, area.Region.Bottom);
-            var geometry = (area.Auto || area.RequiresPanel) && !area.Menu && area.Id != MissionLine.AreaId;
+            var geometry = (area.Auto || area.RequiresPanel) && !area.Menu && area.Id != MissionLine.AreaId
+                && !ScreenNotices.IsNotice(area.Id);
             reading = echo.Filter(reading, place, geometry);
         }
-        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu);
+        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
+                             styled: area.RequiresPanel);
     }
 
     private static int IconCount(Candidate candidate) =>
@@ -523,19 +525,34 @@ public sealed partial class RegionWatcher
     /// </summary>
     /// <param name="auto">Otomatik bulunmuş alan: her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.</param>
     /// <param name="menu">Otomatik alan menüde: satır yükseklikleri farklı olabilir (başlık, etiket).</param>
+    /// <param name="styled">
+    /// Oyunun hazır alanı (<see cref="GameAreaPresets"/>): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
+    /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
+    /// </param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
-                                            bool auto = false, bool menu = false)
+                                            bool auto = false, bool menu = false, bool styled = false)
     {
+        styled = (auto || styled) && !phone;
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame, monochrome: auto);
+        // Menü şeridinin sekmeleri tek satır okunsa da ayrı satırlardır (#859); kutular alana oranlı.
+        var aspect = (region.Right - region.Left) * 16 / Math.Max(1e-6, (region.Bottom - region.Top) * 9);
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         var lines = (auto ? marked : marked.WithoutButtonPrompts()).WithoutOcrNoise(phone).Lines
+            .SelectMany(line => phone ? [line] : ScreenTranslation.MenuPieces(line, aspect, frame))
             .Where(line => ScreenTranslation.IsWords(line.Text))
+            .Where(line => !styled || !ScreenTranslation.IsClock(line.Text))
             // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı") ve karenin kenarında kesilmiş tek sözcük atılır.
             // Güveni düşük okuma, sözlükte karşılığı yoksa atılır ("1 Мар" güven 0,3 ama sözlükte "Map").
             .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)
                                       || (line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null)))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
+        // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827; "Ekranı
+        // çevir" ile aynı). Telefon alanı girmez.
+        // Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+        if (!phone)
+            lines = [.. ScreenTranslation.WithoutDuplicateLines([.. lines.Select(ScreenTranslation.WithoutEdgeMarks)
+                .Select(ScreenTranslation.WithoutEdgeIcons)])];
         var paragraphs = ScreenTranslation.Paragraphs(lines);
         var place = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
         var boxes = lines.Where(line => line.Box is not null).Select(line => line.Box!.Value).ToList();
@@ -549,11 +566,13 @@ public sealed partial class RegionWatcher
         // eskisi gibi tek kutu. Anahtar grup yapısını da içerir: aynı yazı farklı gruplanırsa bloklar yeniden kurulur.
         IReadOnlyList<Block>? blocks = null;
         var key = TextKey(paragraphs);
-        var cards = auto && !phone && lines.Count > 0 && boxes.Count == lines.Count
+        // Görev kartı her alanda kendi parçalarına ayrılır (başlık, açıklama): hazır ya da kullanıcının alanında da başlık
+        // açıklamaya katılıp ikisi tek kutuda, görev resminin üstünde çiziliyordu (#856).
+        var cards = !phone && lines.Count > 0 && boxes.Count == lines.Count
             ? CouchSubs.Core.MissionCard.Find(lines, place) : [];
-        var groups = (phone || auto || lines.Count > 1) && boxes.Count == lines.Count
-            ? (phone ? GamePhoneText.Groups(reading) : auto ? AutoGroups(lines, menuRows, menu, cards) : ScreenTranslation.GroupsFromLines(lines, menuRows)) : [];
-        if (((phone || auto) && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
+        var groups = (phone || styled || lines.Count > 1) && boxes.Count == lines.Count
+            ? (phone ? GamePhoneText.Groups(reading) : styled ? AutoGroups(lines, menuRows, menu, cards) : CardGroups(lines, menuRows, cards)) : [];
+        if (((phone || styled) && groups.Count > 0) || groups.Count is > 1 and < ScreenTranslation.MaxGroups)
         {
             paragraphs = [.. groups.SelectMany(group => group.Paragraphs)];
             icons = [.. groups.SelectMany(group => group.Icons
@@ -564,7 +583,7 @@ public sealed partial class RegionWatcher
             {
                 var style = phone && frame is not null ? GamePhonePalette.Sample(frame, group.Box) : null;
                 TextLook? look = null;
-                if (auto && !phone && frame is not null)
+                if (styled && frame is not null)
                 {
                     // Çeviri özgün yazının stilinde çizilsin: renkler, kalınlık, dar aile, hiza, büyük harf.
                     var own = lines.Where(line => Inside(line.Box!.Value, group.Box)).ToList();
@@ -573,7 +592,7 @@ public sealed partial class RegionWatcher
                 list.Add(new Block(start, group.Paragraphs.Count, group.Box.PlacedIn(place), group.LineHeight * height, style, look));
                 start += group.Paragraphs.Count;
             }
-            if (auto && !phone) list = AlignByNeighbours(list);
+            if (styled) list = AlignByNeighbours(list);
             blocks = list;
             key = TextKey(paragraphs) + "|" + string.Join(',', list.Select(block => block.Count));
         }
@@ -634,6 +653,15 @@ public sealed partial class RegionWatcher
             result.AddRange(body.Count == members.Count ? [group] : ScreenTranslation.GroupsFromLines(body, menuRows));
         }
         return [.. result.OrderBy(group => group.Box.Top).ThenBy(group => group.Box.Left)];
+    }
+
+    /// <summary>Kullanıcının alanında görev kartının parçaları kendi gruplarıdır, kalan satırlar her zamanki gibi.</summary>
+    private static List<ScreenTranslation.Group> CardGroups(List<TextLine> lines, bool menuRows, IReadOnlyList<CouchSubs.Core.MissionCard.Card> cards)
+    {
+        var taken = cards.SelectMany(card => card.All).ToHashSet();
+        var rest = Enumerable.Range(0, lines.Count).Where(i => !taken.Contains(i)).Select(i => lines[i]).ToList();
+        return [.. cards.SelectMany(card => CouchSubs.Core.MissionCard.Groups(card, lines))
+            .Concat(ScreenTranslation.GroupsFromLines(rest, menuRows)).OrderBy(group => group.Box.Top)];
     }
 
     private static bool IsLabelLine(TextLine line) =>
@@ -1014,7 +1042,9 @@ public sealed partial class RegionWatcher
         // Simgeler paket aramasında yok sayılır, çeviride uydurma adlarla korunur (IconText).
         var prepared = paragraphs.Select(IconText.Protect).ToList();
         string?[] result = [.. paragraphs.Select(paragraph =>
-            (labelsFirst && TranslatesUiCommands ? UiCommands.TranslateLabel(IconText.Plain(paragraph)) : null)
+            // Yalnız özel adlardan oluşan yazı ("JASON & LUCIA") çevrilmez (#859).
+            (ScreenTranslation.KeepsNames(paragraph) ? paragraph : null)
+            ?? (labelsFirst && TranslatesUiCommands ? UiCommands.TranslateLabel(IconText.Plain(paragraph)) : null)
             ?? PackLookup?.Invoke(IconText.Plain(paragraph))?.Text ?? (TranslatesUiCommands ? UiCommands.Translate(paragraph) : null))];
         var readyCount = result.Count(text => text is not null);
         // Zaten Türkçe olan parça çevrilmez: aslı kalır, tümü öyleyse kutu gösterilmez.
@@ -1119,6 +1149,8 @@ public sealed partial class RegionWatcher
         {
             var core = part.Core.Trim();
             if (!core.Any(char.IsLetter)) { part.Translation = part.Core; continue; }
+            // Yalnız özel adlardan oluşan sekme ("JASON & LUCIA") çevrilmez (#859).
+            if (ScreenTranslation.KeepsNames(core)) { part.Translation = core; continue; }
             string? known;
             lock (terms) terms.TryGetValue(core, out known);
             known ??= (TranslatesUiCommands ? UiCommands.TranslateLabelLoosely(core) : null)

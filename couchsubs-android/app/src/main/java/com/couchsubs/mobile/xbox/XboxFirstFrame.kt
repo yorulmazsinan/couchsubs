@@ -11,6 +11,11 @@ data class XboxWatchStep(val requestKeyframe: Boolean = false, val logStats: Boo
 
 class XboxFirstFrameWatch {
     companion object {
+        /**
+         * Bağlantıdan sonra ilk kare için beklenen en uzun süre; dolunca bağlantı NO_FIRST_FRAME ile kapatılır, Xbox'ın
+         * kendisi kapatması (~60 sn) beklenmez (Windows, iPhone ve Mac'te de 30 sn).
+         */
+        const val FIRST_FRAME_LIMIT_MS = 30_000L
         const val KEYFRAME_INTERVAL_MS = 2500L
         /** Bu süreden sonra anahtar kare istenmez; tanı satırları sürer. */
         const val KEYFRAME_WINDOW_MS = 20_000L
@@ -57,7 +62,8 @@ data class XboxStat(val type: String, val id: String, val members: Map<String, A
 
 /** WebRTC getStats özetini tek günlük satırına çevirir; Windows'taki XboxStreamStats ile aynı biçim. */
 object XboxStreamStats {
-    val TYPES = setOf("inbound-rtp", "candidate-pair", "local-candidate", "remote-candidate", "transport")
+    /** `codec`: anlaşılan görüntü kodeği tanı satırına girer. */
+    val TYPES = setOf("inbound-rtp", "candidate-pair", "local-candidate", "remote-candidate", "transport", "codec")
 
     /** Telefonda video öğesi yok: görüntü parçasının durumu (LIVE, ENDED). */
     fun picture(trackState: String): String = "görüntü parça $trackState"
@@ -68,7 +74,11 @@ object XboxStreamStats {
         if (video != null) {
             append("video paket ${number(video, "packetsReceived")}, bayt ${number(video, "bytesReceived")}, kayıp ${number(video, "packetsLost")}, ")
             append("çözülen ${number(video, "framesDecoded")}, düşen ${number(video, "framesDropped")}, anahtar kare ${number(video, "keyFramesDecoded")}, ")
-            append("PLI ${number(video, "pliCount")}, çözücü ${text(video, "decoderImplementation") ?: "?"}; ")
+            append("PLI ${number(video, "pliCount")}, çözücü ${text(video, "decoderImplementation") ?: "?"}")
+            byId(stats, text(video, "codecId"))?.let { codec ->
+                append(", kodek ${text(codec, "mimeType") ?: "?"} ${text(codec, "sdpFmtpLine") ?: ""}".trimEnd())
+            }
+            append("; ")
         } else {
             append("video yok; ")
         }

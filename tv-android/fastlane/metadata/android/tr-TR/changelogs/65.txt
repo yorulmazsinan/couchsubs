@@ -1,0 +1,1 @@
+0.9.62: Eşleştirme isteği telefonda/bilgisayarda düşerse (çeviri durdurulup başlatıldı, iki dakikada onaylanmadı) TV "Eşleştirme tamamlanmadı"da kalmıyor, kendisi yeniden istiyor; onay penceresi yeniden açılıyor. Reddedilen istek için Tamam beklenir.

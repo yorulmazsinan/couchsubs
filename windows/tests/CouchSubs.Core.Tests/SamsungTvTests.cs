@@ -44,7 +44,11 @@ public class SamsungTvTests
         Assert.Null(SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Missing));
         Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Installed(2)));
         Assert.Equal("NATIVE_LAUNCH", SamsungAppKnowledge.ActionFor(false, SamsungAppPresence.Installed(4)));
-        Assert.Equal("DEEP_LINK", SamsungAppKnowledge.ActionFor(false, null));
+        // Liste 3 sn'de gelmedi: kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna
+        // bağlanılamıyor (AS400)" der (Samsung 7 Series 2018); komut gönderilmez, tvinstall.log'a yazılır.
+        Assert.Null(SamsungAppKnowledge.ActionFor(false, null));
+        Assert.Contains("uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi", SamsungAppKnowledge.NotSentLine("1.2.3.4", null));
+        Assert.Contains("açma isteği gönderilmedi", SamsungAppKnowledge.NotSentLine("1.2.3.4", SamsungAppPresence.Missing));
     }
 
     [Fact]

@@ -40,14 +40,21 @@ public protocol ReadRescuer: AnyObject, Sendable {
 ///   geciktiriyorsa kendilerini kısar (`backgroundSlowdown`).
 /// - **Takılma**: `timeoutMs` içinde dönmeyen okuma `timedOut` ile bırakılır ve asıl okuyucu "takılı" sayılır. Takılıyken
 ///   yeni Vision isteği verilmez. Yedek (`rescuer`) varsa okumalar ona gider, altyazı sürer; yoksa okuma hemen
-///   `stuck` ile döner. Takılan okuma bitince asıl okuyucuya kendiliğinden dönülür.
+///   `stuck` ile döner. Takılan okuma bitince asıl okuyucuya kendiliğinden dönülür. Yedek varken altyazı için sınır
+///   `subtitleTimeoutMs`'tir: altyazı okuması ya da önünde beklediği okuma o kadar sürerse takılı sayılır (#822).
 /// - **Yedek de takılırsa** bağlamı bırakılıp yenisi kurulur; art arda `maxRescueFailures` kez olursa yedek, asıl
 ///   okuyucu düzelene kadar kullanılmaz.
 public final class ReadQueue: @unchecked Sendable {
-    public static let shared = ReadQueue(degradeAfterStalls: 2)
+    public static let shared = ReadQueue(degradeAfterStalls: 2, subtitleTimeoutMs: ReadQueue.defaultSubtitleTimeoutMs)
     /// Bütün karenin derin okuması (üç Vision isteği) yavaş Mac'te birkaç saniye sürer; `FrameGate`'in 15 saniyesinden
     /// önce dönmeli ki hat yeniden kurulmadan sonraki kare okunsun.
     public static let defaultTimeoutMs = 10_000
+    /// Altyazı okuması (ya da önünde beklediği okuma) bundan uzun sürerse asıl okuyucu takılı sayılır, altyazı yedekten
+    /// okunur (GitHub #822). Eskiden altyazı da `defaultTimeoutMs` bekliyordu: asıl okuyucu yavaşladığında her takılmada
+    /// 10 sn hiç satır okunmuyordu. Mac'te Sony Remote Play penceresinden okuyan kullanıcının altyazı geçmişinde
+    /// çeviriler beta.52'deki 1–4 sn yerine 8–11 sn (ve 19–20 sn) arayla geliyordu: "5-6 cümlede bir çeviri" ve ekranda
+    /// uzun kalan çeviri. Altyazı okuması normalde 0,1–0,5 sn sürer (derin okuma 1 sn'yi bulmaz).
+    public static let defaultSubtitleTimeoutMs = 3_000
     public static let defaultMaxRescueFailures = 3
     /// Altyazı okuması sırada bundan uzun beklediyse arka plan okumaları seyrekleşir.
     public static let subtitleWaitLimitMs = 150
@@ -87,6 +94,8 @@ public final class ReadQueue: @unchecked Sendable {
         let detail: String
         let submitted = ReadQueue.uptimeMs()
         var started: Int?
+        /// Başladığında verilen süre sınırı (ms).
+        var limitMs: Int?
         /// Süresi doldu, çağırana haber verildi; iş hâlâ sürüyor olabilir.
         var expired = false
         let work: @Sendable () -> Void
@@ -107,6 +116,8 @@ public final class ReadQueue: @unchecked Sendable {
         var stalledSince: Int?
         /// Takılı okumasıyla bırakıldı (`abandonStall`); okuma bitince sayaçtan düşülür.
         var abandoned = false
+        /// Takılı sayılan okumanın başladığı an (takılmanın süresi bundan ölçülür).
+        var stallStarted: Int?
         init(label: String) { queue = DispatchQueue(label: label, qos: .userInitiated) }
     }
 
@@ -119,6 +130,8 @@ public final class ReadQueue: @unchecked Sendable {
     private var rescueGeneration = 0
     private var rescueFailures = 0
     private let timeoutMs: Int
+    /// Altyazı okumasının ve önünde beklediği okumanın takılı sayılma süresi (`defaultSubtitleTimeoutMs`).
+    private let subtitleTimeoutMs: Int
     private let maxRescueFailures: Int
     /// Asıl okuyucu bu kadar kez takılırsa okuma yolu değiştirilir (`VisionReader.useFastLevel`); nil: değiştirilmez.
     private let degradeAfterStalls: Int?
@@ -128,10 +141,12 @@ public final class ReadQueue: @unchecked Sendable {
     private var _onEvent: (@Sendable (Event) -> Void)?
 
     public init(label: String = "com.couchsubs.ocr", timeoutMs: Int = ReadQueue.defaultTimeoutMs,
-                maxRescueFailures: Int = ReadQueue.defaultMaxRescueFailures, degradeAfterStalls: Int? = nil) {
+                maxRescueFailures: Int = ReadQueue.defaultMaxRescueFailures, degradeAfterStalls: Int? = nil,
+                subtitleTimeoutMs: Int? = nil) {
         self.degradeAfterStalls = degradeAfterStalls
         self.label = label
         self.timeoutMs = timeoutMs
+        self.subtitleTimeoutMs = min(subtitleTimeoutMs ?? timeoutMs, timeoutMs)
         self.maxRescueFailures = maxRescueFailures
         primary = Lane(label: label)
         rescue = Lane(label: "\(label).yedek.0")
@@ -163,7 +178,7 @@ public final class ReadQueue: @unchecked Sendable {
     public func abandonStall(olderThanMs: Int, maxAbandons: Int = ReadQueue.defaultMaxAbandons) -> Int? {
         let abandoned: Int? = lock.withLock {
             guard let since = primary.stalledSince, abandonedStalls < maxAbandons else { return nil }
-            let ms = Self.uptimeMs() - since + timeoutMs
+            let ms = Self.uptimeMs() - (primary.stallStarted ?? since - timeoutMs)
             guard ms >= olderThanMs else { return nil }
             abandonedStalls += 1
             primary.abandoned = true
@@ -231,8 +246,26 @@ public final class ReadQueue: @unchecked Sendable {
         }
         guard let lane else { return item.fail(ReadQueueError.stuck) }
         let timeoutMs = self.timeoutMs
+        if item.priority == .subtitle, subtitleTimeoutMs < timeoutMs {
+            // Altyazı, asıl okuyucudaki uzun bir okumanın arkasında `subtitleTimeoutMs`'ten fazla beklemez: yedek varsa o
+            // okuma takılı sayılır, altyazı (ve öbür bekleyenler) yedeğe geçer.
+            let limitMs = subtitleTimeoutMs
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self, weak item] in
+                guard let item else { return }
+                let blocker: (item: Item, lane: Lane)? = lock.withLock {
+                    guard rescueUsable, primary.pending.contains(where: { $0 === item }), let running = primary.running, !running.expired,
+                          let started = running.started, Self.uptimeMs() - started >= limitMs else { return nil }
+                    return (running, primary)
+                }
+                if let blocker { overdue(blocker.item, on: blocker.lane) }
+            }
+        }
         // Sırada `timeoutMs` bekleyen okuma artık bayattır; kare atlanır.
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [self] in
+        // Zamanlayıcılar okumayı zayıf tutar (`weak item`): biten okumanın karesi (ve kırpığın bağlı olduğu bütün kare)
+        // hemen bırakılır. Eskiden her okuma karesini 10 sn tutuyordu; Mac'te pencere yakalamanın (ScreenCaptureKit) üç
+        // karelik havuzu tutulan karelerle dolunca yeni kare gelmiyor, altyazı ~10,6 sn arayla okunuyordu (GitHub #822).
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [self, weak item] in
+            guard let item else { return }
             // Asıl okuyucu bu arada takıldıysa okuma yedeğin sırasına taşınmıştır.
             let waiting = lock.withLock {
                 for lane in [primary, rescue] {
@@ -250,25 +283,30 @@ public final class ReadQueue: @unchecked Sendable {
 
     /// Kuyruk boşsa sıradaki okumayı başlatır.
     private func pump(_ lane: Lane) {
-        let next: (item: Item, rescuer: ReadRescuer?)? = lock.withLock {
+        let next: (item: Item, rescuer: ReadRescuer?, limitMs: Int)? = lock.withLock {
             guard lane.running == nil, lane.stalledSince == nil, !lane.pending.isEmpty else { return nil }
             let item = lane.pending.removeFirst()
             let now = Self.uptimeMs()
             item.started = now
             lane.running = item
             if lane === primary, item.priority == .subtitle { lastSubtitleWaitMs = now - item.submitted }
-            return (item, lane === primary ? nil : _rescuer)
+            // Asıl okuyucudaki altyazı okuması, yedek varsa (Mac) `subtitleTimeoutMs`'te takılı sayılır; yedeksiz
+            // (iPhone) beklemenin bir yararı olmadığından eski süre geçerlidir.
+            let limitMs = lane === primary && item.priority == .subtitle && rescueUsable ? subtitleTimeoutMs : timeoutMs
+            item.limitMs = limitMs
+            return (item, lane === primary ? nil : _rescuer, limitMs)
         }
         guard let next else { return }
         let item = next.item
-        let timeoutMs = self.timeoutMs
+        let limitMs = next.limitMs
         lane.queue.async { [self] in
             if let rescuer = next.rescuer { Thread.current.threadDictionary[Self.rescuerKey] = RescuerBox(rescuer) }
             item.work()
             Thread.current.threadDictionary.removeObject(forKey: Self.rescuerKey)
             finished(item, on: lane)
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [self] in
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self, weak item, weak lane] in
+            guard let item, let lane else { return }
             overdue(item, on: lane)
         }
     }
@@ -289,14 +327,18 @@ public final class ReadQueue: @unchecked Sendable {
             } else if lane === primary {
                 if let since = lane.stalledSince {
                     // Takılan okuma sonunda bitti: asıl okuyucu yeniden kullanılır.
+                    let ran = Self.uptimeMs() - (lane.stallStarted ?? since - timeoutMs)
                     lane.stalledSince = nil
+                    lane.stallStarted = nil
                     rescueFailures = 0
                     standDown = _rescuer
-                    events.append(.recovered(ms: Self.uptimeMs() - since + timeoutMs))
+                    events.append(.recovered(ms: ran))
                     // Takılma yineleniyorsa isabetli düzey (Neural Engine) bu oturumda bırakılır: hızlı düzey o yolu
                     // hiç kullanmaz. Takılıyken değiştirmek işe yaramaz (istek aynı kilidi bekler); düzelince değişir.
-                    stalls += 1
-                    if let degradeAfterStalls, stalls == degradeAfterStalls {
+                    // Yalnız `timeoutMs`'i aşan okuma sayılır: altyazıyı bekletmemek için erken takılı sayılan, birkaç
+                    // saniyede biten okuma (ör. "Ekranı çevir"in bütün kare okuması) isabetli düzeyi bıraktırmaz.
+                    if ran >= timeoutMs { stalls += 1 }
+                    if ran >= timeoutMs, let degradeAfterStalls, stalls == degradeAfterStalls {
                         VisionReader.useFastLevel = true
                         events.append(.degraded(stalls: stalls))
                     }
@@ -324,6 +366,7 @@ public final class ReadQueue: @unchecked Sendable {
                               running: (primary.running == nil ? 0 : 1) + (rescue.running == nil ? 0 : 1))
             if lane === primary {
                 lane.stalledSince = Self.uptimeMs()
+                lane.stallStarted = item.started ?? item.submitted
                 // Bekleyenler yedeğe taşınır; yedek yoksa beklemeden hata alırlar.
                 let waiting = lane.pending
                 lane.pending = []
@@ -344,7 +387,7 @@ public final class ReadQueue: @unchecked Sendable {
         abandon?.abandon()
         if let event { onEvent?(event) }
         // `resume` bir kez teslim eder: iş sonradan bitse de çağıran süre aşımını almış olur.
-        item.fail(ReadQueueError.timedOut(ms: timeoutMs))
+        item.fail(ReadQueueError.timedOut(ms: item.limitMs ?? timeoutMs))
         stranded.forEach { $0.fail(ReadQueueError.stuck) }
         let next = lock.withLock { rescue }
         pump(next)

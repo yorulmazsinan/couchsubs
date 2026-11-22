@@ -20,6 +20,16 @@ final class StickyRowsTests: XCTestCase {
         XCTAssertEqual(rows.filter(Reading(text: "Get in the sea plane"), at: 9500).text, "Get in the sea plane")
     }
 
+    /// Konuşan adıyla başlayan satır uzun süre ekranda kalsa da görev/HUD sayılmaz (Windows, Android ile aynı).
+    func testSpeakerLineIsNeverSticky() {
+        var rows = StickyRows()
+        let named = "JASON: I don't like this place."
+        XCTAssertEqual(rows.filter(Reading(text: named), at: 0).text, named)
+        XCTAssertEqual(rows.filter(Reading(text: "Yeah!\n" + named), at: 6000).text, "Yeah!\n" + named)
+        XCTAssertEqual(rows.newlySticky, [])
+        XCTAssertEqual(rows.filter(Reading(text: named), at: 9000).text, named)
+    }
+
     func testDialogueBoxWhoseRowsAppearTogetherIsKept() {
         var rows = StickyRows()
         let page = "You can stay here as long as you like.\nThe inn is always open for travelers."

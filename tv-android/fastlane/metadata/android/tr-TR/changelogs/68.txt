@@ -1,0 +1,1 @@
+0.9.65: Aynı ağda iki CouchSubs varken (ör. bilgisayar açık, çeviri telefondan) TV artık boştaki CouchSubs'a bağlı kalmıyor; çeviri yapan CouchSubs'a geçiyor, altyazı TV'ye geliyor.

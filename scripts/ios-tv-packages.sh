@@ -4,10 +4,14 @@
 # build.gradle samsungTvPackage + tvReleasePackages'ın aynısı:
 #  - Samsung (.wgt): kaynaktan (tv-webos + tv-tizen, package-tizen.sh gibi), sıkıştırmasız zip; kurulurken telefonda
 #    TV'ye özel sertifikayla imzalanır.
-#  - Android TV (.apk) ve LG (.ipk): son GitHub sürümünden, SHA256SUMS.txt ile denetlenerek (masaüstünün kurduğu ve
-#    TV'lerde duran kopyayla aynı imza). İndirilemezse önceki indirilen (önbellek) kullanılır.
+#  - Android TV (.apk) ve LG (.ipk): kaynaktaki TV uygulamasının sürümünü (tv-webos/appinfo.json) taşıyan en yeni GitHub
+#    sürümünden, SHA256SUMS.txt ile denetlenerek (masaüstünün kurduğu ve TV'lerde duran kopyayla aynı imza). Öyle bir
+#    sürüm yoksa en yenisi alınır. İndirilemezse önceki indirilen (önbellek) kullanılır.
 #  - tv-packages.properties: hangi sürümden geldikleri ve sürümleri.
-# Kullanım: scripts/ios-tv-packages.sh <çıktı klasörü>   (Xcode derleme adımı; COUCHSUBS_REQUIRE_TV_PACKAGES=1 indirmeyi şart koşar)
+#  - Son olarak paketlerin sürümü kaynakla karşılaştırılır (scripts/check-tv-packages.py). iPhone 1.0.6 (39) LG paketini
+#    son sürümden (beta.79, TV 0.9.63) almıştı, main'deki TV 0.9.71'di; telefon TV'yi güncelleyemedi.
+# Kullanım: scripts/ios-tv-packages.sh <çıktı klasörü>   (Xcode derleme adımı; COUCHSUBS_REQUIRE_TV_PACKAGES=1 indirmeyi
+# ve sürümlerin kaynakla aynı olmasını şart koşar: release-appstore.sh ios bunu verir)
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$1/tv"
@@ -42,10 +46,11 @@ PYEOF
 cp "$ROOT"/couchsubs-android/app/src/main/resources/samsung-ca/*.pem "$OUT/samsung-ca/"
 SAMSUNG_VERSION=$(sed -n 's/.* version="\([0-9.]*\)" viewmodes.*/\1/p' "$ROOT/tv-tizen/config.xml" | head -1)
 
-# Android TV ve LG: son GitHub sürümü.
-if "$PY" - "$CACHE" <<'PYEOF'
+# Android TV ve LG: kaynaktaki TV sürümünü taşıyan en yeni GitHub sürümü.
+WEBOS_VERSION=$(sed -n 's/.*"version": *"\([0-9.]*\)".*/\1/p' "$ROOT/tv-webos/appinfo.json" | head -1)
+if "$PY" - "$CACHE" "$WEBOS_VERSION" <<'PYEOF'
 import hashlib, json, os, re, sys, tempfile, urllib.request
-cache = sys.argv[1]
+cache, wanted = sys.argv[1], sys.argv[2]
 token = os.environ.get('GITHUB_TOKEN')
 def fetch(url, api):
     request = urllib.request.Request(url, headers={'User-Agent': 'couchsubs-ios-build'})
@@ -54,7 +59,12 @@ def fetch(url, api):
         if token: request.add_header('Authorization', 'Bearer ' + token)
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
-release = json.loads(fetch('https://api.github.com/repos/yorulmazsinan/couchsubs/releases/latest', True))
+releases = [r for r in json.loads(fetch('https://api.github.com/repos/yorulmazsinan/couchsubs/releases?per_page=30', True))
+            if not r.get('draft')]
+if not releases: raise SystemExit('GitHub sürümü yok')
+def carries(r): return any(a['name'] == 'com.couchsubs.tv_' + wanted + '_all.ipk' for a in r['assets'])
+release = next((r for r in releases if carries(r)), releases[0])
+if not carries(release): print('warning: TV ' + wanted + ' hiçbir GitHub sürümünde yok; ' + release['tag_name'] + ' alınıyor')
 sums = next((a for a in release['assets'] if a['name'] == 'SHA256SUMS.txt'), None)
 if not sums: raise SystemExit(release['tag_name'] + ': SHA256SUMS.txt yok')
 lines = [l.strip() for l in fetch(sums['browser_download_url'], False).decode().splitlines()]
@@ -147,3 +157,12 @@ for name in couchsubs-androidtv.apk couchsubs-lg.ipk; do
 done
 echo "TV paketleri uygulamada: $OUT"
 cat "$OUT/tv-packages.properties"
+
+# Paketlerin sürümü kaynaktaki TV uygulamasıyla aynı olmalı: eski paket telefondan TV'yi güncelleyemez.
+if ! "$PY" "$ROOT/scripts/check-tv-packages.py" "$OUT"; then
+  if [ -n "$COUCHSUBS_REQUIRE_TV_PACKAGES" ]; then
+    echo "error: TV paketleri kaynaktaki TV uygulamasıyla aynı değil; önce bu TV sürümüyle GitHub sürümünü yayınlayın"
+    exit 1
+  fi
+  echo "warning: TV paketleri kaynaktaki TV uygulamasıyla aynı değil (mağaza derlemesinde derleme durur)"
+fi

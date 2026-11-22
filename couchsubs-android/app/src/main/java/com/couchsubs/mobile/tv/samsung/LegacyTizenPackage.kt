@@ -15,8 +15,9 @@ import java.util.zip.ZipOutputStream
  * Tizen 2.4 tanımadığı satırı içeren paketi sebep yazmadan `install failed[118]` ile reddediyor; `power` izni
  * çıkarıldıktan sonra da (#497) 0.9.38 aynı hatayı verdi (#621). Yeni TV'lerde paket değişmez.
  *
- * Bu da yetmedi (#638, UE60KU7000): imza SHA-256'ya çevrildi ([WgtSigner.Digest]). TV yine yalın `install failed[118]`
- * derse aynı kurulumda bir kez de "yalın" paket denenir: `tizen:profile` satırı ile `application.launch` ve
+ * Asıl eksik paket değil, cihaz profilinin yeriydi (#890): Tizen 2.x profili `/home/developer`'da arar (SamsungInstaller).
+ * İlk deneme #71'deki gibi SHA-512 imzalıdır; TV yine yalın `install failed[118]` derse aynı kurulumda bir kez de
+ * SHA-256 imzalı ([WgtSigner.Digest]) "yalın" paket denenir (#638): `tizen:profile` satırı ile `application.launch` ve
  * `network.get` izinleri de çıkar (uygulama bunlarsız da açılır; TV adresi ağ taramasıyla bulunur). Hangisinin tuttuğu
  * günlükten görülür.
  */

@@ -4,12 +4,26 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)
 
-**Bu sürümde yeni**
+**Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **Android TV'de CouchSubs'ın öne gelip hemen kaybolması (TV uygulaması 0.9.56):** Bilgisayar ve telefon, TV uygulaması zaten açıkken onu yeniden açmaya çalışmıyor; açma yalnız uygulama gerçekten kapalıysa ve en çok 3 kez deneniyor. TV uygulamasında kumandadan açılan ekran artık kendiliğinden değişmiyor.
-- **Android TV'de HDR açılınca ya da bildirim gelince HDMI girişine geçme (#794):** TV kendi HDMI ekranını öne çekerse CouchSubs kısa sürede kendini geri getiriyor; altyazı arkada kalmıyor.
-- **GTA 6 telefonu:** Otomatik telefon çevirisi artık gidip gelmiyor (tek karelik ıskada panel kapanmıyor, aynı mesajın biraz farklı okunuşu yeni mesaj sayılmıyor); ana ekrandaki uygulama adları otomatik panelde de çevrilmiyor.
-- **Türkçe dublaj telefonlarda:** Çeviri iPhone ve Android'de telefonun kendi Türkçe sesiyle okunabiliyor (bilgisayarlarda zaten vardı). Windows'ta "Hızlı" sesin duygu etiketlerini de okuması düzeltildi.
+- **Mac: Remote Play penceresinden okuma ~10 sn'de bir değil, her karede** (#822): Biten okuma pencerenin karesini 10 sn tutmuyor; aradaki altyazılar artık kaçmıyor. Günlükte dakikada bir kare sayısı yazıyor.
+- **LG'de ekranın dakikada bir 2 sn kararıp "HDR" yazısı çıkması** düzeltildi (TV uygulaması 0.9.73): sağlam görüntü artık boşuna yeniden kurulmuyor.
+- **TV'de görev satırı:** Türkçesi kendi yerinde kalıyor; altyazı kalkınca kayık durmuyor, kırpık ekran yazısı görevi örtmüyor.
+- **Konuşan adıyla başlayan satır** (ör. "Jason: …") artık görev/HUD ya da menü yazısı sayılıp atılmıyor; menü sayılması için satırlar hizalı olmalı.
+- **Sessizlik bekçisi:** Konuşmaya benzeyen bir satır 10 sn okunup çevrilmezse doğrudan çevriliyor; neden günlüğe yazılıyor.
+- **Tanı:** Altyazı alanında yazı çıkmayınca nedeni altyazi.log'da (okunmadı, boş okuma, süzgeç, hata).
+
+**beta.81'de gelenler:** çevirinin durması (menü durumu) düzeltmesi, "Altyazı zeminini izle"nin kaldırılması, "TV uygulamasını güncelle"nin ana ekranda çalışması, DeepL hata nedenleri, eski TV'lerde altyazının kaybolmaması.
+
+**beta.80'de gelenler:** PS5'te kullanıcı değiştirince yeniden bağlanma, altyazının iki kez çıkmaması, GTA 6 telefon/harita/menü düzeltmeleri, TV'ye altyazı gelmemesi (Samsung açma, Android TV), LG siyah ekran, Samsung ultra geniş, Xbox ve OBS düzeltmeleri, Mac'te 10 sn bekleme (#822).
+
+**beta.79'da gelenler:** kısa ve iki satırlı altyazı düzeltmeleri, GTA 6 bildirimlerinin yerinde çizilmesi, LG ses ayarları ve eşleşme, Android TV eski adres, Mac/iPhone PS5 kare boyu çökmesi.
+
+**beta.78'de gelenler:** iki satırlı altyazının yarım okunması (çevirilerin çoğunun gelmemesi) düzeltmesi, menü/harita çevirilerinin üst üste binmemesi, Android TV izin istemi ve Ayarlar tuşu.
+
+**beta.77'de gelenler:** kısa altyazıların atılmaması, GTA 6 telefon kartının sohbeti izlemesi, altyazıyı tam örtme, "Yalnız OBS (yayın)", Mac kısayolları, 2015 Samsung TV'ler.
+
+**beta.76'da gelenler:** Android TV'de CouchSubs'ın öne gelip kaybolması ve HDR/bildirimde HDMI'a geçme düzeltmesi (TV uygulaması 0.9.56), GTA 6 telefon çevirisinin gidip gelmemesi, telefonlarda Türkçe dublaj.
 
 **beta.75'te gelenler:** Samsung 4K/8K'da görüntünün sol üstte küçük kalmasının asıl nedeninin giderilmesi (TV uygulaması 0.9.55), tabela/tişört yazılarının çevrilmemesi, "Yeniden bağlan", oyun profilleri, GTA 6 telefon ana ekranı ve Remote Play penceresi.
 

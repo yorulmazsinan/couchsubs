@@ -80,6 +80,19 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     internal static bool NeedsDeviceProfile(string platform) =>
         platform.Length > 0 && !IsTooOld(platform) && !Versions.IsNewer(platform, DeviceProfileUpTo);
 
+    /// <summary>Tizen 2.x'te cihaz profilinin konduğu klasör (Tizen Studio ve Apps2Samsung ile aynı).</summary>
+    internal const string LegacyDeviceProfileDirectory = "/home/developer";
+
+    /// <summary>
+    /// Cihaz profilinin TV'deki yolu. Tizen 3.0–4.0'da <c>sdk_toolpath</c>; Tizen 2.x (2016) TV'ler profili yalnız
+    /// <c>/home/developer</c>'da arar (Samsung'un "Permitting Device to Install Apps" belgesi, Apps2Samsung'un
+    /// TizenPermitInstall.TargetPath'i). #71'de 40KU7000'e kurulan paket profili oraya gönderen Apps2Samsung'la kuruldu;
+    /// CouchSubs'ın profili <c>/opt/usr/apps/tmp</c>'ye gönderdiği her 2.4 kurulumu imza biçiminden bağımsız
+    /// <c>install failed[118]</c> verdi (#497, #621, #638, #890).
+    /// </summary>
+    internal static string DeviceProfileRemotePath(string platform, string toolPath) =>
+        (LegacyTizenPackage.Applies(platform) ? LegacyDeviceProfileDirectory : toolPath) + "/device-profile.xml";
+
     /// <summary>Sertifika yoksa Samsung girişini başlatır; yoksa null döner ve kurulum giriş adımında durur.</summary>
     public Func<CancellationToken, Task<SamsungAccount>>? SignIn { get; init; }
 
@@ -225,7 +238,7 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
             Log.Write($"Yeni sertifika: {profile.Describe(DateTime.UtcNow, duid)}");
         }
 
-        if (NeedsDeviceProfile(platform)) await PushDeviceProfileAsync(device, profile, toolPath, cancellationToken);
+        if (NeedsDeviceProfile(platform)) await PushDeviceProfileAsync(device, profile, platform, toolPath, cancellationToken);
 
         Progress?.Invoke("signing");
         DeleteLeftovers(Path.GetTempPath());
@@ -236,17 +249,23 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         var packages = new List<string> { staged };
         try
         {
-            // Tizen 2.x (2016): #71'de çalışan config.xml ve SHA-256 imza; TV yine yalın [118] derse yalın paket (#638).
+            // Tizen 2.x (2016): #71'de çalışan paket: o config.xml ve SHA-512 imza (Apps2Samsung'un TizenSdb'si, #890);
+            // TV yine yalın [118] derse SHA-256 imzalı yalın paket (#638).
             var legacy = LegacyTizenPackage.Applies(platform);
             if (legacy)
             {
                 if (LegacyTizenPackage.Adapt(staged))
                     Log.Write($"Tizen {platform}: paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).");
-                WgtSigner.SignInPlace(staged, profile.AuthorP12, profile.DistributorP12, profile.Password, WgtDigest.Sha256);
-                Log.Write($"Tizen {platform}: imza SHA-256 ile üretildi (rsa-sha256, sha256 özet; yeni TV'lerde SHA-512).");
+                await TizenWgtSigner.ReSignWgtWithCertsInPlace(staged, profile.AuthorP12, profile.DistributorP12, profile.Password);
+                Log.Write($"Tizen {platform}: imza SHA-512 ile üretildi (#71'de çalışan paketle aynı).");
             }
             else
             {
+                // 21:9 / 32:9 Samsung monitör: geniş uygulama yüzeyi (#886; TV'lerde paket değişmez).
+                var (model, resolution) = await ReadScreenInfoAsync(host, cancellationToken);
+                Log.Write($"Ekran: model {model ?? "?"}, çözünürlük {resolution ?? "?"}");
+                if (WideScreenPackage.Applies(model, resolution) && WideScreenPackage.Adapt(staged))
+                    Log.Write("Ultra geniş monitör: paket geniş uygulama yüzeyiyle (base_screen_resolution, device-width) kuruluyor (#886).");
                 await TizenWgtSigner.ReSignWgtWithCertsInPlace(staged, profile.AuthorP12, profile.DistributorP12, profile.Password);
             }
             Log.Write("Paket imzalandı.");
@@ -264,7 +283,7 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
                         Log.Write($"Tizen {platform}: yalın paket hazırlandı ({LegacyTizenPackage.LeanRemoved} de çıkarıldı), imza SHA-256.");
                         return "yalın paket";
                     }, keepExisting: legacy && (onTv is not null || !lastListRead));
-                if (legacy) Log.Write($"Tizen {platform}: {(packages.Count > 1 ? "yalın paket" : "tam paket")} SHA-256 imzayla kuruldu.");
+                if (legacy) Log.Write($"Tizen {platform}: {(packages.Count > 1 ? "yalın paket SHA-256" : "tam paket SHA-512")} imzayla kuruldu.");
             }
             catch (SamsungInstallException error)
             {
@@ -440,11 +459,12 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     }
 
     /// <summary>
-    /// Tizen 3.0–4.0: Tizen Studio'daki "Permit to install applications" adımı. Sertifika alınırken saklanan cihaz
-    /// profili TV'nin <c>sdk_toolpath</c> klasörüne gönderilir; TV, imzayı bu profildeki DUID listesine göre kabul eder.
-    /// Profil yoksa ya da gönderilemezse kurulum yine denenir: TV reddederse sebebi kurulum çıktısında görünür.
+    /// Tizen 2.4–4.0: Tizen Studio'daki "Permit to install applications" adımı. Sertifika alınırken saklanan cihaz
+    /// profili TV'ye gönderilir (yol: <see cref="DeviceProfileRemotePath"/>); TV, imzayı bu profildeki DUID listesine göre
+    /// kabul eder. Tizen 2.x'te <c>/home/developer</c>'a gönderilemezse <c>sdk_toolpath</c> denenir. Profil yoksa ya da
+    /// gönderilemezse kurulum yine denenir: TV reddederse sebebi kurulum çıktısında görünür.
     /// </summary>
-    private async Task PushDeviceProfileAsync(SdbTcpDevice device, SigningProfile profile, string toolPath,
+    private async Task PushDeviceProfileAsync(SdbTcpDevice device, SigningProfile profile, string platform, string toolPath,
         CancellationToken cancellationToken)
     {
         var local = Path.Combine(profile.Directory, "device-profile.xml");
@@ -453,16 +473,21 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
             Log.Write("Cihaz profili (device-profile.xml) yok; gönderilmeden kuruluyor.");
             return;
         }
-        var remote = $"{toolPath}/device-profile.xml";
-        try
+        var remote = DeviceProfileRemotePath(platform, toolPath);
+        var fallback = $"{toolPath}/device-profile.xml";
+        foreach (var target in remote == fallback ? [remote] : new[] { remote, fallback })
         {
-            await using var file = File.OpenRead(local);
-            await device.PushAsync(file, remote, ct: cancellationToken);
-            Log.Write($"Cihaz profili gönderildi: {remote}");
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            Log.Write($"Cihaz profili gönderilemedi ({remote}): {error.Message}");
+            try
+            {
+                await using var file = File.OpenRead(local);
+                await device.PushAsync(file, target, ct: cancellationToken);
+                Log.Write($"Cihaz profili gönderildi: {target}");
+                return;
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                Log.Write($"Cihaz profili gönderilemedi ({target}): {error.Message}");
+            }
         }
     }
 
@@ -553,6 +578,16 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     private static async Task<(string? Mode, string? Ip)> ReadDeveloperInfoAsync(string host, CancellationToken cancellationToken)
     {
         try { return DeveloperInfo(await InfoHttp.GetStringAsync($"http://{host}:8001/api/v2/", cancellationToken)); }
+        catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary>TV'nin 8001 yanıtındaki model adı ve çözünürlük; okunamazsa ikisi de null.</summary>
+    private static async Task<(string? Model, string? Resolution)> ReadScreenInfoAsync(string host, CancellationToken cancellationToken)
+    {
+        try { return WideScreenPackage.ScreenInfo(await InfoHttp.GetStringAsync($"http://{host}:8001/api/v2/", cancellationToken)); }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return (null, null);

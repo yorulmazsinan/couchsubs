@@ -1,0 +1,1 @@
+0.9.67: LG'de oyun görüntüsü bir kez takılıp (stalled) yeniden kurulduktan kısa süre sonra yine takılırsa artık siyah ekranda kalmıyor, görüntü yeniden kuruluyor; PS tuşundan sonra CouchSubs öne gelince takılan görüntü de yeniden kuruluyor.

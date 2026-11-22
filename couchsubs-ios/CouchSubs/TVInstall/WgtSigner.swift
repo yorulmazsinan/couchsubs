@@ -79,8 +79,8 @@ enum StoredZip {
 }
 
 /// Tizen web uygulaması paketini (.wgt) imzalar: `author-signature.xml` ve `signature1.xml` (W3C Widget Signature).
-/// Özet ve imza `Digest` ile seçilir: Tizen 3.0 ve üstünde SHA-512 (bugünkü Tizen Studio gibi), Tizen 2.x TV'lerde
-/// (2016) SHA-256 (#638). Kanonik biçimler doğrudan üretilir (Android'deki WgtSigner ile aynı metin).
+/// Özet ve imza `Digest` ile seçilir: SHA-512 (bugünkü Tizen Studio ve TizenSdb gibi; #71'de Tizen 2.4'te de çalıştı),
+/// Tizen 2.x TV'lerde (2016) ikinci denemedeki yalın pakette SHA-256 (#638, #890). Kanonik biçimler doğrudan üretilir (Android'deki WgtSigner ile aynı metin).
 enum WgtSigner {
     private static let dsig = "http://www.w3.org/2000/09/xmldsig#"
     private static let dsp = "http://www.w3.org/2009/xmldsig-properties"
@@ -89,9 +89,9 @@ enum WgtSigner {
 
     /// İmzadaki özet ve imza algoritması.
     enum Digest {
-        /// W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim; Tizen 2.x TV'lerde kullanılır.
+        /// W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim; Tizen 2.x'te yalnız yalın pakette.
         case sha256
-        /// Bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim (Tizen 3.0 ve üstü).
+        /// Bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim (her TV; Tizen 2.x'te ilk deneme, #890).
         case sha512
 
         var signatureMethod: String {

@@ -70,6 +70,7 @@ public class WgtSignerTests
         using var zip = ZipFile.OpenRead(wgt);
         Assert.Equal(new[] { "author-signature.xml", "signature1.xml", "config.xml", "index.html" }, zip.Entries.Select(e => e.FullName));
         var content = zip.Entries.ToDictionary(e => e.FullName, Read);
+        Assert.StartsWith($"<Signature xmlns=\"{Dsig}\" Id=\"AuthorSignature\">", Encoding.UTF8.GetString(content["author-signature.xml"]));
 
         Assert.Equal(["config.xml", "index.html", "#prop"], Validate(content, "author-signature.xml", "AuthorSignature", profile.Key));
         Assert.Equal(["author-signature.xml", "config.xml", "index.html", "#prop"],
@@ -96,6 +97,55 @@ public class WgtSignerTests
         Assert.Equal(Texts(reference, "X509Certificate"), Texts(mine, "X509Certificate"));
     }
 
+    /// <summary>
+    /// Tizen 2.x'teki ilk deneme (#890): #71'de 40KU7000'e kurulan paket Apps2Samsung'un TizenSdb'siyle SHA-512 imzalıydı;
+    /// Windows/Mac bu paketi aynı TizenSdb'yle, telefonlar WgtSigner'ın SHA-512'siyle imzalar. İki paket de bağımsız
+    /// doğrulanır (imza, her dosyanın SHA-512 özeti, referans sırası); dosya listesi ve sırası, her dosyanın sıkıştırma
+    /// yöntemi (deflate) ve paket dosyalarının dağıtıcı özetleri aynıdır. Yazar imzası dosyasının baytları farklı yazılır
+    /// (TizenSdb boş öğeleri kısa kapatır), kanonik biçimi ve imza değeri aynıdır (Sha512SignatureEqualsTizenSdbs).
+    /// </summary>
+    [Fact]
+    public async Task LegacySha512PackageMatchesTheIssue71Signer()
+    {
+        using var profile = new Profile();
+        var ours = profile.Wgt();
+        var theirs = profile.Wgt();
+        WgtSigner.SignInPlace(ours, profile.Author, profile.Distributor, Profile.Password, WgtDigest.Sha512);
+        await TizenWgtSigner.ReSignWgtWithCertsInPlace(theirs, profile.Author, profile.Distributor, Profile.Password);
+
+        foreach (var wgt in new[] { ours, theirs })
+        {
+            using var zip = ZipFile.OpenRead(wgt);
+            var content = zip.Entries.ToDictionary(e => e.FullName, Read);
+            Assert.Equal(["config.xml", "index.html", "#prop"],
+                Validate(content, "author-signature.xml", "AuthorSignature", profile.Key, WgtDigest.Sha512));
+            Assert.Equal(["author-signature.xml", "config.xml", "index.html", "#prop"],
+                Validate(content, "signature1.xml", "DistributorSignature", profile.Key, WgtDigest.Sha512));
+        }
+        Assert.Equal(Methods(theirs), Methods(ours));
+        Assert.Equal(["author-signature.xml", "signature1.xml", "config.xml", "index.html"], Methods(ours).Select(e => e.Name));
+        Assert.All(Methods(ours), entry => Assert.Equal(8, entry.Method));
+        var mine = Texts(Parse(ReadEntry(ours, "signature1.xml")), "DigestValue");
+        var reference = Texts(Parse(ReadEntry(theirs, "signature1.xml")), "DigestValue");
+        Assert.Equal(reference.Skip(1), mine.Skip(1));
+    }
+
+    /// <summary>Zip'in merkezi dizinindeki her girdi: ad ve sıkıştırma yöntemi (0 stored, 8 deflate), dosyadaki sırayla.</summary>
+    private static List<(string Name, int Method)> Methods(string wgt)
+    {
+        var bytes = File.ReadAllBytes(wgt);
+        var entries = new List<(string, int)>();
+        for (var i = 0; i + 46 <= bytes.Length; i++)
+        {
+            if (BitConverter.ToUInt32(bytes, i) != 0x02014b50) continue;
+            var method = BitConverter.ToUInt16(bytes, i + 10);
+            var nameLength = BitConverter.ToUInt16(bytes, i + 28);
+            entries.Add((Encoding.UTF8.GetString(bytes, i + 46, nameLength), method));
+            i += 45 + nameLength;
+        }
+        return entries;
+    }
+
     private static string PropDigest(string id, WgtDigest digest) =>
         WgtSigner.Digest(Encoding.UTF8.GetBytes(WgtSigner.PropObject(id, canonical: true)), digest);
 
@@ -106,30 +156,33 @@ public class WgtSignerTests
     }
 
     /// <summary>Bir imza dosyasını doğrular; referansların URI'lerini sırasıyla döner.</summary>
-    private static List<string> Validate(Dictionary<string, byte[]> content, string file, string id, RSA key)
+    private static List<string> Validate(Dictionary<string, byte[]> content, string file, string id, RSA key,
+        WgtDigest digest = WgtDigest.Sha256)
     {
         var text = Encoding.UTF8.GetString(content[file]);
-        Assert.StartsWith($"<Signature xmlns=\"{Dsig}\" Id=\"{id}\">", text);
         var document = Parse(content[file]);
+        Assert.Equal(Dsig, document.DocumentElement!.NamespaceURI);
+        Assert.Equal(id, document.DocumentElement.GetAttribute("Id"));
         var names = new XmlNamespaceManager(document.NameTable);
         names.AddNamespace("ds", Dsig);
-        Assert.Equal("http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+        Assert.Equal(WgtSigner.SignatureMethod(digest),
             document.SelectSingleNode("//ds:SignatureMethod/@Algorithm", names)!.Value);
 
         var signedInfo = Canonical(document.SelectSingleNode("//ds:SignedInfo", names)!, new XmlDsigExcC14NTransform());
         var signature = Convert.FromBase64String(Text(document, "SignatureValue"));
-        Assert.True(key.VerifyData(signedInfo, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1), "imza doğrulanmalı");
+        Assert.True(key.VerifyData(signedInfo, signature,
+            digest == WgtDigest.Sha256 ? HashAlgorithmName.SHA256 : HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1), "imza doğrulanmalı");
 
         var uris = new List<string>();
         foreach (XmlElement reference in document.SelectNodes("//ds:Reference", names)!)
         {
             var uri = reference.GetAttribute("URI");
             uris.Add(uri);
-            Assert.Equal("http://www.w3.org/2001/04/xmlenc#sha256", reference.SelectSingleNode("ds:DigestMethod/@Algorithm", names)!.Value);
+            Assert.Equal(WgtSigner.DigestMethod(digest), reference.SelectSingleNode("ds:DigestMethod/@Algorithm", names)!.Value);
             var data = uri == "#prop"
                 ? Canonical(document.SelectSingleNode("//ds:Object[@Id='prop']", names)!, new XmlDsigC14NTransform())
                 : content[uri];
-            Assert.Equal(Convert.ToBase64String(SHA256.HashData(data)), reference.SelectSingleNode("ds:DigestValue", names)!.InnerText);
+            Assert.Equal(Convert.ToBase64String(digest == WgtDigest.Sha256 ? SHA256.HashData(data) : SHA512.HashData(data)), reference.SelectSingleNode("ds:DigestValue", names)!.InnerText);
         }
         // Zincir: yaprak; kendi imzaladığımız sertifikanın ara sertifikası yok, kök yazılmaz.
         Assert.Single(Texts(document, "X509Certificate"));

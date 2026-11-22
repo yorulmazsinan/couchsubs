@@ -135,6 +135,15 @@ class AndroidTvInstaller(
         }
 
         /**
+         * TV'de çalışan CouchSubs'a adresi bildiren yayın (TV uygulamasındaki AddressReceiver): ekranı öne çekmez, görüntü
+         * modunu değiştirmez. Parametre yoksa ya da kabukta güvenle gönderilemiyorsa null (Windows'taki AddressCommand ile aynı).
+         */
+        fun addressCommand(launchParams: String?): String? {
+            if (launchParams.isNullOrEmpty() || launchParams.any { it == '\'' || it == '\n' || it == '\r' || it == '\u0000' }) return null
+            return "shell:am broadcast -a $PACKAGE_NAME.action.ADDRESS -n $PACKAGE_NAME/.AddressReceiver --es params '$launchParams'"
+        }
+
+        /**
          * CouchSubs TV çalışıyor mu: etkinlik yığınlarındaki kayıtlar (ekran arka planda olsa da yığındadır) ve paketin
          * servisleri (katman). Windows'taki RunningCommand ve Mac/iPhone'daki AndroidTVApp.runningCommand ile aynı.
          */
@@ -222,7 +231,12 @@ class AndroidTvInstaller(
         val key = adbKey()
         return connector(key) { throw AndroidInstallException(AndroidInstallError.NOT_APPROVED, "açılışta onay beklenmez") }.use { adb ->
             val running = try { adb.run(RUNNING_COMMAND) } catch (_: IOException) { "" }
-            if (isRunning(running)) ALREADY_RUNNING else adb.run(startCommand(params)).trim()
+            if (isRunning(running)) {
+                // Çalışan uygulama telefona bağlı değil (bekçi yalnız o zaman açar): kayıtlı eski bir adrese bağlı kalmış
+                // olabilir. Adres ekranı öne çekmeden bildirilir (TV 0.9.63+; eski TV uygulaması yok sayar).
+                addressCommand(params)?.let { command -> try { adb.run(command) } catch (_: IOException) { } }
+                ALREADY_RUNNING
+            } else adb.run(startCommand(params)).trim()
         }
     }
 

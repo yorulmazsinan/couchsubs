@@ -231,6 +231,66 @@ public class DeepLTranslatorTests
         Assert.Equal(OnlineKeyState.Invalid, (await DeepLTranslator.CheckAsync("  ")).State);
     }
 
+    private const string Key = "0f3c1a2b-1111-2222-3333-444455556666:fx";
+
+    private static Task<OnlineKeyCheck> Check(string key, Func<HttpResponseMessage> reply, out FakeDeepL fake)
+    {
+        fake = new FakeDeepL((_, _) => reply());
+        return DeepLTranslator.CheckAsync(key, new HttpClient(fake));
+    }
+
+    /// <summary>Yapıştırırken araya giren görünmez karakterler her yerden silinir (Mac/iPhone ve Android ile aynı).</summary>
+    [Fact]
+    public async Task KeyCheckRemovesInvisibleCharactersEverywhere()
+    {
+        const string pasted = "﻿ 0f3c1a2b-1111 -2222-​3333-4444\n55556666­:fx\t\r\n";
+        Assert.Equal(Key, DeepLKey.Clean(pasted));
+        var result = await Check(pasted, () => Json("""{"character_count":1,"character_limit":500000}"""), out var fake);
+        Assert.Equal(OnlineKeyState.Valid, result.State);
+        Assert.Equal($"DeepL-Auth-Key {Key}", fake.Requests[0].Request.Headers.Authorization!.ToString());
+        Assert.Equal("api-free.deepl.com", fake.Requests[0].Request.RequestUri!.Host);
+    }
+
+    [Fact]
+    public async Task KeyCheckRejectsNonAsciiKeyWithoutRequest()
+    {
+        var result = await Check("0f3c1a2b-1111-2222-ş333-444455556666:fx", () => Json("{}"), out var fake);
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Invalid, Reason: OnlineKeyReason.MalformedKey), result);
+        Assert.Empty(fake.Requests);
+    }
+
+    /// <summary>Her hata kendi nedeniyle döner; 429 ağ hatası değildir (anahtar reddedilmedi).</summary>
+    [Fact]
+    public async Task KeyCheckReportsEachFailureWithItsReason()
+    {
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Busy, Reason: OnlineKeyReason.RateLimited, Code: 429),
+            await Check(Key, () => new HttpResponseMessage(HttpStatusCode.TooManyRequests), out _));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.HttpStatus, Code: 503),
+            await Check(Key, () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable), out _));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Invalid, Reason: OnlineKeyReason.HttpStatus, Code: 403),
+            await Check(Key, () => new HttpResponseMessage(HttpStatusCode.Forbidden), out _));
+        Assert.Equal(OnlineKeyState.QuotaExceeded, (await Check(Key, () => new HttpResponseMessage((HttpStatusCode)456), out _)).State);
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.Network),
+            await Check(Key, () => throw new HttpRequestException("no network"), out _));
+        Assert.Equal("Busy (HTTP 429 (çok sık istek))",
+            new OnlineKeyCheck(OnlineKeyState.Busy, Reason: OnlineKeyReason.RateLimited, Code: 429).LogDescription);
+    }
+
+    /// <summary>Pro/sınırsız hesap ve eksik ya da beklenmedik alanlar: anahtar geçerli kalır, değerler esnek çözümlenir.</summary>
+    [Fact]
+    public async Task KeyCheckParsesUsageFlexibly()
+    {
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Valid, 5947223, OnlineKeyCheck.Unlimited),
+            await Check(Key, () => Json("""{"character_count":5947223,"character_limit":1000000000000,"products":[{"product_type":"translate"}],"start_time":"2025-05-13T09:18:42Z"}"""), out _));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Valid, 12, 0), await Check(Key, () => Json("""{"character_count":12.0}"""), out _));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Valid, 7, long.MaxValue),
+            await Check(Key, () => Json("""{"character_count":"7","character_limit":1e30}"""), out _));
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Valid, long.MaxValue, 0),
+            await Check(Key, () => Json("""{"character_count":99999999999999999999999,"character_limit":true}"""), out _));
+        // JSON olmayan 200 yanıtı (otel/kafe ağının giriş sayfası gibi) DeepL'den gelmemiştir: ağ hatası.
+        Assert.Equal(new OnlineKeyCheck(OnlineKeyState.Unreachable, Reason: OnlineKeyReason.Network), await Check(Key, () => Json("<html>"), out _));
+    }
+
     /// <summary>
     /// Yerel çeviri yokken (inmemiş) tek bir hata DeepL'i bir dakika durduruyor, bu sürede gelen her satır düşüyordu.
     /// DeepL yine denenmeli.

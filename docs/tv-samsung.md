@@ -32,9 +32,13 @@ Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
   `SamsungInstaller.MINIMUM_TIZEN`, iPhone `SamsungInstaller.minimumTizen`); 2.3 ve eskisi `TooOld` ile durur (#638'de
   masaüstü 2016 TV'yi reddediyordu). Tizen 2.x'te dördü de imzalamadan önce paketin `config.xml`'ini #71'de çalışan hâle
   döndürür: `network.public` izni ve `base_screen_resolution` ayarı çıkarılır (`LegacyTizenPackage`, #621; Android
-  `.kt`, iPhone `.swift`, Mac ve Windows `.cs`). Tizen 2.4–4.0'da, Apps2Samsung'un
-  `TizenPermitInstall`'ı gibi, sertifika alınırken saklanan `device-profile.xml`'i kurulumdan önce TV'nin
-  `sdk_toolpath` klasörüne gönderir. Sertifika aynı uç noktalardan, aynı `public` düzeyle alınır.
+  `.kt`, iPhone `.swift`, Mac ve Windows `.cs`). TV'nin 8001 yanıtı 21:9 / 32:9 Samsung monitör diyorsa (model
+  `LS34`/`LS49`/`LS57…` ya da çözünürlük oranı en az 1,9) dördü de paketi geniş uygulama yüzeyiyle kurar:
+  `config.xml`'e `base_screen_resolution=fullscreen`, `index.html`'e `width=device-width` görünümü eklenir
+  (`WideScreenPackage`, #886; Odyssey G9'da 0.9.55'ten beri uygulama 16:9 kutuda kalıyordu). TV'lerde paket değişmez:
+  aynı ayar 4K/8K TV'de görüntüyü sol üst köşede bırakıyordu (#799). Tizen 2.4–4.0'da, Apps2Samsung'un
+  `TizenPermitInstall`'ı gibi, sertifika alınırken saklanan `device-profile.xml`'i kurulumdan önce TV'ye gönderir:
+  Tizen 3.0–4.0'da `sdk_toolpath` klasörüne, Tizen 2.x'te `/home/developer`'a (#890). Sertifika aynı uç noktalardan, aynı `public` düzeyle alınır.
 - **Gerçek TV'de doğrulanan:** bir kullanıcı (UE43MU7000U, Tizen 3.0) paketi Tizen Studio sertifikası ve Apps2Samsung
   ile elle kurdu; çeviri ve HDMI görüntüsü (`tvwindow` `BEHIND`) çalıştı. İlk açılıştaki "bağlantı hatası" TV yeniden
   başlatılınca geçti.
@@ -42,28 +46,39 @@ Tizen 3.0 için yapılanlar ve neyin doğrulandığı:
   2.4–4.0'da çalışması, `0 vd_applist` çıktısının bu TV'lerde aynı biçimde gelmesi, `webapis.appcommon` ekran koruyucu
   ayarı ve Web Audio dublajı.
 
-### Tizen 2.4'te `install failed[118]` (#497, #621, #638)
+### Tizen 2.4'te `install failed[118]` (#497, #621, #638, #890)
 
-Tizen 2.4 kurulumu reddederken sebep yazmaz; yalın `[118]` imza, sertifika, config ya da TV'de kalmış yarım kopya
-olabilir. `power` izni (#497) ve `network.public` + `base_screen_resolution` (#621) çıkarıldıktan sonra da gerçek bir
-UE60KU7000 aynı hatayı verdi (#638; sdb, DUID, Samsung sertifikası, cihaz profili ve imza adımları başarılıydı).
+Tizen 2.4 kurulumu reddederken sebep yazmaz. `118` Samsung'un kurulum aracının genel "kurulum başarısız" kodudur;
+Tizen 3.0 ve üstü yanına asıl sebebi yazar (`[118, -12]` sertifika, `[118, -19]` ayrıştırma, `[118, -20]` izin,
+`[118, -22]` güvenlik, `[118, -4]` sürüm), 2.4 yazmaz. `power` izni (#497), `network.public` + `base_screen_resolution`
+(#621), SHA-256 imza ve yalın paket (#638) denendi; gerçek KU7000'ler yine `[118]` verdi (#638, #890).
 
-- **İmza biçimi:** dört uygulama da paketi `rsa-sha512` + `sha512` özetle imzalıyordu (bugünkü Tizen Studio ve TizenSdb
-  gibi). Tizen 2.x'te artık `rsa-sha256` + `sha256` kullanılır (W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x
-  SDK'sının ürettiği biçim); Tizen 3.0 ve üstünde imza değişmedi. Telefonlarda `WgtSigner`'ın `Digest` seçeneği, Mac ve
-  Windows'ta `WgtSigner.cs` (3.0 ve üstünde imzayı yine TizenSdb atar). Kanonikleştirme (exclusive C14N; `#prop` için
-  C14N 1.1), referans sırası, `#prop` nesnesi ve zincir (yaprak + ara sertifika, kök yok) aynıdır.
-- **Deneme zinciri (yalnız Tizen 2.x):** 1) tam paket, SHA-256; 2) yalın `[118]` gelirse eski kopya kaldırılıp aynı
+- **Bulunan fark (#890):** #71'de 40KU7000'de çalışan paket Apps2Samsung ile kuruldu. Apps2Samsung (Kasım 2026 öncesi
+  sürümlerde de) paketi TV'nin Samsung sertifikasıyla TizenSdb'de SHA-512 imzalar ve Tizen 3.0'dan eski TV'de
+  `device-profile.xml`'i `/home/developer`'a gönderir (`TizenPermitInstall.TargetPath`; Samsung'un "Permitting Device
+  to Install Apps" belgesi de profilin oraya gittiğini yazar). CouchSubs'ın dört uygulaması profili her TV'de
+  `sdk_toolpath`'e (2.4'te `/opt/usr/apps/tmp`) gönderiyordu; 2.4 profili orada aramaz, DUID'li Samsung dağıtıcı
+  sertifikasını bu yüzden tanımaz. #497, #621, #638 ve #890'daki bütün günlüklerde bu ortaktı, imza biçimi (SHA-512 ya
+  da SHA-256) ve config değişse de sonuç değişmedi. Artık Tizen 2.x'te profil `/home/developer`'a gider (olmazsa
+  `sdk_toolpath` denenir). Tizen Studio'nun "Tizen" sertifikası cihaz profili istemediği için o yolda kurulum
+  çalışıyordu (aşağıdaki free-my-tv raporları da bununla uyumlu). Henüz gerçek 2.4 TV'de doğrulanmadı.
+- **İmza biçimi:** Tizen 2.x'te ilk deneme yine #71'deki gibi `rsa-sha512` + `sha512` (Mac ve Windows'ta TizenSdb,
+  telefonlarda `WgtSigner`'ın SHA-512'si; ikisi aynı kanonik imzayı üretir). Yalın paket `rsa-sha256` + `sha256`
+  (W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim) ile imzalanır. Kanonikleştirme
+  (exclusive C14N; `#prop` için C14N 1.1), referans sırası, `#prop` nesnesi ve zincir (yaprak + ara sertifika, kök yok)
+  aynıdır. Tizen 2.x'e giden config.xml'in #71 paketininkiyle öğe öğe aynı olduğu birim testinde denetlenir
+  (`testdata/tizen/config-71.xml`).
+- **Deneme zinciri (yalnız Tizen 2.x):** 1) tam paket, SHA-512; 2) yalın `[118]` gelirse eski kopya kaldırılıp aynı
   paket; 3) yine yalın `[118]` ise "yalın paket" (`tizen:profile` satırı ile `application.launch` ve `network.get`
-  izinleri de çıkar), SHA-256. Her adım ve hangisinin tuttuğu günlüğe yazılır ("tam paket SHA-256 imzayla kuruldu" /
-  "yalın paket …").
+  izinleri de çıkar), SHA-256. Her adım ve hangisinin tuttuğu günlüğe yazılır ("tam paket SHA-512 imzayla kuruldu" /
+  "yalın paket SHA-256 …").
 - **Bilinen ama yapılmayan:** başka projelerdeki gerçek TV raporlarına göre (free-my-tv #349: KU6300, KU6640, KU6400;
   hepsi Tizen 2.4) bu TV'lerde Samsung'un DUID'li dağıtıcı sertifikasıyla imzalı paket tek sayfalık deneme
   uygulamasında bile `[118]` alıyor; Tizen Studio'nun kendi "Tizen" sertifikasıyla (yazar: Tizen Developers CA,
   dağıtıcı: SDK'daki eski `tizen-distributor-signer.p12`) imzalı paket kuruluyor, KU6300'de SHA-512 imzayla bile.
   Aynı kaynaklarda bir Full HD modelde (UA40K5300) ayrıca SHA-256 gerektiği yazıyor. CouchSubs bu sertifikayı
-  kullanmıyor: SDK'nın CA anahtarını ve imzalayıcı dosyasını uygulamaya gömmek ayrı bir karar. SHA-256 de yetmezse
-  sıradaki aday budur; o zamana kadar elle kurulumda Tizen Studio'da **Tizen** türünde sertifika profili denenebilir
+  kullanmıyor: SDK'nın CA anahtarını ve imzalayıcı dosyasını uygulamaya gömmek ayrı bir karar. Cihaz profili düzeltmesi
+  (#890) de yetmezse sıradaki aday budur; o zamana kadar elle kurulumda Tizen Studio'da **Tizen** türünde sertifika profili denenebilir
   (aşağıda). #638'de beta.68 (SHA-256 + yalın paket) de UE60KU7000'de `[118]` aldı.
 - **Elle kurulmuş kopya korunur:** Tizen 2.x'te TV'de CouchSubs görünüyorsa ya da `vd_applist` okunamıyorsa (2.4'te sık)
   kurtarma adımı TV'deki kopyayı kaldırmaz (`keepExisting`); yalnız tam paket ve sebepsiz `[118]`'de yalın paket denenir.

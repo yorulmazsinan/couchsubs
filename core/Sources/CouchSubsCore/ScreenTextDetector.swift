@@ -91,11 +91,23 @@ public final class ScreenTextDetector: @unchecked Sendable {
     private var lastSample: Int?
     private var counter = 0
     private var menu = false
+    /// Menüye girildiği örnekteki bileşenlerin karoları: menü bunlar yerinde durdukça sürer (`isMenu`).
+    private var menuAnchors = Set<Int>()
+    /// Menüye girilen an ve süresi dolan menünün bittiği an (bundan önce belirmiş yazılar yeniden menü sayılmaz).
+    private var menuEnteredAt = 0
+    private var menuFloor: Int?
 
     public init() {}
 
     /// Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).
     public var inMenu: Bool { lock.withLock { menu } }
+
+    /// Menü durumu değişince altyazı günlüğüne yazılan satır (menüdeyken altyazı okunmaz; günlükte görünmeyince "altyazı
+    /// hattı hiç satır üretmiyor" nedensiz kalıyordu). Android aynı metni yazar; Windows menüde okur ama göstermez
+    /// (MenuPausedSender) ve bunu yazar.
+    public static func menuLog(_ inMenu: Bool) -> String {
+        inMenu ? "ekran menüsü açık: altyazı okunmuyor" : "ekran menüsü kapandı: altyazı okunuyor"
+    }
 
     /// Şu an önerilen otomatik alanlar.
     public var areas: [ExtraArea] { lock.withLock { current() } }
@@ -172,6 +184,8 @@ public final class ScreenTextDetector: @unchecked Sendable {
             tracked.removeAll()
             lastSample = nil
             menu = false
+            menuAnchors = []
+            menuFloor = nil
         }
     }
 
@@ -260,6 +274,11 @@ public final class ScreenTextDetector: @unchecked Sendable {
     /// alana bölünüp ikisi de kesik okunuyor, kutular sırayla gidip geliyordu). Bölge yatayda bir, dikeyde yarım karo
     /// genişlediği için yatayda iki, dikeyde bir boş karoya kadar aralıklı bileşenler kesişir. Birleşen sahne dokusu
     /// kadar büyürse birleşmez.
+    /// Aynı karo satırındaki bileşenler arasında en çok bu kadar sütun (iki uç arası) olunca birleşir; ikisi de en az iki
+    /// karo genişse (sekme öbekleri) `wideRowReach`. Tek karoluk etiketler (tekerlek menü) arası dar kalır.
+    static let rowReach = 3
+    static let wideRowReach = 4
+
     static func merged(_ components: [(cells: Cells, tiles: [Int])]) -> [(cells: Cells, tiles: [Int])] {
         var result = components
         var changed = true
@@ -268,7 +287,13 @@ public final class ScreenTextDetector: @unchecked Sendable {
             outer: for i in result.indices {
                 for j in result.indices where j > i {
                     let a = result[i].cells, b = result[j].cells
-                    guard a.left <= b.right + 2, b.left <= a.right + 2, a.top <= b.bottom + 1, b.top <= a.bottom + 1 else { continue }
+                    // Aynı satırdaki bileşenler (menü şeridinin sekmeleri) iki (sekme öbekleri arasında üç) boş karoya kadar birleşir: seçili sekme renkli
+                    // olduğu için aday olmuyor, iki yanındaki alanlar onu ortadan kesiyordu ("MAP" → "M", #859).
+                    let sameRow = a.top <= b.bottom && b.top <= a.bottom
+                    let wide = a.right - a.left >= 1 && b.right - b.left >= 1
+                    let reach = sameRow ? (wide ? Self.wideRowReach : Self.rowReach) : 2
+                    guard a.left <= b.right + reach, b.left <= a.right + reach, a.top <= b.bottom + 1, b.top <= a.bottom + 1
+                    else { continue }
                     let union = Cells(left: min(a.left, b.left), top: min(a.top, b.top),
                                       right: max(a.right, b.right), bottom: max(a.bottom, b.bottom))
                     guard Double(union.area) <= maxShare * Double(columns * rows) else { continue }
@@ -284,7 +309,14 @@ public final class ScreenTextDetector: @unchecked Sendable {
 
     /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya
     /// da karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
-    /// menüde gezinirken (seçim çerçevesi değişince) durum korunur.
+    /// menüde gezinirken (seçim çerçevesi değişince) durum, menüye girildiğindeki bileşenlerden biri (karolarının en az
+    /// `keepOverlap` kadarı) yerinde durdukça korunur (Android ile aynı: menünün kendi yazılarından biri görünmeli).
+    ///
+    /// Eskiden menü girişten sonra yalnız "en az üç bileşen ve sakin zemin" ile sürüyordu. GTA 6 "Chapter 1: Gone Fishing"
+    /// (gece, karanlık kamp) duraklatma menüsü kapandıktan sonra sahnenin görev yazısı, PS5 bildirimi ve HUD üç bileşen,
+    /// karanlık zemin de sakin sayıldı; menü durumu hiç bitmedi. Menüdeyken altyazı okunmadığı için bütün oturumda tek
+    /// altyazı çevrilmedi (Mac 04:01–04:05 ve iPhone 1.0.6 04:10–04:14 günlükleri: "ilk yazı" yok, diyalog satırı
+    /// altyazı alanı dışlanmadığı için yalnız ekran yazısı olarak okundu).
     /// Arayüz kanıtı: zemin örneklerinin parlaklık sapması en çok bu kadar (düz ya da yarı saydam düz panel).
     public static let groundDeviation = 22.0
     /// Zemin karolarının en az bu kadarı aynı tonda (±`groundTone`).
@@ -324,10 +356,27 @@ public final class ScreenTextDetector: @unchecked Sendable {
         let outside = tiles.indices.filter { !inside.contains($0) }
         guard !outside.isEmpty,
               Double(outside.filter { tiles[$0].quiet }.count) >= Self.menuQuietShare * Double(outside.count) else { return false }
-        if menu { return true }
+        if menu, components.contains(where: { component in
+            Double(component.tiles.filter(menuAnchors.contains).count) >= Self.keepOverlap * Double(component.tiles.count)
+        }) {
+            // Menüde bir şey değişmeden (gezinme, seçim) `menuLifeMs` geçti: menü sayılmaz, altyazı yeniden okunur. Aynı
+            // yazılar yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla yeniden açılır (`menuFloor`).
+            let activity = menuAnchors.map { tiles[$0].stableSince }.max() ?? menuEnteredAt
+            if now - max(activity, menuEnteredAt) <= Self.menuLifeMs { return true }
+            menuFloor = now
+            return false
+        }
         let appeared = components.map { $0.tiles.map { tiles[$0].stableSince }.max()! }
-        return appeared.max()! - appeared.min()! <= Self.menuTogetherMs
+        guard appeared.max()! - appeared.min()! <= Self.menuTogetherMs,
+              menuFloor.map({ floor in appeared.allSatisfy { $0 > floor } }) ?? true else { return false }
+        if !menu { menuEnteredAt = now }
+        menuAnchors = inside
+        return true
     }
+
+    /// Menüde hiçbir yazı değişmeden bu kadar süre geçince menü durumu biter (altyazı okunur). Karanlık sahnede birlikte
+    /// beliren sabit HUD yazıları da menü sanılabiliyor; menü durumu altyazıyı en çok bu kadar susturur.
+    public static let menuLifeMs = 5000
 
     private func update(_ components: [(cells: Cells, tiles: [Int])], candidate: [Bool], now: Int, inMenu: Bool) {
         let closed = menu && !inMenu

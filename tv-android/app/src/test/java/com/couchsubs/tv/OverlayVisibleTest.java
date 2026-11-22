@@ -35,4 +35,19 @@ public class OverlayVisibleTest {
     public void sayfaSeffafZemindeAcilir() throws Exception {
         assertTrue(source("TvPage.java").contains("setBackgroundColor(Color.TRANSPARENT)"));
     }
+
+    /**
+     * Android 12L/13+ dokunmaya kapalı (FLAG_NOT_TOUCHABLE) bindirme penceresinin alfasını
+     * getMaximumObscuringOpacityForTouch'a (0.8) indirir (DisplayPolicy.adjustWindowParamsLw). Katman öyle açılınca
+     * "Tam" koyulukta bile çeviri kutusu yarı saydam kalıyordu (Philips OLED810 Google TV).
+     */
+    @Test
+    public void katmanPenceresiOpaklikSinirinaTakilmaz() throws Exception {
+        String code = source("OverlayService.java");
+        assertFalse("katman penceresi FLAG_NOT_TOUCHABLE ile açılmamalı",
+                code.contains("LayoutParams.FLAG_NOT_TOUCHABLE"));
+        assertTrue("pencere alfası tam olmalı", code.contains("layout.alpha = 1f"));
+        assertTrue("odak alınmamalı (kumanda TV'de kalır)", code.contains("LayoutParams.FLAG_NOT_FOCUSABLE"));
+        assertTrue("dokunmalar sayfada yutulmalı", code.contains("setOnTouchListener((view, event) -> true)"));
+    }
 }

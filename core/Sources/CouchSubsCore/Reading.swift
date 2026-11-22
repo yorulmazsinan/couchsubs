@@ -172,8 +172,18 @@ public struct Reading: Equatable, Sendable {
     /// Ortalanmış blok yoksa en az üç sözcüklü, menü olmayan en alttaki blok alınır. Satırların yeri bilinmiyorsa
     /// okuma olduğu gibi kalır. `area`, okunan alanın karedeki yeridir (ortalanmışlık karenin ortasına göre ölçülür).
     /// Tek satırlık etkileşim/HUD etiketi ("TAKE AMMO PACK (0/3)", `ButtonPrompts.isActionLabel`) ve sahne yazısı
-    /// (tabela, tişört; `SceneText`) altyazı bloğu sayılmaz.
-    public func subtitleBlock(in area: TextBox) -> Reading {
+    /// (tabela, tişört; `SceneText`) altyazı bloğu sayılmaz. `band`: bu oturumda altyazının okunduğu yükseklikler
+    /// (`SubtitleBand`); `dropped`: sahne yazısı sayılıp atılan her blok ve nedeni (altyazı günlüğü için).
+    /// "Tam ekran" alanda ekranın kenarındaki bildirim kartı (`ScreenNotices.isNotice`) altyazı bloğu sayılmaz, `notices`
+    /// ile bildirilir (satır kutuları alana oranlı); kendi yerinde çevrilir. Önceden ortalanmış blok yokken altyazı seçilip
+    /// ekranın ortasında çiziliyordu. `age`: satırın ne kadar süredir değişmeden okunduğu (`StickyRows.unchangedMs`);
+    /// verilirse `staleMs`'dir değişmeyen ortalı blok, yanında yeni beliren ortalı blok varken seçilmez (`withoutStale`),
+    /// atlanan blok `stale` ile bildirilir.
+    public func subtitleBlock(in area: TextBox, band: SubtitleBand = SubtitleBand(),
+                              dropped: ((Reading, String) -> Void)? = nil,
+                              notices: ((Reading) -> Void)? = nil,
+                              age: ((String) -> Int?)? = nil,
+                              stale: ((Reading) -> Void)? = nil) -> Reading {
         guard !lines.isEmpty, lines.allSatisfy({ $0.box != nil }) else { return isActionLabel ? .empty : self }
         var blocks: [[TextLine]] = []
         for line in lines.sorted(by: { $0.box!.top < $1.box!.top }) {
@@ -185,12 +195,22 @@ public struct Reading: Equatable, Sendable {
             }
         }
         // Tabela, tişört, plaka gibi sahne yazısı (`SceneText`) altyazı alanına düşse de altyazı değildir.
-        let candidates = blocks.map { Reading(lines: $0) }
-            .filter { !$0.isMenu && !$0.isActionLabel && !SceneText.isSceneText($0, in: area) }
-        let centered = candidates.filter { reading in
+        let candidates = blocks.map { Reading(lines: $0) }.filter { block in
+            guard !block.isMenu, !block.isActionLabel else { return false }
+            guard let reason = SceneText.reason(block, in: area, band: band) else { return true }
+            dropped?(block, reason)
+            return false
+        }.filter { block in
+            guard ScreenNotices.isWholeScreen(area), let box = block.box?.placed(in: area), ScreenNotices.isNotice(box)
+            else { return true }
+            notices?(block)
+            return false
+        }
+        let middle = candidates.filter { reading in
             guard let box = reading.box?.placed(in: area) else { return false }
             return abs((box.left + box.right) / 2 - 0.5) <= 0.12
         }
+        let centered = Self.withoutStale(middle, age: age, skipped: stale)
         // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
         // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
         if let spoken = centered.first(where: { SpeakerPrefix.split($0.lines[0].text) != nil }) { return spoken }
@@ -221,8 +241,35 @@ public struct Reading: Equatable, Sendable {
 
     private static func letters(_ text: String) -> Int { text.filter(\.isLetter).count }
 
+    /// Ortalı blok bu kadar süredir hiç değişmediyse ve yanında ondan en az `StickyRows.youngerByMs` daha yeni (kırıntı
+    /// olmayan) ortalı blok varsa altyazı sayılmaz. Kullanıcı bildirimi (GitHub #933, GTA 6): karakter TV izlerken haber
+    /// programının alt bandı konuşma altyazısının altında duruyor, en alttaki ortalı blok olarak her karede bant seçiliyor,
+    /// konuşma hiç çevrilmiyordu. Bant çoğu zaman "EXCLUSIVE: …", "BREAKING NEWS: …" diye başlıyor, konuşan adı sanılıp
+    /// her zaman altyazı seçiliyordu. Tek ortalı blok (değişmeyen uzun cümle) seçilmeye devam eder. Konuşan adlı sabit
+    /// blok yalnız yanındaki yeni blok en az üç sözcüklü bir cümleyse atlanır: kısa görev/HUD yazısı uzun konuşmayı
+    /// geçmez (Windows: Reading.StaleMs, Android: Reading.STALE_MS).
+    static let staleMs = 5000
+
+    /// `centered` blokların sabit olanları (`staleMs`) çıkarılmış hali; satır yaşı bilinmiyorsa olduğu gibi kalır.
+    private static func withoutStale(_ centered: [Reading], age: ((String) -> Int?)?,
+                                     skipped: ((Reading) -> Void)?) -> [Reading] {
+        guard let age, centered.count >= 2 else { return centered }
+        let ages = centered.map { block in block.lines.compactMap { age($0.text) }.min() ?? 0 }
+        let fresh = centered.indices.filter { ages[$0] < staleMs && !OcrNoise.isCrumb(centered[$0].text) }
+        guard let youngest = fresh.map({ ages[$0] }).min() else { return centered }
+        let sentence = fresh.filter { wordCount(centered[$0].text) >= 3 }.map { ages[$0] }.min()
+        let stale = Set(centered.indices.filter { index in
+            guard ages[index] >= staleMs else { return false }
+            let rival = SpeakerPrefix.split(centered[index].lines[0].text) == nil ? youngest : sentence
+            return rival.map { ages[index] - $0 >= StickyRows.youngerByMs } ?? false
+        })
+        guard !stale.isEmpty else { return centered }
+        stale.sorted().forEach { skipped?(centered[$0]) }
+        return centered.indices.filter { !stale.contains($0) }.map { centered[$0] }
+    }
+
     /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
-    /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
+    /// yüksekliğinin `lineGap` katından (devam satırında `continuationGap`) büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
     /// satırı ayrılır; Windows ile aynı). Yazı boyu yalnız iki satır da en az üç sözcükken karşılaştırılır ve alttaki satır
     /// üsttekinin devamıysa (`continues`) hiç karşılaştırılmaz: satır kutusu harflere göre ölçülür, "now." gibi kısa ve
     /// büyük harfsiz/kuyruksuz satırın kutusu daha alçak çıkıyor, cümlenin devamı ayrı blok sayılıp tek başına
@@ -231,13 +278,28 @@ public struct Reading: Equatable, Sendable {
         let last = block.last!.box!.placed(in: area)
         let own = box.bottom - box.top, previous = last.bottom - last.top
         let height = max(own, previous)
-        guard box.top - last.bottom <= height * 0.6, box.top >= last.top else { return false }
-        let comparable = wordCount(text) >= 3 && wordCount(block.last!.text) >= 3 && !continues(block.last!.text, with: text)
+        let continuing = continues(block.last!.text, with: text)
+        let wide = continuing && wordCount(block.last!.text) >= continuationMinWords
+        guard box.top - last.bottom <= height * (wide ? continuationGap : lineGap), box.top >= last.top else { return false }
+        let comparable = wordCount(text) >= 3 && wordCount(block.last!.text) >= 3 && !continuing
         guard !comparable || max(own, previous) <= 1.25 * min(own, previous) else { return false }
         let overlap = min(box.right, last.right) - max(box.left, last.left)
         let narrower = min(box.right - box.left, last.right - last.left)
         return overlap > 0 && overlap >= narrower * 0.5
     }
+
+    /// Aynı bloğun satırları arasındaki en büyük boşluk (satır yüksekliğine oranla). GTA 6 gibi geniş satır aralıklı
+    /// altyazılarda iki satırın arası 0,6'yı aşıyor; beta.67'deki 0,6 eşiği iki satırlı altyazıyı iki bloğa bölüyor, yalnız
+    /// biri çevriliyordu (GitHub #822: "5-6 cümlede bir çeviri", çevirilerin bir kısmı cümlenin ikinci yarısı). beta.66'ya
+    /// kadarki 0,8 geri geldi; görev satırı yazı boyu farkıyla ve `StickyRows` ile ayrılır.
+    static let lineGap = 0.8
+    /// Alttaki satır üsttekinin devamıysa (`continues`: cümle bitmemiş, küçük harfle sürüyor) daha geniş boşluk da aynı
+    /// bloktur: yarım cümle tek başına altyazı değildir.
+    static let continuationGap = 1.3
+    /// `continuationGap` yalnız üstteki satır en az bu kadar sözcükken geçerlidir: altyazının sarılmış ilk satırı uzundur.
+    /// Tek sözcüklük üst satır (GTA 6 telefon bildiriminde gönderenin adı "Cal", altında "Checked th…") geniş boşlukla
+    /// alttakine katılınca üç sözcüklü blok olup altyazı seçiliyordu (gerçek kare gta6-n4-bildirim, beta.78'de gerileme).
+    static let continuationMinWords = 3
 
     private static func wordCount(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
 
@@ -253,12 +315,22 @@ public struct Reading: Equatable, Sendable {
         return top.hasSuffix(",") || top.hasSuffix("-") || top.hasSuffix("—") || wordCount(below) <= 3
     }
 
-    /// Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil.
+    /// Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil. Satırların yeri
+    /// biliniyorsa sol ya da sağ kenarları hizalı olmalı (`menuEdge` içinde): ortalanmış kısa konuşma satırları ("No /
+    /// Wait / Go on") menü sanılıp atılmasın. Konuşan adıyla başlayan satır menü değildir (Windows, Android ile aynı).
     var isMenu: Bool {
-        lines.count >= 3 && lines.allSatisfy { line in
+        guard lines.count >= 3, lines.allSatisfy({ line in
             line.text.split(whereSeparator: \.isWhitespace).count <= 3 && !SubtitleStabilizer.endsSentence(line.text)
-        }
+                && SpeakerPrefix.split(line.text) == nil
+        }) else { return false }
+        let boxes = lines.compactMap(\.box)
+        guard boxes.count == lines.count else { return true }
+        func aligned(_ edges: [Double]) -> Bool { edges.max()! - edges.min()! <= Self.menuEdge }
+        return aligned(boxes.map(\.left)) || aligned(boxes.map(\.right))
     }
+
+    /// Menü satırlarının sol ya da sağ kenarı bu kadar içinde hizalı (okunan alana oranla).
+    static let menuEdge = 0.012
 
     /// Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").
     var isActionLabel: Bool { lines.count == 1 && ButtonPrompts.isActionLabel(lines[0].text) }

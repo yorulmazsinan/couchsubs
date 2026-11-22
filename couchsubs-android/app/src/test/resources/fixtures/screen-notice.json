@@ -1,0 +1,531 @@
+{
+ "comment": "Kenar bildirimi (ScreenNotices): \"Tam ekran\" altyazı alanında ekranın kenarındaki bildirim kartı altyazı bloğu sayılmaz, kutusu yerinde durunca kendi yerinde okunan \"auto-notice-<n>\" alanı olur; kayan kartta son geçerli yer kalır, ortaya asla çizilmez. Kutular alana oranlı [sol, üst, sağ, alt]; \"at\" ms. Her karede Reading.subtitleBlock seçtiği altyazıyı (\"subtitle\") ve ScreenNotices.observe sonrası alanları (\"areas\", bölgeler karede) verir. Mac ScreenNoticeTests.swift, Windows ScreenNoticeTests.cs ve Android ScreenNoticeTest.kt (fixtures/screen-notice.json kopyası) aynı dosyayı okur.",
+ "cases": [
+  {
+   "name": "Tam ekran: soldan kayan bildirim ve sağ altta yukarı kayan mesaj önizlemesi kendi yerinde; ortadaki altyazı altyazı",
+   "area": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "frames": [
+    {
+     "at": 0,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.0,
+        0.4,
+        0.12,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.92,
+        0.97,
+        0.95
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.955,
+        0.97,
+        0.985
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": []
+    },
+    {
+     "at": 100,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.0,
+        0.4,
+        0.2,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.89,
+        0.97,
+        0.92
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.925,
+        0.97,
+        0.955
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": []
+    },
+    {
+     "at": 200,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.02,
+        0.4,
+        0.28,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": []
+    },
+    {
+     "at": 300,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.02,
+        0.4,
+        0.28,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": []
+    },
+    {
+     "at": 500,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.02,
+        0.4,
+        0.28,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      },
+      {
+       "text": "Let's go, we're late.",
+       "box": [
+        0.38,
+        0.8,
+        0.62,
+        0.84
+       ]
+      }
+     ],
+     "subtitle": "Let's go, we're late.",
+     "areas": []
+    },
+    {
+     "at": 600,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.02,
+        0.4,
+        0.28,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      },
+      {
+       "text": "Let's go, we're late.",
+       "box": [
+        0.38,
+        0.8,
+        0.62,
+        0.84
+       ]
+      }
+     ],
+     "subtitle": "Let's go, we're late.",
+     "areas": [
+      {
+       "id": "auto-notice-1",
+       "region": [
+        0.01,
+        0.3895,
+        0.29,
+        0.4405
+       ]
+      },
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    },
+    {
+     "at": 900,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.02,
+        0.4,
+        0.28,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      },
+      {
+       "text": "Let's go, we're late.",
+       "box": [
+        0.38,
+        0.8,
+        0.62,
+        0.84
+       ]
+      }
+     ],
+     "subtitle": "Let's go, we're late.",
+     "areas": [
+      {
+       "id": "auto-notice-1",
+       "region": [
+        0.01,
+        0.3895,
+        0.29,
+        0.4405
+       ]
+      },
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    },
+    {
+     "at": 1000,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.0,
+        0.4,
+        0.18,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": [
+      {
+       "id": "auto-notice-1",
+       "region": [
+        0.01,
+        0.3895,
+        0.29,
+        0.4405
+       ]
+      },
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    },
+    {
+     "at": 1100,
+     "lines": [
+      {
+       "text": "Lucia: Meet me at the docks tonight.",
+       "box": [
+        0.0,
+        0.4,
+        0.08,
+        0.43
+       ]
+      },
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": [
+      {
+       "id": "auto-notice-1",
+       "region": [
+        0.01,
+        0.3895,
+        0.29,
+        0.4405
+       ]
+      },
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    },
+    {
+     "at": 1200,
+     "lines": [
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": [
+      {
+       "id": "auto-notice-1",
+       "region": [
+        0.01,
+        0.3895,
+        0.29,
+        0.4405
+       ]
+      },
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    },
+    {
+     "at": 2700,
+     "lines": [
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.74,
+        0.86,
+        0.97,
+        0.89
+       ]
+      },
+      {
+       "text": "I'm waiting outside the club.",
+       "box": [
+        0.74,
+        0.895,
+        0.97,
+        0.925
+       ]
+      }
+     ],
+     "subtitle": "",
+     "areas": [
+      {
+       "id": "auto-notice-2",
+       "region": [
+        0.73,
+        0.8495,
+        0.98,
+        0.9355
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Alt bölge: kenar kuralı uygulanmaz (alanın kenarındaki üç sözcüklü blok eskisi gibi altyazı)",
+   "area": [
+    0.14,
+    0.62,
+    0.86,
+    0.97
+   ],
+   "frames": [
+    {
+     "at": 0,
+     "lines": [
+      {
+       "text": "Jason: Where are you?",
+       "box": [
+        0.7,
+        0.6,
+        0.99,
+        0.7
+       ]
+      }
+     ],
+     "subtitle": "Jason: Where are you?",
+     "areas": []
+    }
+   ]
+  }
+ ]
+}

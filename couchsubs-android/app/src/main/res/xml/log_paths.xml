@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- "Günlükleri paylaş": yalnız önbellekteki logs klasörü paylaşılır (ui/LogShareIntent.kt). -->
+<paths>
+    <cache-path name="logs" path="logs/" />
+</paths>

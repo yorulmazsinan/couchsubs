@@ -1,0 +1,1 @@
+0.9.71: "Ekranı çevir"de GTA 6 telefonunun mesajları artık telefonun yanındaki kartta değil, her biri kendi balonunun üstünde, balonun renginde çevriliyor; Türkçe balona sığmazsa yazı okunabilir boya kadar küçülüyor, yine sığmazsa balon biraz uzuyor.

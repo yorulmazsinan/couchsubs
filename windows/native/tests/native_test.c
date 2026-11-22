@@ -146,6 +146,17 @@ static void test_reason_is_read_from_log(void)
 	CHECK(!cs_reason_from_log(NULL, &reason));
 }
 
+/* Mac/iPhone'daki VideoSampleSizeTests ile aynı (GitHub #855). */
+static void test_sample_size_guard(void)
+{
+	CHECK(!cs_sample_size_plausible(0));
+	CHECK(!cs_sample_size_plausible((size_t)-1));
+	CHECK(!cs_sample_size_plausible((size_t)1 << 63));
+	CHECK(!cs_sample_size_plausible(CS_MAX_SAMPLE_BYTES + 1));
+	CHECK(cs_sample_size_plausible(1));
+	CHECK(cs_sample_size_plausible(2000000));
+}
+
 static void test_throttle_thirty_fps_at_four(void)
 {
 	cs_throttle throttle;
@@ -172,8 +183,8 @@ static void test_quit_reasons(void)
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED) == CS_QUIT_REFUSED);
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED) == CS_QUIT_REFUSED);
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_PSN_REGIST_FAILED) == CS_QUIT_PSN_REGIST_FAILED);
-	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED) == CS_QUIT_NETWORK);
-	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN) == CS_QUIT_NETWORK);
+	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED) == CS_QUIT_CONSOLE_CLOSED);
+	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN) == CS_QUIT_CONSOLE_CLOSED);
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED) == CS_QUIT_NETWORK);
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN) == CS_QUIT_NETWORK);
 	CHECK(cs_quit_reason(CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH) == CS_QUIT_RP_CRASHED);
@@ -374,6 +385,7 @@ int main(int argc, char **argv)
 	CHECK(cs_init() == 0);
 	test_reason_is_read_from_log();
 	test_throttle_thirty_fps_at_four();
+	test_sample_size_guard();
 	test_quit_reasons();
 	test_fixture_decodes(argv[1]);
 	test_garbage_does_not_crash();

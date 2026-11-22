@@ -17,7 +17,8 @@ namespace CouchSubs.TvInstall.Samsung;
 /// yoktur.</item>
 /// </list>
 /// Tizen 2.4 tanımadığı satırı içeren paketi sebep yazmadan <c>install failed[118]</c> ile reddediyor; <c>power</c> izni
-/// çıkarıldıktan sonra da (#497) 0.9.38 aynı hatayı verdi (#621). Yeni TV'lerde paket değişmez.
+/// çıkarıldıktan sonra da (#497) 0.9.38 aynı hatayı verdi (#621). Yeni TV'lerde paket değişmez. Asıl eksik paket değil,
+/// cihaz profilinin yeriydi (#890): Tizen 2.x profili <c>/home/developer</c>'da arar (<see cref="SamsungTvInstaller.DeviceProfileRemotePath"/>).
 /// </summary>
 internal static partial class LegacyTizenPackage
 {
@@ -30,8 +31,8 @@ internal static partial class LegacyTizenPackage
     internal const string LeanRemoved = "tizen:profile, application.launch, network.get";
 
     /// <summary>
-    /// config.xml metninden iki satırı çıkarır. <paramref name="lean"/>: imza SHA-256'ya çevrildikten sonra da TV yalın
-    /// <c>install failed[118]</c> derse (#638) aynı kurulumda bir kez denenen yalın paket; <c>tizen:profile</c> satırı ile
+    /// config.xml metninden iki satırı çıkarır. <paramref name="lean"/>: SHA-512 imzalı tam pakete TV yalın
+    /// <c>install failed[118]</c> derse (#638, #890) aynı kurulumda bir kez denenen, SHA-256 imzalı yalın paket; <c>tizen:profile</c> satırı ile
     /// <c>application.launch</c> ve <c>network.get</c> izinleri de çıkar (uygulama bunlarsız da açılır; TV adresi ağ
     /// taramasıyla bulunur). Hangisinin tuttuğu günlükten görülür.
     /// </summary>

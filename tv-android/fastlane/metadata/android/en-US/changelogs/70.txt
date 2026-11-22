@@ -1,0 +1,1 @@
+0.9.67: On LG, if the game picture stalls again shortly after it was rebuilt, it no longer stays black; the picture is rebuilt. A picture that froze while CouchSubs was in the background (PS button) is also rebuilt when CouchSubs comes back to the front.

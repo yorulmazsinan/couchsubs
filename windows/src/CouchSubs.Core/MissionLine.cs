@@ -41,6 +41,7 @@ public sealed class MissionLine
             var text = TextMatch.Normalize(line.Text);
             if (text.Length < 3) continue;
             var placed = box.PlacedIn(area);
+            if (!IsCandidate(line.Text, placed)) continue;
             var track = tracks.FirstOrDefault(item => TextMatch.IsSimilar(item.Text, text));
             if (track is null) tracks.Add(track = new Track(text, time, placed));
             track.LastSeen = time;
@@ -62,6 +63,14 @@ public sealed class MissionLine
         Region = next;
         return true;
     }
+
+    /// <summary>
+    /// Satır (kutusu karede) görev olabilir mi. Görev satırı ortadadır ve sözcüklerden oluşur; ekranın bir yanındaki HUD
+    /// yazısı (<see cref="ScreenNotices.IsNotice(TextBox)"/>: GTA 6'da arama kartının yanındaki küçük yazı) ya da okuma
+    /// kırıntısı (<see cref="OcrNoise.IsCrumb"/>) görev sayılıp kendi yerinde çevrilmez. Kullanıcı bildirimi (GitHub #882,
+    /// GTA 6): telefon araması sürerken arama kartının yanında "kulaklı ar." diye küçük bir çeviri kutusu çıkıyordu.
+    /// </summary>
+    public static bool IsCandidate(string text, TextBox box) => !ScreenNotices.IsNotice(box) && !OcrNoise.IsCrumb(text);
 
     public void Reset()
     {

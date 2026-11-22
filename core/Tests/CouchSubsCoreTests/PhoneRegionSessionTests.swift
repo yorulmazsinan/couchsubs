@@ -225,6 +225,30 @@ final class PhoneRegionSessionTests: XCTestCase {
         XCTAssertEqual(server.sent.count, 2)
     }
 
+    /// GitHub #822 / X (beta.76, GTA 6 telefonu): çeviri motordayken telefon bir karede doğrulanamadı (el titredi, kare
+    /// geçişi). #801'den beri bu tur çevirileri silmiyor, ama okunan sayfa da bırakılmıyordu: telefon aynı görünüşe
+    /// dönünce sayfa "değişmedi" sayılıyor, hazır çeviri hiç gösterilmiyordu (sonraki mesaja kadar "çeviri gelmiyor").
+    func testTranslationArrivingDuringBriefPhoneMissIsShownOnTheNextTurn() async throws {
+        let reader = Reader(), translator = Translator(), server = Server()
+        var clock = 0
+        let watcher = RegionWatcher(reader: reader, translator: translator, server: server, clock: { clock })
+        let a = GamePhoneTestFrame.phone(), gone = GamePhoneTestFrame.phone(camera: false)
+        let pose = try XCTUnwrap(GamePhoneGeometry.locate(a))
+        reader.set([TextLine("Reply today.", box: first)])
+        await translator.delay("Reply today.")
+        watcher.offer(a, areas: [], phone: pose)
+        try await wait { await translator.waiting }
+        watcher.offer(gone, areas: [], phone: pose)
+        await translator.resume()
+        try await wait { !watcher.isBusy }
+        clock = 450
+        watcher.offer(a, areas: [], phone: pose)
+        try await wait { !watcher.isBusy }
+        XCTAssertEqual(server.sent.last?.text, "Bugün yanıtla.")
+        let calls = await translator.calls
+        XCTAssertEqual(calls, ["Reply today."])
+    }
+
     /// İki komşu arasından düşen balon ekrandan hemen silinmez (`PhoneSteady.holdTurns` tur); sonra da yoksa silinir.
     func testOmittingOneBubbleBetweenUnchangedNeighborsRequiresASecondRead() async throws {
         let rows = [TextBox(left: 0.15, top: 0.20, right: 0.85, bottom: 0.26), TextBox(left: 0.15, top: 0.40, right: 0.85, bottom: 0.46),

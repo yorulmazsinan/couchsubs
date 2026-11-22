@@ -70,6 +70,29 @@ object TvAppUpdate {
         state.value = tv.version?.takeIf { it.isNotEmpty() }?.let { TvAppStatus.UpToDate(it) } ?: TvAppStatus.Unknown
     }
 
+    /** 0.9.69'den eski TV uygulamaları sürüm bildirmez; ekranda böyle görünür. */
+    const val UNREPORTED = "< 0.9.69"
+
+    /**
+     * TV uygulaması altyazı akışına bağlanıp sürümünü bildirdi (boş: 0.9.69'den eski, sürüm bildirmeyen uygulama). LG'de
+     * geliştirici modu kapalıyken ya da anahtar bu telefonda değilken [check] TV'deki sürümü okuyamıyor, TV uygulaması
+     * eski kalıyor ve hiç öneri çıkmıyordu (GitHub #884, #891). Eskiyse ana ekran "TV uygulamasını güncelle" önerir.
+     */
+    fun reported(context: Context, version: String) {
+        val tv = Services.settings.installedTv ?: return
+        val bundled = bundledVersion(context, tv.brand) ?: return
+        state.value = decide(tv, version, bundled) ?: return
+        if (version.isNotEmpty() && tv.version != version) Services.settings.installedTv = tv.copy(version = version)
+    }
+
+    /** Akışla bildirilen sürüme göre öneri; boş paket sürümünde null (karar verilmez). */
+    fun decide(tv: InstalledTv, reported: String, bundled: String): TvAppStatus? = when {
+        bundled.isEmpty() -> null
+        com.couchsubs.mobile.core.SubtitleServer.isTvAppOutdated(reported, bundled) ->
+            TvAppStatus.Outdated(tv, reported.ifEmpty { UNREPORTED }, bundled)
+        else -> TvAppStatus.UpToDate(reported)
+    }
+
     /**
      * Kayıtlı TV'deki sürüme sessizce bakar (uygulama açılınca ve TV her bağlandığında). TV'ye ulaşılamazsa öneri
      * değişmez; kullanıcıdan hiçbir şey istenmez (Samsung girişi, Android TV onayı, LG parolası yok).

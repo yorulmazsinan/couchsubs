@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- #71: 40KU7000'de (Tizen 2.4) elle kurulup çalışan paketin config.xml'i. CouchSubs-samsung-kaynak.zip'teki 0.9.19
+     config.xml'i (git show bbb1c940^:tv-tizen/config.xml); kullanıcı yalnız required_version'ı 2.4 yaptı (Apps2Samsung
+     daha yüksek required_version isteyen paketi bu TV'de kurmadan reddeder). Paket Tizen Studio ile paketlendi, Apps2Samsung
+     ile TV'nin Samsung sertifikasıyla SHA-512 (TizenSdb) yeniden imzalanıp kuruldu; cihaz profili /home/developer'a
+     gönderildi. LegacyTizenPackage'ın Tizen 2.x'e verdiği config.xml bununla birebir aynı öğeleri taşımalı
+     (LegacyTizenPackageTests). -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://github.com/yorulmazsinan/couchsubs" version="0.9.19" viewmodes="maximized">
+    <tizen:application id="CouchSubsT.CouchSubs" package="CouchSubsT" required_version="2.4"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <icon src="icon.png"/>
+    <name>CouchSubs</name>
+    <author>Enmera</author>
+    <license>AGPL-3.0-only</license>
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation>*</tizen:allow-navigation>
+    <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/network.get"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
+                   encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

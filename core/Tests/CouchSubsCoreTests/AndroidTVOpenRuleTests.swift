@@ -28,12 +28,16 @@ final class AndroidTVOpenRuleTests: XCTestCase {
         XCTAssertEqual(tries, [0, 30, 60])
     }
 
-    /// Uygulama TV'de çalışırken bulunduysa (`am start` gönderilmedi) açılış sayılmaz; denemeler 30 sn arayla sürer.
-    func testAttemptsThatFoundTheAppRunningAreNotCounted() {
+    /// X (beta.77): "izni sürekli yeniden istiyor". Uygulama TV'de çalışırken bulunduysa ya da TV onay sorduysa (`am start`
+    /// gönderilmedi) eskiden deneme sayılmıyor, bekçi çeviri boyunca 30 sn'de bir ADB bağlantısı açıyordu. Her bağlantı sayılır.
+    func testEveryAdbConnectionCountsEvenWhenNothingWasOpened() {
         var rule = AndroidTVOpenRule()
-        var tries = 0
-        for second in stride(from: 0.0, through: 300, by: 5) where rule.shouldTry(connected: false, now: second) { tries += 1 }
-        XCTAssertEqual(tries, 11)
+        var tries: [Double] = []
+        for second in stride(from: 0.0, through: 3600, by: 5) where rule.shouldTry(connected: false, now: second) {
+            tries.append(second)
+        }
+        XCTAssertEqual(tries, [0, 30, 60])
+        XCTAssertEqual(rule.attempts, 3)
         XCTAssertEqual(rule.opens, 0)
     }
 

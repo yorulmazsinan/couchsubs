@@ -180,4 +180,26 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     [InlineData("Lamar has sent you a message.", false)]
     [InlineData("Press ✕ to open the map.", false)]
     public void NoiseRules(string text, bool noise) => Assert.Equal(noise, ScreenTextNoise.IsNoise(text));
+
+    /// <summary>
+    /// Menü şeridinin sekmeleri arasındaki seçili (renkli, aday olmayan) sekme alanı ortadan bölmez: aynı karo satırında
+    /// iki boş karoya kadar aralıklı bileşenler birleşir (#859); başka satırdaki bileşen ayrı kalır.
+    /// </summary>
+    [Fact]
+    public void TabsOnOneRowMergeAcrossTheSelectedTab()
+    {
+        var (row, _) = ScreenTextDetector.Merge([(new ScreenTextDetector.Cells(14, 1, 20, 1), [32 + 14]),
+                                                  (new ScreenTextDetector.Cells(23, 1, 29, 1), [32 + 23])]);
+        Assert.Equal(new ScreenTextDetector.Cells(14, 1, 29, 1), Assert.Single(row).Cells);
+        var (apart, _) = ScreenTextDetector.Merge([(new ScreenTextDetector.Cells(14, 1, 20, 1), [32 + 14]),
+                                                    (new ScreenTextDetector.Cells(24, 2, 29, 2), [64 + 24])]);
+        Assert.Equal(2, apart.Count);
+        // İki yanı da geniş sekmeler üç boş karoya kadar birleşir; tek karoluk etiketler (tekerlek menü) ayrı kalır.
+        var (wide, _) = ScreenTextDetector.Merge([(new ScreenTextDetector.Cells(16, 1, 22, 1), [32 + 16]),
+                                                   (new ScreenTextDetector.Cells(26, 1, 29, 1), [32 + 26])]);
+        Assert.Equal(new ScreenTextDetector.Cells(16, 1, 29, 1), Assert.Single(wide).Cells);
+        var (narrow, _) = ScreenTextDetector.Merge([(new ScreenTextDetector.Cells(4, 1, 4, 1), [32 + 4]),
+                                                     (new ScreenTextDetector.Cells(8, 1, 8, 1), [32 + 8])]);
+        Assert.Equal(2, narrow.Count);
+    }
 }

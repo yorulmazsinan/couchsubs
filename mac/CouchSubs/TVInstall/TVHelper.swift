@@ -19,11 +19,21 @@ enum TVInstallEvent: Equatable, Sendable {
 /// "Kurulum günlüğünü göster" ve "Günlüğü kopyala").
 enum TVInstallLog {
     /// Kullanıcıya hata iletisinde gösterilen yol (sandbox'ta kapsayıcının içindeki yol).
-    static var displayPath: String { RemotePlayLog.userPath(file) }
+    static var displayPath: String { RemotePlayLog.userPath(userFile) }
 
-    static var file: URL {
+    /// Kullanıcının kurulum günlüğü.
+    static var userFile: URL {
         FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/CouchSubs/tvinstall.log")
+    }
+
+    /// Yazılan günlük. Testler (sahte TV'lerle kurulum) kullanıcının gerçek günlüğüne yazmaz: önceden "paket 0.6.1" gibi
+    /// sahte satırlar gerçek tvinstall.log'a karışıyordu.
+    static var file: URL {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return FileManager.default.temporaryDirectory.appendingPathComponent("CouchSubsTests/tvinstall.log")
+        }
+        return userFile
     }
 
     private static let lock = NSLock()

@@ -1,0 +1,1 @@
+0.9.63: If the open app stays connected to an old saved address ("connected" on the TV but no subtitles), the computer/phone now sends its address without bringing the screen to the front; subtitles come back.

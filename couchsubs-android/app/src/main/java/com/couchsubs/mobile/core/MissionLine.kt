@@ -18,6 +18,14 @@ class MissionLine {
         /** Bu kadar görülmeyen satır ekrandan kalkmış sayılır. */
         const val FORGET_MS = 1500L
 
+        /**
+         * Satır (kutusu karede) görev olabilir mi. Görev satırı ortadadır ve sözcüklerden oluşur; ekranın bir yanındaki HUD
+         * yazısı ([ScreenNotices.isNotice]: GTA 6'da arama kartının yanındaki küçük yazı) ya da okuma kırıntısı
+         * ([OcrNoise.isCrumb]) görev sayılıp kendi yerinde çevrilmez. Kullanıcı bildirimi (GitHub #882, GTA 6): telefon
+         * araması sürerken arama kartının yanında "kulaklı ar." diye küçük bir çeviri kutusu çıkıyordu.
+         */
+        fun isCandidate(text: String, box: TextBox) = !ScreenNotices.isNotice(box) && !OcrNoise.isCrumb(text)
+
         private fun within(a: CropRegion, b: CropRegion, tolerance: Double) =
             abs(a.top - b.top) <= tolerance && abs(a.bottom - b.bottom) <= tolerance &&
                 abs(a.left - b.left) <= tolerance * 2 && abs(a.right - b.right) <= tolerance * 2
@@ -39,6 +47,7 @@ class MissionLine {
             val text = TextMatch.normalize(line.text)
             if (text.length < 3) continue
             val placed = box.placedIn(area)
+            if (!isCandidate(line.text, placed)) continue
             val track = tracks.firstOrNull { TextMatch.isSimilar(it.text, text) }
             if (track != null) {
                 track.lastSeen = time

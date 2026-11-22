@@ -137,22 +137,57 @@ public sealed class TvKeeper(Func<Task<ITvControl>> connect, string appId, IRead
         }
     }
 
+    /// <summary>
+    /// Samsung'da açma komutu gittikten sonra TV uygulamasının bağlanması için beklenen süre; bağlanmazsa ana ekranda "TV
+    /// açmadı" yazar. Samsung <c>ed.apps.launch</c>'ın açılışı söyleyen bir yanıtını vermez: bazı TV'ler (Tizen 9.0, #412;
+    /// iPhone'da Samsung, 21 Kas) komutu alıp uygulamayı açmıyor, neden satırı boş kalıyordu (Mac/iPhone ile aynı).
+    /// </summary>
+    public static readonly TimeSpan SamsungOpenCheck = TimeSpan.FromSeconds(15);
+
+    /// <summary>Samsung: son açma komutunun gittiği an (uygulama bağlanınca ya da "TV açmadı" bildirilince sıfırlanır).</summary>
+    private DateTime? sentAt;
+    private TvOpenProblem? lastReported;
+
     private async Task LaunchIfAppIsAwayAsync(bool connected)
     {
-        if (connected) return;
-        if (lastLaunch is { } last && DateTime.UtcNow - last < (relaunchInterval ?? TimeSpan.FromSeconds(30))) return;
-        lastLaunch = DateTime.UtcNow;
+        var time = now();
+        if (connected)
+        {
+            sentAt = null;
+            return;
+        }
+        if (sentAt is { } sent && time - sent >= SamsungOpenCheck)
+        {
+            sentAt = null;
+            Report(TvOpenProblem.NotOpened);
+        }
+        if (lastLaunch is { } last && time - last < (relaunchInterval ?? TimeSpan.FromSeconds(30))) return;
+        lastLaunch = time;
         try
         {
             using var fresh = await connect();
             await fresh.LaunchAsync(appId, parameters);
-            onOpenResult?.Invoke(null);
+            sentAt = now();
+            // TV bir önceki komutta da açmadıysa neden satırı yeniden gönderilen komutla silinmez (her 30 sn'de yanıp sönmesin).
+            if (lastReported == TvOpenProblem.NotOpened) return;
+            Report(null);
+        }
+        catch (SsapException error) when (error.Reason == SamsungClient.NotInstalledReason)
+        {
+            // Samsung: TV kurulu olduğunu doğrulamadı, açma komutu gönderilmedi (kurulum gerekiyor; TV yanıt verdi).
+            Report(TvOpenProblem.NotInstalled);
         }
         catch (Exception)
         {
             // TV kapalı ya da ulaşılamıyor; bir sonraki denemede yeniden.
-            onOpenResult?.Invoke(TvOpenProblem.Unreachable);
+            Report(TvOpenProblem.Unreachable);
         }
+    }
+
+    private void Report(TvOpenProblem? problem)
+    {
+        lastReported = problem;
+        onOpenResult?.Invoke(problem);
     }
 
     /// <summary>
@@ -185,6 +220,8 @@ public sealed class TvKeeper(Func<Task<ITvControl>> connect, string appId, IRead
         control?.Dispose();
         control = null;
         lastLaunch = null;
+        sentAt = null;
+        lastReported = null;
         stoodDown = false;
         forced.Clear();
         consoleReturns.Clear();

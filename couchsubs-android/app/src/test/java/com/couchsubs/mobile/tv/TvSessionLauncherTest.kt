@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile.tv
+import com.couchsubs.mobile.R
 import org.json.JSONObject
 import org.junit.Test
 import org.junit.Assert.*
@@ -39,7 +40,12 @@ class TvSessionLauncherTest {
         assertNull(TvSessionLauncher.samsungAction(false, missing))
         assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 2)))
         assertEquals("NATIVE_LAUNCH", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 4)))
-        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, null))
+        // Liste 3 sn'de gelmedi: kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna
+        // bağlanılamıyor (AS400)" der (Samsung 7 Series 2018); komut gönderilmez, tvinstall.log'a yazılır.
+        assertNull(TvSessionLauncher.samsungAction(false, null))
+        assertTrue(TvSessionLauncher.samsungNotSentLine("1.2.3.4", null).contains("uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi"))
+        assertTrue(TvSessionLauncher.samsungNotSentLine("1.2.3.4", missing).contains("açma isteği gönderilmedi"))
+        assertEquals(R.string.tv_open_not_installed, TvOpenProblem.reason(TvOpenProblem.NOT_INSTALLED))
 
         val unknown = InstalledTv(TvBrand.SAMSUNG, "192.168.1.40")
         assertFalse(TvSessionLauncher.samsungKnownInstalled(unknown, null))
@@ -87,8 +93,30 @@ class TvSessionLauncherTest {
             active = { rounds < 120 }, connected = { false },
             open = { _, _, _ -> tries++; if (rounds < 30) com.couchsubs.mobile.tv.android.AndroidTvInstaller.ALREADY_RUNNING else "Starting" },
             sleep = { rounds++; rounds == 100 }, now = { rounds * 5_000L })
-        // 0-29. turlar (150 sn) uygulama çalışıyor: 5 deneme, sayılmaz; sonra 3 açılış; 100. turda yeniden dene: 3 açılış daha.
-        assertEquals(5 + 3 + 3, tries)
+        // X (beta.77), "izni sürekli yeniden istiyor": "zaten açık" da bir ADB bağlantısıdır ve sayılır (eskiden sayılmıyor,
+        // 30 sn'de bir sınırsız bağlantı açılıyordu). İlk 3 deneme; 100. turda yeniden dene: 3 deneme daha.
+        assertEquals(3 + 3, tries)
+    }
+
+    /** X (beta.77): onaysız TV'de her ADB bağlantısı izin sorusu açar; çeviri boyunca en çok üç kez sorulur. */
+    @Test fun unapprovedAndroidTvIsNotAskedOverAndOver() {
+        var rounds = 0
+        var tries = 0
+        TvSessionLauncher.keepAndroidTvOpen(InstalledTv(TvBrand.ANDROID_TV, "192.168.1.120"), "http://192.168.1.124:8787",
+            active = { rounds < 720 }, connected = { false },
+            open = { _, _, _ -> tries++
+                throw com.couchsubs.mobile.tv.android.AndroidInstallException(com.couchsubs.mobile.tv.android.AndroidInstallError.NOT_APPROVED) },
+            sleep = { rounds++; false }, now = { rounds * 5_000L })
+        assertEquals(3, tries)
+    }
+
+    @Test fun connectedAndroidTvAppNeverGetsAnAdbConnection() {
+        var rounds = 0
+        var tries = 0
+        TvSessionLauncher.keepAndroidTvOpen(InstalledTv(TvBrand.ANDROID_TV, "192.168.1.120"), "http://192.168.1.124:8787",
+            active = { rounds < 720 }, connected = { true }, open = { _, _, _ -> tries++; "Starting" },
+            sleep = { rounds++; false }, now = { rounds * 5_000L })
+        assertEquals(0, tries)
     }
 
     @Test fun runningTvAppIsRecognised() {
@@ -166,12 +194,30 @@ class TvSessionLauncherTest {
 
     /** Samsung: eskiden Android telefon uygulamayı yalnız bir kez açmayı deniyordu; bağlı değilken yeniden açılır. */
     @Test fun samsungIsReopenedWhileTheAppIsAway() {
-        var rounds = 0
+        // Her turda iki bekleme: 15 sn (açıldı mı) ve 30 sn'ye kalan.
+        var sleeps = 0
         var opens = 0
-        TvSessionLauncher.keepSamsungOpen(InstalledTv(TvBrand.SAMSUNG, "192.168.1.50"), connected = { rounds >= 2 }, active = { rounds < 4 },
-            sleep = { rounds++ }) { opens++ }
+        var notOpened = 0
+        TvSessionLauncher.keepSamsungOpen(InstalledTv(TvBrand.SAMSUNG, "192.168.1.50"), connected = { sleeps >= 4 }, active = { sleeps < 6 },
+            sleep = { sleeps++; false }, notOpened = { notOpened++ }) { opens++ }
         assertEquals(1, opens)
+        assertEquals(2, notOpened)
         TvSessionLauncher.keepSamsungOpen(InstalledTv(TvBrand.LG, "192.168.1.50"), connected = { false }, active = { true }) { opens++ }
         assertEquals(1, opens)
+    }
+
+    /** "Otomatik açmayı dene" beklemeyi keser: "açmadı" denetimi atlanır, hemen açılır. */
+    @Test fun samsungRetryOpensWithoutWaiting() {
+        var sleeps = 0
+        var opens = 0
+        var notOpened = 0
+        TvSessionLauncher.keepSamsungOpen(InstalledTv(TvBrand.SAMSUNG, "192.168.1.50"), connected = { false }, active = { opens < 1 },
+            sleep = { sleeps++; true }, notOpened = { notOpened++ }) { opens++ }
+        assertEquals(1, opens)
+        assertEquals(1, sleeps)
+        assertEquals(0, notOpened)
+        assertTrue(com.couchsubs.mobile.tv.samsung.SamsungInstaller.sdbLaunched("app_id[CouchSubsT.CouchSubs] launched"))
+        assertFalse(com.couchsubs.mobile.tv.samsung.SamsungInstaller.sdbLaunched("app_id[CouchSubsT.CouchSubs] launch failed"))
+        assertEquals(com.couchsubs.mobile.R.string.tv_open_not_opened, TvOpenProblem.reason(TvOpenProblem.NOT_OPENED))
     }
 }

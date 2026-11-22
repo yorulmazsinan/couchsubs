@@ -368,6 +368,9 @@ public sealed class RemotePlayWindowStream : IStreamSession
         /// <summary>Kare gelmiyor ya da kopyalanamıyorsa nedeni altyazi.log'a yazılır (GitHub #566).</summary>
         private readonly WindowCaptureWatch watch = new();
         private readonly System.Threading.Timer watchTimer;
+        /// <summary>Dakikada bir "pencere kareleri: N/dk" yazılır: kare aralığı günlükte görünsün (GitHub #822, Mac ile aynı).</summary>
+        private readonly WindowFrameCounts counts = new();
+        private readonly System.Threading.Timer minuteTimer;
         private readonly IntPtr window;
         /// <summary>Windows'un yakalaması kare vermedi; pencere PrintWindow ile okunuyor (GitHub #566).</summary>
         private volatile bool fallback;
@@ -404,6 +407,8 @@ public sealed class RemotePlayWindowStream : IStreamSession
             session.StartCapture();
             SubtitleLog.Write($"pencere yakalanıyor: {Name}, {size.Width}x{size.Height}");
             watchTimer = new System.Threading.Timer(_ => CheckFrames(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            minuteTimer = new System.Threading.Timer(_ => { if (!disposed) SubtitleLog.Write(counts.MinuteLine()); },
+                null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
 
         /// <summary>Yakalama başladı ama okumaya kare gitmiyorsa nedeni iki günlüğe de yazılır.</summary>
@@ -468,6 +473,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
                 }
                 CheckBlack(frame.Pixels);
                 if (watch.FrameDelivered()) SubtitleLog.Write($"pencereden ilk kare (PrintWindow): {frame.Width}x{frame.Height}");
+                counts.Fallback();
                 owner.Deliver(frame);
             }
             catch (Exception error)
@@ -540,9 +546,9 @@ public sealed class RemotePlayWindowStream : IStreamSession
                 return;
             }
             var now = clock.ElapsedMilliseconds;
-            if (now - lastFrameMs < 1000 / FramesPerSecond) return;
+            if (now - lastFrameMs < 1000 / FramesPerSecond) { counts.Idle(); return; }
             // Önceki kare hâlâ kopyalanıyorsa bu kare atlanır.
-            if (Interlocked.Exchange(ref busy, 1) == 1) return;
+            if (Interlocked.Exchange(ref busy, 1) == 1) { counts.Idle(); return; }
             lastFrameMs = now;
             watch.CopyStarted(clock.Elapsed);
             deliveringFrame = true;
@@ -555,6 +561,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
                 watch.CopyEnded();
                 CheckBlack(captured.Pixels);
                 if (watch.FrameDelivered()) SubtitleLog.Write($"pencereden ilk kare: {width}x{height}");
+                counts.Delivered();
                 owner.Deliver(captured);
             }
             catch (Exception error)
@@ -602,6 +609,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
             if (disposed) return;
             disposed = true;
             try { watchTimer.Dispose(); } catch (Exception) { }
+            try { minuteTimer.Dispose(); } catch (Exception) { }
             lock (this)
             {
                 try { fallbackTimer?.Dispose(); } catch (Exception) { }

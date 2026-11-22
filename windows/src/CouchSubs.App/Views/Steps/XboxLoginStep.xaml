@@ -25,6 +25,19 @@
             <!-- Hata olunca Xbox satırlarının da yazıldığı günlük açılır (Mac ve PS5 adımındaki gibi). -->
             <Button Content="{t:T 'Show log file'}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnShowLog"
                     Visibility="{Binding Text, ElementName=Error, Converter={StaticResource VisibleIf}}" />
+            <!-- #853: oyun bu bilgisayardaki Xbox uygulamasında / play.xbox.com'da (ya da capture card ile OBS'te) oynanıyorsa
+                 CouchSubs Xbox'a bağlanmaz, yalnız seçilen pencereyi okur; Microsoft girişi ve Xbox seçimi atlanır. -->
+            <c:Card Margin="0,16,0,0">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="{t:T 'Playing with the Xbox app or play.xbox.com on this computer?'}" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,90,0" />
+                        <Button Content="{t:T 'Select'}" HorizontalAlignment="Right" Click="OnUseXboxWindow" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="{t:T 'CouchSubs reads only the window you select in Settings › Picture source (the Xbox app, play.xbox.com or OBS with a capture card). It doesn\'t connect to the Xbox, so no Microsoft sign-in is needed and your Xbox session isn\'t interrupted.'}" />
+                </StackPanel>
+            </c:Card>
         </StackPanel>
     </c:StepLayout>
 </UserControl>

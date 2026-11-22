@@ -1,0 +1,1 @@
+0.9.59: "Ekranı çevir" ile otomatik ekran yazısı aynı yazıyı çizdiğinde kutular üst üste binmiyor, yalnız biri görünüyor. Çeviri kutusu haritada ve oyun dünyasında da tam opak; altındaki İngilizce harfler görünmüyor.

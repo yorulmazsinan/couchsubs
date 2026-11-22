@@ -26,6 +26,25 @@ class StickyRowsTest {
         assertEquals("Get in the sea plane", rows.text("Get in the sea plane", 9500))
     }
 
+    /** Konuşan adıyla başlayan satır uzun süre ekranda kalsa da görev/HUD sayılmaz (Mac, Windows ile aynı). */
+    @Test fun speakerLineIsNeverSticky() {
+        val rows = StickyRows()
+        val named = "JASON: I don't like this place."
+        assertEquals(named, rows.text(named, 0))
+        assertEquals("Yeah!\n$named", rows.text("Yeah!\n$named", 6000))
+        assertTrue(rows.newlySticky.isEmpty())
+        assertEquals(named, rows.text(named, 9000))
+    }
+
+    /** Menü satırlarının kenarı hizalıdır; ortalanmış kısa konuşma satırları ve adlı satırlar menü sayılmaz. */
+    @Test fun centeredShortLinesAndSpeakerLinesAreNotAMenu() {
+        fun line(text: String, left: Double, top: Double, right: Double) = TextLine(text, TextBox(left, top, right, top + 0.07))
+        assertTrue(Reading(listOf(line("MAP", 0.05, 0.05, 0.10), line("HELP", 0.05, 0.15, 0.11), line("SETTINGS", 0.051, 0.25, 0.17))).isMenu)
+        org.junit.Assert.assertFalse(Reading(listOf(line("No", 0.47, 0.05, 0.53), line("Wait", 0.46, 0.15, 0.54), line("Go on", 0.45, 0.25, 0.55))).isMenu)
+        org.junit.Assert.assertFalse(Reading(listOf(line("JASON: No", 0.05, 0.05, 0.15), line("LUCIA: Wait", 0.05, 0.15, 0.16),
+            line("JASON: Go", 0.05, 0.25, 0.15))).isMenu)
+    }
+
     @Test fun dialogueBoxWhoseRowsAppearTogetherIsKept() {
         val rows = StickyRows()
         val page = "You can stay here as long as you like.\nThe inn is always open for travelers."

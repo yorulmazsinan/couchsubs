@@ -41,6 +41,12 @@ public enum OcrNoise {
                 }
                 continue
             }
+            // Harfsiz, rakamsız ve yalnız simgeden oluşan parça ("_", "~", "=") yazı tanımanın uydurmasıdır: renkli
+            // sözcüğün açık zeminde kaybolan harfleri "_" okunuyordu ("Get in the _ eedboat", GitHub #854, GTA 6).
+            if isSymbolOnly(core) {
+                if !trail.isEmpty, let last = kept.popLast() { kept.append(last + trail) }
+                continue
+            }
             if let fixed = cleanCore(core) {
                 kept.append(lead + fixed + trail)
             } else if !trail.isEmpty, let last = kept.popLast() {
@@ -88,6 +94,51 @@ public enum OcrNoise {
         }
         return bad * 6 > good + bad
     }
+
+    /// Parça yalnız simgelerden mi oluşuyor (harf ve rakam yok, en az bir `symbols` imi).
+    private static func isSymbolOnly(_ core: String) -> Bool {
+        !core.isEmpty && !core.contains(where: { $0.isLetter || $0.isNumber })
+            && core.unicodeScalars.contains { symbols.contains($0) }
+    }
+
+    /// Satır bir okuma kırıntısı mı: altyazı ya da görev değil, ekrandaki küçük bir göstergenin ya da solan satırın yazı
+    /// tanımadan kalan parçası ("one ready.", "ar.", "kulak"). En çok üç sözcüklü ve küçük harfle (ya da harf dışı bir
+    /// imle) başlayan, ya da hiç gerçek sözcük (en az iki harfli, ünlü taşıyan) taşımayan, ya da çöp gibi okunan satır.
+    /// Büyük harfle başlayan kısa konuşma ("Go!", "Okay.") kırıntı değildir. Kırıntı yanındaki uzun konuşmayı "eski"
+    /// gösterip altyazıdan attırmaz, görev satırı da sayılmaz (`StickyRows`, `MissionLine`; GitHub #854, #882).
+    /// Windows (OcrNoise.IsCrumb) ve Android (OcrNoise.isCrumb) aynı kuralı uygular.
+    public static func isCrumb(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if looksGarbled(trimmed) { return true }
+        let words = trimmed.split(whereSeparator: \.isWhitespace).filter { $0.contains(where: \.isLetter) }
+        guard words.count <= 3 else { return false }
+        if let first = trimmed.first(where: { $0.isLetter || $0.isNumber }), !(first.isLetter && first.isUppercase) { return true }
+        return !words.contains { word in
+            let letters = word.filter(\.isLetter).lowercased()
+            return letters.count >= 2 && letters.contains(where: { "aeiouyäöüıàáâèéêìíîòóôùúû".contains($0) })
+        }
+    }
+
+    /// Sözcük (harfleri) İngilizcede bir sözcük olamaz: ünlüsüz (`vowelless`), İngilizcede hiç yan yana gelmeyen iki harf
+    /// taşıyor ("ijz": "jz") ya da harf-rakam/simge karışık. Yalnız aynı satırın iki okumasından hangisinin bozuk olduğuna
+    /// karar verirken kullanılır (`SubtitleStabilizer`); tek başına satır atmaz.
+    public static func isNonWord(_ word: String) -> Bool {
+        let core = split(word).1
+        let letters = String(core.filter(\.isLetter))
+        guard letters.count >= 2 else { return false }
+        if cleanCore(core) != core || vowelless(letters) { return true }
+        let characters = Array(letters.lowercased())
+        return zip(characters, characters.dropFirst()).contains { impossiblePairs.contains(String([$0, $1])) }
+    }
+
+    /// İngilizce sözcüklerde yan yana gelmeyen harf çiftleri (yazı tanımanın "lives" → "Ijz" gibi uydurmalarında çıkar).
+    private static let impossiblePairs: Set<String> = [
+        "bx", "cj", "cv", "cx", "dx", "fq", "fx", "gq", "gx", "hx", "jc", "jf", "jg", "jq", "js", "jv", "jw", "jx", "jz",
+        "kq", "kx", "mx", "px", "pz", "qb", "qc", "qd", "qf", "qg", "qh", "qj", "qk", "ql", "qm", "qn", "qp", "qr", "qs",
+        "qt", "qv", "qw", "qx", "qy", "qz", "sx", "vb", "vf", "vh", "vj", "vm", "vp", "vq", "vw", "vx", "wx", "xj", "xx",
+        "zj", "zq", "zx",
+    ]
 
     /// Üç ve daha çok harfli, ünlüsüz ve kısaltma olmayan (tümü büyük harf değil) sözcük: İngilizcede olmaz ("Gtt", "rnnk").
     private static func vowelless(_ letters: String) -> Bool {

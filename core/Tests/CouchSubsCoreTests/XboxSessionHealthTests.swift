@@ -145,4 +145,18 @@ final class XboxFirstFrameWatchTests: XCTestCase {
         let line = XboxStreamStats.describe(sinceConnectedMs: 10_000, frameSeen: false, keyframes: 1, stats: stats, picture: "görüntü")
         XCTAssertTrue(line.contains("aday yerel relay/tcp ağ ?, uzak ?, durum succeeded;"), line)
     }
+
+    func testDiagnosticLineNamesTheNegotiatedCodec() throws {
+        let stats = try report("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":258,"bytesReceived":0,"codecId":"C1"},
+             {"type":"codec","id":"C1","mimeType":"video/H264","sdpFmtpLine":"level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f"}]
+            """)
+        let line = XboxStreamStats.describe(sinceConnectedMs: 10_000, frameSeen: false, keyframes: 4, stats: stats, picture: "görüntü")
+        XCTAssertTrue(line.contains("çözücü ?, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; aday seçilmedi"), line)
+        XCTAssertTrue(XboxStreamStats.types.contains("codec"))
+    }
+
+    func testFirstFrameLimitIsThirtySeconds() {
+        XCTAssertEqual(XboxFirstFrameWatch.firstFrameLimitMs, 30_000)
+    }
 }

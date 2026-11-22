@@ -57,12 +57,10 @@ public class AutoScreenTextOffTests
         controller.StreamEvent += events.Enqueue;
         await controller.StartAsync();
 
-        // Gelişmiş'teki iki ayar açılır, kare gelir, sonra kapatılır (sahadaki sıra).
+        // Gelişmiş'teki ayar açılır, kare gelir, sonra kapatılır (sahadaki sıra).
         controller.Settings = controller.Settings with { FastSubtitleDetection = true };
-        controller.Settings = controller.Settings with { WatchSubtitleBackground = true };
         await Feed(services, BoxFrame(), TimeSpan.FromSeconds(1));
         controller.Settings = controller.Settings with { FastSubtitleDetection = false };
-        controller.Settings = controller.Settings with { WatchSubtitleBackground = false };
         await Feed(services, BoxFrame(), TimeSpan.FromSeconds(2));
 
         // Altyazı alanı dışındaki kutu hiçbir zaman çevrilmedi; alan ve diğer ayarlar başlangıçtaki gibi.
@@ -72,7 +70,6 @@ public class AutoScreenTextOffTests
         Assert.Equal(AreaPreset.Bottom, now.AreaPreset);
         Assert.False(now.AutoScreenText);
         Assert.False(now.FastSubtitleDetection);
-        Assert.False(now.WatchSubtitleBackground);
         Assert.Null(now.ActiveAreaProfile);
         Assert.Equal(start.Areas, now.Areas);
         // Kayıtlı dosya da aynı.

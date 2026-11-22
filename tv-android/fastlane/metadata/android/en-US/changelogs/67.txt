@@ -1,0 +1,1 @@
+0.9.64: In Overlay mode the translation box is now fully opaque when background darkness is set to "Full"; the English subtitle behind it no longer shows through (Android 12L and later).

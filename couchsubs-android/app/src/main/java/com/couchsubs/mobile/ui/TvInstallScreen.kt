@@ -534,6 +534,10 @@ private fun failureText(failure: InstallState.Failed, phoneIp: String?): String 
     failure.detail?.takeIf { it.isNotBlank() }?.let { text += "\n\n" + context.getString(R.string.tvinstall_details, it) }
     if (failure.error == SamsungInstallError.INSTALL_FAILED || failure.error == SamsungInstallError.CERTIFICATE_REJECTED)
         text += "\n\n" + context.getString(R.string.tvinstall_maintenance)
+    // TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı (Samsung 7 Series 2018, 21 Kas; Windows/Mac/iPhone ile aynı).
+    if (failure.error == SamsungInstallError.INSTALL_FAILED || failure.error == SamsungInstallError.CERTIFICATE_REJECTED ||
+        failure.error == SamsungInstallError.UNREACHABLE)
+        text += "\n\n" + context.getString(R.string.tvinstall_samsung_server)
     return text
 }
 

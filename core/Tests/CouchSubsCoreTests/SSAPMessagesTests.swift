@@ -43,6 +43,32 @@ final class SSAPMessagesTests: XCTestCase {
         XCTAssertNil(LGDiscovery.host(fromSSDPResponse: "HTTP/1.1 200 OK\r\nST: urn:other\r\n\r\n"))
     }
 
+    // Sorulan hedefi aynen geri söyleyen yanıt (webOS başlığı yok, cihaz tanımı 1990'da değil) LG diye doğrulanmaz: Mac'te
+    // Android TV "LG TV — 192.168.1.133" diye listeleniyor, Bağlan "TV yanıt vermedi" diyordu (X, Toshiba Android TV).
+    func testEchoedSearchTargetIsNotTakenAsLG() {
+        let lg = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.153:1990/abc/description.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\nSERVER: WebOS/4.4.0 UPnP/1.0\r\n\r\n"
+        XCTAssertEqual(LGDiscovery.hit(fromSSDPResponse: lg), .init(host: "192.168.1.153", confirmed: true))
+        let lgNoServer = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.153:1990/x.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\n\r\n"
+        XCTAssertEqual(LGDiscovery.hit(fromSSDPResponse: lgNoServer)?.confirmed, true)
+        let echo = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.133:49152/description.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\nUSN: uuid:5f9ec1b3-ed59-1900-4530-00a0ded0e7e6::urn:lge-com:service:webos-second-screen:1\r\nSERVER: Linux/4.9.125 UPnP/1.0 Portable SDK for UPnP devices/1.6.18\r\n\r\n"
+        XCTAssertEqual(LGDiscovery.hit(fromSSDPResponse: echo), .init(host: "192.168.1.133", confirmed: false))
+        // Doğrulanmamış adres: LG yoklaması tanırsa LG, Android TV portu açıksa Android TV, hiçbiri değilse listelenmez.
+        let android = LGDiscovery.classify(host: "192.168.1.133", probed: nil, androidPortOpen: true)
+        XCTAssertEqual(android, LGTV(name: "Android TV", host: "192.168.1.133", brand: .androidTV))
+        XCTAssertNil(LGDiscovery.classify(host: "192.168.1.133", probed: nil, androidPortOpen: false))
+        let real = LGTV(name: "[LG] webOS TV", host: "192.168.1.133")
+        XCTAssertEqual(LGDiscovery.classify(host: "192.168.1.133", probed: real, androidPortOpen: true), real)
+        // "ssdp:all" yanıtında LG başlığı zaten kanıttır.
+        let root = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.40:1259/\r\nST: upnp:rootdevice\r\nUSN: uuid:LGTV2017-1234::upnp:rootdevice\r\n\r\n"
+        XCTAssertEqual(LGDiscovery.hit(fromSSDPResponse: root, searchTarget: LGDiscovery.allTarget)?.confirmed, true)
+    }
+
+    // Yanlış etiketlenen Android TV, kapalı LG'nin "yeni adresi" sanılmaz (bekçi eskiden onu LG kaydına yazabiliyordu).
+    func testLocatorDoesNotMoveLGToAnAndroidTV() {
+        let saved = LGTV(name: "[LG] webOS TV", host: "192.168.1.20")
+        XCTAssertNil(TVLocator.moved(saved, among: [LGTV(name: "Android TV", host: "192.168.1.133", brand: .androidTV)]))
+    }
+
     // webOS 3.x (2017) ikinci ekran hedefine cevap vermiyor; "ssdp:all" yanıtı LG olarak tanınır, başka cihaz alınmaz (#498).
     func testSSDPAllResponseFromOldWebOSIsRecognised() {
         let root = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.40:1259/\r\nST: upnp:rootdevice\r\nUSN: uuid:LGTV2017-1234::upnp:rootdevice\r\nSERVER: Linux/3.10.19-32.afro.4 UPnP/1.0 LGE WebOS TV LGE_DLNA_SDK/1.6.0\r\n\r\n"

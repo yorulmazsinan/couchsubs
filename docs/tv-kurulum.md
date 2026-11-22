@@ -35,7 +35,10 @@ kurabilirsiniz; Android telefon da iPhone da Samsung, LG ve Android TV'ye kurar:
 var). Telefon ağdaki TV'yi bulup markayı kendisi seçer; her markanın adımları aşağıdaki "Telefondan kurulum"
 bölümlerindedir. Bilgisayar uygulaması gibi telefon da uygulama açılınca ve TV her bağlandığında TV'deki CouchSubs'ın
 sürümüne bakar; telefondaki sürüm daha yeniyse ana ekranda **TV uygulamasını güncelle** çıkar, tek dokunuşla
-güncellenir. Telefondaki TV paketleri her telefon sürümünde en yenisidir (Samsung paketi kaynaktan, LG ve Android TV
+güncellenir. TV uygulaması 0.9.69'den beri sürümünü altyazı bağlantısında da bildirir (`/events?v=`); bu yüzden LG'de
+geliştirici modu kapalıyken ya da anahtar başka cihazdayken de (TV'deki sürüm okunamasa da) eski TV uygulaması fark
+edilir, dört platformda ana ekranda **TV uygulamasını güncelle** çıkar. Sürüm bildirmeyen TV uygulaması 0.9.69'den eski
+sayılır (#884, #891). Telefondaki TV paketleri her telefon sürümünde en yenisidir (Samsung paketi kaynaktan, LG ve Android TV
 paketleri son [sürümden](https://github.com/yorulmazsinan/couchsubs/releases) gelir).
 
 ## LG TV

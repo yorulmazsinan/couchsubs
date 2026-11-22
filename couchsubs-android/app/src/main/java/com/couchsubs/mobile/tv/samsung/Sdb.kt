@@ -305,18 +305,30 @@ class SdbConnection private constructor(private val socket: Socket, private val 
 class AdbKey(private val privateKey: PrivateKey, val publicKey: RSAPublicKey) {
     // Android TV kurulumu da (tv/android) aynı anahtar biçimini kullanır; anahtar dosyası ayrıdır.
     companion object {
-        fun loadOrCreate(file: File): AdbKey {
+        /**
+         * Anahtar kalıcıdır: TV onayı bu anahtara verilir, değişirse TV "hata ayıklamaya izin verilsin mi?" diye yeniden
+         * sorar. Dosya okunamıyorsa (G/Ç hatası) yenisi üretilmez, hata yükselir; yalnız bozuk dosyanın yerine yenisi yazılır.
+         * Yazma atomiktir (yarım kalan yazma anahtarı bozmasın); aynı anda iki çağrı (güncelleme denetimi ve bekçi) iki ayrı
+         * anahtar üretmesin diye eşzamanlanır.
+         */
+        @Synchronized fun loadOrCreate(file: File): AdbKey {
             val factory = KeyFactory.getInstance("RSA")
             if (file.exists()) {
+                val bytes = file.readBytes()
                 runCatching {
-                    val key = factory.generatePrivate(PKCS8EncodedKeySpec(file.readBytes())) as RSAPrivateCrtKey
+                    val key = factory.generatePrivate(PKCS8EncodedKeySpec(bytes)) as RSAPrivateCrtKey
                     val publicKey = factory.generatePublic(RSAPublicKeySpec(key.modulus, key.publicExponent)) as RSAPublicKey
                     return AdbKey(key, publicKey)
                 }
             }
             val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
             file.parentFile?.mkdirs()
-            file.writeBytes(pair.private.encoded)
+            val temporary = File(file.path + ".tmp")
+            temporary.writeBytes(pair.private.encoded)
+            if (!temporary.renameTo(file)) {
+                file.writeBytes(pair.private.encoded)
+                temporary.delete()
+            }
             return AdbKey(pair.private, pair.public as RSAPublicKey)
         }
 

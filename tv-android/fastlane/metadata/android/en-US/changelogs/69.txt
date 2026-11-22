@@ -1,0 +1,1 @@
+0.9.66: When the TV brings its own HDMI screen to the front and CouchSubs stays in the background (for example when the game switches to 60 Hz), the phone or computer no longer says "TV connected"; it tells you to open CouchSubs on the TV again, and subtitles return as soon as it is back in front.

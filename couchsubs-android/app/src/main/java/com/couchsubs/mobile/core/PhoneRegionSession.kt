@@ -326,7 +326,10 @@ internal class PhoneRegionSession(
      */
     private fun missed() {
         absences++
-        if (absences >= PhoneSteady.MISS_TURNS) clearMissing()
+        // Ekran kalsa da sonraki tur mutlaka yeniden okur. Eskiden okunan sayfa kalıyordu: çeviri bu turda geldiyse ve
+        // telefon aynı görünüşe döndüyse sayfa "değişmedi" sayılıyor, hazır çeviri hiç gösterilmiyordu (GitHub #822, X:
+        // "çeviri ya hiç gelmiyor ya da geç geliyor"; Mac/iPhone ile aynı, Windows zaten yeniden okuyordu).
+        if (absences >= PhoneSteady.MISS_TURNS) clearMissing() else recheck = true
     }
 
     private fun clearMissing() {

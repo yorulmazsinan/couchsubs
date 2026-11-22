@@ -1,0 +1,1 @@
+0.9.59: When Translate screen and automatic screen text draw the same text, the boxes no longer overlap; only one is shown. Translation boxes are fully opaque on maps and in the game world too, so the English letters underneath no longer show through.

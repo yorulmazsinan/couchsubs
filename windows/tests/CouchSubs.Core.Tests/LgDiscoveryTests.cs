@@ -26,6 +26,23 @@ public class LgDiscoveryTests
         Assert.Equal(new[] { 5555, 6466, 8008, 8009 }, LgDiscovery.AndroidPorts.Order());
     }
 
+    /// 1990'da ad veren her cihaz LG değildir: yalnız LG/webOS cihaz tanımı LG adı verir (X, Toshiba Android TV, Windows:
+    /// elle yazılan adres LG diye ekleniyordu). 3000'de de yalnız webOS'un "Hello world" yanıtı sayılır.
+    [Fact]
+    public void ManualLgEvidenceMustComeFromWebOs()
+    {
+        Assert.Equal("[LG] webOS TV UK7550",
+            LgDiscovery.LgNameIn("<root><device><friendlyName> [LG] webOS TV UK7550 </friendlyName><manufacturer>LG Electronics</manufacturer></device></root>"));
+        Assert.Equal("LG TV", LgDiscovery.LgNameIn("<root><device><modelName>webOS TV</modelName></device></root>"));
+        Assert.Null(LgDiscovery.LgNameIn("<root><device><friendlyName>Toshiba TV</friendlyName><manufacturer>Vestel</manufacturer></device></root>"));
+        Assert.Null(LgDiscovery.LgNameIn(null));
+        Assert.False(LgDiscovery.IsSsapGreeting(null));
+        Assert.False(LgDiscovery.IsSsapGreeting("<html>Node</html>"));
+        Assert.Equal(new ManualTv(new Tv("Android TV", "192.168.1.133", TvBrand.AndroidTv), true),
+            LgDiscovery.ClassifyManual("192.168.1.133", null, LgDiscovery.LgNameIn("<device><friendlyName>Toshiba</friendlyName></device>"),
+                LgDiscovery.IsSsapGreeting("<html></html>"), true));
+    }
+
     private const string TvResponse =
         "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.153:1990/abc/description.xml\r\nST: urn:lge-com:service:webos-second-screen:1\r\n\r\n";
 

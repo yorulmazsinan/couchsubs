@@ -15,8 +15,9 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Tizen web uygulaması paketini (.wgt) imzalar: W3C Widget Signature biçiminde `author-signature.xml` (paketin dosyaları)
- * ve `signature1.xml` (dağıtıcı; önce yazar imzası, sonra dosyalar). Özet ve imza [Digest] ile seçilir: Tizen 3.0 ve
- * üstünde SHA-512 (bugünkü Tizen Studio gibi), Tizen 2.x TV'lerde (2016) SHA-256 (#638).
+ * ve `signature1.xml` (dağıtıcı; önce yazar imzası, sonra dosyalar). Özet ve imza [Digest] ile seçilir: SHA-512 (bugünkü
+ * Tizen Studio ve TizenSdb gibi; #71'de Tizen 2.4'te de çalıştı), Tizen 2.x TV'lerde ikinci denemedeki yalın pakette
+ * SHA-256 (#638, #890).
  *
  * Android'de XML imza kütüphanesi (javax.xml.crypto) yoktur. İmzalanan iki parça (SignedInfo ve `#prop` nesnesi) bu
  * sınıfın kendi yazdığı, yapısı sabit XML olduğundan kanonik biçimleri doğrudan üretilir: SignedInfo exclusive C14N,
@@ -31,10 +32,10 @@ object WgtSigner {
 
     /** İmzadaki özet ve imza algoritması. */
     enum class Digest(val signatureMethod: String, val digestMethod: String, internal val hash: String, internal val signature: String) {
-        /** W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim; Tizen 2.x TV'lerde kullanılır. */
+        /** W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim; Tizen 2.x'te yalnız yalın pakette. */
         SHA256("http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", "http://www.w3.org/2001/04/xmlenc#sha256", "SHA-256", "SHA256withRSA"),
 
-        /** Bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim (Tizen 3.0 ve üstü). */
+        /** Bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim (her TV; Tizen 2.x'te ilk deneme, #890). */
         SHA512("http://www.w3.org/2001/04/xmldsig-more#rsa-sha512", "http://www.w3.org/2001/04/xmlenc#sha512", "SHA-512", "SHA512withRSA"),
     }
 

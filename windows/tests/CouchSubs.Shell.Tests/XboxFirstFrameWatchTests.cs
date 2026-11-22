@@ -61,6 +61,36 @@ public class XboxFirstFrameWatchTests
     }
 
     [Fact]
+    public void FirstFrameLimitIsReportedOnceAfterThirtySeconds()
+    {
+        var watch = new XboxFirstFrameWatch();
+        var limits = new List<double>();
+        for (double t = 0; t <= 45_000; t += 500)
+            if (watch.Tick(Ms(t), true).NoPicture) limits.Add(t);
+        Assert.Equal([30_000], limits);
+    }
+
+    [Fact]
+    public void FirstFrameBeforeTheLimitNeverReportsNoPicture()
+    {
+        var watch = new XboxFirstFrameWatch();
+        Assert.False(watch.Tick(Ms(29_500), true).NoPicture);
+        watch.FrameArrived();
+        Assert.False(watch.Tick(Ms(31_000), true).NoPicture);
+    }
+
+    [Fact]
+    public void DiagnosticLineNamesTheNegotiatedCodec()
+    {
+        using var report = JsonDocument.Parse("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":258,"bytesReceived":0,"codecId":"C1"},
+             {"type":"codec","id":"C1","mimeType":"video/H264","sdpFmtpLine":"level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f"}]
+            """);
+        var line = XboxStreamStats.Describe(Ms(10_000), false, 4, report.RootElement, "görüntü");
+        Assert.Contains("çözücü ?, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; aday seçilmedi", line);
+    }
+
+    [Fact]
     public void StalledClockDoesNotWriteMissedStatsTwice()
     {
         var watch = new XboxFirstFrameWatch();

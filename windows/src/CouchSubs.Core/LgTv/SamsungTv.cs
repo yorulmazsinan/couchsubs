@@ -189,14 +189,34 @@ public static class SamsungAppKnowledge
 
     /// <summary>
     /// Açma kararı. Kurulu olduğu bilinen TV'de liste ne derse desin eski yol (DEEP_LINK) gönderilir; bilinmeyen TV'de
-    /// listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen değer gönderilecek tür, gönderilmeyecekse null.
+    /// listede yoksa (#637) ya da liste 3 saniyede gelmezse gönderilmez: kurulu olmayan uygulamaya giden DEEP_LINK Smart
+    /// Hub'ı mağaza aramasına yolluyor, Samsung'a ulaşamayan TV'de "Samsung sunucusuna bağlanılamıyor (AS400)" çıkıyordu
+    /// (Samsung 7 Series 2018, 21 Kas). Dönen değer gönderilecek tür, gönderilmeyecekse null (Mac/iPhone ve Android ile aynı).
     /// </summary>
     public static string? ActionFor(bool knownInstalled, SamsungAppPresence? presence)
     {
         if (knownInstalled) return "DEEP_LINK";
-        if (presence is { IsInstalled: false }) return null;
-        return SamsungMessages.ActionType(presence?.AppType);
+        if (presence is not { IsInstalled: true }) return null;
+        return SamsungMessages.ActionType(presence.AppType);
     }
+
+    /// <summary>Açma isteği gönderilmediğinde tvinstall.log satırı (uygulama katmanı bağlar).</summary>
+    public static Action<string>? InstallLog { get; set; }
+
+    private static string? lastNotSent;
+
+    /// <summary>Gönderilmeyen açma isteği günlüklere yazılır; bekçi her 30 sn'de denediği için aynı satır yinelenmez.</summary>
+    public static void ReportNotSent(string? host, SamsungAppPresence? presence)
+    {
+        var line = NotSentLine(host, presence);
+        if (Interlocked.Exchange(ref lastNotSent, line) == line) return;
+        Log?.Invoke(line);
+        InstallLog?.Invoke(line);
+    }
+
+    public static string NotSentLine(string? host, SamsungAppPresence? presence) => presence is null
+        ? $"Samsung {host ?? "?"}: uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi (kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar)."
+        : $"Samsung {host ?? "?"}: kurulu uygulama listesinde CouchSubs yok; açma isteği gönderilmedi.";
 }
 
 /// <summary>TV'nin kurulu uygulama listesine göre CouchSubs TV uygulamasının durumu.</summary>
@@ -245,6 +265,8 @@ public sealed class SamsungTokenHolder(string? token, Action<string> onChange)
 public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : ITvControl
 {
     public const string AppId = "CouchSubsT.CouchSubs";
+    /// <summary><see cref="SsapException.Reason"/>: TV uygulamanın kurulu olduğunu doğrulamadı, açma komutu gönderilmedi.</summary>
+    public const string NotInstalledReason = "not installed";
 
     private ClientWebSocket? socket;
     private readonly string? host;
@@ -325,7 +347,11 @@ public sealed class SamsungClient(Uri url, TimeSpan? approvalTimeout = null) : I
             return;
         }
         var presence = await InstalledAppAsync(socket, appId, cancellationToken);
-        if (SamsungAppKnowledge.ActionFor(false, presence) is null) throw new SsapException("not installed");
+        if (SamsungAppKnowledge.ActionFor(false, presence) is null)
+        {
+            SamsungAppKnowledge.ReportNotSent(host, presence);
+            throw new SsapException(NotInstalledReason);
+        }
         if (socket.State != WebSocketState.Open)
         {
             // Zaman aşımında iptal edilen okuma ClientWebSocket'i kapatır; DEEP_LINK yeni bağlantıyla gider (jeton aynı,

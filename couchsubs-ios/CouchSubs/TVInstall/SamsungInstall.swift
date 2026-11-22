@@ -174,6 +174,8 @@ struct SamsungTvInfo: Equatable, Sendable {
     let model: String?
     let developerMode: Bool?
     let developerIp: String?
+    /// Ekran çözünürlüğü ("3840x2160"; ultra geniş monitörde geniş yüzey için, #886).
+    var resolution: String? = nil
 
     static func parse(_ data: Data) -> SamsungTvInfo? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let device = json["device"] as? [String: Any] else { return nil }
@@ -183,7 +185,23 @@ struct SamsungTvInfo: Equatable, Sendable {
         }
         return SamsungTvInfo(name: text("name"), model: text("modelName"),
                              developerMode: text("developerMode").map { $0 == "1" || $0.lowercased() == "true" },
-                             developerIp: text("developerIP").flatMap { $0 == "0.0.0.0" ? nil : $0 })
+                             developerIp: text("developerIP").flatMap { $0 == "0.0.0.0" ? nil : $0 },
+                             resolution: text("resolution"))
+    }
+
+    /// Kurulumun eşzamanlı akışı için (bekler, en çok `timeout`); yanıt yoksa nil.
+    static func fetchNow(host: String, timeout: TimeInterval = 1.5) -> SamsungTvInfo? {
+        guard let url = URL(string: "http://\(host):8001/api/v2/") else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        let done = DispatchSemaphore(value: 0)
+        var reply: Data?
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            reply = data
+            done.signal()
+        }.resume()
+        guard done.wait(timeout: .now() + timeout + 0.5) == .success, let reply else { return nil }
+        return parse(reply)
     }
 
     static func fetch(host: String, timeout: TimeInterval = 1.5) async -> SamsungTvInfo? {
@@ -586,6 +604,14 @@ final class SamsungInstaller {
     static func needsDeviceProfile(_ platform: String) -> Bool {
         !platform.isEmpty && !isTooOld(platform) && !Versions.isNewer(platform, than: deviceProfileUpTo)
     }
+    /// Tizen 2.x'te cihaz profilinin konduğu klasör (Tizen Studio ve Apps2Samsung ile aynı).
+    static let legacyDeviceProfileDirectory = "/home/developer"
+    /// Cihaz profilinin TV'deki yolu: Tizen 3.0–4.0'da `sdk_toolpath`, Tizen 2.x'te (2016) `/home/developer`. 2.4 TV profili
+    /// yalnız orada arar; #71'de çalışan kurulum (Apps2Samsung) oraya gönderiyordu, profili `/opt/usr/apps/tmp`'ye gönderen
+    /// her 2.4 kurulumu `install failed[118]` verdi (#890). Windows/Mac ve Android ile aynı.
+    static func deviceProfileRemotePath(_ platform: String, toolPath: String) -> String {
+        (LegacyTizenPackage.applies(platform) ? legacyDeviceProfileDirectory : toolPath) + "/device-profile.xml"
+    }
     /// `0 getduid` yanıtının ilk dolu satırı geçerli DUID ise onu verir. TV satırı CRLF ile bitirebilir
     /// (ör. "XTCK7KNUEHTUM\r\nXTCK7KNUEHTUM"); `split(separator: "\n")` bunu bölmediği için `deviceLines`.
     static func duid(fromGetduid output: String) -> String? {
@@ -603,6 +629,23 @@ final class SamsungInstaller {
         let device = try connect()
         defer { device.close() }
         return readInstalledVersion(device)
+    }
+
+    /// Kurulu TV uygulamasını geliştirici bağlantısıyla (sdb, `was_execute`) açar; arka plandaysa öne getirir (bekçi, bkz.
+    /// `SamsungLauncher`; Mac ve Windows'taki samsung-open ile aynı). sdb izin sormaz, TV'de bildirim çıkarmaz.
+    /// Geliştirici modu kapalıysa ya da Host PC IP başka cihazınsa false.
+    func openApp() -> Bool {
+        log.write("--- Samsung: TV uygulaması bağlı değil, açılıyor (TV \(host))")
+        do {
+            let device = try connect()
+            defer { device.close() }
+            let reply = try device.shell("0 was_execute \(Self.appId)")
+            log.write("Uygulama açılıyor: \(reply.trimmingCharacters(in: .whitespacesAndNewlines))")
+            return SamsungLauncher.sdbLaunched(reply)
+        } catch {
+            log.write("Uygulama açılamadı: \(error)")
+            return false
+        }
     }
 
     /// TV'deki CouchSubs yoksa ya da `version`'dan eskiyse imzalayıp kurar, sonra açar.
@@ -660,34 +703,43 @@ final class SamsungInstaller {
             log.write("Yeni sertifika: \(profile.describe(duid))")
         }
 
-        if Self.needsDeviceProfile(platform) { pushDeviceProfile(device, profile, toolPath) }
+        if Self.needsDeviceProfile(platform) { pushDeviceProfile(device, profile, platform, toolPath) }
 
         progress(.signing)
         let key = try profile.privateKey()
-        // Tizen 2.x (2016): #71'de çalışan config.xml ve SHA-256 imza; TV yine yalın [118] derse yalın paket (#638).
+        // Tizen 2.x (2016): #71'de çalışan paket: o config.xml ve SHA-512 imza (Apps2Samsung'un TizenSdb'si, #890);
+        // TV yine yalın [118] derse SHA-256 imzalı yalın paket (#638).
         let legacy = LegacyTizenPackage.applies(platform)
         let author = WgtSigner.Signer(key: key, chain: SamsungCertificates.chain(try profile.author()))
         let distributor = WgtSigner.Signer(key: key, chain: SamsungCertificates.chain(try profile.distributor()))
         let original = try wgt()
-        func sign(_ unsigned: [UInt8]) throws -> [UInt8] {
-            try WgtSigner.sign(unsigned, author: author, distributor: distributor, digest: legacy ? .sha256 : .sha512)
+        func sign(_ unsigned: [UInt8], digest: WgtSigner.Digest = .sha512) throws -> [UInt8] {
+            try WgtSigner.sign(unsigned, author: author, distributor: distributor, digest: digest)
         }
-        let signed = try sign(legacy ? LegacyTizenPackage.adapt(original) : original)
+        // 21:9 / 32:9 Samsung monitör: geniş uygulama yüzeyi (#886; TV'lerde ve Tizen 2.x'te paket değişmez).
+        var wide = false
+        if !legacy {
+            let info = SamsungTvInfo.fetchNow(host: host)
+            log.write("Ekran: model \(info?.model ?? "?"), çözünürlük \(info?.resolution ?? "?")")
+            wide = WideScreenPackage.applies(model: info?.model, resolution: info?.resolution)
+            if wide { log.write("Ultra geniş monitör: paket geniş uygulama yüzeyiyle (base_screen_resolution, device-width) kuruluyor (#886).") }
+        }
+        let signed = try sign(legacy ? LegacyTizenPackage.adapt(original) : wide ? WideScreenPackage.adapt(original) : original)
         if legacy {
             log.write("Tizen \(platform): paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).")
-            log.write("Tizen \(platform): imza SHA-256 ile üretildi (rsa-sha256, sha256 özet; yeni TV'lerde SHA-512).")
+            log.write("Tizen \(platform): imza SHA-512 ile üretildi (#71'de çalışan paketle aynı).")
         }
         log.write("Paket imzalandı (\(signed.count) bayt).")
         progress(.installing)
         do {
             var lean = false
             try installWithRecovery(device, signed, toolPath, alternative: !legacy ? nil : {
-                let package = try sign(LegacyTizenPackage.adapt(original, lean: true))
+                let package = try sign(LegacyTizenPackage.adapt(original, lean: true), digest: .sha256)
                 lean = true
                 self.log.write("Tizen \(platform): yalın paket hazırlandı (\(LegacyTizenPackage.leanRemovedNames) de çıkarıldı), imza SHA-256.")
                 return ("yalın paket", package)
             }, keepExisting: legacy && (onTv != nil || !listRead))
-            if legacy { log.write("Tizen \(platform): \(lean ? "yalın paket" : "tam paket") SHA-256 imzayla kuruldu.") }
+            if legacy { log.write("Tizen \(platform): \(lean ? "yalın paket SHA-256" : "tam paket SHA-512") imzayla kuruldu.") }
         } catch let failure as SamsungInstallFailure {
             if failure.error == .certificateRejected {
                 profile.discard()
@@ -793,17 +845,23 @@ final class SamsungInstaller {
         log.write("Uygulama açılıyor: \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
     }
 
-    private func pushDeviceProfile(_ device: SdbConnection, _ profile: SigningProfile, _ toolPath: String) {
+    /// Tizen 2.4–4.0: cihaz profili TV'ye gönderilir (`deviceProfileRemotePath`); Tizen 2.x'te `/home/developer`'a
+    /// gönderilemezse `sdk_toolpath` denenir.
+    private func pushDeviceProfile(_ device: SdbConnection, _ profile: SigningProfile, _ platform: String, _ toolPath: String) {
         guard let data = try? Data(contentsOf: profile.deviceProfileFile) else {
             log.write("Cihaz profili (device-profile.xml) yok; gönderilmeden kuruluyor.")
             return
         }
-        let remote = "\(toolPath)/device-profile.xml"
-        do {
-            try device.push(Array(data), to: remote)
-            log.write("Cihaz profili gönderildi: \(remote)")
-        } catch {
-            log.write("Cihaz profili gönderilemedi (\(remote)): \(error)")
+        let remote = Self.deviceProfileRemotePath(platform, toolPath: toolPath)
+        let fallback = "\(toolPath)/device-profile.xml"
+        for target in remote == fallback ? [remote] : [remote, fallback] {
+            do {
+                try device.push(Array(data), to: target)
+                log.write("Cihaz profili gönderildi: \(target)")
+                return
+            } catch {
+                log.write("Cihaz profili gönderilemedi (\(target)): \(error)")
+            }
         }
     }
 

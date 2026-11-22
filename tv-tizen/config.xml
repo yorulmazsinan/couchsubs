@@ -7,7 +7,7 @@
      de kurar. İzinlerin hepsi "public" düzeyde; Samsung'un herkese verdiği geliştirici sertifikası yeter. Sayfa ES5 ile
      yazıldığı için Tizen 3.0'ın tarayıcısında (Chromium 47) da çalışır. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://github.com/yorulmazsinan/couchsubs" version="0.9.58" viewmodes="maximized">
+        id="https://github.com/yorulmazsinan/couchsubs" version="0.9.73" viewmodes="maximized">
     <tizen:application id="CouchSubsT.CouchSubs" package="CouchSubsT" required_version="2.4"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
@@ -16,8 +16,12 @@
          uzayında kalıp büyütülmeden çizildiği için PS5 görüntüsü sol üst köşede küçük kalıyordu. Başka projede de aynı
          değerden sonra 8K TV'de yazılar küçüldü (jellyfin-tizen #315). Ayarsız uygulama Samsung'un "Managing Screen
          Resolution" belgesindeki standart 1920x1080 yüzeyde açılır, TV onu ve HDMI penceresini panele büyütür. Ultra geniş
-         monitörde (#304) ayar zaten etkisizdi (0.9.49–0.9.53: her kaynak 1920x1080); Sarı tuş tam genişlik yöntemlerini
-         dener (platform.js). Ayarı geri eklemeden önce scripts/tv-tizen.test.js'teki açıklamaya bakın. -->
+         monitörde (#304, Odyssey G8 3440x1440) ayar etkisizdi (0.9.49–0.9.53: her kaynak 1920x1080); Sarı tuş tam
+         genişlik yöntemlerini dener (platform.js). 32:9 Odyssey G9'da (#886) ise ayar yüzeyi 32:9 açıyordu ve 0.9.55'ten
+         beri uygulama 16:9 kutuda kaldı (3840x1080 pencere NotSupportedError). Bu yüzden bilgisayar ve telefon, 8001
+         yanıtı ultra geniş monitör diyorsa (model LS34/LS49/LS57… ya da çözünürlük oranı >= 1,9) paketi kurarken ayarı ve
+         width=device-width görünümünü ekler (WideScreenPackage: Windows/Mac, iPhone, Android); TV'lere paket değişmeden
+         gider. Ayarı buraya geri eklemeden önce scripts/tv-tizen.test.js'teki açıklamaya bakın. -->
     <icon src="icon.png"/>
     <name>CouchSubs</name>
     <author>Enmera</author>

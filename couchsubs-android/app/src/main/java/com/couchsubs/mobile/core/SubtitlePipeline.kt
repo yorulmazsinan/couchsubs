@@ -80,10 +80,12 @@ class SubtitlePipeline(
         fun readingTime(text: String) = minOf(8000, 2000 + text.length * 60)
     }
 
-    private class Request(val number: Int, val source: String, val box: TextBox?, val session: Int,
+    private class Request(source: String, val number: Int, val box: TextBox?, val session: Int,
                           val capturedAt: Long? = null, val ocrMs: Int? = null) {
+        /** Ad sonradan okunursa ([nameRead]) adlı okumaya döner; çeviriye giden cümle aynı kalır. */
+        @Volatile var source = source
         /** Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider. */
-        val prefix = SpeakerPrefix.split(source)
+        @Volatile var prefix = SpeakerPrefix.split(source)
         @Volatile var leftAt: Long? = null
         /** Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez. */
         @Volatile var superseded = false
@@ -105,9 +107,88 @@ class SubtitlePipeline(
 
     private val lock = Any()
     private val now: () -> Long = clock ?: monotonicClock
+    /**
+     * Gösterilen çeviriler: karede okunan kendi altyazımız (OBS Program projektörü) yeni satır sayılmaz (bkz.
+     * [OwnSubtitles]). Telefonda OBS yolu yoktur; süzgeç Mac/Windows ile aynı kalsın diye burada da çalışır.
+     */
+    val own = OwnSubtitles(now)
+    /** Günlüğe yazılmış son kendi altyazısı (her karede yeniden yazılmasın). */
+    private var loggedOwn: String? = null
+    /** Günlüğe yazılmış son telefon yazısı (her karede yeniden yazılmasın). */
+    private var loggedPhone: String? = null
+    /** Son gönderilen çevirinin İngilizce satırının yeri. */
+    private var lastSentBox: TextBox? = null
     private val stabilizer = SubtitleStabilizer(clock = now)
     /** Konuşma değişirken sabit duran görev/HUD satırları (GTA 6). */
     private val stickyRows = StickyRows()
+    /** Bu oturumda kesin altyazının okunduğu yükseklikler: oradaki kısa satır sahne yazısı sayılmaz ([SceneText]). */
+    private val subtitleBand = SubtitleBand()
+    /** Günlüğe yazılmış son sahne yazıları (her karede yeniden yazılmasın). */
+    private val loggedSceneText = ArrayDeque<String>()
+    /** Son günlüğe yazılan sabit blok ([logStale]; aynı bant her karede yazılmasın). */
+    private var loggedStale = ""
+
+    /** Altyazı günlüğü (Mac/iPhone `onLog`, Windows `Log`): şimdilik sahne yazısı sayılıp atılan bloklar. */
+    var onLog: ((String) -> Unit)? = null
+
+    /**
+     * Altyazı alanında yazı çıkmayan sürenin tanısı ([QuietReads]); sessizlik [QuietReads.REPORT_AFTER_MS] sürerse nedeni
+     * (okunmadı mı, boş mu okundu, süzgeçte mi kaldı, hata mı) günlüğe yazılır (Mac, iPhone, Windows ile aynı).
+     */
+    private var quiet = QuietReads(now())
+
+    /**
+     * Ekranda menü var (otomatik ekran yazısı menü durumunda) ve bu kare altyazı için okunmuyor. Eskiden bu atlama günlüğe
+     * hiç yazılmıyordu: Mac'te (beta.80, PS5, GTA 6) ekranda diyalog varken altyazı günlüğüne dakikalarca hiçbir satır
+     * düşmüyor, okunmadığı mı, boş mu okunduğu mu anlaşılmıyordu.
+     */
+    fun skipForMenu() {
+        // Geçiş günlüğe hizmette yazılır (TranslationService); burada yalnız sessizlik özetine sayılır.
+        val message = synchronized(lock) {
+            quiet.menu++
+            quietReport()
+        }
+        message?.let { onLog?.invoke(it) }
+    }
+
+    /** Altyazı okuması hata verdi (zaman aşımı dahil); kare boş sayılır, hata sessizlik özetine yazılır. */
+    fun noteReadFailure(error: Throwable) {
+        val message = synchronized(lock) {
+            quiet.frames++
+            quiet.reads++
+            quiet.failures++
+            quiet.lastError = error.message ?: error.javaClass.simpleName
+            quietReport()
+        }
+        message?.let { onLog?.invoke(it) }
+    }
+
+    /** Kilit altında: `REPORT_AFTER_MS`'dir yazı çıkmadıysa özet döner, sayaç yeniden başlar. */
+    private fun quietReport(): String? {
+        val time = now()
+        if (time - quiet.since < QuietReads.REPORT_AFTER_MS) return null
+        return quiet.summary(time).also { quiet = QuietReads(time) }
+    }
+
+    /** Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933). */
+    private fun logStale(texts: List<String>) {
+        val key = texts.joinToString("\n")
+        if (key == loggedStale) return
+        loggedStale = key
+        if (texts.isEmpty()) return
+        val excerpt = key.replace('\n', ' ').let { if (it.length > 120) it.take(120) + "…" else it }
+        onLog?.invoke("sabit blok atlandı: \"$excerpt\" ${Reading.STALE_MS / 1000} sn'dir değişmiyor, yanında yeni ortalı blok var")
+    }
+
+    /** Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822). */
+    private fun logSceneText(text: String, reason: String) {
+        val key = "$text|$reason"
+        if (key in loggedSceneText) return
+        loggedSceneText.addLast(key)
+        if (loggedSceneText.size > 20) loggedSceneText.removeFirst()
+        val excerpt = text.replace('\n', ' ').let { if (it.length > 120) it.take(120) + "…" else it }
+        onLog?.invoke("sahne yazısı: \"$excerpt\" altyazı sayılmadı ($reason)")
+    }
     private val mission = MissionLine()
 
     /**
@@ -115,11 +196,22 @@ class SubtitlePipeline(
      * kendi yerinde ve özgün stilinde gösterilir (bkz. [MissionLine]).
      */
     @Volatile var onMissionChanged: ((CropRegion?) -> Unit)? = null
+    private val notices = ScreenNotices()
+
+    /**
+     * Ekranın kenarındaki bildirim kartlarının alanları değişti (boş: hiç yok). Bildirim altyazıya girmez; alanları
+     * "auto-notice-<n>" ek alanı olarak kendi yerinde ve özgün stilinde gösterilir (bkz. [ScreenNotices]).
+     */
+    @Volatile var onNoticesChanged: ((List<ExtraArea>) -> Unit)? = null
     /**
      * Altyazının son okunan satırları ve alanı; ekran yazısı okuyucuları bunlarla altyazıyı dışlar (bkz. [SubtitleEcho]).
      * Uygulama [SubtitleEcho.shared] verir.
      */
     @Volatile var echo: SubtitleEcho? = null
+        set(value) {
+            field = value
+            value?.own = own
+        }
     private var lastRequested = 0
     private var lastShown = 0
     private var inFlight: Request? = null
@@ -180,28 +272,93 @@ class SubtitlePipeline(
      * Bir karenin okuması ve okunan alanın karedeki yeri. [signature]: bölgenin izi ([RegionSignature.of]); okuma boş
      * dönse de satırın yeri değişmediyse satır silinmez (parlak zemin).
      */
-    fun process(raw: Reading, area: TextBox, signature: ByteArray? = null, capturedAt: Long? = null, ocrMs: Int? = null) {
+    fun process(raw: Reading, area: TextBox, signature: ByteArray? = null, capturedAt: Long? = null, ocrMs: Int? = null,
+                phone: ScreenPhoneCard.Handset? = null, reused: Boolean = false) {
         frameAt = capturedAt
         frameOcrMs = ocrMs
+        synchronized(lock) {
+            quiet.frames++
+            if (!reused) {
+                quiet.reads++
+                if (raw.lines.isEmpty()) quiet.empty++
+            }
+        }
         // Kumanda ipuçları ve yazı tanıma çöpleri çevrilmez; yalnız altyazı bloğu çevrilir.
         // Konuşma değişirken sabit duran görev/HUD satırı ("Get in the sea plane", GTA 6) altyazı bloğuna katılmaz.
-        val rows = raw.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        // Karede kendi altyazımız (OBS Program projektörü, CouchSubs'ın OBS katmanı) varsa okunmaz (bkz. [OwnSubtitles]).
+        var (seen, ownLines) = own.split(raw, area)
+        // Karede açık GTA 6 telefonunun ekranındaki satırlar altyazı değildir ([ScreenPhoneCard.holds]); telefonun çevirisi
+        // kendi yerindedir. Kullanıcı bildirimleri (X, beta.79): telefonun alt kısmındaki mesajlar (telefon ortaya yakın
+        // tutulunca bütün sohbet) altyazı sanılıp ekranın ortasında tek uzun satır olarak çevriliyordu (Mac, Windows ile aynı).
+        if (phone != null) {
+            val kept = seen.lines.filter { line -> line.box?.let { !ScreenPhoneCard.holds(it.placedIn(area), phone) } ?: true }
+            if (kept.size < seen.lines.size) {
+                val text = seen.lines.filter { it !in kept }.joinToString(" ") { it.text }
+                val fresh = synchronized(lock) { (text != loggedPhone).also { loggedPhone = text } }
+                val excerpt = if (text.length > 120) text.take(120) + "…" else text
+                if (fresh) onLog?.invoke("telefon yazısı: \"$excerpt\" telefonun ekranında, altyazı sayılmadı")
+                seen = Reading(kept)
+            }
+        }
+        if (ownLines.isNotEmpty()) {
+            val fresh = synchronized(lock) { (ownLines[0].text != loggedOwn).also { loggedOwn = ownLines[0].text } }
+            val excerpt = ownLines.joinToString(" ") { it.text }.let { if (it.length > 120) it.take(120) + "…" else it }
+            if (fresh) onLog?.invoke("kendi altyazısı: \"$excerpt\" karede okundu, " +
+                "yok sayıldı (görüntü kaynağı CouchSubs'ın OBS katmanını da içeriyor; OBS'te Kaynak projektörünü seçin)")
+        }
+        val rows = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
         var missionChanged = false
         var missionRegion: CropRegion? = null
+        var noticesChanged = false
+        var noticeAreas: List<ExtraArea> = emptyList()
+        var filteredRows = Reading(emptyList())
         val reading = synchronized(lock) {
             val filtered = stickyRows.filter(rows, now())
+            filteredRows = filtered
             if (mission.observe(stickyRows.removed, area, now())) {
                 missionChanged = true
                 missionRegion = mission.region
             }
-            filtered
-        }.subtitleBlock(area)
+            // Bu oturumda altyazının okunduğu yükseklikteki kısa satır tabela sayılmaz; atılan blok günlüğe (GitHub #822).
+            val edge = mutableListOf<Reading>()
+            val staleTexts = mutableListOf<String>()
+            val readAt = now()
+            filtered.subtitleBlock(area, subtitleBand, notices = { block ->
+                edge.add(Reading(block.lines.map { it.copy(box = it.box?.placedIn(area)) }))
+            }, age = { stickyRows.unchangedMs(it, readAt) }, stale = { block -> staleTexts += block.lines.map { it.text } }) {
+                block, reason -> logSceneText(block.text, reason)
+            }.also {
+                logStale(staleTexts)
+                subtitleBand.record(it, area)
+                if (notices.observe(edge, now())) {
+                    noticesChanged = true
+                    noticeAreas = notices.areas
+                }
+            }
+        }
+        // Kenardaki bildirim kartı altyazının yerinde (ekranın ortasında) değil, kendi yerinde çevrilir.
+        if (noticesChanged) {
+            onLog?.invoke(if (noticeAreas.isEmpty()) "kenar bildirimi kalktı" else "kenar bildirimi kendi yerinde gösteriliyor (${noticeAreas.size})")
+            onNoticesChanged?.invoke(noticeAreas)
+        }
         // Ekran yazısı okuyucuları altyazıyı ikinci kez çizmesin (bkz. [SubtitleEcho]).
         echo?.record(reading, area)
+        val quietMessage = synchronized(lock) {
+            if (reading.text.isBlank()) {
+                if (filteredRows.lines.isNotEmpty()) quiet.dropped++ else if (raw.lines.isNotEmpty()) quiet.filtered++
+                quietReport()
+            } else {
+                quiet = QuietReads(now())
+                null
+            }
+        }
+        quietMessage?.let { onLog?.invoke(it) }
         if (missionChanged) onMissionChanged?.invoke(missionRegion)
         var flushed: (() -> Unit)? = null
         val after: (() -> Unit)? = synchronized(lock) {
-            var action = stabilizer.feed(reading.text, signature, reading.box)
+            // Altyazının yerinde yalnız kendi çevirimiz okunduysa (örtme ya da üst üste binen katman) satır kalkmış sayılmaz.
+            val ownOnly = ownLines.isNotEmpty() && reading.lines.isEmpty() && OwnSubtitles.coversLine(ownLines, lastSentBox)
+            var action = if (ownOnly) StabilizerAction.None else stabilizer.feed(reading.text, signature, reading.box)
             val box = reading.box?.placedIn(area)?.centeredOnScreen()
             var fromHold: (() -> Unit)? = null
             held?.let { waiting ->
@@ -261,7 +418,7 @@ class SubtitlePipeline(
                 StabilizerKind.CLEAR -> {
                     lastClearAt = now()
                     lineLeft()
-                    sender.clear()
+                    clearScreen()
                     null
                 }
                 StabilizerKind.TRANSLATE -> {
@@ -277,9 +434,42 @@ class SubtitlePipeline(
             abandonUndisplayableTranslation()
             result
         }
+        val forced = synchronized(lock) {
+            watchSilence(raw, listOf("kendi altyazısı" to ownLines, "telefon yazısı" to seen.lines,
+                "kumanda ipucu ya da okuma gürültüsü" to rows.lines, "sabit satır (görev/HUD)" to filteredRows.lines,
+                "altyazı bloğu seçilmedi (sahne yazısı, menü ya da başka blok)" to reading.lines), area)
+        }
         // Olaylar kilidin dışında çağrılır.
         flushed?.invoke()
         after?.invoke()
+        forced?.invoke()
+    }
+
+    /** Sessizlik bekçisi ([watchSilence]). */
+    private var silence = SilenceWatch()
+
+    /**
+     * lock tutulurken çağrılır. Alanda konuşmaya benzeyen satır 10 sn okunup hiçbir şey gönderilmediyse süzgeçleri atlayıp
+     * o satırı doğrudan çeviriye verir (en çok 10 sn'de bir, aynı satırı bir kez); hangi aşamanın tuttuğu günlüğe yazılır.
+     * Kendi altyazımız ve telefon yazısı hiçbir zaman gönderilmez (Mac/iPhone, Windows ile aynı).
+     */
+    private fun watchSilence(raw: Reading, stages: List<Pair<String, List<TextLine>>>, area: TextBox): (() -> Unit)? {
+        val candidate = silence.due(raw.lines.map { it.text }, now()) ?: return null
+        val key = TextMatch.normalize(candidate)
+        fun holds(lines: List<TextLine>) = lines.any { line ->
+            val text = TextMatch.normalize(line.text)
+            text.contains(key) || (text.isNotEmpty() && key.contains(text) && text.length * 2 >= key.length)
+        }
+        val holder = if (holds(stages[0].second)) stages[0].first
+            else stages.drop(1).firstOrNull { !holds(it.second) }?.first ?: "kararlayıcı ya da bekleme (çeviri gönderilmedi)"
+        if (holder == "kendi altyazısı" || holder == "telefon yazısı") return null
+        silence.fired(candidate, now())
+        val excerpt = candidate.replace('\n', ' ').let { if (it.length > 120) it.take(120) + "…" else it }
+        onLog?.invoke("bekçi: \"$excerpt\" ${SilenceWatch.SILENCE_MS / 1000} sn'dir okunuyor, hiçbir şey gönderilmedi " +
+            "(tutan: $holder); doğrudan çevriliyor")
+        val box = raw.lines.firstOrNull { it.text == candidate }?.box?.placedIn(area)?.centeredOnScreen()
+        lineLeft()
+        return enqueue(candidate, box)
     }
 
     /** Bekletilen okumayı çeviriye gönderir (lock tutulurken çağrılır). */
@@ -304,6 +494,7 @@ class SubtitlePipeline(
      */
     private fun translateOrHold(source: String, box: TextBox?): (() -> Unit)? {
         if (restoreQueued(source)) return null
+        nameRead(source)?.let { return it }
         if (!holdReadings) { lineLeft(); return enqueue(source, box) }
         val packed = findPack(source) != null
         // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
@@ -321,6 +512,39 @@ class SubtitlePipeline(
         if (wait <= 0) return enqueue(source, box)
         held = Held(source, box, time, wait, Rereads.score(source), frameAt, frameOcrMs)
         return null
+    }
+
+    /**
+     * Konuşan adı sonradan okundu: ilk karede renkli ad okunamayıp cümle adsız gitmiş, sonraki karede aynı cümle
+     * "JASON: …" diye okunmuş. Bu yeni satır değildir; cümle yeniden çevrilmez, ekrandaki (ya da süren) çeviriye ad
+     * eklenir ve TV'de aynı satırın yerine geçer. Yoksa her diyalog satırı önce adsız beyaz, sonra adlı renkli iki kez
+     * görünüyordu (X: "çift altyazı"). Ad sonradan okunduysa kilit bırakılınca çağrılacak olay (boş da olabilir), yoksa
+     * null döner. Mac/iPhone (nameRead) ve Windows (NameRead) aynı kuralı uygular.
+     */
+    private fun nameRead(source: String): (() -> Unit)? {
+        val prefix = SpeakerPrefix.split(source) ?: return null
+        requests().lastOrNull {
+            it.session == session && !it.superseded && !it.abandoned && it.prefix == null && sameSentence(prefix.body, it.source)
+        }?.let { request ->
+            request.source = source
+            request.prefix = prefix
+            request.leftAt = null
+            lineOnScreen = request.number
+            lastSent = Sent(source, Rereads.score(source), now())
+            return {}
+        }
+        val shown = lineOnScreen ?: return null
+        val lastSource = lastShownSource ?: return null
+        if (shown != lastShown || SpeakerPrefix.split(lastSource) != null || !sameSentence(prefix.body, lastSource)) return null
+        val previous = pairs.lastOrNull { it.number == shown && it.source == lastSource }?.translation ?: return null
+        val translated = SpeakerPrefix.present(previous, source, showSpeakerNames())
+        remember(shown, source, translated)
+        lastSent = Sent(source, Rereads.score(source), now())
+        lastShownSource = source
+        if (translated == previous) return {}
+        send(translated, source, 15000, lastSentBox, true)
+        val pairShown = onPairShown
+        return { pairShown?.invoke(ShownPair(source, translated, "motor", null, null, null, null)) }
     }
 
     // Paket eşleşmesi tek başına eksik parçayı yeni replik yapmaz. Tam kısa cümleler korunur.
@@ -368,7 +592,7 @@ class SubtitlePipeline(
     }
 
     private fun enqueue(source: String, box: TextBox?, capturedAt: Long? = frameAt, ocrMs: Int? = frameOcrMs): (() -> Unit)? {
-        val request = Request(++lastRequested, source, box, session, capturedAt, ocrMs)
+        val request = Request(source, ++lastRequested, box, session, capturedAt, ocrMs)
         lineOnScreen = request.number
         lastSent = Sent(source, Rereads.score(source), now())
         packMatch(request)?.let { return showPacked(request, it) }
@@ -433,7 +657,7 @@ class SubtitlePipeline(
         remember(request.number, source, if (shouldSend) translated else null)
         if (!shouldSend) return null
         lastShown = request.number
-        sender.sendSubtitle(translated, 15000, request.box, revisesShown(source))
+        send(translated, source, 15000, request.box, revisesShown(source))
         lastShownSource = source
         val shown = onPairShown
         val total = totalMs(request)
@@ -447,7 +671,7 @@ class SubtitlePipeline(
             val pair = pairs[index]
             lineOnScreen = pair.number
             pair.translation?.let {
-                sender.sendSubtitle(it, 15000, box, revisesShown(source))
+                send(it, source, 15000, box, revisesShown(source))
                 lastShownSource = source
             }
             return null
@@ -491,7 +715,7 @@ class SubtitlePipeline(
     }
 
     private fun translate(request: Request) {
-        val source = request.source
+        var source = request.source
         val input = request.prefix?.body ?: source
         // Ayrılan ad çevirmene gitmez; cümle içinde geçtiğinde korunsun diye ayrıca bildirilir (#287).
         request.prefix?.let { translator.noteSpeaker(it.name) }
@@ -514,11 +738,14 @@ class SubtitlePipeline(
         }
         if (request.abandoned) return
         onTranslationResult?.invoke(null)
-        val translated = present(sentence, request)
+        var translated: String
         val translationMs = maxOf(0, (now() - started).toInt())
         var total: Int? = null
         synchronized(lock) {
             if (request.session != session || request.abandoned) return
+            // Çeviri sürerken konuşan adı okunduysa ([nameRead]) çeviri adlı okumayla gösterilir.
+            source = request.source
+            translated = present(sentence, request)
             val shouldSend = stabilizer.shouldSend(input, sentence)
             remember(request.number, source, if (shouldSend) translated else null)
             if (request.number <= lastShown || !shouldSend || request.superseded) return
@@ -527,7 +754,7 @@ class SubtitlePipeline(
             // Satır ekrandan çoktan kalktıysa çevirisi sonraki sahnenin üstüne düşmesin.
             if (!onScreen && left != null && now() - left > LATE_RESULT_MS) return
             lastShown = request.number
-            sender.sendSubtitle(translated, if (onScreen) 15000 else readingTime(translated), request.box, revisesShown(source))
+            send(translated, source, if (onScreen) 15000 else readingTime(translated), request.box, revisesShown(source))
             lastShownSource = source
             total = totalMs(request)
         }
@@ -542,6 +769,8 @@ class SubtitlePipeline(
 
     /** Okuma durunca TV'deki son altyazıyı kaldırır. */
     fun reset() = synchronized(lock) {
+        quiet = QuietReads(now())
+        silence = SilenceWatch()
         session++
         lineOnScreen = null
         held = null
@@ -551,12 +780,71 @@ class SubtitlePipeline(
         lastShownSource = null
         pairs.clear()
         stickyRows.reset()
+        subtitleBand.reset()
+        loggedSceneText.clear()
+        loggedStale = ""
         mission.reset()
+        notices.reset()
         echo?.reset()
-        if (stabilizer.reset() == StabilizerAction.Clear) sender.clear()
+        loggedOwn = null
+        loggedPhone = null
+        if (stabilizer.reset() == StabilizerAction.Clear) clearScreen()
+        own.reset()
+        lastSentBox = null
+    }
+
+    /** Çeviri ekrana gider; kendi altyazısı süzgeci onu hatırlar. */
+    private fun send(translation: String, source: String, durationMs: Int, box: TextBox?, replaces: Boolean) {
+        synchronized(lock) { silence.sent() }
+        own.record(translation, source, durationMs)
+        lastSentBox = box
+        sender.sendSubtitle(translation, durationMs, box, replaces)
+    }
+
+    private fun clearScreen() {
+        own.cleared()
+        sender.clear()
     }
 
     fun shutdown() {
         executor.shutdownNow()
+    }
+}
+
+/** Adın ayrıldığı cümle, adsız okunan cümleyle aynı mı (yazı tanıma farkı kadar; olumsuzluk ya da sayı eklenmemiş). */
+internal fun sameSentence(body: String, unnamed: String): Boolean {
+    val a = TextMatch.normalize(body)
+    val b = TextMatch.normalize(unnamed)
+    if (a.isEmpty() || b.isEmpty()) return false
+    return a == b || (TextMatch.isSimilar(a, b, 0.9) && !TextMatch.addsMeaning(body, unnamed) && !TextMatch.addsMeaning(unnamed, body))
+}
+
+/**
+ * Altyazı alanında yazı çıkmayan pencerenin sayaçları (tanı): kaç kare geldi, kaçı okundu, okumalar boş mu döndü, satırlar
+ * hangi süzgeçte kaldı, okuma hata mı verdi, menü yüzünden mi okunmadı (Mac/iPhone ve Windows: QuietReads).
+ */
+internal class QuietReads(val since: Long) {
+    companion object {
+        /** Bu kadar süre altyazı alanından yazı çıkmazsa günlüğe özet yazılır (sessizlik boyunca bu aralıkla bir satır). */
+        const val REPORT_AFTER_MS = 60_000
+    }
+
+    var frames = 0
+    var menu = 0
+    var reads = 0
+    /** Yazı tanıma alanda hiç satır bulmadı. */
+    var empty = 0
+    /** Satırlar kendi altyazısı, telefon yazısı, kumanda ipucu, gürültü ya da sabit satır olarak ayıklandı. */
+    var filtered = 0
+    /** Satırlar kaldı ama altyazı bloğu seçilmedi (sahne yazısı, kenar bildirimi). */
+    var dropped = 0
+    var failures = 0
+    var lastError: String? = null
+
+    fun summary(time: Long): String {
+        var text = "altyazı alanında ${(time - since) / 1000} sn'dir yazı yok: $frames kare, $menu kare menü yüzünden okunmadı, " +
+            "$reads okuma ($empty boş, $filtered ayıklandı, $dropped altyazı sayılmadı, $failures hata)"
+        lastError?.let { text += "; son hata: $it" }
+        return text
     }
 }

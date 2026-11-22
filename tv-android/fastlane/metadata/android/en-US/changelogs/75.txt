@@ -1,0 +1,1 @@
+0.9.72: The Turkish mission/objective line stays in its own place: it no longer stays shifted after the subtitle disappears, and a partial screen-text read of the same line no longer hides it.

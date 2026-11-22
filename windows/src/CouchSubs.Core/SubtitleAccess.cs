@@ -22,6 +22,19 @@ public static class SubtitleAccess
             || b[0] == 169 && b[1] == 254 || b[0] == 100 && b[1] >= 64 && b[1] <= 127;
     }
 
+    /// <summary>
+    /// Eşleştirme isteği gönderen TV'nin geri bağlanılacak adresi: IPv4'e eşlenmiş IPv6 düz IPv4 olur, bağlantı arayüzü
+    /// atılır. Bu cihazın kendisi (loopback; ikinci ekran sayfası) ve yerel olmayan adres TV sayılmaz: boş döner
+    /// (Mac/iPhone <c>SubtitleAccess.tvHost</c>, Android ile aynı kural).
+    /// </summary>
+    public static string TvHost(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (IPAddress.IsLoopback(address) || !IsLocalPeer(address)) return "";
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 && address.ScopeId != 0) address = new IPAddress(address.GetAddressBytes());
+        return address.ToString();
+    }
+
     public sealed record Request(string Method, string Target, string? Origin, string Host)
     {
         public string Path => Target.Split('?')[0];

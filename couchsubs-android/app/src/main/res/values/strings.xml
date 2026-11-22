@@ -16,6 +16,9 @@
     
     <string name="phase_preparing">Hazırlanıyor…</string>
     <string name="phase_connecting">PS5\'e bağlanılıyor…</string>
+    <string name="connecting_hint_waking">PS5 dinlenme modundan uyandırılıyor. Bu bir dakikayı bulabilir.</string>
+    <string name="connecting_hint_opening">PS5 yanıt verdi ama bağlantı uzun sürüyor. Bağlanmazsa çeviriyi durdurup yeniden başlatın.</string>
+    <string name="connecting_hint_no_answer">PS5 yanıt vermiyor. Açık ve bu cihazla aynı ağda olduğundan emin olun.</string>
     <string name="phase_streaming">Altyazılar okunuyor</string>
     <string name="phase_reconnecting">Bağlantı koptu, yeniden bağlanılıyor…</string>
     <string name="reconnect">Yeniden bağlan</string>
@@ -26,6 +29,7 @@
     <string name="phase_rejected_code">PS5 bağlantıyı reddetti (kod %1$s). Başka bir Uzaktan Oynatma (PS Remote Play) açık olabilir ya da PS5 başka bir oturumda olabilir. PS Remote Play\'i kapat, PS5\'i yeniden başlatıp tekrar dene.</string>
     <string name="phase_rejected">PS5 oturumu başlatmadı. Başka bir Uzaktan Oynatma (PS Remote Play) açık olabilir ya da PS5 başka bir oturumda olabilir. PS Remote Play\'i kapat, PS5\'i yeniden başlatıp tekrar dene.</string>
     <string name="phase_registration_invalid">PS5 bu eşlemeyi kabul etmedi. Ayarlar\'dan PS5\'i ikinci hesapla yeniden eşle.</string>
+    <string name="phase_console_closed">PS5 Uzaktan Oynatma\'yı kapattı. Bu çoğunlukla oyun sırasında PS5\'te kullanıcı değiştirilince olur. Yeniden bağlanılıyor…</string>
     <string name="phase_console_rp_crashed">PS5\'teki Uzaktan Oynatma çöktü. PS5\'i tamamen kapatıp (bekleme modu değil) aç, sonra yeniden bağlan.</string>
     <string name="phase_no_picture">PS5 görüntüsü alınamıyor; PS Remote Play kapalı mı, PS5 uykuda mı? Kontrol edip çeviriyi yeniden başlat.</string>
     <string name="phase_not_found">PS5 ağda bulunamadı. Telefon ve PS5 aynı ağda mı?</string>
@@ -243,6 +247,7 @@
     <string name="psn_why">Neden ikinci hesap?</string>
     <string name="psn_why_body">Remote Play aynı hesapla bağlanınca oynadığın oturumu ve kolunu devralır. İkinci hesap yalnız görüntüyü alır; sen kendi hesabınla, kendi kolunla oynamaya devam edersin. Hesap ücretsizdir, PS Plus gerekmez.</string>
     <string name="subtitle_off_tip">Oyunun kendi altyazısını açın: CouchSubs sesi değil, ekrandaki İngilizce altyazıyı okur.</string>
+    <string name="psn_main_account_steps">Bağlantı kopmadan oynamak için: 1. PS5\'te önce ANA hesabınla oyuna gir. 2. Sonra çeviriyi başlat. 3. Oyun sırasında kullanıcı değiştirme; kolu açınca ANA hesabını seç. CouchSubs\'ın giriş yaptığı ikinci hesapla oynama, yoksa kol kendiliğinden kapanır ya da oyunda çalışmaz.</string>
     <string name="psn_main_account">Oynarken kolu açınca PS5\'te ANA hesabınızı seçin. CouchSubs\'ın giriş yaptığı ikinci hesapla oynamayın, yoksa kol kendiliğinden kapanır ya da oyunda çalışmaz.</string>
     <string name="pair_found">%1$s bulundu</string>
     <string name="pair_same_wifi">%1$s · aynı Wi-Fi</string>
@@ -348,8 +353,8 @@
     <string name="settings_fast_reading">Değişmeyen altyazı alanını daha sık oku</string>
     <string name="settings_fast_reading_short">Altyazı alanı değişmemiş görünüyorsa 20 yerine 2 kare sonra yeniden oku. Daha fazla CPU kullanır.</string>
     <string name="settings_game_phone">GTA 6\'daki telefonu otomatik çevir (deneysel)</string>
-    <string name="settings_subtitle_background">Altyazı zeminini izle (GTA 6, deneysel)</string>
-    <string name="settings_subtitle_background_short">GTA 6’nın altyazı ayarlarında arka planı Solid (opak) olarak seçin. Yalnızca koyu lacivert altyazı zeminindeki yazılar çevrilir.</string>
+    <string name="settings_phone_chat_card">GTA 6 telefonunun çevirisini telefonun yanında kartta göster</string>
+    <string name="settings_phone_chat_card_short">Kapalıyken her mesaj kendi balonunun üstünde, balonun renginde çevrilir.</string>
     <string name="settings_misread_wait">Bozuk okunan satır için bekleme</string>
     <string name="settings_misread_wait_note" formatted="false">Satır sözlükte olmayan sözcüklerle okunursa daha iyi bir okuma için en çok bu kadar beklenir. GTA V\'te ölçülen, bozuk okumadan çıkan çeviri sayısı (0 sn\'ye göre): 0,2 sn → %77, 0,4 sn → %49, 0,6 sn → %41, 0,8 sn (önerilen) → %34, 1,0 sn → %31.</string>
     <string name="settings_partial_wait">Yarım okunan satır için bekleme</string>
@@ -357,7 +362,6 @@
     <string name="settings_waits_note">Bu bekleme süreleri yalnız kötü okunan satırları geciktirir; satırların çoğu hiç beklemeden gösterilir. Kısa bekleme o satırları daha erken gösterir ama daha çok yanlış çeviriye yol açar.</string>
     <string name="settings_waits_defaults">Varsayılanlara dön</string>
     <string name="unit_seconds">sn</string>
-    <string name="subtitle_background_tip">“Altyazı zeminini izle” açık: yalnız GTA 6’nın koyu altyazı zeminindeki yazı okunur. Oyunda altyazı zeminini Solid (opak) yapın ya da bu ayarı kapatın.</string>
     <string name="settings_xbox_audio">Xbox sesini bu cihazda çal</string>
     <string name="settings_xbox_audio_short">Xbox, uzaktan oynatma sürerken TV\'nin sesini kapatır ve oyun sesini yalnız bu cihaza gönderir (Xbox kısıtı). Kapatırsanız oyunun sesi hiç gelmez. TV\'den ya da hoparlörden duymak için telefonu Bluetooth ile hoparlöre ya da kulaklığa bağlayın.</string>
     <string name="running_now">Şimdi</string>
@@ -418,6 +422,8 @@
     <string name="settings_copyright">CouchSubs · © 2026 Sinan Yorulmaz · AGPL-3.0 · Enmera</string>
     <string name="about_body">CouchSubs ücretsiz ve açık kaynaklıdır (AGPL-3.0). Remote Play için chiaki-ng (AGPL-3.0) kullanılır.</string>
     <string name="about_source">Kaynak kodu</string>
+    <string name="share_logs">Günlükleri paylaş</string>
+    <string name="share_logs_note">Sorun bildirirken bu dosyayı GitHub\'a ekleyin ya da bize gönderin.</string>
     <string name="main_packs_off">Kapalı</string>
     <string name="packs_free">Ücretsiz</string>
     <string name="packs_free_count">Ücretsiz · %1$d oyun</string>
@@ -483,6 +489,7 @@
     <string name="tvinstall_signin_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapabilirsin. Giriş bitince CouchSubs\'a dön; kurulum kendiliğinden sürer.</string>
     <string name="webview_out_of_memory">Telefonun belleği uygulama içi tarayıcıya yetmedi. Arka plandaki uygulamaları kapatıp yeniden dene ya da girişi tarayıcıda yap.</string>
     <string name="tvinstall_maintenance">TV\'de “Sunucu bakım altında” yazıyorsa TV, Samsung\'un sunucularına ulaşamıyor: TV\'nin internet bağlantısını, tarih ve saatini kontrol et, TV\'yi yeniden başlatıp tekrar dene.</string>
+    <string name="tvinstall_samsung_server">TV\'de “Samsung sunucusuna bağlanılamıyor” (AS400) yazıyorsa bu uyarı TV\'nin kendisinden geliyor: TV, Samsung sunucularına ulaşamıyor. TV\'nin internet bağlantısını kontrol et, TV\'yi fişten çekip 30 sn sonra tak. CouchSubs kurulumu için Host PC IP olarak bu telefonun adresini gir.</string>
     <string name="tvinstall_err_unreachable">TV bu telefonu kabul etmedi. TV\'deki geliştirici modu penceresinde Host PC IP\'nin bu telefonun adresi (%1$s) olduğunu kontrol et ve TV\'yi tam yeniden başlat: güç tuşunu Samsung logosu görünene kadar (yaklaşık 5 saniye) basılı tut ya da TV\'nin fişini 30 saniye çek.</string>
     <string name="tvinstall_err_other_network">TV (%1$s) ile bu telefon (%2$s) farklı ağlarda, bu yüzden TV telefonu kabul etmiyor. İkisini aynı Wi-Fi\'ya bağla (misafir ağı ya da ikinci modem değil), TV\'de Host PC IP\'ye telefonun yeni adresini yaz, sonra TV\'yi tam yeniden başlat (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tut).</string>
     <string name="tvinstall_err_not_restarted">TV\'deki ayar doğru (Geliştirici modu açık, Host PC IP %1$s), ama TV o zamandan beri tam yeniden başlamadığı için telefonu henüz kabul etmiyor. Kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) basılı tut ya da TV\'nin fişini 30 saniye çek, sonra tekrar dene.</string>
@@ -602,6 +609,11 @@
     <string name="deepl_quota_used_up">Bu ayın DeepL sınırı doldu. Sınır yenilenene kadar bu telefondaki ücretsiz çeviri çevirir.</string>
     <string name="deepl_key_not_accepted">DeepL bu anahtarı kabul etmedi. Anahtarı DeepL hesap sayfanızdan yeniden kopyalayın.</string>
     <string name="deepl_unreachable">DeepL\'e ulaşılamadı. İnternet bağlantınızı kontrol edin.</string>
+    <string name="deepl_usage_unlimited">Bu ay: %1$s karakter kullanıldı (sınır yok).</string>
+    <string name="deepl_usage_unknown">DeepL anahtarı kabul etti. Bu ayki kullanım okunamadı.</string>
+    <string name="deepl_key_malformed">Anahtarda DeepL anahtarında olamayacak karakterler var. Anahtarı DeepL hesap sayfanızdan yeniden kopyalayın.</string>
+    <string name="deepl_rate_limited">DeepL şu an çok fazla istek aldığını bildiriyor (HTTP 429). Anahtar kaydedildi; birkaç dakika içinde DeepL yeniden çevirir.</string>
+    <string name="deepl_server_error">DeepL hata koduyla yanıt verdi (HTTP %1$d). Birkaç dakika sonra yeniden deneyin.</string>
     <string name="metrics_ocr">OCR %1$d ms</string>
     <string name="metrics_pack">Hazır paket</string>
     <string name="metrics_translation">Çeviri %1$d ms</string>
@@ -622,7 +634,11 @@
     <string name="xbox_error_network">Xbox bağlantısı koptu. Yeniden bağlanılıyor…</string>
     <string name="xbox_error_service">Xbox hizmeti beklenmedik yanıt verdi. Yeniden deneniyor…</string>
     <string name="xbox_error_no_picture">Xbox\'tan görüntü gelmiyor. Yeniden bağlanılıyor…</string>
+    <string name="xbox_error_no_first_frame">Xbox\'tan görüntü gelmedi. Bir kez daha deneniyor…</string>
+    <string name="xbox_stopped_no_picture">Xbox\'tan görüntü gelmedi, çeviri durdu. Xbox\'ta Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler\'de uzaktan oynatmanın açık olduğunu denetleyin, olabiliyorsa Xbox\'u ağa kabloyla bağlayın (ya da yeniden başlatın), sonra çeviriyi yeniden başlatın.</string>
     <string name="xbox_connection_lost">Xbox yayını durdu (%1$s). Çeviriyi yeniden başlatın; sürekli duruyorsa Xbox\'ı yeniden başlatın.</string>
+    <string name="xbox_stopped_service">Xbox uzaktan oynatma hizmetini başlatamadı. Xbox\'ı güç düğmesine 10 sn basılı tutarak tam kapatıp açın, Uzak özelliklerin açık olduğunu denetleyin, sonra yeniden deneyin.</string>
+    <string name="xbox_stopped_code">Xbox yayını başlatamadı (kod %1$s). Xbox\'ı güç düğmesine 10 sn basılı tutarak tam kapatıp açın, Uzak özelliklerin açık olduğunu denetleyin, sonra yeniden deneyin.</string>
     <string name="xbox_stopped_busy">Xbox şu an başka bir cihaza yayın yapıyor (Xbox uygulaması, telefon ya da bilgisayar). O oturumu kapatıp çeviriyi yeniden başlatın.</string>
     <string name="xbox_stopped_console">Xbox\'a ulaşılamadı. Xbox\'ın açık olduğundan ve Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler\'de uzaktan oynatmanın açık olduğundan emin olup çeviriyi yeniden başlatın.</string>
     <string name="beta">Beta</string>
@@ -709,6 +725,8 @@
     <string name="tv_open_not_paired">Otomatik açılamadı: bu cihaz TV\'den henüz izin almadı. TV\'ye yeniden bağlanın ve TV\'de izin verin.</string>
     <string name="tv_open_debug_off">Otomatik açılamadı: TV\'ye hata ayıklama bağlantısıyla ulaşılamıyor. TV açık mı, Geliştirici seçeneklerinde ağ üzerinden hata ayıklama açık mı?</string>
     <string name="tv_open_debug_not_approved">Otomatik açılamadı: TV bu cihazın hata ayıklama iznini onaylamadı. TV uygulamasını yeniden kurun ve TV\'de izin verin.</string>
+    <string name="tv_open_not_opened">Otomatik açılamadı: TV açma komutunu aldı ama CouchSubs\'ı açmadı. Kumandayla TV\'den açın.</string>
+    <string name="tv_open_not_installed">Otomatik açılamadı: TV, CouchSubs TV uygulamasının kurulu olduğunu doğrulamadı; açma komutu gönderilmedi. TV uygulamasını kurup tekrar deneyin. TV\'de “Samsung sunucusuna bağlanılamıyor” (AS400) yazıyorsa TV, Samsung sunucularına ulaşamıyor: TV\'nin internet bağlantısını kontrol edin ve TV\'yi 30 sn fişten çekin.</string>
     <string name="tv_open_try">Otomatik açmayı dene</string>
     <string name="tv_open_wizard_note">Her oyunda çeviriyi başlattığınızda CouchSubs TV uygulamasını kendisi açmaya çalışır; açılmazsa TV\'den CouchSubs\'ı açın.</string>
     <string name="engine_local">Yerel model</string>

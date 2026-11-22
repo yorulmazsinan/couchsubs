@@ -1,0 +1,1 @@
+0.9.68: Samsung Odyssey G9 gibi 21:9 / 32:9 Samsung monitörlerde uygulama yeniden ekranın tamamında açılıyor; oyun görüntüsü Sarı tuşla ekranı dolduruyor (bilgisayar ya da telefon TV uygulamasını güncelleyince). Bilgi paneli ekrana sığmıyorsa küçülüyor.

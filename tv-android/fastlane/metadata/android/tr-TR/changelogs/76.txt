@@ -1,0 +1,1 @@
+0.9.73: Bazı LG TV'lerde oyun görüntüsü yaklaşık dakikada bir 2 saniye kararmıyor (ardından HDR yazısı çıkmıyor); sağlam görüntüye dokunulmuyor.

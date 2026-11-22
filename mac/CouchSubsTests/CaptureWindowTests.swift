@@ -74,6 +74,46 @@ final class CaptureWindowTests: XCTestCase {
         model.stop()
     }
 
+    /// #853: Xbox seçiliyken OBS/oyun penceresi (Xbox uygulaması, play.xbox.com, capture card) seçilirse CouchSubs Xbox'a
+    /// hiç bağlanmaz; sihirbazda Microsoft girişi atlanır (Windows XboxWithSelectedWindow… / XboxWizardWindowChoice… ile aynı).
+    func testXboxWithSelectedWindowReadsOnlyTheWindowAndNeverConnectsToTheXbox() async {
+        let services = FakeServices()
+        let defaults = UserDefaults.isolated()
+        defaults.set(ConsolePlatform.xbox.rawValue, forKey: XboxStoreKey.platform)
+        let store = MemoryStore()
+        let model = AppModel(services: services, store: store, defaults: defaults)
+        XCTAssertTrue(model.isXbox)
+        model.advance()
+        XCTAssertEqual(model.step, .psnLogin)
+        XCTAssertTrue(model.needsXboxLink)
+
+        model.useXboxWindow()
+        XCTAssertEqual(model.step, .done)
+        XCTAssertEqual(model.settings.xboxFrameSource, .captureWindow)
+        XCTAssertEqual(model.settings.output, .computer)
+        XCTAssertTrue(model.readsXboxWindow)
+        XCTAssertFalse(model.needsXboxLink)
+        XCTAssertFalse(model.canStart)
+        XCTAssertEqual(model.pictureSourceName, String(localized: "OBS projector or game window"))
+
+        model.settings.captureWindow = obs
+        XCTAssertTrue(model.canStart)
+        XCTAssertTrue(model.keepsDisplayOn)
+        XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: defaults).step, .done)
+
+        await model.start()
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(services.captureWindowStreams, [obs])
+        XCTAssertTrue(services.xboxStreams.isEmpty)
+        model.stop()
+
+        // Xbox bağlantısına dönülünce giriş ve Xbox seçimi yine gerekir.
+        model.settings.xboxFrameSource = .xbox
+        XCTAssertTrue(model.needsXboxLink)
+        XCTAssertFalse(model.canStart)
+        XCTAssertEqual(model.pictureSourceName, String(localized: "Xbox (this app connects)"))
+    }
+
     /// Aynı pencere yeniden seçilirse (ya da başka bir ayar değişirse) çeviri yeniden başlamaz.
     func testUnchangedTargetDoesNotRestart() async {
         let services = FakeServices()

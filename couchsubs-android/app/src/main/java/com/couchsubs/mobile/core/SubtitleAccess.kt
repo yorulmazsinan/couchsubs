@@ -22,6 +22,20 @@ object SubtitleAccess {
         }
         return localIPv4(b)
     }
+    /**
+     * Eşleştirme isteği gönderen TV'nin geri bağlanılacak adresi: IPv4'e eşlenmiş IPv6 düz IPv4 olur, bağlantı arayüzü
+     * atılır. Bu cihazın kendisi (loopback; ikinci ekran sayfası) ve yerel olmayan adres TV sayılmaz: boş döner
+     * (Mac/iPhone `SubtitleAccess.tvHost`, Windows `SubtitleAccess.TvHost` ile aynı kural).
+     */
+    fun tvHost(address: InetAddress?): String {
+        address ?: return ""
+        if (address.isLoopbackAddress || !isLocalPeer(address)) return ""
+        val b = address.address
+        if (b.size == 16 && b.take(10).all { it.toInt() == 0 } && b[10].toInt() and 255 == 255 && b[11].toInt() and 255 == 255)
+            return InetAddress.getByAddress(b.copyOfRange(12, 16)).hostAddress ?: ""
+        if (b.size == 16) return InetAddress.getByAddress(b).hostAddress?.substringBefore('%') ?: ""
+        return address.hostAddress ?: ""
+    }
     private fun localIPv4(b: List<Int>): Boolean = b[0] == 127 || b[0] == 10 || b[0] == 172 && b[1] in 16..31 ||
         b[0] == 192 && b[1] == 168 || b[0] == 169 && b[1] == 254 || b[0] == 100 && b[1] in 64..127
 

@@ -61,10 +61,24 @@ class SamsungInstaller(
         /** Bu sürüme kadar (dahil) TV, kurulumdan önce dağıtıcının cihaz profilini (device-profile.xml) ister. */
         const val DEVICE_PROFILE_UP_TO = "4.0"
 
-        fun isTooOld(platform: String) = platform.isNotEmpty() && SamsungDiagnostics.isNewer(MINIMUM_TIZEN, platform)
+        /** `0 was_execute` yanıtı uygulamanın açıldığını söylüyor mu ("app_id[…] launched"; Windows/Mac/iPhone ile aynı). */
+        fun sdbLaunched(reply: String): Boolean = reply.contains("] launched") && !reply.contains("fail", ignoreCase = true)
+
+        fun isTooOld(platform: String) =platform.isNotEmpty() && SamsungDiagnostics.isNewer(MINIMUM_TIZEN, platform)
 
         fun needsDeviceProfile(platform: String) =
             platform.isNotEmpty() && !isTooOld(platform) && !SamsungDiagnostics.isNewer(platform, DEVICE_PROFILE_UP_TO)
+
+        /** Tizen 2.x'te cihaz profilinin konduğu klasör (Tizen Studio ve Apps2Samsung ile aynı). */
+        const val LEGACY_DEVICE_PROFILE_DIRECTORY = "/home/developer"
+
+        /**
+         * Cihaz profilinin TV'deki yolu: Tizen 3.0–4.0'da `sdk_toolpath`, Tizen 2.x'te (2016) `/home/developer`. 2.4 TV
+         * profili yalnız orada arar; #71'de çalışan kurulum (Apps2Samsung) oraya gönderiyordu, profili `/opt/usr/apps/tmp`'ye
+         * gönderen her 2.4 kurulumu `install failed[118]` verdi (#890). Windows/Mac ve iPhone ile aynı.
+         */
+        fun deviceProfileRemotePath(platform: String, toolPath: String) =
+            (if (LegacyTizenPackage.applies(platform)) LEGACY_DEVICE_PROFILE_DIRECTORY else toolPath) + "/device-profile.xml"
 
         private val duidPattern = Regex("""^[A-Za-z0-9_\-+=/]{8,}$""")
         fun isDuid(text: String) = duidPattern.matches(text)
@@ -164,6 +178,25 @@ class SamsungInstaller(
     /** Yalnız TV'deki CouchSubs sürümünü okur (kurmaz, açmaz); uygulama yoksa null. Güncelleme denetimi için. */
     fun installedVersion(): String? = connect().use { readInstalledVersion(it) }
 
+    /**
+     * Kurulu TV uygulamasını geliştirici bağlantısıyla (sdb, `was_execute`) açar; arka plandaysa öne getirir (Windows, Mac ve
+     * iPhone'daki bekçiyle aynı). sdb izin sormaz, TV'de bildirim çıkarmaz. Geliştirici modu kapalıysa ya da Host PC IP başka
+     * cihazınsa false.
+     */
+    fun openApp(): Boolean {
+        log.write("--- Samsung: TV uygulaması bağlı değil, açılıyor (TV $host)")
+        return try {
+            connect().use { device ->
+                val reply = device.shell("0 was_execute $APP_ID")
+                log.write("Uygulama açılıyor: ${reply.trim()}")
+                sdbLaunched(reply)
+            }
+        } catch (error: Exception) {
+            log.write("Uygulama açılamadı: ${error.message}")
+            false
+        }
+    }
+
     private fun installCore(wgt: () -> ByteArray, version: String?): Result {
         progress(InstallStep.CONNECTING)
         connect().use { device ->
@@ -199,23 +232,30 @@ class SamsungInstaller(
                 log.write("Yeni sertifika: ${profile.describe(Date(), duid)}")
             }
 
-            if (needsDeviceProfile(platform)) pushDeviceProfile(device, profile, toolPath)
+            if (needsDeviceProfile(platform)) pushDeviceProfile(device, profile, platform, toolPath)
 
             progress(InstallStep.SIGNING)
             val key = profile.privateKey()
-            // Tizen 2.x (2016): #71'de çalışan config.xml ve SHA-256 imza; TV yine yalın [118] derse yalın paket (#638).
+            // Tizen 2.x (2016): #71'de çalışan paket: o config.xml ve SHA-512 imza (Apps2Samsung'un TizenSdb'si, #890);
+            // TV yine yalın [118] derse SHA-256 imzalı yalın paket (#638).
             val legacy = LegacyTizenPackage.applies(platform)
-            val digest = if (legacy) WgtSigner.Digest.SHA256 else WgtSigner.Digest.SHA512
-            fun sign(unsigned: ByteArray) = WgtSigner.sign(unsigned,
+            fun sign(unsigned: ByteArray, digest: WgtSigner.Digest = WgtSigner.Digest.SHA512) = WgtSigner.sign(unsigned,
                 WgtSigner.Signer(key, SamsungCertificates.chain(profile.author())),
                 WgtSigner.Signer(key, SamsungCertificates.chain(profile.distributor())), digest)
             val original = wgt()
             val signed = if (legacy) {
                 sign(LegacyTizenPackage.adapt(original)).also {
                     log.write("Tizen $platform: paketten network.public izni ve ultra geniş ekran ayarı çıkarıldı (#621).")
-                    log.write("Tizen $platform: imza SHA-256 ile üretildi (rsa-sha256, sha256 özet; yeni TV'lerde SHA-512).")
+                    log.write("Tizen $platform: imza SHA-512 ile üretildi (#71'de çalışan paketle aynı).")
                 }
-            } else sign(original)
+            } else {
+                // 21:9 / 32:9 Samsung monitör: geniş uygulama yüzeyi (#886; TV'lerde paket değişmez).
+                val info = SamsungTvInfo.fetch(host)
+                log.write("Ekran: model ${info?.model ?: "?"}, çözünürlük ${info?.resolution ?: "?"}")
+                val wide = WideScreenPackage.applies(info?.model, info?.resolution)
+                if (wide) log.write("Ultra geniş monitör: paket geniş uygulama yüzeyiyle (base_screen_resolution, device-width) kuruluyor (#886).")
+                sign(if (wide) WideScreenPackage.adapt(original) else original)
+            }
             log.write("Paket imzalandı (${signed.size} bayt).")
             progress(InstallStep.INSTALLING)
             try {
@@ -223,14 +263,14 @@ class SamsungInstaller(
                 var lean = false
                 val alternative: (() -> String?)? = if (!legacy) null else {
                     {
-                        shell.signed = sign(LegacyTizenPackage.adapt(original, lean = true))
+                        shell.signed = sign(LegacyTizenPackage.adapt(original, lean = true), WgtSigner.Digest.SHA256)
                         lean = true
                         log.write("Tizen $platform: yalın paket hazırlandı (${LegacyTizenPackage.LEAN_REMOVED} de çıkarıldı), imza SHA-256.")
                         "yalın paket"
                     }
                 }
                 installWithRecovery(shell, progress, log, alternative, keepExisting = legacy && (onTv != null || !listRead))
-                if (legacy) log.write("Tizen $platform: ${if (lean) "yalın paket" else "tam paket"} SHA-256 imzayla kuruldu.")
+                if (legacy) log.write("Tizen $platform: ${if (lean) "yalın paket SHA-256" else "tam paket SHA-512"} imzayla kuruldu.")
             } catch (error: SamsungInstallException) {
                 if (error.error == SamsungInstallError.CERTIFICATE_REJECTED) {
                     // TV bu sertifikayı kabul etmiyor; bir sonraki denemede Samsung'dan yenisi istensin.
@@ -278,18 +318,25 @@ class SamsungInstaller(
         }
     }
 
-    /** Tizen 3.0–4.0: sertifika alınırken saklanan cihaz profili TV'nin `sdk_toolpath` klasörüne gönderilir. */
-    private fun pushDeviceProfile(device: SdbConnection, profile: SigningProfile, toolPath: String) {
+    /**
+     * Tizen 2.4–4.0: sertifika alınırken saklanan cihaz profili TV'ye gönderilir ([deviceProfileRemotePath]); Tizen 2.x'te
+     * `/home/developer`'a gönderilemezse `sdk_toolpath` denenir.
+     */
+    private fun pushDeviceProfile(device: SdbConnection, profile: SigningProfile, platform: String, toolPath: String) {
         if (!profile.deviceProfileFile.exists()) {
             log.write("Cihaz profili (device-profile.xml) yok; gönderilmeden kuruluyor.")
             return
         }
-        val remote = "$toolPath/device-profile.xml"
-        try {
-            device.push(profile.deviceProfileFile.readBytes(), remote)
-            log.write("Cihaz profili gönderildi: $remote")
-        } catch (error: IOException) {
-            log.write("Cihaz profili gönderilemedi ($remote): ${error.message}")
+        val remote = deviceProfileRemotePath(platform, toolPath)
+        val fallback = "$toolPath/device-profile.xml"
+        for (target in if (remote == fallback) listOf(remote) else listOf(remote, fallback)) {
+            try {
+                device.push(profile.deviceProfileFile.readBytes(), target)
+                log.write("Cihaz profili gönderildi: $target")
+                return
+            } catch (error: IOException) {
+                log.write("Cihaz profili gönderilemedi ($target): ${error.message}")
+            }
         }
     }
 

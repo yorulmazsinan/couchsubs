@@ -2,10 +2,10 @@
 name: tv-screen-tests
 on:
   pull_request:
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'scripts/tv-cover-pixels.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', 'tv-webos/platform.js', 'scripts/tv-webos-hdmi.test.js', 'scripts/tv-webos-screensaver.test.js', 'scripts/tv-screen-text-apart.test.js', 'scripts/tv-overlay-brightness.test.js', 'tv-webos/i18n.js', 'tv-webos/config.js', 'tv-android/platform.js', 'scripts/tv-es5.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'scripts/tv-cover-pixels.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', 'tv-webos/platform.js', 'scripts/tv-webos-hdmi.test.js', 'scripts/tv-webos-screensaver.test.js', 'scripts/tv-screen-text-apart.test.js', 'scripts/tv-screen-layers.test.js', 'scripts/tv-overlay-brightness.test.js', 'tv-webos/i18n.js', 'tv-webos/config.js', 'tv-android/platform.js', 'scripts/tv-es5.test.js', 'scripts/tv-screen-notice.test.js', 'scripts/tv-live-page.js', 'scripts/tv-live-stale.test.js', 'scripts/tv-legacy-app.test.js', '.github/workflows/tv-screen-tests.yml']
   push:
     branches: [main]
-    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'scripts/tv-cover-pixels.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', 'tv-webos/platform.js', 'scripts/tv-webos-hdmi.test.js', 'scripts/tv-webos-screensaver.test.js', 'scripts/tv-screen-text-apart.test.js', 'scripts/tv-overlay-brightness.test.js', 'tv-webos/i18n.js', 'tv-webos/config.js', 'tv-android/platform.js', 'scripts/tv-es5.test.js', '.github/workflows/tv-screen-tests.yml']
+    paths: ['tv-webos/app.js', 'tv-webos/style.css', 'scripts/tv-screen.test.js', 'scripts/tv-cover.test.js', 'scripts/tv-cover-pixels.test.js', 'tv-tizen/platform.js', 'tv-tizen/config.xml', 'scripts/tv-tizen.test.js', 'scripts/tv-tizen-screen.test.js', 'scripts/package-tizen.sh', 'tv-webos/index.html', 'core/Sources/CouchSubsCore/Resources/obs-overlay.html', 'scripts/obs-overlay.test.js', 'scripts/tv-subtitle-box.test.js', 'scripts/tv-speakers.test.js', 'tv-webos/platform.js', 'scripts/tv-webos-hdmi.test.js', 'scripts/tv-webos-screensaver.test.js', 'scripts/tv-screen-text-apart.test.js', 'scripts/tv-screen-layers.test.js', 'scripts/tv-overlay-brightness.test.js', 'tv-webos/i18n.js', 'tv-webos/config.js', 'tv-android/platform.js', 'scripts/tv-es5.test.js', 'scripts/tv-screen-notice.test.js', 'scripts/tv-live-page.js', 'scripts/tv-live-stale.test.js', 'scripts/tv-legacy-app.test.js', '.github/workflows/tv-screen-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Eski TV uygulaması testi eski sürümleri git geçmişinden çıkarır.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -30,6 +32,10 @@ jobs:
         run: npm install --no-save --prefix "$RUNNER_TEMP/acorn" acorn@8.14.0 && echo "COUCHSUBS_ACORN=$RUNNER_TEMP/acorn/node_modules/acorn" >> "$GITHUB_ENV"
       - name: TV betikleri ES5 (Tizen 2.3-2.4, #761)
         run: node --test scripts/tv-es5.test.js
+      - name: Android TV sayfası gerçek ağla, Android 8 WebView kısıtlarıyla (eski adrese bağlı kalma, sub 0)
+        run: node --test scripts/tv-live-stale.test.js
+      - name: Eski TV uygulaması (0.9.3, 0.9.16, 0.9.33) bugünkü olaylarla; eski TV'ye clear tutularak gider
+        run: node --test scripts/tv-legacy-app.test.js
       - name: Gerçek çizim testleri
         run: node --test scripts/tv-screen.test.js
       - name: Örtü yeri testleri (Android TV katmanı)
@@ -50,5 +56,9 @@ jobs:
         run: node --test scripts/tv-webos-hdmi.test.js scripts/tv-webos-screensaver.test.js
       - name: Ekran yazısı ile altyazı üst üste binmez (TV)
         run: node --test scripts/tv-screen-text-apart.test.js
+      - name: Aynı yeri çizen katmanlardan yalnız biri görünür; görev satırı ekran yazısının altında kalmaz (TV)
+        run: node --test scripts/tv-screen-layers.test.js
       - name: PS5 görüntüsünün üstünde kalıcı karartı yok (TV, piksel ölçümü)
         run: node --test scripts/tv-overlay-brightness.test.js
+      - name: Kenar bildirimi kendi yerinde, ortaya çizilmez (TV ve OBS, piksel ölçümü)
+        run: node --test scripts/tv-screen-notice.test.js

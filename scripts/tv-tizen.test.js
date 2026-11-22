@@ -287,6 +287,40 @@ test('config.xml: base_screen_resolution yok (4K/8K TV standart 1920x1080 yüzey
   assert.doesNotMatch(config, /<tizen:metadata/);
 });
 
+// #886 (Odyssey G9 49", 32:9): 0.9.54'e kadar ayar G9'da yüzeyi 32:9 açıyordu, Sarı 'fit'/'fill' arasında dönüp ekranı
+// dolduruyordu. 0.9.55'ten beri yüzey 16:9 ('scr 1920x1080 ... wide32 0,0,3840,1080 fail NotSupportedError vw 3840 ok ·
+// now 0,0,1920,1080'). Ayarı artık yalnız ultra geniş monitöre kurulumda bilgisayar/telefon ekler (WideScreenPackage);
+// dört uygulamanın kuralı ve eklediği satır aynı olmalı.
+test('WideScreenPackage: Windows/Mac, Android ve iPhone aynı monitör kuralını ve aynı ayar satırını kullanır', () => {
+  const repo = path.join(__dirname, '..');
+  const sources = ['windows/src/CouchSubs.TvInstall/Samsung/WideScreenPackage.cs',
+    'couchsubs-android/app/src/main/java/com/couchsubs/mobile/tv/samsung/WideScreenPackage.kt',
+    'couchsubs-ios/CouchSubs/TVInstall/WideScreenPackage.swift'].map((f) => fs.readFileSync(path.join(repo, f), 'utf8'));
+  for (const source of sources) {
+    assert.ok(source.includes('^L?[SC](34|49|57)[A-Z]'), 'model kuralı');
+    assert.match(source, /1\.9\b/);
+    assert.ok(source.includes('app_ui_type/base_screen_resolution') && source.includes('value=\\"fullscreen\\"') ||
+      source.includes('value="fullscreen"'), 'ayar satırı');
+    assert.ok(source.includes('content=\\"width=device-width\\"') || source.includes('content="width=device-width"'), 'görünüm');
+  }
+  // platform.js'teki monitör model kuralıyla aynı.
+  assert.ok(code.includes('L?[SC](34|49|57)[A-Z]'));
+});
+
+test('32:9 geniş yüzey (G9, geniş yüzeyle kurulmuş paket): 16:9 ortada, Sarı ile ekranın tamamı, yeniden Sarı ile 16:9', () => {
+  // Paketin görünümü (Chromium çizimi: tv-tizen-screen.test.js) geniş yüzeyde 3840x1080 olur.
+  const loaded = load(3840, 1080, { screen: [5120, 1440] });
+  assert.equal(loaded.meta.content, 'width=3840');
+  playHdmi(loaded);
+  assert.equal(loaded.platform.pictureModes(), 'fit');
+  assert.equal(loaded.platform.pictureModeList(), null);
+  assert.deepEqual(loaded.accepted().at(-1).rect, ['960px', '0px', '1920px', '1080px']);
+  assert.equal(loaded.platform.togglePicture(), 'fill');
+  assert.deepEqual(loaded.shown.at(-1).rect, FULL);
+  assert.equal(loaded.platform.togglePicture(), 'fit');
+  assert.deepEqual(loaded.accepted().at(-1).rect, ['960px', '0px', '1920px', '1080px']);
+});
+
 // TV'nin kendi adresi (#484): Tizen sistem bilgisi adres vermezse Samsung ağ API'si sorulur.
 function loadNetwork({ ethernet, wifi, samsung }) {
   const answer = (value) => (name, ok, fail) => {

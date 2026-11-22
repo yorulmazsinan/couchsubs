@@ -380,6 +380,8 @@ struct SamsungInstallSection: View {
         }
         if let detail = failure.detail, !detail.isEmpty { text += "\n\n" + TVText.details(detail) }
         if failure.error == .installFailed || failure.error == .certificateRejected { text += "\n\n" + TVText.maintenance }
+        // TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı (Samsung 7 Series 2018, 21 Kas; Mac/Windows/Android ile aynı).
+        if [.installFailed, .certificateRejected, .unreachable].contains(failure.error) { text += "\n\n" + TVText.samsungServer }
         return text
     }
 }

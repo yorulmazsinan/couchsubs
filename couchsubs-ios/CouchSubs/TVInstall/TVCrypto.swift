@@ -136,7 +136,12 @@ struct RsaKey {
 
     /// Dosyadan yükler; yoksa ya da okunamazsa yenisini üretip yazar.
     static func loadOrCreate(_ file: URL) throws -> RsaKey {
-        if let data = try? Data(contentsOf: file), let key = try? RsaKey(pkcs1: data) { return key }
+        // Dosya var ama okunamıyorsa (ör. telefon açılıştan beri kilitli) yenisi üretilmez: üzerine yazılan anahtarı TV
+        // tanımaz, "hata ayıklamaya izin verilsin mi?" yeniden sorulur. Yalnız bozuk dosyanın yerine yenisi yazılır.
+        if FileManager.default.fileExists(atPath: file.path) {
+            let data = try Data(contentsOf: file)
+            if let key = try? RsaKey(pkcs1: data) { return key }
+        }
         let key = try generate()
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try key.pkcs1().write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])

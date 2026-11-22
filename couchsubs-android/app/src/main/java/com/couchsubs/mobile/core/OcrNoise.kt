@@ -41,6 +41,12 @@ object OcrNoise {
                 if (kept.isNotEmpty() && kept.last().last() !in ".?!…,;:") kept[kept.size - 1] = kept.last() + token
                 continue
             }
+            // Harfsiz, rakamsız ve yalnız simgeden oluşan parça ("_", "~", "=") yazı tanımanın uydurmasıdır: renkli
+            // sözcüğün açık zeminde kaybolan harfleri "_" okunuyordu ("Get in the _ eedboat", GitHub #854, GTA 6).
+            if (isSymbolOnly(core)) {
+                if (trail.isNotEmpty() && kept.isNotEmpty()) kept[kept.size - 1] = kept.last() + trail
+                continue
+            }
             val fixed = cleanCore(core)
             if (fixed != null) kept.add(lead + fixed + trail)
             // Atılan çöpün ardındaki noktalama cümleye aittir ("ou$3e," → virgül kalır).
@@ -81,6 +87,53 @@ object OcrNoise {
         }
         return bad * 6 > good + bad
     }
+
+    /** Parça yalnız simgelerden mi oluşuyor (harf ve rakam yok, en az bir [SYMBOLS] imi). */
+    private fun isSymbolOnly(core: String) =
+        core.isNotEmpty() && core.none { it.isLetter() || TextMatch.isNumber(it) } && core.any { it in SYMBOLS }
+
+    /**
+     * Satır bir okuma kırıntısı mı: altyazı ya da görev değil, ekrandaki küçük bir göstergenin ya da solan satırın yazı
+     * tanımadan kalan parçası ("one ready.", "ar.", "kulak"). En çok üç sözcüklü ve küçük harfle (ya da harf dışı bir
+     * imle) başlayan, ya da hiç gerçek sözcük (en az iki harfli, ünlü taşıyan) taşımayan, ya da çöp gibi okunan satır.
+     * Büyük harfle başlayan kısa konuşma ("Go!", "Okay.") kırıntı değildir. Kırıntı yanındaki uzun konuşmayı "eski"
+     * gösterip altyazıdan attırmaz, görev satırı da sayılmaz ([StickyRows], [MissionLine]; GitHub #854, #882).
+     * Mac/iPhone (OcrNoise.isCrumb) ve Windows (OcrNoise.IsCrumb) aynı kuralı uygular.
+     */
+    fun isCrumb(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return true
+        if (looksGarbled(trimmed)) return true
+        val words = trimmed.split(Regex("\\s+")).filter { word -> word.any { it.isLetter() } }
+        if (words.size > 3) return false
+        val first = trimmed.firstOrNull { it.isLetter() || TextMatch.isNumber(it) }
+        if (first != null && !(first.isLetter() && first.isUpperCase())) return true
+        return words.none { word ->
+            val letters = word.filter { it.isLetter() }.lowercase()
+            letters.length >= 2 && letters.any { it in "aeiouyäöüıàáâèéêìíîòóôùúû" }
+        }
+    }
+
+    /**
+     * Sözcük (harfleri) İngilizcede bir sözcük olamaz: ünlüsüz ([vowelless]), İngilizcede hiç yan yana gelmeyen iki harf
+     * taşıyor ("ijz": "jz") ya da harf-rakam/simge karışık. Yalnız aynı satırın iki okumasından hangisinin bozuk olduğuna
+     * karar verirken kullanılır ([SubtitleStabilizer]); tek başına satır atmaz.
+     */
+    fun isNonWord(word: String): Boolean {
+        val core = split(word).second
+        val letters = core.filter { it.isLetter() }
+        if (letters.length < 2) return false
+        if (cleanCore(core) != core || vowelless(letters)) return true
+        return letters.lowercase().zipWithNext { a, b -> "$a$b" }.any { it in impossiblePairs }
+    }
+
+    /** İngilizce sözcüklerde yan yana gelmeyen harf çiftleri (yazı tanımanın "lives" → "Ijz" gibi uydurmalarında çıkar). */
+    private val impossiblePairs = setOf(
+        "bx", "cj", "cv", "cx", "dx", "fq", "fx", "gq", "gx", "hx", "jc", "jf", "jg", "jq", "js", "jv", "jw", "jx", "jz",
+        "kq", "kx", "mx", "px", "pz", "qb", "qc", "qd", "qf", "qg", "qh", "qj", "qk", "ql", "qm", "qn", "qp", "qr", "qs",
+        "qt", "qv", "qw", "qx", "qy", "qz", "sx", "vb", "vf", "vh", "vj", "vm", "vp", "vq", "vw", "vx", "wx", "xj", "xx",
+        "zj", "zq", "zx",
+    )
 
     /** Üç ve daha çok harfli, ünlüsüz ve kısaltma olmayan (tümü büyük harf değil) sözcük: İngilizcede olmaz ("Gtt", "rnnk"). */
     private fun vowelless(letters: String): Boolean =

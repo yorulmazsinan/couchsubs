@@ -98,6 +98,15 @@ public enum FrameSource: String, Codable, CaseIterable {
     case ps5, remotePlayWindow, captureWindow
 }
 
+/// Xbox seçiliyken görüntünün nereden okunduğu (#853). `xbox`: CouchSubs Xbox'a kendisi bağlanır (Microsoft girişi ve
+/// seçilmiş Xbox). `captureWindow`: oyun bu bilgisayardaki Xbox uygulamasında, play.xbox.com'da ya da capture card ile
+/// OBS'te oynanır; CouchSubs Xbox'a hiç bağlanmaz, yalnız seçilen pencereyi (`captureWindow`) okur. Xbox aynı anda tek
+/// uzaktan oynatma bağlantısına izin verdiği için CouchSubs bağlanırsa kullanıcının oturumu düşerdi. Yalnız masaüstü:
+/// telefonda okunacak pencere yoktur. Eski kayıtlar `xbox` ile açılır.
+public enum XboxFrameSource: String, Codable, CaseIterable {
+    case xbox, captureWindow
+}
+
 /// Görüntü pencereden okunurken hangi Remote Play uygulamasının penceresi: hangisi açıksa (Sony'nin PS Remote Play'i ya
 /// da açık kaynak chiaki-ng), yalnız Sony'ninki ya da yalnız chiaki-ng'ninki. Eski kayıtlar "hangisi açıksa" ile açılır.
 public enum RemotePlayApp: String, Codable, CaseIterable {
@@ -171,8 +180,6 @@ public struct UserSettings: Codable, Equatable {
     public var speakerColors = true
     /// Mac'te değişmeyen altyazı bölgesini en fazla iki kare yeniden kullan; varsayılan kapalı.
     public var fastSubtitleDetection = false
-    /// Yalnız GTA 6'nın lacivert altyazı zemini üstündeki yazıyı oku. Varsayılan kapalı.
-    public var watchSubtitleBackground = false
     /// "Bozuk okunan satır için bekleme" (ms): sözlükte olmayan sözcüklerle okunan satırın daha iyi okuması için en çok bu
     /// kadar beklenir (Windows: MisreadWaitMs). Eski kayıtlarda yoktur; önerilen 800 ile açılır.
     public var misreadWaitMs = SubtitlePipeline.packWaitMs
@@ -184,6 +191,10 @@ public struct UserSettings: Codable, Equatable {
     public static let maxWaitMs = 2000
     /// Mac'te GTA 6 telefonu açıkken mesajları yerinde gösterir. Varsayılan kapalı; kullanıcı açmadıkça telefon okunmaz.
     public var autoReadGamePhone = false
+    /// "Ekranı çevir"de GTA 6 telefonunun mesajları telefonun yanındaki kartta gösterilir. Kapalıyken (varsayılan) her
+    /// mesajın çevirisi kendi balonunun üstünde, balonun renginde, yerindedir (`ScreenTranslation.present`). Eski
+    /// kayıtlarda yoktur; kapalı başlar.
+    public var phoneChatCard = false
     /// Bilinen oyunlarda hazır ek alanlar (bkz. `GameAreaPresets`); kullanıcının kendi ek alanı varsa o kullanılır.
     /// Varsayılan kapalı (beta.63–68'de açık geliyordu: otomatik ekran yazısı kapalıyken de GTA 6'nın sol üstünde menüyü,
     /// sağda bildirimleri çeviriyordu). Kullanıcı açmadıkça altyazı alanı dışında hiçbir şey çevrilmez.
@@ -214,6 +225,8 @@ public struct UserSettings: Codable, Equatable {
     public var appearance = AppAppearance.dark
     /// Görüntü PS5 bağlantısından mı, bu bilgisayardaki PS Remote Play penceresinden mi okunur.
     public var frameSource = FrameSource.ps5
+    /// Xbox seçiliyken görüntü Xbox bağlantısından mı, seçilen pencereden mi okunur (bkz. `XboxFrameSource`).
+    public var xboxFrameSource = XboxFrameSource.xbox
     /// Pencereden okunurken hangi Remote Play uygulaması (bkz. `RemotePlayApp`).
     public var remotePlayApp = RemotePlayApp.automatic
     /// OBS ya da başka bir açık pencere seçildiyse yalnız bu pencere okunur (varsayılan nil; masaüstünde).
@@ -264,10 +277,10 @@ public struct UserSettings: Codable, Equatable {
         showSpeakerNames = try values.decodeIfPresent(Bool.self, forKey: .showSpeakerNames) ?? defaults.showSpeakerNames
         speakerColors = try values.decodeIfPresent(Bool.self, forKey: .speakerColors) ?? defaults.speakerColors
         fastSubtitleDetection = try values.decodeIfPresent(Bool.self, forKey: .fastSubtitleDetection) ?? defaults.fastSubtitleDetection
-        watchSubtitleBackground = try values.decodeIfPresent(Bool.self, forKey: .watchSubtitleBackground) ?? defaults.watchSubtitleBackground
         misreadWaitMs = (try? values.decodeIfPresent(Int.self, forKey: .misreadWaitMs)) ?? defaults.misreadWaitMs
         partialWaitMs = (try? values.decodeIfPresent(Int.self, forKey: .partialWaitMs)) ?? defaults.partialWaitMs
         autoReadGamePhone = try values.decodeIfPresent(Bool.self, forKey: .autoReadGamePhone) ?? defaults.autoReadGamePhone
+        phoneChatCard = try values.decodeIfPresent(Bool.self, forKey: .phoneChatCard) ?? defaults.phoneChatCard
         gameAreaPresets = try values.decodeIfPresent(Bool.self, forKey: .gameAreaPresets) ?? defaults.gameAreaPresets
         setTextApart = try values.decodeIfPresent(Bool.self, forKey: .setTextApart) ?? defaults.setTextApart
         autoScreenText = try values.decodeIfPresent(Bool.self, forKey: .autoScreenText) ?? defaults.autoScreenText
@@ -281,6 +294,7 @@ public struct UserSettings: Codable, Equatable {
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         frameSource = (try? values.decodeIfPresent(FrameSource.self, forKey: .frameSource)) ?? defaults.frameSource
+        xboxFrameSource = (try? values.decodeIfPresent(XboxFrameSource.self, forKey: .xboxFrameSource)) ?? defaults.xboxFrameSource
         remotePlayApp = (try? values.decodeIfPresent(RemotePlayApp.self, forKey: .remotePlayApp)) ?? defaults.remotePlayApp
         captureWindow = try? values.decodeIfPresent(WindowCaptureTarget.self, forKey: .captureWindow)
         areaProfiles = Array(((try? values.decodeIfPresent([AreaProfile].self, forKey: .areaProfiles)) ?? defaults.areaProfiles)

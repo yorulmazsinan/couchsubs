@@ -79,6 +79,13 @@ html, body {
   text-align: left;
   text-shadow: none;
 }
+/* "Ekranı çevir"de GTA 6 telefonunun mesajı kendi balonunun üstünde: balon gibi dar dolgu, balonun renginde. */
+#screen .item.bubble {
+  padding: 1px 3px;
+  border-radius: 3px;
+  line-height: 1.12;
+  font-weight: 500;
+}
 /* Çevirinin içindeki kumanda simgesi (oyun karesinden kesilmiş): yazı boyunda, satırın ortasında. */
 #screen .icon, #regions .icon {
   height: 1.15em;

@@ -111,6 +111,31 @@ data class AiModel(
 }
 
 /**
+ * DeepL anahtarının yazımı (Mac/iPhone ve Windows'taki DeepLKey ile aynı kural). Yapıştırırken araya giren boşluk, satır
+ * sonu, sekme, bölünmez boşluk (U+00A0), sıfır genişlikli boşluk, BOM, yumuşak tire gibi görünmez karakterler her yerden
+ * silinir; DeepL anahtarında bunlar hiç yoktur.
+ */
+object DeepLKey {
+    fun clean(key: String): String {
+        val builder = StringBuilder(key.length)
+        var index = 0
+        while (index < key.length) {
+            val codePoint = key.codePointAt(index)
+            when (Character.getType(codePoint).toByte()) {
+                Character.CONTROL, Character.FORMAT, Character.SPACE_SEPARATOR, Character.LINE_SEPARATOR,
+                Character.PARAGRAPH_SEPARATOR -> {}
+                else -> builder.appendCodePoint(codePoint)
+            }
+            index += Character.charCount(codePoint)
+        }
+        return builder.toString()
+    }
+
+    /** Temizlenmiş anahtar DeepL anahtarı olabilir mi: boş değil, yalnız görünür ASCII (harf, rakam, "-", ":" …). */
+    fun isWellFormed(cleaned: String) = cleaned.isNotEmpty() && cleaned.all { it in '!'..'~' }
+}
+
+/**
  * Anahtar kaydedilmeden önce denenir (Mac/iPhone: DeepLTranslator.check ve AITranslationCore.test ile aynı kural):
  * DeepL'de kullanım sorgulanır, yapay zekâ hizmetinde örnek bir satır çevrilir. Geçerli, kotası dolmuş ya da modeli
  * reddedilen anahtar kabul edilir (anahtar doğrudur); geçersiz ya da ulaşılamayan anahtar kaydedilmez.
@@ -123,29 +148,81 @@ object KeyCheck {
         state == OnlineKeyState.VALID || state == OnlineKeyState.QUOTA_EXCEEDED || state == OnlineKeyState.MODEL_REJECTED ||
             state == OnlineKeyState.BUSY
 
-    /** DeepL anahtarının bu ayki kullanımı (Mac/iPhone: OnlineKeyCheck): durum ve kullanılan / toplam karakter. */
-    data class DeepLUsage(val state: OnlineKeyState, val used: Long = 0, val limit: Long = 0)
+    /**
+     * DeepL anahtar denemesinin ayrıntılı nedeni (Mac/iPhone: OnlineKeyReason, Windows: OnlineKeyReason; aynı kurallar).
+     * MALFORMED_KEY: görünmez karakterler silindikten sonra anahtarda DeepL anahtarında olamayacak karakter kaldı, istek
+     * gönderilmedi. RATE_LIMITED: 429. HTTP_STATUS: DeepL'in döndürdüğü kod ([DeepLUsage.code]). NETWORK: istek ulaşmadı.
+     */
+    enum class Reason { NONE, MALFORMED_KEY, RATE_LIMITED, HTTP_STATUS, NETWORK }
+
+    /**
+     * DeepL anahtarının bu ayki kullanımı (Mac/iPhone: OnlineKeyCheck): durum, kullanılan / toplam karakter ve hatanın
+     * nedeni. Sınır 0: DeepL bildirmedi; [UNLIMITED] ve üstü: sınır yok.
+     */
+    data class DeepLUsage(val state: OnlineKeyState, val used: Long = 0, val limit: Long = 0,
+                          val reason: Reason = Reason.NONE, val code: Int = 0) {
+        /** Günlük satırı: durum ve neden ("BUSY (HTTP 429 (çok sık istek))"); anahtarı içermez. */
+        val logDescription: String get() = when (reason) {
+            Reason.MALFORMED_KEY -> "$state (anahtarda geçersiz karakter)"
+            Reason.RATE_LIMITED -> "$state (HTTP 429 (çok sık istek))"
+            Reason.HTTP_STATUS -> "$state (HTTP $code)"
+            Reason.NETWORK -> "$state (ağ hatası)"
+            Reason.NONE -> "$state"
+        }
+    }
+
+    /** Sınır konmamış hesapta DeepL `character_limit` olarak bunu döndürür (developers.deepl.com, usage-and-quota). */
+    const val UNLIMITED = 1_000_000_000_000L
 
     /** DeepL: /usage; bu ay kota dolduysa QUOTA_EXCEEDED. Bloklar. */
     fun deepL(key: String, http: Http = Http.Default): OnlineKeyState = deepLUsage(key, http).state
 
-    /** DeepL: /usage (karakter kotasından yemez); Ayarlar'daki "Bu ay: …" satırı bunu gösterir. Bloklar. */
+    /**
+     * DeepL: /usage (karakter kotasından yemez); Ayarlar'daki "Bu ay: …" satırı ve "Kaydet" denemesi bunu kullanır. Her
+     * hata kendi nedeniyle döner: 401/403 geçersiz, 456 sınır doldu, 429 çok sık istek (BUSY: anahtar reddedilmedi,
+     * kaydedilir), diğer HTTP kodları sunucu hatası, istek hiç ulaşmadıysa ağ hatası. 200 yanıtında kullanım alanları eksik
+     * ya da beklenmedik biçimdeyse anahtar yine geçerlidir (sınır 0); gövde JSON nesnesi değilse ağ hatasıdır. Bloklar.
+     */
     fun deepLUsage(key: String, http: Http = Http.Default): DeepLUsage {
-        val trimmed = key.trim()
-        if (trimmed.isEmpty()) return DeepLUsage(OnlineKeyState.INVALID)
+        val cleaned = DeepLKey.clean(key)
+        if (cleaned.isEmpty()) return DeepLUsage(OnlineKeyState.INVALID)
+        if (!DeepLKey.isWellFormed(cleaned)) return DeepLUsage(OnlineKeyState.INVALID, reason = Reason.MALFORMED_KEY)
         return try {
-            val (status, body) = http.send("GET", DeepLTranslator.baseUrl(trimmed) + "usage",
-                mapOf("Authorization" to "DeepL-Auth-Key $trimmed"), null, 6000)
-            if (status !in 200..299) return DeepLUsage(DeepLTranslator.failure(status))
-            val usage = JSONObject(body)
-            val count = usage.optLong("character_count", 0)
-            val limit = usage.optLong("character_limit", 0)
+            val (status, body) = http.send("GET", DeepLTranslator.baseUrl(cleaned) + "usage",
+                mapOf("Authorization" to "DeepL-Auth-Key $cleaned"), null, 6000)
+            when (status) {
+                in 200..299 -> {}
+                401, 403 -> return DeepLUsage(OnlineKeyState.INVALID, reason = Reason.HTTP_STATUS, code = status)
+                456 -> return DeepLUsage(OnlineKeyState.QUOTA_EXCEEDED, reason = Reason.HTTP_STATUS, code = status)
+                429 -> return DeepLUsage(OnlineKeyState.BUSY, reason = Reason.RATE_LIMITED, code = status)
+                else -> return DeepLUsage(OnlineKeyState.UNREACHABLE, reason = Reason.HTTP_STATUS, code = status)
+            }
+            // JSON olmayan 200 yanıtı (otel/kafe ağının giriş sayfası gibi) DeepL'den gelmemiştir: ağ hatası.
+            val (count, limit) = parseUsage(body) ?: return DeepLUsage(OnlineKeyState.UNREACHABLE, reason = Reason.NETWORK)
             DeepLUsage(if (limit > 0 && count >= limit) OnlineKeyState.QUOTA_EXCEEDED else OnlineKeyState.VALID, count, limit)
         } catch (error: IOException) {
-            DeepLUsage(OnlineKeyState.UNREACHABLE)
-        } catch (error: JSONException) {
-            DeepLUsage(OnlineKeyState.UNREACHABLE)
+            DeepLUsage(OnlineKeyState.UNREACHABLE, reason = Reason.NETWORK)
         }
+    }
+
+    /**
+     * `/v2/usage` yanıtı (Mac ve Windows'taki çözümlemeyle aynı): alan eksik ya da sayı değilse 0; ondalıklı değer tam
+     * sayıya, Long'a sığmayan değer Long.MAX_VALUE'ya indirilir. Gövde JSON nesnesi değilse null.
+     */
+    fun parseUsage(body: String): Pair<Long, Long>? {
+        val usage = try { JSONObject(body) } catch (error: JSONException) { return null }
+        fun number(name: String): Long {
+            val text = when (val value = usage.opt(name)) {
+                is Number -> value.toString()
+                is String -> value
+                else -> return 0
+            }
+            text.toLongOrNull()?.let { return maxOf(0, it) }
+            val double = text.toDoubleOrNull() ?: return 0
+            if (double.isNaN() || double <= 0) return 0
+            return if (double >= 9.2e18) Long.MAX_VALUE else double.toLong()
+        }
+        return number("character_count") to number("character_limit")
     }
 
     /** Yapay zekâ hizmeti: örnek satır seçilen modelle çevrilir. Bloklar. */
@@ -450,7 +527,7 @@ class DeepLTranslator(
     private val glossary: Glossary = Glossary.Empty,
     private val playedGame: (() -> String?)? = null,
 ) : SentenceTranslator<String>(fallback, cache) {
-    private val key = key.trim()
+    private val key = DeepLKey.clean(key)
     private val recent = ArrayDeque<String>()
     private var recentGame: String? = null
     /** Gerçek bağlantıyla (testlerin sahte [Http]'si değil) çalışırken bağlantıyı sıcak tutan. */
@@ -488,7 +565,7 @@ class DeepLTranslator(
             error !is OnlineException && error !is InterruptedIOException && !Thread.currentThread().isInterrupted
 
         /** Ücretsiz anahtarlar ":fx" ile biter ve ayrı adrese gider. */
-        fun baseUrl(key: String) = if (key.trim().endsWith(":fx")) "https://api-free.deepl.com/v2/" else "https://api.deepl.com/v2/"
+        fun baseUrl(key: String) = if (DeepLKey.clean(key).endsWith(":fx")) "https://api-free.deepl.com/v2/" else "https://api.deepl.com/v2/"
 
         fun body(sentences: List<String>, context: String?, tagged: Boolean = false): String = JSONObject()
             .put("text", JSONArray(sentences))
@@ -626,6 +703,10 @@ object AiRequest {
             "\"Doesn't 00k good.\"); translate the line the speaker clearly meant. " +
             "A subtitle may continue the previous one (it starts in lowercase or with a word like \"and\"); " +
             "translate it so that it reads as that continuation. " +
+            // #827: menü ve görev etiketi kısa, tekil emir kipi ("Para Kazan", "Para Kazanın" değil).
+            "Short menu items, objectives and button labels without a subject (\"Make Money\", \"Find Donnie's Package\") " +
+            "are commands to the player: translate them as short singular informal imperatives (\"Para Kazan\", " +
+            "\"Donnie'nin Paketini Bul\"), never polite or plural forms such as \"Para Kazanın\". " +
             "Reply with only the translation, no explanations, notes or quotes."
 
     /** Kullanıcının ek talimatında en çok bu kadar karakter gider (fazlası kesilir). */

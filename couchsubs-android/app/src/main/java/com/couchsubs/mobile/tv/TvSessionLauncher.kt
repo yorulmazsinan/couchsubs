@@ -68,14 +68,24 @@ object TvSessionLauncher {
 
     /**
      * Açma kararı (Windows ve Mac/iPhone'daki SamsungAppKnowledge ile aynı). Kurulu olduğu bilinen TV'de liste ne derse
-     * desin eski yol (DEEP_LINK); bilinmeyen TV'de listede yoksa gönderilmez (#637), liste yanıtsızsa DEEP_LINK. Dönen
-     * değer gönderilecek tür, gönderilmeyecekse null.
+     * desin eski yol (DEEP_LINK); bilinmeyen TV'de listede yoksa (#637) ya da liste 3 saniyede gelmezse gönderilmez: kurulu
+     * olmayan uygulamaya giden DEEP_LINK Smart Hub'ı mağaza aramasına yolluyor, Samsung'a ulaşamayan TV'de "Samsung
+     * sunucusuna bağlanılamıyor (AS400)" çıkıyordu (Samsung 7 Series 2018, 21 Kas). Dönen değer gönderilecek tür,
+     * gönderilmeyecekse null.
      */
     fun samsungAction(knownInstalled: Boolean, presence: SamsungAppPresence?): String? = when {
         knownInstalled -> "DEEP_LINK"
-        presence?.installed == false -> null
+        presence?.installed != true -> null
         else -> samsungActionType(presence?.appType)
     }
+
+    /** Açma isteği gönderilmediğinde tvinstall.log satırı (Windows ve Mac/iPhone ile aynı metin). */
+    fun samsungNotSentLine(host: String, presence: SamsungAppPresence?): String =
+        if (presence == null) "Samsung $host: uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi (kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar)."
+        else "Samsung $host: kurulu uygulama listesinde CouchSubs yok; açma isteği gönderilmedi."
+
+    /** Bekçi her 30 sn'de denediği için aynı satır tvinstall.log'da yinelenmez. */
+    private val lastNotSent = java.util.concurrent.atomic.AtomicReference<String?>(null)
 
     /** Sahadan öğrenmek için yapılan liste sorgusu çalışma boyunca bir kez yapılır. */
     private val samsungProbed = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -155,28 +165,51 @@ object TvSessionLauncher {
     }
 
     /**
+     * Samsung'da açma komutu gittikten sonra TV uygulamasının bağlanması için beklenen süre; bağlanmazsa ana ekranda "TV
+     * açmadı" yazar ([TvOpenProblem.NOT_OPENED]). Samsung `ed.apps.launch`'ın açılışı söyleyen bir yanıtını vermez: bazı
+     * TV'ler komutu alıp uygulamayı açmıyor, neden satırı boş kalıyordu (iPhone, TestFlight build 27; Windows/Mac/iPhone ile aynı).
+     */
+    const val SAMSUNG_OPEN_CHECK_MS = 15_000L
+
+    /**
      * Samsung: [launch]'tan sonra TV uygulaması bağlı değilken en çok [ANDROID_RELAUNCH_MS]'de bir yeniden açar (Windows,
      * Mac ve iPhone'daki bekçiyle aynı; Samsung önplandaki uygulamayı söylemez, yalnız açılır). "Otomatik açmayı dene"
      * beklemeyi keser. Eskiden Android telefon Samsung'da uygulamayı yalnız bir kez açmayı deniyordu. Bloklar.
+     * [openWithSdb]: önce geliştirici bağlantısıyla (sdb `was_execute`) açmayı dener (bkz. [launch]). [lastResult]: ana
+     * ekranda şu an gösterilen neden.
      */
     fun keepSamsungOpen(settings: AppSettings, port: Int, key: String, connected: () -> Boolean, log: (String) -> Unit = {},
-                        onOpenResult: (TvOpenProblem?) -> Unit = {}, active: () -> Boolean) =
-        keepSamsungOpen(settings.installedTv, connected, active) {
-            launch(settings, port, key, connected = connected, log = log, onOpenResult = onOpenResult, active = active)
+                        onOpenResult: (TvOpenProblem?) -> Unit = {}, openWithSdb: (() -> Boolean)? = null,
+                        lastResult: () -> TvOpenProblem? = { null }, installLog: (String) -> Unit = {}, active: () -> Boolean) =
+        keepSamsungOpen(settings.installedTv, connected, active,
+            notOpened = { if (lastResult() == null) onOpenResult(TvOpenProblem.NOT_OPENED) }) {
+            // TV bir önceki komutta da açmadıysa neden satırı yeniden gönderilen komutla silinmez (her 30 sn'de yanıp sönmesin).
+            val keep = lastResult() == TvOpenProblem.NOT_OPENED
+            launch(settings, port, key, connected = connected, log = log, openWithSdb = openWithSdb,
+                onOpenResult = { if (!(keep && it == null)) onOpenResult(it) }, installLog = installLog, active = active)
         }
 
+    /**
+     * [SAMSUNG_OPEN_CHECK_MS] sonra uygulama hâlâ bağlı değilse [notOpened]; [ANDROID_RELAUNCH_MS] dolunca yeniden [open].
+     * "Otomatik açmayı dene" ([sleep] true dönerse) beklemeden açar.
+     */
     internal fun keepSamsungOpen(tv: InstalledTv?, connected: () -> Boolean, active: () -> Boolean,
-                                 sleep: (Long) -> Unit = { TvOpenRetry.waitOrRetry(it) }, open: () -> Unit) {
+                                 sleep: (Long) -> Boolean = { TvOpenRetry.waitOrRetry(it) }, notOpened: () -> Unit = {},
+                                 open: () -> Unit) {
         if (tv?.brand != TvBrand.SAMSUNG) return
         while (active()) {
-            sleep(ANDROID_RELAUNCH_MS)
+            if (!sleep(SAMSUNG_OPEN_CHECK_MS)) {
+                if (active() && !connected()) notOpened()
+                sleep(ANDROID_RELAUNCH_MS - SAMSUNG_OPEN_CHECK_MS)
+            }
             if (active() && !connected()) open()
         }
     }
 
     /** [onOpenResult]: açma denemesinin sonucu (ana ekrandaki satır); TV izni alındıysa ya da açıldıysa null. */
     fun launch(settings: AppSettings, port: Int, key: String, adbKeyFile: java.io.File? = null, connected: () -> Boolean = { false },
-               log: (String) -> Unit = {}, onOpenResult: (TvOpenProblem?) -> Unit = {}, active: () -> Boolean) {
+               log: (String) -> Unit = {}, onOpenResult: (TvOpenProblem?) -> Unit = {}, openWithSdb: (() -> Boolean)? = null,
+               installLog: (String) -> Unit = {}, active: () -> Boolean) {
         val tv = settings.installedTv ?: return
         if (!active()) return
         val remote = InetAddress.getByName(tv.host)
@@ -189,6 +222,14 @@ object TvSessionLauncher {
                 com.couchsubs.mobile.tv.android.AndroidTvInstaller(host, adbPort,
                     adbKey = { com.couchsubs.mobile.tv.samsung.AdbKey.loadOrCreate(adbKeyFile) }).open(params)
             }, log = log, onOpenResult = onOpenResult)
+            return
+        }
+        // Samsung: önce geliştirici bağlantısı (sdb `was_execute`; Windows, Mac ve iPhone ile aynı). Uzaktan kumanda
+        // bağlantısıyla açmayı bazı TV'ler sessizce yok sayıyor (Tizen 9.0, #412; iPhone build 27). sdb yalnız geliştirici modu
+        // açık ve Host PC IP bu telefonsa çalışır (telefondan kurulduysa öyledir); değilse uzaktan kumandaya geçilir.
+        if (tv.brand == TvBrand.SAMSUNG && openWithSdb?.invoke() == true) {
+            log("Samsung (${tv.host}) TV uygulaması geliştirici bağlantısıyla açıldı")
+            onOpenResult(null)
             return
         }
         val tokenKey = "tv.control.${tv.brand}.${tv.host}"
@@ -223,6 +264,8 @@ object TvSessionLauncher {
                 val done = CountDownLatch(1)
                 var registered = false
                 var sent = false
+                // Samsung: TV kurulu olduğunu doğrulamadı, açma komutu gönderilmedi (ana ekran kurulumu önerir).
+                var notInstalled = false
                 // Samsung: kurulu uygulama listesinin yanıtı bekleniyor mu. Yanıt 3 saniyede gelmezse eski yol (DEEP_LINK).
                 val awaitingList = java.util.concurrent.atomic.AtomicBoolean(false)
                 // Uygulamanın bu TV'de kurulu olduğu biliniyorsa listeye bakılmaz, eskisi gibi doğrudan açılır.
@@ -232,8 +275,16 @@ object TvSessionLauncher {
                 fun samsungLaunch(webSocket: WebSocket, presence: SamsungAppPresence?) {
                     if (!awaitingList.getAndSet(false)) return
                     // Kurulu değilken DEEP_LINK gönderilirse Smart Hub uygulamayı mağazada arıyor ve TV'de "Sunucu bakım
-                    // altında (1544007)" çıkıyordu (#402, #511, #637); listede yoksa hiçbir şey gönderilmez.
-                    samsungAction(false, presence)?.let { sent = webSocket.send(launchMessage(tv.brand, server, key, it)) }
+                    // altında (1544007)" ya da "Samsung sunucusuna bağlanılamıyor (AS400)" çıkıyordu (#402, #511, #637);
+                    // listede yoksa ya da liste 3 sn'de gelmezse hiçbir şey gönderilmez.
+                    val action = samsungAction(false, presence)
+                    if (action != null) sent = webSocket.send(launchMessage(tv.brand, server, key, action))
+                    else {
+                        notInstalled = true
+                        val line = samsungNotSentLine(tv.host, presence)
+                        log(line)
+                        if (lastNotSent.getAndSet(line) != line) installLog(line)
+                    }
                     webSocket.close(1000, null)
                 }
                 fun samsungProbeDone(webSocket: WebSocket, presence: SamsungAppPresence?) {
@@ -287,7 +338,7 @@ object TvSessionLauncher {
                 try { done.await(60, TimeUnit.SECONDS) } finally { socket.close(1000, null); socket.cancel() }
                 // Açılış başarısız olsa bile TV /pair ile onay isteyebilir; sürekli yeniden başlatma yok.
                 if (registered || sent || storedPin != null) {
-                    onOpenResult(if (registered || sent) null else TvOpenProblem.UNREACHABLE)
+                    onOpenResult(if (notInstalled && !sent) TvOpenProblem.NOT_INSTALLED else if (registered || sent) null else TvOpenProblem.UNREACHABLE)
                     return
                 }
             }

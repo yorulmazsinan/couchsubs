@@ -31,9 +31,15 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         const val SAMPLE_GAP_MS = 100L
         const val MAX_AREAS = 4
         const val MAX_COVER = 0.35
+        /** Aynı karo satırındaki bileşenler arasında en çok bu kadar sütun (iki uç arası) olunca birleşir. */
+        const val ROW_REACH = 3
+        /** İki bileşen de en az iki karo genişse aynı satırda en çok bu kadar sütun arayla birleşir. */
+        const val WIDE_ROW_REACH = 4
         const val NAME = "Screen text"
         /** Menü durumu: en az bu kadar bileşen aynı 300 ms içinde belirip duruyor. */
         const val MENU_COMPONENTS = 3
+        /** Menüde hiçbir yazı değişmeden bu kadar süre geçince menü durumu biter (altyazı okunur). */
+        const val MENU_LIFE_MS = 5000L
         /** Menü durumu: bileşenlerin dışındaki karoların en az bu kadarı bulanık/karartılmış (düşük sapmalı). */
         const val MENU_CALM_SHARE = 0.60
         /** Bulanık karo: noktalarının parlaklık sapması bundan küçük. */
@@ -104,6 +110,12 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     /** Son örnekte menü durumu vardı (tekerlek ya da duraklatma menüsü: kısa etiketler de çevrilir). */
     var menu = false
         private set
+
+    /** Menüye girildiği örnekteki bileşenlerin karoları: menü bunlardan biri yerinde durdukça sürer. */
+    private var menuAnchors = emptySet<Int>()
+    /** Menüye girilen an ve süresi dolan menünün bittiği an (bundan önce belirmiş yazılar yeniden menü sayılmaz). */
+    private var menuEnteredAt = 0L
+    private var menuFloor: Long? = null
 
     private fun Auto.area() = ExtraArea(id, NAME, region, auto = true, menu = menu)
 
@@ -225,10 +237,28 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         val wasMenu = menu
         // Menü kanıtı altyazı alanının dışındaki bileşenlerden: iki satırlık altyazı (sakin zeminde) menü sanılıp
         // altyazıyı duraklatmasın.
-        menu = isMenu(all.filter { members -> members.any { !inSubtitle[it] } }, sample)
-        // Menüde gezinirken seçim çerçevesi kayınca birkaç karo bir an aday olmaktan çıkar: menü alanlarından biri hâlâ
-        // görünüyorsa menü sürer (kutular yanıp sönmez, kısa etiketler gürültü sayılmaz).
-        if (!menu && wasMenu && autos.any { auto -> auto.menu && auto.tiles.any { candidate[it] } }) menu = true
+        val evidence = all.filter { members -> members.any { !inSubtitle[it] } }
+        // Süresi dolan menünün yazıları yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla açılır.
+        val floor = menuFloor
+        menu = isMenu(if (floor == null) evidence else evidence.filter { members -> members.maxOf { tiles[it].stableSince } > floor }, sample)
+        if (menu && !wasMenu) {
+            menuAnchors = evidence.flatten().toSet()
+            menuEnteredAt = now
+        }
+        // Menüde gezinirken seçim çerçevesi kayınca birkaç karo bir an aday olmaktan çıkar: menüye girildiğindeki
+        // yazılardan biri hâlâ görünüyorsa menü sürer (kutular yanıp sönmez, kısa etiketler gürültü sayılmaz). Menüdeyken
+        // sonradan beliren yazı (karanlık sahnenin görev yazısı, PS5 bildirimi) menüyü sürdürmez: GTA 6 "Gone Fishing"te
+        // menü durumu bitmiyor, altyazı bütün oturum okunmuyordu (Mac/iPhone, Windows ile aynı kural).
+        if (!menu && wasMenu && autos.any { auto -> auto.menu && auto.tiles.any { candidate[it] && it in menuAnchors } }) menu = true
+        // Menüde bir şey değişmeden (gezinme, seçim) MENU_LIFE_MS geçti: menü sayılmaz, altyazı yeniden okunur
+        // (Mac/iPhone, Windows ile aynı). Karanlık sahnede birlikte beliren sabit HUD yazıları da menü sanılabiliyor.
+        if (menu && wasMenu) {
+            val activity = maxOf(menuEnteredAt, menuAnchors.maxOfOrNull { tiles[it].stableSince } ?: menuEnteredAt)
+            if (now - activity > MENU_LIFE_MS) {
+                menu = false
+                menuFloor = now
+            }
+        }
         // Altyazı alanındaki yazı bulucuya girmez; menü durumunda ise (altyazı duraklar) menünün oradaki etiketleri de alan olur.
         if (!menu && inSubtitle.any { it }) {
             for (index in 0 until TILES) if (inSubtitle[index]) candidate[index] = false
@@ -314,6 +344,8 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         for (index in 0 until TILES) tiles[index] = Tile()
         autos.clear()
         menu = false
+        menuAnchors = emptySet()
+        menuFloor = null
         lastSample = null
         busy = false
     }
@@ -378,7 +410,7 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     }
 
     /** Genişletilmiş bölgeleri kesişen bileşenler birleşir; birleşimi çok büyük olan ayrı kalır. */
-    private fun joined(list: List<List<Int>>): List<List<Int>> {
+    internal fun joined(list: List<List<Int>>): List<List<Int>> {
         val groups = list.map { it.toMutableList() }.toMutableList()
         var changed = true
         while (changed) {
@@ -386,7 +418,8 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             loop@ for (i in groups.indices) for (j in i + 1 until groups.size) {
                 val a = regionOf(groups[i]) ?: continue
                 val b = regionOf(groups[j]) ?: continue
-                if (a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) continue
+                if ((a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top) &&
+                    !sameRow(groups[i], groups[j])) continue
                 val union = groups[i] + groups[j]
                 if (regionOf(union) == null) continue
                 groups[i] = union.toMutableList()
@@ -396,6 +429,23 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             }
         }
         return groups
+    }
+
+    /**
+     * Aynı karo satırındaki bileşenler (menü şeridinin sekmeleri) iki boş karoya kadar birleşir: seçili sekme renkli olduğu
+     * için aday olmuyor, iki yanındaki alanlar onu ortadan kesiyordu ("MAP" → "M", #859). İki bileşen de en az iki karo
+     * genişse (sekme adları; seçili sekme üç karo olabilir) üç boş karoya kadar ([WIDE_ROW_REACH]); tek karoluk tekerlek
+     * etiketleri ayrı kalır.
+     */
+    internal fun sameRow(a: List<Int>, b: List<Int>): Boolean {
+        val aRows = a.map { it / COLUMNS }
+        val bRows = b.map { it / COLUMNS }
+        if (aRows.min() > bRows.max() || bRows.min() > aRows.max()) return false
+        val aColumns = a.map { it % COLUMNS }
+        val bColumns = b.map { it % COLUMNS }
+        val wide = aColumns.max() - aColumns.min() >= 1 && bColumns.max() - bColumns.min() >= 1
+        val reach = if (wide) WIDE_ROW_REACH else ROW_REACH
+        return aColumns.min() <= bColumns.max() + reach && bColumns.min() <= aColumns.max() + reach
     }
 
     private fun moved(old: CropRegion, new: CropRegion): Boolean {
@@ -488,11 +538,12 @@ object AutoText {
         'Ρ' to 'P', 'Τ' to 'T', 'Χ' to 'X', 'Υ' to 'Y', 'ο' to 'o',
     )
     private val keyNames = Regex("^(?:[LR][123]?|[LR]B|[LR]T|△|□|○|✕)$")
+    private val dimension = Regex("^[0-9][A-Za-z]$")
     private val shortWords = setOf("OF", "TO", "ON", "UP", "IN", "IT", "AT", "BY", "OR", "GO", "NO", "MY", "ME", "US", "WE",
         "BE", "DO", "SO", "AN", "AS", "IS", "A", "I")
 
     fun clean(reading: Reading, menu: Boolean): Reading {
-        val lines = reading.lines.mapNotNull { line(it) }
+        val lines = reading.lines.mapNotNull { line(it, menu) }
         val body = lines.any { l -> l.text.any { it.isLowerCase() } && l.text.count { it.isLetter() } >= 8 }
         // Alandaki satırların yarısından alçak, büyük harfli satır logo ya da marka yazısıdır ("REPUBLIC OF GAMERS").
         val heights = lines.mapNotNull { l -> l.box?.let { it.bottom - it.top } }.sorted()
@@ -505,10 +556,12 @@ object AutoText {
 
     private fun isLatin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿĞğİıŞş"
 
-    private fun line(line: TextLine): TextLine? {
-        // Eğik ya da perspektifli satır (sözcüklerin dikey ortaları kayıyor) oyun dünyasındadır (poster, tabela).
+    private fun line(line: TextLine, menu: Boolean): TextLine? {
+        // Eğik ya da perspektifli satır (sözcüklerin dikey ortaları kayıyor) oyun dünyasındadır (poster, tabela). Menüde
+        // aranmaz (Mac ve Windows gibi): menü arayüzdür, yazı tanıma uzun satırın sözcük kutularını biraz oynatır (GTA 6
+        // haritasındaki görev açıklamasının orta satırı eğik sayılıp atılıyordu).
         val words = line.words
-        if (words != null && words.size >= 2) {
+        if (!menu && words != null && words.size >= 2) {
             val first = words.minBy { it.box.left }.box
             val last = words.maxBy { it.box.right }.box
             val height = words.map { it.box.bottom - it.box.top }.sorted()[words.size / 2]
@@ -520,8 +573,10 @@ object AutoText {
         val tokens = text.split(' ').filter { it.isNotEmpty() }.toMutableList()
         var before = 0
         var after = 0
-        // Baştaki simge okuması: en çok iki karakter, ardından büyük harfle başlayan sözcük; kısa etikette.
+        // Baştaki simge okuması: en çok iki karakter, ardından büyük harfle başlayan sözcük; kısa etikette. Rakamla başlayan
+        // harfli parça ("2D VIEW", "3D") sözcüktür.
         if (tokens.size in 2..6 && tokens[0].length <= 2 && ButtonIcons.MARKER !in tokens[0] && !keyNames.matches(tokens[0]) &&
+            !dimension.matches(tokens[0]) &&
             tokens[0].uppercase() !in shortWords && tokens[1].first().isUpperCase()) {
             before = text.indexOf(tokens[1])
             tokens.removeAt(0)
@@ -538,7 +593,7 @@ object AutoText {
         }
         val cleaned = tokens.joinToString(" ")
         // Güveni düşük okuma çevrilmez; arayüz sözlüğünde birebir olan kısa etiket ("1 Мар" → "Map") yine de kalır.
-        if ((line.confidence ?: 1f) < 0.5f && UiCommands.translate(cleaned) == null) return null
+        if ((line.confidence ?: 1f) < 0.5f && UiCommands.translateLabelLoosely(cleaned) == null) return null
         if (before == 0 && after == 0) return line.copy(text = text)
         // Kutunun atılan kısmı karakter oranıyla daraltılır (stil örneklemesi simgeyi yazı saymasın).
         val box = line.box?.let { b ->

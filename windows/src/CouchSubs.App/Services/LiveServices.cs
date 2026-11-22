@@ -96,6 +96,7 @@ public sealed class LiveServices : IAppServices
         if (tv.Brand == TvBrand.AndroidTv) return new TvPairing("", true);
         if (tv.Brand == TvBrand.Samsung)
         {
+            SamsungAppKnowledge.InstallLog = new TvInstall.InstallLog(TvInstallLogPath).Write;
             using var samsung = new SamsungClient(tv, key);
             string token;
             try { token = await samsung.ConnectAsync(); }
@@ -110,6 +111,9 @@ public sealed class LiveServices : IAppServices
                 return new TvPairing(key ?? "", true);
             }
             try { await samsung.LaunchAsync(SamsungClient.AppId, new Dictionary<string, string> { ["server"] = server, ["key"] = accessKey }); }
+            // TV uygulamanın kurulu olduğunu doğrulamadıysa (listede yok ya da liste 3 sn'de gelmedi) açma komutu gitmez:
+            // kurulum adımları görünür (Smart Hub mağaza aramasına gidip "AS400" demesin; Mac ve iPhone ile aynı).
+            catch (SsapException error) when (error.Reason == SamsungClient.NotInstalledReason) { return new TvPairing(token, false); }
             catch (Exception) { /* TV uygulaması bilgisayarı kendisi de bulabilir */ }
             return new TvPairing(token, true);
         }
@@ -152,6 +156,7 @@ public sealed class LiveServices : IAppServices
         }
         if (tv.Brand == TvBrand.Samsung)
         {
+            SamsungAppKnowledge.InstallLog = new TvInstall.InstallLog(TvInstallLogPath).Write;
             var token = new SamsungTokenHolder(key, onKey);
             var samsungLocator = new TvLocator(tv, async target =>
             {
@@ -214,6 +219,8 @@ public sealed class LiveServices : IAppServices
     // LG kurulumunun adımları da tvinstall.log'a telefonlardaki satırlarla yazılır (LgInstallLog); önceden yalnız Samsung
     // ve Android TV kurulumu günlük tutuyordu.
     private static LgInstallLog LgLog => new(new TvInstall.InstallLog(TvInstallLogPath).Write);
+
+    public void WriteTvInstallLog(string line) => new TvInstall.InstallLog(TvInstallLogPath).Write(line);
 
     public Task<string> FetchDevKeyAsync(string host, string passphrase) =>
         LgLog.KeyAsync(host, () => DevModeInstaller.FetchKeyAsync(host, passphrase, new ProcessRunner(), DevModeTools.ForThisSystem()));

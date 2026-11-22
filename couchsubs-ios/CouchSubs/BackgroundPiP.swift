@@ -128,7 +128,7 @@ final class BackgroundPiP: NSObject, ObservableObject {
     // MARK: - Ses oturumu
 
     /// PiP .playback ses oturumu ister (Apple belgesi). Sessiz ses çalınmaz; oturum yalnız kategori olarak açılır.
-    /// Xbox oyun sesi bu telefonda çalıyorsa oturumu WebRTC yönetir, dokunulmaz.
+    /// Xbox oyun sesi bu telefonda çalıyorsa oturumu XboxPlayoutDevice aynı ayarla (PhoneAudioPolicy.media) açar.
     /// `.mixWithOthers`: .playback tek başına karışmaz, açılınca telefonda çalan müziği/podcast'i keser (Apple,
     /// AVAudioSession.Category.playback). Bu oturum ses çalmadığı için başka uygulamanın sesine karışır; kategori yine
     /// .playback olduğundan PiP'in şartı (arka plan modu + .playback) karşılanır.
@@ -137,7 +137,7 @@ final class BackgroundPiP: NSObject, ObservableObject {
         if let model, model.isXbox, model.settings.xboxAudioOnDevice { return }
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .moviePlayback, options: [.mixWithOthers])
+            try PhoneAudioPolicy.media.apply(to: session)
             try session.setActive(true)
             ownsAudioSession = true
         } catch {

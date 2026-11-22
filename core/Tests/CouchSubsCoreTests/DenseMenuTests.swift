@@ -124,8 +124,12 @@ final class DenseMenuTests: XCTestCase {
         func align(_ text: String) -> TextLook.Align? {
             blocks.first { candidate.paragraphs[$0.start] == text }?.look?.align
         }
-        XCTAssertEqual(align("HOLSTER (L1)"), .right)
-        XCTAssertEqual(align("(△) INTERACT"), .left)
+        // Satır ucundaki tuş adı çeviriye ve kutuya girmez, ekranda görünür kalır (#860).
+        XCTAssertEqual(align("HOLSTER"), .right)
+        XCTAssertEqual(align("INTERACT"), .left)
+        XCTAssertFalse(candidate.paragraphs.contains { $0.contains("(L1)") || $0.contains("(△)") })
+        let holster = try XCTUnwrap(blocks.first { candidate.paragraphs[$0.start] == "HOLSTER" })
+        XCTAssertLessThan(holster.box.right, 0.45)
         XCTAssertFalse(candidate.paragraphs.contains("5 / 9"))
 
         typealias Part = RegionWatcher.LabelPart
@@ -149,9 +153,10 @@ final class DenseMenuTests: XCTestCase {
         XCTAssertFalse(translator.texts.contains { $0.contains("(L1)") || $0.contains("1 / 3") || $0 == "SELECT" || $0 == "BACK" })
         let sent = try XCTUnwrap(server.blocks.last { $0 != nil } ?? nil)
         func translation(_ source: String) -> String? { sent.first { $0.source == source }?.translation }
-        XCTAssertTrue(translation("HOLSTER (L1)")?.hasSuffix(" (L1)") == true)
-        XCTAssertTrue(translation("AIM / INTERACT (L2)")?.contains(" / ") == true)
-        XCTAssertEqual(translation("SELECT (✕)"), "SEÇ (✕)")
+        // Tuş adı kutunun dışında kalır (ekranda görünür, #860); etiket çevrilir.
+        XCTAssertNotNil(translation("HOLSTER"))
+        XCTAssertTrue(translation("AIM / INTERACT")?.contains(" / ") == true)
+        XCTAssertEqual(translation("SELECT"), "SEÇ")
 
         // Menü kapandı, yeniden açıldı: hepsi oturum önbelleğinden.
         var again = area

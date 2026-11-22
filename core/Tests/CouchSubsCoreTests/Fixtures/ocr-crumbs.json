@@ -1,0 +1,127 @@
+{
+  "about": "Okuma kırıntısı ve tek sözcük bozulması (GitHub #854, #882; GTA 6). Mac/iPhone OcrCrumbsTests.swift, Windows OcrCrumbsTests.cs ve Android OcrCrumbsTest.kt bu dosyayı okur. crumb: OcrNoise.isCrumb; clean: OcrNoise.clean; nonWord: OcrNoise.isNonWord; mission: MissionLine.isCandidate (kutu karede [sol, üst, sağ, alt]); stickyRows: sırayla StickyRows.filter, son adımda kalan satırlar; stabilizer: ilk satır gönderilir, sonra okumalar sırayla verilir, okumalardan çıkan çeviri istekleri.",
+  "crumb": [
+    { "text": "one ready.", "crumb": true },
+    { "text": "ne ready.", "crumb": true },
+    { "text": "ar.", "crumb": true },
+    { "text": "kulakl ar.", "crumb": true },
+    { "text": "Hm", "crumb": true },
+    { "text": "Gtt solkolfege.", "crumb": true },
+    { "text": "Go!", "crumb": false },
+    { "text": "Okay.", "crumb": false },
+    { "text": "Earpc", "crumb": false },
+    { "text": "Get in the speedboat", "crumb": false },
+    { "text": "It's not too far, don't worry.", "crumb": false },
+    { "text": "and then we go somewhere else", "crumb": false }
+  ],
+  "clean": [
+    { "in": "Get in the _ eedboat", "out": "Get in the eedboat" },
+    { "in": "Wait ~ here", "out": "Wait here" },
+    { "in": "Over there _,", "out": "Over there," },
+    { "in": "It costs $500 now.", "out": "It costs $500 now." }
+  ],
+  "nonWord": [
+    { "word": "Ijz", "nonWord": true },
+    { "word": "ijz", "nonWord": true },
+    { "word": "rnnk", "nonWord": true },
+    { "word": "ou$3e", "nonWord": true },
+    { "word": "lives", "nonWord": false },
+    { "word": "eedboat", "nonWord": false },
+    { "word": "liz", "nonWord": false },
+    { "word": "Hmm", "nonWord": false },
+    { "word": "NYC", "nonWord": false }
+  ],
+  "mission": [
+    { "text": "Get in the speedboat", "box": [0.465, 0.948, 0.69, 0.968], "candidate": true },
+    { "text": "Follow the plane", "box": [0.42, 0.948, 0.58, 0.968], "candidate": true },
+    { "text": "Earpc", "box": [0.76, 0.902, 0.80, 0.93], "candidate": false },
+    { "text": "one ready.", "box": [0.44, 0.86, 0.55, 0.89], "candidate": false }
+  ],
+  "stickyRows": [
+    {
+      "name": "konuşmanın üstünde sonradan beliren kırıntı konuşmayı attırmaz, kendisi atılır",
+      "steps": [
+        { "time": 0, "lines": ["It's not too far, don't worry. That's why I got Burim here."] },
+        { "time": 1000, "lines": ["one ready.", "It's not too far, don't worry. That's why I got Burim here."] }
+      ],
+      "kept": ["It's not too far, don't worry. That's why I got Burim here."]
+    },
+    {
+      "name": "kırıntı geç gelince eski kural konuşmayı atıyordu (1,6 sn)",
+      "steps": [
+        { "time": 0, "lines": ["It's not too far, don't worry. That's why I got Burim here."] },
+        { "time": 1600, "lines": ["one ready.", "It's not too far, don't worry. That's why I got Burim here."] }
+      ],
+      "kept": ["It's not too far, don't worry. That's why I got Burim here."]
+    },
+    {
+      "name": "kırıntı uzun konuşmayı görev/HUD (sabit) saydırmaz",
+      "steps": [
+        { "time": 0, "lines": ["It's not too far, don't worry. That's why I got Burim here."] },
+        { "time": 3500, "lines": ["It's not too far, don't worry. That's why I got Burim here.", "ar ne."] },
+        { "time": 6500, "lines": ["It's not too far, don't worry. That's why I got Burim here.", "ar ne."] }
+      ],
+      "kept": ["It's not too far, don't worry. That's why I got Burim here."]
+    },
+    {
+      "name": "eski görev satırı yeni konuşmanın altında yine atılır",
+      "steps": [
+        { "time": 0, "lines": ["Follow John"] },
+        { "time": 2000, "lines": ["Where are you going?", "Follow John"] }
+      ],
+      "kept": ["Where are you going?"]
+    },
+    {
+      "name": "iki satırlı altyazının geç beliren kısa ikinci satırı kalır",
+      "steps": [
+        { "time": 0, "lines": ["I told you we should"] },
+        { "time": 1300, "lines": ["I told you we should", "go."] }
+      ],
+      "kept": ["I told you we should", "go."]
+    }
+  ],
+  "stabilizer": [
+    {
+      "name": "ilk karede bozuk okunan sözcük (Ijz) doğru okununca yeniden çevrilir",
+      "sent": "To the best day of our fucking Ijz, eh?",
+      "sentReads": 1,
+      "reads": ["To the best day of our fucking lives, eh?", "To the best day of our fucking lives, eh?", "To the best day of our fucking lives, eh?"],
+      "translated": ["To the best day of our fucking lives, eh?"]
+    },
+    {
+      "name": "renkli sözcüğün kesik okuması (eedboat) bir kez düzeltilir",
+      "sent": "Get in the eedboat",
+      "sentReads": 10,
+      "reads": ["Get in the speedboat", "Get in the speedboat", "Get in the eedboat", "Get in the eedboat", "Get in the eedboat"],
+      "translated": ["Get in the speedboat"]
+    },
+    {
+      "name": "temiz sözcük farkı, gönderilenden çok okunursa düzeltmedir",
+      "sent": "To the best day of our fucking liz, eh?",
+      "sentReads": 1,
+      "reads": ["To the best day of our fucking lives, eh?", "To the best day of our fucking lives, eh?"],
+      "translated": ["To the best day of our fucking lives, eh?"]
+    },
+    {
+      "name": "temiz sözcük farkı, gönderilen daha çok okunduysa düzeltme değildir",
+      "sent": "To the best day of our fucking liz, eh?",
+      "sentReads": 4,
+      "reads": ["To the best day of our fucking lives, eh?", "To the best day of our fucking lives, eh?"],
+      "translated": []
+    },
+    {
+      "name": "puanı yüksek olmayan farklı okuma düzeltme değildir",
+      "sent": "I can see the boat from here.",
+      "sentReads": 1,
+      "reads": ["I can see the boot from here.", "I can see the boot from here.", "I can see the boot from here."],
+      "translated": []
+    },
+    {
+      "name": "tek okumalık sapma düzeltme değildir",
+      "sent": "To the best day of our fucking Ijz, eh?",
+      "sentReads": 1,
+      "reads": ["To the best day of our fucking lives, eh?", "To the best day of our fucking Ijz, eh?"],
+      "translated": []
+    }
+  ]
+}

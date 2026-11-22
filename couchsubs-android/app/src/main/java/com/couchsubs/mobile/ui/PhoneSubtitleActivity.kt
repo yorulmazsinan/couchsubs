@@ -200,7 +200,10 @@ class PhoneSubtitleActivity : ComponentActivity() {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         status.regions.forEach { region ->
                             // Ekran yazısı blokları özgün yerinde ve stilinde (zemin, yazı rengi, kalınlık, hizalama; TV'deki gibi).
+                            // "Ekranı çevir" ekrandayken onun yazılarının yerindeki bloklar çizilmez (#827).
                             val styled = region.blocks?.filter { it.surface != null }
+                                ?.let { com.couchsubs.mobile.core.ScreenTranslation.uncovered(it, status.screen) }
+                            if (region.blocks?.any { it.surface != null } == true && styled.isNullOrEmpty()) return@forEach
                             if (!styled.isNullOrEmpty()) {
                                 styled.forEach { item -> StyledBlock(item, maxWidth, maxHeight) }
                                 return@forEach
@@ -248,8 +251,8 @@ class PhoneSubtitleActivity : ComponentActivity() {
 }
 
 /**
- * Otomatik ekran yazısının bir bloğu, özgün yazının yerinde ve stilinde: zemin rengi (düz zeminde tam, değilse %85
- * opak), yazı rengi, kalınlık, dar aile, hizalama. Yazı boyu özgün satır yüksekliğinden; Türkçe uzunsa en çok %40
+ * Otomatik ekran yazısının bir bloğu, özgün yazının yerinde ve stilinde: zemin rengi (her zeminde tam opak; özgün yazı
+ * arasından görünmez, #827), yazı rengi, kalınlık, dar aile, hizalama. Yazı boyu özgün satır yüksekliğinden; Türkçe uzunsa en çok %40
  * küçülür (TV ile aynı kural).
  */
 @androidx.compose.runtime.Composable
@@ -279,6 +282,6 @@ private fun StyledBlock(
             .offset(x = width * box.left.toFloat(), y = height * box.top.toFloat())
             .width(boxWidth)
             .then(if (fill) Modifier.height(height * (box.bottom - box.top).toFloat()) else Modifier)
-            .background(color(surface.background, if (surface.flat) 1f else 0.85f))
+            .background(color(surface.background))
             .padding(horizontal = 2.dp))
 }

@@ -20,6 +20,9 @@ public enum XboxErrorKind: String, Sendable {
     case service
     /// Görüntü geldikten sonra kesildi: bağlantı açık görünse de oturum yeniden kurulur (bkz. `XboxPictureWatch`).
     case noPicture
+    /// Bağlantı kuruldu ama Xbox tek kare göndermedi (ilk kare sınırı doldu ya da Xbox kapattı); iki bağlantıdan sonra
+    /// durulur (bkz. `XboxSessionMachine.maxNoPictureAttempts`).
+    case noFirstFrame
 }
 
 public struct XboxError: Error, Sendable {

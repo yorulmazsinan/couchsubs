@@ -239,6 +239,9 @@ public static class CrashRecords
             }
             text.Append(line).Append("\r\n");
         }
+        if (Analyze(original) is { } analysis) text.Append("Çözümleme: ").Append(analysis).Append("\r\n");
+        if (details.EventLog.Any(ProcessEnded))
+            text.Append("Sonuç: süreç bu hatayla kapandı (Windows olay günlüğünde kayıtlı; \"Aşama: ilk şans\" hatanın kapanıştan önce yakalandığı andır)\r\n");
         foreach (var (name, lines) in details.Logs)
         {
             text.Append($"Son günlük satırları ({name}):\r\n");
@@ -265,6 +268,73 @@ public static class CrashRecords
         }
         return result;
     }
+
+    /// <summary>Windows'un kaydı sürecin bu hatayla kapandığını söylüyor mu (.NET Runtime ya da Application Error).</summary>
+    internal static bool ProcessEnded(string entry) =>
+        entry.Contains("Application Error:", StringComparison.Ordinal)
+        || entry.Contains("The process was terminated", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Yerel işleyicinin yazdığı yazmaçlar ("RIP=0x… RSP=0x…"), yazıldıkları sırayla.</summary>
+    public static IReadOnlyList<(string Name, ulong Value)> Registers(string summary)
+    {
+        var found = new List<(string, ulong)>();
+        var inRegisters = false;
+        foreach (var line in summary.Split('\n').Select(line => line.TrimEnd('\r')))
+        {
+            if (!line.StartsWith("  ", StringComparison.Ordinal)) inRegisters = line.StartsWith("Yazmaçlar:", StringComparison.Ordinal);
+            else if (inRegisters)
+                foreach (Match match in RegisterPattern.Matches(line))
+                    found.Add((match.Groups[1].Value, ulong.Parse(match.Groups[2].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture)));
+        }
+        return found;
+    }
+
+    /// <summary>"Erişim: okuma 0x…" satırındaki adres; yoksa null.</summary>
+    public static ulong? AccessAddress(string summary)
+    {
+        var match = AccessPattern.Match(summary);
+        return match.Success ? ulong.Parse(match.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture) : null;
+    }
+
+    /// <summary>
+    /// Erişilen adres bir <c>taban + sıra + uzaklık</c> toplamının yalnız alt 32 biti mi (GitHub #903). Taban 4 GB'ın
+    /// üstünde bir gösterici (ör. dizi), sıra 4 GB'ın altında bir yazmaç (ya da yok), uzaklık 0-64 bayt (.NET dizisinin
+    /// verisi 16. bayttan başlar). Yazmaçlar doğru, yalnız adresin üst 32 biti düşmüşse komut doğru adresi hesaplayamamıştır:
+    /// programın kendi hesabıyla açıklanamaz, işlemci ya da bellek kararsızlığına işaret eder. Eşleşme yoksa null.
+    /// </summary>
+    public static (string Base, string? Index, int Offset, ulong Intended)? TruncatedPointer(IReadOnlyList<(string Name, ulong Value)> registers, ulong address)
+    {
+        const ulong low = 1UL << 32;
+        if (address < 0x10000 || address >= low) return null;
+        var indexes = new List<(string? Name, ulong Value)> { (null, 0) };
+        indexes.AddRange(registers.Where(r => r.Name != "RIP" && r.Value < low).Select(r => ((string?)r.Name, r.Value)));
+        foreach (var (name, value) in registers)
+        {
+            if (name is "RIP" or "RSP" || value < low) continue;
+            foreach (var (index, offsetBase) in indexes)
+                for (var offset = 0; offset <= 64; offset++)
+                {
+                    var intended = value + offsetBase + (ulong)offset;
+                    if ((intended & 0xFFFFFFFF) == address) return (name, index, offset, intended);
+                }
+        }
+        return null;
+    }
+
+    /// <summary>Özete eklenen çözümleme satırı (yalnız açık bir belirti varsa).</summary>
+    public static string? Analyze(string summary)
+    {
+        if (AccessAddress(summary) is not { } address) return null;
+        if (TruncatedPointer(Registers(summary), address) is not { } hit) return null;
+        var sum = hit.Index is null ? $"{hit.Base} + 0x{hit.Offset:X}" : $"{hit.Base} + {hit.Index} + 0x{hit.Offset:X}";
+        return $"erişilen adres 0x{address:X16}, {sum} toplamının (0x{hit.Intended:X16}) yalnız alt 32 biti. " +
+               "Yazmaçlar doğru, adresin üst 32 biti düşmüş; bu, programın hesabıyla açıklanamaz. Çoğunlukla işlemci ya da " +
+               "bellek kararsızlığı belirtisidir (hız aşırtma, XMP/EXPO bellek ayarı, düşük voltaj; Intel 13./14. nesilde " +
+               "güncellenmemiş BIOS mikrokodu).";
+    }
+
+    private static readonly Regex RegisterPattern = new(@"\b(R[A-Z0-9]{1,2})=0x([0-9A-Fa-f]{16})\b", RegexOptions.Compiled);
+    private static readonly Regex AccessPattern = new(@"^Erişim: (?:okuma|yazma|yürütme) 0x([0-9A-Fa-f]{16})\r?$", RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>Kullanıcı klasörünün yolu ve kullanıcı adı özetten çıkarılır (modül yolları C:\Users\ad\… ile başlar).</summary>
     public static string Sanitize(string text, string? userProfile, string? userName)

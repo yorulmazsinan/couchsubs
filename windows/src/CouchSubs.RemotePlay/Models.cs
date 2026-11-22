@@ -62,6 +62,11 @@ public enum DisconnectKind
     /// sonsuza kadar "Yeniden bağlanılıyor…" deneniyordu (GitHub #519). <see cref="CrashRetryLimit.MaxRetries"/> denemeden
     /// sonra durulur.</summary>
     ConsoleRemotePlayCrashed,
+    /// <summary>PS5 akışı kendisi kapattı: Takion bağlantısında "disconnect" iletisi gönderdi (libchiaki
+    /// STREAM_CONNECTION_REMOTE_DISCONNECTED / _REMOTE_SHUTDOWN). Ağ kopması değildir; ağ gidince PS5'ten ileti gelmez.
+    /// Kullanıcılar bunu oyun sırasında PS5'te ana hesaba geçince görüyor (X, 21 Kas); eskiden Network sayılıp "kabloyla
+    /// bağlayın" deniyor ve kopma görüntüyü 720p'ye düşürüyordu. Ayrıntı: PS5'in neden metni. Yeniden bağlanılır.</summary>
+    ConsoleClosed,
 }
 
 /// <summary>PS5 oturum giriş şifresi (4 hane). PS5 ikinci hesapta şifre isterse Ayarlar'da kayıtlı şifre gönderilir.</summary>
@@ -161,4 +166,14 @@ public interface IStreamSession : IDisposable
     /// (ana ekrandaki "Yeniden bağlan"; Mac, iPhone ve Android ile aynı).
     /// </summary>
     bool HasGivenUp => false;
+    /// <summary>
+    /// Xbox: "Xbox sesini bu bilgisayarda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır, Xbox'a yeni oturum
+    /// açılmaz (#871; Mac, iPhone ve Android ile aynı).
+    /// </summary>
+    void SetPlayAudio(bool enabled) { }
+    /// <summary>
+    /// PS5: bağlanırken son adım; "Bağlanıyor…" 30 sn'yi geçince ana ekranda nedeni söylenir (<see cref="ConnectingHint"/>;
+    /// Xbox ve pencereden okumada yok). Her iş parçacığından okunur.
+    /// </summary>
+    ConnectStep? LastConnectStep => null;
 }

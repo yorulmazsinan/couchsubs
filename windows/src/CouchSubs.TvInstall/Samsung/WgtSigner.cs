@@ -14,10 +14,14 @@ internal enum WgtDigest
 {
     /// <summary>
     /// rsa-sha256 + sha256: W3C Widget Signature'ın zorunlu tuttuğu, Tizen 2.x SDK'sının ürettiği biçim. Tizen 2.x
-    /// TV'lerde (2016) kullanılır (#638).
+    /// TV'lerde (2016) yalnız ikinci denemedeki yalın pakette kullanılır (#638, #890).
     /// </summary>
     Sha256,
-    /// <summary>rsa-sha512 + sha512: bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim (Tizen 3.0 ve üstü).</summary>
+    /// <summary>
+    /// rsa-sha512 + sha512: bugünkü Tizen Studio'nun ve TizenSdb'nin ürettiği biçim. #71'de 40KU7000'e (Tizen 2.4) kurulan
+    /// paket de Apps2Samsung'un TizenSdb'siyle böyle imzalanmıştı; Tizen 2.x'te ilk deneme bununla yapılır (#890; Windows/Mac
+    /// o denemede de TizenSdb'yi kullanır, telefonlar bu biçimi).
+    /// </summary>
     Sha512,
 }
 

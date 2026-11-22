@@ -35,9 +35,18 @@ class StickyRows {
          * John"); boyları yakınsa hangisinin görev olduğu bilinmez, eski kural uygulanır.
          */
         const val JOINED_SHARE = 0.8
+
+        /**
+         * Konuşmanın üstünde, konuşma yerleştikten en az bu kadar sonra beliren kırıntı satır ([OcrNoise.isCrumb])
+         * altyazıya katılmaz. Altyazının üst satırı alttakinden sonra belirmez; alttaki kırıntı ise iki satırlı altyazının
+         * geç beliren ikinci satırı olabileceği için [LINGER_MS] ve devam kuralıyla sınanır.
+         */
+        const val CRUMB_ABOVE_MS = 500L
     }
 
-    private class Row(var text: String, val since: Long) {
+    /** [raw]: satırın son okunuşu (ham); kırıntı denetimi için ([OcrNoise.isCrumb]). */
+    private class Row(var text: String, var raw: String, val since: Long) {
+        val crumb get() = OcrNoise.isCrumb(raw)
         var lastSeen = since
         /** Satırın en son büyüdüğü an (yazı yazılır gibi beliren satır). */
         var grown = since
@@ -75,13 +84,14 @@ class StickyRows {
             val text = TextMatch.normalize(line.text)
             if (text.length < 3) { matched.add(null); continue }
             val row = rows.firstOrNull { it !in used && TextMatch.isSimilar(text, it.text) }
-                ?: Row(text, time).also { rows.add(it); created.add(matched.size) }
+                ?: Row(text, line.text, time).also { rows.add(it); created.add(matched.size) }
             if (text.length >= row.text.length + 3) {
                 // Satır büyüdü (yazı yazılır gibi): yaşı yeniden başlar; okuma sapmaları (kısalıp uzama) saymaz.
                 row.text = text
                 row.grown = time
             }
             row.lastSeen = time
+            row.raw = line.text
             used.add(row)
             matched.add(row)
         }
@@ -90,15 +100,21 @@ class StickyRows {
         previous = present
         matched.forEachIndexed { i, row ->
             if (row == null || row.sticky || time - row.since < STICKY_MS) return@forEachIndexed
-            if (present.any { it.since - row.since >= YOUNGER_BY_MS }) {
+            // Yanındaki daha yeni satır kırıntıysa (OcrNoise.isCrumb) kanıt değildir: uzun konuşma solan satırın parçası ya
+            // da HUD kırıntısı yüzünden görev/HUD sayılmasın (GitHub #854).
+            if (present.any { it.since - row.since >= YOUNGER_BY_MS && !it.crumb }) {
                 row.sticky = true
                 newly.add(reading.lines[i].text)
             }
         }
+        // Konuşan adıyla başlayan satır ("JASON: …") her zaman altyazıdır: görev/HUD sayılıp atılmaz (Mac/iPhone, Windows
+        // ile aynı).
+        newly.removeAll { SpeakerPrefix.split(it) != null }
         newlySticky = newly
         val lingering = lingering(reading, matched)
-        val kept = reading.lines.filterIndexed { i, _ -> matched[i]?.sticky != true && !lingering[i] }
-        removed = reading.lines.filterIndexed { i, _ -> matched[i]?.sticky == true || lingering[i] }
+        val spoken = reading.lines.map { SpeakerPrefix.split(it.text) != null }
+        val kept = reading.lines.filterIndexed { i, _ -> spoken[i] || matched[i]?.sticky != true && !lingering[i] }
+        removed = reading.lines.filterIndexed { i, _ -> !spoken[i] && (matched[i]?.sticky == true || lingering[i]) }
         rows.removeAll { time - it.lastSeen > FORGET_AFTER_MS }
         return if (kept.size == reading.lines.size) reading else Reading(kept)
     }
@@ -130,7 +146,13 @@ class StickyRows {
         val live = matched.indices.filter { matched[it]?.sticky == false }
         if (live.size < 2) return result
         val settled = live.filter { !matched[it]!!.joined }
-        val youngest = settled.ifEmpty { live }.maxOf { matched[it]!!.since }
+        // Kırıntı satır (OcrNoise.isCrumb) "en yeni" sayılmaz: konuşmanın üstünde sonradan beliren okuma kırıntısı
+        // ("one ready.") konuşmayı eski gösterip attırıyor, TV'de konuşmanın yerine kırıntının çevirisi çıkıyordu (GitHub
+        // #854, GTA 6). Kırıntının kendisi konuşma ondan önce yerleşmişse uçta atılır.
+        val substantial = settled.ifEmpty { live }.filter { !matched[it]!!.crumb }
+        dropLateCrumbs(reading, matched, live, result)
+        if (substantial.isEmpty()) return result
+        val youngest = substantial.maxOf { matched[it]!!.since }
         fun old(i: Int) = SpeakerPrefix.split(reading.lines[i].text) == null &&
             ((matched[i]!!.joined && settled.isNotEmpty()) || youngest - matched[i]!!.grown >= LINGER_MS)
         // Yalnız uçtaki eski satırlar (görev altyazının altında ya da üstünde); ortadaki satır konuşmanın parçasıdır.
@@ -142,6 +164,38 @@ class StickyRows {
         }
         for (i in live.asReversed()) if (old(i)) result[i] = true else break
         return result
+    }
+
+    /**
+     * Uçtaki kırıntı satır, yanındaki gerçek satır ondan önce yerleşmişse (üstte [CRUMB_ABOVE_MS], altta [LINGER_MS])
+     * altyazıya katılmaz. Üstteki satırın devamı olan alt satır (iki satırlı altyazının geç beliren ikinci satırı,
+     * [Reading.continues]) kalır.
+     */
+    private fun dropLateCrumbs(reading: Reading, matched: List<Row?>, live: List<Int>, result: BooleanArray) {
+        if (live.size < 2) return
+        fun late(position: Int, ms: Long): Boolean {
+            val row = matched[position]!!
+            if (!row.crumb || SpeakerPrefix.split(reading.lines[position].text) != null) return false
+            return live.any { other -> other != position && !matched[other]!!.crumb && row.since - matched[other]!!.grown >= ms }
+        }
+        val first = live.first()
+        val last = live.last()
+        if (late(first, CRUMB_ABOVE_MS)) result[first] = true
+        if (late(last, LINGER_MS) && !Reading.continues(reading.lines[live[live.size - 2]].text, reading.lines[last].text)) {
+            result[last] = true
+        }
+    }
+
+    /**
+     * Satır ne kadar süredir değişmeden okunuyor (milisaniye; son büyümesinden bu yana). Satır bilinmiyorsa (yeni ya da en
+     * az üç harfli değil) null. [Reading.subtitleBlock] sabit bloğu (haber bandı) bununla ayırır (GitHub #933; Mac:
+     * StickyRows.unchangedMs, Windows: StickyRows.UnchangedMs).
+     */
+    fun unchangedMs(line: String, time: Long): Long? {
+        val text = TextMatch.normalize(line)
+        if (text.length < 3) return null
+        val row = rows.firstOrNull { TextMatch.isSimilar(text, it.text) } ?: return null
+        return time - row.grown
     }
 
     fun reset() {

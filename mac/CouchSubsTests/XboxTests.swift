@@ -209,12 +209,15 @@ final class XboxModelTests: XCTestCase {
         await settle()
         XCTAssertEqual(model.ps5StatusText, String(localized: "Connected"))
 
-        // Ses ayarı değişince yayın yeni seçimle yeniden başlar.
+        // #871: ses ayarı değişince yayın yeniden kurulmaz (Xbox yeni oturumda hizmetini başlatamıyordu); yalnız yerel ses kısılır.
         model.settings.xboxAudioOnDevice = false
-        await settle()
-        for _ in 0..<40 where services.xboxStreams.count < 2 { await settle() }
-        XCTAssertEqual(services.xboxStreams.count, 2)
-        XCTAssertFalse(services.xboxStreams[0].stream.started)
+        for _ in 0..<5 { await settle() }
+        XCTAssertEqual(services.xboxStreams.count, 1)
+        XCTAssertTrue(services.xboxStreams[0].stream.started)
+        XCTAssertEqual(services.xboxStreams[0].stream.playAudioChanges, [false])
+        model.stop()
+        // Sonraki başlatmada yeni ayarla açılır.
+        await model.start()
         XCTAssertFalse(services.xboxStreams[1].playAudio)
         model.stop()
     }
@@ -272,6 +275,16 @@ final class XboxModelTests: XCTestCase {
         XCTAssertFalse(XboxText.stopped(.busy, "ServerInUse").contains("ServerInUse"))
         XCTAssertFalse(XboxText.stopped(.consoleUnavailable, "ConsoleOffline").contains("ConsoleOffline"))
         XCTAssertNotEqual(XboxText.stopped(.busy, ""), XboxText.stopped(.consoleUnavailable, ""))
+        // #871: Xbox'ın JSON hata nesnesi ekranda gösterilmez; hizmet hatasında yeniden başlatma önerisi, bilinmeyende kod.
+        let json = #"{"message":"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready."}"#
+        let kind = XboxStop.classify(json)
+        let notReady = XboxText.stopped(kind, XboxStop.displayReason(json, kind))
+        XCTAssertEqual(kind, .serviceNotReady)
+        XCTAssertFalse(notReady.contains("{"))
+        XCTAssertTrue(notReady.contains("10"))
+        let unknown = XboxText.stopped(.startFailed, XboxStop.displayReason(#"{"message":"Agent : -2147024891 : x"}"#, .startFailed))
+        XCTAssertTrue(unknown.contains("0x80070005"))
+        XCTAssertFalse(unknown.contains("{"))
     }
 }
 

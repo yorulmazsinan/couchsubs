@@ -51,14 +51,34 @@ class XboxStreamSession(
      * sürerken sesi istemciye verip TV'yi susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir. Mikrofon her durumda
      * kapalıdır, yerel ses parçası eklenmez: Xbox'a ses gönderilmez.
      */
-    private val playAudio: Boolean = true,
+    playAudio: Boolean = true,
 ) : FrameSource {
+    /** Çeviri sürerken [setPlayAudio] ile değişir. */
+    @Volatile private var playAudio = playAudio
+    /** Xbox'tan gelen ses parçası ve ses birimi; ayar değişince yalnız bunlar açılıp kapatılır. */
+    @Volatile private var audioTrack: MediaStreamTrack? = null
+    @Volatile private var audioModule: JavaAudioDeviceModule? = null
+
+    /**
+     * "Xbox sesini bu cihazda çal" çeviri sürerken değişti: yalnız yerel ses açılır ya da kısılır, Xbox'a yeni oturum
+     * açılmaz. Eskiden (Mac ve Windows'ta) ayar değişince yayın kapatılıp hemen yeniden açılıyordu; Xbox eski oturumu
+     * bırakmadan gelen yeni istekte uzaktan oynatma hizmetini başlatamıyor, bağlantı geri gelmiyordu (#871).
+     */
+    override fun setPlayAudio(enabled: Boolean) {
+        if (playAudio == enabled) return
+        playAudio = enabled
+        audioModule?.setSpeakerMute(!enabled)
+        val track = audioTrack ?: return
+        runCatching { track.setEnabled(enabled) }
+        log(if (enabled) "oyun sesi açıldı (ayar, oturum sürüyor)" else "oyun sesi kapatıldı (ayar, oturum sürüyor)")
+    }
+
     private companion object {
         const val TAG = "CouchSubsXbox"
         const val ICE_GATHER_MS = 5000L
         const val KEEPALIVE_MS = 30_000L
-        /** El sıkışmadan sonra bu sürede kare gelmezse oturum yeniden açılır. */
-        const val FIRST_FRAME_MS = 20_000L
+        /** El sıkışmadan sonra bu sürede kare gelmezse bağlantı "görüntü gelmedi" nedeniyle kapatılır. */
+        const val FIRST_FRAME_MS = XboxFirstFrameWatch.FIRST_FRAME_LIMIT_MS
         /** OCR saniyede beş kez okur; her kareyi I420'ye çevirmeye gerek yok. */
         const val FRAME_INTERVAL_MS = 66L
         /** Kare onayları oynatıcıdaki gibi 16 ms'de bir paketlenir (Input.ts `_inputInterval`). */
@@ -169,7 +189,11 @@ class XboxStreamSession(
                         else -> break@loop
                     }
                 }
-                if (!stopped.get()) throw XboxException(XboxError.NETWORK, endReason ?: "Xbox görüntü bağlantısı kapandı")
+                if (!stopped.get()) {
+                    // Bağlantı kuruldu ama Xbox tek kare göndermeden kapattı: "görüntü gelmedi" sayılır (iki bağlantıda durulur).
+                    val noFirstFrame = connectedAt > 0 && frameSession?.let { frameCounter.framesInSession(it) } == 0L
+                    throw XboxException(if (noFirstFrame) XboxError.NO_FIRST_FRAME else XboxError.NETWORK, endReason ?: "Xbox görüntü bağlantısı kapandı")
+                }
             } catch (error: InterruptedException) {
                 if (stopped.get()) break
             } catch (error: XboxException) {
@@ -214,6 +238,10 @@ class XboxStreamSession(
         lastError = "$kind: $detail"
         if (stopped.get()) return
         log("kopma ($kind): $detail")
+        if (kind == XboxError.NO_FIRST_FRAME) {
+            log("Xbox görüntü göndermedi: bağlantı kuruldu ama tek kare gelmedi. Xbox'ta Ayarlar › Cihazlar ve bağlantılar › " +
+                "Uzak özellikler açık mı, Xbox kablolu mu? Tanı satırlarında video bayt 0 ise Xbox hiç görüntü kodlamıyor")
+        }
         val failed = machine.phase as? XboxSessionMachine.Phase.Failed
         when {
             failed == null || failed.willRetry -> {
@@ -225,11 +253,17 @@ class XboxStreamSession(
             else -> {
                 // Denemeler bitti ya da konsol yayını reddetti: yayın durur, yeniden denenmez.
                 log("yeniden denenmiyor, yayın durdu")
-                val text = when (XboxSessionMachine.stopKind(kind, detail)) {
+                // Ham neden (Xbox'ın JSON hata nesnesi) yukarıda günlüğe yazıldı; ekranda yalnız anlaşılır metin ve kod (#871).
+                val stop = XboxSessionMachine.stopKind(kind, detail)
+                val text = when (stop) {
                     XboxSessionMachine.StopKind.BUSY -> appContext.getString(R.string.xbox_stopped_busy)
                     XboxSessionMachine.StopKind.CONSOLE_UNAVAILABLE -> appContext.getString(R.string.xbox_stopped_console)
+                    XboxSessionMachine.StopKind.NO_PICTURE -> appContext.getString(R.string.xbox_stopped_no_picture)
+                    XboxSessionMachine.StopKind.SERVICE_NOT_READY -> appContext.getString(R.string.xbox_stopped_service)
+                    XboxSessionMachine.StopKind.START_FAILED ->
+                        appContext.getString(R.string.xbox_stopped_code, XboxSessionMachine.displayReason(detail, stop, kind.name))
                     XboxSessionMachine.StopKind.OTHER ->
-                        appContext.getString(R.string.xbox_connection_lost, XboxSessionMachine.shortReason(detail, kind.name))
+                        appContext.getString(R.string.xbox_connection_lost, XboxSessionMachine.displayReason(detail, stop, kind.name))
                 }
                 onState(SessionState.Disconnected(DisconnectKind.OTHER, text))
             }
@@ -262,6 +296,8 @@ class XboxStreamSession(
                 setSpeakerMute(!playAudio)
                 setMicrophoneMute(true)
             }
+        // Yerel nesne fabrikada yaşar (release yalnız bu başvuruyu bırakır); susturma çeviri sürerken buradan değişir.
+        audioModule = audio
         return PeerConnectionFactory.builder()
             .setAudioDeviceModule(audio)
             // EGL bağlamı yok: donanım çözücüsü kareyi bellekte verir, Y düzlemi doğrudan okunur.
@@ -309,6 +345,7 @@ class XboxStreamSession(
         endReason = null
         lastError = null
         firstFrameAt = 0L
+        connectedAt = 0L
         acking = false
         acks.clear()
         ackSequence = 0
@@ -368,7 +405,9 @@ class XboxStreamSession(
             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
         val video = connection.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
             RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY))
+        audioTrack = audio?.receiver?.track()
         audio?.receiver?.track()?.setEnabled(playAudio)
+        audioModule?.setSpeakerMute(!playAudio)
         log(if (playAudio) "oyun sesi bu telefonda çalınır" else "oyun sesi kapalı (ayar)")
         val track = (video?.receiver?.track() as? VideoTrack)
             ?: throw XboxException(XboxError.SERVICE, "Görüntü alıcısı kurulamadı")
@@ -398,7 +437,7 @@ class XboxStreamSession(
             if (done.await(1, TimeUnit.SECONDS)) break
             if (frameCounter.framesInSession(negotiatedFrames) == 0L && SystemClock.elapsedRealtime() - negotiatedAt > FIRST_FRAME_MS) {
                 endReason = "Xbox'tan ${FIRST_FRAME_MS / 1000} sn içinde görüntü gelmedi"
-                throw XboxException(XboxError.CONSOLE_UNAVAILABLE, endReason!!)
+                throw XboxException(XboxError.NO_FIRST_FRAME, endReason!!)
             }
             checkPicture(watchPicture)
         }
@@ -580,10 +619,13 @@ class XboxStreamSession(
             channels.values.forEach { runCatching { it.unregisterObserver(); it.dispose() } }
             channels.clear()
         }
+        // Parça bağlantıyla birlikte kapanır; kapanmış parçaya dokunulmaz.
+        audioTrack = null
         peer?.let { runCatching { it.dispose() } }
         peer = null
         factory?.let { runCatching { it.dispose() } }
         factory = null
+        audioModule = null
         ended = null
     }
 

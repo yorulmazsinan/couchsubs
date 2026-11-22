@@ -50,6 +50,40 @@ class MenuScreenTextTest {
         assertFalse(detector.menu)
     }
 
+    /**
+     * Menü kapandıktan sonra sakin (karanlık) sahnede ayrı ayrı belirmiş üç yazı menüyü sürdürmez. GTA 6 "Gone Fishing"
+     * (2026-11-22): menü durumu bitmedi, altyazı bütün oturum okunmadı (Mac/iPhone ve Windows ile aynı sınama).
+     */
+    @Test
+    fun menuEndsWhenItsOwnLabelsLeaveEvenIfOtherTextStays() {
+        val scene = listOf(Triple(1, 0, 500L), Triple(28, 0, 900L), Triple(1, 17, 1300L))
+        fun frame(t: Long, withWheel: Boolean): ByteArray {
+            val pixels = if (withWheel) wheel(0) else ByteArray(width * height) { 112 }
+            scene.forEach { (column, row, from) -> if (t >= from) label(pixels, column, row, columns = 2) }
+            return pixels
+        }
+        val detector = ScreenTextDetector()
+        for (t in 0L..1900L step 100) detector.step(frame(t, withWheel = true), t)
+        assertTrue(detector.menu)
+        for (t in 2000L..4000L step 100) detector.step(frame(t, withWheel = false), t)
+        assertFalse(detector.menu)
+    }
+
+    /** Menüde hiçbir şey değişmeden 5 sn geçince menü biter, aynı yazılarla yeniden açılmaz (Mac, Windows ile aynı). */
+    @Test
+    fun stillMenuExpiresAndOnlyANewMenuReopens() {
+        val detector = ScreenTextDetector()
+        for (t in 0L..400L step 100) detector.step(wheel(0), t)
+        assertTrue(detector.menu)
+        for (t in 500L..5000L step 100) detector.step(wheel(0), t)
+        assertTrue(detector.menu)
+        for (t in 5100L..8000L step 100) detector.step(wheel(0), t)
+        assertFalse(detector.menu)
+        for (t in 8100L..8200L step 100) detector.step(ByteArray(width * height) { 112 }, t)
+        for (t in 8300L..8800L step 100) detector.step(wheel(0), t)
+        assertTrue(detector.menu)
+    }
+
     @Test
     fun shortLabelsOverASharpMovingSceneAreNotAMenu() {
         val detector = ScreenTextDetector()
@@ -71,14 +105,14 @@ class MenuScreenTextTest {
 
     @Test
     fun uiCommandsKeepTheOriginalCase() {
-        assertEquals("KAPALI", UiCommands.translate("OFF"))
-        assertEquals("Kapalı", UiCommands.translate("Off"))
-        assertEquals("kapalı", UiCommands.translate("off"))
-        assertEquals("AÇIK", UiCommands.translate("ON"))
-        assertEquals("KIYAFETLER", UiCommands.translate("OUTFITS"))
-        assertEquals("İSTATİSTİKLER", UiCommands.translate("STATS"))
-        assertEquals("SEÇ ${ButtonIcons.MARKER}", UiCommands.translate("SELECT ${ButtonIcons.MARKER}"))
-        assertNull(UiCommands.translate("Open the door"))
+        assertEquals("KAPALI", UiCommands.translateLabel("OFF"))
+        assertEquals("Kapalı", UiCommands.translateLabel("Off"))
+        assertEquals("kapalı", UiCommands.translateLabel("off"))
+        assertEquals("AÇIK", UiCommands.translateLabel("ON"))
+        assertEquals("KIYAFETLER", UiCommands.translateLabel("OUTFITS"))
+        assertEquals("İSTATİSTİKLER", UiCommands.translateLabel("STATS"))
+        assertEquals("SEÇ ${ButtonIcons.MARKER}", UiCommands.translateLabelLoosely("SELECT ${ButtonIcons.MARKER}"))
+        assertNull(UiCommands.translateLabel("Open the door"))
     }
 
     // --- Ek alan hattı ---
@@ -199,13 +233,15 @@ class MenuScreenTextTest {
         // 20'den çok etiket tek toplu istekte.
         assertEquals(1, engine.requests)
         // Ayırıcıyla bölünen etiket parça parça; tuş adları ve sayaç dokunulmaz.
-        assertTrue(engine.texts.toString(), "AIM" in engine.texts && "(✕) JUMP" in engine.texts && "CLIMB" in engine.texts)
+        // Satır ucundaki tuş adı çeviriye ve kutuya girmez, ekranda görünür kalır (#860).
+        assertTrue(engine.texts.toString(), "AIM" in engine.texts && "JUMP" in engine.texts && "CLIMB" in engine.texts)
+        assertFalse(engine.texts.any { it.contains("(L1)") || it.contains("(✕)") })
         assertFalse(engine.texts.any { it.contains("5 / 9") || it == "5" })
         val items = recorder.blocks.last()!!
-        val holster = items.first { it.source == "HOLSTER (L1)" }
+        val holster = items.first { it.source == "HOLSTER" }
         assertEquals("right", holster.look!!.align)
-        assertTrue(holster.translation, holster.translation.contains("(L1)"))
-        assertEquals("TR AIM / TR INTERACT (L2)", items.first { it.source.startsWith("AIM") }.translation)
+        assertTrue(holster.box.right < 0.40)
+        assertEquals("TR AIM / ETKİLEŞİM", items.first { it.source.startsWith("AIM") }.translation)
         assertEquals("left", items.first { it.source.contains("JUMP") }.look!!.align)
         // Aynı ekrana dönüş: oturum terimleriyle istek gitmez.
         watcher.reset()

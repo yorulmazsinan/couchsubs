@@ -1,0 +1,1 @@
+0.9.70: In GTA 6 the subtitle no longer covers the phone's translation; when they overlap it moves beside the phone (or above/below it if there is no room) and returns when the phone is closed.

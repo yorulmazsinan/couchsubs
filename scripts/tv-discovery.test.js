@@ -95,7 +95,10 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
       // Bildirilen HDMI girişi (?hdmi=2) ayrı tutulur; adres karşılaştırmaları onsuz yapılır.
       const parsed = new URL(url);
       this.hdmi = parsed.searchParams.get('hdmi');
+      // TV uygulamasının sürümü (?v=0.9.69) de ayrı tutulur (GitHub #884, #891).
+      this.version = parsed.searchParams.get('v');
       parsed.searchParams.delete('hdmi');
+      parsed.searchParams.delete('v');
       url = parsed.toString().replace(/\/events\?$/, '/events');
       this.url = url;
       this.readyState = 0;
@@ -141,6 +144,7 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
               if (auth.reject) { this.status = 409; data = {}; }
               else data = { id: 'abcdefghijklmnopqrstuv', code: '123456' };
             } else if (target.searchParams.has('validate')) data = { state: target.searchParams.get('k') === auth.key ? 'valid' : 'expired' };
+            else if (auth.rejected) data = { state: 'expired', rejected: true };
             else if (auth.expired) data = { state: 'expired' };
             else data = auth.approved ? { state: 'approved', key: auth.key } : { state: 'pending' };
           }
@@ -228,6 +232,8 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
     lastOpened: () => opened[opened.length - 1],
     // Son açılan akışın bildirdiği HDMI girişi (yoksa null).
     lastHdmi: () => streams[streams.length - 1].hdmi,
+    // Son açılan akışın bildirdiği TV uygulaması sürümü (?v=).
+    lastVersion: () => streams[streams.length - 1].version,
     streamCount: () => streams.length,
     // Açık akış arka planda kopar ve tarayıcı yeniden denemeye düşer (readyState 0) ya da tümüyle kapanır (2).
     dropStream(state) { const s = streams[streams.length - 1]; s.readyState = state; if (s.onerror) s.onerror({}); },
@@ -245,7 +251,7 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
     // Sorulan /hello adresleri (tarama ve kimlik sorusu).
     probed: () => probes.slice(),
     exits: () => exits,
-    pickServer: (found, savedId) => window.__pickServer(found, savedId),
+    pickServer: (found, savedId, current) => window.__pickServer(found, savedId, current),
     // Bilgisayar açık uygulamayı yeniden açar (Samsung DEEP_LINK, parametreler PAYLOAD'da).
     relaunch(params) { relaunchCallback(params); },
     // Açık (kapatılmamış) bağlantılar.
@@ -255,6 +261,8 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
       document.hidden = hidden;
       for (const fn of documentListeners.visibilitychange || []) fn({});
     },
+    // Android TV: Activity onStop/onStart (document.hidden değişmeden; tv-android/platform.js __onBackground).
+    pageHidden(hidden) { window.__pageHidden(hidden); },
     // TV çözünürlük değişikliği bildirir (Samsung addVideoResolutionChangeListener).
     changeResolution(info) { resolutionCallback(info); },
     // Kumanda tuşu.
@@ -276,6 +284,25 @@ test('LG: kayıtlı adres yanıt vermezse aynı ağda yeni kaynak bulunur, kayı
   assert.strictEqual(tv.lastOpened(), 'http://192.168.1.42:8787/events');
   assert.strictEqual(tv.saved(), 'http://192.168.1.42:8787');
   assert.strictEqual(tv.server(), 'http://192.168.1.42:8787');
+});
+
+// #884, #891: LG'de geliştirici modu kapalıyken ya da anahtar bu bilgisayarda değilken CouchSubs TV'deki sürümü
+// okuyamıyor, TV uygulaması eski kalıyor ve hiç uyarı çıkmıyordu. TV sürümünü altyazı akışıyla kendisi bildirir.
+test('altyazı akışı TV uygulamasının sürümünü (appinfo.json ile aynı) bildirir', () => {
+  const tv = startTv({
+    saved: 'http://192.168.1.42:8787',
+    alive: new Set(['http://192.168.1.42:8787']),
+    hasLocalAddress: true,
+    localIp: null
+  });
+  tv.clock.advance(5000);
+  assert.strictEqual(tv.lastOpened(), 'http://192.168.1.42:8787/events');
+  const appinfo = JSON.parse(fs.readFileSync(path.join(root, 'appinfo.json'), 'utf8'));
+  assert.strictEqual(tv.lastVersion(), appinfo.version);
+  const tizen = fs.readFileSync(path.join(root, '..', 'tv-tizen', 'config.xml'), 'utf8');
+  assert.ok(tizen.includes('version="' + appinfo.version + '"'), 'tv-tizen/config.xml sürümü');
+  const gradle = fs.readFileSync(path.join(root, '..', 'tv-android', 'app', 'build.gradle'), 'utf8');
+  assert.ok(gradle.includes("versionName '" + appinfo.version + "'"), 'tv-android versionName');
 });
 
 test('platform adres söyleyemiyorsa (localAddress yok) da kayıtlı adresin ağı taranır', () => {
@@ -446,6 +473,41 @@ test('kendi CouchSubs\'ı kapalıyken boştaki tek CouchSubs kullanılır, kendi
   assert.strictEqual(tv.saved(), back);
 });
 
+// X (beta.79): TV "bağlı" ama altyazı gelmiyor. Kayıtlı CouchSubs (bilgisayar) açık ama boşta, çeviri telefondan:
+// TV eskiden kayıtlı kimliğe bağlı kalıyordu. /hello "live" ile çeviren CouchSubs'a geçilir, kendisi çevirince dönülür.
+test('kayıtlı CouchSubs boştayken çeviren CouchSubs\'a geçilir, kayıtlı çevirmeye başlayınca ona dönülür', () => {
+  const hello = { [A]: { id: 'id-a', tvs: 0, live: 1 }, [B]: { id: 'id-b', tvs: 0, live: 0 } };
+  const tv = startTv({
+    saved: B, savedId: 'id-b', alive: new Set([A, B]), hello,
+    hasLocalAddress: true, localIp: '192.168.1.30'
+  });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), B + '/events');
+  tv.clock.advance(60000);
+  assert.strictEqual(tv.lastOpened(), A + '/events');
+  // Kayıtlı kimlik değişmez: kendi CouchSubs'ı çevirmeye başlayınca ona dönülür.
+  assert.strictEqual(tv.stored('serverId'), 'id-b');
+  hello[A] = { id: 'id-a', tvs: 1, live: 1 };
+  tv.clock.advance(120000);
+  assert.strictEqual(tv.lastOpened(), A + '/events');
+  hello[B] = { id: 'id-b', tvs: 0, live: 1 };
+  tv.clock.advance(120000);
+  assert.strictEqual(tv.lastOpened(), B + '/events');
+});
+
+test('çeviren ama başka TV\'ye hizmet eden CouchSubs\'a geçilmez; kayıtlı ve çeviren CouchSubs\'ta kalınır', () => {
+  const pick = startTv({ alive: new Set(), hasLocalAddress: false }).pickServer;
+  const idleSaved = { address: B, id: 'id-b', tvs: 1, live: 0 };
+  assert.strictEqual(pick([{ address: A, id: 'id-a', tvs: 1, live: 1 }, idleSaved], 'id-b', B), idleSaved);
+  assert.strictEqual(pick([{ address: A, id: 'id-a', tvs: 0, live: 1 }, idleSaved], 'id-b', B).address, A);
+  // Şu an bağlı olunan çeviren CouchSubs (tvs bizi de sayar) seçili kalır.
+  assert.strictEqual(pick([{ address: A, id: 'id-a', tvs: 1, live: 1 }, idleSaved], 'id-b', A).address, A);
+  // İki yabancı çeviren CouchSubs arasından tahminle seçilmez: kayıtlı olanda kalınır.
+  assert.strictEqual(pick([{ address: A, id: 'id-a', tvs: 0, live: 1 }, { address: 'http://192.168.1.70:8787', id: 'id-c', tvs: 0, live: 1 }, idleSaved], 'id-b', B), idleSaved);
+  // Kayıtlı CouchSubs çeviriyorsa başkasına bakılmaz.
+  assert.strictEqual(pick([{ address: A, id: 'id-a', tvs: 0, live: 1 }, { address: B, id: 'id-b', tvs: 1, live: 1 }], 'id-b', B).address, B);
+});
+
 test('kimlik vermeyen eski CouchSubs sürümleri eskisi gibi bulunur', () => {
   const pick = startTv({ alive: new Set(), hasLocalAddress: false }).pickServer;
   assert.strictEqual(pick([{ address: A, id: null, tvs: null }], 'id-b').address, A);
@@ -614,6 +676,24 @@ test('Samsung: arka plana düşen uygulama bağlantıyı kapatır, yeniden bağl
   tv.clock.advance(1000);
   assert.strictEqual(tv.openStreams().length, 1);
   assert.strictEqual(tv.lastOpened(), 'http://192.168.1.109:8787/events');
+});
+
+// X (TCL Q6C Google TV): PS5 60 Hz'e geçince TV kendi HDMI oynatıcısını öne çekiyor, CouchSubs arka planda kalıyordu;
+// bağlantı açık kaldığı için telefon "TV bağlı" görüyor, deneme yazısı bile görünmeyen sayfaya gidiyordu.
+test('Android TV uygulama içi: Activity arka plana düşünce bağlantı bırakılır, öne gelince kurulur', () => {
+  const tv = startTv({ saved: 'http://192.168.1.109:8787', alive: new Set(['http://192.168.1.109:8787']),
+    hasLocalAddress: false, closeWhenHidden: true });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.openStreams().length, 1);
+  tv.pageHidden(true);
+  assert.strictEqual(tv.openStreams().length, 0);
+  // Telefon adresi bildirse de (AddressReceiver) arka plandayken bağlanılmaz.
+  tv.relaunch({ server: 'http://192.168.1.109:8787' });
+  tv.clock.advance(60000);
+  assert.strictEqual(tv.openStreams().length, 0);
+  tv.pageHidden(false);
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.openStreams().length, 1);
 });
 
 test('arka plandayken yeni adres gelirse öne gelince o adrese bağlanılır', () => {
@@ -836,14 +916,28 @@ test('discovery does not restart pairing while waiting for human approval', () =
   assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
 });
 
-test('süresi dolan eşleştirme kendiliğinden yeniden başlamaz, Tamam ile yeniden istenir', () => {
+// GitHub #737: istek telefonda düştü (çeviri durdurulup başlatıldı, iki dakikada onaylanmadı). Eskiden TV "Eşleştirme
+// tamamlanmadı, Tamam'a basın"da kalıyor, yeni istek göndermiyordu; telefonda onay penceresi hiç çıkmıyordu.
+test('süresi dolan ya da düşen eşleştirme isteği kendiliğinden yeniden gönderilir, onaylanınca bağlanır', () => {
   const auth = { key: secureKey, id: secureId, expired: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(1000);
+  assert.doesNotMatch(tv.element('pairing').textContent, /Tamam/);
+  tv.clock.advance(4000);
+  assert(tv.requests.filter(r => r.method === 'POST').length >= 2);
+  auth.expired = false; auth.approved = true;
+  tv.clock.advance(5000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+});
+
+test('reddedilen eşleştirme kendiliğinden yeniden başlamaz, Tamam ile yeniden istenir', () => {
+  const auth = { key: secureKey, id: secureId, rejected: true };
   const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
   tv.clock.advance(5000);
   assert.match(tv.element('pairing').textContent, /Tamam/);
   tv.clock.advance(60000);
   assert.strictEqual(tv.requests.filter(r => r.method === 'POST').length, 1);
-  auth.expired = false; auth.approved = true;
+  auth.rejected = false; auth.approved = true;
   // Gerçek sayfada kaynak ipucu ve görüntü yok ekranı başta gizlidir.
   tv.element('source-tip').className = 'hidden';
   tv.element('no-picture').className = 'hidden';

@@ -24,6 +24,13 @@ enum XboxText {
             return String(localized: "Your Xbox is streaming to another device (the Xbox app, a phone or a PC). Close that session, then start translation again.")
         case .consoleUnavailable:
             return String(localized: "Can't reach your Xbox. Make sure it's on and remote play is enabled in Settings › Devices & connections › Remote features, then start translation again.")
+        case .noPicture:
+            return String(localized: "No picture came from the Xbox, so translation stopped. On the Xbox, check that remote play is on in Settings › Devices & connections › Remote features, connect the Xbox with a network cable if you can (or restart it), then start translation again.")
+        case .serviceNotReady:
+            return String(localized: "Your Xbox couldn't start its remote play service. Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again.")
+        case .startFailed:
+            // `reason`: yalnız hata kodu (XboxStop.displayReason); Xbox'ın JSON hata nesnesi ekranda gösterilmez (#871).
+            return String(format: String(localized: "Your Xbox couldn't start the stream (code %@). Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again."), reason)
         case .other:
             return String(format: String(localized: "The Xbox stream stopped (%@). Start translation again; if it keeps stopping, restart the Xbox."), reason)
         }
@@ -42,6 +49,7 @@ enum XboxText {
         case .network: return String(localized: "The Xbox connection dropped. Reconnecting…")
         case .service: return String(localized: "The Xbox service sent an unexpected reply. Retrying…")
         case .noPicture: return String(localized: "No picture from the Xbox. Reconnecting…")
+        case .noFirstFrame: return String(localized: "No picture came from the Xbox. Trying once more…")
         }
     }
 }

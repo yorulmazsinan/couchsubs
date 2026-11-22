@@ -46,6 +46,12 @@ interface FrameSource {
 
     /** Oturum yeniden denemeyi kendisi bıraktı (kullanıcı durdurmadı); ana ekranda "Yeniden bağlan" hemen görünür. */
     val hasGivenUp: Boolean get() = false
+
+    /** Xbox: "Xbox sesini bu cihazda çal" çeviri sürerken değişti; yalnız yerel ses açılır/kısılır (#871). */
+    fun setPlayAudio(enabled: Boolean) {}
+
+    /** PS5: bağlanırken son adım; "Bağlanıyor…" 30 sn'yi geçince nedeni söylenir (Xbox ve deneme modunda yok). */
+    val connectStep: com.couchsubs.mobile.core.ConnectStep? get() = null
 }
 
 /** PS5 oturumunun yerine kare kaynağı kuran üretici (yalnız geliştirme yapısında kullanılır). */

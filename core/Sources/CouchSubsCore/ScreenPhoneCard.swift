@@ -125,6 +125,24 @@ public enum ScreenPhoneCard {
         }
     }
 
+    /// Satır (karedeki kutusu) telefonun ekranında mı: düz ekrandaki ortası ekranın içinde ve iki yanı ekranın kenarlarını
+    /// `screenSlack`'ten çok aşmıyor. Altyazı hattı bu satırları okumaz (`SubtitlePipeline.process(phone:)`). Kullanıcı
+    /// bildirimleri (X, beta.79): telefonun alt kısmındaki mesaj, telefon ekranın ortasına yakın tutulunca bütün sohbet
+    /// altyazı sanılıp ekranın ortasında tek uzun satır olarak çevriliyordu. Telefonun önünden geçen geniş altyazı satırı
+    /// telefonun ekranından taşar, telefon yazısı sayılmaz (Windows: ScreenPhoneCard.Holds, Android: ScreenPhoneCard.holds).
+    public static func holds(_ box: TextBox, handset: Handset) -> Bool {
+        let flat = handset.flat(box)
+        let v = (flat.top + flat.bottom) / 2
+        return v >= -screenSlack && v <= 1 + belowSlack && flat.left >= -sideSlack && flat.right <= 1 + sideSlack
+    }
+
+    /// `holds`: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını `sideSlack` kadar aşabilir (düz
+    /// ekrana oranla; eğik telefonda kutular biraz taşar). Alt kenarda pay `belowSlack`: telefonun alt gövdesi elle ya da
+    /// altyazıyla örtülünce telefon kısa bulunuyor (alt çentik görünmüyor), sohbetin son mesajları ekranın altında kalıyordu
+    /// (gerçek kare gta6-telefon-sohbet-2: "Go get em" v=1,12, "Locating..." v=1,24). Telefonun altındaki altyazı daha
+    /// aşağıdadır ve telefonun ekranından geniştir.
+    static let screenSlack = 0.03, sideSlack = 0.12, belowSlack = 0.25
+
     /// Öğe kartın zemini mi (masaüstü listesi ve düz metin bunu atlar).
     public static func isBackdrop(_ item: ScreenTranslation.Item) -> Bool {
         item.translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

@@ -47,6 +47,16 @@
             android:name="com.facebook.internal.FacebookInitProvider"
             android:authorities="${applicationId}.FacebookInitProvider"
             tools:node="remove" />
+        <!-- Profil › Hakkında › "Günlükleri paylaş": maskelenmiş günlük dosyası paylaşım sayfasına buradan verilir. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.logs"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/log_paths" />
+        </provider>
         <!-- Resim içinde resim ("Arka planda sürdür"): pencereye geçerken etkinlik yeniden kurulmaz. -->
         <activity
             android:name=".ui.MainActivity"

@@ -138,11 +138,13 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         foreach (var client in closing) client.Tcp.Dispose();
         ClientsChanged?.Invoke(0);
     }
-    private sealed class Client(TcpClient tcp, bool viewer = false)
+    private sealed class Client(TcpClient tcp, bool viewer = false, bool legacy = false)
     {
         public TcpClient Tcp { get; } = tcp;
         /// <summary>OBS katmanı gibi TV olmayan izleyici: olayları alır ama "TV bağlı" sayısına katılmaz.</summary>
         public bool Viewer { get; } = viewer;
+        /// <summary>Sürüm bildirmeyen (0.9.69'den eski) TV uygulaması: <c>clear</c> ona geciktirilerek gider.</summary>
+        public bool Legacy { get; } = legacy;
         public Stream Stream { get; } = tcp.GetStream();
         /// <summary>Aynı bağlantıya iki yazma iç içe geçmesin.</summary>
         public SemaphoreSlim WriteLock { get; } = new(1, 1);
@@ -181,7 +183,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// <summary><c>/hello</c> yanıtı: uygulama, eşleştirme gerektiği (<c>auth</c>), kurulum kimliği ve bağlı TV sayısı (Mac ve
     /// Android ile aynı biçim). Erişim anahtarını içermez. TV ağda birden çok CouchSubs bulursa kayıtlı kimliği, yoksa TV'si
     /// bağlı olmayanı seçer; onayladığı anahtarı da bu kimlikle eşler (adres değişse de yeniden eşleşme gerekmez).</summary>
-    internal static string HelloBody(string id, int tvs) => $"{{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"{HelloId(id)}\",\"tvs\":{Math.Max(0, tvs)}}}";
+    /// <param name="live">Bu CouchSubs çeviriyor ve altyazıyı TV'ye gönderiyor (1) ya da boşta (0). Aynı ağda iki CouchSubs
+    /// varken (bilgisayar açık bırakılmış, çeviri telefondan) TV kayıtlı ama boştaki CouchSubs'a bağlı kalıyor, "bağlı"
+    /// görünüp altyazı hiç gelmiyordu; TV çeviren CouchSubs'ı bununla seçer (Mac: helloBody). Eski TV alanı yok sayar.</param>
+    internal static string HelloBody(string id, int tvs, bool live = false) =>
+        $"{{\"app\":\"couchsubs\",\"auth\":1,\"id\":\"{HelloId(id)}\",\"tvs\":{Math.Max(0, tvs)},\"live\":{(live ? 1 : 0)}}}";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -245,6 +251,31 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     {
         get { lock (gate) return consolePort; }
     }
+
+    private string? tvAppVersion;
+
+    /// <summary>
+    /// Bağlanan TV uygulamasının altyazı akışıyla bildirdiği sürüm (<c>/events?v=0.9.69</c>). null: bu çalışmada henüz TV
+    /// bağlanmadı. Boş: bağlanan TV sürüm bildirmedi, yani 0.9.69'den eski bir TV uygulaması. LG'de geliştirici modu
+    /// kapalıyken ya da anahtar bu bilgisayarda değilken TV'deki sürüm başka yoldan okunamıyor, TV uygulaması eski kalıyor
+    /// ve hiç "TV uygulamasını güncelle" çıkmıyordu (GitHub #884, #891). Mac ve Android ile aynı.
+    /// </summary>
+    public string? TvAppVersion
+    {
+        get { lock (gate) return tvAppVersion; }
+    }
+
+    /// <summary>TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) çağrılır
+    /// (iş parçacığı havuzunda).</summary>
+    public event Action<string>? TvAppVersionReported;
+
+    /// <summary><c>v</c> parametresi: yalnız rakam ve nokta, en çok 20 karakter; yoksa ya da bozuksa boş (eski TV sayılır).</summary>
+    public static string ParseTvAppVersion(string? value) =>
+        value is { Length: > 0 and <= 20 } && value.All(c => c is (>= '0' and <= '9') or '.') ? value : "";
+
+    /// <summary>TV'nin bildirdiği sürüm (boş: sürüm bildirmeyen eski TV uygulaması) bu cihazdaki TV paketinden eski mi?</summary>
+    public static bool IsTvAppOutdated(string reported, string bundled) =>
+        bundled.Length > 0 && (reported.Length == 0 || global::CouchSubs.Core.LgTv.DevModeInstaller.IsNewer(bundled, reported));
 
     /// <summary><c>hdmi</c> parametresi: 1-4 arası tek rakam, değilse null.</summary>
     public static int? ParseHdmiPort(string? value) =>
@@ -311,6 +342,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (box is { } b) json["box"] = BoxJson(b);
         if (SpeakerColors && Core.SpeakerColors.Speakers(text) is { Count: > 0 } speakers)
             json["speakers"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = SpeakerBook.Color(name)! }).ToList();
+        lock (gate)
+        {
+            legacyHoldGeneration++;
+            legacyHoldUntil = DateTime.UtcNow + LegacyClearHold(text.Length);
+        }
         Broadcast(Frame("subtitle", json), subtitle: true);
         EventSent?.Invoke(new SubtitleEvent(SubtitleEventKind.Subtitle, text, durationMs, paragraphs, replaces, Box: box));
     }
@@ -322,9 +358,43 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
 
     public void Clear()
     {
-        Broadcast(Frame("clear", new SortedDictionary<string, object>()), subtitle: true);
+        var frame = Frame("clear", new SortedDictionary<string, object>());
+        TimeSpan wait;
+        int generation;
+        lock (gate)
+        {
+            wait = legacyHoldUntil - DateTime.UtcNow;
+            generation = legacyHoldGeneration;
+        }
+        if (wait <= TimeSpan.Zero || !SendsToTv)
+        {
+            Broadcast(frame, subtitle: true);
+        }
+        else
+        {
+            // Eski TV'ler satırı kendileri tutmaz: `clear` onlara satırın en az görünme süresi dolunca gider.
+            Broadcast(frame, subtitle: true, legacy: false);
+            _ = Task.Delay(wait).ContinueWith(_ =>
+            {
+                lock (gate) if (generation != legacyHoldGeneration) return;
+                Broadcast(frame, subtitle: true, legacy: true);
+            }, TaskScheduler.Default);
+        }
         EventSent?.Invoke(SubtitleEvent.Cleared);
     }
+
+    private DateTime legacyHoldUntil = DateTime.MinValue;
+    private int legacyHoldGeneration;
+
+    /// <summary>
+    /// Eski TV uygulamaları (0.9.7'den önce) <c>clear</c> gelir gelmez satırı kaldırır. Oyundaki satır ekrandan ~1 sn'de
+    /// kalkınca çevirisi TV'de yalnız bir an görünüyordu: "TV'de test et" yazısı (8 sn, <c>clear</c> yok) görünüyor, oyun
+    /// altyazıları hiç görünmüyordu. Yeni TV uygulaması satırı kendisi <c>min(5000, 2000 + 60 × harf)</c> ms tutar
+    /// (tv-webos/app.js <c>holdUntil</c>); sürüm bildirmeyen bağlantılara <c>clear</c> bu süre dolunca gider, arada yeni
+    /// satır gelirse hiç gitmez (Mac ve Android ile aynı kural).
+    /// </summary>
+    public static TimeSpan LegacyClearHold(int textLength) =>
+        TimeSpan.FromMilliseconds(Math.Min(5000, 2000 + 60 * Math.Max(0, textLength)));
 
     /// <summary>
     /// TV uygulamasını kapatır; çeviri durduğunda TV kendi girişine (HDMI) döner. Yalnız TV'lere gider, OBS gibi
@@ -471,6 +541,8 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             {
                 ["align"] = look.Align, ["bold"] = look.Bold, ["condensed"] = look.Condensed, ["upper"] = look.Upper,
             };
+        // Telefon mesajı kendi balonunda: TV çeviriyi balona sığdırır (eski TV yok sayar, özgün stilde çizer).
+        if (item.Bubble) json["bubble"] = true;
         return json;
     }
 
@@ -562,7 +634,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             {
                 if (method == "POST")
                 {
-                    var ticket = Pairing.Begin();
+                    var ticket = Pairing.Begin(tcp.Client.RemoteEndPoint is IPEndPoint peer ? SubtitleAccess.TvHost(peer.Address) : "");
                     if (ticket is null) { await RespondAndClose(tcp, "409 Conflict", cors: cors); return; }
                     PairingRequested?.Invoke(ticket);
                     await RespondAndClose(tcp, "200 OK", JsonSerializer.Serialize(new { id = ticket.Id, code = ticket.Code }), cors);
@@ -574,7 +646,10 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                     {
                         var valid = request.Parameter("validate") == "1";
                         var state = valid ? (SubtitleAccess.Authorize(request with { Target = "/events?k=" + Uri.EscapeDataString(request.Parameter("k") ?? "") }, accessKey, false, out _) == 200 ? "valid" : "expired") : Pairing.Poll(request.Parameter("id") ?? "");
-                        body = JsonSerializer.Serialize(new { state, key = state == "approved" ? accessKey : null });
+                        // Eski TV uygulamaları "rejected"ı tanımaz: "expired" görüp durur. Yenisi rejected ile Tamam bekler, yalnız
+                        // "expired"da kendisi yeniden ister (GitHub #737).
+                        body = state == "rejected" ? JsonSerializer.Serialize(new { state = "expired", rejected = true })
+                            : JsonSerializer.Serialize(new { state, key = state == "approved" ? accessKey : null });
                     }
                     await RespondAndClose(tcp, "200 OK", body, cors);
                 }
@@ -588,13 +663,21 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                 var obs = request.Parameter("viewer") is "obs" or SecondScreen.Viewer;
                 // Anahtarsız OBS sayfası eski bir OBS adresidir; TV uygulamasının eski olduğu anlamına gelmez.
                 if (legacy && !obs && Interlocked.Exchange(ref legacySeen, 1) == 0) LegacyClientConnected?.Invoke();
-                await OpenStream(tcp, obs, cors, checkedKey, obs ? null : ParseHdmiPort(request.Parameter("hdmi")));
+                var unreported = false;
+                if (!obs)
+                {
+                    var version = ParseTvAppVersion(request.Parameter("v"));
+                    lock (gate) tvAppVersion = version;
+                    unreported = version.Length == 0;
+                    TvAppVersionReported?.Invoke(version);
+                }
+                await OpenStream(tcp, obs, cors, checkedKey, obs ? null : ParseHdmiPort(request.Parameter("hdmi")), unreported);
             }
             else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8", cors);
             // Anahtar Authorize'da denetlendi (anahtarsız istek 401 aldı).
             else if (method == "GET" && path == SecondScreen.Path) await RespondAndClose(tcp, SecondScreen.Page, "text/html; charset=utf-8", cors);
             // TV uygulaması ağdaki bilgisayarı bu yanıtla tanır.
-            else if (method == "GET" && path == "/hello") await RespondAndClose(tcp, "200 OK", HelloBody(InstanceId, ConnectedClients), cors);
+            else if (method == "GET" && path == "/hello") await RespondAndClose(tcp, "200 OK", HelloBody(InstanceId, ConnectedClients, SendsToTv && Pairing.InSession), cors);
             else if (method == "GET" && FindFile(path) is { } file) await RespondAndClose(tcp, file.Data, file.Type, cors);
             else await RespondAndClose(tcp, "404 Not Found", cors: cors);
         }
@@ -652,7 +735,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         tcp.Dispose();
     }
 
-    private async Task OpenStream(TcpClient tcp, bool viewer, string cors, string checkedKey, int? hdmi = null)
+    private async Task OpenStream(TcpClient tcp, bool viewer, string cors, string checkedKey, int? hdmi = null, bool legacy = false)
     {
         var head = new StringBuilder()
             .Append("HTTP/1.1 200 OK\r\n")
@@ -661,7 +744,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             .Append("Connection: keep-alive\r\n")
             .Append(cors).Append("\r\n")
             .Append("retry: 2000\n\n");
-        var client = new Client(tcp, viewer);
+        var client = new Client(tcp, viewer, legacy);
         int count;
         lock (gate)
         {
@@ -705,11 +788,12 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// Gönderim hatası alan bağlantı kopmuş sayılır ve listeden çıkarılır. <paramref name="subtitle"/>: altyazı olayı;
     /// altyazı TV'ye gitmiyorsa yalnız izleyiciler (OBS) alır. Dublaj sesi ve ping her zaman herkese gider.
     /// </summary>
-    private void Broadcast(string frame, bool subtitle = false)
+    /// <param name="legacy">null: herkes; false: sürüm bildirmeyen TV'ler dışındakiler; true: yalnız onlar.</param>
+    private void Broadcast(string frame, bool subtitle = false, bool? legacy = null)
     {
         List<Client> targets;
         var toTvs = !subtitle || SendsToTv;
-        lock (gate) targets = [.. clients.Where(c => toTvs || c.Viewer)];
+        lock (gate) targets = [.. clients.Where(c => (toTvs || c.Viewer) && (legacy is null || c.Legacy == legacy))];
         foreach (var client in targets)
             _ = Write(client, frame).ContinueWith(t => Remove(client), TaskContinuationOptions.OnlyOnFaulted);
     }

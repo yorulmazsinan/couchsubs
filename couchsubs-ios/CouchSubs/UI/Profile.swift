@@ -122,13 +122,14 @@ struct ProfileScreen: View {
                 }
                 .tint(Mobile.Palette.accent)
                 RowDivider()
+                // "Ekranı çevir"de telefon mesajları: kapalıyken her balonun üstünde, yerinde (Mac ile aynı).
+                toggleRow("Show GTA 6 phone translations in a card next to the phone",
+                          "Off: each message is translated on top of its own bubble, in the bubble's colours.",
+                          isOn: $model.settings.phoneChatCard)
+                RowDivider()
                 toggleRow("Check unchanged subtitle areas more often",
                           "When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.",
                           isOn: $model.settings.fastSubtitleDetection)
-                RowDivider()
-                toggleRow("Watch subtitle background (GTA 6 experimental)",
-                          "In GTA 6, set the subtitle background to Solid. Only text on the dark blue subtitle panel will be translated.",
-                          isOn: $model.settings.watchSubtitleBackground)
                 RowDivider()
                 // Windows ve Mac'teki iki bekleme kaydırıcısı (Android'de aynı ad ve açıklama; 0–1 sn, 0,1 sn adım).
                 waitRow("Wait for a misread line",
@@ -525,7 +526,12 @@ struct SettingsScreen: View {
             keyResult = nil
             key = ""
         case .rejected:
-            keyResult = String(localized: "The key did not work. Check it and try again.")
+            // DeepL'de neden ayrı yazılır (geçersiz anahtar, geçersiz karakter, sunucu hatası, ağ yok); Mac ile aynı metinler.
+            if engine == .deepL, let check = model.lastDeepLCheck {
+                keyResult = DeepLUsageText.describe(check, quotaUsedUp: String(localized: "This month's DeepL limit is used up. Until it renews, the free translation on this phone translates."))
+            } else {
+                keyResult = String(localized: "The key did not work. Check it and try again.")
+            }
         case .notStored:
             keyResult = String(localized: "The API key could not be saved to this iPhone's keychain.")
         }
@@ -669,8 +675,36 @@ struct AboutScreen: View {
                     .font(Mobile.TypeScale.body).foregroundStyle(Mobile.Palette.secondary)
                 Link("Source code", destination: AppIdentity.sourceURL).font(Mobile.TypeScale.headline).tint(Mobile.Palette.accent)
             }
+            // remoteplay.log, altyazi.log ve varsa tvinstall.log tek dosyada, kişisel veri maskelenmiş (Android'de de aynı;
+            // masaüstünde "Günlük dosyasını göster").
+            Tile {
+                ShareLink(item: PhoneLogs(), preview: SharePreview(LogShare.fileName)) {
+                    Label("Share logs", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(MobileButtonStyle(kind: .secondary, compact: true))
+                Text("Attach this file to your GitHub issue when reporting a problem, or send it to us.")
+                    .font(Mobile.TypeScale.caption).foregroundStyle(Mobile.Palette.secondary)
+            }
         } bottom: {
             EmptyView()
         }
+    }
+}
+
+/// "Günlükleri paylaş"ın dosyası: paylaşım sayfası açılınca günlükler birleştirilip maskelenir (CouchSubsCore `LogShare`).
+struct PhoneLogs: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .plainText) { _ in SentTransferredFile(try PhoneLogs.file()) }
+    }
+
+    static func file() throws -> URL {
+        RemotePlayLog.flush()
+        SubtitleLog.flush()
+        let header = "CouchSubs iOS \(AppIdentity.version) · \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        return try LogShare.write(header: header, logs: [
+            ("remoteplay.log", RemotePlayLog.defaultFile),
+            ("altyazi.log", SubtitleLog.defaultFile),
+            ("tvinstall.log", InstallLog.shared.file),
+        ], to: FileManager.default.temporaryDirectory.appendingPathComponent("logs", isDirectory: true))
     }
 }

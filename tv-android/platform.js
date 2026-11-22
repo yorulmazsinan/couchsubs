@@ -28,9 +28,15 @@
     TrackedAudio.prototype = NativeAudio.prototype;
     window.Audio = TrackedAudio;
   }
+  // Uygulama içi modda ekran arka plana düşünce (TV kendi HDMI oynatıcısını öne çekti: TCL Google TV'de PS5 60 Hz'e
+  // geçince; Ana ekran) altyazı bağlantısı bırakılır, öne gelince yeniden kurulur (Samsung'daki closeWhenHidden). Eskiden
+  // bağlantı arka planda açık kalıyordu: telefon/bilgisayar "TV bağlı" görüyor, deneme yazısı bile görünmeyen sayfaya
+  // gidiyordu; Android'in arka plan uygulamalarını dondurması da bağlantıyı yarı açık bırakıyordu. Bağlantı düşünce
+  // telefon/bilgisayar "CouchSubs'ı TV'de açın" der. Katman penceresi hep görünür: orada bırakılmaz.
   window.__onBackground = function (hidden) {
     muted = !!hidden;
     if (lastAudio) lastAudio.muted = muted;
+    if (!overlay && window.__pageHidden) window.__pageHidden(!!hidden);
   };
 
   window.__onHdmiStatus = function (kind) { hdmiStatus(kind); };
@@ -102,6 +108,9 @@
     // Dublaj <audio> ile çalınır (LG ve Samsung'da Web Audio): HDMI'yi TvView gösterdiği için karışmaz, yukarıdaki
     // sarmalayıcı da sesi arka planda susturabilir.
     speechElement: true,
+
+    // Uygulama içi modda arka plandayken bağlantı bırakılır (bkz. __onBackground); katmanda bırakılmaz.
+    closeWhenHidden: !overlay,
 
     init: function () {
       // Android TV'nin güvenli alanı (yanlarda 48dp, üstte 27dp: 1080p'de 96 ve 54 piksel, TV-OV) artık ortak

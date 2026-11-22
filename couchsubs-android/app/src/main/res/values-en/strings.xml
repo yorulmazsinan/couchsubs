@@ -16,6 +16,9 @@
 
     <string name="phase_preparing">Preparing…</string>
     <string name="phase_connecting">Connecting to PS5…</string>
+    <string name="connecting_hint_waking">The PS5 is being woken from rest mode. This can take up to a minute.</string>
+    <string name="connecting_hint_opening">The PS5 answered, but the connection is taking long. If it doesn\'t connect, stop and start translating again.</string>
+    <string name="connecting_hint_no_answer">The PS5 is not answering. Make sure it is on and on the same network as this device.</string>
     <string name="phase_streaming">Reading subtitles</string>
     <string name="phase_reconnecting">Connection lost, reconnecting…</string>
     <string name="reconnect">Reconnect</string>
@@ -26,6 +29,7 @@
     <string name="phase_rejected_code">The PS5 rejected the connection (code %1$s). Another Remote Play app (PS Remote Play) may be open, or the PS5 may be in another session. Close PS Remote Play, restart the PS5, then try again.</string>
     <string name="phase_rejected">The PS5 didn\'t start the session. Another Remote Play app (PS Remote Play) may be open, or the PS5 may be in another session. Close PS Remote Play, restart the PS5, then try again.</string>
     <string name="phase_registration_invalid">The PS5 didn\'t accept this pairing. Pair the PS5 again with the second account in Settings.</string>
+    <string name="phase_console_closed">The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…</string>
     <string name="phase_console_rp_crashed">Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again.</string>
     <string name="phase_no_picture">No picture from the PS5. Is Remote Play turned off, or is the PS5 in rest mode? Check, then start translating again.</string>
     <string name="phase_not_found">PS5 not found on the network. Are the phone and PS5 on the same network?</string>
@@ -236,6 +240,7 @@
     <string name="psn_why">Why a second account?</string>
     <string name="psn_why_body">When Remote Play connects with the same account, it takes over your session and controller. The second account only receives the picture; you keep playing with your own account and controller. The account is free, no PS Plus needed.</string>
     <string name="subtitle_off_tip">Turn on the game\'s own subtitles: CouchSubs reads the English subtitles on screen, not the audio.</string>
+    <string name="psn_main_account_steps">To play without the connection dropping: 1. On the PS5, start the game with your MAIN account first. 2. Then start translating. 3. Don\'t switch users during the game; when you turn on the controller, choose your MAIN account. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.</string>
     <string name="psn_main_account">When you turn on the controller to play, choose your MAIN account on the PS5. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.</string>
     <string name="pair_found">%1$s found</string>
     <string name="pair_same_wifi">%1$s · same Wi-Fi</string>
@@ -341,8 +346,8 @@
     <string name="settings_fast_reading">Check unchanged subtitle areas more often</string>
     <string name="settings_fast_reading_short">When the subtitle area looks unchanged, read it again after 2 frames instead of 20. Uses more CPU.</string>
     <string name="settings_game_phone">Automatically translate the GTA 6 phone (experimental)</string>
-    <string name="settings_subtitle_background">Watch subtitle background (GTA 6 experimental)</string>
-    <string name="settings_subtitle_background_short">In GTA 6, set the subtitle background to Solid. Only text on the dark blue subtitle panel will be translated.</string>
+    <string name="settings_phone_chat_card">Show GTA 6 phone translations in a card next to the phone</string>
+    <string name="settings_phone_chat_card_short">Off: each message is translated on top of its own bubble, in the bubble\'s colours.</string>
     <string name="settings_misread_wait">Wait for a misread line</string>
     <string name="settings_misread_wait_note" formatted="false">When a line is read with words that are not in the dictionary, a better reading is awaited for at most this long. Measured in GTA V, translations from misread lines compared with 0 s: 0.2 s → 77%, 0.4 s → 49%, 0.6 s → 41%, 0.8 s (recommended) → 34%, 1.0 s → 31%.</string>
     <string name="settings_partial_wait">Wait for a half-read line</string>
@@ -350,7 +355,6 @@
     <string name="settings_waits_note">These waits only delay lines that were read badly; most lines are shown without waiting. A shorter wait shows those lines sooner but lets more wrong translations through.</string>
     <string name="settings_waits_defaults">Restore defaults</string>
     <string name="unit_seconds">sec</string>
-    <string name="subtitle_background_tip">“Watch subtitle background” is on: only text on GTA 6’s dark subtitle panel is read. Set the game’s subtitle background to Solid or turn this setting off.</string>
     <string name="settings_xbox_audio">Play Xbox sound on this device</string>
     <string name="settings_xbox_audio_short">While remote play is running, the Xbox mutes the TV and sends game sound only to this device (an Xbox limitation). If you turn this off, the game has no sound. To hear it from the TV or speakers, connect this phone to a Bluetooth speaker or headphones.</string>
     <string name="running_now">Now</string>
@@ -411,6 +415,8 @@
     <string name="settings_copyright">CouchSubs · © 2026 Sinan Yorulmaz · AGPL-3.0 · Enmera</string>
     <string name="about_body">CouchSubs is free and open source (AGPL-3.0). Remote Play uses chiaki-ng (AGPL-3.0).</string>
     <string name="about_source">Source code</string>
+    <string name="share_logs">Share logs</string>
+    <string name="share_logs_note">Attach this file to your GitHub issue when reporting a problem, or send it to us.</string>
     <string name="main_packs_off">Off</string>
     <string name="packs_free">Free</string>
     <string name="packs_free_count">Free · %1$d games</string>
@@ -474,6 +480,7 @@
     <string name="tvinstall_signin_failed_hint">You can try again, or sign in in your phone\'s browser. When you\'re done, come back to CouchSubs; the install continues by itself.</string>
     <string name="webview_out_of_memory">The phone ran out of memory for the in-app browser. Close apps running in the background and try again, or sign in in your browser.</string>
     <string name="tvinstall_maintenance">If the TV shows “Server under maintenance”, it cannot reach Samsung\'s servers: check the TV\'s internet connection and its date and time, restart the TV and try again.</string>
+    <string name="tvinstall_samsung_server">If the TV shows “Unable to connect to Samsung server” (AS400): this warning comes from the TV itself; the TV can\'t reach Samsung\'s servers. Check the TV\'s internet connection, unplug the TV and plug it back in after 30 seconds. To install CouchSubs, enter this device\'s address as Host PC IP.</string>
     <string name="tvinstall_err_unreachable">The TV did not accept this phone. In the TV\'s Developer mode window, check that Host PC IP is this phone\'s address (%1$s), then restart the TV fully: hold the power button until the Samsung logo appears (about 5 seconds), or unplug the TV for 30 seconds.</string>
     <string name="tvinstall_err_other_network">The TV (%1$s) and this phone (%2$s) are on different networks, so the TV refuses the phone. Connect both to the same Wi-Fi (not a guest network or a second router), type the phone\'s new address as Host PC IP on the TV, then restart the TV fully (hold the power button until the Samsung logo appears, about 5 seconds).</string>
     <string name="tvinstall_err_not_restarted">The TV\'s settings are right (Developer mode on, Host PC IP %1$s), but the TV has not fully restarted since then, so it does not accept the phone yet. Hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug the TV for 30 seconds, then try again.</string>
@@ -593,6 +600,11 @@
     <string name="deepl_quota_used_up">This month\'s DeepL limit is used up. Until it renews, the free translation on this phone translates.</string>
     <string name="deepl_key_not_accepted">DeepL did not accept this key. Copy it again from your DeepL account page.</string>
     <string name="deepl_unreachable">DeepL could not be reached. Check your internet connection.</string>
+    <string name="deepl_usage_unlimited">This month: %1$s characters used (no limit).</string>
+    <string name="deepl_usage_unknown">DeepL accepted the key. This month\'s usage could not be read.</string>
+    <string name="deepl_key_malformed">The key contains characters a DeepL key cannot have. Copy it again from your DeepL account page.</string>
+    <string name="deepl_rate_limited">DeepL is receiving too many requests right now (HTTP 429). The key is saved; DeepL translates again in a few minutes.</string>
+    <string name="deepl_server_error">DeepL answered with an error (HTTP %1$d). Try again in a few minutes.</string>
     <string name="metrics_ocr">OCR %1$d ms</string>
     <string name="metrics_pack">Ready pack</string>
     <string name="metrics_translation">Translation %1$d ms</string>
@@ -613,7 +625,11 @@
     <string name="xbox_error_network">The Xbox connection dropped. Reconnecting…</string>
     <string name="xbox_error_service">The Xbox service sent an unexpected reply. Retrying…</string>
     <string name="xbox_error_no_picture">No picture from the Xbox. Reconnecting…</string>
+    <string name="xbox_error_no_first_frame">No picture came from the Xbox. Trying once more…</string>
+    <string name="xbox_stopped_no_picture">No picture came from the Xbox, so translation stopped. On the Xbox, check that remote play is on in Settings › Devices &amp; connections › Remote features, connect the Xbox with a network cable if you can (or restart it), then start translation again.</string>
     <string name="xbox_connection_lost">The Xbox stream stopped (%1$s). Start translation again; if it keeps stopping, restart the Xbox.</string>
+    <string name="xbox_stopped_service">Your Xbox couldn\'t start its remote play service. Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again.</string>
+    <string name="xbox_stopped_code">Your Xbox couldn\'t start the stream (code %1$s). Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again.</string>
     <string name="xbox_stopped_busy">Your Xbox is streaming to another device (the Xbox app, a phone or a PC). Close that session, then start translation again.</string>
     <string name="xbox_stopped_console">Can\'t reach your Xbox. Make sure it\'s on and remote play is enabled in Settings › Devices &amp; connections › Remote features, then start translation again.</string>
     <string name="beta">Beta</string>
@@ -700,6 +716,8 @@
     <string name="tv_open_not_paired">Couldn\'t open it automatically: this device has no permission from the TV yet. Connect the TV again and allow it on the TV.</string>
     <string name="tv_open_debug_off">Couldn\'t open it automatically: the TV can\'t be reached for debugging. Is the TV on, with network debugging on in Developer options?</string>
     <string name="tv_open_debug_not_approved">Couldn\'t open it automatically: the TV hasn\'t allowed debugging from this device. Reinstall the TV app and allow it on the TV.</string>
+    <string name="tv_open_not_opened">Couldn\'t open it automatically: the TV got the open command but didn\'t open CouchSubs. Open it on the TV with the remote.</string>
+    <string name="tv_open_not_installed">Couldn\'t open it automatically: the TV didn\'t confirm that the CouchSubs TV app is installed, so no open command was sent. Install the TV app, then try again. If the TV shows “Unable to connect to Samsung server” (AS400), the TV can\'t reach Samsung\'s servers: check its internet connection and unplug it for 30 seconds.</string>
     <string name="tv_open_try">Try opening automatically</string>
     <string name="tv_open_wizard_note">Every time you start translating, CouchSubs tries to open the TV app by itself. If it doesn\'t open, open CouchSubs on the TV.</string>
     <string name="engine_local">Local model</string>

@@ -54,6 +54,9 @@ internal sealed class FakeStream : IStreamSession
     public void Dispose() { }
     public void Emit(SessionState state) => StateChanged?.Invoke(state);
     public void Emit(Frame frame) => FrameReceived?.Invoke(frame);
+    /// <summary>Çeviri sürerken verilen ses ayarları (Xbox).</summary>
+    public List<bool> PlayAudioChanges { get; } = [];
+    public void SetPlayAudio(bool enabled) => PlayAudioChanges.Add(enabled);
 }
 
 internal sealed class FakeKeeper : IKeeper
@@ -215,6 +218,9 @@ internal sealed class FakeServices : IAppServices
     }
     /// <summary>TV'nin eşleşmede döndüğü jeton (Samsung jetonla gelen bağlantıda boş dönebilir).</summary>
     public string PairKey { get; set; } = "tv-key";
+    /// <summary>Eşleşme isteği gönderen TV'nin adresinden yoklanan TV (null: tanınmadı).</summary>
+    public Func<string, LgTv?> Identify { get; set; } = host => new LgTv("Samsung TV", host, TvBrand.Samsung);
+    public Task<LgTv?> IdentifyTvAsync(string host) => Task.FromResult(Identify(host));
     /// <summary>Son bekçiye verilen "yeni jeton" geri çağrısı.</summary>
     public Action<string>? OnKey { get; private set; }
     public Action<TvOpenProblem?>? OnOpenResult { get; private set; }
@@ -263,6 +269,8 @@ internal sealed class FakeServices : IAppServices
     public int Installs { get; private set; }
     public int PairCount { get; private set; }
     public string? BundledTvAppVersion { get; set; } = "0.6.1";
+    public List<string> InstallLog { get; } = [];
+    public void WriteTvInstallLog(string line) => InstallLog.Add(line);
     public Task<bool> IsDevModeOnAsync(string host)
     {
         TvCalls++;
@@ -280,9 +288,11 @@ internal sealed class FakeServices : IAppServices
         if (RefuseKey) throw new DevModeException(DevModeError.KeyRefused);
         return Task.FromResult(AppOnTv);
     }
+    public Exception? LgInstallError { get; set; }
     public Task InstallTvAppAsync(string host, string devKey)
     {
         Installs++;
+        if (LgInstallError is { } error) throw error;
         AppOnTv = BundledTvAppVersion;
         return Task.CompletedTask;
     }
@@ -662,6 +672,32 @@ public class AppControllerTests
         finally { controller.Dispose(); }
     }
 
+    /// <summary>#871: ses ayarı çeviri sürerken değişince akış yeniden kurulmaz (Xbox yeni oturumda hizmetini başlatamıyordu).</summary>
+    [Fact]
+    public async Task XboxAudioSettingChangesSoundWithoutNewSession()
+    {
+        var store = new MemoryStore();
+        store.Save(StoreKeys.ConsoleKind, GameConsoleKind.Xbox);
+        store.Save(StoreKeys.XboxToken, "{}");
+        store.Save(StoreKeys.XboxConsole, new XboxConsole("F4", "Xbox", "XboxSeriesX", true));
+        var savedSettings = new MemorySettings();
+        savedSettings.Save(new UserSettings { Output = SubtitleOutput.Computer });
+        var xbox = new FakeXbox([]);
+        var controller = Make(new FakeServices { Xbox = xbox }, store, savedSettings);
+        try
+        {
+            await controller.StartAsync();
+            Assert.Single(xbox.Streams);
+            Assert.True(xbox.Streams[0].PlayAudio);
+            controller.Settings = controller.Settings with { XboxAudioOnComputer = false };
+            await Task.Delay(50);
+            Assert.Single(xbox.Streams);
+            Assert.True(xbox.Streams[0].Stream.Started);
+            Assert.Equal([false], xbox.Streams[0].Stream.PlayAudioChanges);
+        }
+        finally { controller.Dispose(); }
+    }
+
     [Fact]
     public async Task PairingTextIsTurkish()
     {
@@ -869,6 +905,51 @@ public class AppControllerTests
         Assert.EndsWith($":{controller.ServerPort}", services.LaunchedServer);
         Assert.Equal("tv-key", store.Load<string>(StoreKeys.TvKey));
         controller.Dispose();
+    }
+
+    /// PR #870 incelemesi: TV'nin başlattığı eşleşme onaylanınca TV kaydedilmiyordu (bekçi ve TV kartı çalışmıyordu). Onaylanan
+    /// TV elle seçilmiş gibi eşlenir; kullanıcının seçtiği izinli TV değiştirilmez, türü tanınmayan TV kaydedilmez.
+    [Fact]
+    public async Task ApprovedTvRequestSavesTheTv()
+    {
+        var services = new FakeServices();
+        var store = new MemoryStore();
+        var controller = Make(services, store);
+        Assert.False(controller.HasTv);
+        await controller.AdoptPairedTvAsync("192.168.1.40");
+        Assert.True(controller.HasTv);
+        Assert.Equal(new LgTv("Samsung TV", "192.168.1.40", TvBrand.Samsung), controller.Tv);
+        Assert.Equal(new LgTv("Samsung TV", "192.168.1.40", TvBrand.Samsung), store.Load<LgTv>(StoreKeys.Tv));
+        Assert.Equal(1, services.PairCount);
+        // Kayıtlı, izinli TV varken başka TV'nin isteği onu değiştirmez.
+        await controller.AdoptPairedTvAsync("192.168.1.41");
+        Assert.Equal("192.168.1.40", controller.Tv?.Host);
+        Assert.Equal(1, services.PairCount);
+        controller.Dispose();
+
+        var unknown = new FakeServices { Identify = _ => null };
+        var other = Make(unknown, new MemoryStore());
+        await other.AdoptPairedTvAsync("192.168.1.40");
+        Assert.False(other.HasTv);
+        Assert.Equal(0, unknown.PairCount);
+        other.Dispose();
+    }
+
+    [Fact]
+    public void PairedTvRuleAndPeerAddress()
+    {
+        var lg = new LgTv("LG", "192.168.1.30");
+        Assert.True(PairedTv.ShouldAdopt("192.168.1.40", null, false));
+        Assert.True(PairedTv.ShouldAdopt("192.168.1.40", lg, false));
+        Assert.True(PairedTv.ShouldAdopt("192.168.1.40", new LgTv("Android TV", "", TvBrand.AndroidTv), true));
+        Assert.False(PairedTv.ShouldAdopt("192.168.1.40", lg, true));
+        Assert.False(PairedTv.ShouldAdopt("", null, false));
+        Assert.Equal("192.168.1.40", SubtitleAccess.TvHost(System.Net.IPAddress.Parse("::ffff:192.168.1.40")));
+        Assert.Equal("192.168.1.40", SubtitleAccess.TvHost(System.Net.IPAddress.Parse("192.168.1.40")));
+        Assert.Equal("fe80::1", SubtitleAccess.TvHost(System.Net.IPAddress.Parse("fe80::1%3")));
+        Assert.Equal("", SubtitleAccess.TvHost(System.Net.IPAddress.Loopback));
+        Assert.Equal("", SubtitleAccess.TvHost(System.Net.IPAddress.IPv6Loopback));
+        Assert.Equal("", SubtitleAccess.TvHost(System.Net.IPAddress.Parse("8.8.8.8")));
     }
 
     /// #40: Samsung jetonla gelen bağlantıda jeton göndermeyince saklı jeton silinmemeli (yoksa TV her seferinde izin sorar).
@@ -1170,7 +1251,7 @@ public class AppControllerRunTests
     }
 
     /// DM'de bildirildi: "Görüntü kaynağı" ayarı bulunamıyordu. Ana ekrandaki satır seçili kaynağı gösterir (Ayarlar'daki
-    /// seçeneklerle aynı ad); Xbox'ta seçim olmadığından satır yoktur.
+    /// seçeneklerle aynı ad); Xbox'ta da (#853) seçim olduğundan satır vardır.
     [Fact]
     public void PictureSourceTitleFollowsTheSelectedSource()
     {
@@ -1262,6 +1343,63 @@ public class AppControllerRunTests
         Assert.Equal([first, second], services.CaptureWindowStreams);
         Assert.Equal(2, services.Streams.Count);
         Assert.True(controller.IsRunning);
+        controller.Dispose();
+    }
+
+    /// #853: Xbox seçiliyken OBS/oyun penceresi (Xbox uygulaması, play.xbox.com, capture card) seçilirse CouchSubs Xbox'a
+    /// hiç bağlanmaz (Xbox tek bağlantıya izin verir, kullanıcının oturumu düşerdi); Microsoft girişi ve Xbox seçimi gerekmez.
+    [Fact]
+    public async Task XboxWithSelectedWindowReadsOnlyTheWindowAndNeverConnectsToTheXbox()
+    {
+        var target = new WindowCaptureTarget("msedge", "Xbox Cloud Gaming");
+        var store = new MemoryStore();
+        store.Save(StoreKeys.ConsoleKind, GameConsoleKind.Xbox);
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { XboxFrameSource = XboxFrameSource.CaptureWindow, CaptureWindow = target, Output = SubtitleOutput.Computer });
+        var xbox = new FakeXbox([]);
+        var services = new FakeServices { Xbox = xbox };
+        var controller = AppControllerTests.Make(services, store, settings);
+        try
+        {
+            Assert.True(controller.IsXbox);
+            Assert.True(controller.XboxReadsWindow);
+            Assert.False(controller.NeedsXboxLink);
+            Assert.True(controller.CanStart);
+            Assert.Equal(OnboardingStep.Done, controller.Step);
+            Assert.Equal("OBS projector or game window", controller.PictureSourceTitle);
+
+            await controller.StartAsync();
+            Assert.True(controller.IsRunning);
+            Assert.Equal([target], services.CaptureWindowStreams);
+            Assert.Empty(xbox.LegacyFrameRateRequests);
+
+            // Xbox bağlantısına dönülünce giriş ve Xbox seçimi yine gerekir.
+            controller.Settings = controller.Settings with { XboxFrameSource = XboxFrameSource.Xbox };
+            Assert.False(controller.XboxReadsWindow);
+            Assert.True(controller.NeedsXboxLink);
+            Assert.False(controller.CanStart);
+            Assert.Equal("Xbox (this app connects)", controller.PictureSourceTitle);
+        }
+        finally { controller.Dispose(); }
+    }
+
+    /// #853: sihirbazın Xbox girişi adımındaki "Bilgisayarda Xbox uygulaması/play.xbox.com ile mi oynuyorsunuz?" kurulumu
+    /// bitirir; Microsoft girişi istenmez, TV yoksa altyazı bilgisayar ekranında.
+    [Fact]
+    public void XboxWizardWindowChoiceFinishesSetupWithoutSignIn()
+    {
+        var controller = AppControllerTests.Make(new FakeServices { Xbox = new FakeXbox([]) });
+        controller.SelectConsoleKind(GameConsoleKind.Xbox);
+        controller.Advance();
+        Assert.Equal(OnboardingStep.PsnLogin, controller.Step);
+        controller.UseXboxWindow();
+        Assert.Equal(OnboardingStep.Done, controller.Step);
+        Assert.Equal(XboxFrameSource.CaptureWindow, controller.Settings.XboxFrameSource);
+        Assert.Equal(SubtitleOutput.Computer, controller.Settings.Output);
+        Assert.False(controller.NeedsXboxLink);
+        Assert.False(controller.CanStart);
+        controller.Settings = controller.Settings with { CaptureWindow = new WindowCaptureTarget("XboxPcApp", "Xbox") };
+        Assert.True(controller.CanStart);
         controller.Dispose();
     }
 
@@ -1730,6 +1868,20 @@ public class AppControllerRunTests
         controller.Dispose();
     }
 
+    /// DeepL 429 (çok sık istek) anahtarı reddetmez: anahtar kaydedilir (Mac, iPhone ve Android ile aynı); görünmez
+    /// karakterler denemeden önce silinir.
+    [Fact]
+    public async Task RateLimitedDeepLKeyIsSavedAndCleaned()
+    {
+        var services = new FakeServices { KeyCheck = new OnlineKeyCheck(OnlineKeyState.Busy, Reason: OnlineKeyReason.RateLimited, Code: 429) };
+        var (controller, _, _) = Ready(services);
+        var check = await controller.SetDeepLKeyAsync("ab c​:fx\n");
+        Assert.Equal(OnlineKeyState.Busy, check.State);
+        Assert.Equal(["abc:fx"], services.CheckedKeys);
+        Assert.True(controller.HasDeepLKey);
+        controller.Dispose();
+    }
+
     /// Geçerli anahtarla çeviri DeepL'e geçer; cihaz üstü model inmemiş olsa da çeviri hazır sayılır.
     [Fact]
     public async Task AcceptedDeepLKeyTurnsOnlineTranslationOn()
@@ -1932,6 +2084,11 @@ public class AppControllerRunTests
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.Rejected, ApplicationReasons.RemotePlayDisabled), true, Localizer.ForLanguage("tr")));
         Assert.Equal("The PS5 didn't accept this pairing. Pair the PS5 again with the second account in Settings.",
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.RegistrationInvalid), true, text));
+        // X, 21 Kas: PS5 akışı kendisi kapatınca (oyun sırasında kullanıcı değişti) "kabloyla bağlayın" denmez.
+        Assert.Equal("The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosed, "x"), true, text));
+        Assert.Equal("PS5 Uzaktan Oynatma'yı kapattı. Bu çoğunlukla oyun sırasında PS5'te kullanıcı değiştirilince olur. Yeniden bağlanılıyor…",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosed, "x"), true, Localizer.ForLanguage("tr")));
         // GitHub #519: İngilizce "Remote Play on Console has crashed" yerine yerelleştirilmiş yönlendirme.
         Assert.Equal("Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again.",
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleRemotePlayCrashed), true, text));
@@ -2663,6 +2820,188 @@ public class TvAppInstallTests
         Assert.Equal(TvAppKind.Unknown, controller.TvApp.Kind);
     }
 
+    /// <summary>#884, #891: anahtar bu bilgisayarda yokken TV'deki LG uygulaması eski kalıyor, hiç uyarı çıkmıyordu. TV
+    /// sürümünü altyazı akışıyla bildirir (bildirmeyen eski sayılır); ana ekran "TV uygulamasını güncelle" der.</summary>
+    [Fact]
+    public async Task OldLgAppReportedOnTheStreamAsksForAnUpdate()
+    {
+        var services = new FakeServices { DevMode = true };
+        var controller = Make(services);
+        await controller.PairAsync(Tv);
+        Assert.Equal(TvAppKind.Unknown, controller.TvApp.Kind);
+        controller.TvAppReported("");
+        await Task.Yield();
+        Assert.Equal(new TvAppOutdated(TvAppOutdated.Unreported, "0.6.1"), controller.TvAppOutdated);
+        Assert.True(controller.ShowTvAppUpdate);
+        Assert.Equal(StatusTone.Warning, controller.TvTone);
+        Assert.Equal("TV app is out of date (< 0.9.69 → 0.6.1)", controller.TvStatusText);
+        controller.TvAppReported("0.5.0");
+        Assert.Equal(new TvAppOutdated("0.5.0", "0.6.1"), controller.TvAppOutdated);
+        var step = controller.Step;
+        await controller.UpdateTvAppAsync();
+        Assert.Equal(step, controller.Step);
+        Assert.True(controller.TvAppUpdating);
+        Assert.Equal(TvAppKind.NeedsPassphrase, controller.TvApp.Kind);
+        await controller.InstallTvAppAsync("ABC123");
+        Assert.Equal(1, services.Installs);
+        Assert.Null(controller.TvAppOutdated);
+        controller.TvAppReported("0.6.1");
+        Assert.Null(controller.TvAppOutdated);
+        Assert.False(controller.ShowTvAppUpdate);
+    }
+
+    /// <summary>Eski TV uygulaması bağlı (eksik değil) ve geliştirici modu kapalı: TV adımında Developer Mode adımları
+    /// görünür. Önceden kart boş kalıyor, "TV uygulamasını güncelle" yalnız eşleştirme/test gösteriyordu (Mac ile aynı).</summary>
+    [Fact]
+    public async Task OldLgAppWithDevModeOffShowsTheDevModeSteps()
+    {
+        var services = new FakeServices();
+        var controller = Make(services);
+        await controller.PairAsync(Tv);
+        Assert.Equal(TvAppKind.Unknown, controller.TvApp.Kind);
+        controller.TvAppReported("");
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(TvAppKind.DevModeOff, controller.TvApp.Kind);
+        var step = controller.Step;
+        await controller.UpdateTvAppAsync();
+        Assert.Equal(step, controller.Step);
+        Assert.True(controller.TvAppUpdating);
+        Assert.Equal(TvAppKind.DevModeOff, controller.TvApp.Kind);
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(TvAppKind.DevModeOff, controller.TvApp.Kind);
+        services.DevMode = true;
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(TvAppKind.NeedsPassphrase, controller.TvApp.Kind);
+    }
+
+    /// <summary>Eski TV uygulaması bağlı, geliştirici modu açık, anahtar bu bilgisayarda yok: Passphrase kartı görünür.</summary>
+    [Fact]
+    public async Task OldLgAppWithoutKeyShowsThePassphraseCard()
+    {
+        var controller = Make(new FakeServices { DevMode = true });
+        await controller.PairAsync(Tv);
+        Assert.Equal(TvAppKind.Unknown, controller.TvApp.Kind);
+        controller.TvAppReported("0.5.0");
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(TvAppKind.NeedsPassphrase, controller.TvApp.Kind);
+    }
+
+    /// <summary>TV'den silinen uygulama için "Yeniden kur": geliştirici modu açık, anahtar yok → Passphrase kartı; neden
+    /// kurulum günlüğüne yazılır (önceden tvinstall.log'a hiç satır düşmüyordu).</summary>
+    [Fact]
+    public async Task ReinstallForADeletedLgAppAsksThePassphraseAndLogsWhy()
+    {
+        var services = new FakeServices { DevMode = true };
+        var controller = Make(services);
+        await controller.PairAsync(Tv);
+        Assert.Equal(TvAppKind.Unknown, controller.TvApp.Kind);
+        await controller.ReinstallTvAppAsync();
+        Assert.Equal(TvAppKind.NeedsPassphrase, controller.TvApp.Kind);
+        Assert.Contains(services.InstallLog, line => line.Contains("yeniden kurma/güncelleme istendi"));
+        Assert.Contains(services.InstallLog, line => line.Contains("Passphrase isteniyor"));
+    }
+
+    // "TV uygulamasını güncelle" senaryoları: ana ekranda (TV adımına gidilmez), her adım tvinstall.log'da (Mac ile aynı).
+
+    private static async Task<AppController> UpdateScenario(FakeServices services, bool key)
+    {
+        var store = new MemoryStore();
+        if (key) store.Save(StoreKeys.TvDevKey, "dev-key");
+        var controller = Make(services, store);
+        var dev = services.DevMode;
+        var app = services.AppOnTv;
+        services.DevMode = false;
+        await controller.PairAsync(Tv);
+        services.DevMode = dev;
+        services.AppOnTv = app;
+        services.InstallLog.Clear();
+        return controller;
+    }
+
+    [Fact]
+    public async Task UpdateWithEverythingReadyInstallsAtOnce()
+    {
+        var services = new FakeServices { DevMode = true, AppOnTv = "0.5.0" };
+        var controller = await UpdateScenario(services, key: true);
+        await controller.UpdateTvAppAsync();
+        Assert.NotEqual(OnboardingStep.Tv, controller.Step);
+        Assert.Equal(1, services.Installs);
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+        Assert.True(controller.ShowTvAppUpdateDone);
+        Assert.Contains(services.InstallLog, line => line.Contains("Ana ekrandan"));
+        controller.DismissTvAppUpdate();
+        Assert.False(controller.TvAppUpdating);
+    }
+
+    [Fact]
+    public async Task UpdateWithDevModeOffContinuesByItselfOnceItIsOn()
+    {
+        var services = new FakeServices { AppOnTv = "0.5.0" };
+        var controller = await UpdateScenario(services, key: true);
+        await controller.UpdateTvAppAsync();
+        Assert.Equal(TvAppKind.DevModeOff, controller.TvApp.Kind);
+        Assert.Contains(services.InstallLog, line => line.Contains("geliştirici modu kapalı"));
+        services.DevMode = true;
+        // Kartın 3 sn'lik bekleme döngüsü.
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(1, services.Installs);
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+    }
+
+    [Fact]
+    public async Task UpdateWithoutAKeyAsksThePassphraseThenInstalls()
+    {
+        var services = new FakeServices { DevMode = true, AppOnTv = "0.5.0" };
+        var controller = await UpdateScenario(services, key: false);
+        await controller.UpdateTvAppAsync();
+        Assert.Equal(TvAppKind.NeedsPassphrase, controller.TvApp.Kind);
+        Assert.Contains(services.InstallLog, line => line.Contains("Passphrase isteniyor"));
+        await controller.InstallTvAppAsync("ABC123");
+        Assert.Equal(1, services.Installs);
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+    }
+
+    [Fact]
+    public async Task ReinstallingADeletedAppFromHomeInstallsIt()
+    {
+        var services = new FakeServices { DevMode = true, AppOnTv = null };
+        var controller = await UpdateScenario(services, key: true);
+        Assert.Null(controller.TvAppOutdated);
+        await controller.UpdateTvAppAsync();
+        Assert.NotEqual(OnboardingStep.Tv, controller.Step);
+        Assert.Equal(1, services.Installs);
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+    }
+
+    [Fact]
+    public async Task FailedUpdateShowsWhyAndRetrySucceeds()
+    {
+        var services = new FakeServices { DevMode = true, AppOnTv = "0.5.0", LgInstallError = new DevModeException(DevModeError.InstallFailed, "disk dolu") };
+        var controller = await UpdateScenario(services, key: true);
+        await controller.UpdateTvAppAsync();
+        Assert.Equal(TvAppKind.Failed, controller.TvApp.Kind);
+        Assert.Equal("disk dolu", controller.TvApp.Reason);
+        services.LgInstallError = null;
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+    }
+
+    [Fact]
+    public async Task OldLgAppReportedOnTheStreamIsUpdatedWithTheSavedKey()
+    {
+        var services = new FakeServices { DevMode = true, AppOnTv = "0.5.0" };
+        var store = new MemoryStore();
+        store.Save(StoreKeys.TvDevKey, "dev-key");
+        var controller = Make(services, store);
+        await controller.PairAsync(Tv);
+        Assert.Equal(1, services.Installs);
+        services.AppOnTv = "0.6.1";
+        controller.TvAppReported("");
+        for (var i = 0; i < 200 && controller.TvApp.Kind == TvAppKind.Working; i++) await Task.Delay(10);
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.6.1"), controller.TvApp);
+        Assert.Null(controller.TvAppOutdated);
+    }
+
     [Fact]
     public async Task OtherBrandsAreNotInstalledThroughLgDeveloperMode()
     {
@@ -2729,10 +3068,13 @@ internal sealed class FakeXbox(IReadOnlyList<XboxConsole> consoles) : IXboxServi
     public Task<XboxLoginChallenge> BeginLoginAsync() => throw new NotSupportedException();
     public Task<string> CompleteLoginAsync() => throw new NotSupportedException();
     public Task<IReadOnlyList<XboxConsole>> DiscoverAsync(string token) => Task.FromResult(consoles);
+    public List<(bool PlayAudio, FakeStream Stream)> Streams { get; } = [];
     public IStreamSession MakeStream(XboxConsole console, string token, bool legacyFrameRate, bool playAudio)
     {
         LegacyFrameRateRequests.Add(legacyFrameRate);
-        return new FakeStream();
+        var stream = new FakeStream();
+        Streams.Add((playAudio, stream));
+        return stream;
     }
 }
 

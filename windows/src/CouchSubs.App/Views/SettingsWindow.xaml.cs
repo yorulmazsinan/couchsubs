@@ -96,8 +96,8 @@ public partial class SettingsWindow : Window
         CpuThreadChoice.SelectedItem = CpuThreadChoice.Items.Cast<ComboBoxItem>()
             .First(item => (int)item.Tag == CpuThreadOptions.Normalize(settings.CpuTranslationThreads, Environment.ProcessorCount));
         FastSubtitleDetection.IsChecked = settings.FastSubtitleDetection;
-        WatchSubtitleBackground.IsChecked = settings.WatchSubtitleBackground;
         AutoReadGamePhone.IsChecked = settings.AutoReadGamePhone;
+        PhoneChatCard.IsChecked = settings.PhoneChatCard;
         OcrEngineChoice.SelectedItem = OcrEngineChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.OcrEngine.ToString());
         ShowAdvancedOcr();
         ShowCpuThreads();
@@ -121,7 +121,6 @@ public partial class SettingsWindow : Window
         GameAreaPresets.IsChecked = settings.GameAreaPresets;
         ShowPacks();
         AppearanceChoice.SelectedItem = AppearanceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Appearance.ToString());
-        FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.FrameSource.ToString());
         RemotePlayAppChoice.SelectedItem = RemotePlayAppChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.RemotePlayApp.ToString());
         XboxAudioOnComputer.IsChecked = settings.XboxAudioOnComputer;
         XboxLegacyFrameRate.IsChecked = settings.XboxLegacyFrameRate;
@@ -162,14 +161,25 @@ public partial class SettingsWindow : Window
     /// <summary>Remote Play uygulaması seçimi ve ipuçları yalnız seçili görüntü kaynağına göre görünür.</summary>
     private void ShowFrameSource()
     {
-        if (controller.IsXbox) return;
-        var window = controller.Settings.FrameSource == FrameSource.RemotePlayWindow;
-        var capture = controller.Settings.FrameSource == FrameSource.CaptureWindow;
+        // Xbox'ta (#853) seçenekler "Xbox (bu uygulama bağlanır)" ve "OBS projektörü veya oyun penceresi"; PS5'inkiler gizli.
+        var xbox = controller.IsXbox;
+        var settings = controller.Settings;
+        var selectedTag = xbox ? (settings.XboxFrameSource == XboxFrameSource.CaptureWindow ? "CaptureWindow" : "Xbox") : settings.FrameSource.ToString();
+        XboxSourceItem.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
+        Ps5SourceItem.Visibility = RemotePlaySourceItem.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
+        var wasLoading = loading;
+        loading = true;
+        FrameSourceChoice.SelectedItem = FrameSourceChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == selectedTag);
+        loading = wasLoading;
+        XboxWindowHint.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
+        XboxPictureSourceCard.Visibility = xbox && !controller.XboxReadsWindow ? Visibility.Visible : Visibility.Collapsed;
+        var window = !xbox && settings.FrameSource == FrameSource.RemotePlayWindow;
+        var capture = xbox ? controller.XboxReadsWindow : settings.FrameSource == FrameSource.CaptureWindow;
         RemotePlayAppPanel.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         WindowSourceHint.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         CaptureWindowPanel.Visibility = capture ? Visibility.Visible : Visibility.Collapsed;
         if (capture) RefreshCaptureWindows();
-        Ps5SourceHint.Visibility = window || capture ? Visibility.Collapsed : Visibility.Visible;
+        Ps5SourceHint.Visibility = xbox || window || capture ? Visibility.Collapsed : Visibility.Visible;
         SonyInstallRow.Visibility = ChiakiInstallRow.Visibility = window ? Visibility.Visible : Visibility.Collapsed;
         var sony = controller.RemotePlayInstalled(RemotePlayApp.Sony);
         var chiaki = controller.RemotePlayInstalled(RemotePlayApp.Chiaki);
@@ -200,8 +210,6 @@ public partial class SettingsWindow : Window
         ConsoleXboxLink.Content = Localizer.Current[controller.HasXboxAccount ? "Choose your Xbox" : "Sign in with Microsoft"];
         ConsoleXboxLink.Style = (Style)FindResource(controller.NeedsXboxLink ? "PrimaryButton" : "SecondaryButton");
         ConsoleXboxSignedIn.Visibility = controller.HasXboxAccount ? Visibility.Visible : Visibility.Collapsed;
-        PlayStationPictureSourceCard.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
-        XboxPictureSourceCard.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
         ShowFrameSource();
         PasscodeTab.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -233,9 +241,12 @@ public partial class SettingsWindow : Window
 
     private void OnFrameSource(object sender, SelectionChangedEventArgs e)
     {
-        if (FrameSourceChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
-        Update(s => s with { FrameSource = Enum.Parse<FrameSource>(tag) });
-        ShowFrameSource();
+        if (loading || FrameSourceChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        if (controller.IsXbox)
+            Update(s => s with { XboxFrameSource = tag == "CaptureWindow" ? XboxFrameSource.CaptureWindow : XboxFrameSource.Xbox });
+        else
+            Update(s => s with { FrameSource = Enum.Parse<FrameSource>(tag) });
+        ShowConsole();
     }
 
     private void OnXboxLegacyFrameRate(object sender, RoutedEventArgs e) =>
@@ -275,6 +286,7 @@ public partial class SettingsWindow : Window
             }
             CaptureWindowChoice.SelectedItem = selected;
             CaptureWindowEmpty.Visibility = windows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdateSourceProjectorHint(saved);
         }
         finally { refreshingCaptureWindows = false; }
     }
@@ -285,8 +297,15 @@ public partial class SettingsWindow : Window
     {
         if (loading || refreshingCaptureWindows) return;
         if (CaptureWindowChoice.SelectedItem is ComboBoxItem { Tag: WindowCaptureTarget target })
+        {
             Update(s => s with { CaptureWindow = target });
+            UpdateSourceProjectorHint(target);
+        }
     }
+
+    /// <summary>OBS'in Program/Önizleme projektörü seçiliyse Kaynak projektörü önerilir (görüntüde CouchSubs'ın katmanı da var).</summary>
+    private void UpdateSourceProjectorHint(WindowCaptureTarget? target) =>
+        SourceProjectorHint.Visibility = ObsProjector.NeedsSourceProjectorHint(target) ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnAppearance(object sender, SelectionChangedEventArgs e)
     {
@@ -913,14 +932,21 @@ public partial class SettingsWindow : Window
     private void ShowDeepLStatus(OnlineKeyCheck check)
     {
         var text = Localizer.Current;
+        // Mac/iPhone'daki DeepLUsageText ile aynı metinler: her hata kendi nedeniyle (geçersiz karakter, 429, HTTP kodu, ağ yok).
         ShowStatus(check.State switch
         {
+            OnlineKeyState.Valid when check.Limit >= OnlineKeyCheck.Unlimited => text.Format("This month: %@ characters used (no limit).", check.Used.ToString("N0")),
+            OnlineKeyState.Valid when check.Limit <= 0 => text["DeepL accepted the key. This month's usage could not be read."],
             OnlineKeyState.Valid => text.Format("This month: %1$@ of %2$@ characters used.", check.Used.ToString("N0"), check.Limit.ToString("N0")),
             OnlineKeyState.QuotaExceeded => text["This month's DeepL limit is used up. Until it renews, the translation model on this computer translates."],
+            OnlineKeyState.Invalid when check.Reason == OnlineKeyReason.MalformedKey =>
+                text["The key contains characters a DeepL key cannot have. Copy it again from your DeepL account page."],
             OnlineKeyState.Invalid => text["DeepL did not accept this key. Copy it again from your DeepL account page."],
             OnlineKeyState.KeychainWriteFailed => text["The API key could not be saved to this computer's secure storage."],
+            OnlineKeyState.Busy => text["DeepL is receiving too many requests right now (HTTP 429). The key is saved; DeepL translates again in a few minutes."],
+            _ when check.Reason == OnlineKeyReason.HttpStatus => text.Format("DeepL answered with an error (HTTP %lld). Try again in a few minutes.", check.Code),
             _ => text["DeepL could not be reached. Check your internet connection."],
-        }, check.State is not (OnlineKeyState.Valid or OnlineKeyState.QuotaExceeded));
+        }, check.State is not (OnlineKeyState.Valid or OnlineKeyState.QuotaExceeded or OnlineKeyState.Busy));
     }
 
     private void ShowAiResult(AiTestResult result, TranslationEngine engine)
@@ -996,11 +1022,11 @@ public partial class SettingsWindow : Window
     private void OnFastSubtitleDetection(object sender, RoutedEventArgs e) =>
         Update(s => s with { FastSubtitleDetection = FastSubtitleDetection.IsChecked == true });
 
-    private void OnWatchSubtitleBackground(object sender, RoutedEventArgs e) =>
-        Update(s => s with { WatchSubtitleBackground = WatchSubtitleBackground.IsChecked == true });
-
     private void OnAutoReadGamePhone(object sender, RoutedEventArgs e) =>
         Update(s => s with { AutoReadGamePhone = AutoReadGamePhone.IsChecked == true });
+
+    private void OnPhoneChatCard(object sender, RoutedEventArgs e) =>
+        Update(s => s with { PhoneChatCard = PhoneChatCard.IsChecked == true });
 
     private async void OnKeySave(object sender, RoutedEventArgs e)
     {

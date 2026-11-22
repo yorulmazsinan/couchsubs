@@ -9,7 +9,14 @@ import java.net.URL
  * Samsung TV'nin `http://TV:8001/api/v2/` yanıtı: adı, modeli ve geliştirici modu (açık mı, Host PC IP'si ne). Kurulum
  * ekranı buna bakarak TV'de neyin eksik olduğunu söyler; yanıt yoksa yine kurulum denenebilir.
  */
-data class SamsungTvInfo(val name: String?, val model: String?, val developerMode: Boolean?, val developerIp: String?) {
+data class SamsungTvInfo(
+    val name: String?,
+    val model: String?,
+    val developerMode: Boolean?,
+    val developerIp: String?,
+    /** Ekran çözünürlüğü ("3840x2160"; ultra geniş monitörde geniş yüzey için, #886). */
+    val resolution: String? = null,
+) {
     /**
      * sdb (26101) bağlantısı reddedilince TV'nin kendi söylediğine göre neden (Mac/iPhone'daki SamsungDeveloperInfo.refusal):
      * geliştirici modu kapalı, Host PC IP başka cihazın ya da ayar doğru ama TV o zamandan beri tam yeniden başlamamış.
@@ -52,6 +59,7 @@ data class SamsungTvInfo(val name: String?, val model: String?, val developerMod
                 model = text("modelName"),
                 developerMode = text("developerMode")?.let { it == "1" || it.equals("true", ignoreCase = true) },
                 developerIp = text("developerIP")?.takeIf { it != "0.0.0.0" },
+                resolution = text("resolution"),
             )
         } catch (error: Exception) {
             null

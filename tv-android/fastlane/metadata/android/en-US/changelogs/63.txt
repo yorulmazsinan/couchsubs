@@ -1,0 +1,1 @@
+0.9.60: The Settings button on the remote no longer throws you out of CouchSubs: after the quick settings panel opens and closes, the CouchSubs screen and the HDMI picture stay. The computer or phone connects to the TV at most three times per translation, so the "Allow USB debugging?" question no longer keeps coming back.

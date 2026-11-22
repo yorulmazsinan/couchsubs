@@ -38,6 +38,9 @@ public struct XboxSessionMachine {
     /// Ardışık başarısız deneme sayısı.
     private var failures = 0
     private var streamingSince: Double = 0
+    /// Ardışık, Xbox'tan tek kare gelmeden biten bağlantılar.
+    private var noPictureConnections = 0
+    public static let maxNoPictureAttempts = 2
 
     public init(maxPolls: Int = 90, pollIntervalMs: Int = 1000, retryDelaysMs: [Int] = [5000, 15000, 45000], healthyStreamMs: Int = 60_000,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime * 1000 }) {
@@ -94,17 +97,24 @@ public struct XboxSessionMachine {
         guard phase == .negotiating else { return false }
         phase = .streaming
         streamingSince = clock()
+        noPictureConnections = 0
         return true
     }
 
-    /// `permanent`: konsol yayını reddetti (`Failed` ya da `errorDetails`); yeniden denenmez.
+    /// `permanent`: konsol yayını reddetti (`Failed` ya da `errorDetails`); yeniden denenmez. `.noFirstFrame` (bağlantı
+    /// kuruldu, Xbox tek kare göndermedi) ayrıca sayılır: `maxNoPictureAttempts` ardışık bağlantıda görüntü gelmezse
+    /// durulur. Eskiden her biri ~60 sn sürüp Xbox'ta "uzaktan oynatma başlatıldı / durduruldu" bildirimiyle dört kez
+    /// açılıp kapanıyordu (Windows'taki XboxRetryPlan ile aynı).
     public mutating func fail(_ kind: XboxErrorKind, _ message: String, permanent: Bool = false) -> Action {
         guard phase != .stopped else { return .nothing }
         // Yayın en az `healthyStreamMs` sürdüyse bu kopma yeni bir dizinin ilkidir.
         if streamingSince > 0 && clock() - streamingSince >= Double(healthyStreamMs) { failures = 0 }
         streamingSince = 0
         failures += 1
-        let retry = !permanent && !Self.fatal.contains(kind) && failures <= retryDelaysMs.count
+        if kind == .noFirstFrame { noPictureConnections += 1 }
+        // Xbox uzaktan oynatma hizmetini başlatamadı (HTTP hatası olarak gelse de): yeniden denemek işe yaramaz (#871).
+        let retry = !permanent && !XboxStop.isPermanent(message) && !Self.fatal.contains(kind) && failures <= retryDelaysMs.count
+            && noPictureConnections < Self.maxNoPictureAttempts
         phase = .failed(kind, message: message, willRetry: retry, attempt: retry ? failures : 0)
         return .retry(delayMs: retry ? retryDelaysMs[failures - 1] : nil)
     }

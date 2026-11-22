@@ -120,6 +120,7 @@ extension RemotePlayWindowStream {
                 if capture.watch.frameDelivered() {
                     SubtitleLog.write("pencereden ilk kare (yedek yakalama): \(image.width)x\(image.height)")
                 }
+                frameCounts.fallback()
                 onFrame?(image)
             } catch {
                 if !failureNoted {

@@ -320,6 +320,13 @@ public enum DisconnectReason: Equatable, Sendable {
     /// PS5 tamamen kapatılıp açılana kadar her oturum isteği aynı yanıtı alır; eskiden İngilizce metinle sonsuza kadar
     /// "Yeniden bağlanılıyor…" deneniyordu (GitHub #519). `CrashRetryLimit.maxRetries` denemeden sonra durulur.
     case consoleRemotePlayCrashed
+    /// PS5 akışı kendisi kapattı: Takion bağlantısında "disconnect" iletisi gönderdi
+    /// (CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED / _REMOTE_SHUTDOWN). Ağ kopması değildir; ağ gidince PS5'ten
+    /// ileti gelmez, libchiaki STREAM_CONNECTION_UNKNOWN verir. Kullanıcılar bunu oyun sırasında PS5'te ana hesaba geçince
+    /// görüyor (X, 21 Kas: "ana hesaba geçtiğim zaman sürekli bağlantı kopuyor"); eskiden `.network` sayılıp "kabloyla
+    /// bağlayın" deniyor ve kopma görüntüyü 720p'ye düşürüyordu. Değer: PS5'in gönderdiği neden metni (günlükte görünsün
+    /// diye; boş olabilir). Yeniden bağlanılır.
+    case consoleClosed(String)
     case other(String)
 
     /// Altyazı günlüğüne (altyazi.log) yazılan kısa neden: adres ve ayrıntı olmadan, yalnız türü. Kullanıcılar çoğu zaman
@@ -338,6 +345,7 @@ public enum DisconnectReason: Equatable, Sendable {
         case .notFound: "notFound"
         case .rejected(let code): code.map { String(format: "rejected 0x%08x", $0) } ?? "rejected"
         case .consoleRemotePlayCrashed: "consoleRemotePlayCrashed"
+        case .consoleClosed(let text): text.isEmpty ? "consoleClosed" : "consoleClosed: \(text)"
         case .other(let text): text.isEmpty ? "other" : "other: \(text)"
         }
     }
@@ -382,23 +390,25 @@ public enum DisconnectReason: Equatable, Sendable {
 
     /// Oturum isteği bilinmeyen nedenle düştüyse günlükten anlaşılan neden kullanılır. Günlükte neden yoksa (PS5'in
     /// yanıtı okunamadı) PS5 oturumu başlatmamıştır: anlamsız İngilizce metin yerine `.rejected(nil)`.
-    init(quit: ChiakiQuitReason, sessionRequestHint hint: DisconnectReason?) {
+    init(quit: ChiakiQuitReason, sessionRequestHint hint: DisconnectReason?, remoteText: String? = nil) {
         if quit == CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN {
             self = hint ?? .rejected(nil)
         } else {
-            self.init(quit: quit)
+            self.init(quit: quit, remoteText: remoteText)
         }
     }
 
-    init(quit: ChiakiQuitReason) {
+    /// `remoteText`: PS5'in akışı kapatırken gönderdiği neden (libchiaki `quit.reason_str`).
+    init(quit: ChiakiQuitReason, remoteText: String? = nil) {
         switch quit {
         case CHIAKI_QUIT_REASON_STOPPED: self = .stopped
         case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_IN_USE: self = .inUse
         case CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED: self = .refused
         // PSN üzerinden eşleme reddedildi: yalnız bu yeniden eşleme ister (eskiden TCP reddiyle aynı `.refused`'du).
         case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED: self = .registrationInvalid
-        case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN,
-             CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN: self = .network
+        case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN:
+            self = .consoleClosed(remoteText ?? "")
+        case CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED, CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN: self = .network
         case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH: self = .consoleRemotePlayCrashed
         default: self = .other(String(cString: chiaki_quit_reason_string(quit)))
         }
@@ -434,6 +444,16 @@ public enum SessionState: Equatable, Sendable {
     case connecting
     case streaming
     case disconnected(DisconnectReason)
+}
+
+/// Bağlanırken son adım: "Bağlanıyor…" 30 sn'yi geçince ekranda nedeni söylenir (CouchSubsCore `ConnectingHint`).
+public enum ConnectStep: String, Sendable {
+    /// PS5 aramaya yanıt vermedi; yine de bağlanılıyor.
+    case noAnswer
+    /// PS5 dinlenmedeydi; uyandırma gönderildi.
+    case waking
+    /// PS5 yanıt verdi; oturum açılıyor.
+    case opening
 }
 
 /// Tek bir libchiaki oturumunun sahibi. Geri çağrılar bu kutuya gelir; kutu, oturum kapatılıp
@@ -534,6 +554,11 @@ public final class StreamSession: @unchecked Sendable {
     public var onState: ((SessionState) -> Void)?
     /// PS5 ağda yeni bir adreste bulununca (oturum kuyruğunda) çağrılır; yeni adres kaydedilmelidir.
     public var onConsoleMoved: ((RegisteredConsole) -> Void)?
+    /// Bağlanırken son adım (her iş parçacığından okunur); arayüz "Bağlanıyor…" uzayınca nedenini buradan söyler.
+    public var connectStep: ConnectStep? { stepLock.lock(); defer { stepLock.unlock() }; return step }
+    private var step: ConnectStep?
+    private let stepLock = NSLock()
+    private func setStep(_ value: ConnectStep) { stepLock.lock(); step = value; stepLock.unlock() }
 
     /// Yalnız `queue` üzerinde değişir (PS5'in adresi değişirse; Windows'taki gibi).
     private var console: RegisteredConsole
@@ -677,6 +702,7 @@ public final class StreamSession: @unchecked Sendable {
             RemotePlayLog.write("PS5 aranıyor: art arda \(search.unanswered). yanıtsız arama; bu cihaz: \(DeviceDiagnostics.line())")
         }
         let action = wakePolicy.action(awake: info?.isAwake)
+        setStep(info == nil ? .noAnswer : action == .wake ? .waking : .opening)
         if let info {
             let detail = info.isAwake ? "uyanık" : action == .wake ? "dinlenmede, uyandırılıyor" : "dinlenmede, açılması bekleniyor"
             RemotePlayLog.write("PS5 oturumu: \(info.name) \(info.host) \(detail)")
@@ -725,6 +751,7 @@ public final class StreamSession: @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self, self.isCurrent(current) else { return }
             if Console.blockingDiscover(timeout: 2, host: self.console.host).contains(where: \.isAwake) {
+                self.setStep(.opening)
                 self.openSession(current)
             } else if Date() < deadline {
                 self.waitForWake(current, deadline: deadline)
@@ -753,6 +780,13 @@ public final class StreamSession: @unchecked Sendable {
         }, user)
         chiaki_session_set_video_sample_cb(box.pointer, { buffer, size, _, _, user in
             guard let buffer, let user else { return true }
+            // libchiaki'nin `size_t` boyu Swift'te `Int`; üst biti dolu (eksi) gelirse `Data(bytes:count:)` önkoşulu
+            // uygulamayı kapatıyordu (iPhone 1.0.3, Crashlytics: EXC_BREAKPOINT, StreamSession.swift:688). Kare atılır;
+            // false, libchiaki'ye karenin işlenmediğini söyler (sonraki kareler için yeni anahtar kare istenir).
+            guard StreamSession.isPlausibleSample(size: size) else {
+                RemotePlayLog.write("PS5 görüntü: geçersiz kare boyu (\(size)), kare atıldı")
+                return false
+            }
             Unmanaged<ChiakiSessionBox>.fromOpaque(user).takeUnretainedValue().owner?.ingest(Data(bytes: buffer, count: size))
             return true
         }, user)
@@ -816,7 +850,8 @@ public final class StreamSession: @unchecked Sendable {
                 }
             }
         case CHIAKI_EVENT_QUIT:
-            let reason = DisconnectReason(quit: event.quit.reason, sessionRequestHint: sessionRequestHint)
+            let reason = DisconnectReason(quit: event.quit.reason, sessionRequestHint: sessionRequestHint,
+                                          remoteText: event.quit.reason_str.map { String(cString: $0) })
             queue.async { [weak self] in
                 // Eski bir oturumun (ör. reconnectNow ile kapatılanın) kapanma olayı yeni oturumu etkilemez.
                 guard let self, self.box?.generation == eventGeneration else { return }
@@ -824,6 +859,10 @@ public final class StreamSession: @unchecked Sendable {
                 // Bekçi değil libchiaki kapattı (PS5 ya da ağ); görüntünün son ana kadar gelip gelmediği nedeni ayırır.
                 if let summary = self.watch({ $0.summary() }) {
                     RemotePlayLog.write("PS5 oturumunu libchiaki kapattı (\(reason)); \(summary)")
+                }
+                if case .consoleClosed(let text) = reason {
+                    RemotePlayLog.write("PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"\(text)\"); ağ kopması değil, "
+                        + "çoğunlukla PS5'te kullanıcı değişince olur; yeniden bağlanılıyor")
                 }
                 self.closeBox()
                 self.policy.ended()
@@ -897,6 +936,14 @@ public final class StreamSession: @unchecked Sendable {
         let delay = policy.nextDelay(inUse: reason == .inUse)
         RemotePlayLog.write("PS5 oturumu: \(delay) sn sonra yeniden denenecek")
         queue.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in self?.connect(current) }
+    }
+
+    /// Bir H.264 karesinin en büyük kabul edilen boyu; 1080p anahtar kare birkaç MB'ı geçmez.
+    static let maxSampleBytes = 64 << 20
+
+    /// libchiaki'den gelen kare boyu makul mü (boş, eksi ya da akla yatmayacak kadar büyük değil).
+    static func isPlausibleSample(size: Int) -> Bool {
+        size > 0 && size <= maxSampleBytes
     }
 
     /// Her kare çözülür (sonraki kareler öncekilere dayanır); görüntü saniyede en çok 20 kez üretilir.

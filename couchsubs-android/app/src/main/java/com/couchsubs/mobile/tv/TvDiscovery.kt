@@ -35,6 +35,7 @@ object TvDiscovery {
         var location: String? = null
         var brand: TvBrand? = null
         var lg = false
+        var samsung = false
         for (line in response.split("\r\n")) {
             val colon = line.indexOf(':')
             if (colon < 0) continue
@@ -42,11 +43,21 @@ object TvDiscovery {
             val value = line.substring(colon + 1).trim()
             if (name == "LOCATION") location = value
             if (name == "ST" || name == "NT") targets[value]?.let { brand = it }
-            if (name in setOf("ST", "NT", "USN", "SERVER") && isLgHeader(value)) lg = true
+            if (name !in setOf("ST", "NT", "USN", "SERVER")) continue
+            // Sorulan hedefin adı (".../webos-second-screen", "samsung.com") başlıktan çıkarılarak bakılır: yalnız hedefi
+            // geri söyleyen yanıt marka kanıtı değildir.
+            val own = targets.keys.fold(value) { text, target -> text.replace(target, "") }
+            if (isLgHeader(own)) lg = true
+            if ("samsung" in own.lowercase()) samsung = true
         }
+        val url = location?.let { runCatching { URL(it) }.getOrNull() } ?: return null
+        // Bazı cihazların UPnP yığını her M-SEARCH'e sorulan hedefi aynen yazıp cevap veriyor: Android TV LG (ve Samsung)
+        // listesine düşüyor, DIAL'dan gelen Android TV'yi de eziyordu (Mac'te "LG TV — 192.168.1.133", Toshiba Android
+        // TV). LG yanıtı webOS başlığı ya da webOS'un 1990 portu, Samsung yanıtı Samsung başlığı ya da 7676 portu taşımalı.
         if (lg) brand = TvBrand.LG
-        val host = location?.let { runCatching { URL(it).host }.getOrNull() } ?: return null
-        return brand?.let { host to it }
+        else if (brand == TvBrand.LG && url.port != 1990) brand = null
+        if (brand == TvBrand.SAMSUNG && !samsung && url.port != 7676) brand = null
+        return brand?.let { url.host to it }
     }
 
     /**

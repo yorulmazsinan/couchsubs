@@ -10,7 +10,10 @@ Eşleştirme isteği iki dakika geçerlidir; aynı anda bir istek bekler. TV'de 
 denenen istek (Tamam'a basmak, uygulamayı yeniden açmak) iki saniyeden eski onaysız
 isteğin yerini alır; onay penceresi yeni kodla açılır. Ret sonrasında ve süre dolduğu
 andan itibaren on saniyelik bekleme vardır. Onay bekleyen istek, sunucu yeniden açılsa
-ya da port değişse de korunur. Mac/Windows/iPhone ayarlarındaki “TV eşleştir”, çeviri çalışmadan da
+ya da port değişse de korunur. Süresi dolan ya da telefonda/bilgisayarda düşen istek
+(çeviri durdurulup başlatıldı, uygulama yeniden açıldı) TV uygulaması 0.9.62'den beri
+kendiliğinden yeniden gönderilir ve onay penceresi yeniden açılır; yalnız reddedilen
+istekten sonra TV Tamam bekler (sunucu `{"state":"expired","rejected":true}` döner). Mac/Windows/iPhone ayarlarındaki “TV eşleştir”, çeviri çalışmadan da
 iki dakikalık eşleştirme penceresi açar. Android telefonda çeviri oturumu açık olmalıdır.
 Android TV'de eşleştirme için sürekli ADB veya geliştirici bağlantısı gerekmez.
 
@@ -44,5 +47,7 @@ kullanabilir, anahtar yenilenince eski kimlik geçersiz olur.
 
 Geliştirici kontrolü: ortak `subtitle-access.json` ve `subtitle-pairing.json`
 vektörleri Windows, Swift ve Android testlerinde; eski/yeni TV bağlantısı ve anahtar
-geçişleri `node --test scripts/tv-discovery.test.js` içinde sınanır. Bunlar canlı TV,
+geçişleri `node --test scripts/tv-discovery.test.js` içinde sınanır. TV uygulamasının
+kendisi gerçek ağ üzerinden Swift sunucusuyla `TVAppPairingLiveTests` içinde eşleşir
+(`scripts/tv-pair-live.js`; `COUCHSUBS_TV_APP_DIR` ile eski sürümün app.js'i denenebilir). Bunlar canlı TV,
 OBS, telefon ve üretim paketi testlerinin yerini tutmaz.

@@ -1,0 +1,117 @@
+{
+  "about": "Menü şeridi, özel adlar, kenardaki tuş simgesi ve saat (#856, #859, #860). Mac ScreenMenuBarTests.swift, Windows ScreenMenuBarTests.cs ve Android ScreenMenuBarTest.kt aynı dosyayı okur. Kutular [sol, üst, sağ, alt], 16:9 kareye oranla.",
+  "names": [
+    { "text": "JASON & LUCIA", "keep": true },
+    { "text": "Bonnie & Clyde", "keep": true },
+    { "text": "Jason & Lucia Ward", "keep": true },
+    { "text": "MAP", "keep": false },
+    { "text": "JASON", "keep": false },
+    { "text": "Salt & pepper", "keep": false },
+    { "text": "R&D", "keep": false },
+    { "text": "Guards & Soldiers", "keep": false },
+    { "text": "JASON & LUCIA MAP BRIEF", "keep": false },
+    { "text": "JASON & LUCIA MAP", "keep": false },
+    { "text": "Meet Jason & Lucia at the dock", "keep": false }
+  ],
+  "clocks": [
+    { "text": "12:00 pm", "clock": true },
+    { "text": "x3", "clock": true },
+    { "text": "TIP $10", "clock": false },
+    { "text": "2D VIEW", "clock": false },
+    { "text": "ISLAND DREAMS", "clock": false }
+  ],
+  "menuLines": [
+    {
+      "name": "sekmeler geniş boşlukla: her sekme ayrı",
+      "text": "JASON & LUCIA MAP BRIEF PROGRESS",
+      "box": [0.509, 0.059, 0.911, 0.101],
+      "words": [
+        { "text": "JASON", "box": [0.509, 0.059, 0.559, 0.101] },
+        { "text": "&", "box": [0.564, 0.059, 0.575, 0.101] },
+        { "text": "LUCIA", "box": [0.581, 0.059, 0.640, 0.101] },
+        { "text": "MAP", "box": [0.669, 0.059, 0.709, 0.101] },
+        { "text": "BRIEF", "box": [0.737, 0.059, 0.791, 0.101] },
+        { "text": "PROGRESS", "box": [0.818, 0.059, 0.911, 0.101] }
+      ],
+      "pieces": ["JASON & LUCIA", "MAP", "BRIEF", "PROGRESS"]
+    },
+    {
+      "name": "başlık: sözcük arası dar, tek parça",
+      "text": "ISLAND DREAMS",
+      "box": [0.187, 0.193, 0.350, 0.244],
+      "words": [
+        { "text": "ISLAND", "box": [0.187, 0.193, 0.262, 0.244] },
+        { "text": "DREAMS", "box": [0.271, 0.193, 0.350, 0.244] }
+      ],
+      "pieces": ["ISLAND DREAMS"]
+    },
+    {
+      "name": "cümle: büyük harf değil, dokunulmaz",
+      "text": "Keep an eye on the party",
+      "box": [0.1, 0.3, 0.5, 0.34],
+      "words": [
+        { "text": "Keep", "box": [0.1, 0.3, 0.15, 0.34] },
+        { "text": "an", "box": [0.2, 0.3, 0.23, 0.34] },
+        { "text": "eye", "box": [0.3, 0.3, 0.34, 0.34] },
+        { "text": "on", "box": [0.38, 0.3, 0.4, 0.34] },
+        { "text": "the", "box": [0.42, 0.3, 0.45, 0.34] },
+        { "text": "party", "box": [0.46, 0.3, 0.5, 0.34] }
+      ],
+      "pieces": ["Keep an eye on the party"]
+    }
+  ],
+  "edgeIcons": [
+    {
+      "name": "okunmuş tuş adı satır sonunda: kutu tuştan önce biter",
+      "text": "RECENTER L3",
+      "box": [0.869, 0.719, 0.960, 0.754],
+      "words": [
+        { "text": "RECENTER", "box": [0.869, 0.719, 0.934, 0.754] },
+        { "text": "L3", "box": [0.940, 0.719, 0.960, 0.754] }
+      ],
+      "expected": "RECENTER",
+      "left": 0.869,
+      "right": 0.940
+    },
+    {
+      "name": "tanınmış simge satır sonunda (parantezli)",
+      "text": "EXIT (￼)",
+      "box": [0.906, 0.915, 0.959, 0.948],
+      "icons": [[0.940, 0.912, 0.959, 0.950]],
+      "expected": "EXIT",
+      "left": 0.906,
+      "right": 0.940
+    },
+    {
+      "name": "tanınmış simge satır başında",
+      "text": "￼ Swing",
+      "box": [0.05, 0.1, 0.28, 0.14],
+      "icons": [[0.05, 0.09, 0.11, 0.15]],
+      "expected": "Swing",
+      "left": 0.11,
+      "right": 0.28
+    },
+    {
+      "name": "tuş ortada: dokunulmaz",
+      "text": "Hold L2 to scan",
+      "box": [0.5, 0.3, 0.7, 0.34],
+      "words": [
+        { "text": "Hold", "box": [0.5, 0.3, 0.54, 0.34] },
+        { "text": "L2", "box": [0.55, 0.3, 0.57, 0.34] },
+        { "text": "to", "box": [0.58, 0.3, 0.6, 0.34] },
+        { "text": "scan", "box": [0.61, 0.3, 0.7, 0.34] }
+      ],
+      "expected": "Hold L2 to scan",
+      "left": 0.5,
+      "right": 0.7
+    },
+    {
+      "name": "yalnız tuştan oluşan satır: dokunulmaz",
+      "text": "L3 R3",
+      "box": [0.5, 0.5, 0.56, 0.54],
+      "expected": "L3 R3",
+      "left": 0.5,
+      "right": 0.56
+    }
+  ]
+}

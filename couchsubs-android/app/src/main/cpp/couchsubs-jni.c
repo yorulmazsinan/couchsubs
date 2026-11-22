@@ -414,8 +414,10 @@ enum { CS_EVENT_CONNECTED = 1, CS_EVENT_LOGIN_PIN = 2, CS_EVENT_QUIT = 3 };
 /* CS_QUIT_RP_CRASHED: PS5'teki Uzaktan Oynatma çöktü (CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH, GitHub #519). */
 /* CS_QUIT_REFUSED yalnız TCP reddidir (oturum isteği ya da ctrl: PS5 yeni uyanıyor, adres başka cihaza geçmiş); eşleme
  * sorunu değildir. PSN eşlemesinin reddi ayrı (CS_QUIT_PSN_REGIST_FAILED): yalnız o yeniden eşleme ister. */
+/* CS_QUIT_CONSOLE_CLOSED: PS5 akışı kendisi kapattı (Takion "disconnect"; ör. oyun sırasında PS5'te kullanıcı değişti). Metin
+ * PS5'in nedenidir. */
 enum { CS_QUIT_STOPPED = 1, CS_QUIT_IN_USE = 2, CS_QUIT_REFUSED = 3, CS_QUIT_NETWORK = 4, CS_QUIT_OTHER = 5, CS_QUIT_RP_CRASHED = 6,
-	CS_QUIT_PSN_REGIST_FAILED = 7 };
+	CS_QUIT_PSN_REGIST_FAILED = 7, CS_QUIT_CONSOLE_CLOSED = 8 };
 
 typedef struct {
 	ChiakiSession session;
@@ -439,8 +441,10 @@ static int cs_quit_reason(ChiakiQuitReason reason)
 			return CS_QUIT_REFUSED;
 		case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED:
 			return CS_QUIT_PSN_REGIST_FAILED;
+		/* PS5 Takion "disconnect" iletisi gönderdi: ağ kopması değil (Mac/iPhone .consoleClosed). */
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED:
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN:
+			return CS_QUIT_CONSOLE_CLOSED;
 		case CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED:
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN:
 			return CS_QUIT_NETWORK;

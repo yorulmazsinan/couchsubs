@@ -299,11 +299,12 @@ public partial class MainView : UserControl
 
     private void OnReconnect(object sender, RoutedEventArgs e) => controller.Reconnect();
 
-    private async void OnReinstallTvApp(object sender, RoutedEventArgs e)
-    {
-        controller.Step = OnboardingStep.Tv;
-        await controller.ReinstallTvAppAsync();
-    }
+    // "Yeniden kur" ve "Güncelle" ana ekranda kurar (kart TV karosunun altında açılır); TV adımına gidilmez.
+    private async void OnReinstallTvApp(object sender, RoutedEventArgs e) => await controller.UpdateTvAppAsync();
+
+    private async void OnUpdateTvApp(object sender, RoutedEventArgs e) => await controller.UpdateTvAppAsync();
+
+    private void OnDismissTvAppUpdate(object sender, RoutedEventArgs e) => controller.DismissTvAppUpdate();
 
     private void OnDownload(object sender, RoutedEventArgs e) => controller.StartModelDownload();
 

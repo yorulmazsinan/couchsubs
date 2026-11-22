@@ -1,0 +1,1 @@
+0.9.71: With "Translate the screen", GTA 6 phone messages are now translated on top of their own bubbles in the bubble's colours instead of a card beside the phone; if the Turkish does not fit, the text shrinks down to a readable size and then the bubble grows a little.

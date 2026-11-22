@@ -22,6 +22,18 @@ public class StickyRowsTests
         Assert.Equal("Get in the sea plane", rows.Filter(Reading.FromText("Get in the sea plane"), 9500).Text);
     }
 
+    /// <summary>Konuşan adıyla başlayan satır uzun süre ekranda kalsa da görev/HUD sayılmaz (Mac, Android ile aynı).</summary>
+    [Fact]
+    public void SpeakerLineIsNeverSticky()
+    {
+        var rows = new StickyRows();
+        const string named = "JASON: I don't like this place.";
+        Assert.Equal(named, rows.Filter(Reading.FromText(named), 0).Text);
+        Assert.Equal("Yeah!\n" + named, rows.Filter(Reading.FromText("Yeah!\n" + named), 6000).Text);
+        Assert.Empty(rows.NewlySticky);
+        Assert.Equal(named, rows.Filter(Reading.FromText(named), 9000).Text);
+    }
+
     [Fact]
     public void DialogueBoxWhoseRowsAppearTogetherIsKept()
     {
@@ -134,5 +146,15 @@ public class StickyRowsTests
         // Konuşma kalkıp görev tek başına kalınca eski konuşmanın çevirisi TV'den kalkar; yeni kısa konuşma çevrilir.
         Assert.True(clearsWhileObjectiveAlone > 0);
         Assert.Equal(new[] { Objective, "Yeah!", "Okay." }, translator.Requested);
+    }
+
+    [Fact]
+    public void ReportsHowLongALineIsUnchanged()
+    {
+        var rows = new StickyRows();
+        rows.Filter(Reading.FromText("STORM HITS VICE CITY COAST"), 0);
+        rows.Filter(Reading.FromText("STORM HITS VICE CITY COAST"), 1000);
+        Assert.Equal(1000L, rows.UnchangedMs("STORM HITS VICE CITY COAST", 1000));
+        Assert.Null(rows.UnchangedMs("Something else entirely here", 1000));
     }
 }

@@ -4,8 +4,8 @@ import Foundation
 
 /// Çevrimiçi çeviri anahtarı (DeepL ya da yapay zekâ hizmeti) denendiğinde ne çıktı.
 public enum OnlineKeyState: Equatable {
-    /// `modelRejected`: hizmet model adını kabul etmedi; `busy`: hizmet şu an yoğun ya da zamanında yanıt vermedi
-    /// (ikisi de yalnız yapay zekâ hizmetlerinde).
+    /// `modelRejected`: hizmet model adını kabul etmedi (yalnız yapay zekâ hizmetlerinde); `busy`: hizmet şu an yoğun ya da
+    /// zamanında yanıt vermedi (DeepL'in anahtar denemesinde: 429, çok sık istek).
     case valid, invalid, quotaExceeded, modelRejected, unreachable, busy, keychainWriteFailed
 }
 
@@ -15,16 +15,73 @@ public protocol OnlineTranslating: AnyObject {
     var onFailureChanged: ((OnlineKeyState?) -> Void)? { get set }
 }
 
+/// DeepL anahtar denemesinin ayrıntılı nedeni (Windows: OnlineKeyReason, Android: KeyCheck.Reason; aynı kurallar).
+/// Ayarlardaki mesaj ve günlük satırı bundan yazılır; anahtarın kendisini hiç içermez.
+public enum OnlineKeyReason: Equatable {
+    case none
+    /// Görünmez karakterler silindikten sonra anahtarda DeepL anahtarında olamayacak karakter kaldı; istek gönderilmedi.
+    case malformedKey
+    /// DeepL 429 döndü: çok sık istek.
+    case rateLimited
+    /// DeepL bu HTTP koduyla yanıt verdi (401/403/456 ya da beklenmeyen 5xx vb.).
+    case httpStatus(Int)
+    /// İstek DeepL'e ulaşmadı (URLError kodu: bağlantı yok, zaman aşımı…).
+    case network(Int)
+
+    /// Günlük satırı için kısa, anahtarsız açıklama.
+    public var logDescription: String {
+        switch self {
+        case .none: ""
+        case .malformedKey: "anahtarda geçersiz karakter"
+        case .rateLimited: "HTTP 429 (çok sık istek)"
+        case .httpStatus(let code): "HTTP \(code)"
+        case .network(let code): "ağ hatası \(code)"
+        }
+    }
+}
+
 public struct OnlineKeyCheck: Equatable {
     public var state: OnlineKeyState
-    /// Bu ay kullanılan karakter ve aylık sınır (geçerli anahtarda).
+    /// Bu ay kullanılan karakter ve aylık sınır (geçerli anahtarda). Sınır 0: DeepL bildirmedi; `unlimited` ve üstü: sınır yok.
     public var used: Int64 = 0
     public var limit: Int64 = 0
+    public var reason: OnlineKeyReason = .none
 
-    public init(state: OnlineKeyState, used: Int64 = 0, limit: Int64 = 0) {
+    /// Sınır konmamış hesapta DeepL `character_limit` olarak bunu döndürür (developers.deepl.com, usage-and-quota, Kasım 2026).
+    public static let unlimited: Int64 = 1_000_000_000_000
+
+    public init(state: OnlineKeyState, used: Int64 = 0, limit: Int64 = 0, reason: OnlineKeyReason = .none) {
         self.state = state
         self.used = used
         self.limit = limit
+        self.reason = reason
+    }
+
+    /// Günlük satırı: durum ve neden ("busy (HTTP 429 (çok sık istek))"); anahtarı içermez.
+    public var logDescription: String {
+        reason == .none ? "\(state)" : "\(state) (\(reason.logDescription))"
+    }
+}
+
+/// DeepL anahtarının yazımı (Windows ve Android'deki DeepLKey ile aynı kural). Yapıştırırken araya giren boşluk, satır
+/// sonu, sekme, bölünmez boşluk (U+00A0), sıfır genişlikli boşluk, BOM, yumuşak tire gibi görünmez karakterler her yerden
+/// silinir; DeepL anahtarında bunlar hiç yoktur. Bölünmez boşluk başlıkta kalınca istek "sunucuya bağlanılamadı"
+/// (-1004), é gibi Latin-1 harfleri DeepL'den 502 döndürüyordu; ikisi de "DeepL'e ulaşılamadı" görünüyordu.
+public enum DeepLKey {
+    public static func clean(_ key: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in key.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .control, .format, .spaceSeparator, .lineSeparator, .paragraphSeparator: continue
+            default: scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
+    /// Temizlenmiş anahtar DeepL anahtarı olabilir mi: boş değil, yalnız görünür ASCII (harf, rakam, "-", ":" …).
+    public static func isWellFormed(_ cleaned: String) -> Bool {
+        !cleaned.isEmpty && cleaned.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
     }
 }
 
@@ -50,7 +107,7 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
     private let fallback: TextTranslator
     private let session: URLSession
     private let cache: TranslationCache
-    private var speech: [String: [SpokenLine]] = [:]
+    private let speech = SpeechMemory()
     private let names = SpeakerNames()
     /// Çevrilmeyecek adlar ve terimler (ücretsiz çeviriyle aynı sözlük); DeepL'e etiketle korunarak gider.
     private let glossaryStore: GlossaryStore
@@ -70,7 +127,7 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
     public init(key: String, fallback: TextTranslator, session: URLSession? = nil,
          cache: TranslationCache = TranslationCache(),
          glossary: GlossaryStore = GlossaryStore(directory: GlossaryStore.userDirectory)) {
-        self.key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.key = DeepLKey.clean(key)
         self.fallback = fallback
         self.session = session ?? Self.sharedSession
         self.cache = cache
@@ -88,7 +145,7 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
 
     /// Ücretsiz anahtarlar ":fx" ile biter ve ayrı adrese gider.
     public static func baseURL(for key: String) -> URL {
-        URL(string: key.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(":fx")
+        URL(string: DeepLKey.clean(key).hasSuffix(":fx")
             ? "https://api-free.deepl.com/v2/" : "https://api.deepl.com/v2/")!
     }
 
@@ -144,8 +201,7 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
             cache.store(sentence, for: DeepLMarkup.cacheKey(pieces[index].text, glossary: glossary))
         }
         let result = zip(pieces, translations).map { $1 ?? $0.text }.joined()
-        if speech.count >= 512 { speech.removeAll() }
-        speech[text] = SpeechScript.lines(pieces: pieces, translations: translations)
+        speech.store(SpeechScript.lines(pieces: pieces, translations: translations), for: text)
         cache.store(result, for: DeepLMarkup.cacheKey(text, glossary: glossary))
         return result
     }
@@ -203,23 +259,68 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
         return reply.translations.map(\.text)
     }
 
-    /// Ayarlardaki "Kaydet ve dene": anahtar geçerli mi, bu ay ne kadar kullanıldı.
+    /// Ayarlardaki "Kaydet ve dene": anahtar geçerli mi, bu ay ne kadar kullanıldı. Her hata kendi nedeniyle döner:
+    /// 401/403 geçersiz, 456 sınır doldu, 429 çok sık istek (`busy`: anahtar reddedilmedi, kaydedilir), diğer HTTP kodları
+    /// sunucu hatası, istek hiç ulaşmadıysa ağ hatası. 200 yanıtında kullanım alanları eksik ya da beklenmedik biçimdeyse
+    /// anahtar yine geçerlidir (sınır 0 görünür).
     public static func check(key: String, session: URLSession = makeSession()) async -> OnlineKeyCheck {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = DeepLKey.clean(key)
         guard !key.isEmpty else { return OnlineKeyCheck(state: .invalid) }
+        guard DeepLKey.isWellFormed(key) else { return OnlineKeyCheck(state: .invalid, reason: .malformedKey) }
         var request = URLRequest(url: baseURL(for: key).appending(path: "usage"))
         request.setValue("DeepL-Auth-Key \(key)", forHTTPHeaderField: "Authorization")
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await session.data(for: request)
-            try check(response)
-            struct Usage: Decodable { let character_count: Int64; let character_limit: Int64 }
-            let usage = try JSONDecoder().decode(Usage.self, from: data)
-            let used = usage.character_limit > 0 && usage.character_count >= usage.character_limit
-            return OnlineKeyCheck(state: used ? .quotaExceeded : .valid, used: usage.character_count, limit: usage.character_limit)
-        } catch let error as DeepLError {
-            return OnlineKeyCheck(state: error.state)
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            return OnlineKeyCheck(state: .unreachable, reason: .network(error.code.rawValue))
         } catch {
-            return OnlineKeyCheck(state: .unreachable)
+            return OnlineKeyCheck(state: .unreachable, reason: .network(URLError.Code.unknown.rawValue))
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+        switch status {
+        case 200..<300: break
+        case 401, 403: return OnlineKeyCheck(state: .invalid, reason: .httpStatus(status))
+        case 456: return OnlineKeyCheck(state: .quotaExceeded, reason: .httpStatus(status))
+        case 429: return OnlineKeyCheck(state: .busy, reason: .rateLimited)
+        default: return OnlineKeyCheck(state: .unreachable, reason: .httpStatus(status))
+        }
+        // JSON olmayan 200 yanıtı (otel/kafe ağının giriş sayfası gibi) DeepL'den gelmemiştir: ağ hatası.
+        guard let usage = Usage(data) else {
+            return OnlineKeyCheck(state: .unreachable, reason: .network(URLError.Code.cannotParseResponse.rawValue))
+        }
+        let usedUp = usage.limit > 0 && usage.count >= usage.limit
+        return OnlineKeyCheck(state: usedUp ? .quotaExceeded : .valid, used: usage.count, limit: usage.limit)
+    }
+
+    /// `/v2/usage` yanıtı (Windows ve Android'deki çözümlemeyle aynı). Alan eksik ya da sayı değilse 0; ondalıklı değer
+    /// tam sayıya, Int64'e sığmayan değer Int64.max'a indirilir. Gövde JSON nesnesi değilse nil.
+    struct Usage {
+        var count: Int64 = 0
+        var limit: Int64 = 0
+
+        init?(_ data: Data) {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            count = Self.number(object["character_count"])
+            limit = Self.number(object["character_limit"])
+        }
+
+        static func number(_ value: Any?) -> Int64 {
+            let double: Double
+            switch value {
+            case let number as NSNumber:
+                guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return 0 }
+                if let exact = Int64(number.stringValue) { return max(0, exact) }
+                double = number.doubleValue
+            case let text as String:
+                if let exact = Int64(text) { return max(0, exact) }
+                double = Double(text) ?? 0
+            default:
+                return 0
+            }
+            guard !double.isNaN, double > 0 else { return 0 }
+            return double >= 9.2e18 ? .max : Int64(double)
         }
     }
 

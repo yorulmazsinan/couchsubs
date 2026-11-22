@@ -54,6 +54,35 @@ class SubtitleAccessTest {
             }
         } finally { server.stop() }
     }
+    /** TV uygulaması sürümünü akışla bildirir; bildirmeyen TV (0.9.69'den eski) eski sayılır, OBS sayılmaz (#884, #891). */
+    @Test fun remembersTheTvAppVersionAndTreatsSilentTvsAsOld() {
+        val server = SubtitleServer(port = 0, allowLegacy = true)
+        val reported = mutableListOf<String>()
+        server.onTvAppVersion = { synchronized(reported) { reported.add(it) } }
+        val port = server.start()
+        try {
+            assertNull(server.tvAppVersion)
+            for ((query, expected) in listOf("?viewer=obs" to null, "?hdmi=2" to "", "?v=0.9.69&hdmi=2" to "0.9.69")) {
+                Socket("127.0.0.1", port).use { socket ->
+                    socket.soTimeout = 3000
+                    socket.getOutputStream().write("GET /events$query HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray())
+                    assertTrue(socket.getInputStream().bufferedReader().readLine().contains("200"))
+                    assertEquals(query, expected, server.tvAppVersion)
+                }
+            }
+            assertEquals(listOf("", "0.9.69"), synchronized(reported) { reported.toList() })
+        } finally { server.stop() }
+        assertEquals("", SubtitleServer.tvAppVersion("0.9.70<script>"))
+        assertTrue(SubtitleServer.isTvAppOutdated("", "0.9.69"))
+        assertTrue(SubtitleServer.isTvAppOutdated("0.9.49", "0.9.69"))
+        assertFalse(SubtitleServer.isTvAppOutdated("0.9.69", "0.9.69"))
+        assertFalse(SubtitleServer.isTvAppOutdated("0.9.70", "0.9.69"))
+        assertFalse(SubtitleServer.isTvAppOutdated("", ""))
+        val tv = com.couchsubs.mobile.tv.InstalledTv(com.couchsubs.mobile.tv.TvBrand.LG, "192.168.1.5")
+        assertEquals(com.couchsubs.mobile.tv.TvAppStatus.Outdated(tv, "< 0.9.69", "0.9.69"),
+            com.couchsubs.mobile.tv.TvAppUpdate.decide(tv, "", "0.9.69"))
+        assertEquals(com.couchsubs.mobile.tv.TvAppStatus.UpToDate("0.9.69"), com.couchsubs.mobile.tv.TvAppUpdate.decide(tv, "0.9.69", "0.9.69"))
+    }
     /** İkinci ekran eski TV'lere tanınan anahtarsız geçişten yararlanmaz (Mac ve Windows'ta aynı durumlar). */
     @Test fun secondScreenAlwaysNeedsTheKey() {
         val cases = listOf("/view" to 401, "/view?k=yanlis" to 401, "/view?k=anahtar" to 200, "/events?viewer=second" to 401,

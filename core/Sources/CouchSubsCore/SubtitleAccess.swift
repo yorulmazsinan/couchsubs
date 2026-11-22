@@ -29,6 +29,18 @@ public enum SubtitleAccess {
         return b.prefix(15).allSatisfy({ $0 == 0 }) && b[15] == 1
             || b[0] & 0xfe == 0xfc || b[0] == 0xfe && b[1] & 0xc0 == 0x80
     }
+    /// Eşleştirme isteği gönderen TV'nin geri bağlanılacak adresi: IPv4'e eşlenmiş IPv6 (`::ffff:a.b.c.d`) düz IPv4 olur,
+    /// bağlantı arayüzü (`%en0`) atılır. Bu cihazın kendisi (127.x, ::1; ikinci ekran sayfası) ve yerel olmayan adres TV
+    /// sayılmaz: boş döner (Windows `SubtitleAccess.TvHost`, Android `SubtitleAccess.tvHost` ile aynı kural).
+    public static func tvHost(fromPeer address: String) -> String {
+        var host = String(address.split(separator: "%", maxSplits: 1).first ?? "")
+        if host.hasPrefix("[") && host.hasSuffix("]") { host = String(host.dropFirst().dropLast()) }
+        if host.lowercased().hasPrefix("::ffff:"), host.contains(".") { host = String(host.dropFirst(7)) }
+        guard isLocalPeer(host) else { return "" }
+        var v4 = in_addr()
+        if inet_pton(AF_INET, host, &v4) == 1 { return host.hasPrefix("127.") ? "" : host }
+        return host == "::1" ? "" : host
+    }
     private static func localIPv4(_ b: [UInt8]) -> Bool {
         b[0] == 127 || b[0] == 10 || b[0] == 172 && (16...31).contains(b[1])
             || b[0] == 192 && b[1] == 168 || b[0] == 169 && b[1] == 254

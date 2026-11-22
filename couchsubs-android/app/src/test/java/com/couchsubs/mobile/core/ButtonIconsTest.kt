@@ -352,4 +352,20 @@ class ButtonIconsTest {
         // Simgesiz çeviri eskisi gibi gider.
         assertTrue(!SubtitleServer.regionFrame("q", "Tamam", null, null).contains("icons"))
     }
+
+    /**
+     * GTA 6 haritasının açık mavi denizinde beyaz ✕ simgesi: zemin noktaları renkli sayılıp simge tanınmıyor, "SET
+     * DESTINATION ✕" çevirisi simgeyi örtüyordu (Mac ve Windows ile aynı durum). Düz renkli resim yine simge değildir.
+     */
+    @Test
+    fun whiteIconOnLightSeaIsColourless() {
+        val size = 40
+        fun sea(x: Int, y: Int): Int {
+            val ring = kotlin.math.abs(kotlin.math.sqrt(((x - 20) * (x - 20) + (y - 20) * (y - 20)).toDouble()) - 12)
+            return if (ring < 2) 0xFFFFFF else 0x3A94BB
+        }
+        val frame = GrayFrame(ByteArray(size * size) { 120 }, size, size)
+        assertTrue(ButtonIcons.isColourless(frame, ::sea, TextBox(0.0, 0.0, 1.0, 1.0)))
+        org.junit.Assert.assertFalse(ButtonIcons.isColourless(frame, { _, _ -> 0xF050C8 }, TextBox(0.0, 0.0, 1.0, 1.0)))
+    }
 }

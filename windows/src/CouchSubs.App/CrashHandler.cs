@@ -28,7 +28,33 @@ internal static class CrashHandler
             var plus = version.IndexOf('+');
             if (plus > 0 && version.Length - plus > 9) version = version[..(plus + 9)];
             return $"Sürüm: {version}\r\nİşletim sistemi: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})\r\n" +
-                   $".NET: {RuntimeInformation.FrameworkDescription}\r\n";
+                   $".NET: {RuntimeInformation.FrameworkDescription}\r\nİşlemci: {Processor()}\r\n";
+        }
+    }
+
+    /// <summary>
+    /// İşlemcinin adı ve mikrokod sürümü (Windows'un kaydından). Yazmaçları doğru olduğu hâlde yanlış adrese erişen
+    /// komut (GitHub #903) işlemci kararsızlığına işaret eder; Intel 13./14. nesilde eski mikrokod bilinen bir nedendir.
+    /// </summary>
+    private static string Processor()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            var name = (key?.GetValue("ProcessorNameString") as string)?.Trim();
+            if (string.IsNullOrEmpty(name)) name = "?";
+            // "Update Revision" (REG_BINARY, 8 bayt): Intel'de mikrokod sürümü üst dört bayttadır, AMD'de alt dört bayt.
+            if (key?.GetValue("Update Revision") is byte[] { Length: >= 8 } revision)
+            {
+                var high = BitConverter.ToUInt32(revision, 4);
+                var value = high != 0 ? high : BitConverter.ToUInt32(revision, 0);
+                name += $" (mikrokod 0x{value:X})";
+            }
+            return $"{name}, {Environment.ProcessorCount} mantıksal çekirdek";
+        }
+        catch (Exception)
+        {
+            return "?";
         }
     }
 

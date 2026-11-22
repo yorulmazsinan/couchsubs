@@ -61,6 +61,70 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertEqual(SubtitleServer.hdmiPort("4"), 4)
     }
 
+    /// TV uygulaması sürümünü akışla bildirir; bildirmeyen TV (0.9.69'den eski) eski sayılır, OBS sayılmaz (#884, #891).
+    func testRemembersTheTVAppVersionAndTreatsSilentTVsAsOld() async throws {
+        let server = SubtitleServer(port: 0)
+        let port = try await server.start()
+        defer { server.stop() }
+        XCTAssertNil(server.tvAppVersion)
+        let (obs, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?viewer=obs")!)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNil(server.tvAppVersion)
+        let (old, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?hdmi=2")!)
+        try await waitUntil { server.tvAppVersion != nil }
+        XCTAssertEqual(server.tvAppVersion, "")
+        let (fresh, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?v=0.9.69&hdmi=2")!)
+        try await waitUntil { server.tvAppVersion == "0.9.69" }
+        obs.task.cancel(); old.task.cancel(); fresh.task.cancel()
+        XCTAssertEqual(SubtitleServer.tvAppVersion("0.9.70<script>"), "")
+        XCTAssertTrue(SubtitleServer.isTVAppOutdated(reported: "", bundled: "0.9.69"))
+        XCTAssertTrue(SubtitleServer.isTVAppOutdated(reported: "0.9.49", bundled: "0.9.69"))
+        XCTAssertFalse(SubtitleServer.isTVAppOutdated(reported: "0.9.69", bundled: "0.9.69"))
+        XCTAssertFalse(SubtitleServer.isTVAppOutdated(reported: "0.9.70", bundled: "0.9.69"))
+        XCTAssertFalse(SubtitleServer.isTVAppOutdated(reported: "", bundled: ""))
+    }
+
+    /// Eski TV uygulaması (sürüm bildirmeyen; 0.9.7'den önceki sürümler `clear` gelir gelmez satırı kaldırır): `clear`
+    /// ona satırın en az görünme süresi dolunca gider, yeni TV'ye hemen. Arada yeni satır gelirse eski `clear` hiç gitmez.
+    func testClearReachesOldTVAppsOnlyAfterTheLineWasReadable() async throws {
+        let server = SubtitleServer(port: 0)
+        let port = try await server.start()
+        defer { server.stop() }
+        let (old, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
+        let (fresh, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?v=0.9.71")!)
+        try await waitUntil { server.connectedClients == 2 }
+        func clears(_ bytes: URLSession.AsyncBytes) -> Task<[(String, Date)], Error> {
+            Task {
+                var seen: [(String, Date)] = []
+                for try await line in bytes.lines where line.hasPrefix("event: ") {
+                    seen.append((line, Date()))
+                    if line == "event: clear" { break }
+                }
+                return seen
+            }
+        }
+        let oldEvents = clears(old)
+        let freshEvents = clears(fresh)
+        let start = Date()
+        server.sendSubtitle("Selam", durationMs: 4000)
+        server.clear()
+        // Satır kalkmadan yeni satır geldi: eski TV'ye bekleyen `clear` gitmez, yenisininki süresi dolunca gider.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        server.sendSubtitle("Yeni", durationMs: 4000)
+        server.clear()
+        let freshSeen = try await freshEvents.value
+        let oldSeen = try await oldEvents.value
+        let freshClear = try XCTUnwrap(freshSeen.first { $0.0 == "event: clear" })
+        XCTAssertLessThan(freshClear.1.timeIntervalSince(start), 1, "Yeni TV satırı kendisi tutar: clear hemen gider")
+        XCTAssertEqual(oldSeen.map(\.0).filter { $0 == "event: subtitle" }.count, 2, "Eski TV iki satırı da alır")
+        let oldClear = try XCTUnwrap(oldSeen.first { $0.0 == "event: clear" })
+        // İkinci satır 0,5 sn'de geldi; 4 harf → 2,24 sn tutulur.
+        XCTAssertGreaterThan(oldClear.1.timeIntervalSince(start), 2.5)
+        XCTAssertEqual(SubtitleServer.legacyClearHold(textLength: 4), 2.24, accuracy: 0.001)
+        XCTAssertEqual(SubtitleServer.legacyClearHold(textLength: 500), 5)
+        old.task.cancel(); fresh.task.cancel()
+    }
+
     /// Konuşana göre renk açıkken adlı satır `speakers` alanını taşır; adsız satırda ve ayar kapalıyken alan yoktur.
     func testSubtitleCarriesSpeakerColorsWhenEnabled() async throws {
         let server = SubtitleServer(port: 0)
@@ -429,8 +493,25 @@ final class SubtitleServerTests: XCTestCase {
         let (data, response) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/hello")!)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertNil((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Access-Control-Allow-Origin"))
-        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"app":"couchsubs","auth":1,"id":"3f2a-b9","tvs":0}"#)
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), #"{"app":"couchsubs","auth":1,"id":"3f2a-b9","tvs":0,"live":0}"#)
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains(server.accessKey))
+    }
+
+    /// `/hello`'daki `live`: çeviri sürüyor ve altyazı TV'ye gidiyorsa 1. TV boştaki kayıtlı CouchSubs yerine çevireni seçer.
+    func testHelloSaysWhetherSubtitlesGoToTheTV() async throws {
+        let server = SubtitleServer(port: 0, instanceId: "3f2a-b9")
+        let port = try await server.start()
+        defer { server.stop() }
+        func hello() async throws -> String {
+            let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/hello")!)
+            return String(decoding: data, as: UTF8.self)
+        }
+        server.pairing.setSession(true)
+        let live = try await hello()
+        XCTAssertTrue(live.hasSuffix(#","live":1}"#), live)
+        server.sendsToTV = false
+        let screenOnly = try await hello()
+        XCTAssertTrue(screenOnly.hasSuffix(#","live":0}"#), screenOnly)
     }
 
     /// Kurulum kimliği kalıcıdır: aynı ağdaki iki CouchSubs'ı TV bununla ayırır (GitHub #425).
@@ -438,7 +519,8 @@ final class SubtitleServerTests: XCTestCase {
         let first = SubtitleServer.installationId
         XCTAssertFalse(first.isEmpty)
         XCTAssertEqual(SubtitleServer.installationId, first)
-        XCTAssertEqual(SubtitleServer.helloBody(id: "a\"b", tvs: 2), #"{"app":"couchsubs","auth":1,"id":"ab","tvs":2}"#)
+        XCTAssertEqual(SubtitleServer.helloBody(id: "a\"b", tvs: 2), #"{"app":"couchsubs","auth":1,"id":"ab","tvs":2,"live":0}"#)
+        XCTAssertEqual(SubtitleServer.helloBody(id: "x", tvs: 0, live: true), #"{"app":"couchsubs","auth":1,"id":"x","tvs":0,"live":1}"#)
     }
 
     func testUnknownPathIs404() async throws {

@@ -21,6 +21,19 @@ public class SubtitleBlockTests
         Assert.Empty(reading.SubtitleBlock(Area).Lines);
     }
 
+    /// <summary>
+    /// Menü satırlarının kenarı hizalıdır; ortalanmış kısa konuşma satırları ("No / Wait / Go on") menü sayılmaz. Konuşan
+    /// adıyla başlayan satır da menü değildir (Mac, Android ile aynı).
+    /// </summary>
+    [Fact]
+    public void CenteredShortLinesAndSpeakerLinesAreNotAMenu()
+    {
+        Assert.True(new Reading([Line("MAP", 0.05, 0.05, 0.10), Line("HELP", 0.05, 0.15, 0.11), Line("SETTINGS", 0.051, 0.25, 0.17)]).IsMenu);
+        Assert.False(new Reading([Line("No", 0.47, 0.05, 0.53), Line("Wait", 0.46, 0.15, 0.54), Line("Go on", 0.45, 0.25, 0.55)]).IsMenu);
+        Assert.False(new Reading([Line("JASON: No", 0.05, 0.05, 0.15), Line("LUCIA: Wait", 0.05, 0.15, 0.16),
+                                  Line("JASON: Go", 0.05, 0.25, 0.15)]).IsMenu);
+    }
+
     [Fact]
     public void CenteredSubtitleIsKeptWithoutCornerGauge()
     {
@@ -158,5 +171,40 @@ public class SubtitleBlockTests
     {
         var reading = new Reading([Line("I TOLD YOU", 0.42, 0.7, 0.58), Line("NOT TO GO THERE.", 0.4, 0.78, 0.6)]);
         Assert.Equal("I TOLD YOU\nNOT TO GO THERE.", reading.SubtitleBlock(Area).Text);
+    }
+
+    /// <summary>
+    /// GitHub #933 (GTA 6): karakter TV izlerken haber bandı konuşmanın altında hiç değişmeden duruyor; uzun süredir
+    /// değişmeyen ortalı blok, yanında yeni beliren ortalı blok varken seçilmez. Tek sabit blok seçilmeye devam eder (Mac,
+    /// Android ile aynı).
+    /// </summary>
+    [Fact]
+    public void StaleCenteredBlockLosesToNewOne()
+    {
+        var speech = Line("We are live from the scene where it all happened.", 0.25, 0.3, 0.75);
+        var ticker = Line("STORM HITS VICE CITY COAST - LIVE COVERAGE", 0.3, 0.8, 0.7);
+        var ages = new Dictionary<string, long> { [speech.Text] = 1200, [ticker.Text] = 9000 };
+        long? Age(string text) => ages.TryGetValue(text, out var value) ? value : null;
+        var skipped = new List<string>();
+        var both = new Reading([speech, ticker]);
+        Assert.Equal(ticker.Text, both.SubtitleBlock(Area).Text);
+        Assert.Equal(speech.Text, both.SubtitleBlock(Area, age: Age, stale: block => skipped.Add(block.Text)).Text);
+        Assert.Equal([ticker.Text], skipped);
+        // Tek sabit blok (değişmeyen uzun cümle) altyazıdır.
+        skipped.Clear();
+        Assert.Equal(ticker.Text, new Reading([ticker]).SubtitleBlock(Area, age: Age, stale: block => skipped.Add(block.Text)).Text);
+        Assert.Empty(skipped);
+        // İkisi de aynı anda belirip sabit kaldıysa (hangisinin yeni olduğu bilinmiyor) eski kural geçerli.
+        Assert.Equal(ticker.Text, both.SubtitleBlock(Area, age: _ => 9000).Text);
+        // Bant konuşan adı gibi başlıyor ("EXCLUSIVE: …"): sabitse yine atlanır, yeni konuşma seçilir.
+        var headline = Line("EXCLUSIVE: LEONIDA'S TOP SPOTS FOR A DECENT CATCH", 0.25, 0.8, 0.75);
+        var news = new Reading([speech, headline]);
+        Assert.Equal(headline.Text, news.SubtitleBlock(Area).Text);
+        Assert.Equal(speech.Text, news.SubtitleBlock(Area, age: text => text == headline.Text ? 9000 : 1000).Text);
+        // Konuşan adlı blok yeniyse ya da yanındaki yeni yazı kısa (görev/HUD) ise seçilmeye devam eder.
+        var named = Line("ANCHOR: Stay with us for more.", 0.3, 0.3, 0.7);
+        Assert.Equal(named.Text, new Reading([named, ticker]).SubtitleBlock(Area, age: text => text == named.Text ? 1000 : 9000).Text);
+        var shortLine = Line("Follow John", 0.4, 0.8, 0.6);
+        Assert.Equal(named.Text, new Reading([named, shortLine]).SubtitleBlock(Area, age: text => text == named.Text ? 9000 : 1000).Text);
     }
 }

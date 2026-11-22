@@ -10,14 +10,11 @@ public enum LGDiscovery {
     static let allTarget = "ssdp:all"
 
     public static func search(timeout: Duration = .seconds(3)) async -> [LGTV] {
-        var hosts = await Task.detached { collectHosts(searchTarget: searchTarget, timeout: timeout) }.value
-        if hosts.isEmpty {
-            hosts = await Task.detached { collectHosts(searchTarget: allTarget, timeout: timeout) }.value
+        var hits = await Task.detached { collectHits(searchTarget: searchTarget, timeout: timeout) }.value
+        if hits.isEmpty {
+            hits = await Task.detached { collectHits(searchTarget: allTarget, timeout: timeout) }.value
         }
-        var tvs: [LGTV] = []
-        for host in Set(hosts).sorted() {
-            tvs.append(LGTV(name: await friendlyName(host: host) ?? "LG TV", host: host))
-        }
+        let tvs = await resolve(hits)
         if !tvs.isEmpty { return tvs }
 
         // SSDP yanıtı gelmediyse ağdaki adresler tek tek denenir. iPhone'da multicast izni (Apple onayı) olmadan SSDP
@@ -29,14 +26,42 @@ public enum LGDiscovery {
     /// ikinci ekran sunucusu (3000). Biri yanıt verirse TV bulunmuştur.
     private static func scan() async -> [LGTV] {
         let targets = LocalNetwork.homeTargets()
-        async let ssdp = Task.detached { collectHosts(searchTarget: searchTarget, timeout: .milliseconds(2500), unicast: targets) }.value
+        async let ssdp = Task.detached { collectHits(searchTarget: searchTarget, timeout: .milliseconds(2500), unicast: targets) }.value
         // webOS 3.x tek adrese gönderilen "ssdp:all"a cevap veriyor (#498).
-        async let ssdpAll = Task.detached { collectHosts(searchTarget: allTarget, timeout: .milliseconds(2500), unicast: targets) }.value
+        async let ssdpAll = Task.detached { collectHits(searchTarget: allTarget, timeout: .milliseconds(2500), unicast: targets) }.value
         var tvs = await LocalNetwork.probeAll { host in await probe(host: host) }.map(\.value)
-        for host in Set(await ssdp + ssdpAll).sorted() where !tvs.contains(where: { $0.host == host }) {
-            tvs.append(LGTV(name: await friendlyName(host: host) ?? "LG TV", host: host))
-        }
+        let hits = await ssdp + ssdpAll
+        let known = Set(tvs.map(\.host))
+        tvs += await resolve(hits.filter { !known.contains($0.host) })
         return tvs.sorted { $0.host.compare($1.host, options: .numeric) == .orderedAscending }
+    }
+
+    /// SSDP yanıtlarından TV'ler. Yanıtı kendini LG webOS olarak tanıtan adres (bkz. `SSDPHit.confirmed`) LG'dir. Yalnız
+    /// sorulan hedefi geri söyleyen yanıt LG sayılmaz: bazı cihazların UPnP yığını her M-SEARCH'e sorulan hedefi aynen
+    /// yazıp cevap veriyor. Önceden böyle bir adres (ör. Android TV) "LG TV" diye listeleniyor, "Bağlan" LG eşleştirmesi
+    /// deneyip "TV yanıt vermedi" diyordu; LG bekçisinin taraması da onu kayıtlı LG'nin "yeni adresi" sanabiliyordu
+    /// (`TVLocator`). Doğrulanmamış adreste LG cihaz tanımına ve ikinci ekran sunucusuna, sonra Android TV portlarına
+    /// bakılır; ikisi de değilse atlanır.
+    static func resolve(_ hits: [SSDPHit]) async -> [LGTV] {
+        var confirmed: [String: Bool] = [:]
+        for hit in hits { confirmed[hit.host] = (confirmed[hit.host] ?? false) || hit.confirmed }
+        var tvs: [LGTV] = []
+        for host in confirmed.keys.sorted() {
+            if confirmed[host] == true {
+                tvs.append(LGTV(name: await friendlyName(host: host) ?? "LG TV", host: host))
+                continue
+            }
+            async let lg = probe(host: host)
+            async let android = ManualTV.isAndroidTV(host: host)
+            if let tv = classify(host: host, probed: await lg, androidPortOpen: await android) { tvs.append(tv) }
+        }
+        return tvs
+    }
+
+    /// LG olduğunu yanıtında söylemeyen SSDP adresi: LG yoklaması tanırsa LG, Android TV portu açıksa Android TV, yoksa nil.
+    static func classify(host: String, probed: LGTV?, androidPortOpen: Bool) -> LGTV? {
+        if let probed { return probed }
+        return androidPortOpen ? LGTV(name: "Android TV", host: host, brand: .androidTV) : nil
     }
 
     /// Elle yazılan adresteki LG TV (cihaz tanımı ya da ikinci ekran sunucusu yanıt verirse); yoksa nil.
@@ -80,8 +105,22 @@ public enum LGDiscovery {
     /// SSDP yanıtından TV'nin adresini çıkarır; aranan hedef değilse nil. "ssdp:all" aramasında her cihaz cevap
     /// verir: yalnız kendini LG webOS TV olarak tanıtan yanıt (bkz. isLGHeader) alınır.
     static func host(fromSSDPResponse response: String, searchTarget: String = searchTarget) -> String? {
+        hit(fromSSDPResponse: response, searchTarget: searchTarget)?.host
+    }
+
+    /// SSDP yanıtındaki aday adres. `confirmed`: yanıt kendini LG webOS olarak tanıtıyor: sorulan hedefin adı dışında bir
+    /// başlıkta webOS/LGTV geçiyor (webOS: "SERVER: WebOS/4.4.0 UPnP/1.0") ya da cihaz tanımı webOS'un 1990 portunda.
+    /// Hedefin adı ("...webos-second-screen...") içinde "webos" geçtiği için yalnız onu geri söyleyen yanıt doğrulanmış
+    /// sayılmaz.
+    struct SSDPHit: Equatable, Sendable {
+        let host: String
+        let confirmed: Bool
+    }
+
+    static func hit(fromSSDPResponse response: String, searchTarget: String = searchTarget) -> SSDPHit? {
         var location: String?
         var isLG = false
+        var lgHeader = false
         for line in response.components(separatedBy: "\r\n") {
             let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 2 else { continue }
@@ -90,9 +129,10 @@ public enum LGDiscovery {
             guard ["ST", "NT", "USN", "SERVER"].contains(name) else { continue }
             if name == "ST" || name == "NT", parts[1] == searchTarget { isLG = true }
             if searchTarget == allTarget, isLGHeader(parts[1]) { isLG = true }
+            if isLGHeader(parts[1].replacingOccurrences(of: searchTarget, with: "")) { lgHeader = true }
         }
-        guard isLG, let location, let url = URL(string: location) else { return nil }
-        return url.host
+        guard isLG, let location, let url = URL(string: location), let host = url.host else { return nil }
+        return SSDPHit(host: host, confirmed: lgHeader || url.port == 1990)
     }
 
     /// LG webOS TV'nin SSDP başlığı mı: ikinci ekran servisi, sunucu adında "webOS" (webOS 3: "... LGE WebOS TV ...")
@@ -109,6 +149,10 @@ public enum LGDiscovery {
 
     /// `unicast` verilirse istek çok noktaya yayın grubuna değil, bu adreslerin her birine ayrı gönderilir.
     static func collectHosts(searchTarget: String, timeout: Duration, unicast: [String]? = nil) -> [String] {
+        collectHits(searchTarget: searchTarget, timeout: timeout, unicast: unicast).map(\.host)
+    }
+
+    static func collectHits(searchTarget: String, timeout: Duration, unicast: [String]? = nil) -> [SSDPHit] {
         let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard fd >= 0 else { return [] }
         defer { close(fd) }
@@ -150,15 +194,15 @@ public enum LGDiscovery {
             }
         }
 
-        var hosts: [String] = []
+        var hits: [SSDPHit] = []
         let end = ContinuousClock.now + timeout
         var buffer = [UInt8](repeating: 0, count: 2048)
         while ContinuousClock.now < end {
             let count = recv(fd, &buffer, buffer.count, 0)
             guard count > 0 else { continue }
-            if let host = host(fromSSDPResponse: String(decoding: buffer[0..<count], as: UTF8.self), searchTarget: searchTarget) { hosts.append(host) }
+            if let hit = hit(fromSSDPResponse: String(decoding: buffer[0..<count], as: UTF8.self), searchTarget: searchTarget) { hits.append(hit) }
         }
-        return hosts
+        return hits
     }
 
     /// TV'nin ağdaki adını (ör. "[LG] webOS TV UK7550") cihaz tanımından okur.

@@ -314,9 +314,13 @@ final class PhoneRegionSession {
     /// Telefon bu turda bulunamadı ya da okuma doğrulanamadı. Çeviriler hemen silinmez: tek karelik ıska çevirileri
     /// kaldırıp geri getiriyor, ekranda gidip geliyordu. Art arda `PhoneSteady.missTurns` turdan sonra silinir
     /// (telefon gerçekten kapanınca izleyici oturumu zaten kapatır).
+    ///
+    /// Ekran kalsa da okunan sayfa bırakılır: sonraki tur mutlaka yeniden okur. Eskiden sayfa kalıyordu; çeviri bu turda
+    /// geldiyse ve telefon aynı görünüşe döndüyse sayfa "değişmedi" sayılıyor, hazır çeviri hiç gösterilmiyordu (GitHub
+    /// #822, X: "çeviri ya hiç gelmiyor ya da geç geliyor"; Windows `Signature = null` ile zaten yeniden okuyordu).
     private func missed() {
         absences += 1
-        if absences >= PhoneSteady.missTurns { clearMissing() }
+        if absences >= PhoneSteady.missTurns { clearMissing() } else { page = nil }
     }
 
     private func clearMissing() {

@@ -85,6 +85,38 @@ class ScreenPhoneCardTest {
 
     private val outsideItem = ScreenTranslation.Item("Find the car", "Arabayı bul", TextBox(0.30, 0.10, 0.50, 0.13), 0.025)
 
+    /** Kartsız (varsayılan ayar): her mesajın çevirisi kendi balonunun yerinde, kart zemini yok (Mac ile aynı). */
+    @Test
+    fun withoutTheCardEachMessageStaysOnItsOwnBubble() {
+        val incoming = item("Where are you man", "Neredesin adamım", ScreenPhoneCard.Role.INCOMING, 0.2)
+        val outgoing = item("On my way", "Yoldayım", ScreenPhoneCard.Role.OUTGOING, 0.3, 0.6, 0.93)
+        val shown = ScreenTranslation.present(listOf(
+            outsideItem, item("Brian", "Brian", ScreenPhoneCard.Role.HEADER, 0.06, unchanged = true), incoming, outgoing,
+        ), handset(upright), card = false)
+        assertEquals(listOf("Arabayı bul", "Neredesin adamım", "Yoldayım"), shown.map { it.translation })
+        assertEquals(listOf(false, true, true), shown.map { it.bubble })
+        assertFalse(shown.any { ScreenPhoneCard.isBackdrop(it) })
+        assertEquals(incoming.box, shown[1].box)
+        assertEquals(outgoing.box, shown[2].box)
+    }
+
+    /** Çeviriler balonların üstündeyken sohbet kayınca ilk yoklamada kalkar (HIDE), durulunca yeniden çevrilir (Mac ile aynı). */
+    @Test
+    fun inPlaceTranslationsLeaveAsSoonAsTheChatMoves() {
+        val a = ByteArray(768) { 40 }
+        val b = ByteArray(768) { 200.toByte() }
+        val place = TextBox(0.6, 0.2, 0.8, 0.85)
+        val inPlace = ScreenPhoneFollow(hidesOnChange = true)
+        val card = ScreenPhoneFollow()
+        inPlace.settled(place, a)
+        card.settled(place, a)
+        assertEquals(ScreenPhoneFollow.Step.KEEP, inPlace.step(place, a))
+        assertEquals(ScreenPhoneFollow.Step.HIDE, inPlace.step(place, b))
+        assertEquals(ScreenPhoneFollow.Step.REFRESH, inPlace.step(place, b))
+        assertEquals(ScreenPhoneFollow.Step.WAIT, card.step(place, b))
+        assertEquals(ScreenPhoneFollow.Step.REFRESH, card.step(place, b))
+    }
+
     @Test
     fun phoneMessagesBecomeACardBesideThePhone() {
         val phone = handset(upright)
@@ -343,5 +375,17 @@ class ScreenPhoneCardTest {
         assertFalse(ScreenTranslation.isSameScreen(donnie, screen("Donnie", "Where are you man", "Meet me at the docks", "Hurry up")))
         assertTrue(ScreenTranslation.isSameScreen("", ""))
         assertFalse(ScreenTranslation.isSameScreen("", donnie))
+    }
+
+    /** Telefonun ekranındaki satırlar altyazı hattına girmez; telefonun önünden/altından geçen geniş altyazı girer (Mac ile aynı). */
+    @Test
+    fun holdsOnlyTheLinesOnThePhoneScreen() {
+        val phone = handset(listOf(0.50375, 0.12444, 0.46125, 0.68444))
+        assertTrue(ScreenPhoneCard.holds(TextBox(0.39415, 0.47436, 0.54888, 0.52616), phone))
+        assertTrue(ScreenPhoneCard.holds(TextBox(0.47965, 0.17571, 0.5218, 0.19897), phone))
+        assertTrue(ScreenPhoneCard.holds(TextBox(0.3974, 0.74924, 0.4632, 0.79995), phone))
+        assertFalse(ScreenPhoneCard.holds(TextBox(0.30, 0.86, 0.70, 0.91), phone))
+        assertFalse(ScreenPhoneCard.holds(TextBox(0.46, 0.90, 0.54, 0.94), phone))
+        assertFalse(ScreenPhoneCard.holds(TextBox(0.949, 0.93197, 0.99577, 0.95692), phone))
     }
 }

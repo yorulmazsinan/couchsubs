@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.Globalization;
+
 namespace CouchSubs.Core;
 
 /// <summary>
@@ -12,7 +14,12 @@ namespace CouchSubs.Core;
 /// kutusu sözcük boyunun <see cref="TiltedLineHeight"/> katından yüksek), düşük güvenli kısa blok (en çok
 /// <see cref="LowConfidenceWords"/> sözcük, ortalama güven <see cref="LowConfidence"/>'tan az), karenin ortasındaki kısa,
 /// noktalamasız tek satır (en çok üç sözcük; altyazı ve görev satırı karenin alt ya da üst kenarına yakındır,
-/// <see cref="EdgeBand"/>). Mac/iPhone (SceneText.swift) ve Android (SceneText.kt) aynı kuralları ve eşikleri uygular;
+/// <see cref="EdgeBand"/>).
+/// Gerçek altyazı asla atılmaz (GitHub #822): altyazısı alttaki %22'lik şeridin biraz üstünde duran oyunlarda kısa
+/// altyazıların hepsi "ortadaki kısa satır" sayılıp atılıyordu. Altyazı biçimindeki blok (ortalanmış, alt şeritte, en az
+/// iki sözcük) düşük güvenle de atılmaz; bu oturumda kesin altyazı okunan yükseklikteki blok
+/// (<see cref="SubtitleBand"/>) yalnız eğikse atılır. Atılan bloğun nedeni altyazı günlüğüne yazılır
+/// (<see cref="Reason"/>). Mac/iPhone (SceneText.swift) ve Android (SceneText.kt) aynı kuralları ve eşikleri uygular;
 /// ortak deneme dosyası core/Tests/CouchSubsCoreTests/Fixtures/scene-text.json.
 /// </summary>
 public static class SceneText
@@ -27,25 +34,34 @@ public static class SceneText
     public const int ShortWords = 3;
     /// <summary>Karenin alt ve üst kenarından bu kadarı (karenin yüksekliğine oranla) altyazı şerididir.</summary>
     public const double EdgeBand = 0.22;
+    /// <summary>Ortalanmış sayılmak için bloğun yatay ortasının karenin ortasından en çok uzaklığı.</summary>
+    public const double CenterTolerance = 0.12;
 
     /// <summary>
     /// <paramref name="block"/> bir sahne yazısı mı. Satır kutuları <paramref name="area"/>'ya oranlıdır;
     /// <paramref name="area"/> okunan alanın karedeki yeridir.
     /// </summary>
-    public static bool IsSceneText(Reading block, TextBox area)
+    public static bool IsSceneText(Reading block, TextBox area, SubtitleBand? band = null) => Reason(block, area, band) is not null;
+
+    /// <summary>Blok sahne yazısıysa atılma nedeni (altyazı günlüğü için), değilse null.</summary>
+    public static string? Reason(Reading block, TextBox area, SubtitleBand? band = null)
     {
-        if (block.Lines.Count == 0 || SpeakerPrefix.Parse(block.Lines[0].Text) is not null) return false;
-        if (block.Lines.Any(line => line.Box is null)) return false;
-        if (block.Lines.Any(IsTilted)) return true;
+        if (block.Lines.Count == 0 || SpeakerPrefix.Parse(block.Lines[0].Text) is not null) return null;
+        if (block.Lines.Any(line => line.Box is null) || block.Box is not { } whole) return null;
+        var box = whole.PlacedIn(area);
         var words = WordCount(block.Text);
-        if (block.Confidence is { } confidence && confidence < LowConfidence && words <= LowConfidenceWords) return true;
-        if (block.Lines.Count == 1 && words <= ShortWords && !LooksSpoken(block.Lines[0].Text))
-        {
-            var placed = block.Lines[0].Box!.Value.PlacedIn(area);
-            var middle = (placed.Top + placed.Bottom) / 2;
-            return middle > EdgeBand && middle < 1 - EdgeBand;
-        }
-        return false;
+        var middle = (box.Top + box.Bottom) / 2;
+        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
+        var learned = band?.Contains(box) == true;
+        // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
+        var subtitleLike = IsCentered(box) && middle >= 1 - EdgeBand && words >= 2;
+        if (block.Lines.Any(IsTilted) && !subtitleLike) return "eğik satır (tabela)";
+        if (learned || subtitleLike) return null;
+        if (block.Confidence is { } confidence && confidence < LowConfidence && words <= LowConfidenceWords)
+            return $"düşük tanıma güveni ({confidence.ToString("0.00", CultureInfo.InvariantCulture)})";
+        if (block.Lines.Count == 1 && words <= ShortWords && !LooksSpoken(block.Lines[0].Text) && middle > EdgeBand && middle < 1 - EdgeBand)
+            return "karenin ortasında kısa satır";
+        return null;
     }
 
     /// <summary>Sözcük yerleri biliniyorsa satır eğik mi (perspektifli tabela, yan duran tişört). Altyazı yatay yazılır.</summary>
@@ -64,10 +80,58 @@ public static class SceneText
         return middles.Zip(middles.Skip(1)).All(pair => (pair.Second - pair.First) * direction >= -0.15 * median);
     }
 
+    internal static bool IsCentered(TextBox box) => Math.Abs((box.Left + box.Right) / 2 - 0.5) <= CenterTolerance;
+
     /// <summary>Konuşma izi: cümle sonu noktalaması, virgül, noktalı virgül ya da tırnak.</summary>
-    private static bool LooksSpoken(string text) =>
+    internal static bool LooksSpoken(string text) =>
         SubtitleStabilizer.EndsSentence(text) || text.Any(c => ",;\"“”".Contains(c));
 
-    private static int WordCount(string text) =>
+    internal static int WordCount(string text) =>
         text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Count(word => word.Any(char.IsLetter));
+}
+
+/// <summary>
+/// Bu oturumda kesin altyazı okunan yükseklikler (karenin yüksekliğine oranla). Altyazı her oyunda kendi yerinde durur;
+/// orada okunan kısa satır ("Let's go") tabela sayılmaz (<see cref="SceneText.Reason"/>). Kesin altyazı: ortalanmış,
+/// sahne yazısı sayılmayan ve en az dört sözcüklü, konuşma noktalamalı ya da konuşan adlı blok. Hat sıfırlanınca unutulur
+/// (Mac: SubtitleBand, Android: SubtitleBand).
+/// </summary>
+public sealed class SubtitleBand
+{
+    /// <summary>En çok bu kadar yükseklik hatırlanır (en eskisi düşer).</summary>
+    public const int Capacity = 6;
+    /// <summary>Kesin altyazı sayılmak için en az sözcük (noktalaması ya da konuşan adı yoksa).</summary>
+    public const int SureWords = 4;
+
+    private readonly List<(double Top, double Bottom, double Line)> spans = [];
+
+    /// <summary>
+    /// Hatırlanan yüksekliğin her yanındaki pay (satır boyuna oranla). GTA 6'da görev satırı ("Follow the plane") altyazının
+    /// hemen altında belirir; pencere kaynağında orta noktası bir satır payının hemen dışında kalıyordu (Mac/Android: aynı).
+    /// </summary>
+    public const double Margin = 1.5;
+
+    /// <summary>Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (<see cref="Margin"/> satır boyu payla) düşüyor mu.</summary>
+    public bool Contains(TextBox box)
+    {
+        var middle = (box.Top + box.Bottom) / 2;
+        return spans.Any(span => middle >= span.Top - Margin * span.Line && middle <= span.Bottom + Margin * span.Line);
+    }
+
+    /// <summary>Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları alana oranlıdır.</summary>
+    public void Record(Reading block, TextBox area)
+    {
+        if (block.Lines.Count == 0 || block.Box is not { } whole) return;
+        var box = whole.PlacedIn(area);
+        if (!SceneText.IsCentered(box)) return;
+        var sure = SpeakerPrefix.Parse(block.Lines[0].Text) is not null || SceneText.WordCount(block.Text) >= SureWords
+            || block.Lines.Any(line => SceneText.LooksSpoken(line.Text));
+        if (!sure || SceneText.IsSceneText(block, area)) return;
+        var line = (box.Bottom - box.Top) / block.Lines.Count;
+        spans.RemoveAll(span => Math.Abs(span.Top - box.Top) < line / 2 && Math.Abs(span.Bottom - box.Bottom) < line / 2);
+        spans.Add((box.Top, box.Bottom, line));
+        if (spans.Count > Capacity) spans.RemoveRange(0, spans.Count - Capacity);
+    }
+
+    public void Reset() => spans.Clear();
 }

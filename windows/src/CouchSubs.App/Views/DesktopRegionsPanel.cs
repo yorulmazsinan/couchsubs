@@ -12,8 +12,14 @@ internal sealed class DesktopRegionsPanel : DockPanel
 {
     private readonly StackPanel hud = new() { VerticalAlignment = VerticalAlignment.Top };
     private readonly Border phone = new() { ClipToBounds = true };
+    /// <summary>Telefon mesajlarının kendi balonlarının yerinde çizildiği katman (Mac GamePhoneBlocks).</summary>
+    private readonly PhoneBlocksCanvas phoneBlocks;
 
-    public DesktopRegionsPanel(StackPanel subtitles, double bottomInset = 0)
+    /// <param name="phoneLayer">
+    /// Verilirse telefon mesajları bu katmanda (yayın penceresi: pencerenin tamamı oyun karesidir); verilmezse saydam
+    /// pencerede HUD ile konuşma arasındaki alanda, karedeki yerlerine göre (Mac SubtitleOverlay ile aynı).
+    /// </param>
+    public DesktopRegionsPanel(StackPanel subtitles, double bottomInset = 0, PhoneBlocksCanvas? phoneLayer = null)
     {
         IsHitTestVisible = false;
         // Normal ek alanlar önceki gibi üstte dizilir. Konuşmanın zemini tamamen saydam olsa da
@@ -25,22 +31,27 @@ internal sealed class DesktopRegionsPanel : DockPanel
         SetDock(reserved, Dock.Bottom);
         Children.Add(reserved);
         Children.Add(phone);
+        phoneBlocks = phoneLayer ?? new PhoneBlocksCanvas();
+        if (phoneLayer is null) phone.Child = phoneBlocks;
     }
 
     public void ShowRegions(Dictionary<string, (string Text, RegionBox? Box, IReadOnlyList<CouchSubs.Core.ScreenTranslation.Item>? Blocks)> regions,
                             Func<string, RegionBox?, IReadOnlyList<CouchSubs.Core.ScreenTranslation.Item>?, Border> makeBox)
     {
         hud.Children.Clear();
-        phone.Child = null;
-        foreach (var (id, region) in regions.OrderBy(pair => pair.Value.Box?.Top ?? 0))
+        IReadOnlyList<CouchSubs.Core.ScreenTranslation.Item>? messages = null;
+        // "Ekranı çevir" ekrandayken onun yerindeki otomatik ekran yazısı blokları çizilmez (#827).
+        foreach (var (id, region) in CouchSubs.Core.ScreenRegions.Visible(regions).OrderBy(pair => pair.Value.Box?.Top ?? 0))
         {
-            var box = makeBox(region.Text, region.Box, region.Blocks);
-            if (id == "game-phone")
+            // Telefonun her mesajı kendi balonunun yerinde ve renginde (TV, Mac, iPhone, Android ile aynı). Eskiden bloklar
+            // tek kutuda alt alta dizilip ortaya/sola yaslanıyordu: kimin ne yazdığı belli olmuyordu.
+            if (id == "game-phone" && region.Blocks is { Count: > 0 } blocks)
             {
-                box.VerticalAlignment = VerticalAlignment.Top;
-                phone.Child = box;
+                messages = blocks;
+                continue;
             }
-            else hud.Children.Add(box);
+            hud.Children.Add(makeBox(region.Text, region.Box, region.Blocks));
         }
+        phoneBlocks.Show(messages);
     }
 }

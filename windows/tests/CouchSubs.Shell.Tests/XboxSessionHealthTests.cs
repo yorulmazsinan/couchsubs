@@ -56,6 +56,93 @@ public class XboxSessionHealthTests
         Assert.Contains("…)", text);
     }
 
+    /// <summary>#871: Xbox kartında Xbox'ın JSON hata nesnesi olduğu gibi görünüyordu.</summary>
+    private const string CloudServiceTimeout = "{\"message\":\"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\\\\streaming\\\\manager\"}";
+
+    [Fact]
+    public void CloudStreamingServiceTimeoutIsReadableAndNotRetried()
+    {
+        Assert.Equal("0x8007139F", XboxStop.ErrorCode(CloudServiceTimeout));
+        Assert.Equal(XboxStopKind.ServiceNotReady, XboxStop.Classify(CloudServiceTimeout));
+        Assert.Equal(XboxStopKind.ServiceNotReady, XboxStop.Classify("Xbox service HTTP 500: " + CloudServiceTimeout));
+        Assert.StartsWith("Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\\streaming", XboxStop.ErrorMessage(CloudServiceTimeout));
+        var tr = XboxStop.Message(Localizer.ForLanguage("tr"), CloudServiceTimeout);
+        Assert.Equal("Xbox uzaktan oynatma hizmetini başlatamadı. Xbox'ı güç düğmesine 10 sn basılı tutarak tam kapatıp açın, Uzak özelliklerin açık olduğunu denetleyin, sonra yeniden deneyin.", tr);
+        var en = XboxStop.Message(Localizer.ForLanguage("en"), CloudServiceTimeout);
+        Assert.DoesNotContain("{", en);
+        Assert.Contains("10 seconds", en);
+        // HTTP hatası olarak gelse de yeniden denenmez.
+        Assert.Null(new XboxRetryPlan().Failed(false, false, null, "Xbox service HTTP 500: " + CloudServiceTimeout));
+    }
+
+    [Fact]
+    public void UnknownXboxErrorShowsOnlyTheCode()
+    {
+        const string reason = "{\"message\":\"Agent : -2147024891 : Access is denied.\"}";
+        Assert.Equal(XboxStopKind.StartFailed, XboxStop.Classify(reason));
+        var tr = XboxStop.Message(Localizer.ForLanguage("tr"), reason);
+        Assert.StartsWith("Xbox yayını başlatamadı (kod 0x80070005). ", tr);
+        Assert.DoesNotContain("{", tr);
+        Assert.Equal("Conflict", XboxStop.DisplayReason("{\"code\":\"Conflict\",\"message\":\"x\"}", XboxStopKind.StartFailed));
+        Assert.Equal("0x8007139F", XboxStop.ErrorCode("hr 0x8007139f"));
+        Assert.Null(XboxStop.ErrorCode("{\"code\":null,\"message\":\"x\"}"));
+        Assert.Equal(XboxStopKind.Other, XboxStop.Classify("{\"message\":\"something odd\"}"));
+        Assert.Equal("something odd", XboxStop.DisplayReason("{\"message\":\"something odd\"}", XboxStopKind.Other));
+        Assert.Equal("Xbox service HTTP 500", XboxStop.DisplayReason("Xbox service HTTP 500: {\"x\":1}", XboxStopKind.Other));
+        // Bilinmeyen hata yeniden deneme kuralını değiştirmez.
+        Assert.Equal(5000, new XboxRetryPlan().Failed(false, false, null, reason));
+    }
+
+    [Fact]
+    public void NoPictureMessageNamesTheXboxSettingAndCable()
+    {
+        // #403 / X: Xbox görüntü göndermeyince ekranda yalnız "WebRTC bağlantısı kesildi" görünüyordu.
+        var tr = XboxStop.Message(Localizer.ForLanguage("tr"), "Xbox WebRTC bağlantısı kesildi", noFirstFrame: true);
+        Assert.Contains("görüntü gelmedi", tr);
+        Assert.Contains("Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler", tr);
+        Assert.Contains("kablo", tr);
+        Assert.DoesNotContain("WebRTC", tr);
+        var en = XboxStop.Message(Localizer.ForLanguage("en"), null, noFirstFrame: true);
+        Assert.Contains("Settings › Devices & connections › Remote features", en);
+        Assert.Equal("Xbox'tan görüntü gelmedi. Bir kez daha deneniyor…", Localizer.ForLanguage("tr")[XboxStop.NoPictureRetrying]);
+        Assert.Equal(XboxStopKind.NoPicture, XboxStop.Classify("ServerInUse", noFirstFrame: true));
+    }
+
+    [Fact]
+    public void ConnectionsWithoutPictureStopAfterTwoAttempts()
+    {
+        // Eskiden görüntüsüz her bağlantı ~60 sn sürüp dört kez açılıp kapanıyordu (Xbox'ta "uzaktan oynatma başlatıldı / durduruldu").
+        var plan = new XboxRetryPlan();
+        Assert.Equal(5000, plan.Failed(permanent: false, noFirstFrame: true, streamedMs: null));
+        Assert.Null(plan.Failed(permanent: false, noFirstFrame: true, streamedMs: null));
+    }
+
+    [Fact]
+    public void PictureResetsTheNoPictureStreakButNotOtherFailures()
+    {
+        var plan = new XboxRetryPlan();
+        Assert.Equal(5000, plan.Failed(false, noFirstFrame: true, streamedMs: null));
+        plan.PictureArrived();
+        // Görüntü geldi, 10 sn sonra kesildi: sıradan kopma, ikinci deneme.
+        Assert.Equal(15000, plan.Failed(false, noFirstFrame: false, streamedMs: 10_000));
+        Assert.Equal(45000, plan.Failed(false, noFirstFrame: true, streamedMs: null));
+        Assert.Null(plan.Failed(false, noFirstFrame: false, streamedMs: null));
+    }
+
+    [Fact]
+    public void OtherFailuresKeepThreeRetriesAndHealthyStreamResets()
+    {
+        var plan = new XboxRetryPlan();
+        Assert.Equal(5000, plan.Failed(false, false, null));
+        Assert.Equal(15000, plan.Failed(false, false, null));
+        // Bir dakikadan uzun süren yayın: yeni dizi.
+        Assert.Equal(5000, plan.Failed(false, false, XboxRetryPlan.HealthyStreamMs));
+        Assert.Equal(15000, plan.Failed(false, false, null));
+        Assert.Equal(45000, plan.Failed(false, false, null));
+        Assert.Null(plan.Failed(false, false, null));
+        Assert.Null(new XboxRetryPlan().Failed(permanent: true, noFirstFrame: false, streamedMs: null));
+    }
+
     [Fact]
     public void SummarySeparatesNoPictureFromPictureThenDrop()
     {

@@ -12,7 +12,10 @@ import kotlin.math.abs
  * hızlıdır: daha önce görülen sohbetin mesajları çevirmene gitmez (Mac/iPhone: ScreenPhoneFollow.swift, Windows:
  * ScreenPhoneFollow.cs; ortak deneme dosyası fixtures/phone-chat.json `follow` bölümü).
  */
-class ScreenPhoneFollow {
+class ScreenPhoneFollow(
+    /** Çeviriler balonların üstünde, yerinde (kartsız): ekran değişir değişmez [Step.HIDE]. */
+    val hidesOnChange: Boolean = false,
+) {
     /** Yoklamanın kararı; [wire] Mac ve Windows'taki adı (ortak deneme dosyası). */
     enum class Step(val wire: String) {
         /** Bir şey yapma (telefon kıpırdıyor). */
@@ -23,6 +26,11 @@ class ScreenPhoneFollow {
         KEEP("keep"),
         /** Telefon kapandı: kartı kaldır, izlemeyi bırak. */
         STOP("stop"),
+        /**
+         * Telefonun ekranı değişti (sohbet kaydı ya da değişti), henüz durulmadı: yerindeki mesaj çevirileri hemen kalksın
+         * (artık başka balonların üstündeler); durulunca [REFRESH] gelir. Yalnız [hidesOnChange] açıkken.
+         */
+        HIDE("hide"),
     }
 
     private class Look(val box: TextBox, val signature: ByteArray)
@@ -62,8 +70,9 @@ class ScreenPhoneFollow {
             pending = null
             return Step.REFRESH
         }
+        val first = pending == null
         pending = look
-        return Step.WAIT
+        return if (hidesOnChange && first) Step.HIDE else Step.WAIT
     }
 
     companion object {

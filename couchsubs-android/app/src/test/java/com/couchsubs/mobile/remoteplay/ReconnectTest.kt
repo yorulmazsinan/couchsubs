@@ -99,6 +99,18 @@ class ReconnectTest {
             DisconnectKind.sessionRequestHint("Reported Application Reason: 0x80108b12 (unknown)"))
     }
 
+    /**
+     * X, 21 Kas: oyun sırasında PS5'te ana hesaba geçince PS5 akışı kendisi kapatıyor. Ağ kopması değildir: ayrı neden,
+     * 720p'ye düşürme sayılmaz, PS5 aramaya yanıt vermese de "bulunamadı"ya çevrilmez.
+     */
+    @Test
+    fun consoleClosedStreamIsNotANetworkDrop() {
+        assertEquals(DisconnectKind.CONSOLE_CLOSED, DisconnectKind.fromNative(NativeBridge.QUIT_CONSOLE_CLOSED))
+        assertFalse(QualityFallback.countsAsDrop(DisconnectKind.CONSOLE_CLOSED))
+        val closed = SessionState.Disconnected(DisconnectKind.CONSOLE_CLOSED, "Client disconnected")
+        assertEquals(closed, ConsoleSearchState().classify(closed, "192.168.1.70"))
+    }
+
     /** GitHub #519: PS5'teki Uzaktan Oynatma çöktüyse İngilizce libchiaki metni (OTHER) değil, ayrı bir neden. */
     @Test
     fun consoleRemotePlayCrashIsItsOwnKind() {

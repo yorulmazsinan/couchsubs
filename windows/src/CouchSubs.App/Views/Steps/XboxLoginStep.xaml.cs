@@ -19,6 +19,9 @@ public partial class XboxLoginStep : UserControl
     public XboxLoginStep() => InitializeComponent();
     private AppController Controller => (AppController)DataContext;
 
+    /// <summary>"Bilgisayarda Xbox uygulaması/play.xbox.com ile mi oynuyorsunuz?": Xbox'a bağlanılmaz, kurulum biter (#853).</summary>
+    private void OnUseXboxWindow(object sender, RoutedEventArgs e) => Controller.UseXboxWindow();
+
     private async void OnSignIn(object sender, RoutedEventArgs e)
     {
         if (working) return;

@@ -157,9 +157,18 @@ public sealed class Reading
     /// Ortalanmış blok yoksa en az üç sözcüklü, menü olmayan en alttaki blok alınır. Satırların yeri bilinmiyorsa
     /// okuma olduğu gibi kalır. <paramref name="area"/>, okunan alanın karedeki yeridir (Mac: Reading.subtitleBlock).
     /// Tek satırlık etkileşim/HUD etiketi ("TAKE AMMO PACK (0/3)", <see cref="ButtonPrompts.IsActionLabel"/>) ve sahne
-    /// yazısı (tabela, tişört; <see cref="SceneText"/>) altyazı bloğu sayılmaz.
+    /// yazısı (tabela, tişört; <see cref="SceneText"/>) altyazı bloğu sayılmaz. <paramref name="band"/>: bu oturumda
+    /// altyazının okunduğu yükseklikler; <paramref name="dropped"/>: sahne yazısı sayılıp atılan her blok ve nedeni
+    /// (altyazı günlüğü için). "Tam ekran" alanda ekranın kenarındaki bildirim kartı (<see cref="ScreenNotices.IsNotice(TextBox)"/>)
+    /// altyazı bloğu sayılmaz, <paramref name="notices"/> ile bildirilir (satır kutuları alana oranlı); kendi yerinde
+    /// çevrilir. Önceden ortalanmış blok yokken altyazı seçilip ekranın ortasında çiziliyordu. <paramref name="age"/>:
+    /// satırın ne kadar süredir değişmeden okunduğu (<see cref="StickyRows.UnchangedMs"/>); verilirse
+    /// <see cref="StaleMs"/>'dir değişmeyen ortalı blok, yanında yeni beliren ortalı blok varken seçilmez, atlanan blok
+    /// <paramref name="stale"/> ile bildirilir.
     /// </summary>
-    public Reading SubtitleBlock(TextBox area)
+    public Reading SubtitleBlock(TextBox area, SubtitleBand? band = null, Action<Reading, string>? dropped = null,
+                                 Action<Reading>? notices = null, Func<string, long?>? age = null,
+                                 Action<Reading>? stale = null)
     {
         if (Lines.Count == 0 || Lines.Any(line => line.Box is null)) return IsActionLabel ? Empty : this;
         var blocks = new List<List<TextLine>>();
@@ -171,8 +180,18 @@ public sealed class Reading
             else blocks.Add([line]);
         }
         // Tabela, tişört, plaka gibi sahne yazısı (SceneText) altyazı alanına düşse de altyazı değildir.
-        var candidates = blocks.Select(block => new Reading(block))
-            .Where(reading => !reading.IsMenu && !reading.IsActionLabel && !SceneText.IsSceneText(reading, area)).ToList();
+        var candidates = blocks.Select(block => new Reading(block)).Where(reading =>
+        {
+            if (reading.IsMenu || reading.IsActionLabel) return false;
+            if (SceneText.Reason(reading, area, band) is not { } reason) return true;
+            dropped?.Invoke(reading, reason);
+            return false;
+        }).Where(reading =>
+        {
+            if (!ScreenNotices.IsWholeScreen(area) || !ScreenNotices.IsNotice(reading.Box!.Value.PlacedIn(area))) return true;
+            notices?.Invoke(reading);
+            return false;
+        }).ToList();
         var centered = candidates.Where(reading =>
         {
             var box = reading.Box!.Value.PlacedIn(area);
@@ -180,6 +199,7 @@ public sealed class Reading
         }).ToList();
         // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
         // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
+        centered = WithoutStale(centered, age, stale);
         if (centered.FirstOrDefault(reading => SpeakerPrefix.Parse(reading.Lines[0].Text) is not null) is { } spoken) return spoken;
         if (centered.Count > 0)
         {
@@ -211,20 +231,70 @@ public sealed class Reading
     private static int Letters(string text) => text.Count(char.IsLetter);
 
     /// <summary>
+    /// Ortalı blok bu kadar süredir hiç değişmediyse ve yanında ondan en az <see cref="StickyRows.YoungerByMs"/> daha yeni
+    /// (kırıntı olmayan) ortalı blok varsa altyazı sayılmaz. Kullanıcı bildirimi (GitHub #933, GTA 6): karakter TV izlerken
+    /// haber programının alt bandı konuşma altyazısının altında duruyor, en alttaki ortalı blok olarak her karede bant
+    /// seçiliyor, konuşma hiç çevrilmiyordu. Bant çoğu zaman "EXCLUSIVE: …", "BREAKING NEWS: …" diye başlıyor, konuşan adı
+    /// sanılıp her zaman altyazı seçiliyordu. Tek ortalı blok (değişmeyen uzun cümle) seçilmeye devam eder. Konuşan adlı
+    /// sabit blok yalnız yanındaki yeni blok en az üç sözcüklü bir cümleyse atlanır: kısa görev/HUD yazısı uzun konuşmayı
+    /// geçmez (Mac: Reading.staleMs, Android: Reading.STALE_MS).
+    /// </summary>
+    public const int StaleMs = 5000;
+
+    /// <summary>Ortalı blokların sabit olanları (<see cref="StaleMs"/>) çıkarılmış hali; satır yaşı bilinmiyorsa aynen kalır.</summary>
+    private static List<Reading> WithoutStale(List<Reading> centered, Func<string, long?>? age, Action<Reading>? skipped)
+    {
+        if (age is null || centered.Count < 2) return centered;
+        var ages = centered.Select(block => block.Lines.Select(line => age(line.Text)).Where(value => value is not null)
+            .Select(value => value!.Value).DefaultIfEmpty(0).Min()).ToList();
+        var fresh = Enumerable.Range(0, centered.Count)
+            .Where(i => ages[i] < StaleMs && !OcrNoise.IsCrumb(centered[i].Text)).ToList();
+        if (fresh.Count == 0) return centered;
+        long youngest = fresh.Min(i => ages[i]);
+        var sentences = fresh.Where(i => WordCount(centered[i].Text) >= 3).ToList();
+        long? sentence = sentences.Count > 0 ? sentences.Min(i => ages[i]) : null;
+        var stale = Enumerable.Range(0, centered.Count).Where(i =>
+        {
+            if (ages[i] < StaleMs) return false;
+            var rival = SpeakerPrefix.Parse(centered[i].Lines[0].Text) is null ? youngest : sentence;
+            return rival is { } value && ages[i] - value >= StickyRows.YoungerByMs;
+        }).ToHashSet();
+        if (stale.Count == 0) return centered;
+        foreach (var i in stale.Order()) skipped?.Invoke(centered[i]);
+        return Enumerable.Range(0, centered.Count).Where(i => !stale.Contains(i)).Select(i => centered[i]).ToList();
+    }
+
+    /// <summary>
     /// Bloğun son satırının hemen altında ve yatayda onunla üst üste binen satır o bloğa aittir. Aradaki boşluk satır
-    /// yüksekliğinin 0,6'sından büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
+    /// yüksekliğinin LineGap katından (devam satırında ContinuationGap) büyükse ya da yazı boyları 1,25 kattan çok farklıysa ayrı bloktur (altyazıya bitişik görev
     /// satırı ayrılır). Yazı boyu yalnız iki satır da en az üç sözcükken karşılaştırılır ve alttaki satır üsttekinin
     /// devamıysa (<see cref="Continues"/>) hiç karşılaştırılmaz: satır kutusu harflere göre ölçülür, "now." gibi kısa ve
     /// büyük harfsiz/kuyruksuz satırın kutusu daha alçak çıkıyor, cümlenin devamı ayrı blok sayılıp tek başına
     /// çevriliyordu (GitHub #715).
     /// </summary>
+    /// <summary>
+    /// Aynı bloğun satırları arasındaki en büyük boşluk (satır yüksekliğine oranla). GTA 6 gibi geniş satır aralıklı
+    /// altyazılarda 0,6 eşiği iki satırlı altyazıyı iki bloğa bölüyor, yalnız biri çevriliyordu (GitHub #822); 0,8 geri geldi.
+    /// Alttaki satır üsttekinin devamıysa <see cref="ContinuationGap"/> geçerlidir (Mac/Android: aynı eşikler).
+    /// </summary>
+    internal const double LineGap = 0.8;
+    internal const double ContinuationGap = 1.3;
+    /// <summary>
+    /// <see cref="ContinuationGap"/> yalnız üstteki satır en az bu kadar sözcükken geçerlidir: altyazının sarılmış ilk satırı
+    /// uzundur. Tek sözcüklük üst satır (GTA 6 telefon bildiriminde gönderenin adı "Cal", altında "Checked th…") geniş
+    /// boşlukla alttakine katılınca altyazı seçiliyordu (gerçek kare gta6-n4-bildirim; Mac/Android: aynı eşik).
+    /// </summary>
+    internal const int ContinuationMinWords = 3;
+
     private static bool Belongs(TextBox box, List<TextLine> block, TextBox area, string text)
     {
         var last = block[^1].Box!.Value.PlacedIn(area);
         double own = box.Bottom - box.Top, previous = last.Bottom - last.Top;
         var height = Math.Max(own, previous);
-        if (box.Top - last.Bottom > height * 0.6 || box.Top < last.Top) return false;
-        var comparable = WordCount(text) >= 3 && WordCount(block[^1].Text) >= 3 && !Continues(block[^1].Text, text);
+        var continuing = Continues(block[^1].Text, text);
+        var wide = continuing && WordCount(block[^1].Text) >= ContinuationMinWords;
+        if (box.Top - last.Bottom > height * (wide ? ContinuationGap : LineGap) || box.Top < last.Top) return false;
+        var comparable = WordCount(text) >= 3 && WordCount(block[^1].Text) >= 3 && !continuing;
         if (comparable && Math.Max(own, previous) > 1.25 * Math.Min(own, previous)) return false;
         var overlap = Math.Min(box.Right, last.Right) - Math.Max(box.Left, last.Left);
         var narrower = Math.Min(box.Right - box.Left, last.Right - last.Left);
@@ -248,8 +318,25 @@ public sealed class Reading
     }
 
     /// <summary>Alt alta kısa ve noktalamasız satırlar ("MAP", "HELP", "SOCIAL CLUB") menüdür, konuşma değil.</summary>
-    internal bool IsMenu => Lines.Count >= 3 &&
-        Lines.All(line => WordCount(line.Text) <= 3 && !SubtitleStabilizer.EndsSentence(line.Text));
+    /// <remarks>
+    /// Satırların yeri biliniyorsa sol ya da sağ kenarları <see cref="MenuEdge"/> içinde hizalı olmalı: ortalanmış kısa
+    /// konuşma satırları ("No / Wait / Go on") menü sanılıp atılmasın. Konuşan adıyla başlayan satır menü değildir
+    /// (Mac/iPhone, Android ile aynı).
+    /// </remarks>
+    internal bool IsMenu
+    {
+        get
+        {
+            if (Lines.Count < 3 || !Lines.All(line => WordCount(line.Text) <= 3 && !SubtitleStabilizer.EndsSentence(line.Text)
+                                                      && SpeakerPrefix.Parse(line.Text) is null)) return false;
+            if (Lines.Any(line => line.Box is null)) return true;
+            static bool Aligned(IEnumerable<double> edges) => edges.Max() - edges.Min() <= MenuEdge;
+            return Aligned(Lines.Select(line => line.Box!.Value.Left)) || Aligned(Lines.Select(line => line.Box!.Value.Right));
+        }
+    }
+
+    /// <summary>Menü satırlarının sol ya da sağ kenarı bu kadar içinde hizalı (okunan alana oranla).</summary>
+    internal const double MenuEdge = 0.012;
 
     /// <summary>Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").</summary>
     internal bool IsActionLabel => Lines.Count == 1 && ButtonPrompts.IsActionLabel(Lines[0].Text);

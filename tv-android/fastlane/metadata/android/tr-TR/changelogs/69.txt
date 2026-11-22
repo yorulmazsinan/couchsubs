@@ -1,0 +1,1 @@
+0.9.66: TV kendi HDMI ekranını öne çekip CouchSubs arka planda kalınca (ör. oyun 60 Hz'e geçince) telefon/bilgisayar artık "TV bağlı" demiyor; CouchSubs'ı TV'de yeniden açmanız söyleniyor, öne gelince altyazı hemen geri geliyor.

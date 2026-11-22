@@ -325,6 +325,59 @@ final class XboxSessionMachineTests: XCTestCase {
         XCTAssertEqual(m.fail(.network, "kopma"), .retry(delayMs: 15000))
     }
 
+    /// Eskiden görüntüsüz her bağlantı ~60 sn sürüp dört kez açılıp kapanıyordu (Xbox'ta "uzaktan oynatma başlatıldı / durduruldu").
+    func testConnectionsWithoutPictureStopAfterTwoAttempts() {
+        var m = XboxSessionMachine()
+        XCTAssertEqual(m.fail(.noFirstFrame, "görüntü yok"), .retry(delayMs: 5000))
+        XCTAssertEqual(m.fail(.noFirstFrame, "görüntü yok"), .retry(delayMs: nil))
+        if case let .failed(kind, _, willRetry, _) = m.phase { XCTAssertEqual(kind, .noFirstFrame); XCTAssertFalse(willRetry) } else { XCTFail() }
+        XCTAssertEqual(XboxStop.classify("Xbox WebRTC bağlantısı kesildi", kind: .noFirstFrame), .noPicture)
+    }
+
+    /// #871: Xbox kartında Xbox'ın JSON hata nesnesi olduğu gibi görünüyordu.
+    static let cloudServiceTimeout = #"{"message":"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\\streaming\\manager"}"#
+
+    func testCloudStreamingServiceTimeoutIsReadableAndNotRetried() {
+        let reason = Self.cloudServiceTimeout
+        XCTAssertEqual(XboxStop.errorCode(reason), "0x8007139F")
+        XCTAssertEqual(XboxStop.errorCode(reason), XboxStop.serviceNotReadyCode)
+        XCTAssertEqual(XboxStop.classify(reason, kind: .consoleUnavailable), .serviceNotReady)
+        XCTAssertEqual(XboxStop.classify("Xbox service HTTP 500: " + reason), .serviceNotReady)
+        XCTAssertTrue(XboxStop.errorMessage(reason)!.hasPrefix(#"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\streaming"#))
+        // errorDetails olarak da HTTP hatası olarak da gelse yeniden denenmez.
+        var fromState = XboxSessionMachine()
+        _ = fromState.start(); _ = fromState.played()
+        XCTAssertEqual(fromState.status("Provisioning", errorDetails: reason), .retry(delayMs: nil))
+        var fromHTTP = XboxSessionMachine()
+        XCTAssertEqual(fromHTTP.fail(.service, "Xbox service HTTP 500: " + reason), .retry(delayMs: nil))
+        if case let .failed(_, _, willRetry, _) = fromHTTP.phase { XCTAssertFalse(willRetry) } else { XCTFail() }
+    }
+
+    func testUnknownXboxErrorShowsOnlyTheCode() {
+        let reason = #"{"message":"Agent : -2147024891 : Access is denied."}"#
+        XCTAssertEqual(XboxStop.classify(reason), .startFailed)
+        XCTAssertEqual(XboxStop.displayReason(reason, .startFailed), "0x80070005")
+        XCTAssertEqual(XboxStop.displayReason(#"{"code":"Conflict","message":"x"}"#, .startFailed), "Conflict")
+        XCTAssertEqual(XboxStop.errorCode("hr 0x8007139f"), "0x8007139F")
+        XCTAssertEqual(XboxStop.errorCode(#"{"code":null,"message":"x"}"#), nil)
+        XCTAssertEqual(XboxStop.classify(#"{"message":"something odd"}"#), .other)
+        XCTAssertEqual(XboxStop.displayReason(#"{"message":"something odd"}"#, .other), "something odd")
+        XCTAssertEqual(XboxStop.displayReason(#"Xbox service HTTP 500: {"x":1}"#, .other), "Xbox service HTTP 500")
+        XCTAssertEqual(XboxStop.displayReason("Xbox WebRTC bağlantısı kesildi", .other), "Xbox WebRTC bağlantısı kesildi")
+        // Bilinmeyen hata yeniden deneme kuralını değiştirmez.
+        var m = XboxSessionMachine()
+        XCTAssertEqual(m.fail(.service, reason), .retry(delayMs: 5000))
+    }
+
+    func testPictureResetsTheNoPictureStreak() {
+        var m = XboxSessionMachine()
+        XCTAssertEqual(m.fail(.noFirstFrame, "görüntü yok"), .retry(delayMs: 5000))
+        _ = m.start(); _ = m.played(); _ = m.status("Provisioned", errorDetails: nil); _ = m.streaming()
+        XCTAssertEqual(m.fail(.noPicture, "kesildi"), .retry(delayMs: 15000))
+        _ = m.start(); _ = m.played(); _ = m.status("Provisioned", errorDetails: nil)
+        XCTAssertEqual(m.fail(.noFirstFrame, "görüntü yok"), .retry(delayMs: 45000))
+    }
+
     func testOutOfOrderIgnored() {
         var m = XboxSessionMachine()
         XCTAssertEqual(m.played(), .nothing)

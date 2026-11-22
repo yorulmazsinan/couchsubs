@@ -22,14 +22,20 @@ function render() {
   const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const start = app.indexOf('  var AVOID_GAP');
   const end = app.indexOf('\n  function hideRegions()', start);
-  assert.ok(start > 0 && end > start, 'avoidRegions bulunamadı');
+  const hideStart = app.indexOf('  function hideSubtitle(reason)');
+  const hideEnd = app.indexOf('\n  }\n', hideStart) + 4;
+  assert.ok(start > 0 && end > start && hideStart > 0, 'avoidRegions/hideSubtitle bulunamadı');
   const html = `<!doctype html><meta charset="utf-8"><style>${fs.readFileSync(path.join(root, 'style.css'), 'utf8')}
     #subtitle { position:absolute; left:20%; right:20%; bottom:8%; text-align:center; }</style>
     <div id="subtitle"><span id="subtitle-text">Lucia: Bunu bir daha yapmayacağız.</span></div>
-    <div id="regions"></div><pre id="result"></pre><script>
+    <div id="subtitle-cover" class="hidden"></div><div id="regions"></div><pre id="result"></pre><script>
     function $(id) { return document.getElementById(id); }
     var regionBoxes = {};
+    var hideTimer = null, shownAt = 0, diag = {};
+    function renderDiag() {}
+    function hidePrevious() {}
     ${app.slice(start, end)}
+    ${app.slice(hideStart, hideEnd)}
     function box(id, left, top, w, h) {
       var el = document.createElement('div');
       el.className = 'region';
@@ -54,6 +60,13 @@ function render() {
     avoidRegions();
     var u = upper.getBoundingClientRect();
     result.above = { missionBottom: u.bottom, subTop: sub.getBoundingClientRect().top };
+    // Altyazı kalkınca kayan görev kutusu kendi yerine döner (eskiden bir sonraki altyazıya dek kayık kalıyordu).
+    $('subtitle').className = '';
+    avoidRegions();
+    hideSubtitle('clear');
+    result.missionBack = mission.getBoundingClientRect().top - Math.round(before.bottom - 10);
+    result.upperBack = upper.getBoundingClientRect().top - Math.round(before.top - 30);
+    $('subtitle').className = '';
     $('regions').removeChild(mission); delete regionBoxes['auto-mission'];
     $('regions').removeChild(upper); delete regionBoxes['auto-upper'];
     avoidRegions();
@@ -90,6 +103,8 @@ test('görev kutusu ile altyazı üst üste binmez', { skip: !browser && 'Chrome
   assert.ok(r.below.subBottom <= r.below.missionTop - 4, JSON.stringify(r));
   assert.ok(r.below.missionTop - r.below.subBottom <= 12, JSON.stringify(r));
   assert.ok(r.above.missionBottom <= r.above.subTop - 4, JSON.stringify(r));
+  assert.equal(r.missionBack, 0, JSON.stringify(r));
+  assert.equal(r.upperBack, 0, JSON.stringify(r));
   assert.equal(r.back, 0);
   assert.equal(r.side, 0);
 });

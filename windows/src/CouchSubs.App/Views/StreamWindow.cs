@@ -32,6 +32,8 @@ public sealed class StreamWindow : Window
     private readonly DesktopRegionsPanel regionsPanel;
     private readonly Dictionary<string, (string Text, CouchSubs.Core.TextBox? Box, IReadOnlyList<ScreenTranslation.Item>? Blocks)> regions = [];
     private readonly Border linesHost;
+    /// <summary>Düz zemin; telefon katmanı ve altyazı bunun üstünde.</summary>
+    private readonly Grid root;
     private readonly Dictionary<int, Border> boxes = [];
     private double screenUntil;
     /// <summary>Stilli "Ekranı çevir" kutularının kalkacağı an; yoksa 0 (yeni altyazı onları kaldırmaz, TV'deki gibi).</summary>
@@ -81,11 +83,15 @@ public sealed class StreamWindow : Window
         // Video kaynağında renkli alt piksel yumuşatma kenarda renk saçağı bırakır; gri tonlu yumuşatma keskin kalır.
         TextOptions.SetTextRenderingMode(this, TextRenderingMode.Grayscale);
         var layers = new Grid();
-        regionsPanel = new DesktopRegionsPanel(linesPanel);
+        // Pencere 16:9 oyun karesinin kendisi: telefon mesajları kendi balonlarının yerinde, altyazının altında (Mac
+        // StreamWindow GamePhoneBlocks ile aynı); kenar payı yok.
+        var phoneLayer = new PhoneBlocksCanvas();
+        regionsPanel = new DesktopRegionsPanel(linesPanel, phoneLayer: phoneLayer);
         layers.Children.Add(regionsPanel);
         layers.Children.Add(linesPanel);
         linesHost = new Border { Child = layers };
-        Content = linesHost;
+        root = new Grid { Children = { phoneLayer, linesHost } };
+        Content = root;
         ApplyBackground();
         linesHost.SizeChanged += (_, _) =>
         {
@@ -116,7 +122,7 @@ public sealed class StreamWindow : Window
     private void ApplyBackground()
     {
         var (red, green, blue) = controller.StreamBackground.Rgb();
-        linesHost.Background = new SolidColorBrush(Color.FromRgb(red, green, blue));
+        root.Background = new SolidColorBrush(Color.FromRgb(red, green, blue));
     }
 
     private void OnChanged(object? sender, PropertyChangedEventArgs e)
@@ -260,7 +266,7 @@ public sealed class StreamWindow : Window
         var size = Math.Max(12, OverlayPlacement.FontSize(style.FontSize) * scale * 0.55);
         // Otomatik bulunan ekran yazısı: çeviri özgün yazının stilinde.
         var apart = controller.Settings.SetTextApart;
-        if (apart && StyledRegionBox.Make(blocks, size, scale, translucent: false) is { } styled) return styled;
+        if (apart && StyledRegionBox.Make(blocks, size, scale) is { } styled) return styled;
         // Ayrık gösterim: stili bilinmeyen ek alan kutusu altyazı kutusuna benzemesin, zeminsiz ve koyu gölgeli.
         if (apart && StyledRegionBox.Plain(text, size, scale, area) is { } plain) return plain;
         var middle = area is { } box ? (box.Left + box.Right) / 2 : 0.5;

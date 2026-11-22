@@ -213,10 +213,38 @@ public static class TranslationEngines
 public enum FrameSource { Ps5, RemotePlayWindow, CaptureWindow }
 
 /// <summary>
+/// Xbox seçiliyken görüntünün nereden okunduğu (#853; Mac'teki XboxFrameSource ile aynı). <c>Xbox</c>: CouchSubs Xbox'a
+/// kendisi bağlanır (Microsoft girişi ve seçilmiş Xbox). <c>CaptureWindow</c>: oyun bu bilgisayardaki Xbox uygulamasında,
+/// play.xbox.com'da ya da capture card ile OBS'te oynanır; CouchSubs Xbox'a hiç bağlanmaz, yalnız seçilen pencereyi
+/// (<see cref="UserSettings.CaptureWindow"/>) okur. Xbox aynı anda tek uzaktan oynatma bağlantısına izin verdiği için
+/// CouchSubs bağlanırsa kullanıcının oturumu düşerdi. Eski ayar dosyaları Xbox bağlantısıyla açılır.
+/// </summary>
+public enum XboxFrameSource { Xbox, CaptureWindow }
+
+/// <summary>
 /// Kullanıcının açıkça seçtiği OBS projektörü veya oyun penceresi. PID/handle saklanmaz (yeniden açılışta değişir);
 /// hem süreç adı hem pencere başlığı eşleşmelidir. Pencere bulunmazsa başka kaynağa geçilmez.
 /// </summary>
 public sealed record WindowCaptureTarget(string ProcessName, string Title);
+
+/// <summary>
+/// Seçilen pencere OBS'in ve Kaynak projektörü değil (Program/Önizleme projektörü ya da OBS'in ana penceresi): bu
+/// görüntüde CouchSubs'ın OBS katmanı (tarayıcı kaynağı) da vardır, kendi altyazısını okur (bkz. <c>OwnSubtitles</c>).
+/// Ayarlar Kaynak projektörünü önerir. Kaynak projektörünün başlığı "Projector - Source: &lt;ad&gt;" (Türkçe OBS'te
+/// "Projektör - Kaynak: &lt;ad&gt;"), eski OBS'te "Windowed Projector (Source) - &lt;ad&gt;". Mac: CaptureWindows.needsSourceProjectorHint.
+/// </summary>
+public static class ObsProjector
+{
+    public static bool NeedsSourceProjectorHint(WindowCaptureTarget? target)
+    {
+        if (target is null) return false;
+        var process = target.ProcessName.ToLowerInvariant();
+        if (!(process == "obs" || process.StartsWith("obs ") || process.StartsWith("obs64") || process.StartsWith("obs32")
+              || process.Contains("obs studio") || process == "obs-studio")) return false;
+        var title = target.Title.ToLowerInvariant();
+        return !new[] { "source:", "kaynak:", "(source)", "(kaynak)" }.Any(title.Contains);
+    }
+}
 
 /// <summary>Pencereden okunurken hangi Remote Play uygulaması: hangisi açıksa, yalnız Sony'ninki ya da yalnız chiaki-ng.</summary>
 public enum RemotePlayApp { Automatic, Sony, Chiaki }
@@ -288,10 +316,13 @@ public sealed record UserSettings
     public int CpuTranslationThreads { get; init; } = CpuThreadOptions.Default;
     /// <summary>Değişmeyen altyazı bölgesinde tam OCR okumasını en fazla iki kare yeniden kullan.</summary>
     public bool FastSubtitleDetection { get; init; }
-    /// <summary>Yalnız GTA 6'nın lacivert altyazı zemini üstündeki yazıyı oku. Varsayılan kapalı.</summary>
-    public bool WatchSubtitleBackground { get; init; }
     /// <summary>GTA 6'da ekrandaki telefon açılınca yazılarını otomatik çevirir (deneysel).</summary>
     public bool AutoReadGamePhone { get; init; }
+    /// <summary>
+    /// "Ekranı çevir"de GTA 6 telefonunun mesajları telefonun yanındaki kartta gösterilir. Kapalıyken (varsayılan) her
+    /// mesajın çevirisi kendi balonunun üstünde, balonun renginde, yerindedir (Mac: phoneChatCard).
+    /// </summary>
+    public bool PhoneChatCard { get; init; }
     /// <summary>
     /// Ekran yazıları kendiliğinden bulunup yerinde çevrilir (görev, yardım, mesaj; bütün oyunlarda, bkz.
     /// <see cref="ScreenTextDetector"/>). Altyazı alanı Tam ekranken çalışmaz. Deneysel: varsayılan kapalı (beta.63'te açık
@@ -409,6 +440,8 @@ public sealed record UserSettings
     public AppAppearance Appearance { get; init; } = AppAppearance.Dark;
     /// <summary>Görüntü PS5 bağlantısından mı, bu bilgisayardaki Remote Play penceresinden mi okunur.</summary>
     public FrameSource FrameSource { get; init; } = FrameSource.Ps5;
+    /// <summary>Xbox seçiliyken görüntü Xbox bağlantısından mı, seçilen pencereden mi okunur (bkz. <see cref="Shell.XboxFrameSource"/>).</summary>
+    public XboxFrameSource XboxFrameSource { get; init; } = XboxFrameSource.Xbox;
     /// <summary>Xbox karelerini #244 öncesindeki 200 ms aralıkla al; varsayılan 66 ms.</summary>
     public bool XboxLegacyFrameRate { get; init; }
     /// <summary>Xbox Remote Play oyun sesini bu bilgisayarda çal; eski ayarlarda açıktır.</summary>
@@ -764,6 +797,8 @@ public interface IAppServices
     Task<IReadOnlyList<LgTv>> DiscoverTvsAsync();
     /// <summary>TV ile eşleşir ve TV uygulamasını sunucu adresiyle başlatmayı dener.</summary>
     Task<TvPairing> PairTvAsync(LgTv tv, string? key, string server, string accessKey);
+    /// <summary>Eşleşme isteği gönderen TV: marka ve ad adresten yoklanır (bkz. <see cref="PairedTv.IdentifyAsync"/>); tanınmazsa null.</summary>
+    Task<LgTv?> IdentifyTvAsync(string host) => PairedTv.IdentifyAsync(host);
     /// <param name="loginPasscode">PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).</param>
     IStreamSession MakeStream(RegisteredConsole console, byte[] accountId, string? loginPasscode);
     /// <summary>Görüntüyü bu bilgisayardaki Remote Play penceresinden (PS Remote Play ya da chiaki-ng) alan kaynak.</summary>
@@ -789,6 +824,8 @@ public interface IAppServices
                        Action<TvOpenProblem?>? onOpenResult = null);
     /// <summary>Uygulamayla gelen TV paketinin sürümü (geliştirici derlemesinde paket olmayabilir).</summary>
     string? BundledTvAppVersion { get; }
+    /// <summary>TV kurulum günlüğüne (tvinstall.log) bir satır; kurulum başlamadıysa nedeni buraya yazılır.</summary>
+    void WriteTvInstallLog(string line) { }
     Task<bool> IsDevModeOnAsync(string host);
     Task<string> FetchDevKeyAsync(string host, string passphrase);
     Task<string?> InstalledTvAppVersionAsync(string host, string devKey);
@@ -912,6 +949,13 @@ public enum TvAppKind { Unknown, Working, UpToDate, DevModeOff, NeedsPassphrase,
 /// <param name="HostPcIp">HostPcMismatch'te TV'deki "Host PC IP".</param>
 /// <param name="ComputerAddress">HostPcMismatch'te TV'nin göreceği bu bilgisayar adresi.</param>
 /// <param name="Hosts">ChooseAndroidTv'de bulunan TV'lerin adresleri.</param>
+/// <summary>TV'ye bağlı uygulama bu cihazdaki TV paketinden eski (#884, #891).</summary>
+public sealed record TvAppOutdated(string Installed, string Bundled)
+{
+    /// <summary>0.9.69'den eski TV uygulamaları sürüm bildirmez; ekranda böyle görünür.</summary>
+    public const string Unreported = "< 0.9.69";
+}
+
 public sealed record TvAppState(TvAppKind Kind, string? Version = null, DevModeError? Error = null, Uri? Url = null, string? Reason = null,
     string? HostPcIp = null, string? ComputerAddress = null, IReadOnlyList<string>? Hosts = null)
 {

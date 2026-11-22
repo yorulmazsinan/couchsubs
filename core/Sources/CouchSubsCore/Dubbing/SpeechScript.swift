@@ -19,6 +19,32 @@ public struct SpokenLine: Equatable, Sendable {
     }
 }
 
+/// Çevirmenin son çevirdiği satırların seslendirme cümleleri (satır → cümleler), iş parçacıkları arasında güvenli.
+///
+/// Çeviri (`translate`) arka plandaki iş parçacıklarında yazar, okuma hattı (`spokenLines`) ana iş parçacığında okur;
+/// yerine okuması gelen satırın iptal edilen çevirisi de bir sonraki satırın çevirisiyle aynı anda yazabilir. Kilitsiz
+/// sözlükte bu eşzamanlı erişim uygulamayı çökertir (iPhone'da dublaj geldiğinden beri okuma hattı her satırda okuyor).
+public final class SpeechMemory: @unchecked Sendable {
+    /// En çok bu kadar satır tutulur; dolunca baştan başlanır.
+    public static let capacity = 512
+
+    private let lock = NSLock()
+    private var lines: [String: [SpokenLine]] = [:]
+
+    public init() {}
+
+    public subscript(text: String) -> [SpokenLine]? {
+        lock.withLock { lines[text] }
+    }
+
+    public func store(_ spoken: [SpokenLine], for text: String) {
+        lock.withLock {
+            if lines.count >= Self.capacity { lines.removeAll() }
+            lines[text] = spoken
+        }
+    }
+}
+
 /// Çevrilen parçalardan seslendirilecek cümleleri çıkarır (bkz. `SubtitleSegmenter.split`).
 public enum SpeechScript {
     /// `translations[i]`, `pieces[i]` çevrilecek bir parçaysa onun Türkçesidir; diğerleri yok sayılır.

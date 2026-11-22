@@ -68,6 +68,16 @@ async function render(page, width, height, extra = {}) {
       function box(el) { var b = el.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; }
       // Bilgi paneli (kumandada OK) açık çizilir: kullanıcının fotoğrafındaki sol üst kutu.
       document.getElementById('panel').className = '';
+      // extra.tall: panel ekrandan uzun (uzun tanı satırları, #886); Yeşil ile yeniden açılır, app.js küçültür.
+      if (${JSON.stringify(!!extra.tall)}) {
+        var filler = document.createElement('div');
+        filler.style.height = '600px';
+        document.getElementById('panel').appendChild(filler);
+        document.getElementById('panel').className = 'hidden';
+        var green = new Event('keydown');
+        Object.defineProperty(green, 'keyCode', { value: 404 });
+        document.dispatchEvent(green);
+      }
       // HDMI penceresi (#304): sahte TVWindow (getRect yok; Samsung belgesindeki gibi istenen dikdörtgeni geri verir).
       var rects = [];
       var cssBounds = ${JSON.stringify(!!extra.cssBounds)};
@@ -184,6 +194,43 @@ test('Samsung paketi: ultrawide ve 16:9 ekranda sayfa ekranın tamamına çizili
       assert.deepEqual(wide.inner, [1920, 1080]);
       for (const side of ['left', 'right', 'top', 'bottom']) {
         assert.ok(Math.abs(wide.subtitle[side] - full.subtitle[side]) < 2, side + ' ' + JSON.stringify([full, wide]));
+      }
+    });
+
+    // #886 (Odyssey G9 49", 32:9): bilgisayar/telefon ultra geniş monitöre paketi geniş yüzeyle kurar
+    // (WideScreenPackage: config.xml'e base_screen_resolution=fullscreen, görünüm width=device-width). 0.9.27–0.9.54'te
+    // olduğu gibi yüzey 32:9 açılır: PS5 görüntüsü 16:9 ortada, Sarı ile ekranın tamamı.
+    const widePage = path.join(path.dirname(page), 'index-wide.html');
+    fs.writeFileSync(widePage, html.replace('<meta name="viewport" content="width=1920">',
+      '<meta name="viewport" content="width=device-width">'));
+    const FULL = ['0', '0', '100%', '100%'];
+
+    await t.test('Geniş yüzeyle kurulan paket 32:9 (3840x1080) ekranda: görüntü 16:9 ortada, Sarı ile ekranın tamamı', async () => {
+      const [fit, fill] = await render(widePage, 3840, 1080, { yellow: 1 });
+      assert.equal(fit.viewport, 'width=3840');
+      assert.deepEqual(fit.inner, [3840, 1080]);
+      assert.deepEqual(fit.rects, [FULL, ['960px', '0px', '1920px', '1080px']]);
+      assert.match(fit.keys, /(Sarı|Yellow)/);
+      // Sarı: '100%' (alanın tamamı, 3840x1080), 16:9 kutu istenmez.
+      assert.deepEqual(fill.rects.slice(2), [FULL]);
+      assert.ok(Math.abs((fill.subtitle.left + fill.subtitle.right) / 2 - 1920) < 2, JSON.stringify(fill));
+      assert.ok(fill.panel.bottom <= 1080 + 1, JSON.stringify(fill));
+    });
+
+    await t.test('Geniş yüzeyle kurulan paket 5120x1440 ekranda da 3840x1080 görünümde, panel ekranın içinde', async () => {
+      const r = await render(widePage, 5120, 1440);
+      assert.equal(r.viewport, 'width=3840');
+      assert.deepEqual(r.inner, [3840, 1080]);
+      assert.ok(r.panel.bottom <= 1080 + 1 && r.panel.right <= 3840, JSON.stringify(r));
+    });
+
+    await t.test('Panel ekrandan uzunsa küçültülür, alt kenarı ekranın içinde kalır (16:9 ve 32:9)', async () => {
+      for (const [p, w, h] of [[page, 1920, 1080], [widePage, 3840, 1080]]) {
+        const r = await render(p, w, h, { tall: true });
+        const height = r.inner[1];
+        assert.ok(r.panel.bottom <= height - 50, JSON.stringify(r));
+        assert.ok(Math.abs(r.panel.top - 54) < 2, JSON.stringify(r));
+        assert.ok(r.panel.bottom - r.panel.top > height / 2, JSON.stringify(r));
       }
     });
 

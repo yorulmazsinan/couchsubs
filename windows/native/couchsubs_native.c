@@ -569,8 +569,10 @@ static int cs_quit_reason(ChiakiQuitReason reason)
 			return CS_QUIT_REFUSED;
 		case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED:
 			return CS_QUIT_PSN_REGIST_FAILED;
+		/* PS5 Takion "disconnect" iletisi gönderdi: ağ kopması değil, PS5 akışı kendisi kapattı (Mac'teki .consoleClosed). */
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED:
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN:
+			return CS_QUIT_CONSOLE_CLOSED;
 		case CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED:
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN:
 			return CS_QUIT_NETWORK;
@@ -608,12 +610,29 @@ static void cs_session_event(ChiakiEvent *event, void *user)
 	}
 }
 
+/* Bir H.264 karesinin en büyük kabul edilen boyu; 1080p anahtar kare birkaç MB'ı geçmez (Mac/iPhone'da
+ * StreamSession.maxSampleBytes, Android'de video-decoder.c ile aynı). */
+#define CS_MAX_SAMPLE_BYTES ((size_t)64 << 20)
+
+/* libchiaki'den gelen kare boyu makul mü: boş ya da akla yatmayacak kadar büyük (int'e sığmayan) kare çözücüye verilmez
+ * (packet->size int'tir; Mac/iPhone'da aynı koruma, GitHub #855). */
+static bool cs_sample_size_plausible(size_t size)
+{
+	return size > 0 && size <= CS_MAX_SAMPLE_BYTES;
+}
+
 /* Akış iş parçacığında çağrılır. Her örnek çözülür, görüntü en çok max_fps kez üretilir. */
 static bool cs_session_video_sample(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user)
 {
 	(void)frames_lost;
 	(void)frame_recovered;
 	cs_session *session = user;
+	if(!buf || !cs_sample_size_plausible(buf_size))
+	{
+		/* false: libchiaki karenin işlenmediğini bilir, yeni anahtar kare ister. */
+		CHIAKI_LOGW(&session->log, "PS5 video: implausible sample size (%u MB), dropped", (unsigned)(buf_size >> 20));
+		return false;
+	}
 	if(!session->decoder_ready)
 		return true;
 	int got = cs_decoder_decode(&session->decoder, buf, buf_size);

@@ -1,0 +1,1 @@
+0.9.60: Kumandadaki Ayarlar tuşu CouchSubs'tan atmıyor: hızlı ayarlar paneli açılıp kapanınca CouchSubs ekranı ve HDMI görüntüsü yerinde kalıyor. Bilgisayar ya da telefon TV'ye bir çeviride en çok üç kez bağlanıyor; "hata ayıklamaya izin verilsin mi?" sorusu durmadan yinelenmiyor.

@@ -1,5 +1,5 @@
 {
- "comment": "Sahne yazısı (tabela, tişört) altyazı alanına düşse de çevrilmez. Kutular alana oranlı; alan karedeki yeridir (Alt bölge). Mac SceneTextTests.swift, Windows SceneTextTests.cs ve Android SceneTextTest.kt aynı dosyayı okur.",
+ "comment": "Sahne yazısı (tabela, tişört) altyazı alanına düşse de çevrilmez. Kutular alana oranlı; alan karedeki yeridir (Alt bölge). Mac SceneTextTests.swift, Windows SceneTextTests.cs ve Android SceneTextTest.kt aynı dosyayı okur. \"before\": aynı oturumda önceden okunan altyazı (altyazının okunduğu yükseklik öğrenilir; GitHub #822). GTA 6 altyazısının satır aralığı geniştir; iki satırı arasındaki boşluk satır boyunun 0,6'sını aşar (GitHub #822).",
  "area": [
   0.14,
   0.62,
@@ -640,6 +640,226 @@
     }
    ],
    "subtitle": "Mac and John... they were both shot.\nWe need to move."
+  },
+  {
+   "name": "altyazının öğrenilen yerindeki kısa satır kalır (GitHub #822)",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.3,
+      0.7778,
+      0.38
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "Let's go",
+     "box": [
+      0.45,
+      0.31,
+      0.55,
+      0.37
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Let's go"
+  },
+  {
+   "name": "altyazı yeri öğrenilmeden ortadaki kısa satır atılır",
+   "lines": [
+    {
+     "text": "Let's go",
+     "box": [
+      0.45,
+      0.31,
+      0.55,
+      0.37
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "altyazının öğrenilen yeri dışındaki kısa tabela yine atılır",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.3,
+      0.7778,
+      0.38
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "Vice City Beach",
+     "box": [
+      0.4167,
+      0.1143,
+      0.5833,
+      0.2
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "alt şeritte ortalanmış düşük güvenli kısa altyazı kalır (GitHub #822)",
+   "lines": [
+    {
+     "text": "Get down now",
+     "box": [
+      0.42,
+      0.72,
+      0.58,
+      0.8
+     ],
+     "confidence": 0.3
+    }
+   ],
+   "subtitle": "Get down now"
+  },
+  {
+   "name": "GTA 6 iki satırlı, geniş satır aralıklı altyazı (cümle sürüyor) tek blok (GitHub #822)",
+   "lines": [
+    {
+     "text": "Take the next left and",
+     "box": [
+      0.3,
+      0.5,
+      0.7,
+      0.58
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "park behind the store.",
+     "box": [
+      0.31,
+      0.66,
+      0.69,
+      0.74
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Take the next left and\npark behind the store."
+  },
+  {
+   "name": "GTA 6 iki cümleli, geniş satır aralıklı altyazı tek blok (GitHub #822)",
+   "lines": [
+    {
+     "text": "We'll think about it, Jay.",
+     "box": [
+      0.3,
+      0.5,
+      0.7,
+      0.58
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Thanks for the ride.",
+     "box": [
+      0.35,
+      0.636,
+      0.65,
+      0.716
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "We'll think about it, Jay.\nThanks for the ride."
+  },
+  {
+   "name": "altyazıya bitişik küçük yazılı görev satırı ayrı blok, altyazı konuşma (#707)",
+   "lines": [
+    {
+     "text": "Brian's doing us a favor, you know?",
+     "box": [
+      0.25,
+      0.5,
+      0.75,
+      0.58
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Go to the marina now",
+     "box": [
+      0.4,
+      0.636,
+      0.6,
+      0.696
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Brian's doing us a favor, you know?"
+  },
+  {
+   "name": "GTA 6 telefon bildirimi: tek sözcüklük gönderen adı geniş boşlukla alttaki satıra katılmaz, altyazı yok (gerçek kare gta6-n4-bildirim)",
+   "lines": [
+    {
+     "text": "Cal",
+     "box": [
+      0.95058,
+      0.58201,
+      0.97674,
+      0.62963
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Checked th",
+     "box": [
+      0.9157,
+      0.68158,
+      0.99855,
+      0.73545
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 pencere kaynağında altyazının hemen altındaki tek başına görev satırı kalır (gerçek kare pencere-kare-2-gorev)",
+   "before": [
+    {
+     "text": "Lucia: Could I have another ice water, please?",
+     "box": [
+      0.2292,
+      0.2657,
+      0.7708,
+      0.3257
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "Follow the plane",
+     "box": [
+      0.4208,
+      0.3743,
+      0.5764,
+      0.4171
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Follow the plane"
   }
  ]
 }

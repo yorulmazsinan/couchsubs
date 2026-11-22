@@ -45,6 +45,9 @@ public static class TvAppMessages
         if (!samsung) return result + "\n\n" + text.Format(SendLogLine, samsungLog);
         if (error is DevModeError.InstallFailed or DevModeError.CertificateRejected)
             result += "\n\n" + text["If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again."];
+        // TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı (Samsung 7 Series 2018, 21 Kas; Mac/iPhone/Android ile aynı).
+        if (error is DevModeError.Unreachable or DevModeError.InstallFailed or DevModeError.CertificateRejected)
+            result += "\n\n" + text[TvOpenText.SamsungServerHint];
         // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
         if (error is DevModeError.Unreachable or DevModeError.InstallFailed or DevModeError.CertificateRejected)
             result += "\n\n" + text[RestartTip];

@@ -23,7 +23,15 @@ public sealed class ScreenPhoneFollow
         Keep,
         /// <summary>Telefon kapandı: kartı kaldır, izlemeyi bırak.</summary>
         Stop,
+        /// <summary>
+        /// Telefonun ekranı değişti (sohbet kaydı ya da değişti), henüz durulmadı: yerindeki mesaj çevirileri hemen kalksın
+        /// (artık başka balonların üstündeler); durulunca Refresh gelir. Yalnız <see cref="HidesOnChange"/> açıkken.
+        /// </summary>
+        Hide,
     }
+
+    /// <summary>Çeviriler balonların üstünde, yerinde (kartsız): ekran değişir değişmez <see cref="Step.Hide"/>.</summary>
+    public bool HidesOnChange { get; init; }
 
     /// <summary>Yoklama aralığı (ms).</summary>
     public const int Interval = 700;
@@ -83,8 +91,9 @@ public sealed class ScreenPhoneFollow
                 pending = null;
                 return Step.Refresh;
             }
+            var first = pending is null;
             pending = current;
-            return Step.Wait;
+            return HidesOnChange && first ? Step.Hide : Step.Wait;
         }
     }
 

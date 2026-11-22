@@ -28,6 +28,11 @@ enum class XboxError {
     SERVICE,
     /** Görüntü geldikten sonra kesildi: bağlantı açık görünse de oturum yeniden kurulur (bkz. XboxPictureWatch). */
     NO_PICTURE,
+    /**
+     * Bağlantı kuruldu ama Xbox tek kare göndermedi (ilk kare sınırı doldu ya da Xbox kapattı); iki bağlantıdan sonra
+     * durulur (bkz. XboxSessionMachine.MAX_NO_PICTURE_ATTEMPTS).
+     */
+    NO_FIRST_FRAME,
 }
 
 class XboxException(val kind: XboxError, message: String, cause: Throwable? = null) : Exception(message, cause)

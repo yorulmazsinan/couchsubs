@@ -59,9 +59,11 @@ jobs:
           match() { if grep -Eq "$1" <<< "$files"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/pr-tests\.yml$'
           res='^core/Sources/CouchSubsCore/Resources/'
-          echo "windows=$(match "^windows/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
-          echo "swift=$(match "^core/|${wf}")" >> "$GITHUB_OUTPUT"
-          echo "android=$(match "^couchsubs-android/|^tv-webos/|^tv-tizen/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
+          frames='^testdata/frames/|^tools/frame-regression/|^scripts/regression[-_]frames'
+          echo "windows=$(match "^windows/|^testdata/frames/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
+          # TVAppPairingLiveTests TV uygulamasının kendisini (tv-webos/app.js) Swift sunucusuyla eşleştirir.
+          echo "swift=$(match "^core/|^tv-webos/|^scripts/tv-pair-live\.js$|${frames}|${wf}")" >> "$GITHUB_OUTPUT"
+          echo "android=$(match "^couchsubs-android/|^tv-webos/|^tv-tizen/|^testdata/frames/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
 
   windows:
     name: Windows / .NET
@@ -107,11 +109,13 @@ jobs:
     if: ${{ needs.changes.outputs.swift == 'true' }}
     # Package.swift: Swift 6.2; projenin mevcut macOS iş akışıyla aynı runner.
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Gerçek kare gerileme seti önceki etiketle karşılaştırır: etiketler gerekli.
+          fetch-depth: 0
       - name: Swift testleri
         working-directory: core
         shell: bash
@@ -122,11 +126,22 @@ jobs:
           # XCTest'in sıralı çalışmasında xUnit çıktısı Swift sürümüne göre eksik olabilir.
           # Ham test kaydı, XCTSkip gerekçelerini ve toplamları da korur.
           swift test 2>&1 | tee "$RUNNER_TEMP/test-results/swift.log"
+      # Gerçek oyun kareleri gerçek Apple Vision ile: altyazı yakalama, yanlış kabul, telefon/harita sınıflama, kutu örtme ve
+      # telefon çevirisi son etiketin altına düşerse kırmızı (scripts/regression-frames.sh). Sürüm iş akışında zorunlu kapı.
+      - name: Gerçek kare gerileme seti
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          REGRESSION_OUT: ${{ runner.temp }}/regression-frames
+        run: scripts/regression-frames.sh 2>&1 | tee "$RUNNER_TEMP/test-results/regression-frames.log"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: pr-swift-test-results
-          path: ${{ runner.temp }}/test-results/swift.log
+          path: |
+            ${{ runner.temp }}/test-results/swift.log
+            ${{ runner.temp }}/test-results/regression-frames.log
+            ${{ runner.temp }}/regression-frames/*.json
           if-no-files-found: error
           retention-days: 7
 

@@ -78,7 +78,9 @@ extension AppModel {
         // Ek alanların çevirisi altyazının üstünde, alanın bulunduğu yana yaslı küçük kutularda durur.
         case .region(let id, let text, let box):
             var regions = overlayRegions.filter { $0.id != id }
-            if !text.isEmpty { regions.append(OverlayRegion(id: id, text: text, box: box)) }
+            // Kenar bildirimi (`ScreenNotices`) bu pencerede altyazının yanında gösterilmez: kendi yerinde (yayın penceresi,
+            // TV) çizilir ya da hiç (Windows'ta kendiliğinden bulunan alanlar gibi).
+            if !text.isEmpty, !ScreenNotices.isNotice(id: id) { regions.append(OverlayRegion(id: id, text: text, box: box)) }
             overlayRegions = regions.sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
             return
         // Kendiliğinden bulunan ekran yazısı: bloklar özgün yazının stilinde çizilir (yayın penceresinde kendi yerinde).

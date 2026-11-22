@@ -311,9 +311,15 @@ class GamePhoneTextTest {
 class PhoneRegionSessionTest {
     private class Reader {
         @Volatile var lines: List<TextLine> = emptyList()
+        /** Sonraki okuma hata verir (okunamayan kare). */
+        @Volatile var failNext = false
         val count = java.util.concurrent.atomic.AtomicInteger()
         fun read(): Reading {
             count.incrementAndGet()
+            if (failNext) {
+                failNext = false
+                throw IllegalStateException("okunamadı")
+            }
             return Reading(lines)
         }
     }
@@ -571,6 +577,37 @@ class PhoneRegionSessionTest {
         wait { !watcher.isBusy }
         assertEquals(if (stillMissing) 2 else 3, server.sent.last().items.size)
         assertTrue(stillMissing || server.sent.none { it.items.size == 2 })
+    }
+
+    /**
+     * GitHub #822 / X (beta.76): çeviri motordayken telefon bir karede doğrulanamadı. Okunan sayfa bırakılmıyordu; telefon
+     * aynı görünüşe dönünce sayfa "değişmedi" sayılıyor, hazır çeviri hiç gösterilmiyordu (Mac PhoneRegionSessionTests ile aynı).
+     */
+    @Test
+    fun translationArrivingDuringBriefPhoneMissIsShownOnTheNextTurn() {
+        val reader = Reader()
+        val translator = Translator()
+        val server = Server()
+        val watcher = watcher(reader, translator, server)
+        val a = TestPhoneImage.phone()
+        val blurred = TestPhoneImage.phone(patch = edit)
+        val pose = GamePhoneGeometry.locate(a)!!
+        reader.lines = listOf(TextLine("Reply today.", first))
+        translator.delayed = "Reply today."
+        watcher.observePhone(PhoneCapture(a, pose))
+        watcher.offer()
+        wait { translator.waiting }
+        // Android'de doğrulama okuması telefonu aramaz: yazısı değişmiş görünen ama okunamayan kare doğrulanamaz.
+        watcher.observePhone(PhoneCapture(blurred, pose))
+        reader.failNext = true
+        translator.resume()
+        wait { !watcher.isBusy }
+        clock = 450
+        watcher.observePhone(PhoneCapture(a, pose))
+        watcher.offer()
+        wait { !watcher.isBusy }
+        assertEquals("Bugün yanıtla.", server.sent.lastOrNull()?.text)
+        assertEquals(listOf("Reply today."), translator.calls.toList())
     }
 
     @Test

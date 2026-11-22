@@ -235,6 +235,10 @@ public final class TVKeeper: @unchecked Sendable {
     private var control: TVControlling?
     private var loop: Task<Void, Never>?
     private var lastLaunch: ContinuousClock.Instant?
+    /// Samsung: son açma komutunun gittiği an (uygulama bağlanınca ya da "TV açmadı" bildirilince sıfırlanır).
+    private var sentAt: ContinuousClock.Instant?
+    private var lastReported: TVOpenProblem?
+    private var reportedOnce = false
 
     /// `appConnected` verilirse (Samsung) TV'ye yalnız TV uygulaması bilgisayara bağlı değilken ve en çok
     /// `relaunchInterval`'da bir dokunulur: uygulama açılır, bağlantı hemen kapatılır. Samsung önplandaki uygulamayı
@@ -331,17 +335,55 @@ public final class TVKeeper: @unchecked Sendable {
         }
     }
 
+    /// Samsung'da açma komutu gittikten sonra TV uygulamasının bağlanması için beklenen süre; bağlanmazsa ana ekranda
+    /// "TV açmadı" yazar. Samsung `ed.apps.launch`'a yanıt vermez ya da yanıtı açılışı söylemez: bazı TV'ler (Tizen 9.0,
+    /// Windows'ta #412; iPhone'da Samsung, 21 Kas) komutu alıp uygulamayı açmıyor, ekranda "açıldı" sanılıyor, neden satırı
+    /// boş kalıyordu.
+    public static let samsungOpenCheck: Duration = .seconds(15)
+
     private func launchIfAppIsAway(_ connected: Bool) async {
-        guard !connected else { return }
-        if let lastLaunch, ContinuousClock.now - lastLaunch < relaunchInterval { return }
-        lastLaunch = .now
+        let time = now()
+        guard !connected else {
+            sentAt = nil
+            return
+        }
+        if let sentAt, time - sentAt >= Self.samsungOpenCheck {
+            self.sentAt = nil
+            report(.notOpened)
+        }
+        if let lastLaunch, time - lastLaunch < relaunchInterval { return }
+        lastLaunch = time
         guard let fresh = try? await connect() else {
-            onOpenResult?(.unreachable)
+            report(.unreachable)
             return
         }
         defer { fresh.close() }
-        let opened = (try? await fresh.launch(appId: appId, params: params)) != nil
-        onOpenResult?(opened ? nil : .unreachable)
+        var notInstalled = false
+        let opened: Bool
+        do {
+            try await fresh.launch(appId: appId, params: params)
+            opened = true
+        } catch {
+            // Samsung: TV kurulu olduğunu doğrulamadı, açma komutu gönderilmedi (kurulum gerekiyor; TV yanıt verdi).
+            notInstalled = (error as? SamsungClient.SamsungError) == .notInstalled
+            opened = false
+        }
+        if opened {
+            sentAt = now()
+            // TV bir önceki komutta da açmadıysa neden satırı yeniden gönderilen komutla silinmez (her 30 sn'de yanıp sönmesin).
+            if lastReported == .notOpened { return }
+        }
+        report(opened ? nil : notInstalled ? .notInstalled : .unreachable)
+    }
+
+    /// Sonuç ana ekrana gider; değiştiğinde subtitles.log'a da yazılır (eskiden Samsung'da açma denemesi iz bırakmıyordu).
+    private func report(_ problem: TVOpenProblem?) {
+        if problem != lastReported || !reportedOnce {
+            SubtitleLog.write("TV uygulamasını açma (\(appId)): \(problem.map { "olmadı, \($0.rawValue)" } ?? "açma komutu gitti")")
+        }
+        lastReported = problem
+        reportedOnce = true
+        onOpenResult?(problem)
     }
 
     public func start(interval: Duration = .seconds(5)) {
@@ -360,6 +402,8 @@ public final class TVKeeper: @unchecked Sendable {
         control?.close()
         control = nil
         lastLaunch = nil
+        sentAt = nil
+        lastReported = nil
         stoodDown = false
         forced.removeAll()
         consoleReturns.removeAll()

@@ -84,6 +84,31 @@ public class LegacyTizenPackageTests
         XDocument.Parse(adapted);
     }
 
+    /// <summary>
+    /// Tizen 2.x'e giden config.xml, #71'de 40KU7000'de çalışan paketinkiyle (testdata/tizen/config-71.xml) öğe öğe ve
+    /// öznitelik öznitelik aynıdır; yalnız widget sürümü farklıdır. Android'deki LegacyTizenPackageTest ile aynı vaka.
+    /// </summary>
+    [Fact]
+    public void AdaptedConfigMatchesTheIssue71Config()
+    {
+        var wgt = Wgt(Config());
+        LegacyTizenPackage.Adapt(wgt);
+        var ours = Shape(Read(wgt, "config.xml"));
+        var working = Shape(Issue71Config());
+        Assert.Equal(working, ours);
+    }
+
+    private static string Issue71Config([CallerFilePath] string source = "") =>
+        File.ReadAllText(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", "..", "testdata", "tizen", "config-71.xml"));
+
+    /// <summary>config.xml'in öğeleri sırasıyla: ad, öznitelikler (widget sürümü hariç) ve metin; açıklamalar yok.</summary>
+    private static List<string> Shape(string config) =>
+        XDocument.Parse(config).Root!.DescendantsAndSelf().Select(element =>
+            element.Name + " " + string.Join(" ", element.Attributes()
+                .Where(a => !(element == element.Document!.Root && a.Name == "version"))
+                .Select(a => $"{a.Name}={a.Value}").Order(StringComparer.Ordinal)) +
+            (element.HasElements ? "" : " :" + element.Value.Trim())).ToList();
+
     [Fact]
     public void OtherFilesStayTheSame()
     {
