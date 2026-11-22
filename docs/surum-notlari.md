@@ -6,18 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **PS5'te kullanıcı değiştirince kopma:** PS5 oturumu kendisi kapatınca artık ağ kopması sanılmıyor; ekranda nedeni yazıyor ve kendiliğinden yeniden bağlanılıyor. CouchSubs PS5'i hiçbir zaman bekleme moduna almaz.
-- **Altyazının iki kez çıkması (önce beyaz, sonra renkli):** Konuşanın adı sonradan okununca cümle yeniden çevrilmiyor, aynı satır güncelleniyor.
-- **GTA 6 telefonu:** Mesajlar artık altyazı sanılmıyor (bütün sohbetin ortada tek satır çıkması bitti); "Ekranı çevir"de her mesaj kendi balonunun üstünde, balonun renginde çevriliyor. Eski telefon kartı ayardan seçilebilir.
-- **GTA 6 harita ve menüler:** Harita kartı ve tuş ipuçları kendi yerinde ve renginde; sekmeler ayrı, adlar çevrilmiyor; HUD kırıntıları görev sayılmıyor; ilk karede bozuk okunan sözcük doğru okununca satır yeniden çevriliyor.
-- **TV'ye altyazı gelmemesi:** Samsung TV uygulaması telefonlardan da güvenilir yoldan açılıyor, açılamazsa nedeni ekranda; TV'nin istediği eşleşme onaylanınca TV kaydediliyor; Android TV artık "LG TV" diye listelenmiyor ve TV boştaki CouchSubs'a takılı kalmıyor.
-- **Eski TV uygulaması:** TV uygulaması sürümünü bildiriyor; eskiyse ana ekranda uyarı ve "TV uygulamasını güncelle".
-- **LG siyah ekran (#643, TV uygulaması 0.9.67)** ve **Samsung ultra geniş monitörde ekranı doldurmama (#886, 0.9.68)** düzeltildi; **2016 Samsung TV'lerde kurulum (#890)** düzeltmesi.
-- **Android TV:** Katman modunda kutu "Tam" koyulukta tam opak; uygulama arka plana düşünce görünmeyen sayfaya yazılmıyor.
-- **Xbox:** Görüntü gelmezse 30 sn'de açık uyarı; ham hata metni yerine anlaşılır öneri; ses ayarı değişince bağlantı kopmuyor; Görüntü kaynağı'nda Xbox için de "OBS projektörü veya oyun penceresi" (Xbox uygulaması, play.xbox.com, capture card).
-- **OBS:** Program projektöründen okurken CouchSubs kendi altyazısını yeniden okumuyor (yanıp sönme bitti).
-- **Mac:** Remote Play penceresinde okuma yavaşlayınca altyazı 10 sn beklemiyor (#822).
-- **Windows:** PS5 akışında geçersiz kare boyu koruması; çökme kaydı daha ayrıntılı (#903).
+- **Çevirinin durması / hiç gelmemesi:** Karanlık sahnede, görev yazısı ya da PS5 bildirimi ekrandayken "menüdeyiz" durumu bitmiyor ve altyazı hiç okunmuyordu; artık menü durumu yalnız menünün kendi yazıları ekrandayken sürüyor, 5 sn değişmezse kendiliğinden bitiyor. Telefon tanıma yalnız GTA 6'da.
+- **"Altyazı zeminini izle (GTA 6 deneysel)" kaldırıldı:** Zemin bulunamayınca bütün altyazıları sessizce atabiliyordu. Daha önce açtıysanız da artık etkisi yok.
+- **"TV uygulamasını güncelle":** Ana ekranda hemen kuruyor; eksik adım, hata ve sonuç aynı kartta; eşleştirme/test döngüsüne düşmüyor. TV'den silinen uygulamada uyarı kalmıyor, kurulum başlamazsa nedeni tvinstall.log'da.
+- **Eski TV uygulamalarında altyazının bir an görünüp kaybolması** düzeltildi.
+- **DeepL:** Anahtar denemesi her hatayı kendi nedeniyle gösteriyor; yoğunluk (429) "ulaşılamadı" sayılmıyor, anahtardaki görünmez karakterler siliniyor.
+- **"Bağlanıyor…"** 30 sn'yi geçince nedeni ekranda.
+- **Tanı:** Altyazı alanında yazı çıkmayınca nedeni altyazi.log'da (okunmadı, boş okuma, süzgeç, hata).
+
+**beta.80'de gelenler:** PS5'te kullanıcı değiştirince yeniden bağlanma, altyazının iki kez çıkmaması, GTA 6 telefon/harita/menü düzeltmeleri, TV'ye altyazı gelmemesi (Samsung açma, Android TV), LG siyah ekran, Samsung ultra geniş, Xbox ve OBS düzeltmeleri, Mac'te 10 sn bekleme (#822).
 
 **beta.79'da gelenler:** kısa ve iki satırlı altyazı düzeltmeleri, GTA 6 bildirimlerinin yerinde çizilmesi, LG ses ayarları ve eşleşme, Android TV eski adres, Mac/iPhone PS5 kare boyu çökmesi.
 
