@@ -6,12 +6,20 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **Kısa ve iki satırlı altyazılar:** Telefon bildiriminin altyazı sanılması, pencere kaynağında görev satırının ("Follow the plane") kaçması ve oyunun kendi Türkçe altyazısının yeniden çevrilmesi düzeltildi.
-- **GTA 6 bildirimleri:** Telefon bildirimi ve mesaj önizlemesinin çevirisi ekranın ortasına değil, kendi yerine çiziliyor.
-- **LG'de görüntünün önce gelip sonra siyah kalması (#643, TV uygulaması 0.9.61):** TV uygulamasının ses ayarları varsayılan olarak kapatıldı; görüntü takılırsa kendiliğinden yeniden kuruluyor.
-- **LG + telefon eşleşmesinin tamamlanmaması (#737, TV uygulaması 0.9.62):** Telefondaki eşleşme isteği düşerse TV kendiliğinden yeniden istiyor.
-- **Android TV'de "bağlı ama altyazı gelmiyor" (TV uygulaması 0.9.63):** TV uygulaması eski bir adrese bağlı kalıyordu; bilgisayar artık açık uygulamaya kendi adresini bildiriyor.
-- **Mac/iPhone'da PS5 bağlanırken çökme:** Geçersiz görüntü karesi artık atılıyor; Apple çevirisindeki eşzamanlı oturum sorunu giderildi.
+- **PS5'te kullanıcı değiştirince kopma:** PS5 oturumu kendisi kapatınca artık ağ kopması sanılmıyor; ekranda nedeni yazıyor ve kendiliğinden yeniden bağlanılıyor. CouchSubs PS5'i hiçbir zaman bekleme moduna almaz.
+- **Altyazının iki kez çıkması (önce beyaz, sonra renkli):** Konuşanın adı sonradan okununca cümle yeniden çevrilmiyor, aynı satır güncelleniyor.
+- **GTA 6 telefonu:** Mesajlar artık altyazı sanılmıyor (bütün sohbetin ortada tek satır çıkması bitti); "Ekranı çevir"de her mesaj kendi balonunun üstünde, balonun renginde çevriliyor. Eski telefon kartı ayardan seçilebilir.
+- **GTA 6 harita ve menüler:** Harita kartı ve tuş ipuçları kendi yerinde ve renginde; sekmeler ayrı, adlar çevrilmiyor; HUD kırıntıları görev sayılmıyor; ilk karede bozuk okunan sözcük doğru okununca satır yeniden çevriliyor.
+- **TV'ye altyazı gelmemesi:** Samsung TV uygulaması telefonlardan da güvenilir yoldan açılıyor, açılamazsa nedeni ekranda; TV'nin istediği eşleşme onaylanınca TV kaydediliyor; Android TV artık "LG TV" diye listelenmiyor ve TV boştaki CouchSubs'a takılı kalmıyor.
+- **Eski TV uygulaması:** TV uygulaması sürümünü bildiriyor; eskiyse ana ekranda uyarı ve "TV uygulamasını güncelle".
+- **LG siyah ekran (#643, TV uygulaması 0.9.67)** ve **Samsung ultra geniş monitörde ekranı doldurmama (#886, 0.9.68)** düzeltildi; **2016 Samsung TV'lerde kurulum (#890)** düzeltmesi.
+- **Android TV:** Katman modunda kutu "Tam" koyulukta tam opak; uygulama arka plana düşünce görünmeyen sayfaya yazılmıyor.
+- **Xbox:** Görüntü gelmezse 30 sn'de açık uyarı; ham hata metni yerine anlaşılır öneri; ses ayarı değişince bağlantı kopmuyor; Görüntü kaynağı'nda Xbox için de "OBS projektörü veya oyun penceresi" (Xbox uygulaması, play.xbox.com, capture card).
+- **OBS:** Program projektöründen okurken CouchSubs kendi altyazısını yeniden okumuyor (yanıp sönme bitti).
+- **Mac:** Remote Play penceresinde okuma yavaşlayınca altyazı 10 sn beklemiyor (#822).
+- **Windows:** PS5 akışında geçersiz kare boyu koruması; çökme kaydı daha ayrıntılı (#903).
+
+**beta.79'da gelenler:** kısa ve iki satırlı altyazı düzeltmeleri, GTA 6 bildirimlerinin yerinde çizilmesi, LG ses ayarları ve eşleşme, Android TV eski adres, Mac/iPhone PS5 kare boyu çökmesi.
 
 **beta.78'de gelenler:** iki satırlı altyazının yarım okunması (çevirilerin çoğunun gelmemesi) düzeltmesi, menü/harita çevirilerinin üst üste binmemesi, Android TV izin istemi ve Ayarlar tuşu.
 
