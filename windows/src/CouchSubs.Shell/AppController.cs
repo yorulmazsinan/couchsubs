@@ -82,6 +82,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private TextBox? lastSubtitleBox;
     /// <summary>Hatta aynı anda tek kare girer; durdurma ve yeni hat kapıyı sıfırlar, takılan okuma hattı yeniden kurdurur.</summary>
     private readonly FrameGate frameGate = new();
+    /// <summary>Okuma sürerken atlanan son kare; okuma bitince okunur (bkz. <see cref="FrameGate.Leave"/>).</summary>
+    private (Frame Frame, long Arrived)? skippedFrame;
+    private readonly object skippedGate = new();
     private Dubber? dubber;
     private string? updateVersion;
     private bool updating;
@@ -2448,6 +2451,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         UpdateRegionWatcher();
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.Reset();
+        lock (skippedGate) skippedFrame = null;
         activeReader = null;
         screenWork?.Cancel();
         screenWork = null;
@@ -2528,6 +2532,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         old?.Stop();
         old?.Dispose();
         frameGate.Reset();
+        lock (skippedGate) skippedFrame = null;
         framesSince = null;
         IStreamSession stream;
         try
@@ -3204,6 +3209,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         ResetRegionWatcher(discard: true);
         // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
         frameGate.Reset();
+        lock (skippedGate) skippedFrame = null;
         ActiveSourceLanguage = settings.SourceLanguage;
         var reader = services.MakeReader(settings.SourceLanguage, settings.OcrEngine);
         activeReader = reader;
@@ -3814,14 +3820,35 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 post(MakePipeline);
                 return;
             }
-            if (entry.Kind != FrameGate.EntryKind.Enter) return;
-            try
+            if (entry.Kind != FrameGate.EntryKind.Enter)
             {
-                await current.ProcessAsync(frame, settings.Region, arrived);
+                if (entry.Kind == FrameGate.EntryKind.Busy) lock (skippedGate) skippedFrame = (frame, arrived);
+                return;
             }
-            finally
+            lock (skippedGate) skippedFrame = null;
+            var token = entry.Token;
+            var next = (Frame: frame, Arrived: arrived);
+            while (true)
             {
-                frameGate.Leave(entry.Token);
+                bool skipped;
+                try
+                {
+                    await current.ProcessAsync(next.Frame, settings.Region, next.Arrived);
+                }
+                finally
+                {
+                    skipped = frameGate.Leave(token);
+                }
+                // Okuma sürerken atlanan son kare hemen okunur: pencere yakalaması değişmeyen ekranda kare göndermez;
+                // altyazı belirirken gelen son kare atlanınca yeni satır kamera oynatılana dek okunmuyordu (GitHub #1019).
+                (Frame Frame, long Arrived)? waiting;
+                lock (skippedGate) { waiting = skippedFrame; skippedFrame = null; }
+                if (!skipped || waiting is not { } latest) return;
+                if (!ReferenceEquals(pipeline, current) || subtitlesPaused) return;
+                var again = frameGate.TryEnter(Environment.TickCount64);
+                if (again.Kind != FrameGate.EntryKind.Enter) return;
+                token = again.Token;
+                next = latest;
             }
         }
         catch

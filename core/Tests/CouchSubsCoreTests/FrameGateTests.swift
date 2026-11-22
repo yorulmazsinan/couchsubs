@@ -42,6 +42,24 @@ final class FrameGateTests: XCTestCase {
         XCTAssertFalse(gate.isBusy)
     }
 
+    /// GitHub #1019: okuma sürerken kare atlandıysa `leave` söyler; çağıran atlanan son kareyi okutur (pencere yakalaması
+    /// değişmeyen ekranda kare göndermez, atlanan son kare okunmazsa yeni satır kamera oynatılana dek okunmuyordu).
+    func testLeaveTellsWhetherAFrameWasSkipped() {
+        var gate = FrameGate(stuckAfterMs: 1000)
+        guard case .enter(let quiet) = gate.enter(now: 0) else { return XCTFail() }
+        XCTAssertFalse(gate.leave(quiet), "kare atlanmadı")
+        guard case .enter(let busy) = gate.enter(now: 10) else { return XCTFail() }
+        XCTAssertEqual(gate.enter(now: 20), .busy)
+        XCTAssertTrue(gate.leave(busy), "okuma sürerken kare atlandı")
+        guard case .enter(let next) = gate.enter(now: 30) else { return XCTFail() }
+        XCTAssertFalse(gate.leave(next), "atlanma bir sonraki okumaya taşınmaz")
+        // Sıfırlanan kapının eski okuması atlanmayı bildirmez.
+        guard case .enter(let old) = gate.enter(now: 40) else { return XCTFail() }
+        XCTAssertEqual(gate.enter(now: 50), .busy)
+        gate.reset()
+        XCTAssertFalse(gate.leave(old))
+    }
+
     func testDefaultStuckLimitAllowsSlowReads() {
         var gate = FrameGate()
         _ = gate.enter(now: 0)

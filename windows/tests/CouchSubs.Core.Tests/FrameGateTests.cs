@@ -31,6 +31,24 @@ public class FrameGateTests
         Assert.Equal(FrameGate.EntryKind.Busy, gate.TryEnter(60).Kind);
     }
 
+    /// <summary>GitHub #1019: okuma sürerken kare atlandıysa Leave söyler; çağıran atlanan son kareyi okutur.</summary>
+    [Fact]
+    public void LeaveTellsWhetherAFrameWasSkipped()
+    {
+        var gate = new FrameGate();
+        var quiet = gate.TryEnter(0);
+        Assert.False(gate.Leave(quiet.Token));
+        var busy = gate.TryEnter(10);
+        Assert.Equal(FrameGate.EntryKind.Busy, gate.TryEnter(20).Kind);
+        Assert.True(gate.Leave(busy.Token));
+        var next = gate.TryEnter(30);
+        Assert.False(gate.Leave(next.Token));
+        var old = gate.TryEnter(40);
+        Assert.Equal(FrameGate.EntryKind.Busy, gate.TryEnter(50).Kind);
+        gate.Reset();
+        Assert.False(gate.Leave(old.Token));
+    }
+
     [Fact]
     public void AReadThatNeverEndsIsReportedAsStuck()
     {

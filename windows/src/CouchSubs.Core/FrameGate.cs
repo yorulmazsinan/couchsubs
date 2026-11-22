@@ -9,6 +9,9 @@ namespace CouchSubs.Core;
 /// kapatıp açmak düzeltiyordu. Kapı her girişe bir numara verir: durdurma ve yeni hat kapıyı sıfırlar, eski okumanın geç
 /// gelen çıkışı yeni okumayı serbest bırakmaz. <c>stuckAfterMs</c>'ten uzun süren okuma takılmış sayılır; çağıran hattı
 /// yeniden kurar. Kareler ayrı iş parçacıklarından gelir; kapı kilitlidir.
+/// Okuma sürerken atlanan kare olduysa <see cref="Leave"/> bunu söyler; çağıran atlanan son kareyi hemen okutur (GitHub
+/// #1019): pencere yakalaması değişmeyen ekranda kare göndermez, altyazı belirirken gelen son kare okuma sürdüğü için
+/// atlanırsa yeni satır kamera oynatılana dek okunmuyordu.
 /// </summary>
 public sealed class FrameGate(int stuckAfterMs = FrameGate.DefaultStuckAfterMs)
 {
@@ -24,6 +27,7 @@ public sealed class FrameGate(int stuckAfterMs = FrameGate.DefaultStuckAfterMs)
     private readonly object gate = new();
     private (int Token, long Since)? current;
     private int lastToken;
+    private bool skipped;
 
     public bool IsBusy { get { lock (gate) return current is not null; } }
 
@@ -38,26 +42,43 @@ public sealed class FrameGate(int stuckAfterMs = FrameGate.DefaultStuckAfterMs)
             if (current is { } busy)
             {
                 var elapsed = now - busy.Since;
-                if (elapsed < stuckAfterMs) return new Entry(EntryKind.Busy);
+                if (elapsed < stuckAfterMs)
+                {
+                    skipped = true;
+                    return new Entry(EntryKind.Busy);
+                }
                 current = null;
+                skipped = false;
                 return new Entry(EntryKind.Stuck, Ms: elapsed);
             }
+            skipped = false;
             lastToken = unchecked(lastToken + 1);
             current = (lastToken, now);
             return new Entry(EntryKind.Enter, lastToken);
         }
     }
 
-    /// <summary>Kare işlendi. Kapı bu arada sıfırlandıysa (durdurma, yeni hat) eski okumanın çıkışı bir şey değiştirmez.</summary>
-    public void Leave(int token)
+    /// <summary>Kare işlendi. Kapı bu arada sıfırlandıysa (durdurma, yeni hat) eski okumanın çıkışı bir şey değiştirmez.
+    /// Bu okuma sürerken kare atlandıysa true: çağıran atlanan son kareyi hatta sokmalı.</summary>
+    public bool Leave(int token)
     {
         lock (gate)
-            if (current?.Token == token) current = null;
+        {
+            if (current?.Token != token) return false;
+            current = null;
+            var wasSkipped = skipped;
+            skipped = false;
+            return wasSkipped;
+        }
     }
 
     /// <summary>Çeviri durdu ya da hat yeniden kuruldu: süren okuma beklenmez.</summary>
     public void Reset()
     {
-        lock (gate) current = null;
+        lock (gate)
+        {
+            current = null;
+            skipped = false;
+        }
     }
 }

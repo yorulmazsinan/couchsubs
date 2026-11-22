@@ -107,6 +107,54 @@ public class ReadSchedulerTests
         Assert.False(ReadScheduler.Changed(still, inside, ReadScheduler.ChangeThreshold, box));
     }
 
+    /// <summary>GitHub #1019: altyazı birkaç karede belirince her kare bir öncekinden eşikten az farklıdır. Karşılaştırma son
+    /// okunan kareyle yapılır: biriken fark okutur, yazının son hâli de okunur (Mac: ReadSchedulerTests).</summary>
+    [Fact]
+    public void GradualChangeIsComparedWithTheLastReadFrame()
+    {
+        var scheduler = new ReadScheduler();
+        Assert.Equal(ReadPlan.Read(true), scheduler.Plan(Still()));
+        scheduler.Record("");
+        var frame = Still();
+        var reused = new List<bool>();
+        for (var i = 0; i < 6; i++)
+        {
+            frame = (byte[])frame.Clone();
+            frame[3] += 6;
+            var plan = scheduler.Plan(frame);
+            reused.Add(plan.Reuse);
+            if (!plan.Reuse) scheduler.Record("Lucia: Could I");
+        }
+        Assert.Equal([true, true, false, false, false, true], reused);
+    }
+
+    /// <summary>Oturma okumaları sınırlıdır; değişim olmadan küçük fark okutmaz.</summary>
+    [Fact]
+    public void SettlingReadsAreLimited()
+    {
+        var scheduler = new ReadScheduler();
+        scheduler.Plan(Still());
+        scheduler.Record("");
+        var frame = Still();
+        frame[3] += 40;
+        Assert.False(scheduler.Plan(frame).Reuse);
+        scheduler.Record("line");
+        var reads = 0;
+        for (var step = 0; step < 6; step++)
+        {
+            frame = (byte[])frame.Clone();
+            frame[5] = (byte)(40 + (step % 2 == 0 ? 6 : 0));
+            if (!scheduler.Plan(frame).Reuse) reads++;
+        }
+        Assert.Equal(ReadScheduler.SettleReads, reads);
+        var quiet = new ReadScheduler();
+        quiet.Plan(Still());
+        quiet.Record("");
+        var noisy = Still();
+        noisy[3] += 6;
+        Assert.True(quiet.Plan(noisy).Reuse);
+    }
+
     [Fact]
     public void AlwaysDisablesReuse()
     {

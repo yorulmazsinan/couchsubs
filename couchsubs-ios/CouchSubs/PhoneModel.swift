@@ -246,6 +246,8 @@ final class PhoneModel: ObservableObject {
     private var noticeAreas: [ExtraArea] = []
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur (Mac ile aynı).
     private var frameGate = FrameGate()
+    /// Okuma sürerken atlanan son kare; okuma bitince okunur (bkz. `FrameGate.leave`).
+    private var skippedFrame: (frame: CGImage, capturedAt: Int)?
     /// Çözücüden gelen son kare (ana iş parçacığında bekleyen en çok bir kare); çeviri sürerken var.
     private var frameMailbox: FrameMailbox<(frame: CGImage, capturedAt: Int)>?
     /// Takılan okuma bu kadar sürdüyse bırakılır, okuma yeni kuyrukta sürer (bkz. `ReadQueue.abandonStall`). Takılan okuma
@@ -795,6 +797,7 @@ final class PhoneModel: ObservableObject {
         session = nil
         frameMailbox?.clear()
         frameGate.reset()
+        skippedFrame = nil
         abandonStalledRead(olderThanMs: 0)
         guard let (session, _) = makeSession(xbox: xbox) else { return }
         sessionState = .connecting
@@ -858,6 +861,7 @@ final class PhoneModel: ObservableObject {
         frameMailbox = nil
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.reset()
+        skippedFrame = nil
         server.pairing.setSession(false)
         tvPairingRequest = nil
         tvPairingOpened = false
@@ -1098,6 +1102,7 @@ final class PhoneModel: ObservableObject {
         pipeline?.reset()
         // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
         frameGate.reset()
+        skippedFrame = nil
         let scheduler = ReadScheduler(maxReuse: settings.fastSubtitleDetection
             ? ReadScheduler.fastMaxReuse : ReadScheduler.defaultMaxReuse)
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage), translator: makeTranslator(),
@@ -1274,11 +1279,25 @@ final class PhoneModel: ObservableObject {
             makePipeline()
             entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
         }
-        guard case .enter(let token) = entry, let pipeline else { return }
-        let region = settings.region
+        guard case .enter(let token) = entry, let pipeline else {
+            if case .busy = entry { skippedFrame = (frame, capturedAt) }
+            return
+        }
+        skippedFrame = nil
         Task { [weak self] in
-            await pipeline.process(frame, region: region, capturedAt: capturedAt)
-            self?.frameGate.leave(token)
+            var token = token
+            var next = (frame: frame, capturedAt: capturedAt)
+            while let model = self {
+                await pipeline.process(next.frame, region: model.settings.region, capturedAt: next.capturedAt)
+                // Okuma sürerken atlanan son kare hemen okunur: altyazı belirirken gelen son kare atlanıp ardından kare
+                // gelmezse yeni satır okunmuyordu (GitHub #1019; Mac ve Windows ile aynı).
+                guard model.frameGate.leave(token), let skipped = model.skippedFrame else { return }
+                model.skippedFrame = nil
+                guard model.pipeline === pipeline, model.screenTextDetector?.inMenu != true,
+                      case .enter(let again) = model.frameGate.enter(now: SubtitleStabilizer.uptimeMs()) else { return }
+                token = again
+                next = skipped
+            }
         }
     }
 

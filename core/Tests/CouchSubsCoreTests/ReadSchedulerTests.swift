@@ -98,6 +98,48 @@ final class ReadSchedulerTests: XCTestCase {
         XCTAssertFalse(ReadScheduler.changed(still, inside, threshold: ReadScheduler.defaultChangeThreshold, within: box))
     }
 
+    /// GitHub #1019: altyazı birkaç karede belirince her kare bir öncekinden eşikten az farklıdır. Karşılaştırma son
+    /// okunan kareyle yapılır: biriken fark okutur, yazının son hâli de okunur.
+    func testGradualChangeIsComparedWithTheLastReadFrame() {
+        var scheduler = ReadScheduler()
+        XCTAssertEqual(scheduler.plan(signature: still), .read(deep: true))
+        scheduler.record("")
+        var frame = still
+        var plans: [ReadScheduler.Plan] = []
+        for _ in 0..<6 {
+            frame[3] += 6
+            plans.append(scheduler.plan(signature: frame))
+            if case .read = plans.last { scheduler.record("Lucia: Could I") }
+        }
+        // 6, 12 ve 18: üçüncü karede biriken fark eşiği aşar; sonraki iki küçük adım (6) yazının oturması sayılır.
+        XCTAssertEqual(plans, [.reuse(""), .reuse(""), .read(deep: false), .read(deep: false), .read(deep: false),
+                               .reuse("Lucia: Could I")])
+    }
+
+    /// Oturma okumaları sınırlıdır: değişimden sonra küçük farkla en çok `settleReads` okuma; gürültülü sahnede her kare
+    /// okunmaz. Değişim olmadan küçük fark okutmaz.
+    func testSettlingReadsAreLimited() {
+        var scheduler = ReadScheduler()
+        _ = scheduler.plan(signature: still)
+        scheduler.record("")
+        var frame = still
+        frame[3] += 40
+        XCTAssertEqual(scheduler.plan(signature: frame), .read(deep: false))
+        scheduler.record("line")
+        var reads = 0
+        for step in 0..<6 {
+            frame[5] = still[5] + UInt8(step % 2 == 0 ? 6 : 0)
+            if case .read = scheduler.plan(signature: frame) { reads += 1 }
+        }
+        XCTAssertEqual(reads, ReadScheduler.settleReads)
+        var quiet = ReadScheduler()
+        _ = quiet.plan(signature: still)
+        quiet.record("")
+        var noisy = still
+        noisy[3] += 6
+        XCTAssertEqual(quiet.plan(signature: noisy), .reuse(""))
+    }
+
     func testAlwaysReadDisablesReuse() {
         var scheduler = ReadScheduler.always
         _ = scheduler.plan(signature: still)

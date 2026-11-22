@@ -22,25 +22,43 @@ public sealed class ReadScheduler(int changeThreshold = ReadScheduler.ChangeThre
     public const int SignatureWidth = 64, SignatureHeight = 12;
     /// <summary>Video gürültüsü bu farkı aşmaz; bir harf eklenmesi aşar.</summary>
     public const int ChangeThreshold = 16;
+    /// <summary>Değişimle başlayan okumadan sonra bölge hâlâ oturuyorsa (yazı belirmeyi sürdürüyor) bu kadarlık fark da okutur.</summary>
+    public const int SettleThreshold = 4;
+    /// <summary>Değişimden sonra küçük farkla yapılabilecek en çok okuma (gürültülü sahnede her kare okunmasın).</summary>
+    public const int SettleReads = 2;
 
-    private byte[]? previous;
+    /// <summary>
+    /// Son okunan karenin bölge izi. Karşılaştırma önceki kareyle değil bununla yapılır (GitHub #1019): altyazı birkaç
+    /// karede belirip (ya da öncekinin yerine geçip) her kare bir öncekinden eşikten az farklıyken satır hiç okunmuyordu.
+    /// Sabit arka planda pencere yakalaması değişmeyen ekranda kare göndermediğinden yeni satır, kamera oynatılıp kareler
+    /// yeniden gelene dek çevrilmiyordu (Mac: ReadScheduler.swift; Android de son okunan karenin iziyle karşılaştırır).
+    /// </summary>
+    private byte[]? baseline;
     private string lastText = "";
     private int reused;
     private int emptyReads;
+    /// <summary>Değişimle başlayan okumadan sonra kalan küçük farklı okuma hakkı (<see cref="SettleReads"/>).</summary>
+    private int settling;
 
     /// <summary>Her kare okunur ve boş kareler hep derin okunur.</summary>
     public static ReadScheduler Always() => new(changeThreshold: -1, maxReuse: 0, deepEvery: 1);
 
     public ReadPlan Plan(byte[] signature)
     {
-        var before = previous;
-        previous = signature;
-        if (before is not null && reused < maxReuse && !Changed(before, signature))
+        if (baseline is { } before)
         {
-            reused++;
-            return ReadPlan.Reused(lastText);
+            var moved = Changed(before, signature);
+            // Değişimle başlayan okuma yazı belirirken yapıldıysa yazının son hâli de okunur.
+            var settles = !moved && settling > 0 && Changed(before, signature, Math.Min(changeThreshold, SettleThreshold));
+            if (reused < maxReuse && !moved && !settles)
+            {
+                reused++;
+                return ReadPlan.Reused(lastText);
+            }
+            settling = moved ? SettleReads : settles ? settling - 1 : 0;
         }
         reused = 0;
+        baseline = signature;
         return ReadPlan.Read(emptyReads % deepEvery == 0);
     }
 
@@ -53,7 +71,8 @@ public sealed class ReadScheduler(int changeThreshold = ReadScheduler.ChangeThre
 
     public void Reset()
     {
-        previous = null;
+        baseline = null;
+        settling = 0;
         lastText = "";
         reused = 0;
         emptyReads = 0;

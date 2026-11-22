@@ -17,15 +17,25 @@ public struct ReadScheduler {
     public static let signatureWidth = 64, signatureHeight = 12
     /// Video gürültüsü bu farkı aşmaz; bir harf eklenmesi aşar.
     public static let defaultChangeThreshold = 16
+    /// Değişimle başlayan okumadan sonra bölge hâlâ oturuyorsa (yazı belirmeyi sürdürüyor) bu kadarlık fark da okutur.
+    public static let settleThreshold = 4
+    /// Değişimden sonra küçük farkla yapılabilecek en çok okuma (gürültülü sahnede her kare okunmasın).
+    public static let settleReads = 2
 
     private let changeThreshold: Int
     private let maxReuse: Int
     private let deepEvery: Int
 
-    private var previous: [UInt8]?
+    /// Son okunan karenin bölge izi. Karşılaştırma önceki kareyle değil bununla yapılır (GitHub #1019): altyazı birkaç
+    /// karede belirip (ya da öncekinin yerine geçip) her kare bir öncekinden eşikten az farklıyken satır hiç okunmuyordu.
+    /// Sabit arka planda Mac ve Windows pencere yakalaması değişmeyen ekranda kare göndermediğinden yeni satır, kamera
+    /// oynatılıp kareler yeniden gelene dek çevrilmiyordu. Android aynı kuralı uygular (son okunan karenin izi).
+    private var baseline: [UInt8]?
     private var lastText = ""
     private var reused = 0
     private var emptyReads = 0
+    /// Değişimle başlayan okumadan sonra kalan küçük farklı okuma hakkı (`settleReads`).
+    private var settling = 0
 
     public init(changeThreshold: Int = ReadScheduler.defaultChangeThreshold, maxReuse: Int = ReadScheduler.defaultMaxReuse, deepEvery: Int = 3) {
         self.changeThreshold = changeThreshold
@@ -37,12 +47,19 @@ public struct ReadScheduler {
     public static var always: ReadScheduler { ReadScheduler(changeThreshold: -1, maxReuse: 0, deepEvery: 1) }
 
     public mutating func plan(signature: [UInt8]) -> Plan {
-        defer { previous = signature }
-        if let previous, reused < maxReuse, !changed(previous, signature) {
-            reused += 1
-            return .reuse(lastText)
+        if let baseline {
+            let moved = changed(baseline, signature)
+            // Değişimle başlayan okuma yazı belirirken yapıldıysa yazının son hâli de okunur.
+            let settles = !moved && settling > 0
+                && Self.changed(baseline, signature, threshold: min(changeThreshold, Self.settleThreshold))
+            if reused < maxReuse, !moved, !settles {
+                reused += 1
+                return .reuse(lastText)
+            }
+            settling = moved ? Self.settleReads : settles ? settling - 1 : 0
         }
         reused = 0
+        baseline = signature
         return .read(deep: emptyReads % deepEvery == 0)
     }
 
@@ -53,7 +70,8 @@ public struct ReadScheduler {
     }
 
     public mutating func reset() {
-        previous = nil
+        baseline = nil
+        settling = 0
         lastText = ""
         reused = 0
         emptyReads = 0

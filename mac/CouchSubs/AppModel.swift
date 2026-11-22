@@ -831,6 +831,8 @@ final class AppModel: ObservableObject {
     private var lastSubtitleBox: TextBox?
     /// Hatta aynı anda tek kare girer. Durdurma ve yeni hat kapıyı sıfırlar; takılan okuma hattı yeniden kurdurur.
     private var frameGate = FrameGate()
+    /// Okuma sürerken atlanan son kare; okuma bitince okunur (bkz. `FrameGate.leave`).
+    private var skippedFrame: (frame: CGImage, capturedAt: Int)?
     private var wakeObserver: NSObjectProtocol?
 
     // Oyun paketleri ve ortak havuz
@@ -2248,6 +2250,7 @@ final class AppModel: ObservableObject {
         session?.stop()
         session = nil
         frameGate.reset()
+        skippedFrame = nil
         guard let session = makeConsoleSession(xbox: xbox) else { return }
         attach(session)
         self.session = session
@@ -2699,6 +2702,7 @@ final class AppModel: ObservableObject {
         pipeline?.reset()
         // Eski hatta süren okuma beklenmez; yeni hat ilk karesini hemen alır.
         frameGate.reset()
+        skippedFrame = nil
         let scheduler = ReadScheduler(maxReuse: settings.fastSubtitleDetection
             ? ReadScheduler.fastMaxReuse : ReadScheduler.defaultMaxReuse)
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage),
@@ -3006,6 +3010,7 @@ final class AppModel: ObservableObject {
         gamePhoneTracker = nil
         // Yeni "Başlat" eski oturumdan kalan (belki takılmış) okumayı beklemeden temiz başlar.
         frameGate.reset()
+        skippedFrame = nil
         activeLanguages = nil
         subtitlesPaused = false
         screenTask?.cancel()
@@ -3316,9 +3321,23 @@ final class AppModel: ObservableObject {
             makePipeline()
             entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
         }
-        guard case .enter(let token) = entry, let pipeline else { return }
-        await pipeline.process(frame, region: settings.region, capturedAt: capturedAt)
-        frameGate.leave(token)
+        guard case .enter(var token) = entry, let pipeline else {
+            if case .busy = entry { skippedFrame = (frame, capturedAt) }
+            return
+        }
+        skippedFrame = nil
+        var next = (frame: frame, capturedAt: capturedAt)
+        while true {
+            await pipeline.process(next.frame, region: settings.region, capturedAt: next.capturedAt)
+            // Okuma sürerken atlanan son kare hemen okunur: pencere yakalaması değişmeyen ekranda kare göndermez; altyazı
+            // belirirken gelen son kare atlanınca yeni satır kamera oynatılana dek okunmuyordu (GitHub #1019).
+            guard frameGate.leave(token), let skipped = skippedFrame else { return }
+            skippedFrame = nil
+            guard self.pipeline === pipeline, !subtitlesPaused, screenTextDetector?.inMenu != true,
+                  case .enter(let again) = frameGate.enter(now: SubtitleStabilizer.uptimeMs()) else { return }
+            token = again
+            next = skipped
+        }
     }
 
     /// Kendiliğinden bulunan ekran yazıları (ayar açıkken, Tam ekran dışında; oyun telefonu açıkken değil). Karo örneği
