@@ -735,6 +735,7 @@
     <string name="tv_open_not_opened">Otomatik açılamadı: TV açma komutunu aldı ama CouchSubs\'ı açmadı. Kumandayla TV\'den açın.</string>
     <string name="tv_open_not_installed">Otomatik açılamadı: TV, CouchSubs TV uygulamasının kurulu olduğunu doğrulamadı; açma komutu gönderilmedi. TV uygulamasını kurup tekrar deneyin. TV\'de “Samsung sunucusuna bağlanılamıyor” (AS400) yazıyorsa TV, Samsung sunucularına ulaşamıyor: TV\'nin internet bağlantısını kontrol edin ve TV\'yi 30 sn fişten çekin.</string>
     <string name="tv_open_try">Otomatik açmayı dene</string>
+    <string name="tv_reconnecting">TV bağlantısı koptu, yeniden bağlanılıyor…</string>
     <string name="tv_open_wizard_note">Her oyunda çeviriyi başlattığınızda CouchSubs TV uygulamasını kendisi açmaya çalışır; açılmazsa TV\'den CouchSubs\'ı açın.</string>
     <string name="engine_local">Yerel model</string>
     <string name="local_ai_address">Sunucu adresi</string>

@@ -149,6 +149,10 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         public Stream Stream { get; } = tcp.GetStream();
         /// <summary>Aynı bağlantıya iki yazma iç içe geçmesin.</summary>
         public SemaphoreSlim WriteLock { get; } = new(1, 1);
+        /// <summary>TV akışının <c>link</c> olayıyla bildirilen kimliği (izleyicilerde null; bkz. <see cref="AckTimeout"/>).</summary>
+        public string? LinkId { get; init; }
+        /// <summary>Son alındının anı (<c>gate</c> altında); hiç alındı göndermemiş (eski) TV'de null.</summary>
+        public DateTime? LastAck { get; set; }
     }
 
     /// <summary>Bu kurulumun kalıcı kimliği (<c>/hello</c> yanıtında). Aynı ağda iki CouchSubs varken TV uygulaması kendi
@@ -201,6 +205,22 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// bir süre gelmezse yarı açık kalmış bağlantıyı kapatıp yeniden bağlanır (Mac ile aynı).
     /// </summary>
     internal const string PingFrame = ": ping\n\nevent: ping\ndata: {}\n\n";
+
+    /// <summary>
+    /// TV'nin alındısı (bağlantı denetimi): ping yalnız bilgisayardan TV'ye gidiyordu; TV'nin onu gerçekten aldığı
+    /// bilinmiyordu. LG uygulaması arka plana düşüp askıya alınınca (ya da Android TV uygulamayı dondurunca) TV'nin ağ
+    /// katmanı soketi açık tutuyor, TCP canlılık denetimi ve gönderim hatası hiç gelmiyordu: bilgisayar saatlerce "Bağlı"
+    /// gösteriyor, altyazı TV'ye ulaşmıyordu. Akış açılınca <c>link</c> olayı bağlantının kimliğini (<c>id</c>) taşır;
+    /// 0.9.76+ TV her ping'de (ve <c>link</c>'te) <c>GET /ack?c=&lt;id&gt;</c> gönderir. Bir kez alındı gönderen
+    /// bağlantıdan bu süre boyunca alındı gelmezse bağlantı kopmuş sayılır ve kapatılır (TV sayısı düşer), <see cref="TvStale"/>
+    /// tetiklenir; TV kendi tarafında yeniden bağlanır, bekçi uygulamayı yeniden açar. Hiç alındı göndermeyen eski TV
+    /// uygulaması eskisi gibi kalır. Bilinmeyen kimliğe 404 döner: TV hemen yeniden bağlanır. Mac/iPhone ve Android ile aynı.
+    /// </summary>
+    internal TimeSpan AckTimeout => (pingInterval ?? TimeSpan.FromSeconds(15)) * 3;
+
+    /// <summary>Alındısı kesilen TV bağlantısı kapatıldı (iş parçacığı havuzunda). Çağıran "Yeniden bağlanılıyor" gösterip
+    /// TV bekçisini yeniler.</summary>
+    public event Action? TvStale;
 
     private readonly object gate = new();
     private readonly List<Client> clients = [];
@@ -302,7 +322,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         this.listener = listener;
         _ = AcceptLoop(listener);
         var every = pingInterval ?? TimeSpan.FromSeconds(15);
-        pingTimer = new Timer(_ => Broadcast(PingFrame), null, every, every);
+        pingTimer = new Timer(_ =>
+        {
+            DropSilentTvs(DateTime.UtcNow);
+            Broadcast(PingFrame);
+        }, null, every, every);
         return Task.FromResult(((IPEndPoint)listener.LocalEndpoint).Port);
     }
 
@@ -678,6 +702,19 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                 }
                 await OpenStream(tcp, obs, cors, checkedKey, obs ? null : ParseHdmiPort(request.Parameter("hdmi")), unreported);
             }
+            else if (method == "GET" && path == "/ack")
+            {
+                // TV'nin alındısı (bkz. AckTimeout). Bilinmeyen kimlik: sunucuda bu bağlantı yok, TV yeniden bağlanmalı.
+                var link = request.Parameter("c") ?? "";
+                bool known;
+                lock (gate)
+                {
+                    var client = link.Length == 0 ? null : clients.FirstOrDefault(c => c.LinkId == link);
+                    if (client is not null) client.LastAck = DateTime.UtcNow;
+                    known = client is not null;
+                }
+                await RespondAndClose(tcp, known ? "204 No Content" : "404 Not Found", cors: cors);
+            }
             else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8", cors);
             // Anahtar Authorize'da denetlendi (anahtarsız istek 401 aldı).
             else if (method == "GET" && path == SecondScreen.Path) await RespondAndClose(tcp, SecondScreen.Page, "text/html; charset=utf-8", cors);
@@ -749,13 +786,15 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             .Append("Connection: keep-alive\r\n")
             .Append(cors).Append("\r\n")
             .Append("retry: 2000\n\n");
-        var client = new Client(tcp, viewer, legacy);
+        var client = new Client(tcp, viewer, legacy) { LinkId = viewer ? null : MakeLinkId() };
         int count;
         lock (gate)
         {
             // Yetki denetimi ile istemci kaydı arasındaki yenileme yarışını kapatır.
             if (accessKey != checkedKey) { tcp.Dispose(); return; }
             if (lastStyle is { } style) head.Append(StyleFrame(style, SetApart));
+            // Kimlik stilden sonra: TV'ye ilk giden veri eskisi gibi stil olsun (olay sırası protokolü etkilemez).
+            if (client.LinkId is { } link) head.Append(Frame("link", new SortedDictionary<string, object> { ["id"] = link }));
             clients.Add(client);
             if (hdmi is not null) consolePort = hdmi;
             count = TvCount();
@@ -763,6 +802,26 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         await Write(client, head.ToString());
         ClientsChanged?.Invoke(count);
         await WatchForClose(client);
+    }
+
+    /// <summary><c>link</c> olayındaki bağlantı kimliği: tahmin edilemez, URL'de kaçışsız gider.</summary>
+    internal static string MakeLinkId()
+    {
+        const string letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        return new string([.. Enumerable.Range(0, 16).Select(_ => letters[System.Security.Cryptography.RandomNumberGenerator.GetInt32(letters.Length)])]);
+    }
+
+    /// <summary>Alındısı <see cref="AckTimeout"/>'tan uzun süredir gelmeyen TV bağlantılarını kapatır; kapattıysa true
+    /// (her ping turunda).</summary>
+    internal bool DropSilentTvs(DateTime now)
+    {
+        List<Client> silent;
+        lock (gate) silent = [.. clients.Where(c => c.LastAck is { } last && now - last > AckTimeout)];
+        if (silent.Count == 0) return false;
+        foreach (var client in silent) Remove(client);
+        SubtitleLog.Write($"TV {(int)AckTimeout.TotalSeconds} sn alındı göndermedi: bağlantı kopmuş sayıldı, kapatıldı");
+        TvStale?.Invoke();
+        return true;
     }
 
     /// <summary>İstemci bağlantıyı kapattığında listeden çıkarır.</summary>

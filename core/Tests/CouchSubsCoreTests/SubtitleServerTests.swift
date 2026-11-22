@@ -198,6 +198,88 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertEqual(Array(lines.suffix(2)), ["event: ping", "data: {}"])
     }
 
+    /// TV akışı `link` olayıyla kimliğini alır; `/ack` bilinen kimliğe 204, bilinmeyene 404 döner (TV hemen yeniden bağlanır).
+    func testTVStreamGetsALinkIdThatAcksAccept() async throws {
+        let server = SubtitleServer(port: 0)
+        let port = try await server.start()
+        defer { server.stop() }
+        let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
+        var link: String?
+        var previous = ""
+        for try await line in bytes.lines {
+            if previous == "event: link", line.hasPrefix("data:") {
+                let json = try JSONSerialization.jsonObject(with: Data(line.dropFirst(5).utf8)) as? [String: Any]
+                link = json?["id"] as? String
+                break
+            }
+            previous = line
+        }
+        let id = try XCTUnwrap(link)
+        XCTAssertTrue(id.count == 16 && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) })
+        let (_, ok) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/ack?c=\(id)")!)
+        XCTAssertEqual((ok as? HTTPURLResponse)?.statusCode, 204)
+        let (_, unknown) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/ack?c=nope")!)
+        XCTAssertEqual((unknown as? HTTPURLResponse)?.statusCode, 404)
+    }
+
+    /// OBS gibi izleyiciler alındı göndermez; onlara `link` gitmez.
+    func testViewersGetNoLink() async throws {
+        let server = SubtitleServer(port: 0, pingInterval: 0.05)
+        let port = try await server.start()
+        defer { server.stop() }
+        let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?viewer=obs")!)
+        var lines: [String] = []
+        for try await line in bytes.lines {
+            lines.append(line)
+            if line == "event: ping" { break }
+        }
+        XCTAssertFalse(lines.contains("event: link"))
+    }
+
+    /// Alındı gönderip susan TV (askıya alınan LG uygulaması) kopmuş sayılır: bağlantı kapanır, sayı düşer, `onTVStale`
+    /// çağrılır. Hiç alındı göndermeyen eski TV uygulaması bağlı kalır.
+    func testTVThatStopsAckingIsDroppedButOldTVsStay() async throws {
+        let server = SubtitleServer(port: 0, pingInterval: 0.1)
+        let stale = Locked(false)
+        server.onTVStale = { stale.set(true) }
+        let port = try await server.start()
+        defer { server.stop() }
+
+        let old = Task {
+            let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events")!)
+            for try await _ in bytes.lines {}
+        }
+        defer { old.cancel() }
+        try await waitUntil { server.connectedClients == 1 }
+
+        let (bytes, _) = try await URLSession.shared.bytes(from: URL(string: "http://127.0.0.1:\(port)/events?v=0.9.76")!)
+        var link: String?
+        var previous = ""
+        for try await line in bytes.lines {
+            if previous == "event: link", line.hasPrefix("data:") {
+                link = (try JSONSerialization.jsonObject(with: Data(line.dropFirst(5).utf8)) as? [String: Any])?["id"] as? String
+                break
+            }
+            previous = line
+        }
+        let id = try XCTUnwrap(link)
+        try await waitUntil { server.connectedClients == 2 }
+        // Birkaç ping turu boyunca alındı gelir: bağlantı açık kalır.
+        for _ in 0..<5 {
+            _ = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/ack?c=\(id)")!)
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertEqual(server.connectedClients, 2)
+        XCTAssertFalse(stale.value)
+        // TV susar (askıya alındı): 3 ping aralığı sonra bağlantı kapanır; eski TV kalır.
+        try await waitUntil { server.connectedClients == 1 }
+        try await waitUntil { stale.value }
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(server.connectedClients, 1)
+        let (_, gone) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/ack?c=\(id)")!)
+        XCTAssertEqual((gone as? HTTPURLResponse)?.statusCode, 404)
+    }
+
     func testStreamsScreenTranslationsAndTheirClear() async throws {
         let server = SubtitleServer(port: 0)
         let port = try await server.start()
@@ -607,4 +689,12 @@ private final class LockedEvents: @unchecked Sendable {
     private var events: [SubtitleEvent] = []
     func append(_ event: SubtitleEvent) { lock.withLock { events.append(event) } }
     var all: [SubtitleEvent] { lock.withLock { events } }
+}
+
+private final class Locked<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: T
+    init(_ value: T) { stored = value }
+    var value: T { lock.lock(); defer { lock.unlock() }; return stored }
+    func set(_ value: T) { lock.lock(); stored = value; lock.unlock() }
 }

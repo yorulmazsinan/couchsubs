@@ -463,8 +463,8 @@ public class SubtitleServerTests
         await WaitUntil(() => server.ConnectedClients == 1);
         server.SendSubtitle("Kapıyı tut, evlat!", 4000);
         using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
-        var lines = await ReadLines(reader, "");
-        lines = await ReadLines(reader, "");
+        var lines = await ReadLines(reader, "event: subtitle");
+        lines.Add((await reader.ReadLineAsync())!);
         Assert.Contains(lines, l => l.Contains("Kapıyı tut, evlat!"));
     }
 
@@ -523,6 +523,58 @@ public class SubtitleServerTests
         Assert.Equal(new SubtitleStyle(58, 12, SubtitlePlacement.Cover, 90, false), style);
         var again = System.Text.Json.JsonSerializer.Deserialize<SubtitleStyle>(System.Text.Json.JsonSerializer.Serialize(style! with { Placement = SubtitlePlacement.Below }));
         Assert.Equal(SubtitlePlacement.Below, again!.Placement);
+    }
+
+    /// <summary>TV akışı <c>link</c> olayıyla kimliğini alır; alındı yalnız bağlı bağlantının kimliğine kabul edilir.</summary>
+    [Fact]
+    public async Task TvStreamGetsALinkIdThatAcksAccept()
+    {
+        using var server = new SubtitleServer(0);
+        var port = await server.StartAsync();
+        using var response = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
+        var lines = await ReadLines(reader, "event: link");
+        Assert.Equal("event: link", lines[^1]);
+        var data = await reader.ReadLineAsync();
+        var id = JsonDocument.Parse(data!["data: ".Length..]).RootElement.GetProperty("id").GetString()!;
+        Assert.Matches("^[A-Za-z0-9]{16}$", id);
+
+        using var known = await Http.GetAsync($"http://127.0.0.1:{port}/ack?c={id}");
+        Assert.Equal(HttpStatusCode.NoContent, known.StatusCode);
+        using var unknown = await Http.GetAsync($"http://127.0.0.1:{port}/ack?c=bilinmeyen0000000");
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        // OBS izleyicisi TV değildir: kimlik almaz.
+        using var obs = await Http.GetAsync($"http://127.0.0.1:{port}/events?viewer=obs", HttpCompletionOption.ResponseHeadersRead);
+        using var obsReader = new StreamReader(await obs.Content.ReadAsStreamAsync());
+        var obsLines = await ReadLines(obsReader, "event: ping");
+        Assert.DoesNotContain("event: link", obsLines);
+    }
+
+    /// <summary>Alındı gönderip susan TV (LG'de uygulama arka planda askıya alındı) kopmuş sayılır ve kapatılır; hiç alındı
+    /// göndermeyen eski TV uygulamasına dokunulmaz.</summary>
+    [Fact]
+    public async Task TvThatStopsAckingIsDroppedButOldTvStays()
+    {
+        using var server = new SubtitleServer(0, TimeSpan.FromMilliseconds(100));
+        var stale = 0;
+        server.TvStale += () => Interlocked.Increment(ref stale);
+        var port = await server.StartAsync();
+        using var acking = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        using var reader = new StreamReader(await acking.Content.ReadAsStreamAsync());
+        await ReadLines(reader, "event: link");
+        var id = JsonDocument.Parse((await reader.ReadLineAsync())!["data: ".Length..]).RootElement.GetProperty("id").GetString()!;
+        using var old = await Http.GetAsync($"http://127.0.0.1:{port}/events", HttpCompletionOption.ResponseHeadersRead);
+        await WaitUntil(() => server.ConnectedClients == 2);
+
+        using var ack = await Http.GetAsync($"http://127.0.0.1:{port}/ack?c={id}");
+        Assert.Equal(HttpStatusCode.NoContent, ack.StatusCode);
+        // Alındı kesildi: 3 ping süresi (300 ms) sonra bağlantı düşer.
+        await WaitUntil(() => server.ConnectedClients == 1);
+        Assert.Equal(1, Volatile.Read(ref stale));
+        using var again = await Http.GetAsync($"http://127.0.0.1:{port}/ack?c={id}");
+        Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
+        await Task.Delay(500);
+        Assert.Equal(1, server.ConnectedClients);
     }
 
     [Fact]

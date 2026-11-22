@@ -737,6 +737,11 @@ final class AppModel: ObservableObject {
     }
     /// TV uygulamasını kendiliğinden açmanın son denemesi neden olmadı (ana ekranda tek satır); açıldıysa nil.
     @Published private(set) var tvOpenProblem: TVOpenProblem?
+    /// TV bağlıyken bağlantı koptu ya da TV alındı göndermez oldu (`SubtitleServer.onTVStale`): TV durumu "Bağlı" yerine
+    /// "Yeniden bağlanılıyor…" der; TV yeniden bağlanınca, çeviri durunca ya da `SubtitleServer.reconnectingFor` sonra
+    /// "TV uygulaması bekleniyor"a döner (iPhone, Windows ve Android ile aynı).
+    @Published private(set) var tvReconnecting = false
+    private var tvReconnectTask: Task<Void, Never>?
     @Published var lastSource = ""
     @Published var lastTranslation = ""
     /// Görüntü bir dakikadır geliyor ama bu çeviride tek altyazı satırı gösterilmedi: "oyunun kendi altyazısını açın"
@@ -1212,13 +1217,18 @@ final class AppModel: ObservableObject {
             if let self, self.tvClients == 0, count > 0, self.isRunning {
                 self.usage.record(.tvConnected(count: count, brand: self.tv?.brand.rawValue ?? "unknown"))
             }
+            let lost = (self?.tvClients ?? 0) > 0 && count == 0
             self?.tvClients = count
+            if count > 0 { self?.endTVReconnecting() } else if lost { self?.tvLost(stale: false) }
             if count > 0 { self?.tvOpenProblem = nil }
             // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (bekçi listeye bakmadan açar).
             if count > 0, let tv = self?.tv, tv.brand == .samsung { SamsungAppKnowledge.shared.mark(host: tv.host) }
         }
         // Bu Mac'in daha önce kurduğu Samsung uygulaması da bilinen sayılır.
         if let tv, tv.brand == .samsung, installedAppVersion != nil { SamsungAppKnowledge.shared.mark(host: tv.host) }
+        server.onTVStale = { [weak self] in
+            Task { @MainActor [weak self] in self?.tvLost(stale: true) }
+        }
         server.sendsToTV = settings.output.showsOnTV
         server.speakerColors = settings.speakerColors
         server.setApart = settings.setTextApart
@@ -2287,6 +2297,36 @@ final class AppModel: ObservableObject {
 
     /// TV uygulamasını başlatır ve açık tutar; TV kapalıysa açıldığında bağlanır. Altyazı TV'ye gitmiyorsa ya da TV
     /// yoksa bir şey yapmaz.
+    /// TV durumunun yazısı: bağlı, yeniden bağlanılıyor ya da TV uygulaması bekleniyor.
+    var tvStatusText: String {
+        tvClients > 0 ? String(localized: "Connected")
+            : tvReconnecting ? String(localized: "Reconnecting…") : String(localized: "Waiting for the TV app")
+    }
+
+    /// TV bağlantısı koptu (`stale`: TV alındı göndermez oldu; uygulama askıya alınmış ya da arka planda). Çeviri sürüyor ve
+    /// altyazı TV'ye gidiyorsa TV durumu "Yeniden bağlanılıyor…" der. Alındı kesildiyse TV bekçisi yenilenir: TV'ye yeniden
+    /// bağlanıp uygulamayı öne getirir (LG'de geri çekilmiş bekçi de işe döner). TV sayfası kendi tarafında yeniden bağlanır.
+    private func tvLost(stale: Bool) {
+        guard isRunning, settings.output.showsOnTV, !demoMode, tvClients == 0 else { return }
+        tvReconnecting = true
+        tvReconnectTask?.cancel()
+        tvReconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: SubtitleServer.reconnectingFor)
+            guard !Task.isCancelled else { return }
+            self?.tvReconnecting = false
+        }
+        if stale {
+            SubtitleLog.write("TV alındı göndermiyor: TV uygulaması yeniden açılıyor")
+            if keeper == nil { startKeeper() } else { keeper?.reconnect() }
+        }
+    }
+
+    private func endTVReconnecting() {
+        tvReconnectTask?.cancel()
+        tvReconnectTask = nil
+        tvReconnecting = false
+    }
+
     private func startKeeper() {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
@@ -2955,6 +2995,7 @@ final class AppModel: ObservableObject {
             if closingTVApp { server.exitTVApp() }
         }
         tvOpenProblem = nil
+        endTVReconnecting()
         pipeline?.reset()
         if pipeline != nil { SubtitleLog.write("oturum bitti") }
         loggedMenu = false

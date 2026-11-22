@@ -163,6 +163,15 @@ class SubtitleServer(
         /** Bağlantı canlı tutma: yorum satırını EventSource görmez; adlı "ping" olayını TV görür. */
         const val PING_FRAME = ": ping\n\nevent: ping\ndata: {}\n\n"
 
+        /** Bu süre alındı gelmeyen (bir kez göndermiş) TV bağlantısı kopmuş sayılır: üç ping (bkz. [onTvStale]). */
+        fun ackTimeoutMs(pingIntervalMs: Long): Long = pingIntervalMs * 3
+
+        private val LINK_LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        private val random = java.security.SecureRandom()
+
+        /** `link` olayındaki bağlantı kimliği: tahmin edilemez, URL'de kaçışsız gider. */
+        fun makeLinkId(): String = String(CharArray(16) { LINK_LETTERS[random.nextInt(LINK_LETTERS.length)] })
+
         fun frame(name: String, json: Map<String, Any?>) = "event: $name\ndata: ${Json.write(json)}\n\n"
 
         fun boxJson(box: TextBox) = mapOf(
@@ -294,8 +303,13 @@ class SubtitleServer(
     }
 
     /** [legacy]: sürüm bildirmeyen (0.9.69'den eski) TV uygulaması; `clear` ona geciktirilerek gider ([legacyClearHoldMs]). */
-    private class Client(val socket: Socket, val viewer: Boolean, val legacy: Boolean = false) {
+    /**
+     * [link]: `link` olayıyla TV'ye bildirilen kimlik (izleyicide boş). [lastAckMs]: son alındının anı (monoton ms);
+     * 0 ise bu bağlantı hiç alındı göndermedi (eski TV uygulaması), alındı denetimi ona uygulanmaz.
+     */
+    private class Client(val socket: Socket, val viewer: Boolean, val legacy: Boolean = false, val link: String = "") {
         val output: OutputStream = socket.getOutputStream()
+        @Volatile var lastAckMs: Long = 0
     }
 
     private val lock = Any()
@@ -309,6 +323,20 @@ class SubtitleServer(
 
     /** Bağlı TV sayısı değişince çağrılır (sunucunun iş parçacığında). */
     @Volatile var onClientsChanged: ((Int) -> Unit)? = null
+
+    /**
+     * TV'nin alındısı (bağlantı denetimi; Mac/iPhone ve Windows ile aynı). Ping yalnız telefondan TV'ye gidiyordu; TV'nin
+     * onu gerçekten aldığı bilinmiyordu. LG uygulaması arka plana düşüp askıya alınınca (ya da Android TV uygulamayı
+     * dondurunca) TV'nin ağ katmanı soketi açık tutuyor, gönderim hatası hiç gelmiyordu: telefon saatlerce "Bağlı"
+     * gösteriyor, altyazı TV'ye ulaşmıyordu; ancak CouchSubs'tan çıkıp girince düzeliyordu. Akış açılınca `link` olayı
+     * bağlantının kimliğini (`id`) taşır; 0.9.76+ TV her ping'de (ve `link`'te) `GET /ack?c=<id>` gönderir. Bir kez alındı
+     * gönderen bağlantıdan [ackTimeoutMs] boyunca alındı gelmezse bağlantı kopmuş sayılıp kapatılır (TV sayısı düşer) ve
+     * bu çağrılır (ping iş parçacığında): çağıran "Yeniden bağlanılıyor" gösterip TV bekçisini yeniler. Hiç alındı
+     * göndermeyen eski TV uygulaması eskisi gibi kalır. Bilinmeyen kimliğe 404 döner: TV hemen yeniden bağlanır.
+     */
+    @Volatile var onTvStale: (() -> Unit)? = null
+    private val ackTimeoutMs = ackTimeoutMs(pingIntervalMs)
+    private fun monotonicMs(): Long = System.nanoTime() / 1_000_000
 
     /** Altyazı ve temizleme olayları gönderildiği anda buraya da verilir (telefon ekranındaki görünüm için). */
     @Volatile var onEvent: ((SubtitleEvent) -> Unit)? = null
@@ -348,7 +376,12 @@ class SubtitleServer(
         listener = socket
         thread(name = "CouchSubs SSE accept", isDaemon = true) { acceptLoop(socket) }
         pinger = Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "CouchSubs SSE ping").apply { isDaemon = true } }
-            .also { it.scheduleWithFixedDelay({ broadcast(PING_FRAME) }, pingIntervalMs, pingIntervalMs, TimeUnit.MILLISECONDS) }
+            .also {
+                it.scheduleWithFixedDelay({
+                    dropSilentTvs()
+                    broadcast(PING_FRAME)
+                }, pingIntervalMs, pingIntervalMs, TimeUnit.MILLISECONDS)
+            }
         return socket.localPort
     }
 
@@ -546,6 +579,15 @@ class SubtitleServer(
                     respondAndClose(socket, "200 OK", secondScreenPage, cors, "text/html; charset=utf-8")
                 method == "GET" && path.startsWith("/speech/") && synchronized(lock) { speechFiles.containsKey(path) } ->
                     respondAndClose(socket, "200 OK", synchronized(lock) { speechFiles[path] } ?: ByteArray(0), cors, "audio/wav")
+                // TV'nin alındısı (bkz. onTvStale). Bilinmeyen kimlik: telefonda bu bağlantı yok, TV yeniden bağlanmalı.
+                method == "GET" && path == "/ack" -> {
+                    val id = request.parameter("c") ?: ""
+                    val client = synchronized(lock) { clients.firstOrNull { !it.viewer && it.link.isNotEmpty() && it.link == id } }
+                    if (client != null) {
+                        client.lastAckMs = monotonicMs()
+                        respondAndClose(socket, "204 No Content", cors = cors)
+                    } else respondAndClose(socket, "404 Not Found", cors = cors)
+                }
                 method == "GET" && path == "/hello" -> respondAndClose(socket, "200 OK", helloBody(instanceId, connectedClients, sendsToTv && pairing.inSession), cors)
                 else -> respondAndClose(socket, "404 Not Found", cors = cors)
             }
@@ -585,12 +627,15 @@ class SubtitleServer(
             .append("Connection: keep-alive\r\n")
             .append(cors).append("\r\n")
             .append("retry: 2000\n\n")
-        val client = Client(socket, viewer, legacy)
+        val link = if (viewer) "" else makeLinkId()
+        val client = Client(socket, viewer, legacy, link)
         // Başlık, listeye girdikten sonra gelebilecek ilk olaydan önce yazılır (istemci kilidi tutulurken eklenir).
         val count = synchronized(client) {
             val count = synchronized(lock) {
                 if (accessKey != checkedKey) { closeQuietly(socket); return }
                 lastStyle?.let { head.append(styleFrame(it, setApart)) }
+                // Bağlantı kimliği stilden sonra (Mac/iPhone ve Windows ile aynı sıra; bkz. onTvStale).
+                if (!viewer) head.append("event: link\ndata: ").append(Json.write(mapOf("id" to link))).append("\n\n")
                 clients.add(client)
                 clients.count { !it.viewer }
             }
@@ -607,6 +652,18 @@ class SubtitleServer(
         } catch (error: IOException) {
         }
         remove(client)
+    }
+
+    /**
+     * Alındısı [ackTimeoutMs]'tan uzun süredir gelmeyen TV bağlantılarını kapatır ve [onTvStale]'i çağırır; kapattıysa
+     * true (her ping turunda).
+     */
+    internal fun dropSilentTvs(now: Long = monotonicMs()): Boolean {
+        val silent = synchronized(lock) { clients.filter { !it.viewer && it.lastAckMs != 0L && now - it.lastAckMs > ackTimeoutMs } }
+        if (silent.isEmpty()) return false
+        silent.forEach { remove(it) }
+        onTvStale?.invoke()
+        return true
     }
 
     private fun remove(client: Client) {

@@ -1,0 +1,1 @@
+0.9.76: TV uygulaması bilgisayara/telefona altyazıları aldığını bildiriyor; bağlantı sessizce koparsa CouchSubs "Bağlı" demeyi bırakıp kendiliğinden yeniden bağlanıyor, uzun oyunlarda altyazının TV'ye gelmemesi düzeldi.

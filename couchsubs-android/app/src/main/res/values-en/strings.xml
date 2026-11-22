@@ -726,6 +726,7 @@
     <string name="tv_open_not_opened">Couldn\'t open it automatically: the TV got the open command but didn\'t open CouchSubs. Open it on the TV with the remote.</string>
     <string name="tv_open_not_installed">Couldn\'t open it automatically: the TV didn\'t confirm that the CouchSubs TV app is installed, so no open command was sent. Install the TV app, then try again. If the TV shows “Unable to connect to Samsung server” (AS400), the TV can\'t reach Samsung\'s servers: check its internet connection and unplug it for 30 seconds.</string>
     <string name="tv_open_try">Try opening automatically</string>
+    <string name="tv_reconnecting">Lost the TV connection, reconnecting…</string>
     <string name="tv_open_wizard_note">Every time you start translating, CouchSubs tries to open the TV app by itself. If it doesn\'t open, open CouchSubs on the TV.</string>
     <string name="engine_local">Local model</string>
     <string name="local_ai_address">Server address</string>

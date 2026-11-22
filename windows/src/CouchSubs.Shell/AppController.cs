@@ -204,6 +204,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         server.LegacyClientConnected += OnLegacyClient;
         server.TvAppVersionReported += OnTvAppVersion;
         server.PairingRequested += OnPairingRequest;
+        server.TvStale += OnTvStale;
         server.SendsToTv = settings.Output.ShowsOnTv();
         server.SpeakerColors = settings.SpeakerColors;
         server.SetApart = settings.SetTextApart;
@@ -216,6 +217,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         server.LegacyClientConnected -= OnLegacyClient;
         server.TvAppVersionReported -= OnTvAppVersion;
         server.PairingRequested -= OnPairingRequest;
+        server.TvStale -= OnTvStale;
     }
 
     public event Action<SubtitlePairing.Ticket>? TvPairingRequested;
@@ -683,7 +685,42 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public StatusTone TvTone => !HasTv ? StatusTone.Idle : tvAppOutdated is not null ? StatusTone.Warning : TvToneFor(tvClients, isRunning);
     public string TvStatusText => !HasTv ? text["Not set up"]
         : tvAppOutdated is { } outdated ? text.Format("TV app is out of date (%@ → %@)", outdated.Installed, outdated.Bundled)
-        : tvClients > 0 ? text["Connected"] : text["Waiting for the TV app"];
+        : tvClients > 0 ? text["Connected"] : tvReconnecting ? text["Reconnecting…"] : text["Waiting for the TV app"];
+
+    /// <summary>
+    /// TV bağlantısı çeviri sürerken koptu (TV alındı göndermeyi bıraktı ya da bağlantı kapandı): TV durumu "Bağlı" ya da
+    /// "TV uygulaması bekleniyor" yerine "Yeniden bağlanılıyor…" der. TV bağlanınca, çeviri durunca ya da
+    /// <see cref="TvReconnectingFor"/> sonra kalkar (Mac, iPhone ve Android ile aynı).
+    /// </summary>
+    public bool TvReconnecting => tvReconnecting;
+    internal static readonly TimeSpan TvReconnectingFor = TimeSpan.FromSeconds(60);
+    private bool tvReconnecting;
+    private DateTime tvReconnectingSince;
+
+    private void SetTvReconnecting(bool value)
+    {
+        if (value) tvReconnectingSince = Clock();
+        Set(ref tvReconnecting, value, [nameof(TvStatusText)], nameof(TvReconnecting));
+    }
+
+    /// <summary>Süresi dolan "Yeniden bağlanılıyor" kalkar (bağlantı denetimi turlarında).</summary>
+    private void ExpireTvReconnecting()
+    {
+        if (tvReconnecting && (!isRunning || tvClients > 0 || Clock() - tvReconnectingSince >= TvReconnectingFor)) SetTvReconnecting(false);
+    }
+
+    /// <summary>
+    /// Sunucu alındı göndermeyen TV bağlantısını kapattı (LG'de uygulama arka planda askıya alındı, Wi-Fi koptu): bekçi
+    /// yenilenir (TV'ye yeniden bağlanır, geri çekilmesi sıfırlanır, uygulamayı öne getirir). Eskiden bilgisayar
+    /// "Bağlı" görüyor, bekçi uygulamayı açık sandığı için hiçbir şey yapmıyordu.
+    /// </summary>
+    private void OnTvStale() => post(() =>
+    {
+        if (!isRunning || !ShowsOnTv) return;
+        if (tvClients == 0) SetTvReconnecting(true);
+        if (keeper is null) StartKeeper();
+        else keeper.Reconnect();
+    });
     /// <summary>Eşleşmiş bir TV var.</summary>
     public bool HasTv => tv is not null && store.Load<string>(StoreKeys.TvKey) is not null;
     /// <summary>Ana ekranda TV durumu gösterilir mi (altyazı yalnız bilgisayar ekranındaysa gösterilmez).</summary>
@@ -2422,6 +2459,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         StopDubber();
         if (isRunning) sleep.End();
         IsRunning = false;
+        SetTvReconnecting(false);
         SessionState = SessionState.Disconnected(DisconnectKind.Stopped);
         reconnectOffer.Reset();
         sessionIsConsole = false;
@@ -3839,7 +3877,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // TV uygulaması bağlandı: bu TV'de kurulu olduğu artık biliniyor (liste "yok" demiş olsa da).
         if (count > 0 && tv is { Brand: TvBrand.Samsung } connected) SamsungAppKnowledge.Mark(connected.Host);
         if (tvClients == 0 && count > 0 && isRunning) services.Usage?.Record(UsageStats.Event.TvConnected(count, UsageBrand(tv?.Brand)));
+        // Çeviri sürerken TV bağlantısı düştü: TV kendiliğinden yeniden bağlanana kadar "Yeniden bağlanılıyor…".
+        var lost = tvClients > 0 && count == 0 && isRunning && ShowsOnTv;
         TvClients = count;
+        if (lost) SetTvReconnecting(true);
+        else if (count > 0 && tvReconnecting) SetTvReconnecting(false);
         // Eski uygulama TV'den kalktı (silindi, kapandı): "TV uygulamasını güncelle" bellekte kalmıyor (Mac ile aynı).
         if (count == 0) TvAppOutdated = null;
         if (count > 0) OpenProblem = null;
@@ -3907,6 +3949,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         UpdateConnectingHint();
         UpdateTroubleClocks();
+        ExpireTvReconnecting();
         UpdateReconnectOffer();
         if (!isRunning || services.Firewall is not { } firewall) return;
         if (ps5TroubleSince is null && tvWaitingSince is null)

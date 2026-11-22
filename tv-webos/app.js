@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.75';
+  var APP_VERSION = '0.9.76';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -2026,9 +2026,16 @@
       noteFailure();
     };
     // Bilgisayar 15 sn'de bir "ping" gönderir; gelmezse bağlantı yarı kopmuştur (bkz. watchConnection).
+    linkId = null;
     eventSource.addEventListener('ping', function () {
       lastActivity = Date.now();
       pingSeen = true;
+      sendAck();
+    });
+    // Yeni bilgisayar/telefon akışın kimliğini bildirir; TV her ping'de alındı gönderir (bkz. sendAck).
+    onEvent('link', function (data) {
+      linkId = /^[A-Za-z0-9]{1,64}$/.test(data.id || '') ? data.id : null;
+      sendAck();
     });
     onEvent('subtitle', function (data) {
       diag.subtitles++;
@@ -2075,6 +2082,29 @@
   }
 
   setInterval(watchConnection, 10000);
+
+  // --- Alındı ---
+  // Ping yalnız bilgisayardan/telefondan TV'ye gidiyordu: TV uygulaması arka plana düşüp askıya alınınca (LG, Android TV)
+  // TV'nin ağ katmanı bağlantıyı açık tutuyor, telefon/bilgisayar saatlerce "Bağlı" gösteriyor ama altyazı ekrana
+  // gelmiyordu (LG + iPhone, 20-25 dk sonra; CouchSubs'tan çıkıp girince düzeliyordu). Akış `link` olayıyla kimliğini
+  // bildirirse TV her ping'de `/ack?c=<kimlik>` gönderir; alındı kesilince bilgisayar/telefon bağlantıyı kapatıp
+  // "Yeniden bağlanılıyor" der, TV uygulamasını yeniden öne getirir. 404: bilgisayar bu akışı artık tanımıyor (yeniden
+  // açıldı, bağlantıyı kopmuş saydı): TV beklemeden yeniden bağlanır. `link` göndermeyen eski sürümlere alındı gitmez.
+  var linkId = null;
+
+  function sendAck() {
+    if (!linkId || !server || !eventSource) return;
+    var id = linkId, source = eventSource, xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      if (xhr.status !== 404 || id !== linkId || source !== eventSource || pausedByHidden) return;
+      linkId = null;
+      diag.drops++;
+      renderDiag();
+      connect(server);
+    };
+    try { xhr.open('GET', authenticatedUrl(server, '/ack?c=' + encodeURIComponent(id))); xhr.timeout = 4000; xhr.send(); }
+    catch (e) {}
+  }
 
   // --- Türkçe dublaj ---
   // Bilgisayar her cümleyi seslendirip adresini gönderir; TV oyunun sesiyle birlikte çalar. Bilgisayar sıradakini

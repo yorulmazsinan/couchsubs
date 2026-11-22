@@ -22,6 +22,11 @@ data class LiveStatus(
     /** Oturum yeniden denemeyi bıraktı: "Yeniden bağlan" hemen görünür. */
     val gaveUp: Boolean = false,
     val connectedTvs: Int = 0,
+    /**
+     * TV bağlantısı çeviri sürerken koptu ya da TV alındı göndermeyi bıraktı (SubtitleServer.onTvStale); TV yeniden
+     * bağlanana, çeviri durana ya da TranslationService.TV_RECONNECT_MS dolana kadar "yeniden bağlanılıyor" gösterilir.
+     */
+    val tvReconnecting: Boolean = false,
     /** TV uygulamasını kendiliğinden açmanın son denemesi neden olmadı (ana ekranda tek satır); açıldıysa null. */
     val tvOpenProblem: com.couchsubs.mobile.tv.TvOpenProblem? = null,
     /** Son gösterilen çeviriler, yeniden eskiye. */

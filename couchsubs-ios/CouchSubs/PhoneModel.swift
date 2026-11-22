@@ -93,6 +93,11 @@ final class PhoneModel: ObservableObject {
     /// Bağlantının ne zamandan beri gittiği: "Yeniden bağlan" düğmesi için (bkz. `offersReconnect`).
     @Published private(set) var reconnectOffer = ReconnectOffer()
     @Published private(set) var tvClients = 0
+    /// TV bağlıyken bağlantı koptu ya da TV alındı göndermez oldu (`SubtitleServer.onTVStale`): durum satırı "Bağlı"
+    /// yerine "Yeniden bağlanılıyor…" der; TV yeniden bağlanınca, çeviri durunca ya da `SubtitleServer.reconnectingFor`
+    /// sonra "TV uygulaması bekleniyor"a döner (Mac, Windows ve Android ile aynı).
+    @Published private(set) var tvReconnecting = false
+    private var tvReconnectTask: Task<Void, Never>?
     /// Çeviri bir süredir sürüyor ama TV uygulaması bağlanmadı: TV kartının altında ne yapılacağı söylenir.
     @Published private(set) var tvWaitingLong = false
     /// TV uygulamasını kendiliğinden açmanın son denemesi neden olmadı (TV kartının altında tek satır); açıldıysa nil.
@@ -519,7 +524,9 @@ final class PhoneModel: ObservableObject {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     let connected = self.tvClients == 0 && count > 0
+                    let lost = self.tvClients > 0 && count == 0
                     self.tvClients = count
+                    if count > 0 { self.endTVReconnecting() } else if lost { self.tvLost(stale: false) }
                     if count > 0 {
                         self.tvWaitingLong = false
                         self.tvOpenProblem = nil
@@ -533,6 +540,9 @@ final class PhoneModel: ObservableObject {
         }
         server.onListenerFailed = { [weak self] reason in
             Task { @MainActor [weak self] in self?.serverDropped(reason) }
+        }
+        server.onTVStale = { [weak self] in
+            Task { @MainActor [weak self] in self?.tvLost(stale: true) }
         }
         server.sendsToTV = settings.output.showsOnTV
         server.speakerColors = settings.speakerColors
@@ -825,6 +835,7 @@ final class PhoneModel: ObservableObject {
         tvWaitTask = nil
         tvWaitingLong = false
         tvOpenProblem = nil
+        endTVReconnecting()
         SessionHealth.saveMark(nil, defaults)
         runningSince = nil
         packInUse = nil
@@ -970,6 +981,31 @@ final class PhoneModel: ObservableObject {
     private func openResult(_ problem: TVOpenProblem?, brand: TVBrand) {
         guard isRunning, tvClients == 0 else { tvOpenProblem = nil; return }
         tvOpenProblem = TVOpenProblem.shown(problem, brand: brand, hasKey: store.load(String.self, for: StoreKey.tvKey) != nil)
+    }
+
+    /// TV bağlantısı koptu (`stale`: TV alındı göndermez oldu; uygulama askıya alınmış ya da arka planda). Çeviri sürüyor ve
+    /// altyazı TV'ye gidiyorsa durum satırı "Yeniden bağlanılıyor…" der. Alındı kesildiyse TV bekçisi yenilenir: TV'ye
+    /// yeniden bağlanıp uygulamayı öne getirir (LG'de geri çekilmiş bekçi de işe döner). TV sayfası kendi tarafında
+    /// yeniden bağlanır.
+    private func tvLost(stale: Bool) {
+        guard isRunning, settings.output.showsOnTV, !demoMode, tvClients == 0 else { return }
+        tvReconnecting = true
+        tvReconnectTask?.cancel()
+        tvReconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: SubtitleServer.reconnectingFor)
+            guard !Task.isCancelled else { return }
+            self?.tvReconnecting = false
+        }
+        if stale {
+            SubtitleLog.write("TV alındı göndermiyor: TV uygulaması yeniden açılıyor")
+            if keeper == nil { startKeeper() } else { keeper?.reconnect() }
+        }
+    }
+
+    private func endTVReconnecting() {
+        tvReconnectTask?.cancel()
+        tvReconnectTask = nil
+        tvReconnecting = false
     }
 
     /// Ana ekrandaki "Otomatik açmayı dene": TV uygulaması hemen yeniden açılmaya çalışılır (bekçi beklemeden dener).
@@ -1881,7 +1917,8 @@ final class PhoneModel: ObservableObject {
     }
 
     var tvStatusText: String {
-        tvClients > 0 ? String(localized: "Connected") : String(localized: "Waiting for the TV app")
+        tvClients > 0 ? String(localized: "Connected")
+            : tvReconnecting ? String(localized: "Reconnecting…") : String(localized: "Waiting for the TV app")
     }
 
     // MARK: - TV uygulamasının sürümü

@@ -1,0 +1,1 @@
+0.9.76: The TV app now confirms to your computer or phone that subtitles arrive; if the connection silently drops, CouchSubs stops showing "Connected" and reconnects by itself, so subtitles no longer stop reaching the TV during long sessions.

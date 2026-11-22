@@ -157,6 +157,8 @@ public final class SubtitleServer: @unchecked Sendable {
             clients.removeAll()
             viewers.removeAll()
             legacyClients.removeAll()
+            linkIds.removeAll()
+            lastAck.removeAll()
             notifyClientsChanged()
         }
     }
@@ -198,6 +200,29 @@ public final class SubtitleServer: @unchecked Sendable {
     static let pingFrame = ": ping\n\nevent: ping\ndata: {}\n\n"
     private let pingInterval: TimeInterval
 
+    /// TV'nin alındısı (bağlantı denetimi): ping yalnız bilgisayardan TV'ye gidiyordu; TV'nin onu gerçekten aldığı
+    /// bilinmiyordu. LG uygulaması arka plana düşüp askıya alınınca (ya da Android TV uygulamayı dondurunca) TV'nin ağ
+    /// katmanı soketi açık tutuyor, TCP canlılık denetimi ve gönderim hatası hiç gelmiyordu: telefon/bilgisayar saatlerce
+    /// "Bağlı" gösteriyor, altyazı TV'ye ulaşmıyor, LG bekçisi geri çekildiyse uygulama bir daha öne gelmiyordu; kullanıcı
+    /// ancak CouchSubs'tan çıkıp girince düzeliyordu (LG + iPhone, 20-25 dk sonra). Akış açılınca `link` olayı bağlantının
+    /// kimliğini (`id`) taşır; 0.9.76+ TV her ping'de (ve `link`'te) `GET /ack?c=<id>` gönderir. Bir kez alındı gönderen
+    /// bağlantıdan `ackTimeout` boyunca alındı gelmezse bağlantı kopmuş sayılır ve kapatılır (TV sayısı düşer, "Bağlı"
+    /// kalkar), `onTVStale` çağrılır; TV kendi tarafında yeniden bağlanır, bekçi uygulamayı yeniden açar. Hiç alındı
+    /// göndermeyen eski TV uygulaması eskisi gibi kalır (olayı tanımaz). Bilinmeyen kimliğe 404 döner: TV bağlantısının
+    /// sunucuda artık olmadığını anlayıp hemen yeniden bağlanır. Windows ve Android ile aynı.
+    private let ackTimeout: TimeInterval
+    private var linkIds: [String: ObjectIdentifier] = [:]
+    private var lastAck: [ObjectIdentifier: Date] = [:]
+    static func ackTimeout(pingInterval: TimeInterval) -> TimeInterval { pingInterval * 3 }
+
+    /// Alındısı kesilen TV bağlantısı kapatıldı (ana iş parçacığında). Çağıran "Yeniden bağlanılıyor" gösterip TV
+    /// bekçisini yeniler (uygulama arka plandaysa öne getirilir).
+    public var onTVStale: (@Sendable () -> Void)?
+
+    /// TV bağlantısı kopunca uygulamanın "Yeniden bağlanılıyor…" dediği en uzun süre; sonra "TV uygulaması bekleniyor"a
+    /// döner (Windows ve Android ile aynı).
+    public static let reconnectingFor: Duration = .seconds(60)
+
     /// Bu kurulumun kalıcı kimliği (`/hello` yanıtında). Aynı ağda iki CouchSubs varken TV uygulaması kendi bilgisayarını
     /// ya da telefonunu adres değişse de bununla tanır; eskiden ağda ilk bulduğuna bağlanıyordu (GitHub #425).
     public let instanceId: String
@@ -208,6 +233,7 @@ public final class SubtitleServer: @unchecked Sendable {
         requestedPort = port
         self.pairing = pairing
         self.pingInterval = pingInterval
+        self.ackTimeout = Self.ackTimeout(pingInterval: pingInterval)
         self.key = key ?? SubtitleAccess.createKey()
         self.allowLegacy = allowLegacy
         self.instanceId = instanceId
@@ -397,6 +423,8 @@ public final class SubtitleServer: @unchecked Sendable {
             clients.removeAll()
             viewers.removeAll()
             legacyClients.removeAll()
+            linkIds.removeAll()
+            lastAck.removeAll()
         }
     }
 
@@ -474,10 +502,7 @@ public final class SubtitleServer: @unchecked Sendable {
             for (id, connection) in self.clients where !self.viewers.contains(id) {
                 group.enter()
                 connection.send(content: data, completion: .contentProcessed { [weak self] error in
-                    if let self, error != nil {
-                        connection.cancel()
-                        if self.clients.removeValue(forKey: id) != nil { self.notifyClientsChanged() }
-                    }
+                    if let self, error != nil { self.drop(connection, id: id) }
                     group.leave()
                 })
             }
@@ -684,6 +709,14 @@ public final class SubtitleServer: @unchecked Sendable {
                 if let handler = onTVAppVersion { DispatchQueue.main.async { handler(version) } }
             }
             openStream(connection, viewer: obs, legacy: unreported, cors: cors)
+        } else if method == "GET" && path == "/ack" {
+            // TV'nin alındısı (bkz. ackTimeout). Bilinmeyen kimlik: sunucuda bu bağlantı yok, TV yeniden bağlanmalı.
+            if let id = linkIds[request.parameter("c") ?? ""], clients[id] != nil {
+                lastAck[id] = Date()
+                respondAndClose(connection, status: "204 No Content", data: Data(), type: nil, cors: cors)
+            } else {
+                respondAndClose(connection, status: "404 Not Found", cors: cors)
+            }
         } else if method == "GET" && path == "/obs" {
             respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == SecondScreen.path {
@@ -726,9 +759,15 @@ public final class SubtitleServer: @unchecked Sendable {
             json["setApart"] = apart
             head += Self.frame(event: "style", json: json)
         }
+        // Bağlantının kimliği (bkz. ackTimeout); stilden sonra: ilk olay eskisi gibi stil.
+        let id = ObjectIdentifier(connection)
+        if !viewer {
+            let link = Self.makeLinkId()
+            linkIds[link] = id
+            head += Self.frame(event: "link", json: ["id": link])
+        }
         connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
 
-        let id = ObjectIdentifier(connection)
         clients[id] = connection
         if viewer { viewers.insert(id) }
         if legacy { legacyClients.insert(id) }
@@ -741,14 +780,41 @@ public final class SubtitleServer: @unchecked Sendable {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] _, _, isComplete, error in
             guard let self else { return }
             if isComplete || error != nil {
-                connection.cancel()
-                self.viewers.remove(id)
-                self.legacyClients.remove(id)
-                if self.clients.removeValue(forKey: id) != nil { self.notifyClientsChanged() }
+                self.drop(connection, id: id)
             } else {
                 self.watchForClose(connection, id: id)
             }
         }
+    }
+
+    /// Bağlantıyı kapatır ve listelerden çıkarır (sunucunun kuyruğunda).
+    private func drop(_ connection: NWConnection, id: ObjectIdentifier) {
+        connection.cancel()
+        viewers.remove(id)
+        legacyClients.remove(id)
+        lastAck[id] = nil
+        linkIds = linkIds.filter { $0.value != id }
+        if clients.removeValue(forKey: id) != nil { notifyClientsChanged() }
+    }
+
+    /// Alındısı `ackTimeout`'tan uzun süredir gelmeyen TV bağlantılarını kapatır; kapattıysa true (her ping turunda,
+    /// sunucunun kuyruğunda).
+    @discardableResult
+    func dropSilentTVs(now: Date = Date()) -> Bool {
+        let silent = lastAck.filter { now.timeIntervalSince($0.value) > ackTimeout }.map(\.key)
+        for id in silent {
+            if let connection = clients[id] { drop(connection, id: id) } else { lastAck[id] = nil }
+        }
+        guard !silent.isEmpty else { return false }
+        SubtitleLog.write("TV \(Int(ackTimeout)) sn alındı göndermedi: bağlantı kopmuş sayıldı, kapatıldı")
+        if let handler = onTVStale { DispatchQueue.main.async { handler() } }
+        return true
+    }
+
+    /// `link` olayındaki bağlantı kimliği: tahmin edilemez, URL'de kaçışsız gider.
+    static func makeLinkId() -> String {
+        let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        return String((0..<16).map { _ in letters.randomElement()! })
     }
 
     private func notifyClientsChanged() {
@@ -792,10 +858,7 @@ public final class SubtitleServer: @unchecked Sendable {
             && (only?.contains(id) ?? true) {
             connection.send(content: data, completion: .contentProcessed { [weak self] error in
                 guard let self, error != nil else { return }
-                connection.cancel()
-                self.viewers.remove(id)
-                self.legacyClients.remove(id)
-                if self.clients.removeValue(forKey: id) != nil { self.notifyClientsChanged() }
+                self.drop(connection, id: id)
             })
         }
     }
@@ -803,7 +866,11 @@ public final class SubtitleServer: @unchecked Sendable {
     private func startPing() {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + pingInterval, repeating: pingInterval)
-        timer.setEventHandler { [weak self] in self?.sendToAll(Data(Self.pingFrame.utf8)) }
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.dropSilentTVs()
+            self.sendToAll(Data(Self.pingFrame.utf8))
+        }
         timer.resume()
         pingTimer = timer
     }

@@ -327,7 +327,7 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         // TV uygulaması bağlı değil: CouchSubs TV'de nerede bulunur (markaya göre), otomatik açma neden olmadı ve
         // "Otomatik açmayı dene" (Windows, Mac ve iPhone ile aynı).
         if (!status.demo && Services.settings.target.showsOnTv && status.connectedTvs == 0)
-            Services.settings.installedTv?.let { tv -> TvOpenCard(tv.brand, status.tvOpenProblem) { onTvInstall(tv) } }
+            Services.settings.installedTv?.let { tv -> TvOpenCard(tv.brand, status.tvOpenProblem, status.tvReconnecting) { onTvInstall(tv) } }
         val current = status.recent.firstOrNull()
         // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231, MainAccountTip).
         if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,
@@ -391,8 +391,12 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
  * ("ilk başta olmadı, TV'den de uygulamayı açmak lazımmış", 21 Kas). Düğme açma döngüsünü beklemeden yeniden denetir.
  */
 @Composable
-private fun TvOpenCard(brand: com.couchsubs.mobile.tv.TvBrand, problem: com.couchsubs.mobile.tv.TvOpenProblem?, onInstall: () -> Unit) {
+private fun TvOpenCard(brand: com.couchsubs.mobile.tv.TvBrand, problem: com.couchsubs.mobile.tv.TvOpenProblem?, reconnecting: Boolean,
+                       onInstall: () -> Unit) {
     Tile(Modifier.fillMaxWidth()) {
+        // TV bağlantısı koptu ya da TV alındı göndermeyi bıraktı: "Bağlı" yerine "yeniden bağlanılıyor"; bekçi uygulamayı
+        // kendisi yeniden açar, 60 sn içinde bağlanmazsa yalnız "TV'de açın" kalır (Mac/iPhone/Windows ile aynı).
+        if (reconnecting) Text(stringResource(R.string.tv_reconnecting), style = Tokens.Type.body, color = Tokens.Color.warning)
         Text(stringResource(com.couchsubs.mobile.tv.TvOpenProblem.openOnTv(brand)), style = Tokens.Type.body, color = Tokens.Color.text)
         com.couchsubs.mobile.tv.TvOpenProblem.reason(problem)?.let {
             Text(stringResource(it), style = Tokens.Type.caption, color = Tokens.Color.warning)

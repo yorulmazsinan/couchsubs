@@ -111,6 +111,93 @@ class SubtitleServerTest {
         }
     }
 
+    private fun get(port: Int, path: String): String = Socket("127.0.0.1", port).use { socket ->
+        socket.soTimeout = 5000
+        socket.getOutputStream().write("GET $path HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray())
+        socket.getInputStream().readBytes().toString(Charsets.UTF_8)
+    }
+
+    /** TV akışını açar, `link` olayının kimliğini döner (soket açık kalır). */
+    private fun openTv(port: Int, sockets: MutableList<Socket>): String {
+        val socket = Socket("127.0.0.1", port)
+        sockets.add(socket)
+        socket.soTimeout = 5000
+        socket.getOutputStream().write("GET /events?v=0.9.76 HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray())
+        val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
+        while (reader.readLine() != "event: link") Unit
+        val data = reader.readLine()
+        assertTrue(data, data.matches(Regex("data: \\{\"id\":\"[A-Za-z0-9]{16}\"\\}")))
+        return data.substringAfter("\"id\":\"").substringBefore('"')
+    }
+
+    private fun waitFor(ms: Long = 3000, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + ms
+        while (!condition()) {
+            if (System.currentTimeMillis() > deadline) return false
+            Thread.sleep(10)
+        }
+        return true
+    }
+
+    /** TV akışı `link` ile kimliğini alır; `/ack` bilinen kimliğe 204, bilinmeyene 404 (Mac/iPhone ve Windows ile aynı). */
+    @Test
+    fun tvStreamCarriesALinkIdThatAcksAccept() {
+        val server = SubtitleServer(0)
+        val port = server.start()
+        val sockets = mutableListOf<Socket>()
+        try {
+            val id = openTv(port, sockets)
+            assertTrue(waitFor { server.connectedClients == 1 })
+            assertTrue(get(port, "/ack?c=$id").startsWith("HTTP/1.1 204 No Content"))
+            assertTrue(get(port, "/ack?c=bilinmeyen").startsWith("HTTP/1.1 404 Not Found"))
+            assertTrue(get(port, "/ack").startsWith("HTTP/1.1 404 Not Found"))
+            // İzleyici (OBS) kimlik almaz.
+            Socket("127.0.0.1", port).use { socket ->
+                socket.soTimeout = 1000
+                socket.getOutputStream().write("GET /events?viewer=obs HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray())
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
+                while (reader.readLine() != "retry: 2000") Unit
+                server.clear()
+                val lines = mutableListOf<String>()
+                while (true) { val line = reader.readLine() ?: break; lines.add(line); if (line == "event: clear") break }
+                assertFalse(lines.contains("event: link"))
+            }
+        } finally {
+            sockets.forEach { it.close() }
+            server.stop()
+        }
+    }
+
+    /**
+     * Alındı gönderip susan TV (uygulama arka planda askıda, bağlantı yarı açık) üç ping sonra kopmuş sayılır: bağlantı
+     * kapanır, TV sayısı düşer, onTvStale çağrılır. Hiç alındı göndermeyen eski TV uygulaması bağlı kalır.
+     */
+    @Test
+    fun silentTvThatAckedIsDroppedButOldTvStays() {
+        val server = SubtitleServer(0, pingIntervalMs = 100)
+        val stale = java.util.concurrent.atomic.AtomicInteger()
+        server.onTvStale = { stale.incrementAndGet() }
+        val port = server.start()
+        val sockets = mutableListOf<Socket>()
+        try {
+            val acked = openTv(port, sockets)
+            openTv(port, sockets)
+            assertTrue(waitFor { server.connectedClients == 2 })
+            assertTrue(get(port, "/ack?c=$acked").startsWith("HTTP/1.1 204"))
+            assertTrue("susan TV düşmeli", waitFor { server.connectedClients == 1 })
+            assertTrue(waitFor { stale.get() == 1 })
+            // Düşen bağlantının kimliği artık bilinmiyor: TV beklemeden yeniden bağlanır.
+            assertTrue(get(port, "/ack?c=$acked").startsWith("HTTP/1.1 404"))
+            Thread.sleep(500)
+            assertEquals(1, server.connectedClients)
+            assertEquals(1, stale.get())
+            assertEquals(300L, SubtitleServer.ackTimeoutMs(100))
+        } finally {
+            sockets.forEach { it.close() }
+            server.stop()
+        }
+    }
+
     /**
      * Eski TV uygulaması (sürüm bildirmeyen; 0.9.7'den önceki sürümler `clear` gelir gelmez satırı kaldırır): `clear` ona
      * satırın en az görünme süresi dolunca gider, yeni TV'ye hemen. Arada yeni satır gelirse eski `clear` hiç gitmez

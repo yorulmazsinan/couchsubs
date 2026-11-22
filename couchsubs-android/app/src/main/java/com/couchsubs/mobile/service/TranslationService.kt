@@ -88,6 +88,8 @@ class TranslationService : Service() {
         private const val MAX_READS_PER_SECOND = 5
         /** PS5'e çalışan oyunun sorulma aralığı (ortak havuz). */
         private const val GAME_PROBE_MS = 2 * 60 * 1000L
+        /** TV bağlantısı koptuktan sonra en çok bu kadar "yeniden bağlanılıyor" gösterilir (Mac/iPhone/Windows ile aynı). */
+        const val TV_RECONNECT_MS = 60_000L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, TranslationService::class.java))
@@ -378,6 +380,17 @@ class TranslationService : Service() {
         } }, "CouchSubs TV launch").apply { isDaemon = true }.start()
     }
     private lateinit var settings: AppSettings
+    @Volatile private var tvReconnectTimer: java.util.concurrent.ScheduledFuture<*>? = null
+
+    /** "Yeniden bağlanılıyor": TV bağlanınca ya da [TV_RECONNECT_MS] dolunca kalkar (sonra "TV'de açın" kartı kalır). */
+    private fun markTvReconnecting() {
+        if (LiveState.status.value.connectedTvs > 0) return
+        LiveState.update { it.copy(tvReconnecting = true) }
+        tvReconnectTimer?.cancel(false)
+        tvReconnectTimer = try {
+            background.schedule({ LiveState.update { it.copy(tvReconnecting = false) } }, TV_RECONNECT_MS, TimeUnit.MILLISECONDS)
+        } catch (_: java.util.concurrent.RejectedExecutionException) { null }
+    }
     @Volatile private var session: FrameSource? = null
     /** Konsol oturumunu yeniden kuran üretici ("Yeniden bağlan"); her yeni oturum [sourceGeneration]'ı artırır. */
     @Volatile private var sourceFactory: (() -> FrameSource)? = null
@@ -663,9 +676,20 @@ class TranslationService : Service() {
         subtitleServer.setApart = settings.setTextApart
         // Konuşan renkleri oturum boyunca sabittir; yeni oturum yeni defterle başlar.
         com.couchsubs.mobile.core.SpeakerColors.session.reset()
+        // TV alındı göndermeyi bıraktı (uygulama arka planda askıda, bağlantı yarı açık): "yeniden bağlanılıyor" gösterilir ve
+        // TV bekçisi beklemeden uygulamayı yeniden açar ("Otomatik açmayı dene" ile aynı yol; LG bekçisi uygulama öne gelince
+        // geri çekilmeyi de bırakır, Android TV bekçisi açma sınırını sıfırlar).
+        subtitleServer.onTvStale = {
+            Log.i(TAG, "TV alındı göndermedi: bağlantı kopmuş sayıldı, yeniden bağlanılıyor")
+            com.couchsubs.mobile.tv.TvOpenRetry.request()
+            markTvReconnecting()
+        }
         subtitleServer.onClientsChanged = { count ->
             val before = LiveState.status.value.connectedTvs
-            LiveState.update { it.copy(connectedTvs = count, tvOpenProblem = if (count > 0) null else it.tvOpenProblem) }
+            LiveState.update { it.copy(connectedTvs = count, tvOpenProblem = if (count > 0) null else it.tvOpenProblem,
+                tvReconnecting = if (count > 0) false else it.tvReconnecting) }
+            if (count > 0) tvReconnectTimer?.cancel(false)
+            else if (before > 0 && LiveState.status.value.running && settings.target.showsOnTv) markTvReconnecting()
             if (before == 0 && count > 0) Telemetry.event(Telemetry.TV_CONNECTED, "count" to count)
             // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (liste "yok" demiş olsa da).
             if (count > 0) settings.installedTv?.takeIf { it.brand == com.couchsubs.mobile.tv.TvBrand.SAMSUNG }
@@ -1557,7 +1581,8 @@ class TranslationService : Service() {
         wakeLock?.takeIf { it.isHeld }?.release()
         wifiLocks.forEach { lock -> runCatching { if (lock.isHeld) lock.release() } }
         wifiLocks = emptyList()
-        LiveState.update { it.copy(running = false, phase = "", streaming = false, framesSince = null, subtitleOffTip = false, tvOpenProblem = null, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
+        tvReconnectTimer?.cancel(false)
+        LiveState.update { it.copy(running = false, phase = "", streaming = false, framesSince = null, subtitleOffTip = false, tvOpenProblem = null, tvReconnecting = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
         super.onDestroy()
     }
 }

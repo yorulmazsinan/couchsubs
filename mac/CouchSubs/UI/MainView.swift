@@ -292,7 +292,7 @@ private struct TVStatusTile: View {
                 }
             } else if model.canReinstallTVApp {
                 // TV uygulaması bağlanmıyor (ör. TV'den kaldırıldı): yeniden kurulum burada başlar, kart altta açılır.
-                StatusTile(symbol: "tv", title: "TV", value: String(localized: "Waiting for the TV app"),
+                StatusTile(symbol: "tv", title: "TV", value: model.tvStatusText,
                            tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
                     Button("Reinstall the TV app") { Task { await model.updateTVApp() } }.buttonStyle(.secondary)
                         .disabled(model.tvAppUpdating && model.tvApp == .working)
@@ -300,13 +300,13 @@ private struct TVStatusTile: View {
                 }
             } else if model.canReconnectTV {
                 // TV uygulaması bağlı değil (LG): TV adımı açılır; başka TV seçilir ya da kurulum adımları yeniden izlenir.
-                StatusTile(symbol: "tv", title: "TV", value: String(localized: "Waiting for the TV app"),
+                StatusTile(symbol: "tv", title: "TV", value: model.tvStatusText,
                            tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
                     Button("Connect a TV") { model.step = .tv }.buttonStyle(.secondary)
                 }
             } else {
                 StatusTile(symbol: "tv", title: "TV",
-                           value: model.tvClients > 0 ? String(localized: "Connected") : String(localized: "Waiting for the TV app"),
+                           value: model.tvStatusText,
                            tone: AppModel.tvTone(clients: model.tvClients, running: model.isRunning)) {
                     changeTV
                 }

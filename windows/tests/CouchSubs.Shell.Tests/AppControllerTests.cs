@@ -1718,6 +1718,38 @@ public class AppControllerRunTests
         await reading.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
+    /// Çeviri sürerken TV bağlantısı düşünce TV durumu "Yeniden bağlanılıyor…" der; TV bağlanınca ya da 60 sn sonra kalkar.
+    [Fact]
+    public async Task LostTvShowsReconnectingUntilItReturnsOrTimesOut()
+    {
+        var (controller, _, _) = Ready();
+        var now = DateTime.UtcNow;
+        controller.Clock = () => now;
+        await controller.StartAsync();
+        using var http = new HttpClient();
+        var first = await http.GetAsync($"http://127.0.0.1:{controller.ServerPort}/events", HttpCompletionOption.ResponseHeadersRead);
+        for (var i = 0; i < 200 && controller.TvClients == 0; i++) await Task.Delay(10);
+        Assert.Equal(1, controller.TvClients);
+        Assert.False(controller.TvReconnecting);
+
+        first.Dispose();
+        for (var i = 0; i < 300 && controller.TvClients > 0; i++) await Task.Delay(10);
+        Assert.True(controller.TvReconnecting);
+        if (controller.HasTv) Assert.Equal("Reconnecting…", controller.TvStatusText);
+
+        using var second = await http.GetAsync($"http://127.0.0.1:{controller.ServerPort}/events", HttpCompletionOption.ResponseHeadersRead);
+        for (var i = 0; i < 200 && controller.TvClients == 0; i++) await Task.Delay(10);
+        Assert.False(controller.TvReconnecting);
+        second.Dispose();
+        for (var i = 0; i < 300 && controller.TvClients > 0; i++) await Task.Delay(10);
+        Assert.True(controller.TvReconnecting);
+
+        now += TimeSpan.FromSeconds(61);
+        await controller.CheckConnectionsAsync();
+        Assert.False(controller.TvReconnecting);
+        controller.Dispose();
+    }
+
     /// #268: uygulama kapanırken çıkış mesajı sunucu kapanmadan TV'ye yazılır.
     [Fact]
     public async Task DisposeSendsTvExitBeforeServerCloses()
