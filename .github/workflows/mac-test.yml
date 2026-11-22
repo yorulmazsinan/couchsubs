@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Deneme Mac paketi: herkese açık sürüm ve etiket OLMADAN, seçilen daldan (ör. yeni-arayuz) imzalı ve Apple onaylı DMG.
+# Sürüm (GitHub Releases, appcast) yayımlanmaz; DMG yalnız bu çalışmanın "couchsubs-mac-test" eserinde (14 gün) durur.
+# Çalıştırma: gh workflow run mac-test.yml --ref yeni-arayuz   (ya da Actions › mac-test › Run workflow)
+# İmza sırları release.yml'dekilerle aynı (docs/mac-ci-imza.md); eksikse paket imzasız çıkar.
+name: mac-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Uygulamada görünecek sürüm adı (boşsa son etiket + "-test")
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Uygulamayla gelen Android TV paketi (release.yml ile aynı; imza anahtarı yoksa durur).
+  android:
+    uses: ./.github/workflows/tv-android.yml
+    secrets: inherit
+    with:
+      require-signing: true
+
+  mac:
+    needs: android
+    timeout-minutes: 120
+    runs-on: macos-26
+    outputs:
+      signed: ${{ steps.secrets.outputs.signed }}
+    steps:
+      - name: İmza sırları
+        id: secrets
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          MISSING=""
+          for NAME in MACOS_CERT_P12 MACOS_CERT_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 SPARKLE_ED_PRIVATE_KEY; do
+            [ -n "${!NAME}" ] || MISSING="$MISSING $NAME"
+          done
+          if [ -z "$MISSING" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Mac paketi CI'da imzalanıp Apple'a onaylatılacak."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Mac imzasız::Eksik sır:$MISSING. Mac paketi imzasız çıkar; imzalı ZIP, DMG ve appcast.xml scripts/release-mac.sh ile elle yüklenmeli (docs/mac-ci-imza.md)."
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # Mac yapı numarası commit sayısıdır (package-mac.sh); sığ klonda 1 çıkar ve Sparkle güncellemeyi eski sayar (#696).
+          fetch-depth: 0
+
+      - name: chiaki-ng
+        run: git submodule update --init --depth 1 third-party/chiaki-ng
+
+      # Uygulamayla gelen oyun paketleri depoda değil (özel R2); inmezse sürüm durur.
+      - name: Oyun paketleri (özel R2)
+        env:
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: python3 scripts/fetch-packs.py --require
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Samsung ve Android TV kurulum yardımcısı Native AOT ile derlenir; Microsoft'un .NET'i gerekir (Homebrew'unki değil).
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: couchsubs-android
+          path: android-apk
+
+      - name: Araçlar
+        run: |
+          # OpenSSL ve json-c uygulama için kaynaktan derlenir (build-chiaki-macos.sh); openssl@3 yalnız Sparkle imzası için.
+          brew install cmake ninja pkg-config protobuf openssl@3 xcodegen
+          npm install -g @webos-tools/cli
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      # Geçici anahtar zinciri: Developer ID kimliği ve notarytool profili (API anahtarıyla) yalnız bu işte yaşar,
+      # son adımda silinir. package-mac.sh release-mac.sh ile aynı imzayı (sıkılaştırılmış çalışma, zaman damgası,
+      # mac/CouchSubs/CouchSubs.entitlements) atar, ZIP ve DMG'yi onaylatıp zımbalar, appcast.xml'i imzalar.
+      - name: İmza sertifikası ve Apple onayı
+        if: steps.secrets.outputs.signed == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          umask 077
+          KC="$RUNNER_TEMP/imza.keychain-db"
+          KCPW="$(openssl rand -hex 16)"
+          echo "::add-mask::$KCPW"
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -f pkcs12 -k "$KC" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" >/dev/null
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID="$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application: .*"' | head -1 | tr -d '"')"
+          [ -n "$ID" ] || { echo "::error::.p12 içinde Developer ID Application kimliği yok."; exit 1; }
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun notarytool store-credentials couchsubs --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" --keychain "$KC"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle-ed25519.pem"
+          {
+            echo "DEVELOPER_ID=$ID"
+            echo "NOTARY_PROFILE=couchsubs"
+            echo "NOTARY_KEYCHAIN=$KC"
+            echo "SPARKLE_KEY=$RUNNER_TEMP/sparkle-ed25519.pem"
+          } >> "$GITHUB_ENV"
+
+      - name: Paketle
+        env:
+          INPUT_LABEL: ${{ inputs.label }}
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+          GA_API_SECRET: ${{ secrets.GA_API_SECRET }}
+          PACKS_APP_SECRET: ${{ secrets.PACKS_APP_SECRET }}
+          # package-mac.sh paketleri yeniden doğrular (fetch-packs --require); R2 erişimi burada da gerekli.
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: |
+          APKS=(android-apk/*.apk)
+
+      - name: İmzalı paketi denetle
+        if: steps.secrets.outputs.signed == 'true'
+        run: |
+          [ -s dist/CouchSubs-macos.dmg ] || { echo "::error::DMG üretilmedi."; exit 1; }
+          xcrun stapler validate dist/CouchSubs-macos.dmg
+          spctl --assess --type open --context context:primary-signature --verbose dist/CouchSubs-macos.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: couchsubs-mac-test
+          path: |
+            dist/CouchSubs-macos.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Anahtar zincirini sil
+        if: always() && steps.secrets.outputs.signed == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/imza.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/sparkle-ed25519.pem" "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12"
