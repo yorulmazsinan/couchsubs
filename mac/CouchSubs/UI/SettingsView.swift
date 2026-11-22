@@ -693,7 +693,7 @@ struct GamePacksPage: View {
     private let importTypes: [UTType] = [.json, .plainText] + [UTType(filenameExtension: "srt")].compactMap { $0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.space("gap")) {
+        VStack(alignment: .leading, spacing: DS.space("l")) {
             packList
         }
         .fileImporter(isPresented: $choosingImport, allowedContentTypes: importTypes, onCompletion: readImport)
@@ -724,68 +724,48 @@ struct GamePacksPage: View {
         }
     }
 
+    /// Tuval 21: üstte anahtarlar kartı, altında "KURULU PAKETLER" listesi (kapak, ad, satır sayısı, rozet) ve Paketleri
+    /// Şimdi Güncelle / Paket İçe Aktar… (yeni arayüz; Windows aynı düzen).
     @ViewBuilder private var packList: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Game packs").font(.csDisplay)
-            Spacer()
-            if !model.installedPacks.isEmpty {
-                Pill(text: String(format: String(localized: "Free · %lld games"), GameCatalog.packShelf(model.installedPacks).count))
+        DSCard(spacing: DS.space("xxs"), scrolls: false) {
+            DSSwitchRow(title: "Use Game Packs",
+                        subtitle: "Ready Turkish translations for some games. A line found in the pack appears instantly without going to the translation engine.",
+                        isOn: $model.settings.gamePacks)
+            DSSwitchRow(title: "Send the English Subtitles Read to the Shared Pool",
+                        subtitle: "Only the game's English text is sent, anonymously. It helps make better Turkish translations for everyone.",
+                        isOn: $model.settings.sharePool)
+            // Telefonlardaki Profil › Kullanım verisi ile aynı ad ve açıklama; ölçüm bu derlemede yoksa (Mac App Store) gizli.
+            if model.usage.isConfigured {
+                DSSwitchRow(title: "Usage Data", subtitle: "Error and usage statistics", isOn: $model.settings.usageData)
             }
+            DSSwitchRow(title: "Ask Which Game I'm Playing",
+                        subtitle: "If no pack recognises the game, asked once two minutes after translation starts.",
+                        isOn: $model.settings.askGame, divider: false)
         }
-        Text("Ready-made Turkish translations for some games. A line found in a pack appears at once, without the translation engine.")
-            .font(.csBody)
-            .foregroundStyle(Color.csSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-        HStack(spacing: Theme.space("m")) {
-            Button("Import pack…") {
-                importError = nil
-                choosingImport = true
+        DSCard(spacing: DS.space("xxs"), scrolls: false) {
+            DSCardHeader(LocalizedStringKey(model.installedPacks.isEmpty ? "INSTALLED PACKS"
+                                            : String(format: String(localized: "INSTALLED PACKS · %lld"), GameCatalog.packShelf(model.installedPacks).count))) {
+                // Telefonlardaki "Paketleri şimdi güncelle" (Packs.swift): beklerken "Güncelleniyor…", sonuç uyarıda.
+                Button(updating ? "Updating Packs…" : "Update Packs Now", action: updateNow)
+                    .buttonStyle(.dsSecondary)
+                    .disabled(updating || !model.canUpdatePacks)
+                Button("Import Pack…") {
+                    importError = nil
+                    choosingImport = true
+                }
+                .buttonStyle(.dsSecondary)
+                .disabled(readingImport)
             }
-            .buttonStyle(CSButtonStyle(kind: .secondary, height: "buttonLarge"))
-            .disabled(readingImport)
-            // Telefonlardaki "Paketleri şimdi güncelle" (Packs.swift): beklerken düğme "Güncelleniyor…", sonuç uyarıda.
-            Button(action: updateNow) {
-                if updating { Text("Updating…") } else { Text("Update the packs now") }
+            if let importError {
+                Text(verbatim: importError).font(.dsSmall).foregroundStyle(Color.dsLive)
             }
-            .buttonStyle(CSButtonStyle(kind: .secondary, height: "buttonLarge"))
-            .disabled(updating || !model.canUpdatePacks)
-            if updating {
-                ProgressView().controlSize(.small)
-                Text("Updating the packs…").font(.csCallout).foregroundStyle(Color.csSecondary)
-            }
-        }
-        ErrorText(error: importError)
-        if model.installedPacks.isEmpty {
-            Card { HintText(text: "No game pack is installed.") }
-        } else {
-            LazyVGrid(columns: columns, spacing: Theme.space("gap")) {
-                // Oyunun "(ek satırlar)" paketi asıl paketin karosunda (#353).
+            if model.installedPacks.isEmpty {
+                Text("No game pack is installed.").dsMuted()
+            } else {
+                // Oyunun "(ek satırlar)" paketi asıl paketin satırında (#353).
                 ForEach(GameCatalog.packShelf(model.installedPacks)) { pack in PackTile(pack: pack) }
             }
         }
-        VStack(alignment: .leading, spacing: Theme.space("m")) {
-            SwitchRow(title: "Use game packs", isOn: $model.settings.gamePacks)
-            Divider().overlay(Color.csBorder)
-            SwitchRow(title: "Send the English subtitles read to the shared pool", isOn: $model.settings.sharePool)
-            HintText(text: "Only the game's English text is sent, anonymously. It is used to make better Turkish translations for everyone.")
-            Divider().overlay(Color.csBorder)
-            // Telefonlardaki Profil › Kullanım verisi ile aynı ad ve açıklama; ölçüm bu derlemede yoksa (Mac App Store) gizli.
-            if model.usage.isConfigured {
-                SwitchRow(title: "Usage data", isOn: $model.settings.usageData)
-                HintText(text: "Error and usage statistics")
-                Divider().overlay(Color.csBorder)
-            }
-            SwitchRow(title: "Ask which game I'm playing", isOn: $model.settings.askGame)
-            HintText(text: "If no pack recognises the game, asked once two minutes after translation starts.")
-            Divider().overlay(Color.csBorder)
-            SwitchRow(title: "Show speaker name", isOn: $model.settings.showSpeakerNames)
-            HintText(text: "Keeps the character's name in front of the translation (ARTHUR: …). The name itself is never translated.")
-            Divider().overlay(Color.csBorder)
-            SwitchRow(title: "Color by speaker", isOn: $model.settings.speakerColors)
-            HintText(text: "Each speaker's name and line keep their own color.")
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .tile()
     }
 
     private func readImport(_ result: Result<URL, Error>) {
@@ -945,7 +925,7 @@ struct PackTile: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.space("m")) {
+        HStack(alignment: .center, spacing: Theme.space("m")) {
             // Kapak ya da baş harfler; tıklayınca kapak seçilir, sağ tıkta seç/kaldır (Windows ile aynı).
             Button(action: chooseCover) {
                 Group {
@@ -957,8 +937,8 @@ struct PackTile: View {
                             .foregroundStyle(Color.csText)
                     }
                 }
-                .frame(width: 48, height: 48)
-                .background(Color.csSurface2)
+                .frame(width: 40, height: 40)
+                .background(Color.dsField)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radius("inner"), style: .continuous))
             }
             .buttonStyle(.plain)
@@ -972,19 +952,20 @@ struct PackTile: View {
                 }
                 .disabled(cover == nil)
             }
-            VStack(alignment: .leading, spacing: Theme.space("hair")) {
-                Text(verbatim: pack.title).font(.csHeadline).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: pack.title).font(.dsBody.weight(.medium)).fixedSize(horizontal: false, vertical: true)
                 Text(verbatim: String(format: String(localized: "%@ lines"), pack.entries.formatted()))
-                    .font(.csCaption)
-                    .foregroundStyle(Color.csSecondary)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Color.dsMuted)
                 if coverFailed {
-                    Text("The game cover could not be saved.").font(.csCaption).foregroundStyle(Color.csDanger)
+                    Text("The game cover could not be saved.").font(.dsCaption).foregroundStyle(Color.dsLive)
                 }
             }
             Spacer(minLength: 0)
+            DSBadge(text: "Installed", tone: .ok)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .tile()
+        .frame(maxWidth: .infinity, minHeight: DS.size("row"), alignment: .leading)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.dsTileBorder).frame(height: 1) }
     }
 
     /// Resim seçilir, ortasından kare kesilip 128 piksellik PNG olarak kaydedilir (Windows ChoosePackCover ile aynı).

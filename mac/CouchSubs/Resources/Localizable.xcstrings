@@ -16019,7 +16019,8 @@
     "Xbox · Beta": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Xbox · Beta"}}, "tr": {"stringUnit": {"state": "translated", "value": "Xbox · Beta"}}}},
     "Beta": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Beta"}}, "tr": {"stringUnit": {"state": "translated", "value": "Beta"}}}},
     "Copy All": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Copy All"}}, "tr": {"stringUnit": {"state": "translated", "value": "Tümünü Kopyala"}}}},
-    "Open the Page on This Computer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open the Page on This Computer"}},"tr":{"stringUnit":{"state":"translated","value":"Sayfayı Bu Bilgisayarda Aç"}}}}
+    "Open the Page on This Computer": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open the Page on This Computer"}},"tr":{"stringUnit":{"state":"translated","value":"Sayfayı Bu Bilgisayarda Aç"}}}},
+    "INSTALLED PACKS · %lld": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "INSTALLED PACKS · %lld"}}, "tr": {"stringUnit": {"state": "translated", "value": "KURULU PAKETLER · %lld"}}}}
   },
   "version": "1.0"
 }

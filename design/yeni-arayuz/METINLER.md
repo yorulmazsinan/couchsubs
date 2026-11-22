@@ -671,6 +671,7 @@ Ek alan sınırı yok (eskiden 3). İlk 3 ek alanın kısayolu var (Num 1–3 / 
 | Send the English Subtitles Read to the Shared Pool | Okunan İngilizce Altyazıları Ortak Havuza Gönder |
 | Only the game's English text is sent, anonymously. It helps make better Turkish translations for everyone. | Yalnız oyunun İngilizce metni, adsız gönderilir. Herkes için daha iyi Türkçe çeviri yapmaya yarar. |
 | INSTALLED PACKS | KURULU PAKETLER |
+| INSTALLED PACKS · %lld | KURULU PAKETLER · %lld |
 | Update Packs Now | Paketleri Şimdi Güncelle |
 | Updating Packs… | Paketler Güncelleniyor… |
 | Packs Up to Date | Paketler Güncel |
