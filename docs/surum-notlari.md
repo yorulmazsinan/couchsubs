@@ -6,12 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **Çevirinin durması / hiç gelmemesi:** Karanlık sahnede, görev yazısı ya da PS5 bildirimi ekrandayken "menüdeyiz" durumu bitmiyor ve altyazı hiç okunmuyordu; artık menü durumu yalnız menünün kendi yazıları ekrandayken sürüyor, 5 sn değişmezse kendiliğinden bitiyor. Telefon tanıma yalnız GTA 6'da.
-- **"Altyazı zeminini izle (GTA 6 deneysel)" kaldırıldı:** Zemin bulunamayınca bütün altyazıları sessizce atabiliyordu. Daha önce açtıysanız da artık etkisi yok.
-- **"TV uygulamasını güncelle":** Ana ekranda hemen kuruyor; eksik adım, hata ve sonuç aynı kartta; eşleştirme/test döngüsüne düşmüyor. TV'den silinen uygulamada uyarı kalmıyor, kurulum başlamazsa nedeni tvinstall.log'da.
-- **Eski TV uygulamalarında altyazının bir an görünüp kaybolması** düzeltildi.
-- **DeepL:** Anahtar denemesi her hatayı kendi nedeniyle gösteriyor; yoğunluk (429) "ulaşılamadı" sayılmıyor, anahtardaki görünmez karakterler siliniyor.
-- **"Bağlanıyor…"** 30 sn'yi geçince nedeni ekranda.
+- **Mac: Remote Play penceresinden okuma ~10 sn'de bir değil, her karede** (#822): Biten okuma pencerenin karesini 10 sn tutmuyor; aradaki altyazılar artık kaçmıyor. Günlükte dakikada bir kare sayısı yazıyor.
+- **LG'de ekranın dakikada bir 2 sn kararıp "HDR" yazısı çıkması** düzeltildi (TV uygulaması 0.9.73): sağlam görüntü artık boşuna yeniden kurulmuyor.
+- **TV'de görev satırı:** Türkçesi kendi yerinde kalıyor; altyazı kalkınca kayık durmuyor, kırpık ekran yazısı görevi örtmüyor.
+- **Konuşan adıyla başlayan satır** (ör. "Jason: …") artık görev/HUD ya da menü yazısı sayılıp atılmıyor; menü sayılması için satırlar hizalı olmalı.
+- **Sessizlik bekçisi:** Konuşmaya benzeyen bir satır 10 sn okunup çevrilmezse doğrudan çevriliyor; neden günlüğe yazılıyor.
+- **Tanı:** Altyazı alanında yazı çıkmayınca nedeni altyazi.log'da (okunmadı, boş okuma, süzgeç, hata).
+
+**beta.81'de gelenler:** çevirinin durması (menü durumu) düzeltmesi, "Altyazı zeminini izle"nin kaldırılması, "TV uygulamasını güncelle"nin ana ekranda çalışması, DeepL hata nedenleri, eski TV'lerde altyazının kaybolmaması.
 
 **beta.80'de gelenler:** PS5'te kullanıcı değiştirince yeniden bağlanma, altyazının iki kez çıkmaması, GTA 6 telefon/harita/menü düzeltmeleri, TV'ye altyazı gelmemesi (Samsung açma, Android TV), LG siyah ekran, Samsung ultra geniş, Xbox ve OBS düzeltmeleri, Mac'te 10 sn bekleme (#822).
 
