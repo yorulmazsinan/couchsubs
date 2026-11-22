@@ -1,23 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.IO;
+using System.Text.Json;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using CouchSubs.App.Controls;
 using CouchSubs.Core;
 
 namespace CouchSubs.App.Services;
 
 /// <summary>
-/// Enmera'nın kendi uygulamalarının reklamları (Mac'teki AdCatalog ile aynı). Üçüncü taraf reklam ağı, izleme ve kişisel
-/// veri yok: liste uygulamanın içinde (şimdilik tuvaldeki üç yerel örnek; uzaktan liste sonra), tıklanınca yalnız
-/// bağlantı tarayıcıda açılır. Liste boşsa reklam bandı görünmez.
+/// Enmera'nın kendi uygulamalarının reklamları (Mac AdCatalog ile aynı). Üçüncü taraf reklam ağı, izleme ve kişisel
+/// veri yok: liste uygulamanın içinde (design/yeni-arayuz/reklamlar.json ve reklam/*.png; Mac aynı dosyayı okur),
+/// tıklanınca yalnız mağaza bağlantısı tarayıcıda açılır. Dosya yoksa ya da bozuksa reklam bandı görünmez.
 /// </summary>
 public static class AdCatalog
 {
     public const string Home = "https://enmera.com.tr";
 
-    private static IReadOnlyList<BannerAd> banners = Samples();
+    private static IReadOnlyList<BannerAd> banners = Load();
 
-    /// <summary>Bantta sırayla dönen reklamlar.</summary>
+    /// <summary>Bantta sırayla dönen reklamlar (Cebbin, Gramla, Bakkal).</summary>
     public static IReadOnlyList<BannerAd> Banners
     {
         get => banners;
@@ -30,23 +33,50 @@ public static class AdCatalog
 
     public static event Action? Changed;
 
-    /// <summary>Tuvaldeki üç örnek reklam (içerikler belirlenince uzaktan listeyle değişecek).</summary>
-    public static IReadOnlyList<BannerAd> Samples()
+    /// <summary>reklamlar.json'u uygulamanın diline göre okur (Türkçe değilse İngilizce).</summary>
+    public static IReadOnlyList<BannerAd> Load()
     {
-        var text = Localizer.Current;
-        return
-        [
-            new(text["App Name"], text["Sample ad: a short introduction goes here."], Home, Art(0x2B2D33, 0x5A5D66)),
-            new(text["Second App"], text["Sample ad: ads rotate every 6 seconds."], Home, Art(0xF5B83D, 0xE0A22A)),
-            new(text["Third App"], text["Sample ad: the contents will be decided later."], Home, Art(0x4FD1C5, 0x2B8A83)),
-        ];
+        try
+        {
+            using var stream = typeof(AdCatalog).Assembly.GetManifestResourceStream("reklamlar.json");
+            if (stream is null) return [];
+            using var document = JsonDocument.Parse(stream);
+            var language = Localizer.Current.Language == "tr" ? "tr" : "en";
+            var list = new List<BannerAd>();
+            foreach (var ad in document.RootElement.GetProperty("ads").EnumerateArray())
+            {
+                string Text(string name) =>
+                    ad.GetProperty(name).TryGetProperty(language, out var value) ? value.GetString() ?? "" : ad.GetProperty(name).GetProperty("en").GetString() ?? "";
+                string? Link(string name) => ad.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+                list.Add(new BannerAd(ad.GetProperty("id").GetString() ?? "", Text("title"), Text("text"), Icon(ad.GetProperty("icon").GetString()),
+                    Link("appStore"), Link("googlePlay")));
+            }
+            return list;
+        }
+        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException or IOException)
+        {
+            return [];
+        }
     }
 
-    private static Brush Art(int from, int to)
+    /// <summary>Uygulama simgesi (reklam/*.png, uygulamaya Resource olarak gömülü).</summary>
+    private static ImageSource? Icon(string? file)
     {
-        static Color Rgb(int v) => Color.FromRgb((byte)(v >> 16), (byte)(v >> 8), (byte)v);
-        var brush = new LinearGradientBrush(Rgb(from), Rgb(to), 45);
-        brush.Freeze();
-        return brush;
+        if (string.IsNullOrEmpty(file)) return null;
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.UriSource = new Uri($"pack://application:,,,/CouchSubs;component/Assets/reklam/{file}", UriKind.Absolute);
+            image.DecodePixelWidth = 96;
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception error) when (error is IOException or UriFormatException or NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 }

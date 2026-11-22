@@ -55,6 +55,9 @@
     <Resource Include="Assets\enmera-black.png" />
     <!-- Yeni arayüzün renk, yazı, ölçü ve hareket değerleri (Mac ile ortak; Theme/Palette.cs okur). -->
     <EmbeddedResource Include="..\..\..\design\yeni-arayuz\tasarim.json" LogicalName="tasarim.json" />
+    <!-- Alt reklam bandı (Cebbin, Gramla, Bakkal): Mac ile ortak liste ve simgeler (Services/AdCatalog.cs). -->
+    <EmbeddedResource Include="..\..\..\design\yeni-arayuz\reklamlar.json" LogicalName="reklamlar.json" />
+    <Resource Include="..\..\..\design\yeni-arayuz\reklam\*.png" Link="Assets\reklam\%(Filename)%(Extension)" />
     <!-- ShellWindow.xaml pencere simgesi olarak bunu okur; ApplicationIcon yalnız exe simgesidir. -->
     <Resource Include="Assets\CouchSubs.ico" />
   </ItemGroup>

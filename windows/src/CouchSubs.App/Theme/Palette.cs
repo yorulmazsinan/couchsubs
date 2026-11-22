@@ -88,8 +88,9 @@ public static class Palette
         var fonts = new Dictionary<string, (double, string)>();
         foreach (var entry in Root.GetProperty("font").EnumerateObject())
             fonts[entry.Name] = (entry.Value.GetProperty("size").GetDouble(), entry.Value.GetProperty("weight").GetString() ?? "regular");
+        // Eski adlar; dosyada aynı adla değer varsa (label 13 orta kalın) dosyadaki kalır.
         foreach (var (old, name) in new[] { ("display", "h1"), ("title", "h2"), ("headline", "h3"), ("callout", "small"), ("label", "mono"), ("code", "h2") })
-            if (fonts.TryGetValue(name, out var font)) fonts[old] = font;
+            if (!fonts.ContainsKey(old) && fonts.TryGetValue(name, out var font)) fonts[old] = font;
         return fonts;
     }
 

@@ -9,11 +9,15 @@
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:local="clr-namespace:CouchSubs.App.Views"
              xmlns:s="clr-namespace:CouchSubs.App.Views.Steps">
+    <Grid>
+    <!-- Sayfa kayar (Mac HomeView): sol kartta 16:9 önizleme kartın iç genişliğini tam doldurur, düğme satırı aynı genişlikte;
+         sağ sütun sol kartla aynı yükseklikte. İçerik alttaki reklam bandının üstünde biter (bant ayrı satırda). -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
     <Grid Margin="{t:Sp 'l'}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="24" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="{t:Sp l}" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Durum çipleri: her biri durum simgesi, ad, değer ve mono ek bilgi. -->
@@ -29,19 +33,19 @@
         <Grid x:Name="Body" Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="{t:Sp l}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Sol: oyun görüntüsü ve düğmeler -->
-            <Border Style="{StaticResource CardBorder}" Padding="{t:Sp 'm'}">
+            <!-- Sol: oyun görüntüsü ve düğmeler (iç boşluk 24, önizleme → düğmeler 16) -->
+            <Border x:Name="LeftCard" Style="{StaticResource CardBorder}" Padding="{t:Sp 'l'}" VerticalAlignment="Top">
                 <DockPanel>
                     <Grid DockPanel.Dock="Bottom" Margin="{t:Sp '0,m,0,0'}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="1.3*" />
-                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="{t:Sp s}" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="{t:Sp s}" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Button x:Name="Toggle" HorizontalAlignment="Stretch" Style="{StaticResource PrimaryButton}" Click="OnToggle" />
@@ -69,8 +73,8 @@
                 </DockPanel>
             </Border>
 
-            <!-- Sağ: bildirimler, durum ya da sessizlik nedeni, canlı akış -->
-            <DockPanel Grid.Column="2">
+            <!-- Sağ: bildirimler, durum ya da sessizlik nedeni, canlı akış; yüksekliği sol kart kadar. -->
+            <DockPanel Grid.Column="2" Height="{Binding ActualHeight, ElementName=LeftCard}" VerticalAlignment="Top">
                 <ScrollViewer x:Name="NoticeScroll" DockPanel.Dock="Top" Style="{StaticResource CardScroll}" MaxHeight="300">
                     <StackPanel x:Name="Notices">
                         <!-- Önceki çalışma yerel bir hatayla kapandı: kayıt yalnız bu bilgisayarda, bir kez bildirilir -->
@@ -260,8 +264,8 @@
                 <!-- Durum: satır sayısı ve hızı, paketten oranı, ortalama gecikme -->
                 <Border x:Name="StatusCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Margin="{t:Sp '0,0,0,l'}">
                     <StackPanel>
-                        <TextBlock Text="{t:T 'Status'}" Style="{StaticResource SectionLabel}" />
-                        <TextBlock x:Name="StateTitle" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,xxs,0,s'}" />
+                        <TextBlock Text="{t:T 'Status'}" Style="{StaticResource CardTitleText}" Margin="{t:Sp '0,0,0,unitGap'}" />
+                        <TextBlock x:Name="StateTitle" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,0,0,m'}" />
                         <UniformGrid Rows="1">
                             <Border Style="{StaticResource Tile}" Margin="{t:Sp '0,0,xxs,0'}" MinHeight="112">
                                 <Grid>
@@ -290,15 +294,11 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Sessizlik nedeni ("Sorun Var"): solda kırmızı şerit, kaç saniyedir sessiz, neden, açıklama, çözüm düğmeleri. -->
-                <Border x:Name="ProblemCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Padding="0" Margin="{t:Sp '0,0,0,l'}" Visibility="Collapsed">
+                <!-- Sessizlik nedeni ("Sorun Var"): vurgulu kart (kartı saran 1,5 px kırmızı kenarlık + %5 kırmızı zemin; sol şerit yok),
+                     kaç saniyedir sessiz, neden, açıklama, çözüm düğmeleri. -->
+                <c:Card x:Name="ProblemCard" DockPanel.Dock="Top" Kind="Experimental" Margin="{t:Sp '0,0,0,l'}" Visibility="Collapsed">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="4" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Border Background="{DynamicResource liveBrush}" CornerRadius="24,0,0,24" />
-                        <StackPanel Grid.Column="1" Margin="{t:Sp 'm,l,l,l'}">
+                        <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse Width="8" Height="8" Fill="{DynamicResource liveBrush}" VerticalAlignment="Center" t:Motion.Pulse="True" />
                                 <TextBlock x:Name="SilentFor" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource liveBrush}" Margin="{t:Sp 'xs,0,0,0'}" />
@@ -308,14 +308,14 @@
                             <StackPanel x:Name="ProblemFixes" Margin="{t:Sp '0,m,0,0'}" />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </c:Card>
 
                 <!-- Canlı akış: bu oturumun son satırları, en yenisi üstte; "Geçmiş →" -->
                 <Border Style="{StaticResource CardBorder}">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="{t:Sp '0,0,0,xs'}">
+                        <DockPanel DockPanel.Dock="Top" Margin="{t:Sp '0,0,0,m'}">
                             <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="{t:T 'History →'}" Click="OnHistory" />
-                            <TextBlock Text="{t:T 'Live feed'}" Style="{StaticResource SectionLabel}" Margin="0" VerticalAlignment="Center" />
+                            <TextBlock Text="{t:T 'Live feed'}" Style="{StaticResource CardTitleText}" VerticalAlignment="Center" />
                         </DockPanel>
                         <Grid>
                             <TextBlock x:Name="FeedEmpty" Text="{t:T 'Subtitles will appear here while you play.'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
@@ -341,7 +341,9 @@
 
         <!-- "Hangi Oyunu Oynuyorsunuz?" (tuval 11): ana ekran bulanıklaşır, ortada 560 genişlikte kart; arama, oyun
              seçenekleri (paketi olan "Paket Var", son oynanan "Son Oynanan"), havuz notu, "Listede Yok" ve "Sorma". -->
-        <Grid x:Name="GameAsk" Grid.RowSpan="3" Margin="{t:Sp '-l'}" Visibility="Collapsed" Background="#59F3F0EA">
+    </Grid>
+    </ScrollViewer>
+        <Grid x:Name="GameAsk" Visibility="Collapsed" Background="#59F3F0EA">
             <Border Style="{StaticResource CardBorder}" Width="560" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="60" ShadowDepth="24" Direction="270" Opacity="0.18" Color="Black" />

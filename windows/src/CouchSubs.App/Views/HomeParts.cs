@@ -175,15 +175,16 @@ public sealed class GamePreview : ContentControl
         stage.Children.Add(area);
         lineBox.Child = lineText;
         stage.Children.Add(lineBox);
+        // CANLI hapı ve kare hızı sağ üstte yan yana (Mac: örnek karenin sol üstündeki görev yazısıyla çakışmasın).
         var live = Chip(new StackPanel { Orientation = Orientation.Horizontal, Children = { liveDot, liveText } });
-        live.HorizontalAlignment = HorizontalAlignment.Left;
-        live.Margin = Sp.T("s");
-        stage.Children.Add(live);
         rateText.FontFamily = (FontFamily)Application.Current.FindResource("MonoFont");
         rateChip = Chip(rateText);
-        rateChip.HorizontalAlignment = HorizontalAlignment.Right;
-        rateChip.Margin = Sp.T("s");
-        stage.Children.Add(rateChip);
+        rateChip.Margin = Sp.T("xs", "0", "0", "0");
+        stage.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = Sp.T("s"), Children = { live, rateChip },
+        });
         stage.SizeChanged += (_, _) => Layout();
         frame.Child = stage;
         Content = new AspectBox { Child = frame };

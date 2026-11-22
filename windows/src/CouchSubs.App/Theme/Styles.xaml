@@ -89,6 +89,14 @@
     <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource CardTitleText}">
         <Setter Property="Margin" Value="{m:Sp '0,0,0,xs'}" />
     </Style>
+    <!-- Küçük etiket (label 13 orta kalın, gri): tablo sütunu, adım etiketi. Büyük harf değil. -->
+    <Style x:Key="LabelText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}" />
+        <Setter Property="FontSize" Value="{DynamicResource labelFontSize}" />
+        <Setter Property="FontWeight" Value="{DynamicResource labelFontWeight}" />
+        <Setter Property="Foreground" Value="{DynamicResource mutedBrush}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
     <!-- Satır / alan başlığı (bodyStrong 15 orta kalın): anahtar, kaydırıcı, seçici başlığı. -->
     <Style x:Key="UnitTitleText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{DynamicResource bodyStrongFontSize}" />
@@ -1286,36 +1294,96 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Reklam bandı: 64 yüksek, köşe 16; solda görsel (88 × 44), başlık ve tek satır tanıtım; sağda İncele; sağ üstte REKLAM. -->
+    <!-- Mağaza düğmesi (Mac StoreButton): 28 yükseklik, tam yuvarlak, ince halka, simge + 12 yarı kalın ad; bağlantı yoksa soluk
+         ve "Yakında". -->
+    <Style x:Key="StoreButton" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Foreground" Value="{DynamicResource textBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Frame" Height="28" Padding="{m:Sp 's,0'}" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}"
+                            BorderThickness="1" CornerRadius="14">
+                        <ContentPresenter VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Frame" Property="Background" Value="{DynamicResource fieldBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource faintBrush}" />
+                            <Setter TargetName="Frame" Property="Background" Value="{DynamicResource surfaceBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- Reklam bandı (Mac DSAdBand): 64 yüksek, köşe 16; solda 44'lük uygulama simgesi, başlık (14 yarı kalın) ve tek satır tanıtım
+         (12 gri); sağda App Store ve Google Play düğmeleri; sağ üstte REKLAM. Reklamlar 6 sn'de bir yukarı kayarak değişir. -->
     <Style TargetType="c:AdBand">
         <Setter Property="Height" Value="{DynamicResource size.adBandHeight}" />
-        <Setter Property="Margin" Value="24,0,24,16" />
+        <Setter Property="Margin" Value="{m:Sp 'l,xs,l,m'}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="c:AdBand">
-                    <Border CornerRadius="{DynamicResource radius.control}" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}"
-                            BorderThickness="1" ClipToBounds="True">
+                    <Border CornerRadius="{DynamicResource radius.tile}" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}"
+                            BorderThickness="1" ClipToBounds="True" AutomationProperties.Name="{theme:T 'Advertisement'}">
                         <Grid>
-                            <Grid x:Name="PART_Slide" Margin="12,0,16,0">
+                            <Grid x:Name="PART_Slide" Margin="{m:Sp 's,0,m,0'}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="88" Height="44" CornerRadius="10" Background="{Binding Current.Art, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
+                                <Border Width="44" Height="44" CornerRadius="{DynamicResource radius.small}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1"
+                                        Background="{DynamicResource fieldBrush}" ClipToBounds="True">
+                                    <Border.Clip>
+                                        <RectangleGeometry Rect="0,0,44,44" RadiusX="10" RadiusY="10" />
+                                    </Border.Clip>
+                                    <Image Source="{Binding Current.Icon, RelativeSource={RelativeSource TemplatedParent}}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="{m:Sp 's,0'}" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Current.Title, RelativeSource={RelativeSource TemplatedParent}}" FontSize="14" FontWeight="SemiBold"
-                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource textPrimaryBrush}" />
-                                    <TextBlock Text="{Binding Current.Text, RelativeSource={RelativeSource TemplatedParent}}" FontSize="12" Margin="0,4,0,0"
-                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource textSecondaryBrush}" />
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource textBrush}" />
+                                    <TextBlock Text="{Binding Current.Text, RelativeSource={RelativeSource TemplatedParent}}" FontSize="{DynamicResource captionFontSize}"
+                                               Margin="{m:Sp '0,line,0,0'}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource mutedBrush}" />
                                 </StackPanel>
-                                <Button x:Name="PART_Open" Grid.Column="2" Style="{StaticResource SmallDarkButton}" VerticalAlignment="Center"
-                                        Content="{theme:T 'Learn More'}" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{m:Sp '0,xs,0,0'}">
+                                    <Button x:Name="PART_AppStore" Style="{StaticResource StoreButton}"
+                                            IsEnabled="{Binding Current.HasAppStore, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE719;" Style="{StaticResource GlyphText}" FontSize="11" Margin="{m:Sp '0,0,unitHint,0'}" />
+                                            <TextBlock Text="App Store" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="AppStoreSoon" Text="{theme:T 'Coming Soon'}" FontSize="10" Foreground="{DynamicResource faintBrush}"
+                                                       VerticalAlignment="Center" Margin="{m:Sp 'unitHint,0,0,0'}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="PART_GooglePlay" Style="{StaticResource StoreButton}" Margin="{m:Sp 'xs,0,0,0'}"
+                                            IsEnabled="{Binding Current.HasGooglePlay, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE768;" Style="{StaticResource GlyphText}" FontSize="11" Margin="{m:Sp '0,0,unitHint,0'}" />
+                                            <TextBlock Text="Google Play" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="GooglePlaySoon" Text="{theme:T 'Coming Soon'}" FontSize="10" Foreground="{DynamicResource faintBrush}"
+                                                       VerticalAlignment="Center" Margin="{m:Sp 'unitHint,0,0,0'}" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
                             </Grid>
                             <TextBlock Text="{theme:T 'AD'}" FontFamily="{StaticResource MonoFont}" FontSize="9" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource textTertiaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,10,0" />
+                                       Foreground="{DynamicResource faintBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{m:Sp '0,unitHint,xs,0'}" />
                         </Grid>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Current.HasAppStore, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
+                            <Setter TargetName="AppStoreSoon" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Current.HasGooglePlay, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
+                            <Setter TargetName="GooglePlaySoon" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -119,7 +119,12 @@ public sealed class UpperCase : IValueConverter
 }
 
 /// <summary>Reklam bandının bir reklamı (kendi uygulamalarımız; üçüncü taraf ağı ve izleme yok).</summary>
-public sealed record BannerAd(string Title, string Text, string Url, Brush Art);
+public sealed record BannerAd(string Id, string Title, string Text, ImageSource? Icon, string? AppStore, string? GooglePlay)
+{
+    /// <summary>Bağlantı yoksa mağaza düğmesi pasif ve "Yakında" yazar (Cebbin Google Play).</summary>
+    public bool HasAppStore => AppStore is not null;
+    public bool HasGooglePlay => GooglePlay is not null;
+}
 
 /// <summary>
 /// Uygulama ve ayar sayfalarının altındaki 64 px reklam bandı: REKLAM etiketi, reklamlar 6 sn arayla sırayla döner,
@@ -183,8 +188,13 @@ public class AdBand : Control
     public override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        if (GetTemplateChild("PART_Open") is ButtonBase open)
-            open.Click += (_, _) => { if (Current is { } ad && Uri.TryCreate(ad.Url, UriKind.Absolute, out var url)) BrowserLauncher.Open(url); };
+        if (GetTemplateChild("PART_AppStore") is ButtonBase appStore) appStore.Click += (_, _) => Open(Current?.AppStore);
+        if (GetTemplateChild("PART_GooglePlay") is ButtonBase googlePlay) googlePlay.Click += (_, _) => Open(Current?.GooglePlay);
+    }
+
+    private static void Open(string? link)
+    {
+        if (link is not null && Uri.TryCreate(link, UriKind.Absolute, out var url)) BrowserLauncher.Open(url);
     }
 }
 

@@ -85,10 +85,10 @@
                         <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="96" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{t:T 'Time'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="2" Text="{t:T 'Turkish'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="4" Text="{t:T 'English'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="6" Text="{t:T 'Source'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                    <TextBlock Text="{t:T 'Time'}" Style="{StaticResource LabelText}" />
+                    <TextBlock Grid.Column="2" Text="{t:T 'Turkish'}" Style="{StaticResource LabelText}" />
+                    <TextBlock Grid.Column="4" Text="{t:T 'English'}" Style="{StaticResource LabelText}" />
+                    <TextBlock Grid.Column="6" Text="{t:T 'Source'}" Style="{StaticResource LabelText}" />
                 </Grid>
                 <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource borderBrush}" />
 
