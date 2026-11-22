@@ -147,6 +147,9 @@ jobs:
           PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
         run: |
           APKS=(android-apk/*.apk)
+          # Sürüm adı son etiket + "-test" (Sparkle yapı numarasına bakar: commit sayısı, yayındakinden büyük).
+          BASE="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//')"
+          APP_VERSION="${INPUT_LABEL:-${BASE:-0.1.0}-test}" ANDROID_APK="${APKS[0]}" ./scripts/package-mac.sh
 
       - name: İmzalı paketi denetle
         if: steps.secrets.outputs.signed == 'true'
