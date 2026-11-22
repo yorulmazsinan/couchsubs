@@ -813,6 +813,8 @@ final class AppModel: ObservableObject {
     /// Bu çeviri PS5'e ya da Xbox'a doğrudan bağlanıyor (Remote Play ya da seçilen pencereden okumuyor).
     private var sessionIsConsole = false
     private var keeper: KeeperControlling?
+    /// Her yeni bekçide artar: durdurulan bekçinin geç gelen açma sonucu yenisininkiyle karışmaz.
+    private var keeperGeneration = 0
     @Published private var sleepActivity: NSObjectProtocol?
     private var pipeline: SubtitlePipeline?
     /// Ek alanları (görev, telefon, bildirim) okuyup çeviren; çeviri sürerken var.
@@ -2337,6 +2339,8 @@ final class AppModel: ObservableObject {
     private func startKeeper(refreshApp: Bool = true) {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
+        keeperGeneration += 1
+        let generation = keeperGeneration
         let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv), "key": server.accessKey],
                                          appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
@@ -2344,7 +2348,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.store.save(key, for: StoreKey.tvKey) }
         }, consolePort: { server.consolePort }, onOpenResult: { [weak self] problem in
             Task { @MainActor in
-                guard let self, self.tv?.host == tv.host, self.tv?.brand == tv.brand else { return }
+                // Yerine yenisi kurulan (eski adresteki) bekçinin geç gelen sonucu yok sayılır. Adres karşılaştırılmaz:
+                // bekçinin kendisi TV'yi yeni adreste bulunca (onMoved) sonuçları yine gösterilmeli.
+                guard let self, self.keeper != nil, self.keeperGeneration == generation else { return }
                 self.openResult(problem, brand: tv.brand)
             }
         })

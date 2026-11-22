@@ -127,6 +127,8 @@ internal sealed class FakeServices : IAppServices
     public string? LaunchedServer { get; private set; }
     public List<FakeStream> Streams { get; } = [];
     public List<FakeKeeper> Keepers { get; } = [];
+    /// <summary>Her bekçinin kurulduğu TV kaydı (adres değişince yeni bekçi yeni adrese gider).</summary>
+    public List<LgTv> KeeperTvs { get; } = [];
     public List<string> ReaderLanguages { get; } = [];
     /// <summary>Okuyucunun her karede bulduğu satırlar (verilmezse karede yazı yoktur).</summary>
     public Reading? ReaderLines { get; set; }
@@ -260,6 +262,7 @@ internal sealed class FakeServices : IAppServices
         OnOpenResult = onOpenResult;
         var keeper = new FakeKeeper();
         Keepers.Add(keeper);
+        KeeperTvs.Add(tv);
         return keeper;
     }
     public string? AppOnTv { get; set; } = "0.6.1";
@@ -1465,6 +1468,44 @@ public class AppControllerRunTests
         Assert.Equal([RemotePlayApp.Automatic], services.WindowStreams);
         Assert.Equal(2, services.Streams.Count);
         Assert.True(controller.IsRunning);
+        controller.Dispose();
+    }
+
+    /// <summary>
+    /// Android TV DHCP'den yeni adres aldı (#985): kurulum TV'yi yeni adreste bulup kaydı güncelliyordu ama çalışan bekçi
+    /// eski adresi tutuyor, TV uygulaması hep eski adreste açılmaya çalışılıyordu. Bekçi yeni adresle yeniden kurulur;
+    /// eski bekçinin geç gelen açma sonucu yok sayılır.
+    /// </summary>
+    [Fact]
+    public async Task AndroidTvKeeperFollowsTheNewAddressAfterInstall()
+    {
+        var services = new FakeServices();
+        services.Bundled[TvBrand.AndroidTv] = new BundledTvApp("couchsubs-androidtv_0.7.0.apk", "0.7.0");
+        var store = new MemoryStore();
+        store.Save(StoreKeys.AccountId, Enumerable.Repeat((byte)1, 8).ToArray());
+        store.Save(StoreKeys.Console, new RegisteredConsole("192.168.1.253", "PS5", Enumerable.Repeat((byte)0x31, 16).ToArray(), Enumerable.Repeat((byte)2, 16).ToArray()));
+        store.Save(StoreKeys.Tv, new LgTv("Android TV", "192.168.1.40", TvBrand.AndroidTv));
+        store.Save(StoreKeys.TvKey, "tv-key");
+        var controller = AppControllerTests.Make(services, store);
+        await controller.StartAsync();
+        for (var i = 0; i < 200 && controller.TvApp.Kind == TvAppKind.Working; i++) await Task.Delay(10);
+        var old = Assert.Single(services.Keepers);
+        var staleResult = services.OnOpenResult!;
+        Assert.Equal("192.168.1.40", services.KeeperTvs[0].Host);
+
+        services.AndroidHosts.Add("192.168.1.41");
+        await controller.RefreshTvAppAsync();
+        Assert.Equal("192.168.1.41", controller.Tv?.Host);
+        Assert.Equal(2, services.Keepers.Count);
+        Assert.False(old.Running);
+        Assert.True(services.Keepers[1].Running);
+        Assert.Equal("192.168.1.41", services.KeeperTvs[1].Host);
+        staleResult(TvOpenProblem.Unreachable);
+        Assert.False(controller.HasTvOpenReason);
+
+        // Adres değişmeyen denetim bekçiyi yenilemez.
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(2, services.Keepers.Count);
         controller.Dispose();
     }
 

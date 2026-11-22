@@ -1393,11 +1393,20 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var version = await services.InstallAndroidAppAsync(host, bundled, open, launch, replaceForeignApp, e => post(() => InstallEvent(e)));
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
             var located = target with { Host = host };
+            var addressChanged = tv?.Host != located.Host;
             tv = located;
             store.Save(StoreKeys.Tv, located);
             store.Save(StoreKeys.TvAppVersion, version);
             Changed(nameof(Tv));
             TvApp = new TvAppState(TvAppKind.UpToDate, version);
+            if (addressChanged && keeper is not null)
+            {
+                // Çeviri sürerken ADB bekçisi eski adresi tutar; yeni TV kaydıyla yeniden kurulur (Mac ile aynı).
+                var stale = keeper;
+                keeper = null;
+                stale.Stop();
+                StartKeeper(refreshApp: false);
+            }
         }
         catch (DevModeException error)
         {
@@ -2249,16 +2258,22 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// TV uygulamasını başlatır ve açık tutar; TV kapalıysa açıldığında bağlanır. Altyazı TV'ye gitmiyorsa ya da TV
     /// yoksa bir şey yapmaz.
     /// </summary>
-    private void StartKeeper()
+    private void StartKeeper(bool refreshApp = true)
     {
         if (keeper is not null || !ShowsOnTv || !HasTv || tv is not { } target) return;
         var running = server;
-        var tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target), ["key"] = server.AccessKey },
+        IKeeper? tvKeeper = null;
+        tvKeeper = services.MakeKeeper(target, store.Load<string>(StoreKeys.TvKey), new Dictionary<string, string> { ["server"] = ServerAddress(target), ["key"] = server.AccessKey },
             () => running.ConnectedClients > 0, moved => post(() => TvMoved(moved)), key => post(() => store.Save(StoreKeys.TvKey, key)), () => server.ConsolePort,
-            problem => post(() => OpenResult(problem, target.Brand)));
+            problem => post(() =>
+            {
+                // Yerine yenisi kurulan (eski adresteki) bekçinin geç gelen sonucu yok sayılır.
+                if (!ReferenceEquals(keeper, tvKeeper)) return;
+                OpenResult(problem, target.Brand);
+            }));
         tvKeeper.Start(TimeSpan.FromSeconds(5));
         keeper = tvKeeper;
-        _ = RefreshTvAppAsync();
+        if (refreshApp) _ = RefreshTvAppAsync();
     }
 
     /// <summary>Altyazının yeri değişti: TV seçildiyse TV uygulaması açılır, kaldırıldıysa artık açık tutulmaz.</summary>

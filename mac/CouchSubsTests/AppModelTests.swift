@@ -858,6 +858,23 @@ final class AppModelRunTests: XCTestCase {
         XCTAssertNil(model.tvOpenProblem)
     }
 
+    /// Bekçi TV'yi yeni adreste bulunca (onMoved) açma sonucu yine ana ekrana gelir; yalnız yerine yenisi kurulan
+    /// bekçinin geç sonucu yok sayılır (#985).
+    func testOpenResultOfAMovedKeeperIsStillShown() async throws {
+        let services = FakeServices()
+        let model = readyModel(services)
+        model.settings.output = .tv
+        await model.start()
+        services.onMoved?(LGTV(name: "LG TV", host: "127.0.0.2"))
+        for _ in 0..<50 where model.tv?.host != "127.0.0.2" { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(model.tv?.host, "127.0.0.2")
+        services.onOpenResult?(.unreachable)
+        for _ in 0..<50 where model.tvOpenProblem == nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(model.tvOpenProblem, .unreachable)
+        XCTAssertEqual(services.keepers.count, 1)
+        model.stop()
+    }
+
     func testDoubleStartCreatesOneSession() async {
         let services = FakeServices()
         let model = readyModel(services)

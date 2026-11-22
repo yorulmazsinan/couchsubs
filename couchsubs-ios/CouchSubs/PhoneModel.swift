@@ -230,6 +230,8 @@ final class PhoneModel: ObservableObject {
     @Published private(set) var serverPort: UInt16 = AppIdentity.serverPort
     private var session: StreamControlling?
     private var keeper: KeeperControlling?
+    /// Her yeni bekçide artar: durdurulan bekçinin geç gelen açma sonucu yenisininkiyle karışmaz.
+    private var keeperGeneration = 0
     private var pipeline: SubtitlePipeline?
     /// Ek alanları (görev, telefon, bildirim) okuyup çeviren; çeviri sürerken ve ek alan varken var (Mac ile aynı).
     private var regionWatcher: RegionWatcher?
@@ -966,13 +968,19 @@ final class PhoneModel: ObservableObject {
     private func startKeeper() {
         guard keeper == nil, settings.output.showsOnTV, hasTV, let tv else { return }
         let server = self.server
+        keeperGeneration += 1
+        let generation = keeperGeneration
         let keeper = services.makeKeeper(tv: tv, key: store.load(String.self, for: StoreKey.tvKey), params: ["server": serverAddress(for: tv), "key": server.accessKey],
                                          appConnected: { server.connectedClients > 0 }, onMoved: { [weak self] moved in
             Task { @MainActor in self?.tvMoved(to: moved) }
         }, onKey: { [weak self] key in
             Task { @MainActor in self?.store.save(key, for: StoreKey.tvKey) }
         }, consolePort: { server.consolePort }, onOpenResult: { [weak self] problem in
-            Task { @MainActor in self?.openResult(problem, brand: tv.brand) }
+            Task { @MainActor in
+                // Yerine yenisi kurulan (eski adresteki) bekçinin geç gelen sonucu yok sayılır.
+                guard let self, self.keeper != nil, self.keeperGeneration == generation else { return }
+                self.openResult(problem, brand: tv.brand)
+            }
         })
         keeper.start(interval: .seconds(5))
         self.keeper = keeper
@@ -1984,12 +1992,20 @@ final class PhoneModel: ObservableObject {
         // Kurulan TV altyazı hedefi olur (Android'deki TvAppUpdate.installed gibi); yoksa kurulumun 3. adımında "Devam"
         // kapalı kalıyor, uygulama her açılışta yine o adımdan başlıyordu (#113).
         if !(tv?.brand == brand && tv?.host == host && hasTV) {
+            let previousHost = tv?.host
             let name = switch brand {
             case .androidTV: "Android TV"
             case .lg: "LG TV"
             case .samsung: "Samsung TV"
             }
             try? await pair(LGTV(name: name, host: host, brand: brand))
+            if keeper != nil, tv?.host == host, previousHost != host {
+                // Çeviri sürerken bekçi eski adresi tutar (Android TV DHCP'den yeni adres aldı, #985); yeni TV kaydıyla
+                // yeniden kurulur (Mac ile aynı).
+                keeper?.stop()
+                keeper = nil
+                startKeeper()
+            }
         }
         if hasTV, tv?.host == host, step == .output {
             store.save(true, for: StoreKey.setupComplete)

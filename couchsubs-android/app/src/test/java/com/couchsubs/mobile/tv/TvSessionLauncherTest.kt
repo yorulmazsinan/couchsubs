@@ -110,6 +110,25 @@ class TvSessionLauncherTest {
         assertEquals(3, tries)
     }
 
+    /**
+     * #985: Android TV DHCP'den yeni adres aldı, kurulum onu yeni adreste bulup kaydı güncelledi. Bekçi eski adreste açmaya
+     * çalışıp duruyordu; artık kayıtlı TV'nin yeni adresine geçer ve orada yeniden dener.
+     */
+    @Test fun androidTvKeeperFollowsTheNewAddress() {
+        var rounds = 0
+        val opened = mutableListOf<String>()
+        val logged = mutableListOf<String>()
+        var saved = InstalledTv(TvBrand.ANDROID_TV, "192.168.1.120")
+        TvSessionLauncher.keepAndroidTvOpen(saved, "http://192.168.1.124:8787",
+            active = { rounds < 12 }, connected = { false },
+            open = { host, port, _ -> opened += "$host:$port"; throw java.io.IOException("ADB kapalı") }, log = { logged += it },
+            sleep = { rounds++; if (rounds == 4) saved = InstalledTv(TvBrand.ANDROID_TV, "192.168.1.121"); false },
+            now = { rounds * 30_000L }, current = { saved })
+        assertEquals(listOf("192.168.1.120:5555", "192.168.1.120:5555", "192.168.1.120:5555",
+            "192.168.1.121:5555", "192.168.1.121:5555", "192.168.1.121:5555"), opened)
+        assertTrue(logged.any { it.contains("192.168.1.120:5555 → 192.168.1.121:5555") })
+    }
+
     @Test fun connectedAndroidTvAppNeverGetsAnAdbConnection() {
         var rounds = 0
         var tries = 0

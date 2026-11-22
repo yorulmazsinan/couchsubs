@@ -112,21 +112,32 @@ object TvSessionLauncher {
      * @param open (adres, ADB portu, başlatma parametreleri) → `am start` çıktısı ya da AndroidTvInstaller.ALREADY_RUNNING;
      *   testlerde sahtesi verilir.
      * @param sleep en çok verilen süre bekler; "Otomatik açmayı dene" istendiyse true döner (sayaç sıfırlanır).
+     * @param current kayıtlı TV (her turda okunur): Android TV DHCP'den yeni adres alıp kurulum onu yeni adreste bulunca
+     *   bekçi yeni adrese geçer. Eskiden çeviri boyunca eski adreste açmaya çalışıyordu (#985; Mac, Windows, iPhone ile aynı).
      */
     internal fun keepAndroidTvOpen(
         tv: InstalledTv, server: String, active: () -> Boolean, connected: () -> Boolean,
         open: (String, Int, String?) -> String, log: (String) -> Unit = {},
         sleep: (Long) -> Boolean = { TvOpenRetry.waitOrRetry(it) },
         onOpenResult: (TvOpenProblem?) -> Unit = {}, now: () -> Long = { android.os.SystemClock.elapsedRealtime() },
-        rule: AndroidTvOpenRule = AndroidTvOpenRule(),
+        rule: AndroidTvOpenRule = AndroidTvOpenRule(), current: () -> InstalledTv? = { tv },
     ) {
-        val adbPort = tv.port.takeIf { it > 0 } ?: com.couchsubs.mobile.tv.android.AdbConnection.DEFAULT_PORT
+        var target = tv
+        var adbPort = adbPortOf(target)
         val params = com.couchsubs.mobile.tv.android.AndroidTvInstaller.launchParams(server)
         var last: String? = null
         while (active()) {
+            val saved = current()
+            if (saved != null && saved.brand == TvBrand.ANDROID_TV && (saved.host != target.host || adbPortOf(saved) != adbPort)) {
+                log("Android TV yeni adreste: ${target.host}:$adbPort → ${saved.host}:${adbPortOf(saved)}")
+                target = saved
+                adbPort = adbPortOf(saved)
+                last = null
+                rule.reset()
+            }
             if (rule.shouldTry(connected(), now())) {
                 val result = try {
-                    val output = open(tv.host, adbPort, params)
+                    val output = open(target.host, adbPort, params)
                     // Uygulama TV'de çalışırken bulunduysa `am start` gönderilmedi: açılış sayılmaz.
                     if (output != com.couchsubs.mobile.tv.android.AndroidTvInstaller.ALREADY_RUNNING) rule.opened()
                     onOpenResult(null)
@@ -136,12 +147,14 @@ object TvSessionLauncher {
                     "açılamadı: ${error.message ?: error.javaClass.simpleName}"
                 }
                 // Aynı sonuç her denemede yeniden yazılmaz.
-                if (result != last) log("Android TV (${tv.host}:$adbPort) telefonun adresiyle $result")
+                if (result != last) log("Android TV (${target.host}:$adbPort) telefonun adresiyle $result")
                 last = result
             }
             if (sleep(ANDROID_CHECK_MS)) rule.reset()
         }
     }
+
+    private fun adbPortOf(tv: InstalledTv) = tv.port.takeIf { it > 0 } ?: com.couchsubs.mobile.tv.android.AdbConnection.DEFAULT_PORT
 
     /** Telefonun TV'ye bakan adresiyle altyazı sunucusu ("http://192.168.1.20:8787"); bilinemezse null. */
     private fun serverAddress(remote: InetAddress, port: Int): String? {
@@ -221,7 +234,7 @@ object TvSessionLauncher {
                 if (!com.couchsubs.mobile.tv.android.AndroidTvInstaller.isReachable(host, adbPort)) throw java.io.IOException("ADB kapalı")
                 com.couchsubs.mobile.tv.android.AndroidTvInstaller(host, adbPort,
                     adbKey = { com.couchsubs.mobile.tv.samsung.AdbKey.loadOrCreate(adbKeyFile) }).open(params)
-            }, log = log, onOpenResult = onOpenResult)
+            }, log = log, onOpenResult = onOpenResult, current = { settings.installedTv })
             return
         }
         // Samsung: önce geliştirici bağlantısı (sdb `was_execute`; Windows, Mac ve iPhone ile aynı). Uzaktan kumanda

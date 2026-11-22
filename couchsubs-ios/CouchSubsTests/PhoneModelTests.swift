@@ -20,6 +20,13 @@ private final class FakeStream: StreamControlling {
     var hasGivenUp = false
 }
 
+private final class FakeKeeper: KeeperControlling {
+    private(set) var running = false
+    func start(interval: Duration) { running = true }
+    func stop() { running = false }
+    func reconnect() {}
+}
+
 private final class FakeServices: PhoneServices {
     var registerResult: Result<RegisteredConsole, Error> = .success(RegisteredConsole(host: "192.168.1.20", name: "PS5", registKey: Data(), morning: Data()))
     var launched = true
@@ -43,7 +50,15 @@ private final class FakeServices: PhoneServices {
     func makeKeeper(tv: LGTV, key: String?, params: [String: Any], appConnected: @escaping @Sendable () -> Bool,
                     onMoved: @escaping (LGTV) -> Void, onKey: @escaping @Sendable (String) -> Void,
                     consolePort: @escaping @Sendable () -> Int?,
-                    onOpenResult: @escaping @Sendable (TVOpenProblem?) -> Void) -> KeeperControlling { IdleKeeper() }
+                    onOpenResult: @escaping @Sendable (TVOpenProblem?) -> Void) -> KeeperControlling {
+        let keeper = FakeKeeper()
+        keepers.append((tv, keeper))
+        openResults.append(onOpenResult)
+        return keeper
+    }
+    /// Kurulan her bekçi ve kurulduğu TV kaydı.
+    var keepers: [(tv: LGTV, keeper: FakeKeeper)] = []
+    var openResults: [@Sendable (TVOpenProblem?) -> Void] = []
     func checkDeepLKey(_ key: String) async -> OnlineKeyCheck {
         key == "good" ? OnlineKeyCheck(state: .valid, used: 12_345, limit: 500_000) : OnlineKeyCheck(state: .invalid)
     }
@@ -112,6 +127,33 @@ final class PhoneModelTests: XCTestCase {
         XCTAssertTrue(model.hasTV)
         XCTAssertTrue(model.tvAppMissing)
         XCTAssertEqual(model.settings.output, .tv)
+    }
+
+    /// #985: Android TV DHCP'den yeni adres aldı. Kurulum TV'yi yeni adreste bulup kaydı güncelliyordu ama çeviri sürerken
+    /// çalışan bekçi eski adresi tutuyor, TV uygulaması hep eski adreste açılmaya çalışılıyordu. Bekçi yeni adresle yeniden
+    /// kurulur; eski bekçinin geç gelen açma sonucu yok sayılır.
+    func testAndroidTVKeeperFollowsTheNewAddressAfterInstall() async throws {
+        let model = makeModel()
+        try await model.completePSNLogin(redirect: URL(string: "https://example.com")!)
+        try await model.register(host: "192.168.1.20", pin: "12345678")
+        try await model.pair(LGTV(name: "Android TV", host: "192.168.1.40", brand: .androidTV))
+        await model.start()
+        XCTAssertEqual(services.keepers.map { $0.tv.host }, ["192.168.1.40"])
+        let stale = try XCTUnwrap(services.openResults.first)
+
+        await model.tvAppInstalled(brand: .androidTV, host: "192.168.1.41", port: nil, version: "0.9.76")
+        XCTAssertEqual(model.tv?.host, "192.168.1.41")
+        XCTAssertEqual(services.keepers.map { $0.tv.host }, ["192.168.1.40", "192.168.1.41"])
+        XCTAssertFalse(services.keepers[0].keeper.running)
+        XCTAssertTrue(services.keepers[1].keeper.running)
+        stale(.unreachable)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertNil(model.tvOpenProblem)
+
+        // Aynı adreste yeniden kurulum bekçiyi yenilemez.
+        await model.tvAppInstalled(brand: .androidTV, host: "192.168.1.41", port: nil, version: "0.9.76")
+        XCTAssertEqual(services.keepers.count, 2)
+        model.stop()
     }
 
     private func pairCall(_ method: String, _ model: PhoneModel, _ query: String = "") async throws -> (Int, [String: String]) {
