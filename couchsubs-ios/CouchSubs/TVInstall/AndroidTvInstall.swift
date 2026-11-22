@@ -427,7 +427,8 @@ final class AndroidTvInstaller {
         let fromPlay = Self.installedFromPlay(dumpsys)
         if Self.isLeftover(dumpsys) { log.write("TV'de CouchSubs'ın kaydı kalmış ama uygulama kurulu değil; yeniden kuruluyor.") }
         log.write("TV'deki CouchSubs: \(installed ?? "yok")\(fromPlay ? " (Google Play'den)" : "")")
-        if let installed, let version, !Versions.isNewer(version, than: installed) {
+        // İmzası CouchSubs olduğu doğrulanmayan aynı paket adlı uygulama "güncel" sayılıp açılmaz (Windows/Android ile aynı).
+        if let installed, Self.signatureIsOurs(dumpsys), let version, !Versions.isNewer(version, than: installed) {
             grantOverlay(adb)
             launch(adb)
             return Result(version: installed, installed: false)
