@@ -373,6 +373,46 @@ final class ReadQueueTests: XCTestCase {
         XCTAssertFalse(VisionReader.useFastLevel)
     }
 
+    /// Erken sınır (`subtitleTimeoutMs`) Vision isteklerini biriktirmez: takılı sayılan okuma iptal edilemez ama o bitene
+    /// kadar asıl okuyucuya ikinci istek verilmez; art arda gelen altyazı okumalarının hepsi yedeğe gider, takılma bir kez
+    /// günlüğe yazılır. (Mac, beta.80: altyazı gelmezken süreçte birden çok Vision iş parçacığı görülünce şüphelenildi.)
+    func testEarlySubtitleLimitNeverStacksPrimaryReads() async throws {
+        let hang = Hang()
+        defer { hang.release() }
+        let queue = ReadQueue(label: "test.subtitle.nostack", timeoutMs: 5000, subtitleTimeoutMs: 80)
+        let rescuer = FakeRescuer()
+        queue.rescuer = rescuer
+        let events = Events()
+        queue.onEvent = { events.add($0) }
+        let primary = Concurrency()
+        for _ in 0..<12 {
+            _ = try? await queue.run(priority: .subtitle, detail: "altyazı 64x64") { () -> Reading in
+                // Yedek bağlamda değilse asıl okuyucudadır (Vision'ın yerinde): girer ve takılır.
+                guard ReadQueue.activeRescuer == nil else { return try VisionReader().readLines(self.image(), deep: false) }
+                primary.enter()
+                defer { primary.leave() }
+                hang.wait()
+                return .empty
+            }
+            _ = try? await queue.run(priority: .background, detail: "ek alan 64x64") { () -> Reading in
+                guard ReadQueue.activeRescuer == nil else { return try VisionReader().readLines(self.image(), deep: false) }
+                primary.enter()
+                defer { primary.leave() }
+                hang.wait()
+                return .empty
+            }
+        }
+        XCTAssertEqual(primary.maxAtOnce, 1, "asıl okuyucuda aynı anda tek okuma")
+        XCTAssertEqual(primary.calls, 1, "takılan okuma bitmeden asıl okuyucuya yeni okuma verilmez")
+        XCTAssertEqual(rescuer.reads.value, 23, "öbür okumaların hepsi yedekten")
+        let stalls = events.all.filter { if case .stalled(_, rescued: true) = $0 { return true } else { return false } }
+        XCTAssertEqual(stalls.count, 1, "takılma günlüğe bir kez yazılır")
+        hang.release()
+        for _ in 0..<200 where queue.stalledMs != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNil(queue.stalledMs, "takılan okuma bitince asıl okuyucuya dönülür")
+        XCTAssertEqual(rescuer.standDowns.value, 1)
+    }
+
     /// iPhone: asla dönmeyen okuma altyazıyı uygulama kapatılana dek durduruyordu (TestFlight, X). Takılma yeterince
     /// uzunsa bırakılır; sonraki okuma yeni kuyrukta ve hızlı düzeyde verilir. Sınır kadar bırakıldıktan sonra yine `stuck`.
     func testNeverReturningReadIsAbandonedWithoutRescue() async throws {

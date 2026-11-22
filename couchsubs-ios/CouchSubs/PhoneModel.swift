@@ -1193,7 +1193,8 @@ final class PhoneModel: ObservableObject {
         if regionWatcher == nil, !areas.isEmpty || pose != nil { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
         regionWatcher?.offer(frame, areas: areas, phone: pose)
         // Ekranda menü açık (otomatik ekran yazısı menü durumunda): menü satırları altyazıya karışmasın, altyazı okunmaz.
-        if screenTextDetector?.inMenu == true { return }
+        // Atlama günlüğe yazılır (geçişte bir kez, sessizlik sürerse dakikada bir özet; bkz. `SubtitlePipeline.skipForMenu`).
+        if screenTextDetector?.inMenu == true { current.skipForMenu(); return }
         // Önceki kare hâlâ işleniyorsa bu kare atlanır. Tek okuma bitmezse çeviri tamamen duruyor, "Durdur / Başlat"
         // düzeltmiyordu (Mac'te görüldü, 2026-11-13); takılan okuma hattı yeniden kurdurur.
         var entry = frameGate.enter(now: SubtitleStabilizer.uptimeMs())
