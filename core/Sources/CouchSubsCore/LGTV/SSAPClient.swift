@@ -358,13 +358,22 @@ public final class TVKeeper: @unchecked Sendable {
             return
         }
         defer { fresh.close() }
-        let opened = (try? await fresh.launch(appId: appId, params: params)) != nil
+        var notInstalled = false
+        let opened: Bool
+        do {
+            try await fresh.launch(appId: appId, params: params)
+            opened = true
+        } catch {
+            // Samsung: TV kurulu olduğunu doğrulamadı, açma komutu gönderilmedi (kurulum gerekiyor; TV yanıt verdi).
+            notInstalled = (error as? SamsungClient.SamsungError) == .notInstalled
+            opened = false
+        }
         if opened {
             sentAt = now()
             // TV bir önceki komutta da açmadıysa neden satırı yeniden gönderilen komutla silinmez (her 30 sn'de yanıp sönmesin).
             if lastReported == .notOpened { return }
         }
-        report(opened ? nil : .unreachable)
+        report(opened ? nil : notInstalled ? .notInstalled : .unreachable)
     }
 
     /// Sonuç ana ekrana gider; değiştiğinde subtitles.log'a da yazılır (eskiden Samsung'da açma denemesi iz bırakmıyordu).

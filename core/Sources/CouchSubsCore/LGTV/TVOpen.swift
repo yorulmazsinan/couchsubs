@@ -18,6 +18,10 @@ public enum TVOpenProblem: String, Sendable, Equatable {
     case debugNotApproved
     /// Samsung: açma komutu gitti ama TV uygulaması `TVKeeper.samsungOpenCheck` içinde bağlanmadı (TV komutu yok saydı).
     case notOpened
+    /// Samsung: TV, CouchSubs'ın kurulu olduğunu doğrulamadı (listede yok ya da liste 3 sn'de gelmedi); açma komutu
+    /// gönderilmedi. Kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna
+    /// bağlanılamıyor (AS400)" der (Samsung 7 Series 2018, 21 Kas).
+    case notInstalled
 
     /// Bekçinin bildirdiği sorun, ekranda gösterilecek olana çevrilir: LG/Samsung'da kayıtlı anahtar yokken yanıt vermeyen
     /// TV "izin yok" sayılır (TV'nin izin sorusu yanıtlanmamış).
@@ -47,8 +51,14 @@ public enum TVOpenText {
         case .debugOff: "Couldn't open it automatically: the TV can't be reached for debugging. Is the TV on, with network debugging on in Developer options?"
         case .debugNotApproved: "Couldn't open it automatically: the TV hasn't allowed debugging from this device. Reinstall the TV app and allow it on the TV."
         case .notOpened: "Couldn't open it automatically: the TV got the open command but didn't open CouchSubs. Open it on the TV with the remote."
+        case .notInstalled: notInstalledReason
         }
     }
+
+    public static let notInstalledReason = "Couldn't open it automatically: the TV didn't confirm that the CouchSubs TV app is installed, so no open command was sent. Install the TV app, then try again. If the TV shows “Unable to connect to Samsung server” (AS400), the TV can't reach Samsung's servers: check its internet connection and unplug it for 30 seconds."
+
+    /// Samsung kurulumu başarısız olunca: TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı ne demek.
+    public static let samsungServerHint = "If the TV shows “Unable to connect to Samsung server” (AS400): this warning comes from the TV itself; the TV can't reach Samsung's servers. Check the TV's internet connection, unplug the TV and plug it back in after 30 seconds. To install CouchSubs, enter this device's address as Host PC IP."
 
     public static let tryButton = "Try opening automatically"
 

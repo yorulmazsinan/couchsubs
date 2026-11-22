@@ -161,6 +161,7 @@ final class TVKeeperTests: XCTestCase {
         var foreground: [String]
         var launches: [(String, [String: String])] = []
         var failNext = false
+        var launchError: Error?
         var closes = 0
         init(foreground: [String]) { self.foreground = foreground }
         func close() { closes += 1 }
@@ -169,6 +170,7 @@ final class TVKeeperTests: XCTestCase {
             return foreground.isEmpty ? "com.couchsubs.tv" : foreground.removeFirst()
         }
         func launch(appId: String, params: [String: Any]) async throws {
+            if let launchError { throw launchError }
             launches.append((appId, params.compactMapValues { $0 as? String }))
         }
     }
@@ -353,7 +355,7 @@ final class TVKeeperTests: XCTestCase {
         XCTAssertNotEqual(TVOpenText.openOnTV(.androidTV), TVOpenText.openOnTV(.lg))
         XCTAssertEqual(TVOpenText.openOnTV(.lg), TVOpenText.openOnTV(.samsung))
         XCTAssertNil(TVOpenText.reason(nil))
-        for problem in [TVOpenProblem.unreachable, .notPaired, .debugOff, .debugNotApproved] {
+        for problem in [TVOpenProblem.unreachable, .notPaired, .debugOff, .debugNotApproved, .notOpened, .notInstalled] {
             XCTAssertNotNil(TVOpenText.reason(problem))
         }
     }
@@ -383,6 +385,20 @@ final class TVKeeperTests: XCTestCase {
         XCTAssertEqual(control.launches.count, 3)
         XCTAssertEqual(results, [nil, .notOpened, nil])
         XCTAssertNotNil(TVOpenText.reason(.notOpened))
+    }
+
+    func testSamsungUnconfirmedAppIsReportedAsNotInstalled() async throws {
+        // Samsung 7 Series 2018 (21 Kas): kurulu olduğu doğrulanmayan uygulamaya açma komutu gitmez; ana ekran "TV
+        // uygulamasını kurun" ve AS400 ipucunu gösterir, "TV yanıt vermedi" demez.
+        let control = FakeControl(foreground: [])
+        control.launchError = SamsungClient.SamsungError.notInstalled
+        var results: [TVOpenProblem?] = []
+        let keeper = TVKeeper(connect: { control }, appId: "x", params: [:], appConnected: { false },
+                              onOpenResult: { results.append($0) })
+        await keeper.tick()
+        XCTAssertEqual(results, [.notInstalled])
+        XCTAssertTrue(TVOpenText.reason(.notInstalled)!.contains("AS400"))
+        XCTAssertTrue(TVOpenText.samsungServerHint.contains("Host PC IP"))
     }
 
     func testSamsungConnectedAppIsNotReportedAsNotOpened() async throws {

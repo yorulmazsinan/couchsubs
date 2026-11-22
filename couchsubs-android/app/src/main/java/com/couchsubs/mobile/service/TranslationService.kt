@@ -361,17 +361,20 @@ class TranslationService : Service() {
                     log = com.couchsubs.mobile.tv.samsung.InstallLog(java.io.File(filesDir, "tvinstall.log")),
                 ).openApp()
         }
+        // Gönderilmeyen açma isteği (kurulu olduğu doğrulanmadı) tvinstall.log'a da yazılır (Windows/Mac/iPhone ile aynı).
+        val tvInstallLog = com.couchsubs.mobile.tv.samsung.InstallLog(java.io.File(filesDir, "tvinstall.log"))
         Thread({ runCatching {
             com.couchsubs.mobile.tv.TvSessionLauncher.launch(settings, subtitlePort, key,
                 adbKeyFile = java.io.File(noBackupFilesDir, "adb/adbkey"), connected = connected,
-                log = { Log.i(TAG, it) }, onOpenResult = report, openWithSdb = openWithSdb, active = active)
+                log = { Log.i(TAG, it) }, onOpenResult = report, openWithSdb = openWithSdb, installLog = tvInstallLog::write, active = active)
             // LG: PS tuşu TV'yi PS5'in girişine geçirince uygulama geri getirilir (Windows/Mac/iPhone bekçisiyle aynı).
             com.couchsubs.mobile.tv.TvSessionLauncher.keepLgOpen(settings, subtitlePort, key, consolePort = { server?.consolePort },
                 log = { Log.i(TAG, it) }, onOpenResult = report) { active() && settings.target.showsOnTv }
             // Samsung: TV uygulaması bağlı değilken arada bir (ya da "Otomatik açmayı dene"de hemen) yeniden açılır.
             com.couchsubs.mobile.tv.TvSessionLauncher.keepSamsungOpen(settings, subtitlePort, key, connected = connected,
                 log = { Log.i(TAG, it) }, onOpenResult = report, openWithSdb = openWithSdb,
-                lastResult = { LiveState.status.value.tvOpenProblem }, active = { active() && settings.target.showsOnTv })
+                lastResult = { LiveState.status.value.tvOpenProblem }, installLog = tvInstallLog::write,
+                active = { active() && settings.target.showsOnTv })
         } }, "CouchSubs TV launch").apply { isDaemon = true }.start()
     }
     private lateinit var settings: AppSettings

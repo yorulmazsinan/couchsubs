@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile.tv
+import com.couchsubs.mobile.R
 import org.json.JSONObject
 import org.junit.Test
 import org.junit.Assert.*
@@ -39,7 +40,12 @@ class TvSessionLauncherTest {
         assertNull(TvSessionLauncher.samsungAction(false, missing))
         assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 2)))
         assertEquals("NATIVE_LAUNCH", TvSessionLauncher.samsungAction(false, TvSessionLauncher.SamsungAppPresence(true, 4)))
-        assertEquals("DEEP_LINK", TvSessionLauncher.samsungAction(false, null))
+        // Liste 3 sn'de gelmedi: kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna
+        // bağlanılamıyor (AS400)" der (Samsung 7 Series 2018); komut gönderilmez, tvinstall.log'a yazılır.
+        assertNull(TvSessionLauncher.samsungAction(false, null))
+        assertTrue(TvSessionLauncher.samsungNotSentLine("1.2.3.4", null).contains("uygulama listesi 3 sn'de gelmedi; açma isteği gönderilmedi"))
+        assertTrue(TvSessionLauncher.samsungNotSentLine("1.2.3.4", missing).contains("açma isteği gönderilmedi"))
+        assertEquals(R.string.tv_open_not_installed, TvOpenProblem.reason(TvOpenProblem.NOT_INSTALLED))
 
         val unknown = InstalledTv(TvBrand.SAMSUNG, "192.168.1.40")
         assertFalse(TvSessionLauncher.samsungKnownInstalled(unknown, null))

@@ -489,6 +489,7 @@
     <string name="tvinstall_signin_failed_hint">Yeniden deneyebilir ya da girişi telefonun tarayıcısında yapabilirsin. Giriş bitince CouchSubs\'a dön; kurulum kendiliğinden sürer.</string>
     <string name="webview_out_of_memory">Telefonun belleği uygulama içi tarayıcıya yetmedi. Arka plandaki uygulamaları kapatıp yeniden dene ya da girişi tarayıcıda yap.</string>
     <string name="tvinstall_maintenance">TV\'de “Sunucu bakım altında” yazıyorsa TV, Samsung\'un sunucularına ulaşamıyor: TV\'nin internet bağlantısını, tarih ve saatini kontrol et, TV\'yi yeniden başlatıp tekrar dene.</string>
+    <string name="tvinstall_samsung_server">TV\'de “Samsung sunucusuna bağlanılamıyor” (AS400) yazıyorsa bu uyarı TV\'nin kendisinden geliyor: TV, Samsung sunucularına ulaşamıyor. TV\'nin internet bağlantısını kontrol et, TV\'yi fişten çekip 30 sn sonra tak. CouchSubs kurulumu için Host PC IP olarak bu telefonun adresini gir.</string>
     <string name="tvinstall_err_unreachable">TV bu telefonu kabul etmedi. TV\'deki geliştirici modu penceresinde Host PC IP\'nin bu telefonun adresi (%1$s) olduğunu kontrol et ve TV\'yi tam yeniden başlat: güç tuşunu Samsung logosu görünene kadar (yaklaşık 5 saniye) basılı tut ya da TV\'nin fişini 30 saniye çek.</string>
     <string name="tvinstall_err_other_network">TV (%1$s) ile bu telefon (%2$s) farklı ağlarda, bu yüzden TV telefonu kabul etmiyor. İkisini aynı Wi-Fi\'ya bağla (misafir ağı ya da ikinci modem değil), TV\'de Host PC IP\'ye telefonun yeni adresini yaz, sonra TV\'yi tam yeniden başlat (güç tuşunu Samsung logosu görünene kadar, yaklaşık 5 saniye basılı tut).</string>
     <string name="tvinstall_err_not_restarted">TV\'deki ayar doğru (Geliştirici modu açık, Host PC IP %1$s), ama TV o zamandan beri tam yeniden başlamadığı için telefonu henüz kabul etmiyor. Kumandanın güç tuşunu TV kapanıp Samsung logosuyla yeniden açılana kadar (yaklaşık 5 saniye) basılı tut ya da TV\'nin fişini 30 saniye çek, sonra tekrar dene.</string>
@@ -725,6 +726,7 @@
     <string name="tv_open_debug_off">Otomatik açılamadı: TV\'ye hata ayıklama bağlantısıyla ulaşılamıyor. TV açık mı, Geliştirici seçeneklerinde ağ üzerinden hata ayıklama açık mı?</string>
     <string name="tv_open_debug_not_approved">Otomatik açılamadı: TV bu cihazın hata ayıklama iznini onaylamadı. TV uygulamasını yeniden kurun ve TV\'de izin verin.</string>
     <string name="tv_open_not_opened">Otomatik açılamadı: TV açma komutunu aldı ama CouchSubs\'ı açmadı. Kumandayla TV\'den açın.</string>
+    <string name="tv_open_not_installed">Otomatik açılamadı: TV, CouchSubs TV uygulamasının kurulu olduğunu doğrulamadı; açma komutu gönderilmedi. TV uygulamasını kurup tekrar deneyin. TV\'de “Samsung sunucusuna bağlanılamıyor” (AS400) yazıyorsa TV, Samsung sunucularına ulaşamıyor: TV\'nin internet bağlantısını kontrol edin ve TV\'yi 30 sn fişten çekin.</string>
     <string name="tv_open_try">Otomatik açmayı dene</string>
     <string name="tv_open_wizard_note">Her oyunda çeviriyi başlattığınızda CouchSubs TV uygulamasını kendisi açmaya çalışır; açılmazsa TV\'den CouchSubs\'ı açın.</string>
     <string name="engine_local">Yerel model</string>

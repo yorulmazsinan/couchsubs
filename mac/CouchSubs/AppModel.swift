@@ -221,6 +221,7 @@ final class LiveServices: AppServices {
             // Bilgisayar bu TV'yi denetlemez; TV uygulaması bilgisayarı kendisi bulur.
             return TVPairing(key: "", launched: true)
         case .samsung:
+            SamsungAppKnowledge.installLog = { TVInstallLog.write($0) }
             let client = SamsungClient(tv: tv, token: key)
             defer { client.close() }
             let token: String
@@ -235,7 +236,13 @@ final class LiveServices: AppServices {
                 TVInstallLog.write("Samsung uzaktan kumanda izni alınamadı (\(error)); TV 8001'de yanıt verdi, eşleşme izinsiz sürdü.")
                 return TVPairing(key: key ?? "", launched: true)
             }
-            try? await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server, "key": accessKey])
+            // TV uygulamanın kurulu olduğunu doğrulamadıysa (listede yok ya da liste 3 sn'de gelmedi) açma komutu gitmez:
+            // kurulum adımları görünür (Smart Hub mağaza aramasına gidip "AS400" demesin; iPhone ve Windows ile aynı).
+            do {
+                try await client.launch(appId: AppIdentity.samsungAppId, params: ["server": server, "key": accessKey])
+            } catch SamsungClient.SamsungError.notInstalled {
+                return TVPairing(key: token, launched: false)
+            } catch {}
             return TVPairing(key: token, launched: true)
         case .lg:
             break
@@ -262,6 +269,7 @@ final class LiveServices: AppServices {
             guard TVHelper.executable != nil, let server = params["server"] as? String, !tv.host.isEmpty else { return IdleKeeper() }
             return AndroidTVKeeper(host: tv.host, server: server, appConnected: appConnected, onOpenResult: onOpenResult)
         case .samsung:
+            SamsungAppKnowledge.installLog = { TVInstallLog.write($0) }
             let token = SamsungTokenHolder(token: key, onChange: onKey)
             let paired = tv.host
             let locator = TVLocator(tv: tv, connect: { tv in

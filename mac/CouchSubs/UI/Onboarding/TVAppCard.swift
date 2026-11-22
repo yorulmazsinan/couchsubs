@@ -254,6 +254,10 @@ struct TVAppCard: View {
         if error == .installFailed || error == .certificateRejected {
             text += "\n\n" + String(localized: "If the TV shows “Server under maintenance”, it cannot reach Samsung's servers: check the TV's internet connection and its date and time, restart the TV and try again.")
         }
+        // TV'nin kendi "Samsung sunucusuna bağlanılamıyor (AS400)" uyarısı (Samsung 7 Series 2018, 21 Kas).
+        if error == .installFailed || error == .certificateRejected || error == .unreachable {
+            text += "\n\n" + String(localized: "If the TV shows “Unable to connect to Samsung server” (AS400): this warning comes from the TV itself; the TV can't reach Samsung's servers. Check the TV's internet connection, unplug the TV and plug it back in after 30 seconds. To install CouchSubs, enter this device's address as Host PC IP.")
+        }
         // Samsung kısa basışta yalnız bekleme moduna geçer; "yeniden başlatın" diyen hatalarda nasıl yapılacağı yazılır.
         if error == .unreachable || error == .installFailed || error == .certificateRejected {
             text += "\n\n" + String(localized: "To restart a Samsung TV fully, hold the power button on the remote until the TV turns off and comes back on with the Samsung logo (about 5 seconds), or unplug it for 30 seconds. Letting go when it turns off only puts it on standby.")

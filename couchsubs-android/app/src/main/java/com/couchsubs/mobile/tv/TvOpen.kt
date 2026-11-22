@@ -21,7 +21,13 @@ enum class TvOpenProblem {
     /** Android TV: TV bu telefonun hata ayıklama iznini onaylamamış (ADB eşleşmesi yok). */
     DEBUG_NOT_APPROVED,
     /** Samsung: açma komutu gitti ama TV uygulaması [TvSessionLauncher.SAMSUNG_OPEN_CHECK_MS] içinde bağlanmadı (TV komutu yok saydı). */
-    NOT_OPENED;
+    NOT_OPENED,
+    /**
+     * Samsung: TV, CouchSubs'ın kurulu olduğunu doğrulamadı (listede yok ya da liste 3 sn'de gelmedi); açma komutu
+     * gönderilmedi. Kurulu olmayan uygulamaya DEEP_LINK Smart Hub'ı mağazaya yollar, TV "Samsung sunucusuna bağlanılamıyor
+     * (AS400)" der (Samsung 7 Series 2018, 21 Kas).
+     */
+    NOT_INSTALLED;
 
     companion object {
         /**
@@ -50,6 +56,7 @@ enum class TvOpenProblem {
             DEBUG_OFF -> R.string.tv_open_debug_off
             DEBUG_NOT_APPROVED -> R.string.tv_open_debug_not_approved
             NOT_OPENED -> R.string.tv_open_not_opened
+            NOT_INSTALLED -> R.string.tv_open_not_installed
         }
     }
 }

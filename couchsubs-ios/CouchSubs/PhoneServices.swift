@@ -139,6 +139,8 @@ final class LivePhoneServices: PhoneServices {
             }.value
             return TVPairing(key: "", launched: true)
         case .samsung:
+            // Kurulu olduğu doğrulanmayan uygulamaya açma komutu gitmez (launched false: kurulum adımı); satır tvinstall.log'a.
+            SamsungAppKnowledge.installLog = { InstallLog.shared.write($0) }
             let client = SamsungClient(tv: tv, token: key)
             defer { client.close() }
             let token = try await client.connect()
@@ -167,6 +169,7 @@ final class LivePhoneServices: PhoneServices {
             return AndroidTVKeeper(host: tv.host, port: InstalledTVApp.adbPort(for: tv.host), server: server, appConnected: appConnected,
                                    onOpenResult: onOpenResult)
         case .samsung:
+            SamsungAppKnowledge.installLog = { InstallLog.shared.write($0) }
             let token = SamsungTokenHolder(token: key, onChange: onKey)
             let paired = tv.host
             let locator = TVLocator(tv: tv, connect: { tv in

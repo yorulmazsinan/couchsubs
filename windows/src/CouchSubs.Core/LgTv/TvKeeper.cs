@@ -172,6 +172,11 @@ public sealed class TvKeeper(Func<Task<ITvControl>> connect, string appId, IRead
             if (lastReported == TvOpenProblem.NotOpened) return;
             Report(null);
         }
+        catch (SsapException error) when (error.Reason == SamsungClient.NotInstalledReason)
+        {
+            // Samsung: TV kurulu olduğunu doğrulamadı, açma komutu gönderilmedi (kurulum gerekiyor; TV yanıt verdi).
+            Report(TvOpenProblem.NotInstalled);
+        }
         catch (Exception)
         {
             // TV kapalı ya da ulaşılamıyor; bir sonraki denemede yeniden.
