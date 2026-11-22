@@ -6,12 +6,11 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **Mac: Remote Play penceresinden okuma ~10 sn'de bir değil, her karede** (#822): Biten okuma pencerenin karesini 10 sn tutmuyor; aradaki altyazılar artık kaçmıyor. Günlükte dakikada bir kare sayısı yazıyor.
-- **LG'de ekranın dakikada bir 2 sn kararıp "HDR" yazısı çıkması** düzeltildi (TV uygulaması 0.9.73): sağlam görüntü artık boşuna yeniden kurulmuyor.
-- **TV'de görev satırı:** Türkçesi kendi yerinde kalıyor; altyazı kalkınca kayık durmuyor, kırpık ekran yazısı görevi örtmüyor.
-- **Konuşan adıyla başlayan satır** (ör. "Jason: …") artık görev/HUD ya da menü yazısı sayılıp atılmıyor; menü sayılması için satırlar hizalı olmalı.
-- **Sessizlik bekçisi:** Konuşmaya benzeyen bir satır 10 sn okunup çevrilmezse doğrudan çevriliyor; neden günlüğe yazılıyor.
-- **Tanı:** Altyazı alanında yazı çıkmayınca nedeni altyazi.log'da (okunmadı, boş okuma, süzgeç, hata).
+- **GTA 6 telefonu:** Her mesajın çevirisi kendi balonunun üstünde, balonun renginde; çeviriler artık ekranın ortasında ya da kenarında toplanmıyor, alttaki mesajlar kesilmiyor (Windows, iPhone; Mac, Android ve TV zaten böyleydi).
+- **GTA 6 haber bandı** (#933): Karakter TV izlerken uzun süredir değişmeyen haber bandı, yeni beliren konuşma altyazısının yerine çevrilmiyor.
+- **Samsung'da "Samsung sunucusuna bağlanılamıyor (AS400)":** TV uygulaması kurulu olduğu doğrulanmadan TV'den uygulamayı açması istenmiyor (TV mağaza aramasına gitmiyor); kurulum adımı öneriliyor ve AS400 uyarısının nedeni ile çözümü ekranda.
+
+**beta.82'de gelenler:** Mac'te Remote Play penceresinden ~10 sn'de bir okuma (#822), LG'de dakikada bir kararma ve "HDR" yazısı (TV uygulaması 0.9.73), görev satırının TV'de yerinde kalması, konuşan adıyla başlayan satırların atılmaması, sessizlik bekçisi.
 
 **beta.81'de gelenler:** çevirinin durması (menü durumu) düzeltmesi, "Altyazı zeminini izle"nin kaldırılması, "TV uygulamasını güncelle"nin ana ekranda çalışması, DeepL hata nedenleri, eski TV'lerde altyazının kaybolmaması.
 
