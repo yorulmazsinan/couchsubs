@@ -6,9 +6,11 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni** (yalnız hata düzeltmeleri; gerçek oyun kareleriyle gerileme testinden geçti)
 
-- **GTA 6 telefonu:** Her mesajın çevirisi kendi balonunun üstünde, balonun renginde; çeviriler artık ekranın ortasında ya da kenarında toplanmıyor, alttaki mesajlar kesilmiyor (Windows, iPhone; Mac, Android ve TV zaten böyleydi).
-- **GTA 6 haber bandı** (#933): Karakter TV izlerken uzun süredir değişmeyen haber bandı, yeni beliren konuşma altyazısının yerine çevrilmiyor.
-- **Samsung'da "Samsung sunucusuna bağlanılamıyor (AS400)":** TV uygulaması kurulu olduğu doğrulanmadan TV'den uygulamayı açması istenmiyor (TV mağaza aramasına gitmiyor); kurulum adımı öneriliyor ve AS400 uyarısının nedeni ile çözümü ekranda.
+- **Android TV'de siyah ekran** (Philips, TCL vb.): Görüntü modu artık varsayılan olarak Otomatik; TV uygulaması doğrudan Katman'da açılıyor, çeviri başlayınca ekran kararmıyor (TV uygulaması 0.9.74). İsteyen Ayarlar'dan Uygulama İçinde ya da Katman'ı seçebilir.
+- **Güncelleme penceresi:** Yalnız yeni sürümün notlarını gösteriyor, eski sürümlerin notları tekrar gelmiyor.
+- **Oyun paketleri:** Paket indirme istekleri uygulama tarafından imzalanıyor. Paketlerin kesintisiz inmesi için bu sürüme güncellemeniz önerilir.
+
+**beta.83'te gelenler:** GTA 6 telefon mesajlarının kendi balonunda çevrilmesi, haber bandının konuşmanın önüne geçmemesi (#933), Samsung'da AS400 uyarısı düzeltmesi.
 
 **beta.82'de gelenler:** Mac'te Remote Play penceresinden ~10 sn'de bir okuma (#822), LG'de dakikada bir kararma ve "HDR" yazısı (TV uygulaması 0.9.73), görev satırının TV'de yerinde kalması, konuşan adıyla başlayan satırların atılmaması, sessizlik bekçisi.
 
