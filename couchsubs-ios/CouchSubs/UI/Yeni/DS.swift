@@ -91,6 +91,10 @@ enum DS {
     static func space(_ name: String) -> CGFloat { CGFloat(tokens.space[name] ?? 0) }
     static func radius(_ name: String) -> CGFloat { CGFloat(tokens.radius[name] ?? 0) }
     static func size(_ name: String) -> CGFloat { CGFloat(tokens.size[name] ?? 0) }
+    /// Dikey ritim Mac'le aynı (tasarim.json › space): başlık → denetim 8, denetim → açıklama 6; birimler arası 24.
+    static var unitTitleGap: CGFloat { space("unitTitle") }
+    static var unitHintGap: CGFloat { space("unitHint") }
+    static var unitGap: CGFloat { space("unitGap") }
     static var mutedTracking: CGFloat { CGFloat(tokens.mutedTracking) }
 
     // MARK: Hareket
@@ -185,5 +189,17 @@ extension EnvironmentValues {
     var dsMotionOff: Bool {
         get { self[DSReducedMotionKey.self] }
         set { self[DSReducedMotionKey.self] = newValue }
+    }
+}
+
+/// Ortak Card'ın (Components.swift) öğe aralığı; Mac'teki DSComponents.swift ile aynı anahtar ve varsayılan.
+private struct DSCardSpacingKey: EnvironmentKey {
+    static let defaultValue = DS.space("m")
+}
+
+extension EnvironmentValues {
+    var dsCardSpacing: CGFloat {
+        get { self[DSCardSpacingKey.self] }
+        set { self[DSCardSpacingKey.self] = newValue }
     }
 }
