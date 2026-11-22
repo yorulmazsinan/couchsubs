@@ -265,6 +265,28 @@ public partial class ShellWindow : Window
     }
 
     /// <summary>
+    /// "Günlüğü Kopyala": günlükler maskelenip zip olur, zip panoya DOSYA olarak konur (yapıştırınca dosya gelir); altında
+    /// kısa onay ve "Gezgin'de Göster". Sürerken "Kopyalanıyor…" yazar, basılamaz.
+    /// </summary>
+    private async void OnCopyLog(object sender, RoutedEventArgs e)
+    {
+        LogCopy.IsEnabled = false;
+        LogCopyText.Text = Localizer.Current["Copying…"];
+        var zip = await LogArchive.CopyAsync();
+        LogCopy.IsEnabled = true;
+        LogCopyText.Text = Localizer.Current["Copy Log"];
+        LogCopiedOk.Visibility = LogShow.Visibility = zip is null ? Visibility.Collapsed : Visibility.Visible;
+        LogCopyFailed.Visibility = zip is null ? Visibility.Visible : Visibility.Collapsed;
+        LogCopied.IsOpen = true;
+    }
+
+    private void OnShowLog(object sender, RoutedEventArgs e)
+    {
+        LogCopied.IsOpen = false;
+        LogArchive.ShowInExplorer();
+    }
+
+    /// <summary>
     /// En küçük boy 1200 × 760 (tasarım). Ekranın çalışma alanı bundan küçükse (1366 × 768 dizüstü) pencere ekrana
     /// sığacak kadar küçülebilir; yoksa pencerenin altı görev çubuğunun arkasında kalırdı.
     /// </summary>

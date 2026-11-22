@@ -1503,6 +1503,50 @@
         <Setter Property="FontSize" Value="{DynamicResource smallFontSize}" />
         <Setter Property="FontWeight" Value="{DynamicResource labelFontWeight}" />
     </Style>
+    <!-- Üst çubuktaki "Günlüğü Kopyala" (Mac LogCopyButton): durum hapıyla aynı 40 yükseklikte ikincil hap; yüzey zemini, ince halka,
+         gri simge + 13 yazı; üzerine gelince alan zemini. -->
+    <Style x:Key="LogPill" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Foreground" Value="{DynamicResource mutedBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Frame" Height="{DynamicResource size.tab}" Padding="{m:Sp 'm,0'}" Background="{DynamicResource surfaceBrush}"
+                            BorderBrush="{DynamicResource borderBrush}" BorderThickness="1"
+                            CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource PillCorner}}">
+                        <ContentPresenter VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Frame" Property="Background" Value="{DynamicResource fieldBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource accentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.55" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- Açılır küçük kart (popover): yüzey, ince halka, köşe 16, 16 iç boşluk, yumuşak gölge. -->
+    <Style x:Key="PopoverCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource surfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource borderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.tile}" />
+        <Setter Property="Padding" Value="{m:Sp 'm'}" />
+        <Setter Property="Margin" Value="{m:Sp 's,xs,s,m'}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource textBrush}" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.16" Color="Black" />
+            </Setter.Value>
+        </Setter>
+    </Style>
     <!-- Hesap kartı (DSAccountCard): köşe 16, 1 px kenarlık; üst satır 16 iç boşluk; ayraç; "Diğer Giriş Yolları ›". -->
     <Style x:Key="OthersToggle" TargetType="Button">
         <Setter Property="Cursor" Value="Hand" />

@@ -36,7 +36,35 @@
                     <RadioButton x:Name="SettingsTab" Style="{StaticResource TopTab}" GroupName="ShellTabs" Content="{t:T 'Settings'}" Checked="OnTab" />
                 </StackPanel>
             </Border>
-            <c:StatusPill x:Name="Status" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            <!-- Sağda: "Günlüğü Kopyala" (ikincil hap, durum hapıyla aynı yükseklik) ve durum hapı; aralarında s (12). -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="LogCopy" Style="{StaticResource LogPill}" Click="OnCopyLog" Margin="{t:Sp '0,0,s,0'}"
+                        ToolTip="{t:T 'Copies CouchSubs\'s logs as a zip file (personal data masked) so you can paste them into a bug report.'}"
+                        AutomationProperties.Name="{t:T 'Copy Log'}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8C8;" Style="{StaticResource GlyphText}" FontSize="12" />
+                        <TextBlock x:Name="LogCopyText" Text="{t:T 'Copy Log'}" FontSize="{DynamicResource smallFontSize}" Margin="{t:Sp 'xs,0,0,0'}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <c:StatusPill x:Name="Status" VerticalAlignment="Center" />
+            </StackPanel>
+            <!-- Günlük kopyalanınca altında kısa onay ve "Gezgin'de Göster" (Mac: popover + Finder'da Göster). -->
+            <Popup x:Name="LogCopied" PlacementTarget="{Binding ElementName=LogCopy}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                   PopupAnimation="Fade">
+                <Border Style="{StaticResource PopoverCard}">
+                    <StackPanel>
+                        <StackPanel x:Name="LogCopiedOk" Orientation="Horizontal">
+                            <TextBlock Text="&#xE930;" Style="{StaticResource GlyphText}" FontSize="16" Foreground="{DynamicResource successTextBrush}" VerticalAlignment="Top"
+                                       Margin="{t:Sp '0,line,xs,0'}" />
+                            <TextBlock Text="{t:T 'Log copied; you can paste it into GitHub or an email.'}" Width="240" />
+                        </StackPanel>
+                        <Button x:Name="LogShow" Style="{StaticResource LinkButton}" Content="{t:T 'Show in Explorer'}" Click="OnShowLog" Margin="{t:Sp '0,s,0,0'}"
+                                FontSize="{DynamicResource smallFontSize}" />
+                        <TextBlock x:Name="LogCopyFailed" Text="{t:T 'The log couldn\'t be collected. Try again.'}" Foreground="{DynamicResource liveTextBrush}"
+                                   Width="268" Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
+            </Popup>
         </Grid>
 
         <ContentControl x:Name="Host" Grid.Row="1" Focusable="False" />
