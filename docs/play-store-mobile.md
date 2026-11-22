@@ -60,7 +60,7 @@ Not: TV uygulamasının adı "CouchSubs: Türkçe Altyazı". Telefon için "Tür
 geliştirici sayfasında yan yana durur. "Yama" sözcüğü oyun dosyasını değiştiriyor gibi anlaşılırsa (inceleyici
 sorarsa) ad "CouchSubs: Türkçe Altyazı" yapılabilir.
 
-### Tam açıklama: tr-TR (2451 karakter, sınır 4000)
+### Tam açıklama: tr-TR (2418 karakter, sınır 4000)
 
 ```
 CouchSubs, Türkçe dil desteği olmayan PS5 oyunlarına Türkçe yama getirir. Telefonun oyundaki İngilizce altyazıyı okur, Türkçeye çevirir ve TV'de ya da kendi ekranında gösterir. Sen kumandayı bırakmadan, her zamanki gibi oynarsın.
@@ -78,7 +78,6 @@ Bu oyunların bütün metni önceden çevrildi. Oyunu açınca yama kendiliğind
 • Mafia: The Old Country
 • Assassin's Creed Shadows
 • Death Stranding 2
-• Death Stranding Director's Cut
 • Marvel's Spider-Man 2
 • Call of Duty: Modern Warfare (2019)
 Yeni yamalar ve düzeltmeler kendiliğinden iner. Listede olmayan oyunlar da çalışır: yamada olmayan satırı seçtiğin çeviri motoru çevirir.
@@ -103,7 +102,7 @@ Kurulum rehberi ve SSS: https://couchsubs.enmeraapps.com
 CouchSubs bağımsız bir uygulamadır; Sony Interactive Entertainment ile bağlantılı değildir, onun tarafından onaylanmamış ya da desteklenmemiştir. PlayStation, PS5 ve Remote Play, Sony Interactive Entertainment Inc.'in markalarıdır ve burada yalnız uyumluluğu anlatmak için anılır. Oyun adları sahiplerinin markalarıdır.
 ```
 
-### Tam açıklama: en-US (2529 karakter)
+### Tam açıklama: en-US (2496 karakter)
 
 ```
 CouchSubs brings Turkish subtitles to PS5 games that have no Turkish language option. Your phone reads the English subtitles in the game, translates them into Turkish and shows them on your TV or on the phone itself. You keep playing as usual, controller in hand.
@@ -123,7 +122,6 @@ The full text of these games is already translated. The pack is picked automatic
 • Mafia: The Old Country
 • Assassin's Creed Shadows
 • Death Stranding 2
-• Death Stranding Director's Cut
 • Marvel's Spider-Man 2
 • Call of Duty: Modern Warfare (2019)
 New packs and fixes download automatically. Other games work too: lines that are not in a pack are translated by the engine you choose.

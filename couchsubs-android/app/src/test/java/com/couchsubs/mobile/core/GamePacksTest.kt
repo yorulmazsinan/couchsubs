@@ -222,7 +222,7 @@ class GamePackTest {
     }
 }
 
-/** Dokuz gömülü paketin bellekte kalan boyu (bulanık imzalar dahil); zayıf telefonda çeviri başlarken bellek yetmeli. */
+/** Sekiz gömülü paketin bellekte kalan boyu (bulanık imzalar dahil); zayıf telefonda çeviri başlarken bellek yetmeli. */
 class PackMemoryTest {
     private fun used(): Long {
         val runtime = Runtime.getRuntime()
@@ -239,12 +239,12 @@ class PackMemoryTest {
         val before = used()
         val library = GamePackLibrary({ directory.listFiles()!!.sortedBy { it.name }.map { file -> file.name to { file.readBytes() } } }, null)
         val started = System.nanoTime()
-        assertEquals(9, library.infos.size)
+        assertEquals(8, library.infos.size)
         println("PAKET YÜKLEME: ${(System.nanoTime() - started) / 1_000_000} ms")
         val retainedMb = (used() - before) / (1 shl 20)
         println("PAKET BELLEK: $retainedMb MB (${library.infos.sumOf { it.entries }} satır)")
         assertTrue("paketler bellekte $retainedMb MB", retainedMb < 80)
-        assertEquals(9, library.infos.size)
+        assertEquals(8, library.infos.size)
     }
 }
 
