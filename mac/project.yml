@@ -46,6 +46,9 @@ targets:
       # Tasarım değerleri: Windows sürümüyle ortak tek kaynak.
       - path: ../design/tokens.json
         buildPhase: resources
+      # Yeni arayüzün tasarım değerleri (design/yeni-arayuz; Windows da aynı dosyayı okur).
+      - path: ../design/yeni-arayuz/tasarim.json
+        buildPhase: resources
       # TV uygulaması paketi (scripts/package-tv.sh üretir; yoksa kurulum özelliği gizlenir).
       - path: ../dist/tv-app
         type: folder
@@ -120,6 +123,8 @@ targets:
       - path: AppStore
         buildPhase: none
       - path: ../design/tokens.json
+        buildPhase: resources
+      - path: ../design/yeni-arayuz/tasarim.json
         buildPhase: resources
       # TV uygulaması paketleri: TV kurulumu sandbox'ta da çalışıyor (ssh, ssh-keygen ve yardımcı uygulamanın
       # sandbox'ını miras alır; CouchSubsAppStoreTests/SandboxTests sınar).
