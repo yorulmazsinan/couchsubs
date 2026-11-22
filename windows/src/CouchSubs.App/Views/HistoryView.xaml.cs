@@ -86,6 +86,7 @@ public partial class HistoryView : UserControl
         var today = shown.Count(entry => entry.Date.ToLocalTime().Date == DateTime.Now.Date);
         Summary.Text = controller.PlayedGame is { } game ? text.Format("%@ · Today · %lld Lines", game, today) : text.Format("Today · %lld Lines", today);
         ExportButton.IsEnabled = !empty;
+        CopyAllButton.IsEnabled = !empty;
         ReportButton.IsEnabled = !empty;
         ClearAll.IsEnabled = all.Count > 0;
         CopyAll.IsEnabled = !empty;

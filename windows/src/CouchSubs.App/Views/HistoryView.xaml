@@ -96,6 +96,7 @@
                 <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,1,0,0" Padding="{t:Sp 'l,s'}">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button x:Name="CopyAllButton" Content="{t:T 'Copy All'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp '0,0,xs,0'}" Click="OnCopyAll" />
                             <Button x:Name="ExportButton" Content="{t:T 'Export'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Click="OnExport" />
                             <Button x:Name="ReportButton" Content="{t:T 'Report a Wrong Translation'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Click="OnReport" />
                             <Button x:Name="ClearAll" Content="{t:T 'Clear History'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Click="OnClear" />
