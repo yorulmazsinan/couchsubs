@@ -10,8 +10,11 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("../scripts/build-index.mjs", import.meta.url));
 const defaultPacks = fileURLToPath(new URL("../../../core/Sources/CouchSubsCore/Resources/packs/", import.meta.url));
 
+// Paketler depoda değil (özel R2, scripts/fetch-packs.py); inmemişse depo klasörü testi atlanır.
+const havePacks = readdirSync(defaultPacks).some(name => name.endsWith(".json.gz"));
+
 describe("build-index.mjs", () => {
-  it("uses the repository pack folder when no directory argument is supplied", () => {
+  it.skipIf(!havePacks)("uses the repository pack folder when no directory argument is supplied", () => {
     const expectedCount = readdirSync(defaultPacks).filter(name => name.endsWith(".json.gz")).length;
     expect(expectedCount).toBeGreaterThan(0);
 

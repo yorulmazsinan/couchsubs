@@ -336,7 +336,7 @@ class OnlineTranslationTest {
 
     @Test
     fun sharedModelListParses() {
-        val file = File(System.getProperty("couchsubs.packs") ?: return, "../ai-models.json")
+        val file = File(File(System.getProperty("couchsubs.glossary") ?: return).parentFile, "ai-models.json")
         val models = AiModel.parse(file.readText())
         assertTrue(models.keys.containsAll(listOf("gemini", "openai", "claude")))
         assertTrue(models.getValue("gemini").first().freeTier)
@@ -345,7 +345,7 @@ class OnlineTranslationTest {
     /** Ayarlar'da seçilen Gemini modeli isteğe gider; dakikalık hak modelin sınırıdır; kayıt yoksa ilk model (Mac ile aynı). */
     @Test
     fun selectedGeminiModelGoesToTheRequest() {
-        val file = File(System.getProperty("couchsubs.packs") ?: return, "../ai-models.json")
+        val file = File(File(System.getProperty("couchsubs.glossary") ?: return).parentFile, "ai-models.json")
         val gemini = AiModel.parse(file.readText()).getValue("gemini")
         assertEquals("gemini-3.5-flash-lite", AiModel.selected(gemini, null)?.id)
         assertEquals("gemini-3.5-flash-lite", AiModel.selected(gemini, "gemini-eski")?.id)
@@ -368,7 +368,7 @@ class OnlineTranslationTest {
      */
     @Test
     fun openAiAndClaudeModelsAreSelectableLikeOnTheDesktop() {
-        val file = File(System.getProperty("couchsubs.packs") ?: return, "../ai-models.json")
+        val file = File(File(System.getProperty("couchsubs.glossary") ?: return).parentFile, "ai-models.json")
         val all = AiModel.parse(file.readText())
         // Yerel modelin listesi yok: model adı yazılır.
         for (provider in AiProvider.entries.filter { it != AiProvider.LOCAL }) {

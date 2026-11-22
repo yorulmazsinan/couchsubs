@@ -172,7 +172,7 @@ public class GamePackTests
         GamePackLibrary.EmbeddedPacks().Where(pack => pack.Name == file);
 
     /// <summary>Uygulamaya gömülü paketler (Mafia, GTA V, RDR2) birlikte yüklenir ve hızlı aranır.</summary>
-    [Fact]
+    [RealPackFact]
     public void EmbeddedPacksLoad()
     {
         var before = GC.GetTotalMemory(true);
@@ -200,7 +200,7 @@ public class GamePackTests
 
     /// <summary>Her gömülü paket kendi başına açılır, en az beklenen satırı taşır ve bilinen satırlar (anahtarlar canon.py
     /// ile hesaplandı) boş olmayan Türkçeye çıkar. Mac'teki testEachBundledPackHasItsLines ile aynı.</summary>
-    [Theory]
+    [RealPackTheory]
     [InlineData("mafia-the-old-country.json.gz", "mafia-the-old-country", "Mafia: The Old Country", 18000,
         new[] { "e7f18c8f6d1083ab", "15014c246455f36c" })]
     // "Are you listening to me?", "Cool, I'll see you later.", "Take out the Lost."
@@ -275,7 +275,7 @@ public class GamePackTests
     }
 
     /// <summary>Biçim 2: Mafia paketinde parçalar ve imzalar da var; hiç tam eşleşme olmadan bulanık arama yapılmaz.</summary>
-    [Fact]
+    [RealPackFact]
     public void VersionTwoPackHasSegmentsAndSignatures()
     {
         var (name, data) = EmbeddedOnly("mafia-the-old-country.json.gz").Single();
@@ -299,7 +299,7 @@ public class GamePackTests
 
     /// <summary>Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019), Elden Ring, Death Stranding Director's Cut ve
     /// Marvel's Spider-Man 2 paketleri de uygulamaya gömülüdür.</summary>
-    [Theory]
+    [RealPackTheory]
     [InlineData("assassins-creed-shadows", "Assassin's Creed Shadows", 39000)]
     [InlineData("death-stranding-2", "Death Stranding 2: On the Beach", 23000)]
     [InlineData("call-of-duty-modern-warfare-2019", "Call of Duty: Modern Warfare (2019)", 50000)]
@@ -315,7 +315,7 @@ public class GamePackTests
         Assert.True(pack.BuiltIn);
     }
 
-    [Fact]
+    [RealPackFact]
     public void MoreEmbeddedPacksTranslate()
     {
         var library = new GamePackLibrary(GamePackLibrary.EmbeddedPacks, null);

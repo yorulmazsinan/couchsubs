@@ -14,6 +14,8 @@
 #   GA_API_SECRET           Aynı akışın Measurement Protocol API sırrı
 # Oyun paketleri (server/packs):
 #   PACKS_APP_SECRET        Paket isteklerinin imza sırrı; yoksa paketlerde paket indirme kapalı
+#   PACKS_R2_ACCESS_KEY_ID, PACKS_R2_SECRET_ACCESS_KEY, PACKS_R2_ENDPOINT
+#                           Uygulamayla gelen paketlerin özel R2 erişimi (scripts/fetch-packs.py); yoksa sürüm durur
 # İkisi de tanımlıysa GitHub/Sparkle Mac paketinde ve Windows paketinde ölçüm açılır; yoksa ölçüm kapalı (no-op).
 # Mac App Store sürümü bunları hiç almaz (APP_STORE derlemesinde ölçüm kapalı).
 # Sırlar eksikse Mac paketi imzasız çıkar (uyarı verilir); imzalı paket eskisi gibi scripts/release-mac.sh ile elle
@@ -64,6 +66,9 @@ jobs:
       GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
       GA_API_SECRET: ${{ secrets.GA_API_SECRET }}
       PACKS_APP_SECRET: ${{ secrets.PACKS_APP_SECRET }}
+      PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+      PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+      PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
 
   android:
     needs: frames
@@ -107,6 +112,14 @@ jobs:
 
       - name: chiaki-ng
         run: git submodule update --init --depth 1 third-party/chiaki-ng
+
+      # Uygulamayla gelen oyun paketleri depoda değil (özel R2); inmezse sürüm durur.
+      - name: Oyun paketleri (özel R2)
+        env:
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: python3 scripts/fetch-packs.py --require
 
       - uses: actions/setup-node@v4
         with:

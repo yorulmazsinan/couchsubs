@@ -23,7 +23,7 @@ final class PackBenchmarkTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         // `COUCHSUBS_PACK_BENCH_DIR`: denenecek paketin klasörü (varsayılan gömülü paketler).
-        let packs = try environment["COUCHSUBS_PACK_BENCH_DIR"].map { URL(fileURLWithPath: $0) } ?? XCTUnwrap(GamePackLibrary.bundledDirectory)
+        let packs = try environment["COUCHSUBS_PACK_BENCH_DIR"].map { URL(fileURLWithPath: $0) } ?? bundledTestPack(file).deletingLastPathComponent()
         let source = packs.appendingPathComponent(file)
         try FileManager.default.copyItem(at: source, to: directory.appendingPathComponent(file))
         let library = GamePackLibrary(bundled: directory, user: nil)

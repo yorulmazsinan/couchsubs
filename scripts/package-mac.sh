@@ -19,6 +19,9 @@ universal() { [[ -f "$1" ]] && lipo "$1" -verify_arch arm64 && lipo "$1" -verify
 MAC_SLICE=(third-party/build/CChiaki.xcframework/macos-*/libCChiaki.a(N))
 universal "${MAC_SLICE[1]}" || ./scripts/build-chiaki-macos.sh
 
+# Uygulamayla gelen oyun paketleri depoda değil: özel R2'den (PACKS_R2_* ya da ~/.config/couchsubs/packs.env).
+python3 scripts/fetch-packs.py --require
+
 ./scripts/package-tv.sh
 ./scripts/package-tizen.sh
 # Android TV APK'sı verilirse (CI: tv-android iş akışının çıktısı) uygulamaya gömülür.

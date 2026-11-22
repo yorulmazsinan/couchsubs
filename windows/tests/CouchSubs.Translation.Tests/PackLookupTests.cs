@@ -184,7 +184,7 @@ public class PackLookupTests
     /// Kullanıcılardan gelen gerçek ıskalamalar (Mafia: The Old Country, OCR hatalı, parça parça ve etiketi bozuk
     /// satırlar): paket betiğinin Python karşılığıyla ve Mac'le aynı Türkçe ya da hiç eşleşme (başka oyunların satırları).
     /// </summary>
-    [Fact]
+    [RealPackFact]
     public void RealOcrMissesMatchLikeThePackScript()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(Fixture("pack-matches.json")));
@@ -208,7 +208,7 @@ public class PackLookupTests
     /// GTA V oyuncularının gerçek ıskalamaları (Mac'teki testGtaOcrReadsAreFound ile aynı): kısa satırda tek harf hatası,
     /// yutulmuş kesme işareti, köşe yazısı, iki satırlık altyazının yalnız bir satırı ve başına çöp eklenmiş okuma.
     /// </summary>
-    [Fact]
+    [RealPackFact]
     public void GtaOcrReadsAreFound()
     {
         var library = new GamePackLibrary(() => GamePackLibrary.EmbeddedPacks().Where(pack => pack.Name == "gta-v.json.gz"), null);
@@ -234,7 +234,7 @@ public class PackLookupTests
     /// İki altyazı yan yana tek satır okununca yalnız birinin Türkçesi gösterilmez (Mac'teki
     /// testTwoSubtitlesReadAsOneLineAreNotHalfTranslated ile aynı); köşe yazısı eklenmiş okuma yine bulunur.
     /// </summary>
-    [Fact]
+    [RealPackFact]
     public void TwoSubtitlesReadAsOneLineAreNotHalfTranslated()
     {
         var library = new GamePackLibrary(() => GamePackLibrary.EmbeddedPacks().Where(pack => pack.Name == "gta-v.json.gz"), null);
@@ -262,7 +262,7 @@ public class PackLookupTests
     }
 
     /// <summary>En büyük pakette (GTA V) bulanık arama da hızlı.</summary>
-    [Fact]
+    [RealPackFact]
     public void FuzzySearchIsFastInTheLargestPack()
     {
         var library = new GamePackLibrary(() => GamePackLibrary.EmbeddedPacks().Where(pack => pack.Name == "gta-v.json.gz"), null);
@@ -281,7 +281,7 @@ public class PackLookupTests
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", "..", "core", "Tests", "CouchSubsCoreTests", "Fixtures", name));
 
     /// <summary>Uygulamayla gelen Mafia paketinde konuşmacılı ve iki satırlı arama.</summary>
-    [Fact]
+    [RealPackFact]
     public void BundledPackIsSearched()
     {
         // Yalnız Mafia paketi: ortak satırlarda ("Get Down!") birleşik kitaplıkta sonraki oyunun çevirisi kazanır.

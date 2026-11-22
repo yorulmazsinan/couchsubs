@@ -157,13 +157,14 @@ final class GamePackTests: XCTestCase {
     /// Yalnız tek bir gömülü paketle kitaplık: paketler birleşince ortak satırlarda ("Get down!") sonraki paket kazanır.
     private func bundledOnly(_ file: String) throws -> GamePackLibrary {
         let directory = temporaryDirectory()
-        let source = try XCTUnwrap(GamePackLibrary.bundledDirectory).appendingPathComponent(file)
+        let source = try bundledTestPack(file)
         try FileManager.default.copyItem(at: source, to: directory.appendingPathComponent(file))
         return GamePackLibrary(bundled: directory, user: nil)
     }
 
     /// Uygulamayla gelen paketler (Mafia, GTA V, RDR2) birlikte yüklenir ve hızlı aranır.
     func testBundledPacksLoad() throws {
+        _ = try bundledTestPack("gta-v.json.gz")
         let all = GamePackLibrary(bundled: GamePackLibrary.bundledDirectory, user: nil)
         let start = Date()
         let ids = all.packs.map(\.id)
@@ -212,7 +213,7 @@ final class GamePackTests: XCTestCase {
             ("marvels-spider-man-2.json.gz", "marvels-spider-man-2", "Marvel's Spider-Man 2", 2000,
              ["40236a7f701ea389", "ee2428652bc9ceb2", "e829f8ce088898b8"]),
         ]
-        let directory = try XCTUnwrap(GamePackLibrary.bundledDirectory)
+        let directory = try bundledTestPack("gta-v.json.gz").deletingLastPathComponent()
         for pack in expected {
             let data = try Data(contentsOf: directory.appendingPathComponent(pack.file))
             let decoded = try GamePack.decode(data, name: GamePackLibrary.baseName(directory.appendingPathComponent(pack.file)))
@@ -229,7 +230,8 @@ final class GamePackTests: XCTestCase {
 
     /// Assassin's Creed Shadows, Death Stranding 2, Modern Warfare (2019), Elden Ring, Death Stranding Director's Cut ve
     /// Marvel's Spider-Man 2 paketleri de uygulamayla gelir.
-    func testMoreBundledPacksLoad() {
+    func testMoreBundledPacksLoad() throws {
+        _ = try bundledTestPack("assassins-creed-shadows.json.gz")
         let library = GamePackLibrary(bundled: GamePackLibrary.bundledDirectory, user: nil)
         let expected: [(id: String, title: String, minimum: Int)] = [
             ("assassins-creed-shadows", "Assassin's Creed Shadows", 39000),
@@ -453,7 +455,7 @@ final class PackFuzzyTests: XCTestCase {
     /// Yalnız Mafia paketiyle kitaplık (birleşik kitaplıkta ortak satırlarda başka oyunun çevirisi kazanabilir).
     private func library(_ file: String) throws -> GamePackLibrary {
         let directory = temporaryDirectory()
-        let source = try XCTUnwrap(GamePackLibrary.bundledDirectory).appendingPathComponent(file)
+        let source = try bundledTestPack(file)
         try FileManager.default.copyItem(at: source, to: directory.appendingPathComponent(file))
         return GamePackLibrary(bundled: directory, user: nil)
     }
@@ -507,7 +509,7 @@ final class PackFuzzyTests: XCTestCase {
         XCTAssertEqual(library.match("ENZO: Che buono.")?.text, "ENZO: Che buono.")
         XCTAssertNotNil(library.match("then clear the way for someone who does."))
         XCTAssertNotNil(library.match("I see. Well, please pass on my apologies for missing our appointment last week."))
-        let data = try Data(contentsOf: XCTUnwrap(GamePackLibrary.bundledDirectory).appendingPathComponent("mafia-the-old-country.json.gz"))
+        let data = try Data(contentsOf: bundledTestPack("mafia-the-old-country.json.gz"))
         let pack = try GamePack.decode(data, name: "mafia-the-old-country")
         XCTAssertGreaterThan(pack.segments.count, 10000)
         XCTAssertGreaterThan(pack.fuzzy?.count ?? 0, 20000)
@@ -574,3 +576,14 @@ final class PackFuzzyTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.12)
     }
 }
+
+/// Gerçek gömülü paketin yolu. Paketler depoda değil (özel R2, scripts/fetch-packs.py); inmemişse (dış katkıcı, yerel
+/// geliştirici) gerçek paket testleri atlanır. CI paket sırlarıyla indirir ve bu testleri koşar.
+func bundledTestPack(_ file: String) throws -> URL {
+    guard let directory = GamePackLibrary.bundledDirectory,
+          FileManager.default.fileExists(atPath: directory.appendingPathComponent(file).path) else {
+        throw XCTSkip("gerçek paket yok (\(file)); scripts/fetch-packs.py ile indirilir")
+    }
+    return directory.appendingPathComponent(file)
+}
+

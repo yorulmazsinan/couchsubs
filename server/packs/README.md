@@ -44,6 +44,37 @@ server/packs/scripts/setup-app-secret.sh
 npx wrangler deploy   # server/packs içinde
 ```
 
+## Uygulamayla gelen paketler ve katkı havuzu (özel)
+
+Paket dosyaları depoda değildir (2026-11-22'den beri; git geçmişinde eski sürümleri durur). Kovadaki önekler:
+
+| Önek | Ne | Kim okur |
+|---|---|---|
+| `packs/`, `index.json` | Uygulamaların indirdiği paketler ve liste | bu Worker (imzalı istek) |
+| `bundled/` | Uygulamayla gelen paketler (`*.json.gz`) | derleme: `scripts/fetch-packs.py` → `core/Sources/CouchSubsCore/Resources/packs/` |
+| `contrib/` | GTA topluluk katkı havuzu ve notu | `scripts/fetch-packs.py --contrib` → `tools/packs/katki/` |
+| `auto/` | Havuzdan üretim için bilinen anahtarlar | `server/pool` |
+
+`fetch-packs.py` S3 uyumlu API ile okur (yalnız Python standart kitaplığı). Erişim: ortamdaki
+`PACKS_R2_ACCESS_KEY_ID`, `PACKS_R2_SECRET_ACCESS_KEY`, `PACKS_R2_ENDPOINT` (`https://<hesap kimliği>.r2.cloudflarestorage.com`)
+ya da `~/.config/couchsubs/packs.env` (aynı adlar ve `PACKS_APP_SECRET`; chmod 600, depoya girmez, yedeği iCloud
+Drive/CouchSubs-anahtarlar/packs.env). CI'da aynı adlı GitHub sırları: pr-tests.yml (Windows, Swift, Android),
+android-app.yml, windows.yml (etikette zorunlu), release.yml (Mac, zorunlu); package-mac.sh ve release-appstore.sh
+(`--unsigned` dışında) ve Android `bundleRelease`/`assembleRelease` paket yoksa durur. Erişim yoksa (dış katkıcı PR'ı)
+paketler inmez, uygulama paketsiz derlenir ve gerçek paketlere dayanan testler kendini atlar (Swift `XCTSkip`, Windows
+`RealPackFact`, Android `couchsubs.packs` özelliği verilmez, Node `skip`).
+
+R2 erişim anahtarı: Cloudflare › R2 › Manage API tokens › Create Account API token, izin "Object Read & Write", yalnız
+`couchsubs-packs` kovası. Access Key ID ve Secret Access Key değerleri ekrana yazılmadan `gh secret set` ile
+(`PACKS_R2_ACCESS_KEY_ID`, `PACKS_R2_SECRET_ACCESS_KEY`, `PACKS_R2_ENDPOINT`) ve packs.env'e konur.
+
+Yeni ya da güncellenen elle paket: `bundled/<id>.json.gz` ve (uygulamalara da gitsin diye) `packs/<id>.json.gz` olarak
+yüklenir, `index.json` güncellenir (var olan `pool-*` girdileri korunur):
+
+```sh
+npx wrangler r2 object put couchsubs-packs/bundled/<id>.json.gz --file <id>.json.gz --content-type application/gzip --remote
+```
+
 ## Havuzdan otomatik paketler
 
 `server/pool` Worker'ı her gece (03:07–04:57 UTC, on dakikada bir adım) ortak havuzda en az iki oyuncunun okuduğu
@@ -68,7 +99,8 @@ cd server/packs
 npm install
 npx wrangler r2 bucket create couchsubs-packs
 
-# Paketleri ve listeyi yükle (sürüm: artan bir sayı; uygulama sürümü değişen paketi yeniden indirir)
+# Paketleri ve listeyi yükle (sürüm: artan bir sayı; uygulama sürümü değişen paketi yeniden indirir). Paketler önce
+# python3 ../../scripts/fetch-packs.py ile indirilir (depoda değil).
 node scripts/build-index.mjs ../../core/Sources/CouchSubsCore/Resources/packs 1 > index.json
 for f in ../../core/Sources/CouchSubsCore/Resources/packs/*.json.gz; do
   id=$(basename "$f" .json.gz)

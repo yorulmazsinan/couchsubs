@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -11,7 +11,10 @@ import { gzipSync } from "node:zlib";
 const script = fileURLToPath(new URL("../scripts/build-known.mjs", import.meta.url));
 const defaultPacks = fileURLToPath(new URL("../../../core/Sources/CouchSubsCore/Resources/packs/", import.meta.url));
 
-test("build-known uses its default pack directory on all platforms", () => {
+// Paketler depoda değil (özel R2, scripts/fetch-packs.py); inmemişse depo klasörü testi atlanır.
+const havePacks = readdirSync(defaultPacks).some((name) => name.endsWith(".json.gz"));
+
+test("build-known uses its default pack directory on all platforms", { skip: !havePacks && "gerçek paketler yok" }, () => {
   const options = { stdio: ["ignore", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024 };
   const explicit = execFileSync(process.execPath, [script, defaultPacks], options);
   const inferred = execFileSync(process.execPath, [script], options);

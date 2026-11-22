@@ -23,6 +23,13 @@ on:
       # Paket isteklerinin imzası (server/packs); yoksa Windows paketinde paket indirme kapalı.
       PACKS_APP_SECRET:
         required: false
+      # Uygulamayla gelen paketlerin özel R2 erişimi (scripts/fetch-packs.py); sürümde zorunlu.
+      PACKS_R2_ACCESS_KEY_ID:
+        required: false
+      PACKS_R2_SECRET_ACCESS_KEY:
+        required: false
+      PACKS_R2_ENDPOINT:
+        required: false
 
 env:
   FFMPEG_VERSION: "7.1.2"
@@ -206,6 +213,16 @@ jobs:
         with:
           name: couchsubs-native
           path: windows/native/bin
+
+      # Paketler depoda değil (özel R2); sürüm etiketinde zorunlu (paketsiz Windows paketi çıkmaz).
+      - name: Oyun paketleri (özel R2)
+        shell: bash
+        env:
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then python scripts/fetch-packs.py --require; else python scripts/fetch-packs.py; fi
 
       - name: Derle
         run: dotnet build windows/CouchSubs.Windows.slnx -c Release

@@ -60,6 +60,9 @@ elif [[ "$3" == --unsigned ]]; then
   SIGN_ARGS=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=)
 fi
 
+# Uygulamayla gelen oyun paketleri depoda değil: özel R2'den (~/.config/couchsubs/packs.env). İmzasız sınamada isteğe bağlı.
+if [[ "$3" == --unsigned ]]; then python3 scripts/fetch-packs.py; else python3 scripts/fetch-packs.py --require; fi
+
 if [[ "$PLATFORM" == ios ]]; then
   # Remote Play kütüphanesinin iPhone dilimi gerekir (scripts/build-chiaki-ios.sh).
   [[ -d third-party/build/CChiaki.xcframework/ios-arm64 ]] || { echo "CChiaki.xcframework'te iOS dilimi yok: scripts/build-chiaki-ios.sh"; exit 1; }

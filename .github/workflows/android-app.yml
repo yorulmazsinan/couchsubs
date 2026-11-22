@@ -8,7 +8,7 @@ on:
   push:
     branches: [main, "feat/android-*"]
     # tv-webos ve tv-tizen: telefondan kurulum için uygulamaya gömülen Samsung paketi bunlardan derlenir.
-    paths: ["couchsubs-android/**", "core/Sources/CouchSubsCore/Resources/**", "tv-webos/**", "tv-tizen/**", ".github/workflows/android-app.yml"]
+    paths: ["couchsubs-android/**", "core/Sources/CouchSubsCore/Resources/**", "scripts/fetch-packs.py", "tv-webos/**", "tv-tizen/**", ".github/workflows/android-app.yml"]
   workflow_dispatch:
 
 jobs:
@@ -24,6 +24,14 @@ jobs:
         with:
           gradle-version: 8.11.1
       # TV paketleri (Android TV APK) son sürümden indirilir; CI'da indirilemezse derleme durur.
+      # Paketler depoda değil (özel R2). Sır yoksa (dış katkıcı PR'ı) atlanır, gerçek paket testleri kendini atlar.
+      - name: Oyun paketleri (özel R2)
+        shell: bash
+        env:
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: python3 scripts/fetch-packs.py
       - name: JVM testleri (paket anahtarı, kararlılık, SSE biçimi, TV kurulumu)
         working-directory: couchsubs-android
         env:
@@ -60,6 +68,13 @@ jobs:
           echo "COUCHSUBS_PYTHON=$RUNNER_TEMP/venv/bin/python3" >> "$GITHUB_ENV"
       - name: NDK ve CMake
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.0.12077973" "cmake;3.22.1" > /dev/null
+      - name: Oyun paketleri (özel R2)
+        shell: bash
+        env:
+          PACKS_R2_ACCESS_KEY_ID: ${{ secrets.PACKS_R2_ACCESS_KEY_ID }}
+          PACKS_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKS_R2_SECRET_ACCESS_KEY }}
+          PACKS_R2_ENDPOINT: ${{ secrets.PACKS_R2_ENDPOINT }}
+        run: python3 scripts/fetch-packs.py
       - name: Derle
         working-directory: couchsubs-android
         env:

@@ -154,6 +154,13 @@ tasks.register('copyCouchSubsPacks', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-packs')
     from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'packs/*.json.gz' }
 }
+// Paketler depoda değil (özel R2): yayın derlemesinden önce `python3 scripts/fetch-packs.py` (erişim
+// ~/.config/couchsubs/packs.env ya da PACKS_R2_*). Paketsiz yayın paketi çıkmasın.
+gradle.taskGraph.whenReady { graph ->
+    def release = graph.allTasks.any { it.project == project && (it.name == 'bundleRelease' || it.name == 'assembleRelease') }
+    def packsHere = file("$repoRoot/core/Sources/CouchSubsCore/Resources/packs").listFiles()?.any { it.name.endsWith('.json.gz') }
+    if (release && !packsHere) throw new GradleException('Oyun paketleri yok: önce python3 scripts/fetch-packs.py --require')
+}
 // Samsung TV paketi (.wgt): scripts/package-tizen.sh'nin yaptığının aynısı (ortak dosyalar tv-webos'tan, Tizen'e
 // özgüler tv-tizen'den; index.html'e Samsung'un webapis.js'i eklenir, panel simgesi panel-icon.png olur).
 tasks.register('samsungTvPackage', Zip) {
@@ -262,9 +269,11 @@ if ((findProperty('couchsubs.patchChiaki') ?: 'false').toString().toBoolean()) {
     preBuild.dependsOn 'patchChiaki'
 }
 
-// Testler, gömülü paketleri depodaki yerinden okur.
+// Testler, gömülü paketleri depodaki yerinden okur. Paketler depoda değil (özel R2, scripts/fetch-packs.py); inmemişse
+// özellik verilmez ve gerçek paket testleri kendini atlar.
+def bundledPacksDir = file("$repoRoot/core/Sources/CouchSubsCore/Resources/packs")
 tasks.withType(Test).configureEach {
-    systemProperty 'couchsubs.packs', "$repoRoot/core/Sources/CouchSubsCore/Resources/packs"
+    if (bundledPacksDir.listFiles()?.any { it.name.endsWith('.json.gz') }) systemProperty 'couchsubs.packs', bundledPacksDir.absolutePath
     systemProperty 'couchsubs.glossary', "$repoRoot/core/Sources/CouchSubsCore/Resources/glossary-en-tr.json"
     systemProperty 'couchsubs.tvPackages', tvReleaseDir.absolutePath
     systemProperty 'couchsubs.requireTvPackages', requireTvPackages.toString()
