@@ -140,7 +140,7 @@ function shoot(name) {
     let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     // HDMI görüntüsü yerine bembeyaz zemin: oyunun en parlak sahnesi.
     html = html.replace('</head>', '<style>#video-host { background: #fff; }</style></head>');
-    html = html.replace('<script src="app.js"></script>', `<script src="app.js"></script><script>${events}</script>`);
+    html = html.replace('<script src="shell.js"></script>', `<script src="shell.js"></script><script>${events}</script>`);
     fs.writeFileSync(path.join(temp, 'index.html'), html);
     const shot = path.join(temp, 'shot.png');
     const run = spawnSync(browser, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run',

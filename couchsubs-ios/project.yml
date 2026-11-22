@@ -63,6 +63,10 @@ targets:
         buildPhase: resources
       - path: ../design/tokens.json
         buildPhase: resources
+      # TV sayfasının kodu: eşleşmiş TV'ler /tv/app'ten yükler (ince kabuk, docs/tv-ince-kabuk.md; TVAppBundle.bundled).
+      - path: ../tv-webos
+        type: folder
+        buildPhase: resources
       - path: Config
         buildPhase: none
     dependencies:

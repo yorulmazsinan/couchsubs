@@ -141,6 +141,8 @@ android {
 tasks.register('copyCouchSubsAssets', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-assets')
     from("$repoRoot/core/Sources/CouchSubsCore/Resources") { include 'ai-models.json', 'glossary-en-tr.json', 'obs-overlay.html', 'second-screen.html' }
+    // TV sayfasının kodu: eşleşmiş TV'ler /tv/app'ten yükler (ince kabuk, docs/tv-ince-kabuk.md; Mac ve Windows'la aynı).
+    from("$repoRoot/tv-webos") { include 'index.html', 'style.css', 'i18n.js', 'app.js'; into 'tv-webos' }
 }
 tasks.register('copyCouchSubsPacks', Copy) {
     into layout.buildDirectory.dir('generated/couchsubs-packs')
@@ -153,7 +155,7 @@ tasks.register('samsungTvPackage', Zip) {
     destinationDirectory = layout.buildDirectory.dir('generated/couchsubs-tv/tv')
     preserveFileTimestamps = false
     reproducibleFileOrder = true
-    from("$repoRoot/tv-webos") { include 'app.js', 'i18n.js', 'config.js', 'style.css', 'largeIcon.png' }
+    from("$repoRoot/tv-webos") { include 'app.js', 'i18n.js', 'shell.js', 'config.js', 'style.css', 'largeIcon.png' }
     from("$repoRoot/tv-webos") { include 'icon.png'; rename { 'panel-icon.png' } }
     from("$repoRoot/tv-webos") {
         include 'index.html'

@@ -19,8 +19,8 @@ android {
         minSdk 24
         targetSdk 35
         // Masaüstü uygulamaları beklenen TV sürümünü buradan alır (scripts/bundle-android-apk.sh, APK adı).
-        versionCode 74
-        versionName '0.9.71'
+        versionCode 75
+        versionName '0.9.72'
     }
     buildFeatures { buildConfig true }
     signingConfigs {
@@ -72,7 +72,7 @@ android {
 // Arayüz LG ve Samsung'la ortaktır.
 tasks.register('copyTvAssets', Copy) {
     into layout.buildDirectory.dir('generated/tv-assets/tv')
-    from('../../tv-webos') { include 'app.js', 'i18n.js', 'config.js', 'index.html', 'style.css', 'icon.png', 'largeIcon.png' }
+    from('../../tv-webos') { include 'app.js', 'i18n.js', 'shell.js', 'config.js', 'index.html', 'style.css', 'icon.png', 'largeIcon.png' }
     from('..') { include 'platform.js' }
 }
 preBuild.dependsOn 'copyTvAssets'

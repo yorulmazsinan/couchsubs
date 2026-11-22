@@ -6,10 +6,16 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.71';
+  var APP_VERSION = '0.9.72';
+  // Bu sayfanın istediği kabuk arayüzü (ShellAPI, tv-webos/shell.js, docs/tv-ince-kabuk.md). Sayfa bilgisayardan ya da
+  // telefondan da yüklenebilir; daha eski arayüzlü kabuk bu sayfayı yüklemez, kendi yedeğiyle açılır. Sayfa platforma
+  // yalnız kabuğun verdiği nesnelerle erişir; platform.js'e sayfanın şart koştuğu yeni bir çağrı eklenirse ikisi artırılır.
+  var SHELL_API = 1;
+  // Kabuk yoksa (testler, kabuktan önceki paketler) sayfa eskisi gibi çalışır.
+  var shell = window.COUCHSUBS_SHELL && window.COUCHSUBS_SHELL.api >= SHELL_API ? window.COUCHSUBS_SHELL : null;
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
-  var platform = window.COUCHSUBS_PLATFORM;
+  var platform = (shell && shell.platform) || window.COUCHSUBS_PLATFORM;
   var KEY = { RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
   // Sayfa ölçüleri (innerWidth, clientWidth ...) window.COUCHSUBS_ZOOM'a bölünür (platform sayfayı CSS zoom ile
   // büyütürse; Samsung 0.9.55'ten beri büyütmez, değer tanımsız yani 1).
@@ -96,6 +102,8 @@
       (diag.speechWeb || diag.speechElement ? ' · tts w' + diag.speechWeb + ' a' + diag.speechElement : '') +
       // Dublaj çalarken açık Web Audio bağlamı (dublaj hiç çalmadıysa bağlam yoktur, HDMI sesine karışamaz).
       (audioContext ? ' ac ' + audioContext.state : '');
+    // Kabuğun sürümü ve sayfanın nereden geldiği ("shell 0.9.72 · page 0.9.75 remote").
+    try { if (shell && shell.status) page += ' · ' + shell.status(); } catch (e) {}
     el.textContent = (text ? text + ' · ' : '') + page;
     $('row-platform').style.display = '';
     fitPanel();
@@ -1899,6 +1907,8 @@
       setStatus('st-conn', t('connected'), 'ok');
       learnServer(address);
       restoreLastLine();
+      // Bağlanılan bilgisayar/telefon daha yeni bir TV sayfası sunuyorsa kabuk onu doğrulayıp yükler (docs/tv-ince-kabuk.md).
+      try { if (shell && shell.connected) shell.connected(address, serverKey(address)); } catch (e) {}
     };
     eventSource.onerror = function () {
       var failedGeneration = connectionGeneration;
@@ -2809,4 +2819,6 @@
   if (!server) scanForServer();
   // Bekleme ekranı açıksa panel kendiliğinden açılmaz; yeşil tuşla açılabilir.
   if (server) showPanel(true); else hidePanel();
+  // Açılış bitti: kabuk bunu görmezse bilgisayardan gelen sayfayı bozuk sayar ve yedeğe döner.
+  if (shell && shell.started) shell.started(APP_VERSION);
 })();

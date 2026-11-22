@@ -94,6 +94,11 @@ class SubtitleServer(
      * "TV eşleştir" süresi ve onaylanmış istek taşınır (Mac/iPhone ve Windows ile aynı).
      */
     val pairing: SubtitlePairing = SubtitlePairing(),
+    /**
+     * TV sayfasının kodu (ince kabuk, docs/tv-ince-kabuk.md): `/tv/app/…` ile eşleşmiş TV'lere verilir (assets/tv-webos;
+     * Mac ve Windows ile aynı dosyalar). Yoksa `/tv/app` 404 döner ve TV kendi yedeğiyle açılır.
+     */
+    @Volatile var tvApp: TvAppBundle? = null,
 ) : SubtitleSender, RegionSender {
     @Volatile var accessKey: String = key
         private set
@@ -491,8 +496,18 @@ class SubtitleServer(
                     }
                     openStream(socket, obs, cors, checkedKey)
                 }
+                // TV sayfasının kodu; anahtar authorize'da denetlendi (anahtarsız istek eski TV geçişinden de yararlanmaz).
+                method == "GET" && TvAppBundle.isPath(path) -> {
+                    val bundle = tvApp
+                    val page = bundle?.fileAt(path)
+                    when {
+                        path == TvAppBundle.MANIFEST_PATH && bundle != null -> respondAndClose(socket, "200 OK", bundle.manifest(checkedKey), cors)
+                        page != null -> respondAndClose(socket, "200 OK", page.data, cors, TvAppBundle.contentType(page.path), TvAppBundle.FILE_CACHE)
+                        else -> respondAndClose(socket, "404 Not Found", cors = cors)
+                    }
+                }
                 // TV uygulaması ağdaki CouchSubs'ı bu yanıtla tanır.
-                method == "GET" && path == "/obs" && obsOverlay.isNotEmpty() -> respondAndClose(socket, "200 OK", obsOverlay, cors, "text/html; charset=utf-8")
+                method == "GET" && path == "/obs" &&obsOverlay.isNotEmpty() -> respondAndClose(socket, "200 OK", obsOverlay, cors, "text/html; charset=utf-8")
                 // Anahtar authorize'da denetlendi (anahtarsız istek 401 aldı).
                 method == "GET" && path == SecondScreen.PATH && secondScreenPage.isNotEmpty() ->
                     respondAndClose(socket, "200 OK", secondScreenPage, cors, "text/html; charset=utf-8")
@@ -523,8 +538,8 @@ class SubtitleServer(
     private fun respondAndClose(socket: Socket, status: String, body: String = "", cors: String = "", type: String = "application/json") =
         respondAndClose(socket, status, body.toByteArray(Charsets.UTF_8), cors, type)
 
-    private fun respondAndClose(socket: Socket, status: String, data: ByteArray, cors: String, type: String) {
-        val head = "HTTP/1.1 $status\r\n${cors}Content-Type: $type\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n"
+    private fun respondAndClose(socket: Socket, status: String, data: ByteArray, cors: String, type: String, cache: String = "no-store") {
+        val head = "HTTP/1.1 $status\r\n${cors}Content-Type: $type\r\nCache-Control: $cache\r\nReferrer-Policy: no-referrer\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n"
         socket.getOutputStream().apply { write(head.toByteArray(Charsets.US_ASCII)); write(data); flush() }
         closeQuietly(socket)
     }

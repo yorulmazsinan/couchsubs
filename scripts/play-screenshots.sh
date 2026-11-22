@@ -13,7 +13,7 @@ CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 PAGE=$(mktemp -d)
 PROFILE=$(mktemp -d)
 trap 'rm -rf "$PAGE" "$PROFILE"' EXIT
-cp tv-webos/{app.js,i18n.js,config.js,style.css,icon.png,largeIcon.png} tv-android/platform.js "$PAGE/"
+cp tv-webos/{app.js,i18n.js,shell.js,config.js,style.css,icon.png,largeIcon.png} tv-android/platform.js "$PAGE/"
 cp scripts/play-screenshot-harness.js "$PAGE/harness.js"
 # Taklit köprü platform.js'ten önce yüklenir.
 sed 's|<script src="platform.js"></script>|<script src="harness.js"></script><script src="platform.js"></script>|' \

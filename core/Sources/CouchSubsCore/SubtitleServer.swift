@@ -166,6 +166,14 @@ public final class SubtitleServer: @unchecked Sendable {
     }
     private var tvEnabled = true
 
+    /// TV sayfasının kodu (ince kabuk, docs/tv-ince-kabuk.md): `/tv/app/…` ile eşleşmiş TV'lere verilir. Varsayılan,
+    /// uygulama paketindeki tv-webos kopyasıdır; yoksa `/tv/app` 404 döner ve TV kendi yedeğiyle açılır.
+    public var tvApp: TVAppBundle? {
+        get { queue.sync { tvAppBundle } }
+        set { queue.sync { tvAppBundle = newValue } }
+    }
+    private var tvAppBundle: TVAppBundle? = TVAppBundle.bundled
+
     /// Konuşana göre renk: açıksa adlı satırları olan `subtitle` olayına `speakers` alanı ([{name, color}]) eklenir;
     /// TV o adla başlayan satırı o renkte gösterir. Alanı tanımayan eski TV uygulaması yok sayar.
     public var speakerColors: Bool {
@@ -651,6 +659,16 @@ public final class SubtitleServer: @unchecked Sendable {
                 if let handler = onTVAppVersion { DispatchQueue.main.async { handler(version) } }
             }
             openStream(connection, viewer: obs, cors: cors)
+        } else if method == "GET" && TVAppBundle.isPath(path) {
+            // Anahtar `authorize`'da denetlendi (anahtarsız istek eski TV geçişinden de yararlanmaz, 401 alır).
+            if path == TVAppBundle.manifestPath, let bundle = tvAppBundle {
+                respondAndClose(connection, status: "200 OK", data: bundle.manifest(key: key), type: "application/json", cors: cors)
+            } else if let file = tvAppBundle?.file(at: path) {
+                respondAndClose(connection, status: "200 OK", data: file.data, type: TVAppBundle.contentType(file.path), cors: cors,
+                                cache: TVAppBundle.fileCache)
+            } else {
+                respondAndClose(connection, status: "404 Not Found", cors: cors)
+            }
         } else if method == "GET" && path == "/obs" {
             respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == SecondScreen.path {
@@ -674,8 +692,9 @@ public final class SubtitleServer: @unchecked Sendable {
     static let preflightHeaders = "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\n"
         + "Access-Control-Allow-Private-Network: true\r\nAccess-Control-Max-Age: 600\r\n"
 
-    private func respondAndClose(_ connection: NWConnection, status: String, data: Data, type: String?, cors: String = "") {
-        var head = "HTTP/1.1 \(status)\r\n\(cors)Cache-Control: no-store\r\nReferrer-Policy: no-referrer\r\n"
+    private func respondAndClose(_ connection: NWConnection, status: String, data: Data, type: String?, cors: String = "",
+                                 cache: String = "no-store") {
+        var head = "HTTP/1.1 \(status)\r\n\(cors)Cache-Control: \(cache)\r\nReferrer-Policy: no-referrer\r\n"
         if let type { head += "Content-Type: \(type)\r\n" }
         head += "Content-Length: \(data.count)\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(head.utf8) + data, completion: .contentProcessed { _ in connection.cancel() })

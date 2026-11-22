@@ -107,7 +107,8 @@ public static class SubtitleAccess
         if (request.Path is "/hello" or "/obs" or "/pair") return 200;
         var supplied = request.Parameter("k");
         // İkinci ekran (sayfası ve akışı) eski TV'lere tanınan anahtarsız geçişten yararlanmaz: aynı ağdaki herkes açamaz.
-        if (supplied is null && allowLegacy && !IsSecondScreen(request) && (request.Origin is null || PackagedOrigin(request.Origin)))
+        // TV sayfasının kodu (/tv/app) da: listesi eşleşme anahtarıyla imzalanır, anahtarsız istenemez.
+        if (supplied is null && allowLegacy && !IsSecondScreen(request) && !TvAppBundle.IsPath(request.Path) && (request.Origin is null || PackagedOrigin(request.Origin)))
         {
             legacy = true;
             return 200;

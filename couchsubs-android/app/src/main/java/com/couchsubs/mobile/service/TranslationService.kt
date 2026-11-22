@@ -39,6 +39,7 @@ import com.couchsubs.mobile.core.SubtitlePairing
 import com.couchsubs.mobile.core.SubtitlePipeline
 import com.couchsubs.mobile.core.SubtitleServer
 import com.couchsubs.mobile.core.TextTranslator
+import com.couchsubs.mobile.core.TvAppBundle
 import com.couchsubs.mobile.ocr.RegionPixels
 import com.couchsubs.mobile.ocr.SubtitleReader
 import com.couchsubs.mobile.remoteplay.ConsoleDiscovery
@@ -288,7 +289,8 @@ class TranslationService : Service() {
             val app = context.applicationContext
             val server = SubtitleServer(instanceId = installationId(app), key = settings.subtitleAccessKey,
                 obsOverlay = runCatching { app.assets.open("obs-overlay.html").bufferedReader().use { it.readText() } }.getOrDefault(""),
-                secondScreenPage = runCatching { app.assets.open("second-screen.html").bufferedReader().use { it.readText() } }.getOrDefault(""))
+                secondScreenPage = runCatching { app.assets.open("second-screen.html").bufferedReader().use { it.readText() } }.getOrDefault(""),
+                tvApp = TvAppBundle.load { name -> app.assets.open(name).use { it.readBytes() } })
             server.onPairingRequest = { _ -> syncPairing(server.pairing) }
             server.sendsToTv = true
             server.onClientsChanged = { count ->
@@ -643,7 +645,8 @@ class TranslationService : Service() {
         val free = MlKitTranslator(cache(MlKitTranslator.ENGINE_ID), glossary).also { freeTranslator = it }
         val translator = engineTranslator(free)
         val subtitleServer = SubtitleServer(instanceId = installationId(this), key = settings.subtitleAccessKey, obsOverlay = assets.open("obs-overlay.html").bufferedReader().use { it.readText() },
-            secondScreenPage = assets.open("second-screen.html").bufferedReader().use { it.readText() }).also { server = it }
+            secondScreenPage = assets.open("second-screen.html").bufferedReader().use { it.readText() },
+            tvApp = TvAppBundle.load { name -> assets.open(name).use { it.readBytes() } }).also { server = it }
         subtitleServer.pairing.setSession(true)
         subtitleServer.onPairingRequest = { _ ->
             Log.i(TAG, "TV eşleştirme istedi; onay bekleniyor")

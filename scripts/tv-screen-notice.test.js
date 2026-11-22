@@ -162,7 +162,7 @@ function tvShot() {
     let html = fs.readFileSync(path.join(tvRoot, 'index.html'), 'utf8');
     html = html.replace('</head>', '<style>#video-host { background: #fff; }</style></head>');
     html = html.replace('<div id="video-host"></div>', `<div id="video-host">${english}</div>`);
-    html = html.replace('<script src="app.js"></script>', `<script src="app.js"></script><script>setTimeout(function () {
+    html = html.replace('<script src="shell.js"></script>', `<script src="shell.js"></script><script>setTimeout(function () {
       ${events}
       var pre = document.createElement('pre'); pre.id = 'result';
       // Kesir olarak (görünümün boyuna göre): başsız Chromium'un --dump-dom görünümü 1080'den biraz kısa olabiliyor.

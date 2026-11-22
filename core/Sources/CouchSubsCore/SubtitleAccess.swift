@@ -109,7 +109,8 @@ public enum SubtitleAccess {
         if request.path == "/hello" || request.path == "/obs" || request.path == "/pair" { return (200, false) }
         let supplied = request.parameter("k")
         // İkinci ekran (sayfası ve akışı) eski TV'lere tanınan anahtarsız geçişten yararlanmaz: aynı ağdaki herkes açamaz.
-        if supplied == nil && allowLegacy && !isSecondScreen(request) && (request.origin == nil || packagedOrigin(request.origin!)) { return (200, true) }
+        // TV sayfasının kodu (/tv/app) da: listesi eşleşme anahtarıyla imzalanır, anahtarsız istenemez.
+        if supplied == nil && allowLegacy && !isSecondScreen(request) && !TVAppBundle.isPath(request.path) && (request.origin == nil || packagedOrigin(request.origin!)) { return (200, true) }
         guard let supplied else { return (401, false) }
         // CryptoKit doğrulaması sabit zamanlı karşılaştırır; sıradan String == kullanılmaz.
         let secret = SymmetricKey(data: Data(key.utf8))

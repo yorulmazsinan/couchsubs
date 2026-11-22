@@ -1,0 +1,40 @@
+{
+  "comment": "TV sayfası paketi (ince kabuk, docs/tv-ince-kabuk.md): Mac/iPhone TVAppBundleTests, Windows TvAppBundleTests, Android TvAppBundleTest ve scripts/tv-shell.test.js aynı değerleri bekler.",
+  "key": "Q2xhdWRlS2V5MDEyMzQ1Ng",
+  "files": {
+    "index.html": "<!doctype html>\n<html>\n<body>\n  <div id=\"video-host\"></div>\n  <div id=\"panel\">Çeviri — ş ğ ı</div>\n  <script src=\"app.js\"></script>\n</body>\n</html>\n",
+    "style.css": "#panel { color: #fff; }\n",
+    "i18n.js": "window.t = function (k) { return k; }; // ü ö\n",
+    "app.js": "(function () {\n  var APP_VERSION = '0.9.80';\n  var SHELL_API = 1;\n  window.__ran = APP_VERSION + ' — İ';\n})();\n"
+  },
+  "version": "0.9.80",
+  "shellApi": 1,
+  "sizes": {
+    "index.html": 154,
+    "style.css": 24,
+    "i18n.js": 48,
+    "app.js": 114
+  },
+  "sha256": {
+    "index.html": "d1ce136e52c77b189b587ed2414f33997c28b92c515ffae100d4cb01dd4921bd",
+    "style.css": "c0fc121851742e9f22a1ffc9dcef739cb31318f0d248f85eb4b5d16ad4d7a9ab",
+    "i18n.js": "95fc06ee7dec62247c05445c64d88ef52909055a84871dde9c49a508a8aa63a2",
+    "app.js": "cbd5a3078e74669b4568f354d15e811a74173667836a664c34db4d4140f3357e"
+  },
+  "canonical": "couchsubs-tv-app/1\n0.9.80\n1\nindex.html 154 d1ce136e52c77b189b587ed2414f33997c28b92c515ffae100d4cb01dd4921bd\nstyle.css 24 c0fc121851742e9f22a1ffc9dcef739cb31318f0d248f85eb4b5d16ad4d7a9ab\ni18n.js 48 95fc06ee7dec62247c05445c64d88ef52909055a84871dde9c49a508a8aa63a2\napp.js 114 cbd5a3078e74669b4568f354d15e811a74173667836a664c34db4d4140f3357e\n",
+  "hmac": "26974d1848ac7563c425da11e386ef8c7cc8ab3e1b112de5beb8a5f472c3a9d3",
+  "invalid": [
+    {
+      "name": "SHELL_API yok (kabuktan önceki sayfa)",
+      "app.js": "var APP_VERSION = '0.9.71';\n"
+    },
+    {
+      "name": "sürüm yok",
+      "app.js": "var SHELL_API = 1;\n"
+    },
+    {
+      "name": "bozuk sürüm",
+      "app.js": "var APP_VERSION = '0.9.x';\nvar SHELL_API = 1;\n"
+    }
+  ]
+}

@@ -17,6 +17,8 @@
     <!-- Oyun çeviri paketleri: Mac ile aynı klasör (ad: "packs/x.json.gz"). -->
     <EmbeddedResource Include="..\..\..\core\Sources\CouchSubsCore\Resources\packs\*.json.gz" LogicalName="packs/%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\..\mac\CouchSubs\Resources\Localizable.xcstrings" LogicalName="Localizable.xcstrings" />
+    <!-- TV sayfasının kodu: eşleşmiş TV'ler /tv/app'ten yükler (ince kabuk, docs/tv-ince-kabuk.md; ad: "tv-webos/x"). -->
+    <EmbeddedResource Include="..\..\..\tv-webos\index.html;..\..\..\tv-webos\style.css;..\..\..\tv-webos\i18n.js;..\..\..\tv-webos\app.js" LogicalName="tv-webos/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

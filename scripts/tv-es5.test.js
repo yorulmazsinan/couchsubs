@@ -20,7 +20,7 @@ try {
 
 const root = path.join(__dirname, '..');
 // Samsung paketine giren betikler (scripts/package-tizen.sh) ve LG/Android TV'nin platform betikleri.
-const FILES = ['tv-webos/app.js', 'tv-webos/i18n.js', 'tv-webos/config.js', 'tv-tizen/platform.js',
+const FILES = ['tv-webos/app.js', 'tv-webos/i18n.js', 'tv-webos/shell.js', 'tv-webos/config.js', 'tv-tizen/platform.js',
   'tv-webos/platform.js', 'tv-android/platform.js'];
 
 test('TV betikleri ES5 ile ayrıştırılıyor (Tizen 2.3-2.4 tarayıcısı)', { skip: !acorn && 'acorn bulunamadı' }, () => {
@@ -42,7 +42,9 @@ test('Tizen paketinin sayfası ES2015+ API\'sini korumasız çağırmıyor', () 
   // Tizen 2.3'ün tarayıcısında olmayabilecek API'ler yalnız varlık denetimiyle kullanılır.
   const app = fs.readFileSync(path.join(root, 'tv-webos/app.js'), 'utf8');
   const platform = fs.readFileSync(path.join(root, 'tv-tizen/platform.js'), 'utf8');
-  for (const [name, code] of [['app.js', app], ['tv-tizen/platform.js', platform]]) {
+  // Kabuk (shell.js) her TV'de ilk çalışan sayfa betiğidir: en eski tarayıcıya (Tizen 2.3, webOS 3 / Chrome 38) göre.
+  const shell = fs.readFileSync(path.join(root, 'tv-webos/shell.js'), 'utf8');
+  for (const [name, code] of [['app.js', app], ['tv-tizen/platform.js', platform], ['shell.js', shell]]) {
     for (const api of ['fetch(', 'Object.assign(', '.includes(', '.startsWith(', '.endsWith(', 'new Map(', 'new Set(',
       'Symbol(', 'new URL(', 'URLSearchParams', 'requestAnimationFrame(', '.classList']) {
       assert.ok(code.indexOf(api) < 0, name + ': ' + api);
@@ -53,7 +55,7 @@ test('Tizen paketinin sayfası ES2015+ API\'sini korumasız çağırmıyor', () 
   // scripts/tv-live-page.js bunları silinmiş ortamda sayfayı gerçek sunucuya bağlar (TvPageEndToEndTests, tv-live-stale).
   const android = fs.readFileSync(path.join(root, 'tv-android/platform.js'), 'utf8');
   const i18n = fs.readFileSync(path.join(root, 'tv-webos/i18n.js'), 'utf8');
-  for (const [name, code] of [['app.js', app], ['tv-android/platform.js', android], ['i18n.js', i18n]]) {
+  for (const [name, code] of [['app.js', app], ['tv-android/platform.js', android], ['i18n.js', i18n], ['shell.js', shell]]) {
     for (const api of ['.flat(', '.flatMap(', 'Object.fromEntries', '.trimStart(', '.trimEnd(', '.finally(', 'globalThis',
       '.replaceAll(', '.matchAll(', 'ResizeObserver', 'AbortController', 'structuredClone', 'queueMicrotask',
       'Promise.allSettled', 'Promise.any', '.at(-']) {
@@ -69,7 +71,7 @@ test('Tizen paketinin sayfası ES2015+ API\'sini korumasız çağırmıyor', () 
   // LG webOS 4.x (2018, ör. 55SK8500, #643): tarayıcı Chrome 53 ("cr53" tanıda). Chrome 54-58'de gelen API ve CSS LG
   // paketinde (app.js, i18n.js, tv-webos/platform.js, style.css) kullanılmaz.
   const webos = fs.readFileSync(path.join(root, 'tv-webos/platform.js'), 'utf8');
-  for (const [name, code] of [['app.js', app], ['i18n.js', i18n], ['tv-webos/platform.js', webos]]) {
+  for (const [name, code] of [['app.js', app], ['i18n.js', i18n], ['tv-webos/platform.js', webos], ['shell.js', shell]]) {
     for (const api of ['Object.values(', 'Object.entries(', 'Object.getOwnPropertyDescriptors', '.padStart(', '.padEnd(',
       '.append(', '.prepend(', '.replaceWith(', '.before(', '.after(', 'async function', 'await ', 'once: true',
       '.toggleAttribute(', '.getRootNode(']) {

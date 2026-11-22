@@ -126,6 +126,25 @@ CAPABILITIES = {
         ("ios", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"func tvAppReported\("),
         ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/tv/TvAppUpdate.kt", r"fun reported\("),
     ],
+    # İnce kabuk (docs/tv-ince-kabuk.md): TV uygulaması sayfa kodunu bağlandığı bilgisayardan/telefondan imzalı listeyle
+    # (/tv/app/manifest, /tv/app/<sürüm>/<dosya>) yükler; dört platformun sunucusu aynı dosyaları aynı imzayla verir.
+    "TV sayfasını sunma (/tv/app, eşleşme anahtarıyla HMAC imzalı liste)": [
+        ("mac", _CORE + "TVAppBundle.swift", r"public func manifest\(key: String\)"),
+        ("mac", _CORE + "SubtitleServer.swift", r"TVAppBundle\.isPath\(path\)"),
+        ("mac", "mac/project.yml", r"path: \.\./tv-webos"),
+        ("ios", "couchsubs-ios/project.yml", r"path: \.\./tv-webos"),
+        ("windows", _WIN + "TvAppBundle.cs", r"public string Manifest\(string key\)"),
+        ("windows", _WIN + "SubtitleServer.cs", r"TvAppBundle\.IsPath\(path\)"),
+        ("windows", _WIN + "CouchSubs.Core.csproj", r"tv-webos\\app\.js"),
+        ("android", _DROID + "TvAppBundle.kt", r"fun manifest\(key: String\)"),
+        ("android", _DROID + "SubtitleServer.kt", r"TvAppBundle\.isPath\(path\)"),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/TranslationService.kt", r"tvApp = TvAppBundle\.load"),
+    ],
+    "Ortak deneme dosyası tv-app-bundle.json": [
+        ("mac", _CORE_TESTS + "TVAppBundleTests.swift", r"tv-app-bundle\.json"),
+        ("windows", _WIN_TESTS + "TvAppBundleTests.cs", r"tv-app-bundle\.json"),
+        ("android", _DROID_TESTS + "TvAppBundleTest.kt", r"tv-app-bundle\.json"),
+    ],
     "Gerçek kare ekran yazısı ölçütü (menü, görev listesi)": [
         ("mac", "tools/frame-regression/Sources/frame-regression/ScreenCheck.swift", r"func checkScreen\("),
         ("android", _DROID_TESTS + "ScreenFramesTest.kt", r"ocr/screen/"),

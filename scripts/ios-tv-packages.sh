@@ -20,7 +20,7 @@ mkdir -p "$OUT/samsung-ca" "$CACHE"
 import sys, zipfile
 root, dst = sys.argv[1], sys.argv[2]
 web, tizen = root + '/tv-webos/', root + '/tv-tizen/'
-files = [(web + n, n) for n in ['app.js', 'i18n.js', 'config.js', 'style.css', 'largeIcon.png']]
+files = [(web + n, n) for n in ['app.js', 'i18n.js', 'shell.js', 'config.js', 'style.css', 'largeIcon.png']]
 files.append((web + 'icon.png', 'panel-icon.png'))
 files += [(tizen + n, n) for n in ['platform.js', 'config.xml', 'icon.png']]
 with open(web + 'index.html', encoding='utf-8') as f:

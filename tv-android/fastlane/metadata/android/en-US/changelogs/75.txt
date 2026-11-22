@@ -1,0 +1,1 @@
+0.9.72: The TV app now updates itself from your computer or phone; installing it one more time is enough. When CouchSubs is updated, subtitles, phone bubbles and the info panel on the TV stay current without reinstalling or Developer Mode.

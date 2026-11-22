@@ -60,7 +60,8 @@ jobs:
           wf='^\.github/workflows/pr-tests\.yml$'
           res='^core/Sources/CouchSubsCore/Resources/'
           frames='^testdata/frames/|^tools/frame-regression/|^scripts/regression[-_]frames'
-          echo "windows=$(match "^windows/|^testdata/frames/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
+          # CouchSubs.Core TV sayfasını (tv-webos) /tv/app için gömer (docs/tv-ince-kabuk.md).
+          echo "windows=$(match "^windows/|^tv-webos/|^testdata/frames/|${res}|${wf}")" >> "$GITHUB_OUTPUT"
           # TVAppPairingLiveTests TV uygulamasının kendisini (tv-webos/app.js) Swift sunucusuyla eşleştirir.
           echo "swift=$(match "^core/|^tv-webos/|^scripts/tv-pair-live\.js$|${frames}|${wf}")" >> "$GITHUB_OUTPUT"
           echo "android=$(match "^couchsubs-android/|^tv-webos/|^tv-tizen/|^testdata/frames/|${res}|${wf}")" >> "$GITHUB_OUTPUT"

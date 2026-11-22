@@ -46,6 +46,10 @@ targets:
       # Tasarım değerleri: Windows sürümüyle ortak tek kaynak.
       - path: ../design/tokens.json
         buildPhase: resources
+      # TV sayfasının kodu: eşleşmiş TV'ler /tv/app'ten yükler (ince kabuk, docs/tv-ince-kabuk.md; TVAppBundle.bundled).
+      - path: ../tv-webos
+        type: folder
+        buildPhase: resources
       # TV uygulaması paketi (scripts/package-tv.sh üretir; yoksa kurulum özelliği gizlenir).
       - path: ../dist/tv-app
         type: folder
@@ -118,6 +122,10 @@ targets:
       - path: AppStore
         buildPhase: none
       - path: ../design/tokens.json
+        buildPhase: resources
+      # TV sayfasının kodu: eşleşmiş TV'ler /tv/app'ten yükler (ince kabuk, docs/tv-ince-kabuk.md).
+      - path: ../tv-webos
+        type: folder
         buildPhase: resources
       # TV uygulaması paketleri: TV kurulumu sandbox'ta da çalışıyor (ssh, ssh-keygen ve yardımcı uygulamanın
       # sandbox'ını miras alır; CouchSubsAppStoreTests/SandboxTests sınar).

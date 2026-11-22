@@ -204,6 +204,13 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     private readonly Queue<string> speechPaths = new();
     private int speechNumber;
 
+    /// <summary>
+    /// TV sayfasının kodu (ince kabuk, docs/tv-ince-kabuk.md): <c>/tv/app/…</c> ile eşleşmiş TV'lere verilir. Varsayılan,
+    /// uygulamaya gömülü tv-webos kopyasıdır; yoksa <c>/tv/app</c> 404 döner ve TV kendi yedeğiyle açılır.
+    /// </summary>
+    public TvAppBundle? TvApp { get => Volatile.Read(ref tvApp); set => Volatile.Write(ref tvApp, value); }
+    private TvAppBundle? tvApp = TvAppBundle.Bundled;
+
     /// <summary>Bağlı TV sayısı değişince çağrılır (iş parçacığı havuzunda).</summary>
     public event Action<int>? ClientsChanged;
 
@@ -625,6 +632,16 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                 }
                 await OpenStream(tcp, obs, cors, checkedKey, obs ? null : ParseHdmiPort(request.Parameter("hdmi")));
             }
+            // TV sayfasının kodu; anahtar Authorize'da denetlendi (anahtarsız istek eski TV geçişinden de yararlanmaz).
+            else if (method == "GET" && TvAppBundle.IsPath(path))
+            {
+                var bundle = TvApp;
+                if (path == TvAppBundle.ManifestPath && bundle is not null)
+                    await RespondAndClose(tcp, Encoding.UTF8.GetBytes(bundle.Manifest(checkedKey)), "application/json", cors);
+                else if (bundle?.FileAt(path) is { } page)
+                    await RespondAndClose(tcp, page.Data, TvAppBundle.ContentType(page.Path), cors, TvAppBundle.FileCache);
+                else await RespondAndClose(tcp, "404 Not Found", cors: cors);
+            }
             else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8", cors);
             // Anahtar Authorize'da denetlendi (anahtarsız istek 401 aldı).
             else if (method == "GET" && path == SecondScreen.Path) await RespondAndClose(tcp, SecondScreen.Page, "text/html; charset=utf-8", cors);
@@ -662,9 +679,9 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         lock (gate) return files.TryGetValue(path, out var file) ? file : null;
     }
 
-    private static async Task RespondAndClose(TcpClient tcp, byte[] data, string type, string cors = "")
+    private static async Task RespondAndClose(TcpClient tcp, byte[] data, string type, string cors = "", string cache = "no-store")
     {
-        var head = $"HTTP/1.1 200 OK\r\n{cors}Content-Type: {type}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\n" +
+        var head = $"HTTP/1.1 200 OK\r\n{cors}Content-Type: {type}\r\nCache-Control: {cache}\r\nReferrer-Policy: no-referrer\r\n" +
                    $"Content-Length: {data.Length}\r\nConnection: close\r\n\r\n";
         var stream = tcp.GetStream();
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head));

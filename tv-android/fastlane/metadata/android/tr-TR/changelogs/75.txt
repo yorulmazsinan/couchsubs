@@ -1,0 +1,1 @@
+0.9.72: TV uygulaması artık kendini bilgisayardan/telefondan günceller; bir kez daha kurulum yeterli. CouchSubs güncellenince TV'deki altyazı, telefon balonları ve bilgi paneli de yeniden kurulum ya da geliştirici modu gerekmeden güncel olur.

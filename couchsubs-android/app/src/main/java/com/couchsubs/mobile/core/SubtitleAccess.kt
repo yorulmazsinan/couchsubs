@@ -95,7 +95,8 @@ object SubtitleAccess {
         if (request.path == "/hello" || request.path == "/obs" || request.path == "/pair") return Decision(200)
         val supplied = request.parameter("k")
         // İkinci ekran (sayfası ve akışı) eski TV'lere tanınan anahtarsız geçişten yararlanmaz: aynı ağdaki herkes açamaz.
-        if (supplied == null && allowLegacy && !isSecondScreen(request) && (request.origin == null || packagedOrigin(request.origin))) return Decision(200, true)
+        // TV sayfasının kodu (/tv/app) da: listesi eşleşme anahtarıyla imzalanır, anahtarsız istenemez.
+        if (supplied == null && allowLegacy && !isSecondScreen(request) && !TvAppBundle.isPath(request.path) && (request.origin == null || packagedOrigin(request.origin))) return Decision(200, true)
         return Decision(if (supplied != null && MessageDigest.isEqual(key.toByteArray(Charsets.UTF_8), supplied.toByteArray(Charsets.UTF_8))) 200 else 401)
     }
 

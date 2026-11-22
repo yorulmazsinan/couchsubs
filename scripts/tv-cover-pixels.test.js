@@ -152,7 +152,7 @@ function tvPage(temp, events) {
     `height:${(ENGLISH.bottom - ENGLISH.top) * 100}%`;
   html = html.replace('</head>', '<style>#video-host { background: #fff; }</style></head>');
   html = html.replace('<div id="video-host"></div>', `<div id="video-host"><div style="position:absolute;background:#f00;${english}"></div></div>`);
-  html = html.replace('<script src="app.js"></script>', `<script src="app.js"></script><script>setTimeout(function () {
+  html = html.replace('<script src="shell.js"></script>', `<script src="shell.js"></script><script>setTimeout(function () {
     ${events}
   }, 30000);</script>`);
   fs.writeFileSync(path.join(temp, 'index.html'), html);
