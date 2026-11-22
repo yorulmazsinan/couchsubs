@@ -71,7 +71,7 @@ class DiscardedTranslationTest {
         pipeline.frame(old, 0)
         waitFor("eski üretim başladı") { translator.requested.size == 1 }
         pipeline.frame(next, 100)
-        pipeline.frame(next, 100 + SubtitlePipeline.LATE_RESULT_MS + 1L)
+        pipeline.frame(next, 100 + SubtitlePipeline.QUEUED_LATE_RESULT_MS + 1L)
         waitFor("yeni replik bekliyor") { translator.requested.size == 2 }
         assertEquals(listOf(old), translator.cancelled)
         translator.open()
@@ -123,7 +123,7 @@ class DiscardedTranslationTest {
         pipeline.frame(old, 0)
         waitFor("eski üretim başladı") { translator.requested.size == 1 }
         pipeline.frame(next, 100)
-        pipeline.frame(next, 3000)
+        pipeline.frame(next, 100 + SubtitlePipeline.QUEUED_LATE_RESULT_MS + 1L)
         waitFor("kesme gönderildi") { translator.cancelled.size == 1 }
         assertEquals(listOf(old), translator.requested)
         translator.open()
@@ -167,9 +167,9 @@ class DiscardedTranslationTest {
             pipeline.frame(old, 0)
             waitFor("eski üretim başladı") { translator.requested.size == 1 }
             pipeline.frame(next, 100)
-            pipeline.frame(next, 2700)
+            pipeline.frame(next, 100 + SubtitlePipeline.QUEUED_LATE_RESULT_MS + 1L)
             waitFor("kesme gönderildi") { translator.cancelled.size == 1 }
-            pipeline.frame(old, 2800)
+            pipeline.frame(old, 200 + SubtitlePipeline.QUEUED_LATE_RESULT_MS + 1L)
             translator.open()
             waitFor("iki satır gösterildi") { sender.sent.size == 2 }
             assertEquals("honors=$honors", listOf(old, next, old), translator.requested)

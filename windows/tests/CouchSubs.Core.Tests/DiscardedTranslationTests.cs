@@ -7,6 +7,8 @@ public class DiscardedTranslationTests
 {
     private const string Old = "Hold the gate.";
     private const string Next = "Run!";
+    /// <summary>Eski satır yenisi geldikten (100 ms) sonra beklenebilecek en uzun süreyi aştı (GitHub #893).</summary>
+    private const int Expired = 100 + SubtitlePipeline.QueuedLateResultMs + 1;
     private static readonly Frame Image = Frame.Blank(64, 64);
     // Süreler yalnız takılmayı yakalar; yüklü CI'da yavaş kalmak testi düşürmesin.
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
@@ -95,7 +97,7 @@ public class DiscardedTranslationTests
         await using var scene = new Scene();
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
-        await scene.Frame(Next, 100 + SubtitlePipeline.LateResultMs + 1);
+        await scene.Frame(Next, 100 + SubtitlePipeline.QueuedLateResultMs + 1);
         await scene.WaitForCalls(2);
         Assert.True(scene.Translator.Calls[0].Token.IsCancellationRequested);
         Assert.False(scene.Translator.Calls[0].Result.Task.IsCompleted);
@@ -170,7 +172,7 @@ public class DiscardedTranslationTests
         await using var scene = new Scene(honorsCancellation: false);
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
-        await scene.Frame(Next, 3000);
+        await scene.Frame(Next, Expired);
         Assert.True(scene.Translator.Calls[0].Token.IsCancellationRequested);
         Assert.Single(scene.Translator.Calls);
         scene.Translator.Open();
@@ -201,8 +203,8 @@ public class DiscardedTranslationTests
         await using var scene = new Scene(honorsCancellation);
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
-        await scene.Frame(Next, 2700);
-        await scene.Frame(Old, 2800);
+        await scene.Frame(Next, Expired);
+        await scene.Frame(Old, Expired + 100);
         scene.Translator.Open();
         await scene.Pipeline.WaitForTranslationsAsync();
         Assert.Equal([Old, Next, Old], scene.Translator.Calls.Select(c => c.Text));
@@ -274,7 +276,7 @@ public class DiscardedTranslationTests
         };
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
-        await scene.Frame(Next, 2700);
+        await scene.Frame(Next, Expired);
         Assert.True(gateAvailable);
         await scene.WaitForCalls(2);
     }
@@ -287,7 +289,7 @@ public class DiscardedTranslationTests
         scene.Pipeline.TranslationResult += reported.Add;
         await scene.Frame(Old, 0);
         await scene.Frame(Next, 100);
-        await scene.Frame(Next, 2700);
+        await scene.Frame(Next, Expired);
         scene.Translator.Calls[0].Result.SetException(new TranslatorException(TranslatorStatus.EngineFailed));
         await scene.WaitForCalls(2);
         Assert.Empty(reported);
@@ -316,7 +318,7 @@ public class DiscardedTranslationTests
             await scene.Frame(Next, 100);
             scene.Translator.Calls[0].Result.SetResult("TR: " + Old);
             await published.Task.WaitAsync(Patience);
-            await scene.Frame(Next, 2700);
+            await scene.Frame(Next, Expired);
             Assert.False(scene.Translator.Calls[0].Token.IsCancellationRequested);
         }
         finally { releaseEvent.Set(); }

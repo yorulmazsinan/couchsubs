@@ -19,9 +19,16 @@ public final class SubtitlePipeline {
     /// Satır ekrandan bundan uzun süre önce kalktıysa geç gelen çevirisi gösterilmez (sonraki sahnenin üstüne düşmesin).
     /// Yavaş çeviride (ücretsiz motor, zayıf işlemci) art arda gelen satırların çevirisi satır kalktıktan bir iki saniye
     /// sonra gelir; sınır 1 sn iken üç satırlık konuşmanın yalnız ilki görünüyordu.
+    /// Süre satırın kalktığı andan, satır sırada beklediyse çevirisinin başladığı andan sayılır: önceki satırların
+    /// çevirisini bekleyen satır sıranın gecikmesi yüzünden atılmaz.
     public static let lateResultMs = 2500
+    /// Arkasından yeni satır gelmiş (konuşma sürüyor) satırın geç gelen çevirisi bu süreye kadar yine gösterilir; yeni
+    /// satır onun ardından gider, sıra bozulmaz. Daha eskisi hiçbir zaman gösterilmez. GitHub #893: yapay zekâ çevirisi
+    /// satır başına bir iki saniye sürüyor; art arda gelen satırların ilki yenisi geldikten 2,5 sn sonra çevrilince
+    /// atılıyor ya da yarıda bırakılıyordu, bazı satırlar TV'ye hiç gitmiyordu (ücretsiz motorda olmuyordu).
+    public static let queuedLateResultMs = 8000
     /// Çeviri sürerken sırada en çok bu kadar satır bekler; daha eskisi atlanır (kuyruk konuşma hızıyla büyümesin).
-    public static let maxWaiting = 2
+    public static let maxWaiting = 4
     private static let rememberedPairs = 8
     /// Bozuk okunan (OCR izi taşıyan) ve pakette bulunmayan satır en çok bu kadar bekletilir: aynı satırın düzgün okuması
     /// gelirse o çevrilir (Windows: PackWaitMs).
@@ -67,6 +74,8 @@ public final class SubtitlePipeline {
         let read: ReadInfo
         /// Satırın ekrandan kalktığı an (hâlâ ekrandaysa nil).
         var leftAt: Int?
+        /// Çevirisinin başladığı an (sırada bekliyorsa nil).
+        var startedAt: Int?
         /// Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez.
         var superseded = false
         /// Mevcut gösterim kurallarına göre elendi (daha yeni satır gösterildi ya da süresi doldu); iptali dinlemeyen
@@ -484,8 +493,8 @@ public final class SubtitlePipeline {
     }
 
     /// Süren çeviri artık gösterilemeyecekse üretimi iptal eder, böylece sıradaki satır onu beklemez. Yalnız iki durumda:
-    /// daha yeni bir satır ekranda gösterilmişse, ya da satır `lateResultMs`'ten önce kalkmış, ekranda değil ve sırada
-    /// gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar uzarsa uzasın iptal edilmez.
+    /// daha yeni bir satır ekranda gösterilmişse, ya da satırın çevirisi artık geç (`isLate`), satır ekranda değil ve
+    /// sırada gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar uzarsa uzasın iptal edilmez.
     /// İptal edilen satır ekrana geri gelirse (`restore`) yeniden çevrilir. Windows (SubtitlePipeline.cs) ve Android
     /// (SubtitlePipeline.kt) aynı kuralları uygular.
     private func abandonUndisplayableTranslation() {
@@ -493,16 +502,25 @@ public final class SubtitlePipeline {
               work != nil else { return }
         let time = now()
         let replaced = current.number < lastShown
-        let expired = current.number > lastShown && current.number != lineOnScreen
-            && current.leftAt.map { time - $0 > Self.lateResultMs } == true
+        let expired = current.number > lastShown && current.number != lineOnScreen && isLate(current, at: time)
         guard replaced || expired else { return }
         let hasWaiting = waiting.contains {
-            $0.session == session && !$0.superseded && !$0.abandoned && !($0.leftAt.map { time - $0 > Self.lateResultMs } == true)
+            $0.session == session && !$0.superseded && !$0.abandoned && !isLate($0, at: time)
         }
         guard replaced || hasWaiting else { return }
         current.abandoned = true
         log(current, replaced ? "bırakıldı: daha yeni satır gösterildi" : "bırakıldı: gösterim süresi doldu, yeni satır bekliyor")
         work?.cancel()
+    }
+
+    /// Satırın çevirisi artık gösterilemeyecek kadar geç mi. Ekrandaki satır hiçbir zaman geç değildir. Süre satırın
+    /// kalktığı andan, sırada beklediyse çevirisinin başladığı andan sayılır (`lateResultMs`); arkasından yeni satır
+    /// gelmişse yeni satır onu beklediği için `queuedLateResultMs`'e kadar gösterilir (GitHub #893). Windows ve Android aynı.
+    private func isLate(_ request: Request, at time: Int) -> Bool {
+        guard let left = request.leftAt else { return false }
+        if time - left > Self.queuedLateResultMs { return true }
+        if request.number < lastRequested { return false }
+        return time - max(left, request.startedAt ?? time) > Self.lateResultMs
     }
 
     /// Süren ve sırada bekleyen istekler.
@@ -748,11 +766,11 @@ public final class SubtitlePipeline {
             for old in waiting {
                 if old.session != session {
                     log(old, "atıldı: oturum bitti")
-                } else if let left = old.leftAt, time - left > Self.lateResultMs {
+                } else if let left = old.leftAt, isLate(old, at: time) {
                     log(old, "atıldı: çevrilmeden ekrandan kalktı (\(time - left) ms önce)")
                 }
             }
-            waiting.removeAll { $0.session != session || $0.leftAt.map { time - $0 > Self.lateResultMs } == true }
+            waiting.removeAll { $0.session != session || isLate($0, at: time) }
             inFlight = waiting.isEmpty ? nil : waiting.removeFirst()
         }
     }
@@ -770,6 +788,7 @@ public final class SubtitlePipeline {
     private func translate(_ request: Request) async {
         var source = request.source
         let started = now()
+        request.startedAt = started
         let probe = TranslationProbe()
         do {
             let translator = self.translator
@@ -801,7 +820,7 @@ public final class SubtitlePipeline {
             }
             let onScreen = request.number == lineOnScreen
             // Satır ekrandan çoktan kalktıysa çevirisi sonraki sahnenin üstüne düşmesin.
-            if !onScreen, let left = request.leftAt, now() - left > Self.lateResultMs {
+            if !onScreen, let left = request.leftAt, isLate(request, at: now()) {
                 log(request, "\(result), geç: satır \(now() - left) ms önce kalktı, gösterilmedi")
                 return
             }

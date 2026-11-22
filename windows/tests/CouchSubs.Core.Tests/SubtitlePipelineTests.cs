@@ -425,12 +425,13 @@ public class SubtitlePipelineTests
     {
         var clock = new TestClock();
         var translator = new GatedTranslator();
-        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!", "Get down!", "Now!"), translator, new FakeSender(),
-            clock: clock.Read);
-        await Run(pipeline, 4, waitEach: false, clock: clock);
+        string[] lines = ["Hold the gate.", "Run!", "Get down!", "Now!", "Over here!", "Go left!"];
+        Assert.Equal(SubtitlePipeline.MaxWaiting + 2, lines.Length);
+        var pipeline = new SubtitlePipeline(new FakeReader(lines), translator, new FakeSender(), clock: clock.Read);
+        await Run(pipeline, lines.Length, waitEach: false, clock: clock);
         translator.Open();
         await pipeline.WaitForTranslationsAsync();
-        Assert.Equal(["Hold the gate.", "Get down!", "Now!"], translator.Requested);
+        Assert.Equal(["Hold the gate.", "Get down!", "Now!", "Over here!", "Go left!"], translator.Requested);
     }
 
     /// Yavaş çeviride (ücretsiz motor) art arda üç satırın çevirisi satırlar kalktıktan iki saniye sonra gelse de
@@ -483,9 +484,10 @@ public class SubtitlePipelineTests
         Assert.Equal([false, true, false], sender.Replaces);
     }
 
-    /// Yeni satır gelmiş, eskisinin çevirisi bir saniyeden geç gelmişse gösterilmez; yeni satırınki gösterilir.
+    /// Yeni satır gelmiş, eskisinin çevirisi geç gelse de yeni satırınkinden önce gösterilir (GitHub #893: yapay zekâ
+    /// çevirisinde satırlar kayboluyordu).
     [Fact]
-    public async Task LateTranslationOfReplacedLineIsDropped()
+    public async Task LateTranslationOfReplacedLineIsShownBeforeTheNewOne()
     {
         var sender = new FakeSender();
         var clock = new TestClock();
@@ -493,6 +495,22 @@ public class SubtitlePipelineTests
         var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!"), translator, sender, clock: clock.Read);
         await Run(pipeline, 2, waitEach: false, clock: clock);
         clock.Now += SubtitlePipeline.LateResultMs + 100;
+        await translator.Release("Hold the gate.");
+        await translator.Release("Run!");
+        await pipeline.WaitForTranslationsAsync();
+        Assert.Equal(["TR: Hold the gate.", "TR: Run!"], sender.Sent);
+    }
+
+    /// Yeni satır gelmiş, eskisinin çevirisi beklenebilecek en uzun süreden de geç gelmişse gösterilmez.
+    [Fact]
+    public async Task VeryLateTranslationOfReplacedLineIsDropped()
+    {
+        var sender = new FakeSender();
+        var clock = new TestClock();
+        var translator = new GatedTranslator();
+        var pipeline = new SubtitlePipeline(new FakeReader("Hold the gate.", "Run!"), translator, sender, clock: clock.Read);
+        await Run(pipeline, 2, waitEach: false, clock: clock);
+        clock.Now += SubtitlePipeline.QueuedLateResultMs + 100;
         await translator.Release("Hold the gate.");
         await translator.Release("Run!");
         await pipeline.WaitForTranslationsAsync();

@@ -53,11 +53,20 @@ class SubtitlePipeline(
         /**
          * Satır ekrandan bundan uzun süre önce kalktıysa geç gelen çevirisi gösterilmez (sonraki sahnenin üstüne düşmesin).
          * Yavaş çeviride (ücretsiz motor, zayıf işlemci) art arda gelen satırların çevirisi satır kalktıktan bir iki saniye
-         * sonra gelir; sınır 1 sn iken üç satırlık konuşmanın yalnız ilki görünüyordu.
+         * sonra gelir; sınır 1 sn iken üç satırlık konuşmanın yalnız ilki görünüyordu. Süre satırın kalktığı andan, satır
+         * sırada beklediyse çevirisinin başladığı andan sayılır: önceki satırların çevirisini bekleyen satır sıranın
+         * gecikmesi yüzünden atılmaz.
          */
         const val LATE_RESULT_MS = 2500
+        /**
+         * Arkasından yeni satır gelmiş (konuşma sürüyor) satırın geç gelen çevirisi bu süreye kadar yine gösterilir; yeni
+         * satır onun ardından gider, sıra bozulmaz. Daha eskisi hiçbir zaman gösterilmez. GitHub #893: yapay zekâ çevirisi
+         * satır başına bir iki saniye sürüyor; art arda gelen satırların ilki yenisi geldikten 2,5 sn sonra çevrilince
+         * atılıyor ya da yarıda bırakılıyordu, bazı satırlar TV'ye hiç gitmiyordu (ücretsiz motorda olmuyordu).
+         */
+        const val QUEUED_LATE_RESULT_MS = 8000
         /** Çeviri sürerken sırada en çok bu kadar satır bekler; daha eskisi atlanır (kuyruk konuşma hızıyla büyümesin). */
-        const val MAX_WAITING = 2
+        const val MAX_WAITING = 4
         private const val REMEMBERED_PAIRS = 8
         /**
          * Bozuk okunan (OCR izi taşıyan) ve pakette bulunmayan satır en çok bu kadar bekletilir: aynı satırın düzgün
@@ -87,6 +96,8 @@ class SubtitlePipeline(
         /** Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider. */
         @Volatile var prefix = SpeakerPrefix.split(source)
         @Volatile var leftAt: Long? = null
+        /** Çevirisinin başladığı an (sırada bekliyorsa null). */
+        @Volatile var startedAt: Long? = null
         /** Yerine aynı cümlenin uzamış okuması geldi (daktilo efekti); çevirisi gösterilmez. */
         @Volatile var superseded = false
         /**
@@ -565,8 +576,8 @@ class SubtitlePipeline(
 
     /**
      * Süren çeviri artık gösterilemeyecekse üretimi iptal eder (çeviri iş parçacığı kesilir), böylece sıradaki satır onu
-     * beklemez. Yalnız iki durumda: daha yeni bir satır ekranda gösterilmişse, ya da satır [LATE_RESULT_MS]'ten önce
-     * kalkmış, ekranda değil ve sırada gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar
+     * beklemez. Yalnız iki durumda: daha yeni bir satır ekranda gösterilmişse, ya da satırın çevirisi artık geç ([isLate]),
+     * satır ekranda değil ve sırada gösterilebilir yeni bir satır bekliyorsa. Ekranda duran satır üretimi ne kadar
      * uzarsa uzasın iptal edilmez. İptal edilen satır ekrana geri gelirse ([restore]) yeniden çevrilir. Kesmeyi
      * dinlemeyen motorun sonucu da gösterilmez ve eşzamanlı ikinci üretim başlamaz. Windows ve Mac/iPhone aynı kuralları uygular.
      */
@@ -574,7 +585,7 @@ class SubtitlePipeline(
         val current = inFlight ?: return
         if (translating !== current || current.session != session || current.superseded || current.abandoned) return
         val time = now()
-        fun late(request: Request) = request.leftAt.let { left -> left != null && time - left > LATE_RESULT_MS }
+        fun late(request: Request) = isLate(request, time)
         val replaced = current.number < lastShown
         val expired = current.number > lastShown && current.number != lineOnScreen && late(current)
         if (!replaced && !expired) return
@@ -582,6 +593,19 @@ class SubtitlePipeline(
         if (!replaced && !hasWaiting) return
         current.abandoned = true
         worker?.interrupt()
+    }
+
+    /**
+     * Satırın çevirisi artık gösterilemeyecek kadar geç mi (kilit tutulurken çağrılır). Ekrandaki satır hiçbir zaman geç
+     * değildir. Süre satırın kalktığı andan, sırada beklediyse çevirisinin başladığı andan sayılır ([LATE_RESULT_MS]);
+     * arkasından yeni satır gelmişse yeni satır onu beklediği için [QUEUED_LATE_RESULT_MS]'e kadar gösterilir
+     * (GitHub #893). Windows ve Mac/iPhone aynı.
+     */
+    private fun isLate(request: Request, time: Long): Boolean {
+        val left = request.leftAt ?: return false
+        if (time - left > QUEUED_LATE_RESULT_MS) return true
+        if (request.number < lastRequested) return false
+        return time - maxOf(left, request.startedAt ?: time) > LATE_RESULT_MS
     }
 
     private fun lineLeft() {
@@ -705,7 +729,7 @@ class SubtitlePipeline(
                 Thread.interrupted()
                 // Ekrandan çoktan kalkmış satır çevrilmez; çevirisi zaten gösterilmeyecekti.
                 val time = now()
-                waiting.removeAll { it.session != session || it.leftAt.let { left -> left != null && time - left > LATE_RESULT_MS } }
+                waiting.removeAll { it.session != session || isLate(it, time) }
                 val next = if (waiting.isEmpty()) null else waiting.removeAt(0)
                 inFlight = next
                 if (next == null) return
@@ -720,6 +744,7 @@ class SubtitlePipeline(
         // Ayrılan ad çevirmene gitmez; cümle içinde geçtiğinde korunsun diye ayrıca bildirilir (#287).
         request.prefix?.let { translator.noteSpeaker(it.name) }
         val started = now()
+        request.startedAt = started
         val sentence = try {
             translator.translate(input)
         } catch (error: Exception) {
@@ -752,7 +777,7 @@ class SubtitlePipeline(
             val onScreen = request.number == lineOnScreen
             val left = request.leftAt
             // Satır ekrandan çoktan kalktıysa çevirisi sonraki sahnenin üstüne düşmesin.
-            if (!onScreen && left != null && now() - left > LATE_RESULT_MS) return
+            if (!onScreen && left != null && isLate(request, now())) return
             lastShown = request.number
             send(translated, source, if (onScreen) 15000 else readingTime(translated), request.box, revisesShown(source))
             lastShownSource = source
