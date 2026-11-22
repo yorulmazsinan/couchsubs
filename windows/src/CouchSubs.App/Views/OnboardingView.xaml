@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
-<!-- Kurulum sihirbazı (yeni arayüz, tuval 00–08): üstte logo, ortada ilerleme noktaları (şimdiki adım amber hap), sağda
-     "Sonra Ayarlarım"; içerik alanı yanlarda 120, üstte 24, altta 40; adım etiketi "ADIM 1 / 4", başlık, açıklama, adım;
-     altta Geri (ikincil) ve tek ana düğme Devam. Kurulumda reklam yok. -->
+<!-- Kurulum sihirbazı (Mac WizardView): üstte logo, ortada ilerleme noktaları (şimdiki adım amber hap), sağda "Sonra Ayarlarım";
+     içerik alanı yanlarda 120, üstte 24, altta 40; adım etiketi ("Adım 3 / 4", "Kurulum · Hesap"), başlık, açıklama, adım;
+     altta solda Geri (ikincil) ve Deneme modu, sağda adımın kısa notu ve tek ana düğme Devam. Kurulumda reklam yok. -->
 <UserControl x:Class="CouchSubs.App.Views.OnboardingView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -21,6 +21,7 @@
             </StackPanel>
             <StackPanel x:Name="Dots" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" />
             <Button x:Name="LaterButton" Grid.Column="2" Style="{StaticResource LinkButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    FontSize="{DynamicResource smallFontSize}"
                     Content="{t:T 'I\'ll Set Up Later'}" Click="OnLater" />
         </Grid>
 
@@ -30,18 +31,21 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock x:Name="Counter" Style="{StaticResource SectionLabel}" Margin="{t:Sp '0,0,0,xs'}" />
+            <TextBlock x:Name="Counter" Style="{StaticResource EyebrowText}" Margin="{t:Sp '0,0,0,xs'}" />
             <ScrollViewer Grid.Row="1" Style="{StaticResource CardScroll}">
                 <ContentControl x:Name="StepHost" Focusable="False" Margin="{t:Sp '0,0,xs,0'}" />
             </ScrollViewer>
-            <DockPanel Grid.Row="2" Margin="{t:Sp '0,xl,0,0'}" LastChildFill="False">
-                <Button x:Name="BackButton" Content="{t:T 'Back'}" Style="{StaticResource SecondaryButton}" Margin="{t:Sp '0,0,s,0'}" Click="OnBack" />
-                <Button x:Name="ContinueButton" Content="{t:T 'Continue'}" Style="{StaticResource WidePrimaryButton}" IsDefault="True"
-                        IsEnabled="{Binding CanAdvance}" Click="OnContinue" />
+            <DockPanel Grid.Row="2" Margin="{t:Sp '0,xl,0,0'}">
+                <Button x:Name="BackButton" Content="{t:T 'Back'}" Style="{StaticResource SecondaryButton}" Margin="{t:Sp '0,0,m,0'}" Click="OnBack" />
                 <!-- Her adımda: konsolu olmayan, uygulamayı örnek görüntülerle dener. -->
-                <local:DemoModeButton DockPanel.Dock="Right" ButtonStyle="GhostButton" />
-                <Button DockPanel.Dock="Right" Content="{t:T 'Reset setup'}" Style="{StaticResource GhostButton}" Margin="{t:Sp '0,0,xs,0'}"
+                <local:DemoModeButton ButtonStyle="GhostButton" VerticalAlignment="Center" />
+                <Button Content="{t:T 'Reset setup'}" Style="{StaticResource GhostButton}" Margin="{t:Sp 'xs,0,0,0'}"
                         Visibility="{Binding ConsoleKindLocked, Converter={StaticResource VisibleIf}}" Click="OnReset" />
+                <Button x:Name="ContinueButton" DockPanel.Dock="Right" Content="{t:T 'Continue'}" Style="{StaticResource WidePrimaryButton}" IsDefault="True"
+                        IsEnabled="{Binding CanAdvance}" Click="OnContinue" />
+                <!-- Adımın kısa notu (Mac WizardText.footnote): sağda, Devam'ın solunda, en çok iki satır. -->
+                <TextBlock x:Name="Footnote" DockPanel.Dock="Right" Style="{StaticResource FootnoteText}" Margin="{t:Sp 's,0,m,0'}" />
+                <Border />
             </DockPanel>
         </Grid>
     </DockPanel>

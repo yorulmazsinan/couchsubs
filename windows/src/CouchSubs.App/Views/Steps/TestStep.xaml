@@ -4,8 +4,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout x:Name="Layout" Title="{t:T 'Let\'s test it'}"
-                  Message="{t:T 'CouchSubs will send a sample subtitle to your TV. It should appear at the bottom of the screen, on top of the game.'}">
+    <c:StepLayout x:Name="Layout" Title="{t:T 'Let\'s Try It'}"
+                  Message="{t:T 'We test each part one by one. You should see a sample Turkish subtitle on the TV.'}">
         <StackPanel>
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="Send" Content="{t:T 'Send test subtitle'}" Style="{StaticResource PrimaryButton}" Click="OnSend" />
@@ -14,10 +14,11 @@
             </StackPanel>
             <c:Card x:Name="Question" Title="{t:T 'Do you see it on the TV?'}" Margin="{t:Sp '0,m,0,0'}" Visibility="Collapsed">
                 <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="{t:T 'Yes, I see it'}" Style="{StaticResource PrimaryButton}" Click="OnYes" IsDefault="True" />
-                        <Button Content="{t:T 'No'}" Margin="{t:Sp 's,0,0,0'}" Click="OnNo" />
-                    </StackPanel>
+                    <!-- İlişkili ardışık düğmeler alt alta, aralar 12 (Mac DSButtonStack). -->
+                    <c:SpacedStack Gap="related" HorizontalAlignment="Left">
+                        <Button Content="{t:T 'Yes, I see it'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Click="OnYes" IsDefault="True" />
+                        <Button Content="{t:T 'No'}" HorizontalAlignment="Stretch" Click="OnNo" />
+                    </c:SpacedStack>
                     <TextBlock x:Name="Hint" Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}"
                                Text="{t:T 'If you don\'t see it, make sure the CouchSubs TV app is open and connect the TV again.'}" />
                 </StackPanel>

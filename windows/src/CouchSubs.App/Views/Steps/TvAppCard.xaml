@@ -1,72 +1,96 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- TV uygulamasının kurulumu (Mac TVSetupView: errorBox, interactiveCard, TVChecklistCard). Üç parça, gerekmeyen görünmez:
+     hata kutusu (ne oldu, neden, çözüm, Tekrar Dene, Günlüğü Kopyala), etkileşimli durum kartı (Samsung girişi, iki Android TV,
+     TV'de Yükle, hazır), markaya göre "Kurulumdan Önce TV'de" listesi (LG'de Passphrase, Samsung'da Host PC IP kopyala kutusu). -->
 <UserControl x:Class="CouchSubs.App.Views.Steps.TvAppCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              Visibility="Collapsed">
-    <c:Card Title="{t:T 'CouchSubs TV app'}">
-        <StackPanel>
-            <TextBlock x:Name="Status" TextWrapping="Wrap" />
-            <TextBlock x:Name="Detail" Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" Visibility="Collapsed" />
-            <StackPanel x:Name="LgSteps" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '1. Create a free account at webostv.developer.lge.com.'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '2. On the TV, install Developer Mode from the LG Content Store and sign in.'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '3. Turn on Dev Mode Status. The TV restarts and this screen continues by itself.'}" />
+    <c:SpacedStack Gap="l">
+        <c:ErrorBox x:Name="ProblemBox">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="Retry" Content="{t:T 'Try Again'}" Style="{StaticResource CompactButton}" Margin="{t:Sp '0,0,xs,0'}" Click="OnRetry" />
+                <!-- Kurulum günlüğü (tvinstall.log) Explorer'da seçili gösterilir (telefonlardaki "Kurulum günlüğünü paylaş"ın karşılığı). -->
+                <Button x:Name="ShowLog" Content="{t:T 'Show the install log'}" Style="{StaticResource CompactButton}" Click="OnShowLog" />
             </StackPanel>
-            <StackPanel x:Name="SamsungSteps" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <!-- Telefonlardaki kurulum ekranıyla aynı not: 2016 (Tizen 2.4) ve sonrası kurulur, 2016–2018 deneysel. -->
-                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,0,0,xxs'}" Text="{t:T 'Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '1. On the TV, open Apps and scroll to the very bottom of the page.'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.'}" />
-                <TextBlock x:Name="SamsungHostStep" Style="{StaticResource HintText}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself.'}" />
-                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" Text="{t:T 'Later you sign in once with a free Samsung account; Samsung needs it to sign the app for your TV.'}" />
-                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" Text="{t:T 'If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.'}" />
-            </StackPanel>
-            <StackPanel x:Name="AndroidSteps" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '1. On the TV, open Settings › Device Preferences › About (Google TV: Settings › System › About).'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '2. Press OK on Build 7 times until it says you are a developer.'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T '3. Go back to Device Preferences (Google TV: System) › Developer options and turn on USB debugging. Turn on Network debugging too if you see it.'}" />
-                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" Text="{t:T 'Looking for the TV on the network…'}" />
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T 'Menu names differ a little by brand. If the app is already on the TV, you can skip this step.'}" />
-                <Button HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Content="{t:T 'Install with a USB stick instead'}" Click="OnGuide" />
-            </StackPanel>
-            <!-- Aynı ağda birden çok Android TV: izin sorusu yanlış odadaki TV'de çıkmasın diye TV sorulur (#425). -->
-            <StackPanel x:Name="AndroidChoice" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T 'You can see the TV\'s address on the TV in Settings › Network &amp; Internet.'}" />
-                <StackPanel x:Name="AndroidHosts" Margin="{t:Sp '0,xxs,0,0'}" />
-                <Button HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Content="{t:T 'Search again'}" Click="OnRetry" />
-            </StackPanel>
-            <StackPanel x:Name="PassphraseArea" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T 'Open the Developer Mode app on the TV, turn on Key Server and keep the app on screen. Type the Passphrase it shows.'}" />
-                <Grid Margin="{t:Sp '0,xs,0,0'}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="Passphrase" />
-                    <Button Grid.Column="1" Margin="{t:Sp 'xs,0,0,0'}" Style="{StaticResource PrimaryButton}" Content="{t:T 'Install on the TV'}" Click="OnInstall" />
-                </Grid>
-            </StackPanel>
-            <StackPanel x:Name="OpenAgain" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <!-- Samsung'un sayfası girişi açılır pencerede açıyor; engellenince kullanıcılar takılıyordu (2026-11-13). -->
-                <TextBlock Style="{StaticResource HintText}" Text="{t:T 'If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again.'}" />
-                <StackPanel Orientation="Horizontal" Margin="{t:Sp '0,xs,0,0'}">
-                    <Button Content="{t:T 'Open the page again'}" Click="OnOpenAgain" />
-                    <Button x:Name="CopyLink" Margin="{t:Sp 'xs,0,0,0'}" Content="{t:T 'Copy the link'}" Click="OnCopyLink" />
-                </StackPanel>
-            </StackPanel>
-            <TextBlock x:Name="Problem" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,xs,0,0'}" />
-            <Button x:Name="Retry" Visibility="Collapsed" HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Content="{t:T 'Try again'}" Click="OnRetry" />
-            <!-- Kurulum hatasında günlük (tvinstall.log) üç markada da Explorer'da gösterilir ya da panoya kopyalanır
-                 (telefonlardaki "Kurulum günlüğünü paylaş"ın karşılığı). -->
-            <StackPanel x:Name="LogActions" Orientation="Horizontal" Visibility="Collapsed" Margin="{t:Sp '0,xs,0,0'}">
-                <Button Content="{t:T 'Show the install log'}" Click="OnShowLog" />
-                <Button x:Name="CopyLog" Margin="{t:Sp 'xs,0,0,0'}" Content="{t:T 'Copy the log'}" Click="OnCopyLog" />
-            </StackPanel>
-            <!-- TV'den kaldırılan uygulama bu bilgisayarın kaydında "kurulu" kalıyordu (#352, #389): kaydı unutup TV'ye yeniden bakar. -->
-            <Button x:Name="Reinstall" Visibility="Collapsed" HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Content="{t:T 'Reinstall the TV app'}" Click="OnReinstall" />
-        </StackPanel>
-    </c:Card>
+        </c:ErrorBox>
+
+        <c:Card x:Name="StatusCard" Title="{t:T 'CouchSubs TV app'}">
+            <c:SpacedStack>
+                <c:SpacedStack Gap="titleBody">
+                    <TextBlock x:Name="Status" Style="{StaticResource UnitTitleText}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="Detail" Style="{StaticResource HintText}" Visibility="Collapsed" />
+                </c:SpacedStack>
+                <!-- Aynı ağda birden çok Android TV: izin sorusu yanlış odadaki TV'de çıkmasın diye TV sorulur (#425). -->
+                <c:SpacedStack x:Name="AndroidChoice" Gap="s" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource HintText}" Text="{t:T 'You can see the TV\'s address on the TV in Settings › Network &amp; Internet.'}" />
+                    <c:SpacedStack x:Name="AndroidHosts" Gap="xs" />
+                    <Button HorizontalAlignment="Left" Style="{StaticResource CompactButton}" Content="{t:T 'Search Again'}" Click="OnRetry" />
+                </c:SpacedStack>
+                <c:SpacedStack x:Name="OpenAgain" Gap="s" Visibility="Collapsed">
+                    <!-- Samsung'un sayfası girişi açılır pencerede açıyor; engellenince kullanıcılar takılıyordu (2026-11-13). -->
+                    <TextBlock Style="{StaticResource HintText}" Text="{t:T 'If the sign-in window does not open, the browser may have blocked it as a pop-up: allow pop-ups for this page from the icon in the address bar, then press Open the page again.'}" />
+                    <c:SpacedStack Gap="related">
+                        <Button Content="{t:T 'Open the page again'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Click="OnOpenAgain" />
+                        <Button x:Name="CopyLink" Content="{t:T 'Copy the link'}" HorizontalAlignment="Stretch" Click="OnCopyLink" />
+                    </c:SpacedStack>
+                </c:SpacedStack>
+                <!-- TV'den kaldırılan uygulama bu bilgisayarın kaydında "kurulu" kalıyordu (#352, #389): kaydı unutup TV'ye yeniden bakar. -->
+                <Button x:Name="Reinstall" Visibility="Collapsed" HorizontalAlignment="Left" Style="{StaticResource CompactButton}"
+                        Content="{t:T 'Reinstall the TV app'}" Click="OnReinstall" />
+            </c:SpacedStack>
+        </c:Card>
+
+        <c:Card x:Name="Checklist" Title="{t:T 'Before Installing, on the TV'}" Visibility="Collapsed">
+            <c:SpacedStack>
+                <c:SpacedStack x:Name="LgSteps" Gap="s" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '1. Create a free account at webostv.developer.lge.com.'}" />
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '2. On the TV, install Developer Mode from the LG Content Store and sign in.'}" />
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '3. Turn on Dev Mode Status. The TV restarts and this screen continues by itself.'}" />
+                </c:SpacedStack>
+                <c:SpacedStack x:Name="SamsungSteps" Gap="s" Visibility="Collapsed">
+                    <!-- Telefonlardaki kurulum ekranıyla aynı not: 2016 (Tizen 2.4) ve sonrası kurulur, 2016–2018 deneysel. -->
+                    <TextBlock Style="{StaticResource HintText}" Text="{t:T 'Samsung TVs and smart monitors (2016 and later; 2016–2018 models are experimental).'}" />
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '1. On the TV, open Apps and scroll to the very bottom of the page.'}" />
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '2. There, press 1 2 3 4 5 on the remote (or type 12345 on the on-screen keypad). The Developer Mode window opens.'}" />
+                    <TextBlock x:Name="SamsungHostStep" Style="{StaticResource ChecklistText}" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '4. Restart the TV: hold the power button on the remote and keep holding until the TV turns off and comes back on with the Samsung logo (about 5 seconds); letting go when it turns off only puts it on standby. If no logo appears, unplug the TV for 30 seconds. This screen continues by itself.'}" />
+                        <ToggleButton x:Name="SamsungHow" Style="{StaticResource HowToggle}" Margin="{t:Sp '0,unitHint,0,0'}" />
+                        <c:SpacedStack Gap="xs" Margin="{t:Sp '0,unitHint,0,0'}" Visibility="{Binding IsChecked, ElementName=SamsungHow, Converter={StaticResource VisibleIf}}">
+                            <TextBlock Style="{StaticResource HintText}" Text="{t:T 'Later you sign in once with a free Samsung account; Samsung needs it to sign the app for your TV.'}" />
+                            <TextBlock Style="{StaticResource HintText}" Text="{t:T 'If the TV keeps switching to HDMI 1 or another source while the CouchSubs TV app is open, turn off Anynet+ (HDMI-CEC) and Auto Source Switching on the TV: Settings › All Settings › Connection › External Device Manager.'}" />
+                        </c:SpacedStack>
+                    </StackPanel>
+                </c:SpacedStack>
+                <c:SpacedStack x:Name="AndroidSteps" Gap="s" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '1. On the TV, open Settings › Device Preferences › About (Google TV: Settings › System › About).'}" />
+                    <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '2. Press OK on Build 7 times until it says you are a developer.'}" />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource ChecklistText}" Text="{t:T '3. Go back to Device Preferences (Google TV: System) › Developer options and turn on USB debugging. Turn on Network debugging too if you see it.'}" />
+                        <ToggleButton x:Name="AndroidHow" Style="{StaticResource HowToggle}" Margin="{t:Sp '0,unitHint,0,0'}" />
+                        <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,unitHint,0,0'}" Visibility="{Binding IsChecked, ElementName=AndroidHow, Converter={StaticResource VisibleIf}}"
+                                   Text="{t:T 'Menu names differ a little by brand. If the app is already on the TV, you can skip this step.'}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource HintText}" Text="{t:T 'Looking for the TV on the network…'}" />
+                    <Button HorizontalAlignment="Left" Style="{StaticResource CompactButton}" Content="{t:T 'Install with a USB stick instead'}" Click="OnGuide" />
+                </c:SpacedStack>
+                <!-- Samsung: TV'ye yazılacak bu bilgisayarın adresi, kopyala simgeli kutuda. -->
+                <c:Unit x:Name="HostUnit" Visibility="Collapsed">
+                    <c:CopyField x:Name="HostAddress" />
+                </c:Unit>
+                <!-- LG: Key Server parolası tam yuvarlak kutuda, "TV'ye kur" kutunun içinde sağda. -->
+                <c:Unit x:Name="PassphraseArea" Title="{t:T 'Passphrase'}" Visibility="Collapsed"
+                        Hint="{t:T 'Open the Developer Mode app on the TV, turn on Key Server and keep the app on screen. Type the Passphrase it shows.'}">
+                    <Grid>
+                        <TextBox x:Name="Passphrase" FontFamily="{StaticResource MonoFont}" Padding="{t:Sp 'm,0,xxl,0'}" ToolTip="{t:T 'Passphrase'}" />
+                        <Button Content="{t:T 'Install on the TV'}" Style="{StaticResource CompactButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Margin="{t:Sp '0,0,xs,0'}" Click="OnInstall" />
+                    </Grid>
+                </c:Unit>
+            </c:SpacedStack>
+        </c:Card>
+    </c:SpacedStack>
 </UserControl>

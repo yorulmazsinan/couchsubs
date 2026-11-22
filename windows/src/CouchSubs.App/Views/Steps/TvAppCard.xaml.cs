@@ -58,17 +58,37 @@ public partial class TvAppCard : UserControl
 
     private static Visibility Visible(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// TV henüz eşleşmemişken ön koşul listesinin markası (bulunan ilk TV; Mac TVSetupStep.needsChecklist). Null ise liste
+    /// yalnız TV uygulaması durumuna göre görünür.
+    /// </summary>
+    public TvBrand? FallbackBrand
+    {
+        get => fallbackBrand;
+        set
+        {
+            if (fallbackBrand == value) return;
+            fallbackBrand = value;
+            if (controller is not null) Show(controller.TvApp);
+        }
+    }
+
+    private TvBrand? fallbackBrand;
+
     private void Show(TvAppState state)
     {
         var text = Localizer.Current;
-        var brand = controller?.Tv?.Brand ?? TvBrand.Lg;
+        var paired = controller?.Tv is not null;
+        var brand = controller?.Tv?.Brand ?? fallbackBrand ?? TvBrand.Lg;
         var devModeOff = state.Kind == TvAppKind.DevModeOff;
-        Visibility = Visible(state.Kind != TvAppKind.Unknown);
-        LgSteps.Visibility = Visible(devModeOff && brand == TvBrand.Lg);
         // TV bu bilgisayarı kabul etmediyse de adımlar (Host PC IP satırı bu bilgisayarın adresiyle) görünür (#343).
         var hostPcProblem = state.Kind == TvAppKind.Failed && state.Error is DevModeError.Unreachable or DevModeError.HostPcMismatch;
-        SamsungSteps.Visibility = Visible((devModeOff || hostPcProblem) && brand == TvBrand.Samsung);
-        AndroidSteps.Visibility = Visible(devModeOff && brand == TvBrand.AndroidTv);
+        // Eşleşmeden önce, bulunan TV'nin markasına göre ön koşullar (yalnız maddeler; parola alanı eşleşince).
+        var preview = !paired && fallbackBrand is not null && state.Kind == TvAppKind.Unknown;
+        LgSteps.Visibility = Visible((devModeOff || preview) && brand == TvBrand.Lg);
+        SamsungSteps.Visibility = Visible((devModeOff || hostPcProblem || preview) && brand == TvBrand.Samsung);
+        AndroidSteps.Visibility = Visible((devModeOff || preview) && brand == TvBrand.AndroidTv);
+        HostUnit.Visibility = SamsungSteps.Visibility;
         AndroidChoice.Visibility = Visible(state.Kind == TvAppKind.ChooseAndroidTv);
         AndroidHosts.Children.Clear();
         var choices = state.Kind == TvAppKind.ChooseAndroidTv && state.Hosts is { } found ? found : Array.Empty<string>();
@@ -77,9 +97,9 @@ public partial class TvAppCard : UserControl
             var choose = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = Sp.T("0", "xxs", "0", "0"),
                 Content = text["Install on the TV at %@"].Replace("%@", host),
             };
+            choose.SetResourceReference(StyleProperty, "CompactButton");
             choose.Click += async (_, _) =>
             {
                 if (controller is not null) await controller.ChooseAndroidTvAsync(host);
@@ -92,16 +112,16 @@ public partial class TvAppCard : UserControl
         OpenAgain.Visibility = Visible(state.Kind == TvAppKind.SignIn);
         if (state.Kind != TvAppKind.SignIn) CopyLink.Content = text["Copy the link"];
         Retry.Visibility = Visible(state.Kind == TvAppKind.Failed);
-        // Hata varken (LG'nin parola adımındaki hata dahil) günlük gösterilip kopyalanabilir.
-        LogActions.Visibility = Visible(state.Error is not null);
-        if (state.Error is null) CopyLog.Content = text["Copy the log"];
         // Uygulama "hazır" görünüp TV'de yoksa ya da açılmıyorsa (TV uygulaması bağlı değil) yeniden kurulabilir.
         Reinstall.Visibility = Visible(state.Kind == TvAppKind.UpToDate && controller?.CanReinstallTvApp == true);
         SamsungHostStep.Text = text["3. Turn Developer mode On, type this computer's address as Host PC IP: %@ and press OK."]
             .Replace("%@", controller?.ComputerAddress ?? "?");
+        HostAddress.Text = controller?.ComputerAddress ?? "?";
+        HostUnit.Title = text["This computer's address (Host PC IP): %@"].Replace("%@", "").TrimEnd(' ', ':');
         // Wi-Fi ve Ethernet ikisi de bağlıysa ya da birden çok ağ varsa diğer adresler de yazılır.
-        if (brand == TvBrand.Samsung && controller?.OtherComputerAddresses is { Length: > 0 } others)
-            SamsungHostStep.Text += "\n" + text.Format(TvAppMessages.OtherAddressesLine, string.Join(", ", others));
+        HostUnit.Hint = brand == TvBrand.Samsung && controller?.OtherComputerAddresses is { Length: > 0 } others
+            ? text.Format(TvAppMessages.OtherAddressesLine, string.Join(", ", others))
+            : null;
 
         Status.Text = state.Kind switch
         {
@@ -132,12 +152,44 @@ public partial class TvAppCard : UserControl
             _ => "",
         };
         Detail.Visibility = Visible(Detail.Text.Length > 0);
-        Problem.Text = TvAppMessages.Problem(state, brand, text, Services.LiveServices.TvInstallLogPath, controller?.ComputerAddress);
+        // Durum kartı yalnız bilgi veren ya da etkileşim gereken durumlarda (Hata kutusu ayrı).
+        StatusCard.Visibility = Visible(state.Kind is TvAppKind.SignIn or TvAppKind.ApproveOnTv or TvAppKind.PressInstallOnTv
+            or TvAppKind.ChooseAndroidTv or TvAppKind.NeedsPassphrase or TvAppKind.DevModeOff or TvAppKind.Working
+            || (state.Kind == TvAppKind.UpToDate && (Detail.Text.Length > 0 || Reinstall.Visibility == Visibility.Visible)));
+        Checklist.Visibility = Visible(LgSteps.Visibility == Visibility.Visible || SamsungSteps.Visibility == Visibility.Visible
+            || AndroidSteps.Visibility == Visibility.Visible || PassphraseArea.Visibility == Visibility.Visible);
+        // Hata kutusu: başlık (ne oldu) ve TvAppMessages'ın açıklaması (neden ve çözüm; paragraflar boş satırla ayrılır).
+        ProblemBox.Title = state.Error is { } error ? text[ErrorTitle(error)] : null;
+        ProblemBox.Message = TvAppMessages.Problem(state, brand, text, Services.LiveServices.TvInstallLogPath, controller?.ComputerAddress);
+        ShowLog.Visibility = Visible(state.Error is not null);
+        Visibility = Visible(StatusCard.Visibility == Visibility.Visible || Checklist.Visibility == Visibility.Visible
+            || ProblemBox.Visibility == Visibility.Visible);
         // Host PC IP düzeltilip TV yeniden başlayınca da kendiliğinden devam eder.
         if (devModeOff || (brand == TvBrand.Samsung && state.Error == DevModeError.HostPcMismatch)) devModeWatch.Start();
         else devModeWatch.Stop();
         if (state.Error == DevModeError.ForeignApp) Dispatcher.BeginInvoke(() => AskToReplaceForeign(state));
     }
+
+    /// <summary>Kurulum hatalarının kısa başlığı (ne oldu; Mac TVErrorTitle); ayrıntı ve çözüm TvAppMessages.Problem'de.</summary>
+    private static string ErrorTitle(DevModeError error) => error switch
+    {
+        DevModeError.Unreachable or DevModeError.HostPcMismatch => "The TV Didn't Respond",
+        DevModeError.KeyServerOff => "Key Server Is Off",
+        DevModeError.WrongPassphrase => "Wrong Passphrase",
+        DevModeError.KeyRefused => "The TV Refused the Key",
+        DevModeError.TooOld => "This TV Is Too Old",
+        DevModeError.SignInFailed => "Samsung Sign-In Didn't Complete",
+        DevModeError.CertificateFailed => "No Signing Certificate",
+        DevModeError.NotApproved => "Debugging Wasn't Allowed",
+        DevModeError.NotEnoughSpace => "The TV Is Out of Space",
+        DevModeError.CertificateMismatch => "An Old Copy Is on the TV",
+        DevModeError.CertificateRejected => "The TV Rejected the Certificate",
+        DevModeError.TvClockWrong => "The TV's Clock Is Behind",
+        DevModeError.PackageBlocked => "The TV Blocks CouchSubs",
+        DevModeError.ConnectionLost => "The Connection Dropped",
+        DevModeError.ForeignApp => "Another App Is Installed",
+        _ => "The TV App Couldn't Be Installed",
+    };
 
     /// <summary>Son sorulan ForeignApp durumu: kart her yenilendiğinde (ve iki kart birden açıksa) pencere bir kez çıkar.</summary>
     private static TvAppState? askedForeign;
@@ -197,16 +249,6 @@ public partial class TvAppCard : UserControl
             else Process.Start(new ProcessStartInfo(System.IO.Path.GetDirectoryName(path)!) { UseShellExecute = true });
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { }
-    }
-
-    /// <summary>Günlüğün sonunu panoya kopyalar (GitHub'a ya da iletiye yapıştırmak için).</summary>
-    private void OnCopyLog(object sender, RoutedEventArgs e)
-    {
-        var log = TvInstall.InstallLog.ReadTail(Services.LiveServices.TvInstallLogPath);
-        if (log.Length == 0) return;
-        try { Clipboard.SetText(log); }
-        catch (System.Runtime.InteropServices.COMException) { return; } // pano başka bir uygulamada kilitli
-        CopyLog.Content = Localizer.Current["Copied"];
     }
 
     private void OnGuide(object sender, RoutedEventArgs e) =>

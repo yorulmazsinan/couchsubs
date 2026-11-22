@@ -20,7 +20,7 @@ public sealed class TvCodeCard : Border
     /// <summary>Kart ekrandayken açılır onay kartı gösterilmez.</summary>
     public static bool Showing { get; private set; }
 
-    private readonly StackPanel digits = new() { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "m", "0", "0") };
+    private readonly StackPanel digits = new() { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "unitGap", "0", "0") };
     private readonly TextBlock waiting = new();
     private readonly StackPanel question = new() { Margin = Sp.T("0", "l", "0", "0") };
     private readonly Button confirm = new();
@@ -32,19 +32,19 @@ public sealed class TvCodeCard : Border
     {
         var l = Localizer.Current;
         SetResourceReference(StyleProperty, "CardBorder");
-        Margin = Sp.T("0", "0", "0", "l");
         var stack = new StackPanel();
-        var label = new TextBlock { Text = l["CODE SHOWN ON THE TV"] };
-        label.SetResourceReference(StyleProperty, "SectionLabel");
+        // Kart başlığı cümle düzeninde (Mac DSCardHeader), içerikle arası 24.
+        var label = new TextBlock { Text = l["Code shown on the TV"] };
+        label.SetResourceReference(StyleProperty, "CardTitleText");
         stack.Children.Add(label);
         waiting.Text = l["Open CouchSubs on the TV. When it shows a code, it appears here too."];
         waiting.SetResourceReference(StyleProperty, "HintText");
-        waiting.Margin = Sp.T("0", "m", "0", "0");
+        waiting.Margin = Sp.T("0", "unitGap", "0", "0");
         stack.Children.Add(waiting);
         stack.Children.Add(digits);
         var title = new TextBlock { Text = l["Do You See This Code on Your TV Too?"] };
-        title.SetResourceReference(StyleProperty, "HeadlineText");
-        var hint = new TextBlock { Text = l["If you see the same code, you're on the right TV. Approving completes the pairing."], Margin = Sp.T("0", "xxs", "0", "m") };
+        title.SetResourceReference(StyleProperty, "UnitTitleText");
+        var hint = new TextBlock { Text = l["If you see the same code, you're on the right TV. Approving completes the pairing."], Margin = Sp.T("0", "titleBody", "0", "s") };
         hint.SetResourceReference(StyleProperty, "HintText");
         confirm.Content = l["I See This Code on the TV"];
         confirm.SetResourceReference(StyleProperty, "PrimaryButton");
@@ -86,12 +86,13 @@ public sealed class TvCodeCard : Border
         digits.Children.Clear();
         foreach (var digit in ticket.Code.Where(char.IsLetterOrDigit))
         {
-            var box = new Border { Width = 64, Height = 80, CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1), Margin = Sp.T("0", "0", "s", "0") };
-            box.SetResourceReference(Border.BackgroundProperty, "surface2Brush");
+            // Sağ sütuna (380) altı hane sığsın: 44 × 56, köşe 12.
+            var box = new Border { Width = 44, Height = 56, CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Margin = Sp.T("0", "0", "xs", "0") };
+            box.SetResourceReference(Border.BackgroundProperty, "fieldBrush");
             box.SetResourceReference(Border.BorderBrushProperty, "borderBrush");
-            var text = new TextBlock { Text = digit.ToString(), FontSize = 36, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var text = new TextBlock { Text = digit.ToString(), FontSize = 26, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             text.SetResourceReference(StyleProperty, "MonoValue");
-            text.FontSize = 36;
+            text.FontSize = 26;
             box.Child = text;
             digits.Children.Add(box);
             Motion.EnterFrom(box, 8, Motion.Short, TimeSpan.FromMilliseconds(60 * digits.Children.Count));

@@ -46,6 +46,22 @@ public static class ScreenRenderer
                 var controller = Demo(step);
                 Save(() => new OnboardingView(controller), Width, Height, Path.Combine(folder, $"adim-{(int)step + 1}-{step}-{suffix}.png"));
             }
+            // TV kurulum ekranının durumları (Mac kurulum-tv-1…6 ile aynı sahte liste): boş, taranıyor, bulundu, onay bekleniyor, hata.
+            LgTv lg = new("LG OLED55C3", "192.168.1.153"), samsung = new("Samsung QE55Q80", "192.168.1.160", TvBrand.Samsung);
+            var tvStates = new (string Name, Views.Steps.TvStep.Preview State)[]
+            {
+                ("1-bos", new([])),
+                ("2-tariyor", new([], Searching: true)),
+                ("3-bulundu", new([lg, samsung])),
+                ("4-onay", new([lg, samsung], PairingHost: lg.Host)),
+                ("6-hata", new([lg, samsung], PairError: TvAppMessages.PairingProblem(new TimeoutException(), TvBrand.Samsung, Localizer.Current))),
+            };
+            foreach (var (name, state) in tvStates)
+            {
+                Views.Steps.TvStep.PreviewState = state;
+                Save(() => new OnboardingView(Demo(OnboardingStep.Tv)), Width, Height, Path.Combine(folder, $"kurulum-tv-{name}-{suffix}.png"));
+            }
+            Views.Steps.TvStep.PreviewState = null;
             Save(() => new MainView(Demo(OnboardingStep.Done)), Width, Height, Path.Combine(folder, $"ana-{suffix}.png"));
             Save(() => new HistoryView(Demo(OnboardingStep.Done)), Width, Height, Path.Combine(folder, $"gecmis-{suffix}.png"));
             // Uygulamanın gerçek penceresi: XAML'ı (simge dahil) açılıştaki gibi yüklenir.

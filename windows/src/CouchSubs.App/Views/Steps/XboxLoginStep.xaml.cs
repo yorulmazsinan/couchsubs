@@ -74,14 +74,6 @@ public partial class XboxLoginStep : UserControl
         }
     }
 
-    private void OnCopyCodeButton(object sender, RoutedEventArgs e) => OnCopyCode(sender, null!);
-
-    private void OnCopyCode(object sender, MouseButtonEventArgs e)
-    {
-        CopyCode();
-        Code.SelectAll();
-    }
-
     private void CopyCode()
     {
         if (string.IsNullOrEmpty(Code.Text)) return;

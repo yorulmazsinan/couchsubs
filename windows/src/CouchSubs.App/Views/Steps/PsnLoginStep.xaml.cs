@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using CouchSubs.App.Controls;
 using CouchSubs.Core;
 using CouchSubs.RemotePlay;
 using CouchSubs.Shell;
@@ -33,8 +34,8 @@ public partial class PsnLoginStep : UserControl
 
     private void Refresh()
     {
-        SignIn.Content = Localizer.Current[Controller.HasAccount ? "Sign in again" : "Sign in"];
-        SignIn.Style = (Style)FindResource(Controller.HasAccount ? "SecondaryButton" : "PrimaryButton");
+        // Hesap kartı girişli/girişsiz görünümü HasAccount bağlamasıyla kendisi değiştirir; burada yalnız yeniden okunur.
+        Account.GetBindingExpression(AccountCard.SignedInProperty)?.UpdateTarget();
     }
 
     private async void OnSignIn(object sender, RoutedEventArgs e)
@@ -67,7 +68,7 @@ public partial class PsnLoginStep : UserControl
 
     private async Task CompleteAsync(Uri redirect)
     {
-        SignIn.IsEnabled = false;
+        Account.Busy = true;
         Error.Text = "";
         try
         {
@@ -82,7 +83,7 @@ public partial class PsnLoginStep : UserControl
             // Son çare: denetleyici her hatayı AppException'a çevirir; buraya düşen yine de ayrıntısıyla gösterilir.
             Error.Text = $"{AppException.Describe(AppError.InvalidLogin, Localizer.Current)} ({error.Message})";
         }
-        SignIn.IsEnabled = true;
+        Account.Busy = false;
         Refresh();
     }
 
@@ -95,6 +96,7 @@ public partial class PsnLoginStep : UserControl
     {
         ShowBrowser.Visibility = Visibility.Collapsed;
         BrowserPanel.Visibility = Visibility.Visible;
+        Account.Expanded = true;
         BrowserReason.Visibility = automatic ? Visibility.Visible : Visibility.Collapsed;
         BrowserError.Text = "";
         // Tarayıcı açılmadan önce panoda duran (eski girişten kalmış) adres kendiliğinden denenmesin.
@@ -107,7 +109,7 @@ public partial class PsnLoginStep : UserControl
     /// <summary>Kullanıcı tarayıcıdan dönünce panoda yönlendirme adresi varsa kendiliğinden alınır.</summary>
     private void OnWindowActivated(object? sender, EventArgs e)
     {
-        if (BrowserPanel.Visibility != Visibility.Visible || !SignIn.IsEnabled) return;
+        if (BrowserPanel.Visibility != Visibility.Visible || Account.Busy) return;
         string clipboard;
         try { clipboard = Clipboard.ContainsText() ? Clipboard.GetText() : ""; }
         catch (Exception) { return; }
@@ -127,7 +129,7 @@ public partial class PsnLoginStep : UserControl
 
     private async Task SubmitBrowserAsync()
     {
-        if (!SignIn.IsEnabled) return;
+        if (Account.Busy) return;
         if (PsnAccount.RedirectFromPastedText(BrowserUrl.Text) is not { } redirect)
         {
             BrowserError.Text = Localizer.Current["This address has no sign-in code. It should start with https://remoteplay.dl.playstation.net/remoteplay/redirect?code="];
@@ -151,6 +153,7 @@ public partial class PsnLoginStep : UserControl
     {
         ShowManual.Visibility = Visibility.Collapsed;
         Manual.Visibility = Visibility.Visible;
+        Account.Expanded = true;
         ManualId.Focus();
     }
 

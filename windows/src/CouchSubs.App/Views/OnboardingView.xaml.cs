@@ -59,6 +59,7 @@ public partial class OnboardingView : UserControl
             ShowSteps();
         }
         else if (e.PropertyName == nameof(AppController.UsesFreeGemini)) ShowContinue();
+        else if (e.PropertyName is nameof(AppController.Tv) or nameof(AppController.HasTv)) ShowSteps();
     }
 
     /// <summary>
@@ -111,7 +112,17 @@ public partial class OnboardingView : UserControl
             OnboardingStep.Tv or OnboardingStep.Hdmi => 3,
             _ => 4,
         };
-        Counter.Text = text.Format("STEP %lld / %lld", group, 4);
+        // Adım etiketi Mac'teki gibi (WizardText.eyebrow): hesap ve çeviri adımlarında bölüm adı.
+        var stepText = text.Format("Step %lld / %lld", group, 4);
+        Counter.Text = controller.Step switch
+        {
+            OnboardingStep.SecondAccount or OnboardingStep.PsnLogin => controller.IsXbox ? stepText : text["Setup · Account"],
+            OnboardingStep.Hdmi => stepText + " · " + text["TV input"],
+            OnboardingStep.BetterTranslation => text["Setup · Translation"],
+            _ => stepText,
+        };
+        Footnote.Text = FootnoteKey() is { } key ? text[key] : "";
+        Footnote.Visibility = Footnote.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         Dots.Children.Clear();
         for (var number = 1; number <= 4; number++)
         {
@@ -120,11 +131,26 @@ public partial class OnboardingView : UserControl
                 Width = number == group ? 24 : 8, Height = 8, CornerRadius = new CornerRadius(4),
                 Margin = new Thickness(number == 1 ? 0 : Sp.V("xs"), 0, 0, 0),
             };
-            dot.SetResourceReference(Border.BackgroundProperty, number <= group ? "accentBrush" : "borderBrush");
+            // Şimdiki adım amber, geçilenler %60 amber çizgi rengi, sıradakiler çerçeve rengi (Mac ProgressDots).
+            dot.SetResourceReference(Border.BackgroundProperty, number == group ? "amberBrush" : number < group ? "amberLineBrush" : "borderBrush");
+            if (number < group) dot.Opacity = 0.6;
             Dots.Children.Add(dot);
         }
         System.Windows.Automation.AutomationProperties.SetName(Dots, Counter.Text);
     }
+
+    /// <summary>Alt çubuktaki kısa not (Mac WizardText.footnote; Mac'e özgü anahtar zinciri notu Windows'ta yok).</summary>
+    private string? FootnoteKey() => controller.Step switch
+    {
+        OnboardingStep.Welcome => "You can change the console later in Settings.",
+        OnboardingStep.PsnLogin when !controller.IsXbox => "If sign-in opens in the browser, finish it there; the app continues by itself.",
+        OnboardingStep.Console when !controller.IsXbox => "If the PS5 isn't found, tips open after 10 seconds.",
+        OnboardingStep.Tv => controller.HasTv
+            ? "If the installation continues in the background, it shows on the home screen when it's done."
+            : "Approve the code on the TV to continue. If you don't have a TV, skip with \"I Don't Have a TV\".",
+        OnboardingStep.Hdmi => "Confirm the picture to continue.",
+        _ => null,
+    };
 
     /// <summary>"Sonra Ayarlarım": kurulum yarıda bırakılır, ana ekran "Kurulum Eksik" durumuyla açılır.</summary>
     private void OnLater(object sender, RoutedEventArgs e) => ShellWindow.DeferSetup();
@@ -137,5 +163,10 @@ public partial class OnboardingView : UserControl
         ShowStep();
     }
 
-    private void OnContinue(object sender, RoutedEventArgs e) => controller.Advance();
+    private void OnContinue(object sender, RoutedEventArgs e)
+    {
+        // Karşılamada "Oyun Penceresi" seçildiyse görüntü seçilen pencereden okunur, kurulum biter (Mac ile aynı).
+        if (controller.Step == OnboardingStep.Welcome && WelcomeStep.ApplyWindowChoice(controller)) return;
+        controller.Advance();
+    }
 }

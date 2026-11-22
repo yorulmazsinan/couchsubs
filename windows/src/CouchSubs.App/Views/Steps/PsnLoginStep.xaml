@@ -1,45 +1,59 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- İkinci PlayStation hesabıyla giriş (Mac PSNLoginStep): tek hesap kartı. Girişliyse yeşil nokta + "Giriş yapıldı" ve sağda küçük
+     "Yeniden Giriş Yap"; değilse tek ana "Giriş Yap". Tarayıcıda giriş ve hesap kimliğini elle girme "Diğer Giriş Yolları"nda. -->
 <UserControl x:Class="CouchSubs.App.Views.Steps.PsnLoginStep"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Title="{t:T 'Sign in with the second account'}"
-                  Message="{t:T 'Sign in to PlayStation Network with the second account you just created. Your password goes directly to Sony; CouchSubs only keeps the account ID.'}">
-        <StackPanel>
-            <TextBlock Text="{t:T 'Signed in'}" Style="{StaticResource DoneText}" Margin="{t:Sp '0,0,0,s'}"
-                       Visibility="{Binding HasAccount, Converter={StaticResource VisibleIf}}" />
-            <Button x:Name="SignIn" Click="OnSignIn" />
-            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,s,0,0'}" />
-            <!-- Uygulama içi giriş Sony'nin "Can't connect to the server" hatasında kalırsa giriş sistem tarayıcısında yapılır,
-                 yönlendirme adresi buraya yapıştırılır (panoya kopyalanınca kendiliğinden alınır). -->
-            <Button x:Name="ShowBrowser" Content="{t:T 'Sign in in the browser'}" Style="{StaticResource SecondaryButton}"
-                    HorizontalAlignment="Left" Margin="{t:Sp '0,m,0,0'}" Click="OnShowBrowser" />
-            <StackPanel x:Name="BrowserPanel" Margin="{t:Sp '0,m,0,0'}" Visibility="Collapsed">
-                <TextBlock x:Name="BrowserReason" Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,titleBody'}" Visibility="Collapsed"
-                           Text="{t:T 'Sony\'s sign-in page could not reach its server inside the app, so sign-in moved to your browser.'}" />
-                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,titleBody'}"
-                           Text="{t:T 'Sign in with your second account in the browser that opened. When you finish, the browser stays on a remoteplay.dl.playstation.net page that only says redirect. Click the address bar, copy the whole address and come back here. CouchSubs picks up the copied address by itself; if it does not, paste it below and press Save.'}" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBox x:Name="BrowserUrl" Width="340" PreviewKeyDown="OnBrowserKeyDown" />
-                    <Button Content="{t:T 'Save'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp 's,0,0,0'}" Click="OnSaveBrowser" />
-                </StackPanel>
-                <Button Content="{t:T 'Open the browser again'}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"
-                        Margin="{t:Sp '0,xs,0,0'}" Click="OnOpenBrowser" />
-                <TextBlock x:Name="BrowserError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}" />
-            </StackPanel>
-            <!-- Sony girişi açılmıyorsa (ör. servis sağlayıcı engelliyor) hesap kimliği elle yazılır. -->
-            <Button x:Name="ShowManual" Content="{t:T 'Enter account ID manually'}" Style="{StaticResource SecondaryButton}"
-                    HorizontalAlignment="Left" Margin="{t:Sp '0,s,0,0'}" Click="OnShowManual" />
-            <StackPanel x:Name="Manual" Margin="{t:Sp '0,m,0,0'}" Visibility="Collapsed">
-                <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,0,0,titleBody'}"
-                           Text="{t:T 'If Sony\'s sign-in page does not open (some internet providers block it), enter the second account\'s PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).'}" />
-                <StackPanel Orientation="Horizontal">
-                    <TextBox x:Name="ManualId" Width="240" MaxLength="24" PreviewKeyDown="OnManualKeyDown" />
-                    <Button Content="{t:T 'Save'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp 's,0,0,0'}" Click="OnSaveManual" />
-                </StackPanel>
-                <TextBlock x:Name="ManualError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}" />
-            </StackPanel>
-        </StackPanel>
+    <c:StepLayout Title="{t:T 'Second PlayStation Account'}"
+                  Message="{t:T 'CouchSubs connects to the PS5 by itself with a second account. You keep playing with your main account.'}">
+        <c:SpacedStack Gap="s" MaxWidth="640" HorizontalAlignment="Left">
+            <c:AccountCard x:Name="Account" Badge="PS" Title="{t:T 'PlayStation Account'}" SignedIn="{Binding HasAccount, Mode=OneWay}" SignIn="OnSignIn">
+                <c:SpacedStack>
+                    <!-- Uygulama içi giriş Sony'nin "Can't connect to the server" hatasında kalırsa giriş sistem tarayıcısında yapılır,
+                         yönlendirme adresi buraya yapıştırılır (panoya kopyalanınca kendiliğinden alınır). -->
+                    <Button x:Name="ShowBrowser" Content="{t:T 'Sign In in the Browser'}" Style="{StaticResource SecondaryButton}"
+                            HorizontalAlignment="Left" Click="OnShowBrowser" />
+                    <c:SpacedStack x:Name="BrowserPanel" Gap="s" Visibility="Collapsed">
+                        <TextBlock x:Name="BrowserReason" Style="{StaticResource HintText}" TextWrapping="Wrap" Visibility="Collapsed"
+                                   Text="{t:T 'Sony\'s sign-in page could not reach its server inside the app, so sign-in moved to your browser.'}" />
+                        <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
+                                   Text="{t:T 'Sign in with your second account in the browser that opened. When you finish, the browser stays on a remoteplay.dl.playstation.net page that only says redirect. Click the address bar, copy the whole address and come back here. CouchSubs picks up the copied address by itself; if it does not, paste it below and press Save.'}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="BrowserUrl" PreviewKeyDown="OnBrowserKeyDown" />
+                            <Button Grid.Column="1" Content="{t:T 'Save'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp 's,0,0,0'}" Click="OnSaveBrowser" />
+                        </Grid>
+                        <Button Content="{t:T 'Open the Browser Again'}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="OnOpenBrowser" />
+                        <TextBlock x:Name="BrowserError" Style="{StaticResource ErrorText}" TextWrapping="Wrap"
+                                   Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource VisibleIf}}" />
+                    </c:SpacedStack>
+                    <!-- Sony girişi açılmıyorsa (ör. servis sağlayıcı engelliyor) hesap kimliği elle yazılır. -->
+                    <Button x:Name="ShowManual" Content="{t:T 'Enter Account ID Manually'}" Style="{StaticResource SecondaryButton}"
+                            HorizontalAlignment="Left" Click="OnShowManual" />
+                    <c:Unit x:Name="Manual" Visibility="Collapsed"
+                            Hint="{t:T 'If Sony\'s sign-in page does not open (some internet providers block it), enter the second account\'s PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).'}">
+                        <c:SpacedStack Gap="xs">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="ManualId" MaxLength="24" FontFamily="{StaticResource MonoFont}" PreviewKeyDown="OnManualKeyDown" />
+                                <Button Grid.Column="1" Content="{t:T 'Save'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp 's,0,0,0'}" Click="OnSaveManual" />
+                            </Grid>
+                            <TextBlock x:Name="ManualError" Style="{StaticResource ErrorText}" TextWrapping="Wrap"
+                                       Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource VisibleIf}}" />
+                        </c:SpacedStack>
+                    </c:Unit>
+                </c:SpacedStack>
+            </c:AccountCard>
+            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" TextWrapping="Wrap"
+                       Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource VisibleIf}}" />
+        </c:SpacedStack>
     </c:StepLayout>
 </UserControl>

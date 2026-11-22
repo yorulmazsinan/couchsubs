@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Title="{t:T 'Choose your home Xbox'}"
+    <c:StepLayout Title="{t:T 'Choose Your Xbox at Home'}"
                   Message="{t:T 'Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings.'}">
         <StackPanel>
             <Button x:Name="Refresh" Content="{t:T 'Find consoles'}" Style="{StaticResource PrimaryButton}" Click="OnRefresh" />

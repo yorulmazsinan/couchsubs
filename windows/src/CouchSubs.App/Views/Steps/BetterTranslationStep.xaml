@@ -5,18 +5,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
-    <c:StepLayout Title="{t:T 'Better translation (free)'}"
-                  Message="{t:T 'The free translation works without the internet but often sounds stiff. Google\'s Gemini translates much more naturally, and a free Google key is enough.'}">
+    <c:StepLayout Title="{t:T 'Better Translation (Free)'}"
+                  Message="{t:T 'If you like, add a free Gemini key. Without it the free translation is used; you can also add it later in Settings.'}">
         <StackPanel>
             <c:Card>
                 <StackPanel>
-                    <TextBlock Text="{t:T 'Free translation device'}" Margin="{t:Sp '0,0,0,xs'}" />
-                    <ComboBox x:Name="TranslationDeviceChoice" SelectionChanged="OnTranslationDevice" Width="240" HorizontalAlignment="Left">
+                    <TextBlock Text="{t:T 'Free translation device'}" Style="{StaticResource UnitTitleText}" Margin="{t:Sp '0,0,0,unitTitle'}" />
+                    <ComboBox x:Name="TranslationDeviceChoice" SelectionChanged="OnTranslationDevice">
                         <ComboBoxItem Content="{t:T 'CPU (default)'}" Tag="Cpu" />
                         <ComboBoxItem Content="{t:T 'GPU (Beta) · NVIDIA CUDA'}" Tag="Gpu" />
                     </ComboBox>
-                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}"
-                               Text="{t:T 'CPU works on every computer. GPU needs a compatible NVIDIA card; the first time you choose it, CouchSubs downloads about 565 MB of CUDA files from NVIDIA (about 790 MB on disk). If unavailable, CouchSubs uses CPU.'}" />
+                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap"
+                               Margin="{t:Sp '0,unitHint,0,0'}" Text="{t:T 'CPU works on every computer. GPU needs a compatible NVIDIA card; the first time you choose it, CouchSubs downloads about 565 MB of CUDA files from NVIDIA (about 790 MB on disk). If unavailable, CouchSubs uses CPU.'}" />
                     <TextBlock Foreground="{DynamicResource warningBrush}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}"
                                Visibility="{Binding GpuFallbackWarning, Converter={StaticResource VisibleIf}}"
                                Text="{t:T 'GPU could not be used; free translation is running on CPU.'}" />

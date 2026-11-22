@@ -13,6 +13,8 @@ public partial class SecondAccountStep : UserControl
     {
         InitializeComponent();
         SignUpCode.Source = Qr(CouchSubs.Core.SecondScreen.QrModules(SignUpPage));
+        MainAccountWarning.Content = StepText.Rich(CouchSubs.Core.Localizer.Current[
+            "When you turn on the controller to play, choose your **main** account on the PS5. Don't play with the second account CouchSubs signs in with, or the controller will turn off by itself or won't work in the game."]);
         // PS Remote Play ya da chiaki-ng kurulu değilse indirme düğmeleri görünür.
         Loaded += (_, _) => DownloadPanel.Visibility =
             Controller.RemotePlayInstalled(RemotePlayApp.Automatic) ? Visibility.Collapsed : Visibility.Visible;

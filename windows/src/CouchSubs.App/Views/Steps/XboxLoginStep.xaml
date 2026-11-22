@@ -14,27 +14,16 @@
         </Grid.ColumnDefinitions>
         <Border Style="{StaticResource CardBorder}" VerticalAlignment="Top">
             <StackPanel>
-                <TextBlock Text="{t:T 'Xbox · Microsoft account'}" Style="{StaticResource SectionLabel}" />
-                <TextBlock Text="{t:T 'Sign In with Your Microsoft Account'}" Style="{StaticResource TitleText}" Margin="{t:Sp '0,xs,0,0'}" />
+                <TextBlock Text="{t:T 'Xbox · Microsoft account'}" Style="{StaticResource CardTitleText}" />
+                <TextBlock Text="{t:T 'Sign In with Your Microsoft Account'}" Style="{StaticResource TitleText}" Margin="{t:Sp '0,unitGap,0,0'}" />
                 <TextBlock Text="{t:T 'Link your Xbox account with a Microsoft device code. The sign-in page opens in your default browser.'}"
-                           Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" />
+                           Style="{StaticResource HintText}" Margin="{t:Sp '0,titleBody,0,0'}" />
                 <Button Content="{t:T 'Signed In'}" Style="{StaticResource SuccessButton}" Margin="{t:Sp '0,m,0,0'}"
                         Visibility="{Binding HasXboxAccount, Converter={StaticResource VisibleIf}}" />
                 <!-- Kod: tam yuvarlak kutuda büyük mono yazı, kopyala içte sağda. -->
                 <StackPanel x:Name="CodePanel" Visibility="Collapsed" Margin="{t:Sp '0,m,0,0'}">
-                    <Border Height="64" CornerRadius="32" Background="{DynamicResource surface2Brush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" Padding="{t:Sp 'l,0,xs,0'}">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="{t:T 'Copy the Code'}" Style="{StaticResource SmallSecondaryButton}" VerticalAlignment="Center" Click="OnCopyCodeButton" />
-                            <TextBox x:Name="Code" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="28" FontWeight="Bold" BorderThickness="0"
-                                     Background="Transparent" Padding="0" VerticalAlignment="Center" Cursor="Hand" PreviewMouseLeftButtonUp="OnCopyCode">
-                                <TextBox.Template>
-                                    <ControlTemplate TargetType="TextBox">
-                                        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
-                                    </ControlTemplate>
-                                </TextBox.Template>
-                            </TextBox>
-                        </DockPanel>
-                    </Border>
+                    <!-- Kod tam yuvarlak kutuda (mono 22), kopyala simgesi kutunun içinde; ayrı "Kopyala" düğmesi yok (Mac DSCopyField). -->
+                    <c:CopyField x:Name="Code" FontSize="22" MaxWidth="320" HorizontalAlignment="Left" />
                     <TextBlock Margin="{t:Sp '0,s,0,0'}">
                         <Hyperlink x:Name="Link" RequestNavigate="OnOpenLink"><Run x:Name="LinkText" /></Hyperlink>
                     </TextBlock>
