@@ -11,10 +11,20 @@ private struct CSNewLookKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct CSInsideCardKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var csNewLook: Bool {
         get { self[CSNewLookKey.self] }
         set { self[CSNewLookKey.self] = newValue }
+    }
+
+    /// Yeni arayüzde bir kartın içindeyiz: gömülü eski karolar çerçevesiz, düz satır olarak çizilir (kart içinde kart yok).
+    var csInsideCard: Bool {
+        get { self[CSInsideCardKey.self] }
+        set { self[CSInsideCardKey.self] = newValue }
     }
 }
 
@@ -210,14 +220,21 @@ private struct TileBody<Content: View>: View {
     let padding: CGFloat
     let fill: Color
     @Environment(\.csNewLook) private var newLook
+    @Environment(\.csInsideCard) private var insideCard
 
     var body: some View {
         #if os(macOS)
-        if newLook {
-            // Yeni arayüzde gömülü karo: kart içinde alan zemini, 16 köşe, ince halka (etkin: 2 pt amber).
-            let shape = RoundedRectangle(cornerRadius: DS.radius("tile"), style: .continuous)
+        if newLook && insideCard && style == .plain {
+            // Kartın içindeki eski karo: çerçevesiz, zeminsiz; düz satırlar olarak durur.
             content
-                .padding(padding)
+                .padding(.vertical, DS.space("xs"))
+        } else if newLook {
+            // Yeni arayüzde kendi başına duran eski karo: yeni kart gibi (24 köşe, 24 iç boşluk); seçili karo 2 pt amber.
+            // İçindeki karolar düz çizilir.
+            let shape = RoundedRectangle(cornerRadius: style == .active ? DS.radius("tile") : DS.radius("card"), style: .continuous)
+            content
+                .environment(\.csInsideCard, true)
+                .padding(padding == Theme.space("tile") && style == .plain ? DS.space("l") : padding)
                 .background(fill == .csSurface ? Color.dsSurface : Color.dsField, in: shape)
                 .overlay(shape.strokeBorder(style == .active ? Color.dsAmber : Color.dsBorder, lineWidth: style == .active ? 2 : 1))
         } else {

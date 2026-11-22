@@ -42,6 +42,7 @@ struct DSCard<Content: View>: View {
 
     private var stack: some View {
         VStack(alignment: .leading, spacing: spacing) { content }
+            .environment(\.csInsideCard, true)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(padding)
     }

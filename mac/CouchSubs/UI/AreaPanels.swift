@@ -121,25 +121,40 @@ private struct FreeAreaView: View {
                     .resizable()
                     .frame(width: picture.width, height: picture.height)
                     .offset(x: picture.minX, y: picture.minY)
+                // Tuval 12: donmuş görüntü hafif karartılır, seçilen yer amber çerçeveyle aydınlık kalır.
+                Color.black.opacity(0.25).allowsHitTesting(false)
                 if let selection {
-                    Rectangle()
-                        .fill(Color.csAccent.opacity(0.16))
-                        .overlay(Rectangle().stroke(Color.csAccent, lineWidth: 2))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.dsAmber.opacity(0.12))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.dsAmber, lineWidth: 2))
                         .frame(width: selection.width, height: selection.height)
                         .offset(x: selection.minX, y: selection.minY)
                     if let result {
                         bubble(result, below: selection, in: geometry.size)
                     }
                 }
-                Text("Drag over the text you want to translate. Esc or right-click closes.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.7))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 12)
-                    .allowsHitTesting(false)
+                VStack {
+                    Text("Drag over the text you want to translate. Esc or a right-click closes.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color(red: 0.063, green: 0.063, blue: 0.078).opacity(0.75), in: Capsule())
+                        .padding(.top, 16)
+                    Spacer()
+                    Text(verbatim: String(format: String(localized: "Press %@ while playing: the picture freezes; drag over any part of it to translate that part once. Translate the Screen (%@) always translates the whole screen."),
+                                          HotkeyText.keys(model.settings, .freeArea) ?? String(localized: "no shortcut"), HotkeyText.keys(model.settings, .screen) ?? String(localized: "no shortcut")))
+                        .font(.system(size: 13))
+                        .tracking(-0.5)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color(red: 0.063, green: 0.063, blue: 0.078).opacity(0.6), in: Capsule())
+                        .padding(.bottom, 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
@@ -159,20 +174,25 @@ private struct FreeAreaView: View {
     }
 
     private func bubble(_ text: String, below area: CGRect, in size: CGSize) -> some View {
-        let width = min(size.width * 0.5, max(area.width, 320))
+        let width = min(size.width * 0.5, max(min(area.width, 480), 360))
         let x = min(max(0, area.minX), max(0, size.width - width))
         // Metin alanın altına konur; alan ekranın alt kısmındaysa üstüne.
         let below = area.maxY < size.height * 0.7
-        return Text(verbatim: text)
-            .font(.system(size: max(16, size.height * 0.026)))
-            .foregroundStyle(.white)
-            .fixedSize(horizontal: false, vertical: true)
+        let busy = text == String(localized: "Translating…")
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(busy ? "Translating…" : "Translation").font(.system(size: 11)).foregroundStyle(Color(red: 0.639, green: 0.62, blue: 0.584))
+            Text(verbatim: busy ? "…" : text)
+                .font(.system(size: max(16, size.height * 0.02), weight: .semibold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+        }
             .frame(width: width - 32, alignment: .leading)
-            .padding(16)
-            .background(Color.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(red: 0.063, green: 0.063, blue: 0.078).opacity(0.9), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .padding(.leading, x)
-            .padding(.top, below ? area.maxY + 12 : 0)
-            .padding(.bottom, below ? 0 : size.height - area.minY + 12)
+            .padding(.top, below ? area.maxY + 8 : 0)
+            .padding(.bottom, below ? 0 : size.height - area.minY + 8)
             .frame(width: size.width, height: size.height, alignment: below ? .topLeading : .bottomLeading)
             .allowsHitTesting(false)
     }

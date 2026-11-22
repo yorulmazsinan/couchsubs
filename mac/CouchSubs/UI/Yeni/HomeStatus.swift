@@ -302,6 +302,7 @@ private extension View {
     func noticeCard() -> some View {
         let shape = RoundedRectangle(cornerRadius: DS.radius("tile"), style: .continuous)
         return self
+            .environment(\.csInsideCard, true)
             .padding(DS.space("m"))
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.dsSurface, in: shape)

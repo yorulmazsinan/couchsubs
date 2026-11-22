@@ -59,6 +59,68 @@ final class StreamWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+/// Görüntü penceresinin altındaki denetim çubuğu (tuval 13): Ekranı Çevir, Örtsün (zemin tam koyu, İngilizce altyazı
+/// görünmez), Çubuğu Gizle. Çubuk yayına da girer; gizlenince yalnız fare penceredeyken köşede "Çubuğu Göster" çıkar.
+private struct StreamControlBar: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("streamBarHidden") private var hidden = false
+    @State private var hovering = false
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Color.clear.contentShape(Rectangle()).allowsHitTesting(false)
+            if hidden {
+                if hovering {
+                    Button("Show the Bar") { hidden = false }
+                        .buttonStyle(BarButton(fill: Color(red: 0.063, green: 0.063, blue: 0.078).opacity(0.6), height: 32))
+                        .padding(16)
+                        .transition(.opacity)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Button("Translate the Screen") { model.translateScreen() }
+                        .buttonStyle(BarButton(fill: .dsAmber, text: .dsOnAmber, weight: .semibold))
+                        .disabled(!model.isRunning)
+                    Button("Cover") {
+                        model.settings.style.background = covers ? SubtitlePalette.darkness[1] : 100
+                        model.sendTestSubtitle()
+                    }
+                    .buttonStyle(BarButton(fill: covers ? .dsSuccess : .white.opacity(0.12)))
+                    Button("Hide the Bar") { hidden = true }
+                        .buttonStyle(BarButton(fill: .white.opacity(0.12)))
+                }
+                .padding(6)
+                .background(Color(red: 0.063, green: 0.063, blue: 0.078).opacity(0.7), in: Capsule())
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 16)
+                .transition(.opacity)
+            }
+        }
+        .onHover { hovering = $0 }
+        .animation(DS.animation(.medium, reduced: !model.settings.transitionAnimations), value: hidden)
+        .animation(DS.animation(.short, reduced: !model.settings.transitionAnimations), value: hovering)
+    }
+
+    private var covers: Bool { model.settings.style.background >= 100 }
+
+    private struct BarButton: ButtonStyle {
+        var fill: Color
+        var text: Color = .white
+        var weight: Font.Weight = .medium
+        var height: CGFloat = 36
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .font(.system(size: height < 36 ? 12 : 13, weight: weight))
+                .foregroundStyle(text)
+                .padding(.horizontal, height < 36 ? 12 : 16)
+                .frame(height: height)
+                .background(fill, in: Capsule())
+                .opacity(configuration.isPressed ? 0.8 : 1)
+        }
+    }
+}
+
 /// Pencerenin içeriği: düz zemin ve TV'deki altyazı kutusu (yazı boyu 1080 satırlık ekrana göre pencereye ölçeklenir).
 struct StreamWindowView: View {
     @EnvironmentObject private var model: AppModel
@@ -100,6 +162,7 @@ struct StreamWindowView: View {
         .coordinateSpace(name: "stream")
         .onPreferenceChange(SubtitleFrameKey.self) { subtitleFrame = $0 }
         .background(Self.color(model.streamBackground))
+        .overlay(alignment: .bottom) { StreamControlBar() }
     }
 
     /// Yığının satırları; `screen` verilirse o metinli ("Ekranı çevir" listesi) satır atlanır.

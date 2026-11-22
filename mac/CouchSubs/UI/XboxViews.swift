@@ -34,8 +34,9 @@ private func showXboxLogFile() {
     }
 }
 
-/// Microsoft girişi: düğmeye basınca kod alınır, panoya kopyalanır ve microsoft.com/link tarayıcıda açılır; kullanıcı
-/// kodu onaylayınca giriş kendiliğinden biter. Microsoft'un giriş sayfası uygulamanın içinde açılmaz.
+/// Microsoft girişi (tuval 15): solda "XBOX · MICROSOFT HESABI" kartı (durum başlığı, açıklama, kod ve Kodu Kopyala,
+/// tek ana düğme, Baştan); sağda ses ve "Bu Bilgisayarda Xbox Uygulaması ile mi Oynuyorsunuz?". Düğmeye basınca kod alınır,
+/// panoya kopyalanır ve microsoft.com/link tarayıcıda açılır; kullanıcı kodu onaylayınca giriş kendiliğinden biter.
 struct XboxLoginStep: View {
     @EnvironmentObject private var model: AppModel
     @State private var code: XboxDeviceCode?
@@ -46,64 +47,76 @@ struct XboxLoginStep: View {
     @State private var task: Task<Void, Never>?
 
     var body: some View {
-        StepLayout(title: "Sign in with your Microsoft account",
-                   message: "Link your Xbox account with a Microsoft device code, as in Greenlight. The sign-in page opens in your default browser.") {
-            VStack(alignment: .leading, spacing: Theme.space("m")) {
-                Pill(text: "Beta")
-                if model.xboxSignedIn && code == nil {
-                    DoneLabel(text: String(localized: "Signed in"))
-                }
-                Button("Sign in with Microsoft") { begin() }
-                    .buttonStyle(CSButtonStyle(kind: model.xboxSignedIn ? .secondary : .primary))
-                    .disabled(working)
+        HStack(alignment: .top, spacing: DS.space("l")) {
+            DSCard(scrolls: false) {
+                DSCardHeader("XBOX · MICROSOFT ACCOUNT")
+                Text(title).font(.dsH2).fixedSize(horizontal: false, vertical: true)
+                Text(text).dsMuted(.system(size: 14))
                 if let code {
-                    Card {
-                        Text("Your code (click to copy):").font(.csCallout).foregroundStyle(Color.csSecondary)
-                        Button { copy(code) } label: {
-                            Text(verbatim: code.userCode).font(.csCode).foregroundStyle(Color.csAccentText)
+                    HStack(spacing: DS.space("s")) {
+                        Text(verbatim: code.userCode)
+                            .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                            .tracking(3.4)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color.dsField, in: RoundedRectangle(cornerRadius: DS.radius("tile")))
+                            .textSelection(.enabled)
+                        if copied {
+                            DSSuccessBadge(text: "Copied")
+                        } else {
+                            Button("Copy the Code") { copy(code) }.buttonStyle(.dsSecondary)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint(Text("Copy the code"))
-                        Button { open(code) } label: {
-                            Text(verbatim: code.verificationURI.replacingOccurrences(of: "https://", with: ""))
-                                .font(.csBody.weight(.semibold)).foregroundStyle(Color.csAccentText).underline()
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint(Text("Open the Microsoft page"))
-                        HintText(text: "1. The code is copied and microsoft.com/link is open in your browser. If it didn't open, click the link above.\n2. Paste the code, sign in with the Microsoft account you use on your Xbox and allow access.\n3. Come back to CouchSubs; sign-in finishes on its own.")
-                        if copied { Text("Code copied").font(.csCallout).foregroundStyle(Color.csSuccess) }
                     }
+                    .transition(.opacity.combined(with: .offset(y: 12)))
+                    Text("1. The code is copied and microsoft.com/link is open in your browser. If it didn't open, click the link above.\n2. Paste the code, sign in with the Microsoft account you use on your Xbox and allow access.\n3. Come back to CouchSubs; sign-in finishes on its own.").dsMuted()
                 }
-                if working {
-                    HStack(spacing: Theme.space("m")) {
-                        ProgressView().controlSize(.small)
-                        HintText(text: code == nil ? "Opening the Microsoft sign-in page…" : "Waiting for the sign-in to finish…")
+                if let error {
+                    Text(verbatim: error).font(.dsSmall).foregroundStyle(Color.dsLive).textSelection(.enabled)
+                    Text("Sign-in did not finish. You can try again.").dsMuted()
+                }
+                Spacer(minLength: DS.space("s"))
+                HStack(spacing: DS.space("xs")) {
+                    if finished || (model.xboxSignedIn && code == nil && !working) {
+                        Button("Find Consoles") { model.advance() }.buttonStyle(.dsPrimary)
+                    } else if let code {
+                        Button("Open the Microsoft Page") { open(code) }.buttonStyle(.dsPrimary)
+                    } else {
+                        Button(working ? "Opening the Microsoft sign-in page…" : "Sign In with Microsoft") { begin() }
+                            .buttonStyle(.dsPrimary)
+                            .disabled(working)
                     }
-                } else if finished {
-                    DoneLabel(text: String(localized: "Microsoft sign-in is done. You can continue."))
-                }
-                ErrorText(error: error).textSelection(.enabled)
-                if error != nil {
-                    HintText(text: "Sign-in did not finish. You can try again.")
-                    Button("Show log file") { showXboxLogFile() }.buttonStyle(.secondary)
-                }
-                // #853: oyun bu bilgisayardaki Xbox uygulamasında / play.xbox.com'da (ya da capture card ile OBS'te)
-                // oynanıyorsa CouchSubs Xbox'a bağlanmaz, yalnız seçilen pencereyi okur; Microsoft girişi atlanır.
-                Card {
-                    HStack {
-                        Text("Playing with the Xbox app or play.xbox.com on this computer?").font(.csBody.weight(.semibold))
-                        Spacer()
-                        Button("Select") {
-                            task?.cancel()
-                            model.useXboxWindow()
-                        }
-                        .buttonStyle(.secondary)
+                    Button("Start Over") {
+                        task?.cancel()
+                        code = nil
+                        error = nil
+                        finished = false
+                        working = false
+                        copied = false
                     }
-                    HintText(text: "CouchSubs reads only the window you select in Settings › Picture source (the Xbox app, play.xbox.com or OBS with a capture card). It doesn't connect to the Xbox, so no Microsoft sign-in is needed and your Xbox session isn't interrupted.")
+                    .buttonStyle(.dsSecondary)
+                    if error != nil { Button("Show Log File") { showXboxLogFile() }.buttonStyle(.dsSecondary) }
                 }
             }
+            .frame(maxWidth: .infinity)
+            XboxSideColumn {
+                task?.cancel()
+                model.useXboxWindow()
+            }
+            .frame(maxWidth: .infinity)
         }
+        .animation(DS.enter(400), value: code?.userCode)
         .onDisappear { task?.cancel() }
+    }
+
+    private var title: LocalizedStringKey {
+        if finished || (model.xboxSignedIn && code == nil && !working) { return "Searching for Xbox Consoles…" }
+        return code == nil ? "Sign In with Your Microsoft Account" : "Enter the Code on the Microsoft Page"
+    }
+
+    private var text: LocalizedStringKey {
+        if finished || (model.xboxSignedIn && code == nil && !working) { return "Microsoft sign-in is done. Getting the consoles on this account." }
+        return code == nil ? "Link your Xbox account with a Microsoft device code. The sign-in page opens in your default browser."
+            : "Copy the code, paste it on the Microsoft page that opens and finish signing in."
     }
 
     private func copy(_ code: XboxDeviceCode) {
@@ -144,7 +157,31 @@ struct XboxLoginStep: View {
     }
 }
 
-/// Xbox seçimi: hesaptaki Xbox'lar listelenir; uzak özellikleri kapalı olan seçilemez ve nedeni yazılır.
+/// Xbox sayfalarının sağ sütunu: ses anahtarı ve "Bu bilgisayarda Xbox uygulaması/play.xbox.com ile mi oynuyorsunuz?" (#853;
+/// pencere okunur, Microsoft girişi gerekmez), altta marka notu.
+private struct XboxSideColumn: View {
+    @EnvironmentObject private var model: AppModel
+    let chooseWindow: () -> Void
+
+    var body: some View {
+        VStack(spacing: DS.space("l")) {
+            DSCard(spacing: DS.space("xs"), scrolls: false) {
+                DSCardHeader("SOUND")
+                DSSwitchRow(title: "Play Xbox Sound on This Computer", subtitle: "When off, sound comes only from the TV.",
+                            isOn: $model.settings.xboxAudioOnDevice, divider: false)
+            }
+            DSCard(scrolls: false) {
+                Text("Playing with the Xbox App or play.xbox.com on This Computer?").font(.dsH3).fixedSize(horizontal: false, vertical: true)
+                Text("Then you don't need to sign in with Microsoft; just choose the game window.").dsMuted()
+                Button("Choose the Game Window") { chooseWindow() }.buttonStyle(.dsSecondary)
+                Spacer(minLength: DS.space("s"))
+                Text("CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation.").dsMuted()
+            }
+        }
+    }
+}
+
+/// Xbox seçimi (tuval 15, son durum): hesaptaki Xbox'lar seçenek kartlarında, uzak özellikleri kapalı olan seçilemez.
 struct XboxConsoleStep: View {
     @EnvironmentObject private var model: AppModel
     @State private var consoles: [XboxConsole]?
@@ -153,43 +190,39 @@ struct XboxConsoleStep: View {
     @State private var needsSignIn = false
 
     var body: some View {
-        StepLayout(title: "Choose your home Xbox",
-                   message: "Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings.") {
-            VStack(alignment: .leading, spacing: Theme.space("l")) {
-                if let console = model.xboxConsole {
-                    DoneLabel(text: Self.displayName(of: console))
+        HStack(alignment: .top, spacing: DS.space("l")) {
+            DSCard(spacing: DS.space("xs"), scrolls: false) {
+                DSCardHeader("XBOX · MICROSOFT ACCOUNT") {
+                    Button(consoles == nil ? "Searching…" : "Find Consoles") { Task { await load() } }
+                        .buttonStyle(.dsSecondary)
+                        .disabled(consoles == nil)
                 }
-                Card {
-                    HStack {
-                        Text(verbatim: "Xbox").font(.csHeadline)
-                        Pill(text: "Beta")
-                        if consoles == nil { ProgressView().controlSize(.small) }
-                        Spacer()
-                        Button("Find consoles") { Task { await load() } }.buttonStyle(.secondary).disabled(consoles == nil)
+                Text(consoles == nil ? "Searching for Xbox Consoles…" : "Choose Your Xbox at Home").font(.dsH2)
+                Text(consoles == nil ? "Microsoft sign-in is done. Getting the consoles on this account." : "Choose the console to use.")
+                    .dsMuted(.system(size: 14))
+                    .padding(.bottom, DS.space("xs"))
+                if let consoles {
+                    if consoles.isEmpty && error == nil {
+                        Text("No Xbox found on this account. Sign in on your Xbox with the same account and turn on remote features.").dsMuted()
                     }
-                    if let consoles {
-                        if consoles.isEmpty && error == nil {
-                            HintText(text: "No Xbox found on this account. Sign in on your Xbox with the same account and turn on remote features.")
-                        } else if !consoles.isEmpty {
-                            HintText(text: "Choose the console to use:")
-                            ForEach(consoles) { console in row(console) }
-                        }
-                    } else {
-                        HintText(text: "Searching for Xbox consoles…")
+                    ForEach(Array(consoles.enumerated()), id: \.element.id) { index, console in
+                        row(console)
+                            .transition(.opacity.combined(with: .offset(y: 12)))
                     }
                 }
-                HintText(text: "The Xboxes on your account. On the Xbox, turn on Settings › Devices & connections › Remote features.")
-                ErrorText(error: error).textSelection(.enabled)
-                if error != nil {
-                    HStack(spacing: Theme.space("m")) {
-                        if needsSignIn {
-                            Button("Sign in with Microsoft") { model.back() }.buttonStyle(.primary)
-                        }
-                        Button("Show log file") { showXboxLogFile() }.buttonStyle(.secondary)
+                Text("The Xboxes on your account. On the Xbox, turn on Settings › Devices & connections › Remote features.").dsMuted()
+                if let error {
+                    Text(verbatim: error).font(.dsSmall).foregroundStyle(Color.dsLive).textSelection(.enabled)
+                    HStack(spacing: DS.space("xs")) {
+                        if needsSignIn { Button("Sign In with Microsoft") { model.back() }.buttonStyle(.dsPrimary) }
+                        Button("Show Log File") { showXboxLogFile() }.buttonStyle(.dsSecondary)
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
+            XboxSideColumn { model.useXboxWindow() }.frame(maxWidth: .infinity)
         }
+        .animation(DS.enter(400), value: consoles?.map(\.id))
         .task { await load() }
     }
 
@@ -198,29 +231,22 @@ struct XboxConsoleStep: View {
     }
 
     private func row(_ console: XboxConsole) -> some View {
-        let chosen = selected == console.id
-        return Button {
+        Button {
             guard console.streamingEnabled else { return }
             selected = console.id
             model.chooseXbox(console)
         } label: {
-            HStack(spacing: Theme.space("m")) {
-                Image(systemName: console.streamingEnabled ? (chosen ? "largecircle.fill.circle" : "circle") : "exclamationmark.triangle.fill")
-                    .foregroundStyle(console.streamingEnabled ? (chosen ? Color.csAccentText : Color.csSecondary) : Color.csWarning)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Theme.space("xs")) {
-                    Text(verbatim: console.model.isEmpty || console.name.isEmpty ? Self.displayName(of: console) : "\(console.name) (\(console.model))")
-                        .font(.csBody.weight(.semibold))
-                    Text(console.streamingEnabled ? "Remote play on" : "Remote play off: turn on Remote features on the Xbox")
-                        .font(.csCallout).foregroundStyle(Color.csSecondary)
+            HStack(spacing: DS.space("m")) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: Self.displayName(of: console)).font(.dsBodyStrong)
+                    Text(verbatim: console.model.isEmpty ? "Xbox" : console.model).font(.dsSmall).foregroundStyle(Color.dsMuted)
                 }
-                Spacer(minLength: 0)
+                Spacer()
+                DSBadge(text: console.streamingEnabled ? "Remote Play On" : "Remote Features Off", tone: console.streamingEnabled ? .ok : .warn)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DSOptionStyle(selected: selected == console.id))
         .disabled(!console.streamingEnabled)
-        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
     private func load() async {
@@ -248,51 +274,47 @@ struct XboxConsoleStep: View {
     }
 }
 
-/// Ayarlar › Konsol: konsol türü; Xbox'ta bağlı Xbox, Microsoft hesabı ve bağlama/çıkış.
+/// Ayarlar › Konsol ve Kaynak › KONSOL: PlayStation 5 / Xbox sekmeleri; PS5'te eşleşen PS5 ve ikinci hesap, Xbox'ta bağlı
+/// Xbox ve Microsoft hesabı.
 struct ConsoleSettingsCard: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Card {
-            ConsolePicker()
+        DSCard(scrolls: false) {
+            DSCardHeader("CONSOLE")
+            DSTabs(selection: Binding(get: { model.platform }, set: { model.choosePlatform($0) }),
+                   items: [(ConsolePlatform.playstation, LocalizedStringKey("PlayStation 5")), (ConsolePlatform.xbox, LocalizedStringKey("Xbox"))])
             if model.isXbox {
-                HintText(text: "Xbox support is in Beta. If something goes wrong, tell us and we'll fix it as soon as we can.")
-                HStack {
-                    Text("Xbox and connection")
-                    Spacer()
-                    if let console = model.xboxConsole {
-                        Text(verbatim: console.name.isEmpty ? "Xbox" : console.name).foregroundStyle(Color.csSecondary)
-                    }
-                    Button(model.xboxSignedIn ? "Choose your Xbox" : "Sign in with Microsoft") {
-                        model.linkXbox()
-                        dismiss()
-                    }
-                    .buttonStyle(CSButtonStyle(kind: model.needsXboxLink ? .primary : .secondary))
+                DSRow(title: LocalizedStringKey(model.xboxConsole.map { $0.name.isEmpty ? "Xbox" : $0.name } ?? "Xbox"),
+                      subtitle: model.xboxSignedIn ? "Signed in" : "Xbox support is in Beta. If something goes wrong, tell us and we'll fix it as soon as we can.",
+                      divider: false) {
+                    DSBadge(text: model.needsXboxLink ? "Not Connected" : "Connected", tone: model.needsXboxLink ? .unknown : .ok)
                 }
-                if model.xboxSignedIn {
-                    HStack {
-                        Label(String(localized: "Signed in"), systemImage: "checkmark.circle.fill").foregroundStyle(Color.csSuccess)
-                        Spacer()
-                        Button("Sign out of Microsoft") { model.signOutXbox() }.buttonStyle(.secondary)
-                    }
+                HStack(spacing: DS.space("xs")) {
+                    Button(model.xboxSignedIn ? "Choose Your Xbox at Home" : "Link Xbox Account") { model.linkXbox() }
+                        .buttonStyle(model.needsXboxLink ? .dsPrimary : .dsSecondary)
+                    if model.xboxSignedIn { Button("Sign out of Microsoft") { model.signOutXbox() }.buttonStyle(.dsSecondary) }
                 }
             } else {
-                HintText(text: "With Remote Play and a second PSN account.")
+                DSRow(title: LocalizedStringKey(model.console.map { $0.name.isEmpty ? "PS5" : $0.name } ?? "PS5"),
+                      subtitle: model.console.map { LocalizedStringKey($0.host) } ?? "With Remote Play and a second PSN account.",
+                      divider: false) {
+                    DSBadge(text: model.console == nil ? "Not Set Up" : "Connected", tone: model.console == nil ? .unknown : .ok)
+                }
             }
         }
     }
 }
 
-/// Ayarlar › Görüntü kaynağı, Xbox seçiliyken (Windows'taki Xbox kartı): oyun sesi. Uzaktan oynatma sürerken Xbox sesi
-/// istemciye verip TV'yi susturur; açıkken ses bu Mac'in ses çıkışından çalınır.
+/// Ayarlar › Konsol ve Kaynak, Xbox seçiliyken: oyun sesi. Uzaktan oynatma sürerken Xbox sesi istemciye verip TV'yi
+/// susturur; açıkken ses bu Mac'in ses çıkışından çalınır.
 struct XboxSoundCard: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        Card {
-            SwitchRow(title: "Play Xbox sound on this computer", isOn: $model.settings.xboxAudioOnDevice)
-            HintText(text: "While Xbox Remote Play is running, the Xbox mutes the TV and sends game sound only to this computer (an Xbox limitation). If you turn this off, the game has no sound. To hear it from the TV or speakers, set the sound output of this computer to them.")
+        VStack(alignment: .leading, spacing: DS.space("xs")) {
+            DSSwitchRow(title: "Play Xbox Sound on This Computer", isOn: $model.settings.xboxAudioOnDevice, divider: false)
+            Text("While Xbox Remote Play is running, the Xbox mutes the TV and sends game sound only to this computer (an Xbox limitation). If you turn this off, the game has no sound. To hear it from the TV or speakers, set the sound output of this computer to them.").dsMuted()
         }
     }
 }
