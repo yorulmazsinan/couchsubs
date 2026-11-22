@@ -121,6 +121,15 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         await using var adb = await ConnectAsync(cancellationToken);
         var dumpsys = await adb.RunAsync($"shell:dumpsys package {PackageName}", cancellationToken: cancellationToken);
         var installed = VersionFromDumpsys(dumpsys);
+        if (IsForeign(dumpsys))
+        {
+            // Bizim kimliğimizle (com.couchsubs.tv) başka imzalı bir uygulama: sürümü bizimkinden yüksekse "güncel" sayılıp
+            // o açılıyordu. Kullanıcı onaylamadan dokunulmaz; onaylarsa kaldırılır ve CouchSubs kurulur.
+            if (!ReplaceForeign) throw new AndroidInstallException(AndroidInstallError.ForeignApp, ForeignDetail(dumpsys, installed));
+            await adb.RunAsync($"shell:pm uninstall {PackageName}", cancellationToken: cancellationToken);
+            installed = null;
+            dumpsys = "";
+        }
         if (installed is not null && !Versions.IsNewer(version, installed))
         {
             // Bu izni vermeyen eski bir CouchSubs'ın kurduğu güncel uygulama da izni alsın.
@@ -130,11 +139,52 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         // Play'de ve TV'de Play Store varsa Play'den (PlayStoreRedirect.cs); olmazsa APK ile.
         if (await InstallFromPlayAsync(adb, installed, InstalledFromPlay(dumpsys), cancellationToken) is { } fromPlay)
             return (fromPlay, true);
-        await InstallAsync(adb, apkPath, cancellationToken);
+        await InstallAsync(adb, apkPath, ReplaceForeign || IsOurs(dumpsys), cancellationToken);
         await GrantOverlayAsync(adb, cancellationToken);
         await adb.RunAsync(StartCommand(LaunchParams), cancellationToken: cancellationToken);
         return (version, true);
     }
+
+    /// <summary>
+    /// Kullanıcı "Kaldırıp Kur" dedi: TV'de bizim kimliğimizi kullanan başka imzalı uygulama kaldırılıp CouchSubs kurulur.
+    /// Verilmezse (varsayılan) böyle bir uygulamada <see cref="AndroidInstallError.ForeignApp"/> fırlatılır, hiçbir şey silinmez.
+    /// </summary>
+    public bool ReplaceForeign { get; init; }
+
+    /// <summary>
+    /// CouchSubs TV'nin imza sertifikasının (TV_KEYSTORE, CN=CouchSubs TV, O=Enmera; SHA-256 5FFE122E…D0D5FB) Android'deki
+    /// özeti: <c>Signature.hashCode()</c> (sertifikanın DER baytlarında <c>Arrays.hashCode</c>), dumpsys'in yazdığı biçimde.
+    /// Play'in uygulama imza anahtarı da budur; Play'den ve ADB ile kurulan kopyanın ikisi de bunu taşır.
+    /// </summary>
+    public const string OurSignature = "32d37cf9";
+
+    /// <summary>
+    /// dumpsys'teki imza özetleri: <c>signatures=PackageSignatures{… version:2, signatures:[32d37cf9], past signatures:[]}</c>
+    /// (Android 9+) ya da <c>signatures=PackageSignatures{41ab21 [32d37cf9]}</c> (eski). Satırdaki ilk köşeli parantez geçerli
+    /// imzalardır. Okunamazsa boş.
+    /// </summary>
+    internal static IReadOnlyList<string> SignaturesFromDumpsys(string dumpsys)
+    {
+        var line = dumpsys.Split('\n').FirstOrDefault(l => l.Contains("signatures=PackageSignatures{", StringComparison.Ordinal));
+        if (line is null) return [];
+        var open = line.IndexOf('[');
+        var close = open < 0 ? -1 : line.IndexOf(']', open + 1);
+        if (close < 0) return [];
+        return [.. line[(open + 1)..close].Split(',').Select(s => s.Trim().ToLowerInvariant()).Where(s => s.Length > 0)];
+    }
+
+    /// <summary>TV'deki com.couchsubs.tv bizim imzamızı taşıyor (kesin).</summary>
+    internal static bool IsOurs(string dumpsys) => SignaturesFromDumpsys(dumpsys).Contains(OurSignature);
+
+    /// <summary>
+    /// TV'de com.couchsubs.tv kurulu ve imzası bizimki değil: başka bir uygulama bizim kimliğimizi kullanıyor. İmza okunamazsa
+    /// (bilinmiyor) yabancı sayılmaz; o zaman da imza farkı kurulumda INSTALL_FAILED_UPDATE_INCOMPATIBLE ile yakalanır.
+    /// </summary>
+    internal static bool IsForeign(string dumpsys) =>
+        VersionFromDumpsys(dumpsys) is not null && SignaturesFromDumpsys(dumpsys) is { Count: > 0 } signatures && !signatures.Contains(OurSignature);
+
+    private static string ForeignDetail(string dumpsys, string? version) =>
+        $"TV'de {PackageName} {version ?? "?"} başka bir imzayla kurulu ({string.Join(", ", SignaturesFromDumpsys(dumpsys))}; CouchSubs {OurSignature})";
 
     /// <summary>
     /// "Diğer uygulamaların üzerinde göster" iznini verir. Katman modunda (bazı TV'lerde uygulama içindeki HDMI görüntüsü
@@ -167,12 +217,17 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
     internal static string? VersionFromDumpsys(string output) =>
         VersionName().Match(output) is { Success: true } match ? match.Groups[1].Value : null;
 
-    /// <summary>APK'yı kurar. İmzası farklı eski bir kopya varsa önce onu kaldırır.</summary>
-    private static async Task InstallAsync(AdbConnection adb, string apkPath, CancellationToken cancellationToken)
+    /// <summary>
+    /// APK'yı kurar. İmzası farklı (ya da sürümü yüksek) bir kopya varsa onu ancak <paramref name="mayUninstall"/> ise kaldırır
+    /// (kullanıcı onayladı ya da TV'deki kopyanın bizim imzamızı taşıdığı kesin); yoksa
+    /// <see cref="AndroidInstallError.ForeignApp"/>: başka imzalı uygulama kullanıcı onayı olmadan silinmez.
+    /// </summary>
+    private static async Task InstallAsync(AdbConnection adb, string apkPath, bool mayUninstall, CancellationToken cancellationToken)
     {
         var result = await StreamInstallAsync(adb, apkPath, cancellationToken);
         if (result.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") || result.Contains("INSTALL_FAILED_VERSION_DOWNGRADE"))
         {
+            if (!mayUninstall) throw new AndroidInstallException(AndroidInstallError.ForeignApp, result.Trim());
             await adb.RunAsync($"shell:pm uninstall {PackageName}", cancellationToken: cancellationToken);
             result = await StreamInstallAsync(adb, apkPath, cancellationToken);
         }

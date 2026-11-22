@@ -98,6 +98,9 @@ internal fun AndroidTvInstallScreen(onBack: () -> Unit, onDone: () -> Unit, bran
         state = AndroidState.Idle
     }
 
+    // TV'de bu kimlikle başka bir uygulama var: kaldırılıp kurulsun mu diye sorulur (onaysız kaldırılmaz).
+    var foreignDialog by remember { mutableStateOf(false) }
+
     fun install(allowReplace: Boolean = false) {
         val defaultPort = if (wireless) 0 else AdbConnection.DEFAULT_PORT
         val target = AndroidTvInstaller.parseAddress(address, defaultPort)?.takeIf { it.second > 0 }
@@ -141,8 +144,14 @@ internal fun AndroidTvInstallScreen(onBack: () -> Unit, onDone: () -> Unit, bran
                 Log.w(TAG, "Android TV kurulumu başarısız", error)
                 AndroidState.Failed(null, error.message ?: error.javaClass.simpleName)
             }
+            foreignDialog = (state as? AndroidState.Failed)?.error == AndroidInstallError.FOREIGN_APP
         }
     }
+
+    if (foreignDialog) ForeignTvAppDialog(onReplace = {
+        foreignDialog = false
+        install(allowReplace = true)
+    }, onDismiss = { foreignDialog = false })
 
     // "TV uygulamasını güncelle"den gelindiyse kurulum hemen başlar (kullanıcı ana ekranda onayladı).
     LaunchedEffect(preset) { if (preset != null && state is AndroidState.Idle && address.isNotBlank()) install() }
@@ -250,6 +259,7 @@ private fun androidFailureText(failure: AndroidState.Failed): String {
         AndroidInstallError.PAIRING_FAILED -> context.getString(R.string.tvinstall_android_err_pairing)
         AndroidInstallError.REPLACE_NEEDED -> context.getString(
             if (failure.fromPlay) R.string.tvinstall_android_err_play_copy else R.string.tvinstall_android_err_other_copy)
+        AndroidInstallError.FOREIGN_APP -> return context.getString(R.string.tvinstall_foreign_body)
         AndroidInstallError.NOT_ENOUGH_SPACE -> context.getString(R.string.tvinstall_err_space)
         AndroidInstallError.CONNECTION_LOST -> context.getString(R.string.tvinstall_err_connection)
         AndroidInstallError.PACKAGE_MISSING -> context.getString(R.string.tvinstall_err_package_missing)

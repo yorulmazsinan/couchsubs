@@ -58,6 +58,8 @@ public static partial class AndroidTvApp
         return await LoggedAsync($"TV {host}:{AndroidTvInstaller.DefaultPort}, paket {version}", log, async () =>
         {
             await RemoveLeftoverAsync(host, keyDirectory, onApprovalNeeded, log, cancellationToken);
+            if (installer.ReplaceForeign)
+                log?.Invoke($"Android TV: kullanıcı onayladı; {Package} kimliğini kullanan başka imzalı uygulama varsa kaldırılıp CouchSubs kurulacak.");
             var result = await installer.EnsureInstalledAsync(apkPath, version, cancellationToken);
             if (!result.Installed && openIfInstalled)
             {
@@ -107,6 +109,13 @@ public static partial class AndroidTvApp
         await using var adb = await ConnectAsync(host, keyDirectory, onApprovalNeeded, cancellationToken);
         var dumpsys = await adb.RunAsync($"shell:dumpsys package {Package}", cancellationToken: cancellationToken);
         if (!IsLeftover(dumpsys)) return;
+        // Kalıntı başka imzalı bir uygulamanınsa (bizim kimliğimizle) geri getirilmez ve sessizce silinmez: kurulum adımı
+        // kullanıcıya sorar (AndroidInstallError.ForeignApp).
+        if (AndroidTvInstaller.IsForeign(dumpsys))
+        {
+            log?.Invoke("Android TV: paket kaydı başka bir imzayla kalmış; kullanıcı onayı olmadan dokunulmuyor.");
+            return;
+        }
         if (CanInstallExisting(dumpsys))
         {
             var existing = await adb.RunAsync(InstallExistingCommand, cancellationToken: cancellationToken);

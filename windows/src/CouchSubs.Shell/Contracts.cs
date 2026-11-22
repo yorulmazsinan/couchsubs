@@ -823,8 +823,14 @@ public interface IAppServices
     void WriteTvInstallLog(string line) { }
     Task<bool> IsDevModeOnAsync(string host);
     Task<string> FetchDevKeyAsync(string host, string passphrase);
+    /// <summary>TV'deki sürüm; TV'de CouchSubs'ın kimliğiyle başka bir uygulama varsa DevModeError.ForeignApp fırlatır.</summary>
     Task<string?> InstalledTvAppVersionAsync(string host, string devKey);
     Task InstallTvAppAsync(string host, string devKey);
+    /// <summary>
+    /// <paramref name="replaceForeign"/>: kullanıcı "Kaldırıp Kur" dedi; TV'de CouchSubs'ın kimliğini kullanan başka uygulama
+    /// önce kaldırılır. Üç markada da (bu ve aşağıdaki iki yük) onay yoksa hiçbir şey silinmez, ForeignApp fırlatılır.
+    /// </summary>
+    Task InstallTvAppAsync(string host, string devKey, bool replaceForeign) => InstallTvAppAsync(host, devKey);
     /// <summary>LG geliştirici modunun süresini baştan başlatır; kalan saati döner (bilinmiyorsa null).</summary>
     Task<int?> RenewDevSessionAsync(string host, string devKey);
     /// <summary>Samsung ve Android TV için uygulamayla gelen paket (geliştirici derlemesinde olmayabilir).</summary>
@@ -840,6 +846,9 @@ public interface IAppServices
     /// uygulama güncelse de TV'de açılır ("TV uygulamasını yeniden kur").
     /// </summary>
     Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent);
+    /// <summary><paramref name="replaceForeign"/>: bkz. <see cref="InstallTvAppAsync(string, string, bool)"/>.</summary>
+    Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, bool replaceForeign,
+        Action<TvInstallEvent> onEvent) => InstallSamsungAppAsync(host, app, openIfInstalled, onEvent);
     Task<bool> IsAndroidDebugOnAsync(string host);
     /// <summary>Ağda ADB'si açık cihazlar.</summary>
     Task<IReadOnlyList<string>> ScanAndroidTvsAsync();
@@ -855,6 +864,9 @@ public interface IAppServices
     /// </summary>
     Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
                                         Action<TvInstallEvent> onEvent) => InstallAndroidAppAsync(host, app, openIfInstalled, onEvent);
+    /// <summary><paramref name="replaceForeign"/>: bkz. <see cref="InstallTvAppAsync(string, string, bool)"/>.</summary>
+    Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams, bool replaceForeign,
+                                        Action<TvInstallEvent> onEvent) => InstallAndroidAppAsync(host, app, openIfInstalled, launchParams, onEvent);
     /// <summary>
     /// Altyazı sunucusunun dinleyeceği port; null ise 8787 (doluysa boş bir port). Linux sunucusunda
     /// COUCHSUBS_SERVER_PORT ile seçilir (#617).

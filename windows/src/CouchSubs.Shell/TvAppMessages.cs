@@ -26,6 +26,15 @@ public static class TvAppMessages
     /// <summary>Bu bilgisayarın Host PC IP için gösterilenden başka ev ağı adresleri varsa (Wi-Fi ve Ethernet ikisi de bağlı).</summary>
     public const string OtherAddressesLine = "If the TV does not accept this address, try one of this computer's other addresses: %@";
 
+    /// <summary>
+    /// TV'de CouchSubs'ın kimliğiyle (Android paket adı, LG uygulama kimliği, Samsung paket kimliği) başka bir uygulama kurulu.
+    /// Soru penceresinin başlığı, metni ve düğmeleri; Mac, iPhone ve Android'dekiyle aynı.
+    /// </summary>
+    public const string ForeignAppTitle = "Another App Is Installed";
+    public const string ForeignAppMessage = "Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?";
+    public const string ForeignAppConfirm = "Remove And Install";
+    public const string ForeignAppCancel = "Cancel";
+
     /// <summary>Hata iletisinin sonunda günlük dosyasını söyleyen satır.</summary>
     public const string SendLogLine = "If this keeps happening, send us this file: %@";
 
@@ -34,6 +43,8 @@ public static class TvAppMessages
     public static string Problem(TvAppState state, TvBrand brand, Localizer text, string samsungLog, string? computerAddress = null)
     {
         if (state.Error is not { } error) return "";
+        // Soru penceresinin metni; "Vazgeç"ten sonra kartta da bu kalır ("Yeniden dene" yine sorar).
+        if (error == DevModeError.ForeignApp) return text[ForeignAppMessage];
         var samsung = brand == TvBrand.Samsung;
         if (error == DevModeError.HostPcMismatch)
             return text.Format(HostPcMismatchMessage, state.HostPcIp ?? "?", state.ComputerAddress ?? computerAddress ?? "?");
@@ -103,6 +114,7 @@ public static class TvAppMessages
             "The TV refuses CouchSubs because an earlier CouchSubs is still registered on it (Tizen error 118, -22), even if it no longer appears among the apps. If CouchSubs is among the TV's apps, delete it there and try again. Otherwise reset Smart Hub (Settings › Support › Device Care › Self Diagnosis › Reset Smart Hub; menu names differ a little by model) and try again. Resetting Smart Hub also removes the other apps you downloaded.",
         DevModeError.ConnectionLost =>
             "The connection to the TV dropped during the install. Keep the TV on and on the same network as this computer, then try again.",
+        DevModeError.ForeignApp => ForeignAppMessage,
         _ => "The TV app could not be installed. Try again; if it fails again, send us the reason below.",
     };
 }

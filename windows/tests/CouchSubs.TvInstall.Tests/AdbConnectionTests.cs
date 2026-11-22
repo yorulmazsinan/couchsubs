@@ -206,6 +206,87 @@ public class AdbConnectionTests
         Assert.Contains("shell:appops set com.couchsubs.tv SYSTEM_ALERT_WINDOW allow", tv.OpenedServices);
     }
 
+    /// <summary>Bizim kimliğimizle başka imzalı uygulama: sürümü yüksek olsa da "güncel" sayılmaz, onaysız silinmez.</summary>
+    private const string ForeignDumpsys =
+        "Success\n  versionName=9.9.9\n  signatures=PackageSignatures{a1b2c3 version:2, signatures:[deadbeef], past signatures:[]}\n";
+
+    [Fact]
+    public async Task ForeignAppIsNotTreatedAsUpToDateAndNotRemovedWithoutConsent()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        await using var tv = new FakeAdbd { TrustedKey = key, Reply = ForeignDumpsys };
+        tv.Serve();
+        var installer = new AndroidTvInstaller("127.0.0.1", dir, tv.Port);
+        var error = await Assert.ThrowsAsync<AndroidInstallException>(() => installer.EnsureInstalledAsync("yok.apk", "0.9.74"));
+        Assert.Equal(AndroidInstallError.ForeignApp, error.Error);
+        Assert.DoesNotContain(tv.OpenedServices, s => s.Contains("uninstall"));
+        Assert.DoesNotContain(tv.OpenedServices, s => s.StartsWith("exec:"));
+    }
+
+    [Fact]
+    public async Task ForeignAppIsReplacedAfterConsent()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var apk = Path.Combine(dir, "couchsubs.apk");
+        await File.WriteAllBytesAsync(apk, RandomNumberGenerator.GetBytes(3000));
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        await using var tv = new FakeAdbd { TrustedKey = key, Reply = ForeignDumpsys };
+        tv.Serve();
+        var installer = new AndroidTvInstaller("127.0.0.1", dir, tv.Port) { ReplaceForeign = true };
+        var (version, installed) = await installer.EnsureInstalledAsync(apk, "0.9.74");
+        Assert.True(installed);
+        Assert.Equal("0.9.74", version);
+        var uninstall = tv.OpenedServices.IndexOf("shell:pm uninstall com.couchsubs.tv");
+        var install = tv.OpenedServices.FindIndex(s => s.StartsWith("exec:cmd package install"));
+        Assert.True(uninstall >= 0 && install > uninstall, string.Join(" | ", tv.OpenedServices));
+    }
+
+    [Fact]
+    public async Task OurSignedNewerAppStaysUpToDate()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        await using var tv = new FakeAdbd { TrustedKey = key, Reply = ForeignDumpsys.Replace("deadbeef", AndroidTvInstaller.OurSignature) };
+        tv.Serve();
+        var (version, installed) = await new AndroidTvInstaller("127.0.0.1", dir, tv.Port).EnsureInstalledAsync("yok.apk", "0.9.74");
+        Assert.Equal("9.9.9", version);
+        Assert.False(installed);
+    }
+
+    [Fact]
+    public async Task IncompatibleSignatureAsksInsteadOfRemoving()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var apk = Path.Combine(dir, "couchsubs.apk");
+        await File.WriteAllBytesAsync(apk, RandomNumberGenerator.GetBytes(3000));
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        // İmza okunamıyor (bilinmiyor), kurulum imza farkıyla reddediliyor: sessiz kaldırma yerine onay istenir.
+        await using var tv = new FakeAdbd { TrustedKey = key, Reply = "  versionName=0.1.0\nFailure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]\n" };
+        tv.Serve();
+        var error = await Assert.ThrowsAsync<AndroidInstallException>(() =>
+            new AndroidTvInstaller("127.0.0.1", dir, tv.Port).EnsureInstalledAsync(apk, "0.9.74"));
+        Assert.Equal(AndroidInstallError.ForeignApp, error.Error);
+        Assert.DoesNotContain(tv.OpenedServices, s => s.Contains("uninstall"));
+    }
+
+    [Theory]
+    [InlineData("  signatures=PackageSignatures{a1b2c3 version:2, signatures:[32d37cf9], past signatures:[]}", "32d37cf9")]
+    [InlineData("  signatures=PackageSignatures{41ab21 [32D37CF9]}", "32d37cf9")]
+    [InlineData("  signatures=PackageSignatures{41ab21 [aa, bb]}", "aa,bb")]
+    [InlineData("  versionName=1.0", "")]
+    public void SignaturesAreReadFromDumpsys(string dumpsys, string expected) =>
+        Assert.Equal(expected, string.Join(",", AndroidTvInstaller.SignaturesFromDumpsys(dumpsys)));
+
+    [Theory]
+    [InlineData("versionName=1.0\nsignatures=PackageSignatures{x version:3, signatures:[deadbeef], past signatures:[]}", true)]
+    [InlineData("versionName=1.0\nsignatures=PackageSignatures{x version:3, signatures:[32d37cf9], past signatures:[]}", false)]
+    // İmza okunamıyor ya da uygulama yok: yabancı sayılmaz.
+    [InlineData("versionName=1.0", false)]
+    [InlineData("signatures=PackageSignatures{x [deadbeef]}", false)]
+    public void ForeignAppIsRecognisedBySignature(string dumpsys, bool foreign) =>
+        Assert.Equal(foreign, AndroidTvInstaller.IsForeign(dumpsys));
+
     [Fact]
     public async Task InstallerGrantsOverlayPermissionBeforeOpeningTheApp()
     {

@@ -17,6 +17,9 @@ enum AndroidInstallError: Equatable, Sendable {
     /// TV'deki kopya başka anahtarla imzalı (ör. Google Play'den); kullanıcı onaylarsa kaldırılır.
     case replaceNeeded
     case notEnoughSpace, installFailed, connectionLost, packageMissing
+    /// TV'de com.couchsubs.tv adıyla başka bir uygulama kurulu (imza sertifikası bizim değil); kullanıcı onaylamadan
+    /// kaldırılmaz.
+    case foreignApp
 }
 
 struct AndroidInstallFailure: Error, CustomStringConvertible {
@@ -311,6 +314,31 @@ final class AndroidTvInstaller {
     static func looksFailed(_ output: String) -> Bool {
         ["Error", "Exception", "Unknown", "not allowed"].contains { output.range(of: $0, options: .caseInsensitive) != nil }
     }
+    /// CouchSubs TV'nin imza sertifikasının (CN=CouchSubs TV, O=Enmera; SHA-256 5FFE122E…CBAD0D5FB) dumpsys'te görünen
+    /// özeti: Android `Signature.hashCode()` (sertifikanın DER baytlarının `Arrays.hashCode`'u) onaltılık. Play'in uygulama
+    /// imza anahtarı da budur, Play'den kurulan kopyada da aynıdır.
+    static let ownSignature = "32d37cf9"
+
+    /// dumpsys'teki imza özetleri: `signatures=PackageSignatures{…}` satırındaki ilk `[…]` (yeni biçim
+    /// "version:2, signatures:[32d37cf9], past signatures:[]", eski biçim "{41ab21 [32d37cf9]}"). Okunamazsa boş.
+    static func signatureHashes(_ output: String) -> [String] {
+        guard let line = output.deviceLines.first(where: { $0.contains("signatures=PackageSignatures{") }),
+              let open = line.firstIndex(of: "["), let close = line[open...].firstIndex(of: "]") else { return [] }
+        return line[line.index(after: open)..<close].split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
+    }
+
+    /// TV'deki com.couchsubs.tv'nin imzası bizim mi (özet okunduysa ve bizimkiyse).
+    static func signatureIsOurs(_ output: String) -> Bool { signatureHashes(output).contains(ownSignature) }
+
+    /// TV'de com.couchsubs.tv var ama imzası bizim değil: aynı paket adını kullanan başka bir uygulama. İmza okunamazsa
+    /// bilinmiyor sayılır (başka uygulama değil); o zaman TV kurulumda INSTALL_FAILED_UPDATE_INCOMPATIBLE der.
+    /// Mac, Windows ve Android'deki denetimle aynı.
+    static func isForeign(_ output: String) -> Bool {
+        let hashes = signatureHashes(output)
+        return versionFromDumpsys(output) != nil && !hashes.isEmpty && !hashes.contains(ownSignature)
+    }
+
     static func needsReplace(_ output: String) -> Bool {
         output.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") || output.contains("INSTALL_FAILED_VERSION_DOWNGRADE")
     }
@@ -345,12 +373,14 @@ final class AndroidTvInstaller {
         return Self.installedVersionFromDumpsys(try adb.run("shell:dumpsys package \(Self.packageName)"))
     }
 
-    /// Uygulama eksikse ya da eskiyse kurar ve açar. `allowReplace`: TV'deki başka imzalı kopya kaldırılsın mı.
-    func ensureInstalled(apk: () throws -> [UInt8], version: String?, allowReplace: Bool = false) throws -> Result {
+    /// Uygulama eksikse ya da eskiyse kurar ve açar. `allowReplace`: TV'deki bizim imzalı ama kurulamayan (daha yeni) kopya
+    /// kaldırılsın mı. `replaceForeign`: TV'de com.couchsubs.tv adıyla başka bir uygulama varsa kullanıcı onayladı; o
+    /// kaldırılıp CouchSubs kurulur.
+    func ensureInstalled(apk: () throws -> [UInt8], version: String?, allowReplace: Bool = false, replaceForeign: Bool = false) throws -> Result {
         log.write("--- Android TV kurulumu (iPhone) başlıyor: TV \(host):\(port), paket \(version ?? "?")"
             + (pairing.map { ", eşleme portu \($0.port)" } ?? ""))
         do {
-            let result = try installCore(apk: apk, version: version, allowReplace: allowReplace)
+            let result = try installCore(apk: apk, version: version, allowReplace: allowReplace, replaceForeign: replaceForeign)
             log.write(result.installed ? "Kurulum tamam." : "TV'de \(result.version) sürümü var; kurulum gerekmedi.")
             return result
         } catch let failure as AndroidInstallFailure {
@@ -362,7 +392,7 @@ final class AndroidTvInstaller {
         }
     }
 
-    private func installCore(apk: () throws -> [UInt8], version: String?, allowReplace: Bool) throws -> Result {
+    private func installCore(apk: () throws -> [UInt8], version: String?, allowReplace: Bool, replaceForeign: Bool) throws -> Result {
         let key = try adbKey()
         if let pairing {
             progress(.pairing)
@@ -378,6 +408,15 @@ final class AndroidTvInstaller {
         log.write("ADB bağlantısı kuruldu (\(adb.secure ? "TLS" : "düz"), en çok \(adb.maxData) bayt).")
         progress(.reading)
         var dumpsys = try adb.run("shell:dumpsys package \(Self.packageName)")
+        if Self.isForeign(dumpsys) {
+            // Aynı paket adıyla başka bir uygulama (kalıntısı dahil): onaysız hiçbir şey silinmez, geri de getirilmez.
+            let other = "imza \(Self.signatureHashes(dumpsys).joined(separator: ",")), sürüm \(Self.versionFromDumpsys(dumpsys) ?? "?")"
+            guard replaceForeign else { throw AndroidInstallFailure(error: .foreignApp, detail: "TV'de aynı paket adıyla başka bir uygulama var: \(other)") }
+            progress(.uninstalling)
+            log.write("TV'deki başka uygulama kaldırılıyor (kullanıcı onayladı; \(other)): \((try? adb.run("shell:pm uninstall \(Self.packageName)")) ?? "?")")
+            dumpsys = try adb.run("shell:dumpsys package \(Self.packageName)")
+        }
+        let oursConfirmed = Self.signatureIsOurs(dumpsys)
         if Self.canInstallExisting(dumpsys) {
             // TV uygulamayı yalnız ana kullanıcıdan kaldırmış, başka profilde duruyor: APK göndermeden geri getirilir (#528).
             let existing = (try? adb.run(Self.installExistingCommand)) ?? ""
@@ -399,7 +438,17 @@ final class AndroidTvInstaller {
         progress(.installing)
         let bytes = try apk()
         var output = try install(adb, bytes)
-        if Self.needsReplace(output) {
+        // İmza tutmuyor (ya da imzası bizim olduğu doğrulanmamış kopya daha yeni): TV'deki uygulama bizim olmayabilir; sessizce
+        // kaldırılmaz, aynı "başka uygulama" sorusu sorulur.
+        if Self.needsReplace(output), output.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") || !oursConfirmed {
+            guard replaceForeign else {
+                throw AndroidInstallFailure(error: .foreignApp, detail: output.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            progress(.uninstalling)
+            log.write("TV'deki başka imzalı kopya kaldırılıyor (kullanıcı onayladı): \((try? adb.run("shell:pm uninstall \(Self.packageName)")) ?? "?")")
+            progress(.installing)
+            output = try install(adb, bytes)
+        } else if Self.needsReplace(output) {
             guard allowReplace else {
                 throw AndroidInstallFailure(error: .replaceNeeded, detail: output.trimmingCharacters(in: .whitespacesAndNewlines), installedFromPlay: fromPlay)
             }

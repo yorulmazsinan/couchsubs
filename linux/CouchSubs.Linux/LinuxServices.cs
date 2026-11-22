@@ -141,7 +141,7 @@ public sealed class LinuxServices : IAppServices
         DevModeInstaller.FetchKeyAsync(host, passphrase, new ProcessRunner(), DevModeTools.ForThisSystem());
 
     public Task<string?> InstalledTvAppVersionAsync(string host, string devKey) =>
-        WithKeyFileAsync(devKey, file => Installer(host, file).InstalledVersionAsync());
+        WithKeyFileAsync(devKey, file => Installer(host, file).CheckInstalledVersionAsync());
 
     public async Task InstallTvAppAsync(string host, string devKey)
     {
@@ -232,6 +232,7 @@ public sealed class LinuxServices : IAppServices
         SamsungInstallError.TvClockWrong => DevModeError.TvClockWrong,
         SamsungInstallError.PackageBlocked => DevModeError.PackageBlocked,
         SamsungInstallError.ConnectionLost => DevModeError.ConnectionLost,
+        SamsungInstallError.ForeignApp => DevModeError.ForeignApp,
         _ => DevModeError.InstallFailed,
     };
 
@@ -267,6 +268,7 @@ public sealed class LinuxServices : IAppServices
             {
                 AndroidInstallError.Unreachable => DevModeError.Unreachable,
                 AndroidInstallError.NotApproved => DevModeError.NotApproved,
+                AndroidInstallError.ForeignApp => DevModeError.ForeignApp,
                 _ => DevModeError.InstallFailed,
             }, error.Message);
         }

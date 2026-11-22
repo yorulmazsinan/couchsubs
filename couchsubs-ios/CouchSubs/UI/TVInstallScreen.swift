@@ -176,6 +176,19 @@ struct InstallResult: View {
     }
 }
 
+/// TV'de CouchSubs kimliğini kullanan başka bir uygulama var: kullanıcıya sorulur. "Kaldırıp Kur" o uygulamayı kaldırıp
+/// CouchSubs'ı kurar; "Vazgeç" hiçbir şeyi silmez, ekran aynı uyarıyla hata durumunda kalır ("Yeniden dene" yine sorar).
+extension View {
+    func foreignAppAlert(isPresented: Binding<Bool>, onReplace: @escaping () -> Void) -> some View {
+        alert(Text(verbatim: TVText.foreignTitle), isPresented: isPresented) {
+            Button(role: .destructive, action: onReplace) { Text(verbatim: TVText.foreignReplace) }
+            Button(role: .cancel) {} label: { Text(verbatim: TVText.cancel) }
+        } message: {
+            Text(verbatim: TVText.foreignMessage)
+        }
+    }
+}
+
 /// Telefonun TV ile aynı ağdaki adresi (Samsung'da Host PC IP olarak yazılır).
 func phoneAddress(near host: String?) -> String? { NetworkAddress.near(host?.isEmpty == false ? host : nil) }
 
@@ -248,6 +261,7 @@ struct SamsungInstallSection: View {
     @State private var phase = TVInstallPhase.idle
     @State private var login: SamsungLogin.Listener?
     @State private var started = false
+    @State private var foreignApp = false
 
     var body: some View {
         InstallIntro(body1: TVText.body, note: TVText.samsungNote)
@@ -287,6 +301,7 @@ struct SamsungInstallSection: View {
             .sheet(isPresented: Binding(get: { login != nil }, set: { if !$0 { login?.close(); login = nil } })) {
                 SamsungSignInSheet { login?.close(); login = nil }
             }
+            .foreignAppAlert(isPresented: $foreignApp) { install(replaceForeign: true) }
     }
 
     private func developerState(_ info: SamsungTvInfo?) -> (String, Bool)? {
@@ -312,7 +327,7 @@ struct SamsungInstallSection: View {
         }
     }
 
-    private func install() {
+    private func install(replaceForeign: Bool = false) {
         // Virgüllü yazım ("192,168,1,5"), "http://…" ya da port temizlenir (LG ve Mac'teki gibi).
         let typed = host.trimmingCharacters(in: .whitespaces)
         let target = ManualAddress.normalize(typed) ?? typed.replacingOccurrences(of: ",", with: ".")
@@ -333,10 +348,14 @@ struct SamsungInstallSection: View {
                         DispatchQueue.main.async { login = listener }
                         defer { DispatchQueue.main.async { login = nil } }
                         return try listener.await(timeout: 600)
-                    }, progress: progress).ensureInstalled(wgt: { try TVPackages.samsungPackage() }, version: TVPackages.samsungVersion)
+                    }, progress: progress).ensureInstalled(wgt: { try TVPackages.samsungPackage() }, version: TVPackages.samsungVersion,
+                                                           replaceForeign: replaceForeign)
                 }, progress: { step in if phase.isWorking { phase = .working(step) } })
                 phase = .done(version: result.version, installed: result.installed)
                 await model.tvAppInstalled(brand: .samsung, host: target, port: nil, version: result.version)
+            } catch let failure as SamsungInstallFailure where failure.error == .foreignApp {
+                phase = .failed(text: TVText.foreignMessage)
+                foreignApp = true
             } catch let failure as SamsungInstallFailure {
                 let phone = phoneAddress(near: target)
                 // TV'ye 26101 kapalıysa 8001'den geliştirici modu yeniden sorulur: neden ayar mı, yeniden başlatma mı (#524).
@@ -377,6 +396,7 @@ struct SamsungInstallSection: View {
         case .packageBlocked: TVText.errBlocked
         case .connectionLost: TVText.errConnection
         case .installFailed: TVText.errFailed
+        case .foreignApp: TVText.foreignMessage
         }
         if let detail = failure.detail, !detail.isEmpty { text += "\n\n" + TVText.details(detail) }
         if failure.error == .installFailed || failure.error == .certificateRejected { text += "\n\n" + TVText.maintenance }
@@ -442,6 +462,7 @@ struct AndroidTVInstallSection: View {
     @State private var pairCode = ""
     @State private var phase = TVInstallPhase.idle
     @State private var replaceNeeded = false
+    @State private var foreignApp = false
     /// 5555'e bağlanılamadı: "Kablosuz hata ayıklamayla dene" gösterilir (GitHub #478).
     @State private var offerWireless = false
     @State private var started = false
@@ -502,6 +523,7 @@ struct AndroidTVInstallSection: View {
             }
         }
             .task { await search() }
+            .foreignAppAlert(isPresented: $foreignApp) { install(replaceForeign: true) }
     }
 
     private func search() async {
@@ -532,7 +554,7 @@ struct AndroidTVInstallSection: View {
         phase = .idle
     }
 
-    private func install(allowReplace: Bool = false) {
+    private func install(allowReplace: Bool = false, replaceForeign: Bool = false) {
         guard let target = AndroidTvInstaller.parseAddress(address, defaultPort: wireless ? 0 : AdbConnection.defaultPort), target.1 > 0 else {
             phase = .failed(text: TVText.androidNeedPort)
             return
@@ -566,12 +588,14 @@ struct AndroidTVInstallSection: View {
                     let installer = AndroidTvInstaller(host: target.0, port: target.1, pairing: selectedPairing, progress: progress)
                     installer.launchParams = launchParams
                     return try installer
-                        .ensureInstalled(apk: { try TVPackages.androidPackage() }, version: TVPackages.androidVersion, allowReplace: allowReplace)
+                        .ensureInstalled(apk: { try TVPackages.androidPackage() }, version: TVPackages.androidVersion, allowReplace: allowReplace,
+                                         replaceForeign: replaceForeign)
                 }, progress: { step in if phase.isWorking { phase = .working(step) } })
                 phase = .done(version: result.version, installed: result.installed)
                 await model.tvAppInstalled(brand: .androidTV, host: target.0, port: target.1 == AdbConnection.defaultPort ? nil : target.1, version: result.version)
             } catch let failure as AndroidInstallFailure {
                 replaceNeeded = failure.error == .replaceNeeded
+                foreignApp = failure.error == .foreignApp
                 offerWireless = AdbMode.offersWireless(wireless: usedWireless, error: failure.error)
                 phase = .failed(text: failureText(failure))
             } catch {
@@ -596,10 +620,11 @@ struct AndroidTVInstallSection: View {
         case .notEnoughSpace: TVText.errSpace
         case .connectionLost: TVText.errConnection
         case .packageMissing: TVText.errPackageMissing
+        case .foreignApp: TVText.foreignMessage
         // Kaldırıp kurma denendi ama TV eski kopyayı kaldırmadı (imza yine tutmuyor): kullanıcı TV'de elle kaldırır.
         case .installFailed: mustRemoveOnTV(failure) ? TVText.androidErrRemoveManually : TVText.errFailed
         }
-        guard failure.error != .replaceNeeded, !mustRemoveOnTV(failure), let detail = failure.detail, !detail.isEmpty else { return advice }
+        guard failure.error != .replaceNeeded, failure.error != .foreignApp, !mustRemoveOnTV(failure), let detail = failure.detail, !detail.isEmpty else { return advice }
         return advice + "\n\n" + TVText.details(detail)
     }
 }

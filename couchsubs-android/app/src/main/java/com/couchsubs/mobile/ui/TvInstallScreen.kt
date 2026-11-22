@@ -184,7 +184,10 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
     // Ekrandan çıkılırsa bekleyen giriş bırakılır (kurulum iş parçacığı giriş hatasıyla biter).
     DisposableEffect(Unit) { onDispose { login?.close() } }
 
-    fun install() {
+    // TV'de bu kimlikle başka bir uygulama var: kaldırılıp kurulsun mu diye sorulur (onaysız kaldırılmaz).
+    var foreignDialog by remember { mutableStateOf(false) }
+
+    fun install(replaceForeign: Boolean = false) {
         val target = host.trim()
         state = InstallState.Working(InstallStep.CONNECTING)
         val main = Handler(Looper.getMainLooper())
@@ -210,7 +213,7 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
                         log = InstallLog(logFile),
                     )
                     installer.ensureInstalled({ context.assets.open("tv/couchsubs-samsung.wgt").use { it.readBytes() } },
-                        BuildConfig.TV_SAMSUNG_VERSION)
+                        BuildConfig.TV_SAMSUNG_VERSION, replaceForeign)
                 }
                 TvAppUpdate.installed(InstalledTv(TvBrand.SAMSUNG, target, version = result.version))
                 InstallState.Done(result.version, result.installed)
@@ -229,8 +232,14 @@ private fun SamsungInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPi
                 Log.w(TAG, "TV kurulumu başarısız", error)
                 InstallState.Failed(null, error.message ?: error.javaClass.simpleName)
             }
+            foreignDialog = (state as? InstallState.Failed)?.error == SamsungInstallError.FOREIGN_APP
         }
     }
+
+    if (foreignDialog) ForeignTvAppDialog(onReplace = {
+        foreignDialog = false
+        install(replaceForeign = true)
+    }, onDismiss = { foreignDialog = false })
 
     // "TV uygulamasını güncelle"den gelindiyse kurulum hemen başlar (kullanıcı ana ekranda onayladı).
     LaunchedEffect(preset) { if (preset != null && state is InstallState.Idle) install() }
@@ -528,6 +537,7 @@ private fun failureText(failure: InstallState.Failed, phoneIp: String?): String 
         SamsungInstallError.TV_CLOCK_WRONG -> context.getString(R.string.tvinstall_err_clock)
         SamsungInstallError.PACKAGE_BLOCKED -> context.getString(R.string.tvinstall_err_blocked)
         SamsungInstallError.CONNECTION_LOST -> context.getString(R.string.tvinstall_err_connection)
+        SamsungInstallError.FOREIGN_APP -> return context.getString(R.string.tvinstall_foreign_body)
         SamsungInstallError.INSTALL_FAILED, null -> context.getString(R.string.tvinstall_err_failed)
     }
     var text = advice

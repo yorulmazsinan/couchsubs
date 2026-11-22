@@ -155,11 +155,12 @@ class SamsungInstaller(
     /**
      * TV'deki CouchSubs sürümüne bakar; yoksa ya da [version]'dan eskiyse imzalayıp kurar, sonra uygulamayı açar.
      * @param wgt İmzasız paket (uygulamayla gelir).
+     * @param replaceForeign Bizim kimliğimizle başka bir uygulama kuruluysa kaldırılıp kurulsun mu (yalnız kullanıcı onayıyla).
      */
-    fun ensureInstalled(wgt: () -> ByteArray, version: String?): Result {
+    fun ensureInstalled(wgt: () -> ByteArray, version: String?, replaceForeign: Boolean = false): Result {
         log.write("--- Samsung kurulumu (telefon) başlıyor: TV $host, paket $version")
         try {
-            val result = installCore(wgt, version)
+            val result = installCore(wgt, version, replaceForeign)
             log.write(if (result.installed) "Kurulum tamam." else "TV'de ${result.version} sürümü var; kurulum gerekmedi.")
             return result
         } catch (error: SamsungInstallException) {
@@ -176,7 +177,7 @@ class SamsungInstaller(
     }
 
     /** Yalnız TV'deki CouchSubs sürümünü okur (kurmaz, açmaz); uygulama yoksa null. Güncelleme denetimi için. */
-    fun installedVersion(): String? = connect().use { readInstalledVersion(it) }
+    fun installedVersion(): String? = connect().use { device -> readInstalledVersion(device).takeUnless { lastForeign } }
 
     /**
      * Kurulu TV uygulamasını geliştirici bağlantısıyla (sdb, `was_execute`) açar; arka plandaysa öne getirir (Windows, Mac ve
@@ -197,7 +198,7 @@ class SamsungInstaller(
         }
     }
 
-    private fun installCore(wgt: () -> ByteArray, version: String?): Result {
+    private fun installCore(wgt: () -> ByteArray, version: String?, replaceForeign: Boolean): Result {
         progress(InstallStep.CONNECTING)
         connect().use { device ->
             progress(InstallStep.READING)
@@ -208,9 +209,19 @@ class SamsungInstaller(
             if (isTooOld(platform)) throw SamsungInstallException(SamsungInstallError.TOO_OLD, "Tizen $platform")
             if (platform.isNotEmpty() && SamsungDiagnostics.isNewer("5.0", platform)) log.write("Tizen $platform: 2016–2018 TV si, destek deneysel.")
 
-            val onTv = readInstalledVersion(device)
+            var onTv = readInstalledVersion(device)
             // "CouchSubs yok" ile "liste okunamadı" ayrılsın (Tizen 2.x'te okunamayan listede kopya kaldırılmaz).
             val listRead = lastListRead
+            if (lastForeign) {
+                // Bizim kimliğimizle başka bir uygulama: yalnız kullanıcı onaylarsa kaldırılır.
+                if (!replaceForeign) throw SamsungInstallException(SamsungInstallError.FOREIGN_APP, "TV'deki uygulamanın adı CouchSubs değil")
+                progress(InstallStep.UNINSTALLING)
+                for (id in listOf(PACKAGE_ID, APP_ID)) {
+                    val reply = try { device.shell("0 vd_appuninstall $id").trim() } catch (error: IOException) { error.message ?: "" }
+                    log.write("Diğer uygulama kaldırılıyor (kullanıcı onayladı) $id: $reply")
+                }
+                onTv = null
+            }
             if (version != null && onTv != null && !SamsungDiagnostics.isNewer(version, onTv)) {
                 launch(device)
                 return Result(onTv, false)
@@ -296,12 +307,17 @@ class SamsungInstaller(
     /** Son `vd_applist` okunabildi mi. */
     private var lastListRead = false
 
+    /** Son `vd_applist`'te bizim kimliğimizle başka bir uygulama (adı CouchSubs değil) kurulu muydu. */
+    private var lastForeign = false
+
     private fun readInstalledVersion(device: SdbConnection): String? = try {
         lastListRead = false
+        lastForeign = false
         val listing = device.shell("0 vd_applist")
         lastListRead = true
+        lastForeign = SamsungDiagnostics.isForeignApp(listing)
         SamsungDiagnostics.installedVersion(listing).also {
-            log.write("vd_applist: ${if (it == null) "CouchSubs yok" else "CouchSubs $it"} (${listing.length} karakter)")
+            log.write("vd_applist: ${if (it == null) "CouchSubs yok" else if (lastForeign) "CouchSubs kimliğiyle başka bir uygulama ($it)" else "CouchSubs $it"} (${listing.length} karakter)")
         }
     } catch (error: IOException) {
         log.write("vd_applist okunamadı: ${error.message}")

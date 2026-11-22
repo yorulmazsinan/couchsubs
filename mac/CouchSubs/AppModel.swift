@@ -112,6 +112,30 @@ protocol AppServices: AnyObject {
     func scanAndroidTVs() async -> [String]
     /// Eksikse ya da eskiyse kurar; TV'deki sürümü döner. `open`: uygulama güncelse de TV'de açılır ("yeniden kur").
     func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String
+
+    /// `replaceForeign`: kullanıcı "Kaldırıp Kur" dedi; TV'de CouchSubs'ın kimliğini kullanan başka uygulama önce kaldırılır.
+    /// Üç markada da onay yoksa hiçbir şey silinmez, `DevModeError.foreignApp` gelir (Windows'taki IAppServices ile aynı).
+    func installTVApp(host: String, devKey: String, replaceForeign: Bool) async throws
+    func installSamsungApp(host: String, app: BundledTVApp, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> (version: String, installed: Bool)
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String
+}
+
+extension AppServices {
+    func installTVApp(host: String, devKey: String, replaceForeign: Bool) async throws {
+        try await installTVApp(host: host, devKey: devKey)
+    }
+
+    func installSamsungApp(host: String, app: BundledTVApp, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> (version: String, installed: Bool) {
+        try await installSamsungApp(host: host, app: app, onEvent: onEvent)
+    }
+
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
+        try await installAndroidApp(host: host, app: app, open: open, onEvent: onEvent)
+    }
 }
 
 struct BundledTVApp: Equatable {
@@ -326,14 +350,24 @@ final class LiveServices: AppServices {
 
     func installedTVAppVersion(host: String, devKey: String) async throws -> String? {
         try await withKeyFile(devKey) { file in
-            try await DevModeInstaller(host: host, keyFile: file, runner: ProcessRunner()).installedVersion()
+            // TV'de CouchSubs'ın kimliğiyle başka uygulama varsa sürümü yerine DevModeFailure(.foreignApp).
+            try await DevModeInstaller(host: host, keyFile: file, runner: ProcessRunner()).checkInstalledVersion()
         }
     }
 
     func installTVApp(host: String, devKey: String) async throws {
+        try await installTVApp(host: host, devKey: devKey, replaceForeign: false)
+    }
+
+    func installTVApp(host: String, devKey: String, replaceForeign: Bool) async throws {
         guard let package = bundledTVPackage, let version = bundledTVAppVersion else { throw DevModeError.installFailed }
         try await withKeyFile(devKey) { file in
-            try await DevModeInstaller(host: host, keyFile: file, runner: ProcessRunner()).install(package: package, version: version)
+            let installer = DevModeInstaller(host: host, keyFile: file, runner: ProcessRunner())
+            // Kullanıcı "Kaldırıp Kur" dedi: CouchSubs'ın kimliğini kullanan başka uygulama önce kaldırılır.
+            if replaceForeign {
+                TVInstallLog.write("LG: kullanıcı onayıyla TV'deki com.couchsubs.tv kaldırıldı: \(try await installer.removeApp())")
+            }
+            try await installer.install(package: package, version: version)
         }
     }
 
@@ -361,9 +395,14 @@ final class LiveServices: AppServices {
 
     func installSamsungApp(host: String, app: BundledTVApp,
                            onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> (version: String, installed: Bool) {
+        try await installSamsungApp(host: host, app: app, replaceForeign: false, onEvent: onEvent)
+    }
+
+    func installSamsungApp(host: String, app: BundledTVApp, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> (version: String, installed: Bool) {
         let result = try await TVHelper.run(["samsung-install", "--host", host, "--package", app.url.path, "--version", app.version,
                                     "--profiles", TVHelper.dataDirectory.appendingPathComponent("samsung").path,
-                                    "--log", TVInstallLog.file.path], onEvent: onEvent)
+                                    "--log", TVInstallLog.file.path] + (replaceForeign ? ["--replace-foreign"] : []), onEvent: onEvent)
         let version = result.version.flatMap { $0.isEmpty ? nil : $0 } ?? app.version
         return (version, result.installed)
     }
@@ -385,9 +424,15 @@ final class LiveServices: AppServices {
     }
 
     func installAndroidApp(host: String, app: BundledTVApp, open: Bool, onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
+        try await installAndroidApp(host: host, app: app, open: open, replaceForeign: false, onEvent: onEvent)
+    }
+
+    func installAndroidApp(host: String, app: BundledTVApp, open: Bool, replaceForeign: Bool,
+                           onEvent: @escaping @Sendable (TVInstallEvent) -> Void) async throws -> String {
         let result = try await TVHelper.run(["android-install", "--host", host, "--package", app.url.path, "--version", app.version,
                                              "--key-dir", TVHelper.dataDirectory.appendingPathComponent("adb").path,
-                                             "--log", TVInstallLog.file.path] + (open ? ["--open"] : []),
+                                             "--log", TVInstallLog.file.path] + (open ? ["--open"] : [])
+                                                + (replaceForeign ? ["--replace-foreign"] : []),
                                             onEvent: onEvent)
         return result.version ?? app.version
     }
@@ -1656,7 +1701,7 @@ final class AppModel: ObservableObject {
         samsungCheckRunning = true
         defer { samsungCheckRunning = false }
         do {
-            let result = try await services.installSamsungApp(host: tv.host, app: bundled) { [weak self] event in
+            let result = try await services.installSamsungApp(host: tv.host, app: bundled, replaceForeign: replaceForeignApp) { [weak self] event in
                 Task { @MainActor in self?.installEvent(event) }
             }
             store.save(result.version, for: StoreKey.tvAppVersion)
@@ -1718,7 +1763,8 @@ final class AppModel: ObservableObject {
         let open = openTVAppAfterCheck
         openTVAppAfterCheck = false
         do {
-            let version = try await services.installAndroidApp(host: host, app: bundled, open: open) { [weak self] event in
+            let version = try await services.installAndroidApp(host: host, app: bundled, open: open,
+                                                               replaceForeign: replaceForeignApp) { [weak self] event in
                 Task { @MainActor in self?.installEvent(event) }
             }
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
@@ -1782,6 +1828,25 @@ final class AppModel: ObservableObject {
     /// seçilir; "Yeniden kur…" ile bütün kurulumu baştan yapmak gerekmez. "TV'ye bağlan" aynı yere gittiği için ikisi
     /// birden çıkmaz.
     var canChangeTV: Bool { hasTV && !canReconnectTV }
+
+    /// Kullanıcı "Kaldırıp Kur"a bastı (yalnız `.failed(.foreignApp)`'ta sorulur): bir kerelik olarak TV'de CouchSubs'ın
+    /// kimliğini kullanan başka uygulama kaldırılır ve CouchSubs kurulur. Onay olmadan hiçbir markada bir şey silinmez
+    /// (Windows'taki ReplaceForeignTvAppAsync ile aynı).
+    private var replaceForeignApp = false
+
+    func replaceForeignTVApp() async {
+        guard let tv else { return }
+        TVInstallLog.write("Kullanıcı onayladı: TV'de CouchSubs'ın kimliğini kullanan başka uygulama kaldırılıp CouchSubs kurulacak.")
+        replaceForeignApp = true
+        defer { replaceForeignApp = false }
+        if tv.brand == .lg {
+            lastLGSkipReason = nil
+            await reinstallLGApp(tv)
+            return
+        }
+        tvApp = .working
+        await refreshTVApp()
+    }
 
     /// Kurulan sürüm kaydını unutur ve TV'ye yeniden bakar: uygulama TV'de yoksa kurulur, Android TV'de varsa açılır.
     /// TV'ye ulaşılamazsa kart geliştirici modu / hata ayıklama adımlarını gösterir.
@@ -1877,8 +1942,11 @@ final class AppModel: ObservableObject {
         // Android TV kurulumu günlük tutuyordu, LG hatasında gönderilecek bir şey yoktu.
         TVInstallLog.lgStart(host: tv.host, package: bundled)
         do {
-            let installed = try await services.installedTVAppVersion(host: tv.host, devKey: devKey)
-            TVInstallLog.write("TV'deki CouchSubs: \(installed ?? "yok")")
+            // Kullanıcı "Kaldırıp Kur" dediyse TV'deki (başka) uygulamanın sürümüne bakılmaz; o kaldırılıp CouchSubs kurulur.
+            // Yoksa TV'de CouchSubs'ın kimliğiyle başka uygulama varsa sürüm okuması .foreignApp fırlatır.
+            let replace = replaceForeignApp
+            let installed = replace ? nil : try await services.installedTVAppVersion(host: tv.host, devKey: devKey)
+            TVInstallLog.write("TV'deki CouchSubs: \(replace ? "başka uygulama (kaldırılacak)" : installed ?? "yok")")
             // "Yeniden kur": TV'deki sürüm güncel görünse de paket yeniden kurulur (anahtar reddedilirse istek sürer,
             // Passphrase yazılınca kurulur).
             let force = lgReinstallRequested
@@ -1889,7 +1957,7 @@ final class AppModel: ObservableObject {
                 await renewDevSessionIfDue(tv: tv, devKey: devKey)
                 return
             }
-            try await services.installTVApp(host: tv.host, devKey: devKey)
+            try await services.installTVApp(host: tv.host, devKey: devKey, replaceForeign: replace)
             TVInstallLog.write("Kurulum tamam.")
             tvApp = .upToDate(bundled)
             tvAppMissing = false

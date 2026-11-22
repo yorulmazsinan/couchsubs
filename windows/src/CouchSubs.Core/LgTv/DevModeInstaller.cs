@@ -42,6 +42,8 @@ public enum DevModeError
     ConnectionLost,
     /// <summary>Samsung: TV'deki "Host PC IP" bu bilgisayarın adresi değil; sdb denenmez (#343).</summary>
     HostPcMismatch,
+    /// <summary>TV'de CouchSubs'ın kimliğiyle başka bir uygulama kurulu; kaldırıp CouchSubs'ı kurmak için kullanıcı onayı gerekir.</summary>
+    ForeignApp,
 }
 
 /// <param name="detail">Sorunu bulmak için ayrıntı (komut çıktısı gibi); hata günlüğüne yazılır, kullanıcıya gösterilmez.</param>
@@ -197,6 +199,46 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
         var result = await SshAsync($"cat {AppInfoPath}");
         return VersionFromAppInfo(result.Output);
     }
+
+    /// <summary>
+    /// TV'deki sürüm (kurulu değilse null). TV'de com.couchsubs.tv kimliğiyle başka bir uygulama varsa (appinfo.json'daki ad
+    /// CouchSubs ya da üretici Enmera değil) <see cref="DevModeError.ForeignApp"/> fırlatır: sürümü bizimkinden yüksekse
+    /// "güncel" sayılıp o açılıyordu; kullanıcı onaylamadan üstüne kurulmaz.
+    /// </summary>
+    public async Task<string?> CheckInstalledVersionAsync()
+    {
+        var info = (await SshAsync($"cat {AppInfoPath}")).Output;
+        var version = VersionFromAppInfo(info);
+        if (version is not null && IsForeignAppInfo(info))
+            throw new DevModeException(DevModeError.ForeignApp, $"\"{AppInfoField(info, "title")}\" ({AppInfoField(info, "vendor")}) {version}");
+        return version;
+    }
+
+    /// <summary>CouchSubs'ın appinfo.json'ındaki ad ve üretici (tv-webos/appinfo.json).</summary>
+    public const string OurTitle = "CouchSubs", OurVendor = "Enmera";
+
+    /// <summary>appinfo.json'daki ad CouchSubs değil ya da üretici Enmera değil. Alan yoksa yabancı sayılmaz.</summary>
+    public static bool IsForeignAppInfo(string text) =>
+        (AppInfoField(text, "title") is { } title && !title.Trim().Equals(OurTitle, StringComparison.OrdinalIgnoreCase)) ||
+        (AppInfoField(text, "vendor") is { } vendor && !vendor.Trim().Equals(OurVendor, StringComparison.OrdinalIgnoreCase));
+
+    private static string? AppInfoField(string text, string key)
+    {
+        var match = Regex.Match(text, $"\"{key}\"\\s*:\\s*\"([^\"]*)\"");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// TV'deki com.couchsubs.tv'yi kaldırır (ares-install --remove'un luna çağrısı). Yalnız kullanıcı "Kaldırıp Kur" deyince
+    /// çağrılır. TV'nin yanıtını döner (günlük için).
+    /// </summary>
+    public async Task<string> RemoveAppAsync() =>
+        (await SshAsync(RemoveCommand)).Output.Trim();
+
+    /// <summary>Kaldırma TV'de arka planda sürer: appinfo.json gidene kadar (en çok 20 sn) beklenir, kurulum ona çarpmasın.</summary>
+    public const string RemoveCommand =
+        "/usr/bin/luna-send-pub -n 1 'luna://com.webos.appInstallService/dev/remove' '{\"id\":\"com.couchsubs.tv\",\"subscribe\":false}'; " +
+        "i=0; while [ -f " + AppInfoPath + " ] && [ $i -lt 20 ]; do sleep 1; i=$((i+1)); done";
 
     /// <summary>
     /// Paketi TV'ye yükler ve ares-install'un yaptığı gibi kurar: kurulum aboneliği TV "installed" ya da hata diyene kadar

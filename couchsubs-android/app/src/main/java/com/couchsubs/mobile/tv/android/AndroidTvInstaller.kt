@@ -47,6 +47,36 @@ class AndroidTvInstaller(
 
         fun versionFromDumpsys(output: String): String? = versionName.find(output)?.groupValues?.get(1)
 
+        /**
+         * Bizim TV imza sertifikamızın (CN=CouchSubs TV, O=Enmera; SHA-256 5FFE122E…D0D5FB) dumpsys'te görünen özeti:
+         * Android Signature.hashCode() (sertifikanın DER baytları üzerinde Arrays.hashCode) Integer.toHexString ile. Play'in
+         * uygulama imza anahtarı da aynı anahtardır (tv-android/app/build.gradle).
+         */
+        const val SIGNATURE_HASH = "32d37cf9"
+
+        /**
+         * dumpsys'teki imza özetleri: `signatures=PackageSignatures{…` satırındaki ilk `[...]`. Yeni biçim
+         * `PackageSignatures{a1b2c3 version:2, signatures:[32d37cf9], past signatures:[]}`, eski biçim
+         * `PackageSignatures{41ab21 [32d37cf9]}`. Satır yoksa boş liste.
+         */
+        fun signatureHashes(output: String): List<String> {
+            val line = output.lineSequence().firstOrNull { it.contains("signatures=PackageSignatures{") } ?: return emptyList()
+            val open = line.indexOf('[')
+            val close = if (open < 0) -1 else line.indexOf(']', open)
+            if (close < 0) return emptyList()
+            return line.substring(open + 1, close).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        }
+
+        /** TV'deki kopya bizim anahtarımızla imzalı mı (özet okunabildi ve bizimki). */
+        fun isOurs(output: String): Boolean = signatureHashes(output).any { it.equals(SIGNATURE_HASH, ignoreCase = true) }
+
+        /**
+         * TV'de bu kimlikle başka bir uygulama mı kurulu: sürüm var, imza özeti okunabildi ve bizimki değil. Okunamazsa
+         * bizim sayılır (Windows, Mac ve iPhone ile aynı kural); o zaman TV'nin imza hatası aynı onaya götürür.
+         */
+        fun isForeign(output: String): Boolean =
+            versionFromDumpsys(output) != null && signatureHashes(output).let { it.isNotEmpty() && it.none { hash -> hash.equals(SIGNATURE_HASH, ignoreCase = true) } }
+
         private val userInstalled = Regex("""^\s*User (\d+):.*?\binstalled=(true|false)\b""", RegexOption.MULTILINE)
 
         /** dumpsys'teki kullanıcı satırları: kullanıcı numarası -> kurulu mu. */
@@ -192,7 +222,8 @@ class AndroidTvInstaller(
 
     /**
      * Uygulama eksikse ya da eskiyse kurar ve açar; hepsi tek bağlantıda yapılır, TV onayı en çok bir kez sorulur.
-     * @param allowReplace TV'deki kopya başka imzalıysa kaldırılıp kurulsun mu (kullanıcı onayıyla).
+     * @param allowReplace TV'deki kopya başka imzalıysa ya da bu kimlikle başka bir uygulama kuruluysa kaldırılıp kurulsun
+     *   mu (yalnız kullanıcı onayıyla; masaüstündeki replaceForeign).
      */
     fun ensureInstalled(apk: () -> ByteArray, version: String?, allowReplace: Boolean = false): Result {
         log.write("--- Android TV kurulumu (telefon) başlıyor: TV $host:$port, paket $version${if (pairing != null) ", eşleme portu ${pairing.port}" else ""}")
@@ -216,7 +247,8 @@ class AndroidTvInstaller(
     fun installedVersion(): String? {
         val key = adbKey()
         return connector(key) { throw AndroidInstallException(AndroidInstallError.NOT_APPROVED, "denetimde onay beklenmez") }.use { adb ->
-            installedVersionFromDumpsys(adb.run("shell:dumpsys package $PACKAGE_NAME"))
+            // Bu kimlikle başka bir uygulama kuruluysa CouchSubs yok sayılır (denetim hiçbir şeyi kaldırmaz).
+            adb.run("shell:dumpsys package $PACKAGE_NAME").let { if (isForeign(it)) null else installedVersionFromDumpsys(it) }
         }
     }
 
@@ -255,6 +287,15 @@ class AndroidTvInstaller(
             log.write("ADB bağlantısı kuruldu (${if (adb.secure) "TLS" else "düz"}, en çok ${adb.maxData} bayt).")
             progress(InstallStep.READING)
             var dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
+            // Bu kimlikle başka imzalı bir uygulama: sürüme bakılmadan, Play'e ve kalıntı temizliğine geçilmeden önce sorulur.
+            if (isForeign(dumpsys)) {
+                log.write("TV'de CouchSubs kimliğiyle başka bir uygulama kurulu (sürüm ${versionFromDumpsys(dumpsys)}, imza ${signatureHashes(dumpsys).joinToString()}).")
+                if (!allowReplace) throw AndroidInstallException(AndroidInstallError.FOREIGN_APP, "imza ${signatureHashes(dumpsys).joinToString()}")
+                progress(InstallStep.UNINSTALLING)
+                log.write("Diğer uygulama kaldırılıyor (kullanıcı onayladı): ${adb.run("shell:pm uninstall $PACKAGE_NAME").trim()}")
+                dumpsys = adb.run("shell:dumpsys package $PACKAGE_NAME")
+            }
+            val ours = isOurs(dumpsys)
             if (canInstallExisting(dumpsys)) {
                 // TV uygulamayı yalnız ana kullanıcıdan kaldırmış, başka profilde duruyor: APK göndermeden geri getirilir (#528).
                 val existing = runCatching { adb.run(INSTALL_EXISTING_COMMAND) }.getOrDefault("")
@@ -279,7 +320,13 @@ class AndroidTvInstaller(
             val bytes = apk()
             var output = install(adb, bytes)
             if (needsReplace(output)) {
-                if (!allowReplace) throw AndroidInstallException(AndroidInstallError.REPLACE_NEEDED, output.trim(), fromPlay)
+                // İmza tutmuyor (ya da imzası doğrulanamayan kopya daha yeni): başka bir uygulama olabilir, aynı onay sorulur.
+                // Yalnız imzası bizim olduğu bilinen kopyanın sürüm düşürmesinde eski "kopyayı kaldırıp kur" önerisi kalır.
+                if (!allowReplace) {
+                    val error = if (ours && !output.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE")) AndroidInstallError.REPLACE_NEEDED
+                    else AndroidInstallError.FOREIGN_APP
+                    throw AndroidInstallException(error, output.trim(), fromPlay)
+                }
                 progress(InstallStep.UNINSTALLING)
                 log.write("Eski kopya kaldırılıyor (kullanıcı onayladı): ${adb.run("shell:pm uninstall $PACKAGE_NAME").trim()}")
                 progress(InstallStep.INSTALLING)

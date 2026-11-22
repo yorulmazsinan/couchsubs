@@ -546,6 +546,9 @@
     <string name="tvinstall_android_wireless_step2">2. Turn on Developer options › Wireless debugging and open it. Type the “IP address &amp; Port” at the top as the TV\'s address.</string>
     <string name="tvinstall_android_wireless_step3">3. The first time, press “Pair device with pairing code”; type the IP address and port from that window together with the 6-digit code, and press Install and open while the window is still open.</string>
     <string name="tvinstall_android_replace">Remove the TV\'s copy and install</string>
+    <string name="tvinstall_foreign_title">Another App Is Installed</string>
+    <string name="tvinstall_foreign_body">Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?</string>
+    <string name="tvinstall_foreign_replace">Remove And Install</string>
     <string name="tvinstall_android_err_unreachable">The TV did not respond. Make sure the TV is on and on the same Wi-Fi as this phone, and that debugging is on in its developer options. With wireless debugging the port changes every time; type the one on the screen.</string>
     <string name="tvinstall_android_try_wireless">Try with wireless debugging</string>
     <string name="tvinstall_android_err_legacy_closed">The TV did not answer on the USB/network debugging port (5555). Newer Android TV and Google TV models keep this port closed. On the TV, turn on Developer options › Wireless debugging, then tap the button below.</string>

@@ -1,6 +1,9 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Another App Is Installed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Another App Is Installed"}},"tr":{"stringUnit":{"state":"translated","value":"Başka Bir Uygulama Kurulu"}}}},
+    "Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?"}},"tr":{"stringUnit":{"state":"translated","value":"Bu TV'de CouchSubs kimliğini kullanan başka bir uygulama kurulu. Kaldırıp CouchSubs'ı kuralım mı?"}}}},
+    "Remove And Install": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Remove And Install"}},"tr":{"stringUnit":{"state":"translated","value":"Kaldırıp Kur"}}}},
     "This month: %@ characters used (no limit).": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This month: %@ characters used (no limit)."}},"tr":{"stringUnit":{"state":"translated","value":"Bu ay: %@ karakter kullanıldı (sınır yok)."}}}},
     "DeepL accepted the key. This month's usage could not be read.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DeepL accepted the key. This month's usage could not be read."}},"tr":{"stringUnit":{"state":"translated","value":"DeepL anahtarı kabul etti. Bu ayki kullanım okunamadı."}}}},
     "The key contains characters a DeepL key cannot have. Copy it again from your DeepL account page.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The key contains characters a DeepL key cannot have. Copy it again from your DeepL account page."}},"tr":{"stringUnit":{"state":"translated","value":"Anahtarda DeepL anahtarında olamayacak karakterler var. Anahtarı DeepL hesap sayfanızdan yeniden kopyalayın."}}}},

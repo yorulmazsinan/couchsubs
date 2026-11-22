@@ -27,6 +27,11 @@ enum class AndroidInstallError {
     PAIRING_FAILED,
     /** TV'deki kopya başka anahtarla imzalı (ör. Google Play'den); kaldırılmadan güncellenemez. Kullanıcı onaylarsa kaldırılır. */
     REPLACE_NEEDED,
+    /**
+     * TV'de com.couchsubs.tv kimliğiyle başka bir uygulama kurulu: imzası bizim TV anahtarımız değil ya da TV başka imza
+     * yüzünden güncellemeyi reddetti (INSTALL_FAILED_UPDATE_INCOMPATIBLE). Kullanıcı onaylarsa kaldırılıp kurulur.
+     */
+    FOREIGN_APP,
     NOT_ENOUGH_SPACE,
     INSTALL_FAILED,
     CONNECTION_LOST,

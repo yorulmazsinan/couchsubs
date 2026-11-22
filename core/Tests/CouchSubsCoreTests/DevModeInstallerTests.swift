@@ -22,6 +22,44 @@ final class DevModeInstallerTests: XCTestCase {
 
     private func isInstall(_ line: String) -> Bool { line.contains("appInstallService") }
 
+    private static let ourAppInfo = #"{"id":"com.couchsubs.tv","version":"0.9.74","vendor":"Enmera","title":"CouchSubs"}"#
+
+    func testForeignAppIsRecognisedFromAppInfo() {
+        XCTAssertFalse(DevModeInstaller.isForeignAppInfo(Self.ourAppInfo))
+        XCTAssertTrue(DevModeInstaller.isForeignAppInfo(Self.ourAppInfo.replacingOccurrences(of: "\"CouchSubs\"", with: "\"Başka Uygulama\"")))
+        XCTAssertTrue(DevModeInstaller.isForeignAppInfo(Self.ourAppInfo.replacingOccurrences(of: "Enmera", with: "Başka Şirket")))
+        // Alan yoksa yabancı sayılmaz.
+        XCTAssertFalse(DevModeInstaller.isForeignAppInfo(#"{"id":"com.couchsubs.tv","version":"0.9.1"}"#))
+        XCTAssertEqual(DevModeInstaller.appInfoField(Self.ourAppInfo, "title"), "CouchSubs")
+    }
+
+    func testForeignAppIsReportedAndNothingIsRemovedWithoutConsent() async throws {
+        let runner = FakeRunner()
+        let foreign = Self.ourAppInfo.replacingOccurrences(of: "\"CouchSubs\"", with: "\"Başka Uygulama\"")
+        runner.answers = [{ $0.hasSuffix("appinfo.json") ? CommandResult(status: 0, output: foreign) : nil }]
+        do {
+            _ = try await installer(runner).checkInstalledVersion()
+            XCTFail("başka uygulama sürümüyle dönmemeli")
+        } catch let failure as DevModeFailure {
+            XCTAssertEqual(failure.error, .foreignApp)
+        }
+        XCTAssertFalse(runner.calls.contains { $0.arguments.joined(separator: " ").contains("dev/remove") })
+        runner.answers = [{ $0.hasSuffix("appinfo.json") ? CommandResult(status: 0, output: Self.ourAppInfo) : nil }]
+        let version = try await installer(runner).checkInstalledVersion()
+        XCTAssertEqual(version, "0.9.74")
+        try await installer(runner).removeApp()
+        XCTAssertTrue(runner.calls.last?.arguments.last?.contains("luna://com.webos.appInstallService/dev/remove") == true)
+    }
+
+    /// Kaldırma komutu Windows'takiyle aynı (DevModeInstaller.cs RemoveCommand).
+    func testRemoveCommandIsTheSameAsOnWindows() throws {
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("windows/src/CouchSubs.Core/LgTv/DevModeInstaller.cs"), encoding: .utf8)
+        XCTAssertTrue(source.contains(#"luna-send-pub -n 1 'luna://com.webos.appInstallService/dev/remove' '{\"id\":\"com.couchsubs.tv\",\"subscribe\":false}'"#))
+        XCTAssertTrue(DevModeInstaller.removeCommand.contains(#"'{"id":"com.couchsubs.tv","subscribe":false}'"#))
+    }
+
     func testVersionIsReadFromThePackageName() {
         XCTAssertEqual(DevModeInstaller.version(ofPackage: "com.couchsubs.tv_0.6.1_all.ipk"), "0.6.1")
         XCTAssertNil(DevModeInstaller.version(ofPackage: "notes.txt"))

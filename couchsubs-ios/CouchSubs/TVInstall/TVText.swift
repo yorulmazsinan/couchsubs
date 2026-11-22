@@ -30,6 +30,11 @@ enum TVText {
     static var button: String { String(localized: "Install and open") }
     static var goHome: String { String(localized: "Go to the home screen") }
     static var retry: String { String(localized: "Try again") }
+    /// TV'de CouchSubs kimliğini kullanan başka bir uygulama var (Mac, Windows ve Android ile aynı metin).
+    static var foreignTitle: String { String(localized: "Another App Is Installed") }
+    static var foreignMessage: String { String(localized: "Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?") }
+    static var foreignReplace: String { String(localized: "Remove And Install") }
+    static var cancel: String { String(localized: "Cancel") }
     static var stepConnecting: String { String(localized: "Connecting to the TV…") }
     static var stepReading: String { String(localized: "Reading the TV…") }
     static var stepSignin: String { String(localized: "Waiting for Samsung sign-in…") }

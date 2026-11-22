@@ -70,6 +70,8 @@ enum SamsungInstallError: Equatable, Sendable {
     /// Geliştirici modu kapalı ya da Host PC IP bu telefonunki değil.
     case unreachable, loginFailed, certificateFailed, tooOld, installFailed, notEnoughSpace, certificateMismatch,
          certificateRejected, tvClockWrong, packageBlocked, connectionLost
+    /// TV'de CouchSubs kimliğiyle (CouchSubsT) başka bir uygulama kurulu; kullanıcı onaylamadan kaldırılmaz.
+    case foreignApp
 }
 
 struct SamsungInstallFailure: Error, CustomStringConvertible {
@@ -136,12 +138,28 @@ enum SamsungDiagnostics {
     private static func has(_ log: String, _ token: String) -> Bool { log.range(of: token, options: .caseInsensitive) != nil }
 
     /// `0 vd_applist` çıktısında CouchSubs'ın sürümü; satırlar `---- anahtar = değer ----` biçimindedir.
-    static func installedVersion(_ listing: String) -> String? {
+    static func installedVersion(_ listing: String) -> String? { couchSubsBlock(listing)?["app_version"] }
+
+    /// TV'de CouchSubs kimliğiyle (CouchSubsT) kurulu uygulamanın adı (`app_title`); yoksa nil.
+    static func installedTitle(_ listing: String) -> String? {
+        couchSubsBlock(listing)?["app_title"]?.trimmingCharacters(in: .whitespaces).nonEmpty
+    }
+
+    /// CouchSubs kimliğiyle kurulu uygulama bizim değil mi: adı CouchSubs değil. Ad yoksa bizim sayılır.
+    /// Samsung'da imza sertifikası her kullanıcının kendi Samsung hesabından gelir, ayırt etmeye yaramaz; ad bakılır.
+    /// Mac, Windows ve Android'deki denetimle aynı.
+    static func isForeign(_ listing: String) -> Bool {
+        guard let title = installedTitle(listing) else { return false }
+        return title.caseInsensitiveCompare("CouchSubs") != .orderedSame
+    }
+
+    /// `vd_applist`'te CouchSubs kimliğini (app_tizen_id/app_id) taşıyan ve sürümü olan ilk blok.
+    private static func couchSubsBlock(_ listing: String) -> [String: String]? {
         var fields: [String: String] = [:]
-        var found: String?
+        var found: [String: String]?
         func flush() {
             let ids = [fields["app_tizen_id"], fields["app_id"]]
-            if found == nil, ids.contains(where: isCouchSubs), let version = fields["app_version"], !version.isEmpty { found = version }
+            if found == nil, ids.contains(where: isCouchSubs), let version = fields["app_version"], !version.isEmpty { found = fields }
             fields.removeAll()
         }
         let pattern = try! NSRegularExpression(pattern: #"^[\s-]*([A-Za-z_]+)\s*=\s*(.*?)[\s-]*$"#)
@@ -589,6 +607,8 @@ final class SamsungInstaller {
     private let log: InstallLog
     /// Son `vd_applist` okunabildi mi ("CouchSubs yok" ile "bilinmiyor" ayrılsın).
     private var lastListRead = false
+    /// Son okunan `vd_applist` çıktısı (TV'deki uygulamanın bizim olup olmadığına bakmak için).
+    private var lastListing = ""
 
     init(host: String, profiles: URL = TVPaths.directory("samsung"), adbKey: @escaping () throws -> AdbKey = { try AdbKey.loadOrCreate(TVPaths.directory("sdb").appendingPathComponent("adbkey")) },
          signIn: (() throws -> SamsungAccount)?, progress: @escaping (InstallStep) -> Void = { _ in }, log: InstallLog = .shared) {
@@ -649,10 +669,11 @@ final class SamsungInstaller {
     }
 
     /// TV'deki CouchSubs yoksa ya da `version`'dan eskiyse imzalayıp kurar, sonra açar.
-    func ensureInstalled(wgt: () throws -> [UInt8], version: String?) throws -> Result {
+    /// `replaceForeign`: TV'de CouchSubs kimliğiyle başka bir uygulama varsa kullanıcı onayladı; o kaldırılıp CouchSubs kurulur.
+    func ensureInstalled(wgt: () throws -> [UInt8], version: String?, replaceForeign: Bool = false) throws -> Result {
         log.write("--- Samsung kurulumu (iPhone) başlıyor: TV \(host), paket \(version ?? "?")")
         do {
-            let result = try installCore(wgt: wgt, version: version)
+            let result = try installCore(wgt: wgt, version: version, replaceForeign: replaceForeign)
             log.write(result.installed ? "Kurulum tamam." : "TV'de \(result.version) sürümü var; kurulum gerekmedi.")
             return result
         } catch let failure as SamsungInstallFailure {
@@ -667,7 +688,7 @@ final class SamsungInstaller {
         }
     }
 
-    private func installCore(wgt: () throws -> [UInt8], version: String?) throws -> Result {
+    private func installCore(wgt: () throws -> [UInt8], version: String?, replaceForeign: Bool) throws -> Result {
         progress(.connecting)
         let device = try connect()
         defer { device.close() }
@@ -679,9 +700,21 @@ final class SamsungInstaller {
         if Self.isTooOld(platform) { throw SamsungInstallFailure(error: .tooOld, detail: "Tizen \(platform)") }
         if !platform.isEmpty, Versions.isNewer("5.0", than: platform) { log.write("Tizen \(platform): 2016–2018 TV si, destek deneysel.") }
 
-        let onTv = readInstalledVersion(device)
+        var onTv = readInstalledVersion(device)
         // "CouchSubs yok" ile "liste okunamadı" ayrılsın (Tizen 2.x'te okunamayan listede kopya kaldırılmaz).
         let listRead = lastListRead
+        if onTv != nil, SamsungDiagnostics.isForeign(lastListing) {
+            // CouchSubs kimliğini taşıyan başka bir uygulama: onaysız hiçbir şey silinmez, ekran kullanıcıya sorar.
+            let other = "\(SamsungDiagnostics.installedTitle(lastListing) ?? "?") \(onTv ?? "")"
+            guard replaceForeign else { throw SamsungInstallFailure(error: .foreignApp, detail: "TV'de aynı kimlikle başka bir uygulama var: \(other)") }
+            progress(.uninstalling)
+            var removal = ""
+            for id in [Self.packageId, Self.appId] {
+                removal += "\(id): " + ((try? device.shell("0 vd_appuninstall \(id)").trimmingCharacters(in: .whitespacesAndNewlines)) ?? "?") + "\n"
+            }
+            log.write("TV'deki başka uygulama kaldırıldı (kullanıcı onayladı): \(other):\n\(removal)")
+            onTv = nil
+        }
         if let version, let onTv, !Versions.isNewer(version, than: onTv) {
             launch(device)
             return Result(version: onTv, installed: false)
@@ -829,11 +862,13 @@ final class SamsungInstaller {
 
     private func readInstalledVersion(_ device: SdbConnection) -> String? {
         lastListRead = false
+        lastListing = ""
         guard let listing = try? device.shell("0 vd_applist") else {
             log.write("vd_applist okunamadı")
             return nil
         }
         lastListRead = true
+        lastListing = listing
         let version = SamsungDiagnostics.installedVersion(listing)
         log.write("vd_applist: \(version.map { "CouchSubs \($0)" } ?? "CouchSubs yok") (\(listing.count) karakter)")
         return version

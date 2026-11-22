@@ -22,6 +22,9 @@ enum LGInstallError: Equatable {
     /// TV anahtarı reddetti (geliştirici modu yeniden açılınca TV yeni anahtar üretir).
     case keyRefused
     case notEnoughSpace, installFailed, connectionLost, packageMissing
+    /// TV'de com.couchsubs.tv kimliğiyle başka bir uygulama kurulu (appinfo.json'daki ad ya da yapımcı bizim değil);
+    /// kullanıcı onaylamadan kaldırılmaz.
+    case foreignApp
 }
 
 struct LGInstallFailure: Error, CustomStringConvertible {
@@ -228,6 +231,29 @@ struct LGInstaller {
         return text[found].split(separator: "\"").last.map(String.init)
     }
 
+    /// appinfo.json'daki bir metin alanı ("title", "vendor"); yoksa nil.
+    static func fieldFromAppInfo(_ text: String, _ key: String) -> String? {
+        // cat çıktısının başında/sonunda kabuk yazısı olabilir: yalnız { … } arası okunur.
+        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end,
+              let object = (try? JSONSerialization.jsonObject(with: Data(text[start...end].utf8))) as? [String: Any] else { return nil }
+        return object[key] as? String
+    }
+
+    /// TV'deki com.couchsubs.tv bizim uygulamamız değil mi: appinfo.json'da ad CouchSubs değil ya da yapımcı Enmera değil.
+    /// Alan yoksa (okunamadıysa) bizim sayılır. Mac, Windows ve Android'deki denetimle aynı.
+    static func isForeignAppInfo(_ text: String) -> Bool {
+        if let title = fieldFromAppInfo(text, "title")?.trimmingCharacters(in: .whitespaces),
+           title.caseInsensitiveCompare("CouchSubs") != .orderedSame { return true }
+        if let vendor = fieldFromAppInfo(text, "vendor")?.trimmingCharacters(in: .whitespaces),
+           vendor.caseInsensitiveCompare("Enmera") != .orderedSame { return true }
+        return false
+    }
+
+    /// Geliştirici modunda kurulu uygulamayı kaldıran komut (ares-install --remove gibi); appinfo.json silinene kadar
+    /// (en çok 20 sn) bekler.
+    static let removeCommand = "/usr/bin/luna-send-pub -n 1 'luna://com.webos.appInstallService/dev/remove' '{\"id\":\"\(appId)\",\"subscribe\":false}'; "
+        + "i=0; while [ -f \(appInfo) ] && [ $i -lt 20 ]; do sleep 1; i=$((i+1)); done"
+
     /// Geliştirici modu açık mı (9922 yanıt veriyor mu)?
     static func isDevModeOn(_ host: String, timeout: TimeInterval = 1.5) -> Bool { PosixSocket.isOpen(host: host, port: port, timeout: timeout) }
 
@@ -355,12 +381,23 @@ struct LGInstaller {
     func installedVersion() throws -> String? { Self.versionFromAppInfo(try shell.run("cat \(Self.appInfo)", input: nil).output) }
 
     /// TV'deki CouchSubs `version`'dan eskiyse ya da yoksa `ipk`'yı kurar, sonra uygulamayı açar.
-    func ensureInstalled(ipk: [UInt8], packageName: String, version: String) throws -> Result {
+    /// `replaceForeign`: TV'de bizim kimliğimizle başka bir uygulama varsa kullanıcı onayladı; o kaldırılıp CouchSubs kurulur.
+    func ensureInstalled(ipk: [UInt8], packageName: String, version: String, replaceForeign: Bool = false) throws -> Result {
         log.write("--- LG kurulumu (iPhone) başlıyor: paket \(packageName)")
         do {
             progress(.connecting)
-            let onTV = try installedVersion()
+            let appInfo = try shell.run("cat \(Self.appInfo)", input: nil).output
+            var onTV = Self.versionFromAppInfo(appInfo)
             log.write("TV'deki CouchSubs: \(onTV ?? "yok")")
+            if onTV != nil, Self.isForeignAppInfo(appInfo) {
+                let other = "\(Self.fieldFromAppInfo(appInfo, "title") ?? "?") (\(Self.fieldFromAppInfo(appInfo, "vendor") ?? "?")) \(onTV ?? "")"
+                // Onaysız hiçbir şey silinmez; ekran kullanıcıya sorar.
+                guard replaceForeign else { throw LGInstallFailure(error: .foreignApp, detail: "TV'de aynı kimlikle başka bir uygulama var: \(other)") }
+                progress(.uninstalling)
+                let removed = try shell.run(Self.removeCommand, input: nil).output
+                log.write("TV'deki başka uygulama kaldırıldı (kullanıcı onayladı): \(other): \(removed.trimmingCharacters(in: .whitespacesAndNewlines))")
+                onTV = nil
+            }
             if let onTV, !Versions.isNewer(version, than: onTV) {
                 launch()
                 return Result(version: onTV, installed: false)
@@ -531,6 +568,7 @@ struct LGInstallSection: View {
     @State private var passphrase = ""
     @State private var phase = TVInstallPhase.idle
     @State private var started = false
+    @State private var foreignApp = false
 
     private var hasKey: Bool {
         let target = host.trimmingCharacters(in: .whitespaces)
@@ -579,6 +617,7 @@ struct LGInstallSection: View {
             }
         }
             .task { await search() }
+            .foreignAppAlert(isPresented: $foreignApp) { install(replaceForeign: true) }
     }
 
     private func search() async {
@@ -608,7 +647,7 @@ struct LGInstallSection: View {
         if list.isEmpty { manual = true }
     }
 
-    private func install() {
+    private func install(replaceForeign: Bool = false) {
         // Elle yazılan adres temizlenir ("192.168.1.5:3000", "http://…", virgüllü yazım); adres değilse söylenir.
         guard let target = ManualAddress.normalize(host) else {
             addressError = true
@@ -638,7 +677,8 @@ struct LGInstallSection: View {
                     }
                     func attempt(_ key: [UInt8]) throws -> LGInstaller.Result {
                         let installer = LGInstaller(shell: SshShell(host: target, key: key), progress: progress, log: log)
-                        let result = try installer.ensureInstalled(ipk: package.ipk, packageName: package.name, version: package.version)
+                        let result = try installer.ensureInstalled(ipk: package.ipk, packageName: package.name, version: package.version,
+                                                                  replaceForeign: replaceForeign)
                         // Masaüstündeki gibi: geliştirici modunun süresi günde bir uzatılır, kullanıcı TV'den uzatmaz.
                         LGPhoneInstall.renewSessionIfDue(installer, host: target)
                         return result
@@ -655,6 +695,9 @@ struct LGInstallSection: View {
                 }, progress: { step in if phase.isWorking { phase = .working(step) } })
                 phase = .done(version: result.version, installed: result.installed)
                 await model.tvAppInstalled(brand: .lg, host: target, port: nil, version: result.version)
+            } catch let failure as LGInstallFailure where failure.error == .foreignApp {
+                phase = .failed(text: TVText.foreignMessage)
+                foreignApp = true
             } catch let failure as LGInstallFailure {
                 // 9922 yanıt vermediyse neden: TV bu adreste mi, geliştirici modu mu kapalı (diğer portlara bakılır).
                 var reason: LGUnreachableReason?
@@ -693,8 +736,9 @@ struct LGInstallSection: View {
         case .connectionLost: TVText.errConnection
         case .packageMissing: TVText.errPackageMissing
         case .installFailed: TVText.errFailed
+        case .foreignApp: TVText.foreignMessage
         }
-        guard failure.error != .wrongPassphrase, let detail = failure.detail, !detail.isEmpty else { return advice }
+        guard failure.error != .wrongPassphrase, failure.error != .foreignApp, let detail = failure.detail, !detail.isEmpty else { return advice }
         return advice + "\n\n" + TVText.lgTvSays(detail)
     }
 }

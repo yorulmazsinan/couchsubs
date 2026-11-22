@@ -86,6 +86,15 @@ public class SamsungInstallTests
         Assert.Null(SamsungTvInstaller.InstalledVersion(listing.Replace("CouchSubsT.CouchSubs", "Baska.App")));
         Assert.Null(SamsungTvInstaller.InstalledVersion("closed"));
         Assert.Null(SamsungTvInstaller.InstalledVersion(null));
+        Assert.Equal("CouchSubs", SamsungTvInstaller.InstalledTitle(listing));
+        Assert.False(SamsungTvInstaller.IsForeignTitle(SamsungTvInstaller.InstalledTitle(listing)));
+        // Bizim kimliğimizle (CouchSubsT.CouchSubs) başka adlı uygulama: yabancı.
+        var foreign = listing.Replace("app_title  =  CouchSubs", "app_title  =  Başka Uygulama");
+        Assert.Equal("Başka Uygulama", SamsungTvInstaller.InstalledTitle(foreign));
+        Assert.True(SamsungTvInstaller.IsForeignTitle(SamsungTvInstaller.InstalledTitle(foreign)));
+        // Ad yoksa yabancı sayılmaz.
+        Assert.False(SamsungTvInstaller.IsForeignTitle(null));
+        Assert.False(SamsungTvInstaller.IsForeignTitle(" couchsubs "));
     }
 
     [Theory]

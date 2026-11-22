@@ -1289,7 +1289,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         samsungCheckRunning = true;
         try
         {
-            var (version, installed) = await services.InstallSamsungAppAsync(target.Host, bundled, open, e => post(() => InstallEvent(e)));
+            var (version, installed) = await services.InstallSamsungAppAsync(target.Host, bundled, open, replaceForeignApp, e => post(() => InstallEvent(e)));
             version = string.IsNullOrWhiteSpace(version) ? bundled.Version : version;
             store.Save(StoreKeys.TvAppVersion, version);
             SamsungAppKnowledge.Mark(target.Host);
@@ -1353,7 +1353,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // Linux'ta COUCHSUBS_SERVER_PORT) TV uygulaması onu bulur (#617). Eşleştirme yine TV'deki kodla yapılır.
             try { await StartServerAsync(); } catch (SocketException) { }
             var launch = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["server"] = ServerAddress(target with { Host = host }) });
-            var version = await services.InstallAndroidAppAsync(host, bundled, open, launch, e => post(() => InstallEvent(e)));
+            var version = await services.InstallAndroidAppAsync(host, bundled, open, launch, replaceForeignApp, e => post(() => InstallEvent(e)));
             // TV'nin adresi bundan sonra sürüm denetimi için kullanılır.
             var located = target with { Host = host };
             tv = located;
@@ -1432,6 +1432,34 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         await RefreshTvAppAsync();
     }
 
+    /// <summary>
+    /// Kullanıcı "Kaldırıp Kur"a bastı (yalnız TvAppState Failed/ForeignApp'ta sorulur): bir kerelik olarak TV'de CouchSubs'ın
+    /// kimliğini kullanan başka uygulama kaldırılır ve CouchSubs kurulur. Onay olmadan hiçbir markada bir şey silinmez.
+    /// </summary>
+    private bool replaceForeignApp;
+
+    public async Task ReplaceForeignTvAppAsync()
+    {
+        if (tv is not { } target) return;
+        services.WriteTvInstallLog("Kullanıcı onayladı: TV'de CouchSubs'ın kimliğini kullanan başka uygulama kaldırılıp CouchSubs kurulacak.");
+        replaceForeignApp = true;
+        try
+        {
+            if (target.Brand == TvBrand.Lg)
+            {
+                lastLgSkipReason = null;
+                await ReinstallLgAppAsync(target);
+                return;
+            }
+            TvApp = new TvAppState(TvAppKind.Working);
+            await RefreshTvAppAsync();
+        }
+        finally
+        {
+            replaceForeignApp = false;
+        }
+    }
+
     public async Task ReinstallTvAppAsync()
     {
         if (tv is null)
@@ -1504,7 +1532,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         TvApp = new TvAppState(TvAppKind.Working);
         try
         {
-            var installed = await services.InstalledTvAppVersionAsync(target.Host, devKey);
+            // Kullanıcı "Kaldırıp Kur" dediyse TV'deki (başka) uygulamanın sürümüne bakılmaz; o kaldırılıp CouchSubs kurulur.
+            // Yoksa TV'de CouchSubs'ın kimliğiyle başka uygulama varsa sürüm okuması ForeignApp fırlatır.
+            var replace = replaceForeignApp;
+            var installed = replace ? null : await services.InstalledTvAppVersionAsync(target.Host, devKey);
             // "Yeniden kur": TV'deki sürüm güncel görünse de paket yeniden kurulur (anahtar reddedilirse istek sürer,
             // Passphrase yazılınca kurulur).
             var force = lgReinstallRequested;
@@ -1515,7 +1546,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 await RenewDevSessionIfDueAsync(target, devKey);
                 return;
             }
-            await services.InstallTvAppAsync(target.Host, devKey);
+            await services.InstallTvAppAsync(target.Host, devKey, replace);
             TvApp = new TvAppState(TvAppKind.UpToDate, bundled);
             tvAppMissing = false;
             await RenewDevSessionIfDueAsync(target, devKey);

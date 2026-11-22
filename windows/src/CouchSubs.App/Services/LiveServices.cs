@@ -227,9 +227,11 @@ public sealed class LiveServices : IAppServices
         LgLog.KeyAsync(host, () => DevModeInstaller.FetchKeyAsync(host, passphrase, new ProcessRunner(), DevModeTools.ForThisSystem()));
 
     public Task<string?> InstalledTvAppVersionAsync(string host, string devKey) =>
-        LgLog.InstalledVersionAsync(host, BundledTvAppVersion, () => WithKeyFileAsync(devKey, file => Installer(host, file).InstalledVersionAsync()));
+        LgLog.InstalledVersionAsync(host, BundledTvAppVersion, () => WithKeyFileAsync(devKey, file => Installer(host, file).CheckInstalledVersionAsync()));
 
-    public async Task InstallTvAppAsync(string host, string devKey)
+    public Task InstallTvAppAsync(string host, string devKey) => InstallTvAppAsync(host, devKey, replaceForeign: false);
+
+    public async Task InstallTvAppAsync(string host, string devKey, bool replaceForeign)
     {
         try
         {
@@ -237,6 +239,9 @@ public sealed class LiveServices : IAppServices
             {
                 if (BundledTvPackage is not { } package || BundledTvAppVersion is not { } version)
                     throw new DevModeException(DevModeError.InstallFailed, "uygulamanın yanında LG paketi (tv-app/*.ipk) yok");
+                // Kullanıcı "Kaldırıp Kur" dedi: CouchSubs'ın kimliğini kullanan başka uygulama önce kaldırılır.
+                if (replaceForeign)
+                    WriteTvInstallLog($"LG: kullanıcı onayıyla TV'deki com.couchsubs.tv kaldırıldı: {await Installer(host, file).RemoveAppAsync()}");
                 await Installer(host, file).InstallAsync(package, version);
                 return null;
             }));
@@ -323,7 +328,11 @@ public sealed class LiveServices : IAppServices
         return new SamsungPreflight(info, AppController.LocalAddress(host));
     }
 
-    public async Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
+    public Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent) =>
+        InstallSamsungAppAsync(host, app, openIfInstalled, replaceForeign: false, onEvent);
+
+    public async Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, bool replaceForeign,
+        Action<TvInstallEvent> onEvent)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(1) };
         var log = new TvInstall.InstallLog(TvInstallLogPath);
@@ -331,6 +340,7 @@ public sealed class LiveServices : IAppServices
         {
             Log = log,
             OpenIfInstalled = openIfInstalled,
+            ReplaceForeign = replaceForeign,
             Progress = step => onEvent(new TvInstallEvent(TvInstallEventKind.Progress, Step: step)),
             SignIn = token => SamsungLogin.SignInAsync(url => onEvent(new TvInstallEvent(TvInstallEventKind.SignIn, new Uri(url))),
                 TimeSpan.FromMinutes(10), token),
@@ -367,6 +377,7 @@ public sealed class LiveServices : IAppServices
         SamsungInstallError.TvClockWrong => DevModeError.TvClockWrong,
         SamsungInstallError.PackageBlocked => DevModeError.PackageBlocked,
         SamsungInstallError.ConnectionLost => DevModeError.ConnectionLost,
+        SamsungInstallError.ForeignApp => DevModeError.ForeignApp,
         _ => DevModeError.InstallFailed,
     };
 
@@ -377,14 +388,19 @@ public sealed class LiveServices : IAppServices
     public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent) =>
         InstallAndroidAppAsync(host, app, openIfInstalled, null, onEvent);
 
+    public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
+                                               Action<TvInstallEvent> onEvent) =>
+        InstallAndroidAppAsync(host, app, openIfInstalled, launchParams, replaceForeign: false, onEvent);
+
     public async Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams,
-                                                     Action<TvInstallEvent> onEvent)
+                                                     bool replaceForeign, Action<TvInstallEvent> onEvent)
     {
         void Approve() => onEvent(new TvInstallEvent(TvInstallEventKind.ApproveOnTv));
         var installer = new AndroidTvInstaller(host, DataDirectory("adb"))
         {
             OnApprovalNeeded = Approve,
             LaunchParams = launchParams,
+            ReplaceForeign = replaceForeign,
             // CouchSubs TV Play'de ve TV'de Play Store varsa TV'de Play sayfası açılır (PlayStoreRedirect.cs).
             PlayListed = AndroidTvInstaller.IsListedOnPlayAsync,
             OnPlayOpened = () => onEvent(new TvInstallEvent(TvInstallEventKind.Progress, Step: "play")),
@@ -404,6 +420,7 @@ public sealed class LiveServices : IAppServices
             {
                 AndroidInstallError.Unreachable => DevModeError.Unreachable,
                 AndroidInstallError.NotApproved => DevModeError.NotApproved,
+                AndroidInstallError.ForeignApp => DevModeError.ForeignApp,
                 _ => DevModeError.InstallFailed,
             }, error.Message);
         }

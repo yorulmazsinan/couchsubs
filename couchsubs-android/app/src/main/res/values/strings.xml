@@ -555,6 +555,9 @@
     <string name="tvinstall_android_wireless_step2">2. Geliştirici seçenekleri › Kablosuz hata ayıklama\'yı aç, içine gir. Üstteki “IP adresi ve bağlantı noktası”nı TV\'nin adresine yaz.</string>
     <string name="tvinstall_android_wireless_step3">3. İlk kurulumda “Cihazı eşleme kodu ile eşle”ye bas; açılan penceredeki IP adresi ve portu, 6 haneli kodla birlikte buraya yaz ve pencere açıkken Kur ve aç\'a bas.</string>
     <string name="tvinstall_android_replace">TV\'deki kopyayı kaldırıp kur</string>
+    <string name="tvinstall_foreign_title">Başka Bir Uygulama Kurulu</string>
+    <string name="tvinstall_foreign_body">Bu TV\'de CouchSubs kimliğini kullanan başka bir uygulama kurulu. Kaldırıp CouchSubs\'ı kuralım mı?</string>
+    <string name="tvinstall_foreign_replace">Kaldırıp Kur</string>
     <string name="tvinstall_android_err_unreachable">TV yanıt vermedi. TV\'nin açık ve bu telefonla aynı Wi-Fi\'da olduğundan, geliştirici seçeneklerinde hata ayıklamanın açık olduğundan emin ol. Kablosuz hata ayıklamada port her açılışta değişir; ekrandakini yaz.</string>
     <string name="tvinstall_android_try_wireless">Kablosuz hata ayıklamayla dene</string>
     <string name="tvinstall_android_err_legacy_closed">TV, USB/ağ hata ayıklama portuna (5555) yanıt vermedi. Yeni Android TV ve Google TV\'lerde bu port kapalıdır. TV\'de Geliştirici seçenekleri › Kablosuz hata ayıklama\'yı aç, sonra aşağıdaki düğmeye dokun.</string>

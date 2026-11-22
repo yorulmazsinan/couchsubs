@@ -286,6 +286,7 @@ internal sealed class FakeServices : IAppServices
     {
         TvCalls++;
         if (RefuseKey) throw new DevModeException(DevModeError.KeyRefused);
+        if (ForeignOnTv) throw new DevModeException(DevModeError.ForeignApp, "\"Başka Uygulama\" 9.0.0");
         return Task.FromResult(AppOnTv);
     }
     public Exception? LgInstallError { get; set; }
@@ -352,6 +353,34 @@ internal sealed class FakeServices : IAppServices
     {
         AndroidLaunchParams.Add(launchParams);
         return InstallAndroidAppAsync(host, app, openIfInstalled, onEvent);
+    }
+    /// <summary>TV'de CouchSubs'ın kimliğiyle başka bir uygulama var (üç marka); "Kaldırıp Kur" onayıyla gider.</summary>
+    public bool ForeignOnTv { get; set; }
+    /// <summary>Her kurulumda "başka uygulamayı kaldır" istendi mi.</summary>
+    public List<bool> ReplaceRequests { get; } = [];
+    private void Foreign(bool replace)
+    {
+        ReplaceRequests.Add(replace);
+        if (!ForeignOnTv) return;
+        if (!replace) throw new DevModeException(DevModeError.ForeignApp, "\"Başka Uygulama\" 9.0.0");
+        ForeignOnTv = false;
+    }
+    public Task InstallTvAppAsync(string host, string devKey, bool replaceForeign)
+    {
+        Foreign(replaceForeign);
+        return InstallTvAppAsync(host, devKey);
+    }
+    public Task<(string Version, bool Installed)> InstallSamsungAppAsync(string host, BundledTvApp app, bool openIfInstalled, bool replaceForeign,
+        Action<TvInstallEvent> onEvent)
+    {
+        Foreign(replaceForeign);
+        return InstallSamsungAppAsync(host, app, openIfInstalled, onEvent);
+    }
+    public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, string? launchParams, bool replaceForeign,
+                                               Action<TvInstallEvent> onEvent)
+    {
+        Foreign(replaceForeign);
+        return InstallAndroidAppAsync(host, app, openIfInstalled, launchParams, onEvent);
     }
     public Task<string> InstallAndroidAppAsync(string host, BundledTvApp app, bool openIfInstalled, Action<TvInstallEvent> onEvent)
     {
@@ -2513,6 +2542,60 @@ public class TvAppInstallTests
         // LG'de Samsung'a özgü ipucu çıkmaz.
         var lg = TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.Unreachable), TvBrand.Lg, text, "x.log");
         Assert.DoesNotContain("Samsung logosu", lg);
+    }
+
+    /// <summary>
+    /// TV'de CouchSubs'ın kimliğiyle başka uygulama: onaysız hiçbir şey silinmez, kart soruyu gösterir; "Kaldırıp Kur"
+    /// bir kerelik olarak kaldırıp kurar (Mac, iPhone ve Android ile aynı).
+    /// </summary>
+    [Fact]
+    public async Task ForeignAppOnAndroidTvIsReplacedOnlyAfterConsent()
+    {
+        var services = new FakeServices { ForeignOnTv = true };
+        services.Bundled[TvBrand.AndroidTv] = new BundledTvApp("couchsubs-androidtv_0.7.0.apk", "0.7.0");
+        services.AndroidHosts.Add("192.168.1.40");
+        var controller = Make(services, new MemoryStore());
+        await controller.PairAsync(new LgTv("Android TV", "192.168.1.40", TvBrand.AndroidTv));
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(TvAppKind.Failed, controller.TvApp.Kind);
+        Assert.Equal(DevModeError.ForeignApp, controller.TvApp.Error);
+        Assert.True(services.ForeignOnTv);
+        Assert.Empty(services.BrandInstalls);
+        var text = Localizer.ForLanguage("tr");
+        Assert.Equal("Bu TV'de CouchSubs kimliğini kullanan başka bir uygulama kurulu. Kaldırıp CouchSubs'ı kuralım mı?",
+            TvAppMessages.Problem(controller.TvApp, TvBrand.AndroidTv, text, "x.log"));
+        Assert.Equal("Kaldırıp Kur", text[TvAppMessages.ForeignAppConfirm]);
+        Assert.Equal("Vazgeç", text[TvAppMessages.ForeignAppCancel]);
+        Assert.Equal("Başka Bir Uygulama Kurulu", text[TvAppMessages.ForeignAppTitle]);
+
+        await controller.ReplaceForeignTvAppAsync();
+        Assert.Equal(new TvAppState(TvAppKind.UpToDate, "0.7.0"), controller.TvApp);
+        Assert.False(services.ForeignOnTv);
+        Assert.True(services.ReplaceRequests[^1]);
+        Assert.DoesNotContain(true, services.ReplaceRequests[..^1]);
+        // Onay bir kerelik: sonraki denetimler yine onaysız.
+        await controller.RefreshTvAppAsync();
+        Assert.False(services.ReplaceRequests[^1]);
+    }
+
+    [Fact]
+    public async Task ForeignAppOnLgIsReplacedOnlyAfterConsent()
+    {
+        var services = new FakeServices { DevMode = true, ForeignOnTv = true };
+        var store = new MemoryStore();
+        store.Save(StoreKeys.TvDevKey, "dev-key");
+        var controller = Make(services, store);
+        await controller.PairAsync(new LgTv("LG", "192.168.1.30", TvBrand.Lg));
+        await controller.RefreshTvAppAsync();
+        Assert.Equal(DevModeError.ForeignApp, controller.TvApp.Error);
+        Assert.Equal(0, services.Installs);
+
+        await controller.ReplaceForeignTvAppAsync();
+        Assert.Equal(TvAppKind.UpToDate, controller.TvApp.Kind);
+        Assert.Equal(1, services.Installs);
+        Assert.True(services.ReplaceRequests[^1]);
+        Assert.DoesNotContain(true, services.ReplaceRequests[..^1]);
+        Assert.False(services.ForeignOnTv);
     }
 
     [Fact]

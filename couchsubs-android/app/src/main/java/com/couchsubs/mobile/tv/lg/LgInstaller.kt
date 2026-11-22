@@ -28,6 +28,11 @@ enum class LgInstallError {
     INSTALL_FAILED,
     CONNECTION_LOST,
     PACKAGE_MISSING,
+    /**
+     * TV'de com.couchsubs.tv kimliğiyle başka bir uygulama kurulu (appinfo.json'da başlık ya da üretici bizim değil).
+     * Kullanıcı onaylamadan kaldırılmaz; onaylarsa kaldırılıp CouchSubs kurulur.
+     */
+    FOREIGN_APP,
 }
 
 /**
@@ -124,6 +129,33 @@ class LgInstaller(
         }
 
         fun versionFromAppInfo(text: String): String? = Regex(""""version"\s*:\s*"([^"]+)"""").find(text)?.groupValues?.get(1)
+
+        /** Bizim appinfo.json'daki başlık ve üretici (tv-webos/appinfo.json). */
+        const val OUR_TITLE = "CouchSubs"
+        const val OUR_VENDOR = "Enmera"
+
+        private fun appInfoField(text: String, name: String): String? =
+            Regex(""""$name"\s*:\s*"([^"]*)"""").find(text)?.groupValues?.get(1)
+
+        /**
+         * TV'deki appinfo.json başka bir uygulamanın mı: başlık "CouchSubs" değil ya da üretici "Enmera" değil (büyük/küçük
+         * harf gözetilmez). Dosya ya da alan yoksa bizim sayılır (Windows, Mac ve iPhone ile aynı kural).
+         */
+        fun isForeignAppInfo(text: String): Boolean {
+            if (versionFromAppInfo(text) == null) return false
+            val title = appInfoField(text, "title")?.trim()
+            val vendor = appInfoField(text, "vendor")?.trim()
+            return (title != null && !title.equals(OUR_TITLE, ignoreCase = true)) ||
+                (vendor != null && !vendor.equals(OUR_VENDOR, ignoreCase = true))
+        }
+
+        /**
+         * Geliştirici modunda kurulu uygulamayı kaldıran komut (ares-install --remove'un kullandığı istek); appinfo.json
+         * silinene kadar (en çok 20 sn) bekler.
+         */
+        const val REMOVE_COMMAND =
+            "/usr/bin/luna-send-pub -n 1 'luna://com.webos.appInstallService/dev/remove' '{\"id\":\"$APP_ID\",\"subscribe\":false}'; " +
+                "i=0; while [ -f $APP_INFO ] && [ \$i -lt 20 ]; do sleep 1; i=\$((i+1)); done"
 
         /** Geliştirici modu açık mı (9922 yanıt veriyor mu)? */
         fun isDevModeOn(host: String, timeoutMs: Int = 1_500): Boolean = try {
@@ -259,14 +291,27 @@ class LgInstaller(
     }
 
     /** TV'deki sürüm; uygulama kurulu değilse null. */
-    fun installedVersion(): String? = versionFromAppInfo(shell.run("cat $APP_INFO", null).output)
+    /** TV'deki CouchSubs sürümü; uygulama kurulu değilse ya da bu kimlikle başka bir uygulama kuruluysa null. */
+    fun installedVersion(): String? =
+        shell.run("cat $APP_INFO", null).output.let { if (isForeignAppInfo(it)) null else versionFromAppInfo(it) }
 
-    /** TV'deki CouchSubs [version]'dan eskiyse ya da yoksa [ipk]'yı kurar, sonra uygulamayı açar. */
-    fun ensureInstalled(ipk: ByteArray, packageName: String, version: String): Result {
+    /**
+     * TV'deki CouchSubs [version]'dan eskiyse ya da yoksa [ipk]'yı kurar, sonra uygulamayı açar.
+     * @param replaceForeign Bu kimlikle başka bir uygulama kuruluysa kaldırılıp kurulsun mu (yalnız kullanıcı onayıyla).
+     */
+    fun ensureInstalled(ipk: ByteArray, packageName: String, version: String, replaceForeign: Boolean = false): Result {
         log.write("--- LG kurulumu (telefon) başlıyor: paket $packageName")
         try {
             progress(InstallStep.CONNECTING)
-            val onTv = installedVersion()
+            val appInfo = shell.run("cat $APP_INFO", null).output
+            var onTv = versionFromAppInfo(appInfo)
+            if (isForeignAppInfo(appInfo)) {
+                log.write("TV'de CouchSubs kimliğiyle başka bir uygulama kurulu (sürüm ${onTv ?: "?"}).")
+                if (!replaceForeign) throw LgInstallException(LgInstallError.FOREIGN_APP, "appinfo.json başka bir uygulamanın")
+                progress(InstallStep.UNINSTALLING)
+                log.write("Diğer uygulama kaldırılıyor (kullanıcı onayladı): ${shell.run(REMOVE_COMMAND, null).output.trim()}")
+                onTv = null
+            }
             log.write("TV'deki CouchSubs: ${onTv ?: "yok"}")
             if (onTv != null && !SamsungDiagnostics.isNewer(version, onTv)) {
                 launch()

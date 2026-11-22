@@ -88,7 +88,10 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
         if (found.isEmpty()) manual = true
     }
 
-    fun install() {
+    // TV'de bu kimlikle başka bir uygulama var: kaldırılıp kurulsun mu diye sorulur (onaysız kaldırılmaz).
+    var foreignDialog by remember { mutableStateOf(false) }
+
+    fun install(replaceForeign: Boolean = false) {
         // Elle yazılan adres temizlenir ("192.168.1.5:3000", "http://…", virgüllü yazım); adres değilse söylenir (#50).
         val target = ManualAddress.normalize(host) ?: run {
             addressError = true
@@ -114,7 +117,7 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
                     }
                     fun attempt(key: ByteArray): LgInstaller.Result {
                         val installer = LgInstaller(JschShell(target, key), progress, log)
-                        val result = installer.ensureInstalled(ipk, name, version)
+                        val result = installer.ensureInstalled(ipk, name, version, replaceForeign)
                         // Masaüstündeki gibi: geliştirici modunun süresi günde bir uzatılır, kullanıcı TV'den uzatmaz.
                         TvAppUpdate.renewLgSessionIfDue(target, installer)
                         return result
@@ -144,8 +147,14 @@ internal fun LgInstallScreen(onBack: () -> Unit, onDone: () -> Unit, brandPicker
                 Log.w(TAG, "LG kurulumu başarısız", error)
                 LgState.Failed(null, error.message ?: error.javaClass.simpleName)
             }
+            foreignDialog = (state as? LgState.Failed)?.error == LgInstallError.FOREIGN_APP
         }
     }
+
+    if (foreignDialog) ForeignTvAppDialog(onReplace = {
+        foreignDialog = false
+        install(replaceForeign = true)
+    }, onDismiss = { foreignDialog = false })
 
     // "TV uygulamasını güncelle"den gelindiyse ve anahtar kayıtlıysa kurulum hemen başlar; değilse parola beklenir.
     LaunchedEffect(preset) { if (preset != null && state is LgState.Idle && hasKey) install() }
@@ -236,6 +245,7 @@ private fun lgFailureText(failure: LgState.Failed): String {
         LgInstallError.NOT_ENOUGH_SPACE -> context.getString(R.string.tvinstall_err_space)
         LgInstallError.CONNECTION_LOST -> context.getString(R.string.tvinstall_err_connection)
         LgInstallError.PACKAGE_MISSING -> context.getString(R.string.tvinstall_err_package_missing)
+        LgInstallError.FOREIGN_APP -> return context.getString(R.string.tvinstall_foreign_body)
         LgInstallError.INSTALL_FAILED, null -> context.getString(R.string.tvinstall_err_failed)
     }
     val detail = failure.detail?.takeIf { it.isNotBlank() && failure.error != LgInstallError.WRONG_PASSPHRASE } ?: return advice

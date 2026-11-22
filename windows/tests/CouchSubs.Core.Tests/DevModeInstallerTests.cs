@@ -33,6 +33,40 @@ public class DevModeInstallerTests
 
     private static bool IsInstall(string line) => line.Contains("appInstallService");
 
+    private const string OurAppInfo = "{\"id\":\"com.couchsubs.tv\",\"version\":\"0.9.74\",\"vendor\":\"Enmera\",\"title\":\"CouchSubs\"}";
+
+    [Theory]
+    [InlineData(OurAppInfo, false)]
+    [InlineData("{\"id\":\"com.couchsubs.tv\",\"version\":\"2.0.0\",\"vendor\":\"Enmera\",\"title\":\"Başka Uygulama\"}", true)]
+    [InlineData("{\"id\":\"com.couchsubs.tv\",\"version\":\"2.0.0\",\"vendor\":\"Başka Şirket\",\"title\":\"CouchSubs\"}", true)]
+    // Alan yoksa yabancı sayılmaz.
+    [InlineData("{\"id\":\"com.couchsubs.tv\",\"version\":\"0.9.1\"}", false)]
+    public void ForeignAppIsRecognisedFromAppInfo(string appInfo, bool foreign) =>
+        Assert.Equal(foreign, DevModeInstaller.IsForeignAppInfo(appInfo));
+
+    [Fact]
+    public async Task ForeignAppIsReportedInsteadOfItsVersion()
+    {
+        var shell = new FakeShell
+        {
+            Answer = c => c.StartsWith("cat ") ? new CommandResult(0, OurAppInfo.Replace("\"CouchSubs\"", "\"Başka Uygulama\"").Replace("0.9.74", "9.0.0")) : null,
+        };
+        var error = await Assert.ThrowsAsync<DevModeException>(() => Installer(shell).CheckInstalledVersionAsync());
+        Assert.Equal(DevModeError.ForeignApp, error.Error);
+        Assert.DoesNotContain(shell.Calls, call => call.Command.Contains("dev/remove"));
+        shell.Answer = c => c.StartsWith("cat ") ? new CommandResult(0, OurAppInfo) : null;
+        Assert.Equal("0.9.74", await Installer(shell).CheckInstalledVersionAsync());
+    }
+
+    [Fact]
+    public async Task RemovingUsesTheDevRemoveCall()
+    {
+        var shell = new FakeShell();
+        await Installer(shell).RemoveAppAsync();
+        Assert.Contains("luna://com.webos.appInstallService/dev/remove", shell.Calls.Single().Command);
+        Assert.Contains("\"id\":\"com.couchsubs.tv\"", shell.Calls.Single().Command);
+    }
+
     [Fact]
     public async Task KeyFileIsOnlyReadableByTheOwner()
     {

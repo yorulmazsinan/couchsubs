@@ -41,6 +41,9 @@ public enum DevModeError: Error, Equatable {
     case packageBlocked
     /// Kurulum sırasında TV bağlantısı koptu.
     case connectionLost
+    /// TV'de CouchSubs'ın kimliğiyle (Android paket adı, LG uygulama kimliği, Samsung paket kimliği) başka bir uygulama
+    /// kurulu; kaldırıp CouchSubs'ı kurmak için kullanıcı onayı gerekir.
+    case foreignApp
 }
 
 /// Kurulum hatası ve TV'nin verdiği sebep (luna yanıtındaki errorText/reason ya da komut çıktısı).
@@ -171,6 +174,49 @@ public struct DevModeInstaller: Sendable {
     public func installedVersion() async throws -> String? {
         let result = try await ssh("cat \(Self.appInfoPath)")
         return Self.version(fromAppInfo: result.output)
+    }
+
+    /// TV'deki sürüm (kurulu değilse nil). TV'de com.couchsubs.tv kimliğiyle başka bir uygulama varsa (appinfo.json'daki ad
+    /// CouchSubs ya da üretici Enmera değil) `DevModeFailure(.foreignApp)` fırlatır: sürümü bizimkinden yüksekse "güncel"
+    /// sayılıp o açılıyordu; kullanıcı onaylamadan üstüne kurulmaz. Windows'taki CheckInstalledVersionAsync ile aynı.
+    public func checkInstalledVersion() async throws -> String? {
+        let info = try await ssh("cat \(Self.appInfoPath)").output
+        let version = Self.version(fromAppInfo: info)
+        if let version, Self.isForeignAppInfo(info) {
+            throw DevModeFailure(.foreignApp, detail: "\"\(Self.appInfoField(info, "title") ?? "")\" (\(Self.appInfoField(info, "vendor") ?? "")) \(version)")
+        }
+        return version
+    }
+
+    /// CouchSubs'ın appinfo.json'ındaki ad ve üretici (tv-webos/appinfo.json).
+    static let ourTitle = "CouchSubs", ourVendor = "Enmera"
+
+    /// appinfo.json'daki ad CouchSubs değil ya da üretici Enmera değil. Alan yoksa yabancı sayılmaz.
+    static func isForeignAppInfo(_ text: String) -> Bool {
+        func differs(_ key: String, _ ours: String) -> Bool {
+            guard let value = appInfoField(text, key) else { return false }
+            return value.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(ours) != .orderedSame
+        }
+        return differs("title", ourTitle) || differs("vendor", ourVendor)
+    }
+
+    static func appInfoField(_ text: String, _ key: String) -> String? {
+        guard let found = text.range(of: #""\#(key)"\s*:\s*"[^"]*""#, options: .regularExpression) else { return nil }
+        let match = text[found]
+        guard let colon = match.firstIndex(of: ":"), let open = match[colon...].firstIndex(of: "\"") else { return nil }
+        return String(match[match.index(after: open)..<match.index(before: match.endIndex)])
+    }
+
+    /// TV'deki com.couchsubs.tv'yi kaldırır (ares-install --remove'un luna çağrısı); kaldırma TV'de arka planda sürdüğü
+    /// için appinfo.json gidene kadar (en çok 20 sn) beklenir. Yalnız kullanıcı "Kaldırıp Kur" deyince çağrılır.
+    static let removeCommand =
+        "/usr/bin/luna-send-pub -n 1 'luna://com.webos.appInstallService/dev/remove' '{\"id\":\"com.couchsubs.tv\",\"subscribe\":false}'; " +
+        "i=0; while [ -f \(appInfoPath) ] && [ $i -lt 20 ]; do sleep 1; i=$((i+1)); done"
+
+    /// - Returns: TV'nin yanıtı (günlük için).
+    @discardableResult
+    public func removeApp() async throws -> String {
+        try await ssh(Self.removeCommand).output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Paketi TV'ye yükler ve ares-install'un yaptığı gibi kurar: kurulum aboneliği TV "installed" ya da hata diyene kadar

@@ -18,6 +18,11 @@ enum class SamsungInstallError {
     TV_CLOCK_WRONG,
     PACKAGE_BLOCKED,
     CONNECTION_LOST,
+    /**
+     * TV'de CouchSubs'ın kimliğiyle (CouchSubsT) başka bir uygulama kurulu (adı CouchSubs değil). Kullanıcı onaylamadan
+     * kaldırılmaz; onaylarsa kaldırılıp CouchSubs kurulur.
+     */
+    FOREIGN_APP,
 }
 
 /** [detail] kullanıcıya da gösterilir: TV'nin hata satırı, Samsung'un yanıtı ya da istisna iletisi. */
@@ -95,14 +100,30 @@ object SamsungDiagnostics {
     private val fieldLine = Regex("""^[\s-]*([A-Za-z_]+)\s*=\s*(.*?)[\s-]*$""")
 
     /** `0 vd_applist` çıktısında CouchSubs'ın sürümü; satırlar `---- anahtar = değer ----` biçimindedir. */
-    fun installedVersion(listing: String?): String? {
+    fun installedVersion(listing: String?): String? = couchSubsBlock(listing)?.get("app_version")?.takeIf { it.isNotEmpty() }
+
+    /** Bizim config.xml'deki uygulama adı (tv-tizen/config.xml). */
+    const val OUR_TITLE = "CouchSubs"
+
+    /**
+     * `vd_applist`'te bizim kimliğimizle (CouchSubsT / CouchSubsT.CouchSubs) kurulu uygulamanın adı CouchSubs değil mi?
+     * Ad yoksa bizim sayılır (Windows, Mac ve iPhone ile aynı kural). Samsung'da imza sertifikası kullanıcının Samsung
+     * hesabına göre değiştiği için ayırt etmede ada bakılır.
+     */
+    fun isForeignApp(listing: String?): Boolean {
+        val title = couchSubsBlock(listing)?.get("app_title")?.trim()
+        return !title.isNullOrEmpty() && !title.equals(OUR_TITLE, ignoreCase = true)
+    }
+
+    /** `vd_applist`'te bizim kimliğimizin alanları (sürümü olan ilk blok); yoksa null. */
+    private fun couchSubsBlock(listing: String?): Map<String, String>? {
         if (listing.isNullOrBlank()) return null
         val fields = HashMap<String, String>()
-        var found: String? = null
+        var found: Map<String, String>? = null
         fun flush() {
             val ids = listOf(fields["app_tizen_id"], fields["app_id"])
             val version = fields["app_version"]
-            if (found == null && ids.any { isCouchSubs(it) } && !version.isNullOrEmpty()) found = version
+            if (found == null && ids.any { isCouchSubs(it) } && !version.isNullOrEmpty()) found = HashMap(fields)
             fields.clear()
         }
         for (raw in listing.replace("\r", "").split('\n')) {

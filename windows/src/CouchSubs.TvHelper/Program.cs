@@ -61,6 +61,8 @@ try
                 // CouchSubs TV Play'de ve TV'de Play Store varsa TV'de Play sayfası açılır.
                 PlayListed = AndroidTvInstaller.IsListedOnPlayAsync,
                 OnPlayOpened = () => Emit("progress", ("step", "play")),
+                // --replace-foreign: kullanıcı "Kaldırıp Kur" dedi; yoksa başka imzalı uygulamada ForeignApp hatası döner.
+                ReplaceForeign = args.Contains("--replace-foreign"),
             };
             // TV'den kaldırılıp kaydı kalan uygulama da kurulur; --open: güncel uygulama da açılır ("yeniden kur").
             var (version, installed) = await AndroidTvApp.EnsureInstalledAsync(installer, Option("--host"), Option("--key-dir"),
@@ -86,6 +88,7 @@ try
             {
                 Log = log,
                 Progress = step => Emit("progress", ("step", step)),
+                ReplaceForeign = args.Contains("--replace-foreign"),
                 // Tarayıcıyı Mac uygulaması açar; giriş geri dönüşünü burası dinler.
                 SignIn = token => SamsungLogin.SignInAsync(url =>
                 {
@@ -116,7 +119,7 @@ try
             return 0;
 
         default:
-            Console.Error.WriteLine("kullanım: couchsubs-tv-helper android-scan | android-install --host IP --package APK --version V --key-dir DİZİN [--open] | android-open --host IP --key-dir DİZİN [--params JSON] | samsung-install --host IP --package WGT --version V --profiles DİZİN [--log DOSYA] | samsung-open --host IP --profiles DİZİN [--log DOSYA] | self-test");
+            Console.Error.WriteLine("kullanım: couchsubs-tv-helper android-scan | android-install --host IP --package APK --version V --key-dir DİZİN [--open] [--replace-foreign] | android-open --host IP --key-dir DİZİN [--params JSON] | samsung-install --host IP --package WGT --version V --profiles DİZİN [--log DOSYA] [--replace-foreign] | samsung-open --host IP --profiles DİZİN [--log DOSYA] | self-test");
             return 2;
     }
 }

@@ -234,6 +234,7 @@ enum TVHelper {
         case "TvClockWrong": .tvClockWrong
         case "PackageBlocked": .packageBlocked
         case "ConnectionLost": .connectionLost
+        case "ForeignApp": .foreignApp
         default: .installFailed
         }
     }

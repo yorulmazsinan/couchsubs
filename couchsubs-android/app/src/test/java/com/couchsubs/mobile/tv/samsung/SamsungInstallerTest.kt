@@ -78,6 +78,13 @@ class SamsungInstallerTest {
         assertNull(SamsungDiagnostics.installedVersion(listing.replace("CouchSubsT.CouchSubs", "Baska.App")))
         assertNull(SamsungDiagnostics.installedVersion("closed"))
         assertNull(SamsungDiagnostics.installedVersion(null))
+
+        // Bizim kimliğimizle kurulu uygulamanın adı CouchSubs değilse başka bir uygulamadır; ad yoksa bizim sayılır.
+        assertFalse(SamsungDiagnostics.isForeignApp(listing))
+        assertTrue(SamsungDiagnostics.isForeignApp(listing.replace("app_title  =  CouchSubs-", "app_title  =  Other App-")))
+        assertFalse(SamsungDiagnostics.isForeignApp(listing.replace("\t-------------app_title  =  CouchSubs----------------------------\n", "")))
+        assertFalse(SamsungDiagnostics.isForeignApp(listing.replace("CouchSubsT.CouchSubs", "Baska.App")))
+        assertFalse(SamsungDiagnostics.isForeignApp(null))
     }
 
     @Test

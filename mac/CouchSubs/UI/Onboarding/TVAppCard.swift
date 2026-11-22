@@ -132,6 +132,22 @@ struct TVAppCard: View {
                 }
             }
         }
+        // TV'de CouchSubs'ın kimliğiyle başka uygulama: kaldırıp CouchSubs'ı kurmak için onay. "Vazgeç"te hiçbir şey
+        // silinmez; kartta aynı metin ve "Yeniden dene" kalır (Windows, iPhone ve Android ile aynı).
+        .onAppear { askForeign(model.tvApp) }
+        .onChange(of: model.tvApp) { state in askForeign(state) }
+        .alert("Another App Is Installed", isPresented: $foreignPrompt) {
+            Button("Remove And Install", role: .destructive) { Task { await model.replaceForeignTVApp() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?")
+        }
+    }
+
+    @State private var foreignPrompt = false
+
+    private func askForeign(_ state: TVAppState) {
+        if case .failed(.foreignApp, _) = state { foreignPrompt = true }
     }
 
     /// Kurulum hatasında günlük (tvinstall.log) üç markada da Finder'da gösterilir ya da panoya kopyalanır
@@ -238,6 +254,8 @@ struct TVAppCard: View {
     /// Samsung'un yanıtı) da yazılır: hiçbir hata genel mesajda kalmasın. Gönderilecek günlük dosyası üç markada da
     /// yazılır (önceden yalnız Samsung'da).
     static func message(for error: DevModeError, brand: TVBrand, reason: String?) -> String {
+        // Soru penceresinin metni; "Vazgeç"ten sonra kartta da bu kalır ("Yeniden dene" yine sorar).
+        if error == .foreignApp { return message(for: error, brand: brand) }
         var text = message(for: error, brand: brand, hasReason: reason != nil)
         let samsung = brand == .samsung
         if let reason {
@@ -296,6 +314,8 @@ struct TVAppCard: View {
             String(localized: "The TV refuses CouchSubs because an earlier CouchSubs is still registered on it (Tizen error 118, -22), even if it no longer appears among the apps. If CouchSubs is among the TV's apps, delete it there and try again. Otherwise reset Smart Hub (Settings › Support › Device Care › Self Diagnosis › Reset Smart Hub; menu names differ a little by model) and try again. Resetting Smart Hub also removes the other apps you downloaded.")
         case .connectionLost:
             String(localized: "The connection to the TV dropped during the install. Keep the TV on and on the same network as this computer, then try again.")
+        case .foreignApp:
+            String(localized: "Another app on this TV is using the CouchSubs identity. Remove it and install CouchSubs?")
         }
     }
 }

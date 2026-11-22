@@ -197,6 +197,48 @@ class LgTest {
     }
 
     @Test
+    fun recognisesOtherAppsInAppInfo() {
+        val ours = """{"id":"com.couchsubs.tv","version":"0.9.74","vendor":"Enmera","title":"CouchSubs"}"""
+        assertFalse(LgInstaller.isForeignAppInfo(ours))
+        assertFalse(LgInstaller.isForeignAppInfo(ours.replace("CouchSubs\"", "couchsubs \"")))
+        assertTrue(LgInstaller.isForeignAppInfo(ours.replace("\"CouchSubs\"", "\"Other App\"")))
+        assertTrue(LgInstaller.isForeignAppInfo(ours.replace("Enmera", "Someone")))
+        // Alan yoksa ya da dosya yoksa bizim sayılır.
+        assertFalse(LgInstaller.isForeignAppInfo("""{"id":"com.couchsubs.tv","version":"0.9.18"}"""))
+        assertFalse(LgInstaller.isForeignAppInfo("cat: no such file"))
+        assertTrue(LgInstaller.REMOVE_COMMAND.contains("dev/remove"))
+    }
+
+    @Test
+    fun otherAppIsRemovedOnlyWithConsent() {
+        class OtherTv : LgShell {
+            val commands = mutableListOf<String>()
+            var info: String? = """{"id":"com.couchsubs.tv","version":"9.9.9","vendor":"Someone","title":"Other App"}"""
+            override fun run(command: String, input: ByteArray?): CommandResult {
+                commands += command
+                return when {
+                    command.startsWith("cat /media/developer/apps") -> CommandResult(if (info == null) 1 else 0, info ?: "cat: no such file")
+                    command.contains("dev/remove") -> { info = null; CommandResult(0, """{"returnValue":true}""") }
+                    command.contains("cat > ") -> CommandResult(0, "")
+                    command.startsWith("wc -c") -> CommandResult(0, "${ipk.size}\n")
+                    command.contains("dev/install") -> {
+                        info = """{"id":"com.couchsubs.tv","version":"0.9.18","vendor":"Enmera","title":"CouchSubs"}"""
+                        CommandResult(0, """{"returnValue":true,"details":{"state":"installed"}}""")
+                    }
+                    else -> CommandResult(0, "")
+                }
+            }
+        }
+        val tv = OtherTv()
+        val error = expect<LgInstallException> { LgInstaller(tv).ensureInstalled(ipk, "com.couchsubs.tv_0.9.18_all.ipk", "0.9.18") }
+        assertEquals(LgInstallError.FOREIGN_APP, error.error)
+        assertEquals(1, tv.commands.size)
+        val result = LgInstaller(tv, pollIntervalMs = 1).ensureInstalled(ipk, "com.couchsubs.tv_0.9.18_all.ipk", "0.9.18", replaceForeign = true)
+        assertEquals(LgInstaller.Result("0.9.18", true), result)
+        assertTrue(tv.commands.any { it.contains("dev/remove") })
+    }
+
+    @Test
     fun upToDateTvIsOnlyLaunched() {
         val tv = FakeTv(installed = "0.9.18")
         assertEquals(LgInstaller.Result("0.9.18", false), LgInstaller(tv).ensureInstalled(ipk, "com.couchsubs.tv_0.9.18_all.ipk", "0.9.18"))

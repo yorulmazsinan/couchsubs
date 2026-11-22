@@ -238,6 +238,47 @@ class AndroidTvTest {
     }
 
     @Test
+    fun recognisesOurSignatureAndOtherApps() {
+        val newFormat = "    signatures=PackageSignatures{a1b2c3 version:2, signatures:[32d37cf9], past signatures:[]}\n"
+        val oldFormat = "    signatures=PackageSignatures{41ab21 [32d37cf9]}\n"
+        val other = "    signatures=PackageSignatures{a1b2c3 version:3, signatures:[1f2e3d4c], past signatures:[]}\n"
+        assertEquals(listOf("32d37cf9"), AndroidTvInstaller.signatureHashes(newFormat))
+        assertEquals(listOf("32d37cf9"), AndroidTvInstaller.signatureHashes(oldFormat))
+        assertFalse(AndroidTvInstaller.isForeign(dumpsys("0.9.74") + newFormat))
+        assertFalse(AndroidTvInstaller.isForeign(dumpsys("0.9.74") + oldFormat.replace("32d37cf9", "32D37CF9")))
+        assertTrue(AndroidTvInstaller.isOurs(dumpsys("0.9.74") + newFormat))
+        assertTrue(AndroidTvInstaller.isForeign(dumpsys("2.0.0") + other))
+        // İmza satırı yok ya da uygulama yok: bilinmiyor, başka uygulama sayılmaz.
+        assertFalse(AndroidTvInstaller.isForeign(dumpsys("2.0.0")))
+        assertFalse(AndroidTvInstaller.isForeign(dumpsys(null) + other))
+    }
+
+    @Test
+    fun otherAppWithOurIdIsRemovedOnlyWithConsent() {
+        val key = tempKey()
+        var removed = false
+        val other = "    signatures=PackageSignatures{a1b2c3 version:3, signatures:[1f2e3d4c], past signatures:[]}\n"
+        val adbd = FakeAdbd(services = { service, _ ->
+            when {
+                // Sürümü bizimkinden yeni: eskiden "güncel" sayılıp o uygulama açılıyordu.
+                service.startsWith("shell:dumpsys") -> if (removed) dumpsys(null) else dumpsys("9.9.9") + other
+                service.startsWith("exec:cmd package install") -> "Success\n"
+                service == "shell:pm uninstall com.couchsubs.tv" -> { removed = true; "Success\n" }
+                else -> ""
+            }
+        }).start(connections = 2)
+        val error = expect<AndroidInstallException> { installer(adbd, key).ensureInstalled({ apk }, "0.9.18") }
+        assertEquals(AndroidInstallError.FOREIGN_APP, error.error)
+        assertFalse(removed)
+        assertFalse(adbd.opened.any { it.contains("uninstall") || it.startsWith("exec:") || it.contains("am start") })
+
+        val result = installer(adbd, key).ensureInstalled({ apk }, "0.9.18", allowReplace = true)
+        assertTrue(result.installed)
+        assertTrue(removed)
+        adbd.join()
+    }
+
+    @Test
     fun playCopyIsNotRemovedWithoutConsent() {
         val key = tempKey()
         var removed = false
@@ -251,7 +292,8 @@ class AndroidTvTest {
             }
         }).start(connections = 2)
         val error = expect<AndroidInstallException> { installer(adbd, key).ensureInstalled({ apk }, "0.9.18") }
-        assertEquals(AndroidInstallError.REPLACE_NEEDED, error.error)
+        // İmza tutmuyor ve imza özeti okunamadı: başka bir uygulama olabilir, aynı onay sorulur.
+        assertEquals(AndroidInstallError.FOREIGN_APP, error.error)
         assertTrue(error.installedFromPlay)
         assertFalse(removed)
         assertFalse(adbd.opened.any { it.contains("uninstall") })

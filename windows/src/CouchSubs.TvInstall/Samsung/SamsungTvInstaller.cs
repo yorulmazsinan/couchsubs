@@ -30,6 +30,8 @@ public enum SamsungInstallError
     PackageBlocked,
     /// <summary>Kurulum sırasında TV bağlantısı koptu.</summary>
     ConnectionLost,
+    /// <summary>TV'de CouchSubs'ın kimliğiyle (CouchSubsT) başka bir uygulama kurulu; kaldırmak için kullanıcı onayı gerekir.</summary>
+    ForeignApp,
 }
 
 /// <param name="detail">Kullanıcıya da gösterilen ayrıntı: TV'nin hata satırı, Samsung'un yanıtı ya da istisna iletisi.</param>
@@ -106,6 +108,12 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     /// yalnız kurulumdan sonra açılıyordu; düğmeye basmak Samsung'da kapalı uygulamayı geri getirmiyordu.
     /// </summary>
     public bool OpenIfInstalled { get; init; }
+
+    /// <summary>
+    /// Kullanıcı "Kaldırıp Kur" dedi: TV'de CouchSubs'ın kimliğini kullanan başka uygulama kaldırılıp CouchSubs kurulur.
+    /// Verilmezse (varsayılan) böyle bir uygulamada <see cref="SamsungInstallError.ForeignApp"/> fırlatılır, hiçbir şey silinmez.
+    /// </summary>
+    public bool ReplaceForeign { get; init; }
 
     /// <summary>
     /// TV'de geliştirici modu açık ve bu bilgisayar kabul ediliyor mu? Samsung yalnız geliştirici modunda girilen IP'den
@@ -214,6 +222,20 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
             Log.Write($"Tizen {platform}: 2016–2018 TV'si, destek deneysel.");
 
         var onTv = await ReadInstalledVersionAsync(device, cancellationToken);
+        if (onTv is not null && IsForeignTitle(lastTitle))
+        {
+            // Bizim kimliğimizle başka adlı bir uygulama: sürümü bizimkinden yüksekse "güncel" sayılıp o açılıyordu.
+            // Samsung'da imza her kullanıcının kendi Samsung sertifikasıdır, ayırt edici değildir; ada (CouchSubs) bakılır.
+            Log.Write($"TV'de CouchSubs kimliğiyle başka bir uygulama var: \"{lastTitle}\" {onTv}.");
+            if (!ReplaceForeign) throw new SamsungInstallException(SamsungInstallError.ForeignApp, $"\"{lastTitle}\" {onTv}");
+            Progress?.Invoke("uninstalling");
+            foreach (var id in new[] { PackageId, AppId })
+            {
+                try { Log.Write($"Kullanıcı onayıyla kaldırılıyor {id}: {(await device.ShellCommandAsync($"0 vd_appuninstall {id}", cancellationToken)).Trim()}"); }
+                catch (Exception error) when (error is not OperationCanceledException) { Log.Write($"{id} kaldırılamadı: {error.Message}"); }
+            }
+            onTv = null;
+        }
         if (version is not null && onTv is not null && !Versions.IsNewer(version, onTv))
         {
             if (OpenIfInstalled) await LaunchAsync(device, cancellationToken);
@@ -317,15 +339,27 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     /// <summary>Son <c>vd_applist</c> okunabildi mi ("CouchSubs yok" ile "bilinmiyor" ayrılsın).</summary>
     private bool lastListRead;
 
+    /// <summary>Son <c>vd_applist</c>'te CouchSubs kimliğindeki uygulamanın adı (app_title); yoksa null.</summary>
+    private string? lastTitle;
+
+    /// <summary>CouchSubs'ın TV'deki adı (tv-tizen/config.xml &lt;name&gt;).</summary>
+    internal const string OurTitle = "CouchSubs";
+
+    /// <summary>Ad biliniyor ve CouchSubs değil: başka bir uygulama bizim kimliğimizi kullanıyor. Ad yoksa yabancı sayılmaz.</summary>
+    internal static bool IsForeignTitle(string? title) =>
+        !string.IsNullOrWhiteSpace(title) && !title.Trim().Equals(OurTitle, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>TV'deki CouchSubs sürümü; uygulama yoksa ya da liste okunamazsa null.</summary>
     private async Task<string?> ReadInstalledVersionAsync(SdbTcpDevice device, CancellationToken cancellationToken)
     {
         lastListRead = false;
+        lastTitle = null;
         try
         {
             var listing = await device.ShellCommandAsync("0 vd_applist", cancellationToken);
             lastListRead = true;
             var found = InstalledVersion(listing);
+            lastTitle = InstalledTitle(listing);
             Log.Write($"vd_applist: {(found is null ? "CouchSubs yok" : $"CouchSubs {found}")} ({listing.Length} karakter)");
             return found;
         }
@@ -340,7 +374,12 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
     /// <c>vd_applist</c> çıktısında CouchSubs'ın sürümü. Çıktı uygulama bloklarından oluşur, her satır
     /// <c>---- anahtar = değer ----</c> biçimindedir (Apps2Samsung'un TizenInstalledApps'i).
     /// </summary>
-    internal static string? InstalledVersion(string? listing)
+    internal static string? InstalledVersion(string? listing) => InstalledField(listing, "app_version");
+
+    /// <summary><c>vd_applist</c> çıktısında CouchSubs kimliğindeki uygulamanın adı (app_title).</summary>
+    internal static string? InstalledTitle(string? listing) => InstalledField(listing, "app_title");
+
+    private static string? InstalledField(string? listing, string key)
     {
         if (string.IsNullOrWhiteSpace(listing)) return null;
         var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -349,8 +388,8 @@ public sealed partial class SamsungTvInstaller(string host, string profilesDirec
         void Flush()
         {
             var ids = new[] { fields.GetValueOrDefault("app_tizen_id"), fields.GetValueOrDefault("app_id") };
-            if (found is null && ids.Any(IsCouchSubs) && fields.GetValueOrDefault("app_version") is { Length: > 0 } version)
-                found = version;
+            if (found is null && ids.Any(IsCouchSubs) && fields.GetValueOrDefault(key) is { Length: > 0 } value)
+                found = value;
             fields.Clear();
         }
 

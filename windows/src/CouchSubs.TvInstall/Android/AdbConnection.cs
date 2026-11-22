@@ -8,7 +8,8 @@ using System.Text;
 
 namespace CouchSubs.TvInstall.Android;
 
-public enum AndroidInstallError { Unreachable, NotApproved, InstallFailed }
+/// <summary>ForeignApp: TV'de com.couchsubs.tv kimliğiyle başka imzalı bir uygulama kurulu; kaldırmak için kullanıcı onayı gerekir.</summary>
+public enum AndroidInstallError { Unreachable, NotApproved, InstallFailed, ForeignApp }
 
 public sealed class AndroidInstallException(AndroidInstallError error, string? detail = null)
     : Exception(detail is null ? error.ToString() : $"{error}: {detail}")
