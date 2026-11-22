@@ -84,3 +84,19 @@ for (const [name, file] of Object.entries(sources)) {
     assert.deepEqual(plain.children, [{ text: 'Sakin ol.', color: null }]);
   });
 }
+
+// Yeni arayüz (style.nameOnly): konuşan rengi yalnız adı boyar, cümle yazı renginde kalır. Alan yoksa eski davranış.
+test('tv: nameOnly açıkken yalnız ad renkli', () => {
+  const source = fs.readFileSync(sources.tv, 'utf8');
+  const start = source.indexOf('  function speakerMap(list)');
+  const end = source.indexOf('  function paintSpeakers(');
+  const close = source.indexOf('\n  }\n', end) + 4;
+  const context = { document: fakeDocument() };
+  vm.runInNewContext(source.slice(start, close) + '\nthis.api = { speakerMap, paintSpeakers };', context);
+  context.speakerNameOnly = true;
+  const map = context.api.speakerMap([{ name: 'Jason', color: '#4FD1C5' }]);
+  const el = element();
+  el.textContent = 'Jason: Tamam. Gidelim.';
+  context.api.paintSpeakers(el, 'Jason: Tamam. Gidelim.', map);
+  assert.deepEqual(el.children, [{ text: 'Jason:', color: '#4FD1C5' }, { text: ' Tamam. Gidelim.', color: null }]);
+});

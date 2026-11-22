@@ -48,7 +48,8 @@ final class ComputerScreenTests: XCTestCase {
         model.step = .tv
         XCTAssertFalse(model.canAdvance)
         model.useComputerScreen()
-        XCTAssertEqual(model.step, .test)
+        // TV yokken TV girişi adımı sorulmaz; sıradaki adım "Daha İyi Çeviri".
+        XCTAssertEqual(model.step, .betterTranslation)
         XCTAssertEqual(model.settings.output, .computer)
         XCTAssertEqual(services.pairCount, 0)
         XCTAssertNil(model.tv)
@@ -61,9 +62,10 @@ final class ComputerScreenTests: XCTestCase {
         // PS5 kayıtlı ama kurulum bitmemiş: sihirbaz TV adımından sürer.
         XCTAssertEqual(model.step, .tv)
         model.useComputerScreen()
-        // Deneme ve isteğe bağlı "Daha iyi çeviri" adımları (Windows'taki testle aynı).
-        model.advance()
+        // İsteğe bağlı "Daha İyi Çeviri" ve deneme adımları (yeni arayüzün sırası).
         XCTAssertEqual(model.step, .betterTranslation)
+        model.advance()
+        XCTAssertEqual(model.step, .test)
         model.advance()
         XCTAssertEqual(model.step, .done)
         XCTAssertEqual(AppModel(services: FakeServices(), store: store, defaults: defaults).step, .done)

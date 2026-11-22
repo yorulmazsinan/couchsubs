@@ -86,6 +86,9 @@ final class SpeakerColorBookTests: XCTestCase {
         XCTAssertEqual(json["textHex"] as? String, "#FFE066")
         XCTAssertEqual(json["backgroundColor"] as? String, "#101014")
         XCTAssertEqual(json["nameOnly"] as? Bool, true)
+        XCTAssertNil(json["hdmiInput"])
+        style.hdmiInput = 2
+        XCTAssertEqual(style.json["hdmiInput"] as? Int, 2)
         let round = try JSONDecoder().decode(SubtitleStyle.self, from: JSONEncoder().encode(style))
         XCTAssertEqual(round, style)
     }

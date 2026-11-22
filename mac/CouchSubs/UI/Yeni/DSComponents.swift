@@ -672,11 +672,11 @@ struct DSSceneBackground: View {
 /// Altyazı kutusu örneği (koyu yarı saydam zemin, beyaz yarı kalın yazı, konuşan adı amber).
 struct DSSubtitleSample: View {
     var speaker: String?
-    let text: String
+    let line: String
     var size: CGFloat = 17
 
     var body: some View {
-        (Text(verbatim: speaker.map { $0 + " " } ?? "").foregroundColor(Color.dsAmber) + Text(verbatim: text).foregroundColor(.white))
+        (Text(verbatim: speaker.map { $0 + " " } ?? "").foregroundColor(Color.dsAmber) + Text(verbatim: line).foregroundColor(.white))
             .font(.system(size: size, weight: .semibold))
             .lineSpacing(3)
             .multilineTextAlignment(.center)

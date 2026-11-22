@@ -1,0 +1,1 @@
+0.9.76: Subtitles can use the background, text and character name colors chosen on the computer; the character color can color only the name. The TV input chosen during setup opens by itself.

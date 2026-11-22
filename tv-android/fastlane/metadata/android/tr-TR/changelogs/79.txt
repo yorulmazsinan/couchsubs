@@ -1,0 +1,1 @@
+0.9.76: Altyazı, bilgisayarda seçilen zemin, yazı ve karakter adı renklerini kullanabilir; karakter rengi yalnız adı boyayabilir. Kurulumda seçilen TV girişi kendiliğinden açılır.

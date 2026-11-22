@@ -590,8 +590,9 @@ extension AppAppearance {
 @MainActor
 final class AppModel: ObservableObject {
     enum Step: Int, CaseIterable {
-        /// `betterTranslation`: isteğe bağlı ücretsiz Gemini anahtarı; atlanabilir.
-        case welcome, secondAccount, psnLogin, console, tv, test, betterTranslation, done
+        /// `betterTranslation`: isteğe bağlı ücretsiz Gemini anahtarı; atlanabilir. Yeni arayüzün sırası (onaylı tuval):
+        /// konsol, hesap, PS5, TV, TV girişi (HDMI; yalnız TV eşleştiyse), daha iyi çeviri, deneme.
+        case welcome, secondAccount, psnLogin, console, tv, hdmi, betterTranslation, test, done
     }
 
     @Published var step: Step {
@@ -783,6 +784,8 @@ final class AppModel: ObservableObject {
     private(set) var frameCount = 0
     private(set) var lastFrameAt: Date?
     @Published var showAbout = false
+    /// Uygulama menüsündeki "Sürüm Notları".
+    @Published var showReleaseNotes = false
     @Published var showSettings = false {
         didSet { if showSettings, !oldValue { usage.record(.screen("settings")) } }
     }
@@ -1313,7 +1316,7 @@ final class AppModel: ObservableObject {
 
     var canAdvance: Bool {
         switch step {
-        case .welcome, .secondAccount, .test, .betterTranslation: true
+        case .welcome, .secondAccount, .test, .betterTranslation, .hdmi: true
         case .psnLogin: isXbox ? xboxSignedIn : accountId != nil
         case .console: isXbox ? xboxConsole != nil : console != nil
         case .tv: hasTV || !settings.output.showsOnTV
@@ -1322,15 +1325,23 @@ final class AppModel: ObservableObject {
     }
 
     func advance() {
-        guard canAdvance, let next = Step(rawValue: step.rawValue + 1) else { return }
+        guard canAdvance, var next = Step(rawValue: step.rawValue + 1) else { return }
         // Xbox'ta "İkinci hesap" adımı yoktur: karşılamadan Microsoft girişine geçilir.
-        step = next == .secondAccount && isXbox ? .psnLogin : next
+        if next == .secondAccount && isXbox { next = .psnLogin }
+        // TV girişi (HDMI) yalnız TV eşleştiyse ve altyazı TV'de gösterilecekse sorulur.
+        if next == .hdmi && !asksTVInput { next = .betterTranslation }
+        step = next
     }
 
     func back() {
-        guard let previous = Step(rawValue: step.rawValue - 1) else { return }
-        step = previous == .secondAccount && isXbox ? .welcome : previous
+        guard var previous = Step(rawValue: step.rawValue - 1) else { return }
+        if previous == .secondAccount && isXbox { previous = .welcome }
+        if previous == .hdmi && !asksTVInput { previous = .tv }
+        step = previous
     }
+
+    /// Kurulumda TV girişi (HDMI) adımı gösterilir mi (Android TV girişi kendi seçer; görüntü modu ayrı).
+    var asksTVInput: Bool { hasTV && settings.output.showsOnTV && tv?.brand != .androidTV }
 
     // MARK: - Xbox (Beta)
 

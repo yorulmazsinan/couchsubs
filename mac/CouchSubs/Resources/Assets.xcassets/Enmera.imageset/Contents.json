@@ -1,0 +1,7 @@
+{
+  "images": [
+    { "filename": "enmera-black.png", "idiom": "universal" },
+    { "appearances": [{ "appearance": "luminosity", "value": "dark" }], "filename": "enmera-white.png", "idiom": "universal" }
+  ],
+  "info": { "author": "xcode", "version": 1 }
+}

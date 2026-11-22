@@ -251,10 +251,19 @@
   }
 
   /// Sayfa renkli zeminliyse yarı saydam kutu zeminle karışıp chroma key'i bozar; kutu ya tam koyu ya hiç yoktur.
+  // Zeminin rengi (yeni arayüz: style.backgroundColor, "#RRGGBB"); göndermeyen bilgisayarda siyah.
+  var boxRgb = '0, 0, 0';
+
+  function hexRgb(hex) {
+    if (typeof hex !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return null;
+    var value = parseInt(hex.slice(1), 16);
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  }
+
   function boxColor(percent) {
     var alpha = Math.max(0, Math.min(100, percent)) / 100;
     if (pageColor) alpha = alpha > 0 ? 1 : 0;
-    return 'rgba(0, 0, 0, ' + alpha + ')';
+    return 'rgba(' + boxRgb + ', ' + alpha + ')';
   }
 
   function apply(style) {
@@ -271,11 +280,15 @@
       // İngilizce satıra göre yerleşen altyazının kabı ayar gelince sabit yüksekliğe kaymasın.
       if (shownMode === 'fixed') wrap.style.bottom = bottom + '%';
     }
+    var rgb = hexRgb(style.backgroundColor);
+    boxRgb = rgb ? rgb.join(', ') : '0, 0, 0';
+    speakerNameOnly = style.nameOnly === true;
     var bg = fixed.bg !== null ? Number(fixed.bg) : style.background;
     if (typeof bg === 'number' && !isNaN(bg)) line.style.background = boxColor(bg);
     else if (pageColor) line.style.background = boxColor(60);
     if (typeof style.bold === 'boolean') line.style.fontWeight = style.bold ? '700' : '600';
-    if (TEXT_COLORS[style.textColor]) line.style.color = TEXT_COLORS[style.textColor];
+    if (hexRgb(style.textHex)) line.style.color = style.textHex;
+    else if (TEXT_COLORS[style.textColor]) line.style.color = TEXT_COLORS[style.textColor];
     if (style.placement) placement = style.placement;
     for (var id in regions) styleRegion(regions[id]);
   }
@@ -543,6 +556,9 @@
     return segments;
   }
 
+  // Konuşan rengi yalnız adı boyar (style.nameOnly; TV uygulamasıyla aynı).
+  var speakerNameOnly = false;
+
   function paintSpeakers(el, text, map) {
     var segments = speakerSegments(text, map);
     if (segments.length === 1 && !segments[0].color) return;
@@ -552,11 +568,21 @@
         el.appendChild(document.createTextNode(segments[i].text));
         continue;
       }
+      var colored = segments[i].text;
+      var rest = '';
+      if (speakerNameOnly) {
+        var colon = colored.search(/[:\uFF1A]/);
+        if (colon >= 0) {
+          rest = colored.slice(colon + 1);
+          colored = colored.slice(0, colon + 1);
+        }
+      }
       var span = document.createElement('span');
       span.className = 'speaker';
       span.style.color = segments[i].color;
-      span.textContent = segments[i].text;
+      span.textContent = colored;
       el.appendChild(span);
+      if (rest) el.appendChild(document.createTextNode(rest));
     }
   }
 

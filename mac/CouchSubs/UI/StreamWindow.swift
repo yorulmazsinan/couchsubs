@@ -159,7 +159,8 @@ struct StreamWindowView: View {
         let shown: Double = line.fading ? 0 : 1
         let colored = model.settings.speakerColors && !line.paragraphs
         let text = SubtitleOverlayView.subtitleText(wrapped.text, colored: colored,
-                                                    base: SubtitleOverlayView.color(style.textColor), book: model.speakerBook)
+                                                    base: SubtitleOverlayView.textColor(style), book: model.speakerBook,
+                                                    nameOnly: style.nameOnly)
             .font(.system(size: size, weight: weight))
         return text
             .opacity(textOpacity)
@@ -169,7 +170,7 @@ struct StreamWindowView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, vertical)
             .padding(.horizontal, horizontal)
-            .background(Color.black.opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
+            .background(SubtitleOverlayView.boxColor(style).opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
             .opacity(shown)
             .animation(.linear(duration: SubtitleStack.previousFade), value: line.fading)
     }

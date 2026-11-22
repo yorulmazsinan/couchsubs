@@ -14,6 +14,8 @@ enum ShellTab: Hashable {
 struct AppShell: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Açılır reklam (günde en çok bir; açılışta ya da çeviri durunca).
+    @State private var popupAd: PopupAd?
 
     private var tab: Binding<ShellTab> {
         Binding(get: { model.showSettings ? .settings : model.showHistory ? .history : .home },
@@ -47,6 +49,22 @@ struct AppShell: View {
         .background(Color.dsBackground)
         .animation(DS.animation(.page, reduced: reduceMotion || !model.settings.transitionAnimations), value: tab.wrappedValue)
         .environment(\.dsMotionOff, !model.settings.transitionAnimations)
+        .overlay {
+            if let popupAd {
+                ZStack {
+                    Color.dsScrim.ignoresSafeArea().onTapGesture { self.popupAd = nil }
+                    PopupAdView(ad: popupAd) { self.popupAd = nil }
+                        .shadow(color: .black.opacity(0.28), radius: 32, y: 24)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(DS.animation(.page, reduced: reduceMotion || !model.settings.transitionAnimations), value: popupAd)
+        .onAppear { popupAd = PopupAdSchedule.next(model: model) }
+        .onChange(of: model.isRunning) { running in
+            // Çeviri başlayınca açık reklam kapanır; çeviri durunca (günde bir) gösterilebilir.
+            popupAd = running ? nil : PopupAdSchedule.next(model: model)
+        }
         .newLook()
         .alert(item: $model.tvPairingRequest) { ticket in
             Alert(title: Text("Pair this TV?"),

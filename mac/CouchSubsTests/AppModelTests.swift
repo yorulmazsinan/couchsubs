@@ -268,6 +268,8 @@ final class AppModelTests: XCTestCase {
         let defaults = UserDefaults.isolated()
         let model = wizardUpToTV(store, defaults)
         try await model.pair(LGTV(name: "Samsung", host: "192.168.1.20", brand: .samsung))
+        // TV → TV girişi → daha iyi çeviri → deneme → bitti.
+        model.advance()
         model.advance()
         model.advance()
         model.advance()
@@ -662,11 +664,15 @@ final class AppModelTests: XCTestCase {
         try await model.register(host: "192.168.1.253", pin: "12345678"); model.advance()
         XCTAssertEqual(model.step, .tv)
         try await model.pair(LGTV(name: "LG TV", host: "192.168.1.153")); model.advance()
-        XCTAssertEqual(model.step, .test); model.advance()
+        XCTAssertEqual(model.step, .hdmi); model.advance()
         XCTAssertEqual(model.step, .betterTranslation)
         XCTAssertTrue(model.canAdvance)
         model.advance()
+        XCTAssertEqual(model.step, .test); model.advance()
         XCTAssertEqual(model.step, .done)
+        model.step = .betterTranslation; model.back()
+        XCTAssertEqual(model.step, .hdmi); model.back()
+        XCTAssertEqual(model.step, .tv)
     }
 
     /// "Daha iyi çeviri" adımı isteğe bağlıdır: geçilirse ücretsiz çeviri kalır; anahtar kabul edilirse Gemini seçilir.
@@ -676,12 +682,13 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.usesFreeGemini)
         XCTAssertTrue(model.canAdvance)
         model.advance()
-        XCTAssertEqual(model.step, .done)
+        XCTAssertEqual(model.step, .test)
         XCTAssertEqual(model.settings.translationEngine, .free)
         model.back()
         XCTAssertEqual(model.step, .betterTranslation)
+        // TV yok: TV girişi adımı atlanır.
         model.back()
-        XCTAssertEqual(model.step, .test)
+        XCTAssertEqual(model.step, .tv)
     }
 
     func testBetterTranslationStepSavesTheKeyAndSelectsGemini() async {
@@ -699,6 +706,8 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(store.load(String.self, for: StoreKey.geminiKey), "AIza-free")
         XCTAssertEqual(model.settings.translationEngine, .gemini)
         XCTAssertTrue(model.usesFreeGemini)
+        model.advance()
+        XCTAssertEqual(model.step, .test)
         model.advance()
         XCTAssertEqual(model.step, .done)
     }

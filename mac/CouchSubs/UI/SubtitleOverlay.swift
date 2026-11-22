@@ -445,7 +445,8 @@ struct SubtitleOverlayView: View {
         let corner: CGFloat = band ? 0 : 10 * scale
         let shown: Double = line.fading ? 0 : opacity
         let colored = model.settings.speakerColors && !line.paragraphs
-        let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.color(style.textColor), book: model.speakerBook)
+        let text = Self.subtitleText(wrapped.text, colored: colored, base: Self.textColor(style), book: model.speakerBook,
+                                     nameOnly: style.nameOnly)
             .font(.system(size: size, weight: weight))
         let padded = text
             .multilineTextAlignment(alignment)
@@ -456,7 +457,7 @@ struct SubtitleOverlayView: View {
             .padding(.horizontal, horizontal)
         return CoverFrame(minimum: cover) { padded }
             .frame(maxWidth: band ? .infinity : nil)
-            .background(Color.black.opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
+            .background(Self.boxColor(style).opacity(alpha), in: RoundedRectangle(cornerRadius: corner))
             .opacity(shown)
             .animation(.linear(duration: SubtitleStack.previousFade), value: line.fading)
             .contentShape(Rectangle())
@@ -511,12 +512,28 @@ struct SubtitleOverlayView: View {
 
     /// Altyazı yazısı. Konuşana göre renk açıksa "Mattia: …" satırı (bölünmüş devamıyla) o konuşanın renginde
     /// (bkz. `SpeakerColors`); adsız satırlar ve görev paneli gibi paragraflar `base` renginde kalır.
-    static func subtitleText(_ text: String, colored: Bool, base: Color, book: SpeakerColorBook? = nil) -> Text {
+    static func subtitleText(_ text: String, colored: Bool, base: Color, book: SpeakerColorBook? = nil, nameOnly: Bool = false) -> Text {
         guard colored else { return Text(verbatim: text).foregroundColor(base) }
         return SpeakerColors.segments(in: text, book: book).reduce(Text(verbatim: "")) { result, segment in
             let color = segment.color.flatMap(speakerColor) ?? base
+            // Yeni arayüz (style.nameOnly): yalnız ad ve iki nokta renkli, cümle yazı renginde (TV uygulamasıyla aynı).
+            if nameOnly, segment.color != nil, let colon = segment.text.firstIndex(where: { $0 == ":" || $0 == "\u{FF1A}" }) {
+                let name = segment.text[...colon]
+                let rest = segment.text[segment.text.index(after: colon)...]
+                return result + Text(verbatim: String(name)).foregroundColor(color) + Text(verbatim: String(rest)).foregroundColor(base)
+            }
             return result + Text(verbatim: segment.text).foregroundColor(color)
         }
+    }
+
+    /// Yazı rengi: yeni arayüzün seçimi (textHex) varsa o, yoksa eski beyaz/sarı.
+    static func textColor(_ style: SubtitleStyle) -> Color {
+        style.textHex.flatMap(speakerColor) ?? color(style.textColor)
+    }
+
+    /// Kutunun zemin rengi (yeni arayüzde seçilir; eski kayıtta siyah).
+    static func boxColor(_ style: SubtitleStyle) -> Color {
+        speakerColor(style.backgroundColor) ?? .black
     }
 
     private static func speakerColor(_ hex: String) -> Color? {

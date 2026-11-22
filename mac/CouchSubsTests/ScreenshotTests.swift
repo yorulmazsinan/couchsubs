@@ -44,9 +44,17 @@ final class ScreenshotTests: XCTestCase {
             try capture(window).write(to: folder.appendingPathComponent("\(name).png"))
             window.close()
         }
-        let setupWindow = show(AnyView(OnboardingView().environmentObject(setup)), size: size, offset: 40)
-        try await Task.sleep(for: .seconds(1.5))
-        try capture(setupWindow).write(to: folder.appendingPathComponent("kurulum.png"))
+        // Kurulum adımları (karşılama adımı ilk kurulumda açılış animasyonunu gösterir).
+        let steps: [(String, AppModel.Step)] = [("kurulum-0-acilis", .welcome), ("kurulum-2-hesap", .secondAccount),
+                                                ("kurulum-2b-giris", .psnLogin), ("kurulum-3-ps5", .console), ("kurulum-5-tv", .tv),
+                                                ("kurulum-6-hdmi", .hdmi), ("kurulum-7-ceviri", .betterTranslation), ("kurulum-8-dene", .test)]
+        for (name, step) in steps where only == nil || name.hasPrefix(only!) {
+            setup.step = step
+            let window = show(AnyView(WizardView().environmentObject(setup)), size: size, offset: 40)
+            try await Task.sleep(for: .seconds(step == .welcome ? 3.5 : 2))
+            try capture(window).write(to: folder.appendingPathComponent("\(name).png"))
+            window.close()
+        }
         windows.forEach { $0.close() }
     }
 

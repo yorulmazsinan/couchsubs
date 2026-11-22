@@ -80,13 +80,16 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
     public var characterColors: [String: String]
     /// Konuşan rengi yalnız adı boyar (yeni arayüz); false ise eski davranış: ad ve satır o renkte. TV'ye `nameOnly`.
     public var nameOnly: Bool
+    /// Kurulumda seçilen TV girişi (HDMI 1–4); TV uygulaması değer değişince o girişi açar (TV'de elle seçilen giriş,
+    /// aynı değer yeniden gelince ezilmez). nil: seçilmedi. TV'ye `hdmiInput`.
+    public var hdmiInput: Int?
 
     public static let defaultBackgroundColor = "#101014"
 
     public init(fontSize: Int = 46, bottomPercent: Int = 7, placement: SubtitlePlacement = .cover, background: Int = 90, backgroundShape: SubtitleBackgroundShape = .fit, bold: Bool = false,
                 textColor: SubtitleTextColor = .white, displayMode: TVDisplayMode = .auto, stackPrevious: Bool = true,
                 backgroundColor: String = SubtitleStyle.defaultBackgroundColor, textHex: String? = nil, nameColorMode: NameColorMode = .speaker,
-                nameHex: String? = nil, characterColors: [String: String] = [:], nameOnly: Bool = false) {
+                nameHex: String? = nil, characterColors: [String: String] = [:], nameOnly: Bool = false, hdmiInput: Int? = nil) {
         self.fontSize = fontSize
         self.bottomPercent = bottomPercent
         self.placement = placement
@@ -102,11 +105,12 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         self.nameHex = nameHex
         self.characterColors = characterColors
         self.nameOnly = nameOnly
+        self.hdmiInput = hdmiInput
     }
 
     private enum CodingKeys: String, CodingKey {
         case fontSize, bottomPercent, placement, background, backgroundShape, bold, textColor, displayMode, stackPrevious
-        case backgroundColor, textHex, nameColorMode, nameHex, characterColors, nameOnly
+        case backgroundColor, textHex, nameColorMode, nameHex, characterColors, nameOnly, hdmiInput
     }
 
     /// Eski sürümün kaydettiği ayarlarda yeni alanlar yoktur; eksikler varsayılanla dolar.
@@ -129,6 +133,7 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
         characterColors = ((try? values.decodeIfPresent([String: String].self, forKey: .characterColors)) ?? nil)?
             .compactMapValues { Self.hex($0) } ?? [:]
         nameOnly = (try? values.decodeIfPresent(Bool.self, forKey: .nameOnly)) ?? defaults.nameOnly
+        hdmiInput = ((try? values.decodeIfPresent(Int.self, forKey: .hdmiInput)) ?? nil).flatMap { (1...4).contains($0) ? $0 : nil }
     }
 
     /// Geçerli "#RRGGBB" ise büyük harfle; değilse nil.
@@ -144,6 +149,7 @@ public struct SubtitleStyle: Codable, Equatable, Sendable {
          "displayMode": displayMode.rawValue, "stackPrevious": stackPrevious,
          "backgroundColor": backgroundColor, "nameOnly": nameOnly]
             .merging(textHex.map { ["textHex": $0] } ?? [:]) { $1 }
+            .merging(hdmiInput.map { ["hdmiInput": $0] } ?? [:]) { $1 }
     }
 }
 

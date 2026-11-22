@@ -29,6 +29,15 @@ struct CouchSubsApp: App {
         updaterDelegate: nil, userDriverDelegate: nil)
     #endif
 
+    /// Hakkında'daki "Güncellemeleri Denetle…" (Mac App Store sürümünde yok).
+    private var checkForUpdates: (() -> Void)? {
+        #if APP_STORE
+        nil
+        #else
+        { [updater] in updater.checkForUpdates(nil) }
+        #endif
+    }
+
     /// Testler uygulamanın içinde çalışır. Gerçek Anahtarlığa dokunmazlar: imza farklı olunca macOS parola sorar ve test takılır.
     private static func makeModel() -> AppModel {
         // Testlerde ayarlar da gerçek kayda (com.couchsubs.mac) yazılmaz.
@@ -42,6 +51,7 @@ struct CouchSubsApp: App {
             RootView()
                 .environmentObject(model)
                 // Sparkle kendi takviminde günde bir bakar; yeni sürüm her açılışta fark edilsin diye açılışta da sessizce bakılır.
+                .environment(\.checkForUpdates, checkForUpdates)
                 .task {
                     overlay.attach(model)
                     stream.attach(model)
@@ -62,8 +72,9 @@ struct CouchSubsApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About CouchSubs") { model.showAbout = true }
+                Button("Release Notes") { model.showReleaseNotes = true }
                 #if !APP_STORE
-                Button("Check for updates…") { updater.checkForUpdates(nil) }
+                Button("Check for Updates…") { updater.checkForUpdates(nil) }
                 #endif
             }
             CommandGroup(replacing: .appSettings) {
@@ -73,16 +84,12 @@ struct CouchSubsApp: App {
             }
         }
         // Altyazı bilgisayar ekranındayken menü çubuğundan pencereye ulaşılır ("Tıklamalar geçsin" açıkken geri dönüş yolu).
+        // Yeni arayüzde pencere biçiminde (tuval 17): durum, Çeviriyi Başlat/Durdur, Tıklamalar Geçsin, Konumlandır, Aç.
         MenuBarExtra("CouchSubs", systemImage: "captions.bubble",
                      isInserted: Binding(get: { model.step == .done && model.settings.output.showsOnComputer }, set: { _ in })) {
-            Toggle("Clicks pass through", isOn: Binding(get: { model.settings.overlayClickThrough },
-                                                        set: { model.settings.overlayClickThrough = $0 }))
-            Button("Position the subtitles") { model.overlayAdjusting = true }
-            Divider()
-            Button("Open CouchSubs") {
-                if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
-            }
+            MenuBarPanel().environmentObject(model)
         }
+        .menuBarExtraStyle(.window)
     }
 }
 
@@ -92,10 +99,11 @@ struct RootView: View {
     var body: some View {
         Group {
             // Deneme modu kurulumdan bağımsızdır: sihirbazın hangi adımından açılırsa açılsın ana pencere görünür.
-            if model.step == .done || model.demoMode { AppShell() } else { OnboardingView() }
+            if model.step == .done || model.demoMode { AppShell() } else { WizardView() }
         }
         .onAppear { model.adoptNewDesign() }
-        .sheet(isPresented: $model.showAbout) { AboutView().appSurface() }
+        .sheet(isPresented: $model.showAbout) { NewAboutView() }
+        .sheet(isPresented: $model.showReleaseNotes) { ReleaseNotesView() }
     }
 }
 

@@ -166,7 +166,9 @@
   var bold = false;
   function applyStyle(style) {
     if (!style) return;
-    color = style.textColor === 'yellow' ? '#ffe135' : '#ffffff';
+    // Yeni arayüzün yazı rengi (style.textHex) varsa o; yoksa eski beyaz/sarı.
+    color = typeof style.textHex === 'string' && /^#[0-9A-Fa-f]{6}$/.test(style.textHex) ? style.textHex
+      : style.textColor === 'yellow' ? '#ffe135' : '#ffffff';
     bold = !!style.bold;
     if (current) { line.style.color = color; line.className = 'on' + (bold ? ' bold' : ''); fit(line, 2); }
   }

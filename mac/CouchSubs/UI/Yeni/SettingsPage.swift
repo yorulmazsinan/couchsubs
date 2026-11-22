@@ -839,6 +839,16 @@ private struct ConsoleSettings: View {
                     FrameSourceCard()
                 }
             }
+            if model.asksTVInput {
+                // Kurulumda seçilen TV girişi; değişince TV uygulaması o girişi açar (style.hdmiInput).
+                DSCard(scrolls: false) {
+                    DSCardHeader("TV INPUT (HDMI)")
+                    DSTabs(selection: Binding(get: { model.settings.style.hdmiInput }, set: { value in
+                        model.settings.style.hdmiInput = value
+                        model.sendTestSubtitle()
+                    }), items: (1...4).map { (Int?.some($0), LocalizedStringKey("HDMI \($0)")) })
+                }
+            }
             DSCard(scrolls: false) {
                 DSCardHeader("LANGUAGE")
                 LanguageCard()

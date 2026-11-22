@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.75';
+  var APP_VERSION = '0.9.76';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -621,6 +621,10 @@
     return segments;
   }
 
+  // Yeni arayüzdeki "Karakter Adı" rengi yalnız adı boyar (style.nameOnly); alanı göndermeyen bilgisayarda eskisi gibi
+  // ad ve satır o renkte.
+  var speakerNameOnly = false;
+
   function paintSpeakers(el, text, map) {
     var segments = speakerSegments(text, map);
     if (segments.length === 1 && !segments[0].color) return;
@@ -630,11 +634,21 @@
         el.appendChild(document.createTextNode(segments[i].text));
         continue;
       }
+      var colored = segments[i].text;
+      var rest = '';
+      if (speakerNameOnly) {
+        var colon = colored.search(/[:：]/);
+        if (colon >= 0) {
+          rest = colored.slice(colon + 1);
+          colored = colored.slice(0, colon + 1);
+        }
+      }
       var span = document.createElement('span');
       span.className = 'speaker';
       span.style.color = segments[i].color;
-      span.textContent = segments[i].text;
+      span.textContent = colored;
       el.appendChild(span);
+      if (rest) el.appendChild(document.createTextNode(rest));
     }
   }
 
@@ -1760,6 +1774,13 @@
   // Bilgisayardaki "Yazı rengi" seçimi; bilinmeyen değer gelirse renk değişmez.
   var TEXT_COLORS = { white: '#FFFFFF', yellow: '#FFE135' };
 
+  // "#RRGGBB" → [r, g, b]; geçersizse null.
+  function hexRgb(hex) {
+    if (typeof hex !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return null;
+    var value = parseInt(hex.slice(1), 16);
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  }
+
   function applyStyle(style) {
     if (style.fontSize) {
       fontBase = style.fontSize;
@@ -1776,13 +1797,17 @@
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;
       // Zemin saydamsa yazıya sert kontur eklenir (style.css, body.thin-bg).
       setBodyClass('thin-bg', alpha < 0.5);
-      // Saf siyah değil, hafif mavimsi siyah (#0c0e12): oyun görüntüsünün üstünde daha yumuşak durur.
-      textBackground = 'rgba(12, 14, 18, ' + alpha + ')';
-      coverBackground = style.background >= 100 ? '#0c0e12' : textBackground;
+      // Saf siyah değil, hafif mavimsi siyah (#0c0e12): oyun görüntüsünün üstünde daha yumuşak durur. Yeni arayüz
+      // zemin rengini gönderir (style.backgroundColor, "#RRGGBB"); göndermeyen bilgisayarda eski renk.
+      var rgb = hexRgb(style.backgroundColor) || [12, 14, 18];
+      var base = rgb[0] + ', ' + rgb[1] + ', ' + rgb[2];
+      textBackground = 'rgba(' + base + ', ' + alpha + ')';
+      coverBackground = style.background >= 100 ? 'rgb(' + base + ')' : textBackground;
       $('subtitle-text').style.background = textBackground;
-      $('subtitle-prev-text').style.background = 'rgba(12, 14, 18, ' + (alpha * 0.83).toFixed(2) + ')';
-      $('subtitle-prev2-text').style.background = 'rgba(12, 14, 18, ' + (alpha * 0.83).toFixed(2) + ')';
+      $('subtitle-prev-text').style.background = 'rgba(' + base + ', ' + (alpha * 0.83).toFixed(2) + ')';
+      $('subtitle-prev2-text').style.background = 'rgba(' + base + ', ' + (alpha * 0.83).toFixed(2) + ')';
     }
+    speakerNameOnly = style.nameOnly === true;
     // Ayarı göndermeyen bilgisayar (eski Windows sürümü, Mac) eski davranışı bekler: önceki satırlar üstte kalır.
     // Yoksa bir kez kapatılan ayar başka bilgisayara bağlanınca da kapalı kalırdı.
     stackPrevious = typeof style.stackPrevious === 'boolean' ? style.stackPrevious : true;
@@ -1793,15 +1818,22 @@
       $('subtitle-prev-text').style.fontWeight = style.bold ? '700' : '400';
       $('subtitle-prev2-text').style.fontWeight = style.bold ? '700' : '400';
     }
-    if (TEXT_COLORS[style.textColor]) {
-      $('subtitle-text').style.color = TEXT_COLORS[style.textColor];
-      $('subtitle-prev-text').style.color = TEXT_COLORS[style.textColor];
-      $('subtitle-prev2-text').style.color = TEXT_COLORS[style.textColor];
+    // Yeni arayüzün yazı rengi (style.textHex) eski beyaz/sarı seçiminin önüne geçer.
+    var textColor = hexRgb(style.textHex) ? style.textHex : TEXT_COLORS[style.textColor];
+    if (textColor) {
+      $('subtitle-text').style.color = textColor;
+      $('subtitle-prev-text').style.color = textColor;
+      $('subtitle-prev2-text').style.color = textColor;
     }
     // Ekrandaki yazı yeni ayarlarla yeniden bölünür: yazı boyu, kalınlık, yerleşim ve bant bölmeyi değiştirir.
     var shown = rawText('subtitle-text');
     if ($('subtitle-text').rawText !== undefined && shown) setLineText('subtitle-text', shown, !!shownParagraphs, fontBase, $('subtitle-text').speakers);
     layout();
+    // Kurulumda bilgisayarda seçilen TV girişi: yalnız değer değişince açılır (TV'de elle seçilen giriş ezilmez).
+    if (style.hdmiInput >= 1 && style.hdmiInput <= 4 && String(style.hdmiInput) !== load('appHdmi')) {
+      save('appHdmi', style.hdmiInput);
+      chooseHdmi(Number(style.hdmiInput));
+    }
     if (style.bottomPercent >= 0 && String(style.bottomPercent) !== load('appBottom')) {
       save('appBottom', style.bottomPercent);
       save('bottom', '');

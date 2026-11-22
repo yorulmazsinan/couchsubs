@@ -36,6 +36,7 @@ extension AppModel.Step {
         case .psnLogin: "psn_login"
         case .console: "console"
         case .tv: "tv"
+        case .hdmi: "tv_input"
         case .test: "test"
         case .betterTranslation: "better_translation"
         case .done: "home"

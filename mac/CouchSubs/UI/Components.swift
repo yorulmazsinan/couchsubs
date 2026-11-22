@@ -513,21 +513,28 @@ struct StepLayout<Content: View>: View {
     let title: LocalizedStringKey
     let message: LocalizedStringKey
     @ViewBuilder var content: Content
+    @Environment(\.csNewLook) private var newLook
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.space("l")) {
-            Text(title)
-                .font(.csDisplay)
-            Text(message)
-                .font(.csBody)
-                .foregroundStyle(Color.csSecondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-            content
-                .padding(.top, Theme.space("s"))
-            Spacer(minLength: 0)
+        // Yeni arayüzde başlık ve açıklamayı sihirbazın kendisi (tuvaldeki metinlerle) çizer; adım yalnız içeriğini verir.
+        if newLook {
+            VStack(alignment: .leading, spacing: 16) { content }
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: Theme.space("l")) {
+                Text(title)
+                    .font(.csDisplay)
+                Text(message)
+                    .font(.csBody)
+                    .foregroundStyle(Color.csSecondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                content
+                    .padding(.top, Theme.space("s"))
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
