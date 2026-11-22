@@ -250,7 +250,8 @@ public final class ReadQueue: @unchecked Sendable {
             // Altyazı, asıl okuyucudaki uzun bir okumanın arkasında `subtitleTimeoutMs`'ten fazla beklemez: yedek varsa o
             // okuma takılı sayılır, altyazı (ve öbür bekleyenler) yedeğe geçer.
             let limitMs = subtitleTimeoutMs
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self, weak item] in
+                guard let item else { return }
                 let blocker: (item: Item, lane: Lane)? = lock.withLock {
                     guard rescueUsable, primary.pending.contains(where: { $0 === item }), let running = primary.running, !running.expired,
                           let started = running.started, Self.uptimeMs() - started >= limitMs else { return nil }
@@ -260,7 +261,11 @@ public final class ReadQueue: @unchecked Sendable {
             }
         }
         // Sırada `timeoutMs` bekleyen okuma artık bayattır; kare atlanır.
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [self] in
+        // Zamanlayıcılar okumayı zayıf tutar (`weak item`): biten okumanın karesi (ve kırpığın bağlı olduğu bütün kare)
+        // hemen bırakılır. Eskiden her okuma karesini 10 sn tutuyordu; Mac'te pencere yakalamanın (ScreenCaptureKit) üç
+        // karelik havuzu tutulan karelerle dolunca yeni kare gelmiyor, altyazı ~10,6 sn arayla okunuyordu (GitHub #822).
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { [self, weak item] in
+            guard let item else { return }
             // Asıl okuyucu bu arada takıldıysa okuma yedeğin sırasına taşınmıştır.
             let waiting = lock.withLock {
                 for lane in [primary, rescue] {
@@ -300,7 +305,8 @@ public final class ReadQueue: @unchecked Sendable {
             Thread.current.threadDictionary.removeObject(forKey: Self.rescuerKey)
             finished(item, on: lane)
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self] in
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self, weak item, weak lane] in
+            guard let item, let lane else { return }
             overdue(item, on: lane)
         }
     }

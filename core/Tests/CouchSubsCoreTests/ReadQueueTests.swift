@@ -66,6 +66,32 @@ final class ReadQueueTests: XCTestCase {
                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
     }
 
+    /// Biten okumanın karesi hemen bırakılır; süre zamanlayıcıları onu `timeoutMs` boyunca tutmaz (GitHub #822). Mac'te
+    /// pencere yakalamanın karesi okuma sırasındaki görüntüye bağlıdır; her okuma karesini 10 sn tutunca ScreenCaptureKit'in
+    /// üç karelik havuzu doluyor, yeni kare gelmiyor, altyazı ~10,6 sn arayla okunuyordu.
+    func testFinishedReadReleasesItsFrameBeforeTimeout() async throws {
+        let queue = ReadQueue(label: "test.release", timeoutMs: 60_000, subtitleTimeoutMs: 30_000)
+        queue.rescuer = FakeRescuer()
+        final class Frame: @unchecked Sendable {}
+        weak var subtitleFrame: Frame?
+        weak var backgroundFrame: Frame?
+        do {
+            let frame = Frame()
+            subtitleFrame = frame
+            _ = try await queue.run(priority: .subtitle) { _ = frame; return 1 }
+        }
+        do {
+            let frame = Frame()
+            backgroundFrame = frame
+            _ = try await queue.run(priority: .background) { _ = frame; return 2 }
+        }
+        for _ in 0..<100 where subtitleFrame != nil || backgroundFrame != nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNil(subtitleFrame, "altyazı okumasının karesi okuma bitince bırakılmalı")
+        XCTAssertNil(backgroundFrame, "arka plan okumasının karesi okuma bitince bırakılmalı")
+    }
+
     /// Yedek yokken: takılan okumanın yanına yenisi verilmez (Vision'da o da aynı kilidi bekler); okuma hemen `stuck`
     /// döner, takılan bitince okuyucu kendiliğinden düzelir.
     func testStalledReaderWithoutRescueFailsFastAndRecovers() async throws {

@@ -261,3 +261,16 @@ final class WindowCaptureWatchTests: XCTestCase {
         XCTAssertNil(watch.tick(sinceStart: 201))
     }
 }
+
+/// Dakikalık kare sayımı: günlük satırı ve sıfırlama (GitHub #822).
+final class WindowFrameCountsTests: XCTestCase {
+    func testMinuteLineCountsAndResets() {
+        let counts = WindowFrameCounts()
+        for _ in 0..<3 { counts.delivered() }
+        counts.idle()
+        counts.fallback()
+        counts.fallback()
+        XCTAssertEqual(counts.minuteLine(), "pencere kareleri: 3/dk, boş: 1, yedek: 2")
+        XCTAssertEqual(counts.minuteLine(), "pencere kareleri: 0/dk, boş: 0, yedek: 0")
+    }
+}

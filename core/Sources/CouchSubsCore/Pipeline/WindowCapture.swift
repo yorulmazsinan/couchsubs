@@ -255,3 +255,31 @@ public struct BlackFrameWatch: Sendable {
         return true
     }
 }
+
+/// Pencere yakalamanın dakikalık kare sayımı (GitHub #822). Mac'te Remote Play penceresinden altyazı ~10,6 sn arayla
+/// okunuyordu ve günlükte nedeni görünmüyordu: kareler mi gelmiyor, okuma mı beklemede, ayırt edilemiyordu. Dakikada bir
+/// "pencere kareleri: 600/dk, boş: 12, yedek: 0" yazılır (Windows: WindowFrameCounts.cs). İş parçacığı güvenlidir.
+public final class WindowFrameCounts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames = 0
+    private var idleFrames = 0
+    private var fallbackFrames = 0
+
+    public init() {}
+
+    /// Okumaya verilen kare (yakalama akışından).
+    public func delivered() { lock.withLock { frames += 1 } }
+    /// Değişmeyen ekranda gelen boş kare (okunmaz).
+    public func idle() { lock.withLock { idleFrames += 1 } }
+    /// Yedek yakalamadan (tek tek görüntü) okumaya verilen kare.
+    public func fallback() { lock.withLock { fallbackFrames += 1 } }
+
+    /// Son dakikanın günlük satırı; sayaçlar sıfırlanır.
+    public func minuteLine() -> String {
+        let (frames, idle, fallback) = lock.withLock {
+            defer { self.frames = 0; idleFrames = 0; fallbackFrames = 0 }
+            return (self.frames, idleFrames, fallbackFrames)
+        }
+        return "pencere kareleri: \(frames)/dk, boş: \(idle), yedek: \(fallback)"
+    }
+}
