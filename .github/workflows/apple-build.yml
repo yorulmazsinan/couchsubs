@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Mac ve iPhone uygulamaları derleniyor mu? Ortak Swift dosyaları (mac/CouchSubs/UI/Components.swift vb.) iPhone hedefinde
+# de derlenir; tek platformda tanımlı bir sembol ötekini kırarsa PR kırmızı olur. İmza, paketleme ve test yok: yalnız
+# `xcodebuild build`. Yalnız mac/, couchsubs-ios/, core/, remoteplay/ ve tasarım dosyaları değişince çalışır.
+#
+# CChiaki.xcframework (chiaki-ng libchiaki) release.yml'deki gibi kaynaktan derlenir (build-chiaki-macos.sh,
+# build-chiaki-ios.sh); dilimler chiaki-ng sürümü ve derleme betikleri değişmedikçe önbellekten gelir. main ve
+# yeni-arayuz'a gönderimde de çalışır ki PR'lar bu dallarda kaydedilen önbelleği bulsun.
+name: apple-build
+
+on:
+  pull_request:
+    paths:
+      - "mac/**"
+      - "couchsubs-ios/**"
+      - "core/**"
+      - "remoteplay/**"
+      - "design/**"
+      - "docs/surum-notlari.md"
+      - "third-party/chiaki-ng"
+      - "third-party/patches/**"
+      - "scripts/build-chiaki-*.sh"
+      - "scripts/make-cchiaki-xcframework.sh"
+      - ".github/workflows/apple-build.yml"
+  push:
+    branches: [main, yeni-arayuz]
+    paths:
+      - "mac/**"
+      - "couchsubs-ios/**"
+      - "core/**"
+      - "remoteplay/**"
+      - "design/**"
+      - "docs/surum-notlari.md"
+      - "third-party/chiaki-ng"
+      - "third-party/patches/**"
+      - "scripts/build-chiaki-*.sh"
+      - "scripts/make-cchiaki-xcframework.sh"
+      - ".github/workflows/apple-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Mac ve iPhone derlemesi
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: chiaki-ng
+        run: git submodule update --init --depth 1 third-party/chiaki-ng
+
+      - name: Önbellek anahtarı
+        id: key
+        shell: bash
+        run: |
+          echo "chiaki=$(git rev-parse HEAD:third-party/chiaki-ng)" >> "$GITHUB_OUTPUT"
+          echo "xcode=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
+
+      # Yalnız uygulamanın bağlandığı dilimler: macOS arm64 (koşucu) ve iPhone cihazı (generic/platform=iOS).
+      - name: CChiaki dilimleri (önbellek)
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            third-party/build/macos
+            third-party/build/ios-iphoneos
+          key: cchiaki-${{ steps.key.outputs.chiaki }}-${{ steps.key.outputs.xcode }}-${{ hashFiles('scripts/build-chiaki-macos.sh', 'scripts/build-chiaki-ios.sh', 'third-party/patches/**') }}
+
+      - name: Araçlar
+        run: |
+          brew install xcodegen
+          if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then brew install cmake ninja pkg-config protobuf; fi
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: CChiaki derle
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          MAC_ARCHS=arm64 JOBS=4 ./scripts/build-chiaki-macos.sh
+          SLICES=iphoneos JOBS=4 ./scripts/build-chiaki-ios.sh
+
+      - name: CChiaki.xcframework
+        run: ./scripts/make-cchiaki-xcframework.sh 2>&1 | grep -v "has no symbols"
+
+      # TV uygulaması paketi isteğe bağlı kaynak; boş klasör yeterli (paketleme release.yml'de).
+      - name: Projeler
+        run: |
+          mkdir -p dist/tv-app
+          (cd mac && xcodegen generate)
+          (cd couchsubs-ios && xcodegen generate)
+
+      - name: Mac uygulaması
+        working-directory: mac
+        run: |
+          xcodebuild -scheme CouchSubs -destination 'platform=macOS' -derivedDataPath "$RUNNER_TEMP/dd-mac" \
+            CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/mac.log" 2>&1 || { grep -E "error:" "$RUNNER_TEMP/mac.log" | sort -u; tail -40 "$RUNNER_TEMP/mac.log"; exit 1; }
+          grep -E "BUILD SUCCEEDED" "$RUNNER_TEMP/mac.log"
+
+      - name: iPhone uygulaması
+        if: ${{ !cancelled() }}
+        working-directory: couchsubs-ios
+        run: |
+          xcodebuild -scheme CouchSubs -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/ios.log" 2>&1 || { grep -E "error:" "$RUNNER_TEMP/ios.log" | sort -u; tail -40 "$RUNNER_TEMP/ios.log"; exit 1; }
+          grep -E "BUILD SUCCEEDED" "$RUNNER_TEMP/ios.log"
