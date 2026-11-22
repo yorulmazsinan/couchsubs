@@ -77,6 +77,10 @@ public sealed class AppearanceEditor : Grid
         lowContrast.SetResourceReference(StyleProperty, "ErrorText");
         preview.Children.Add(lowContrast);
         preview.Children.Add(Hint("The settings apply the same on the TV, phone and computer screen.", new Thickness(0)));
+        // Mac SubtitleLookSettings: önizlemenin altında "Deneme Altyazısı Gönder".
+        var test = new Button { Content = l["Send Test Subtitle"], HorizontalAlignment = HorizontalAlignment.Left };
+        test.Click += (_, _) => controller.SendTestSubtitle();
+        preview.Children.Add(test);
         var left = new Card { Title = l["Subtitles on the TV"], Content = preview, VerticalAlignment = VerticalAlignment.Top };
         Children.Add(left);
 

@@ -7,7 +7,7 @@
              xmlns:c="clr-namespace:CouchSubs.App.Controls"
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:local="clr-namespace:CouchSubs.App.Views">
-    <!-- Mac OutputSettings: kart başlığı "Altyazıyı göster", kısa etiketli seçici (TV / Bu bilgisayar / İkisi de / OBS), anlamı
+    <!-- Mac OutputSettings: kart başlığı "Altyazıyı göster", kısa etiketli seçici (TV / Bu PC / İkisi de / OBS), anlamı
          altındaki cümlede. OBS adresleri kopyala simgesi kutunun içinde olan tam yuvarlak kutularda (CopyField). -->
     <c:Card Title="{t:T 'Show subtitles on'}">
         <c:SpacedStack>
@@ -15,7 +15,7 @@
                 <Border Style="{StaticResource SegmentGroup}" HorizontalAlignment="Stretch">
                     <UniformGrid Rows="1">
                         <RadioButton x:Name="OutputTv" Content="TV" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Tv" />
-                        <RadioButton x:Name="OutputComputer" Content="{t:T 'This computer'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
+                        <RadioButton x:Name="OutputComputer" Content="{t:T 'This PC'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Computer" />
                         <RadioButton x:Name="OutputBoth" Content="{t:T 'Both'}" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Both" />
                         <RadioButton x:Name="OutputObs" Content="OBS" GroupName="subtitleOutput" Style="{StaticResource SegmentButton}" Checked="OnOutput" Tag="Obs" />
                     </UniformGrid>

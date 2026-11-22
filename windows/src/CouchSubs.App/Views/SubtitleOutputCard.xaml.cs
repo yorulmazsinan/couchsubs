@@ -70,6 +70,8 @@ public partial class SubtitleOutputCard : UserControl
         OutputHint.Text = settings.Output switch
         {
             SubtitleOutput.Tv => CouchSubs.Core.Localizer.Current["Subtitles are shown on the TV."],
+            SubtitleOutput.Computer => CouchSubs.Core.Localizer.Current["Subtitles are shown in a window on this PC's screen."],
+            SubtitleOutput.Both => CouchSubs.Core.Localizer.Current["Subtitles are shown on the TV and on this PC's screen."],
             SubtitleOutput.Obs => CouchSubs.Core.Localizer.Current["Only for streaming: subtitles go to the OBS overlay."],
             _ => "",
         };

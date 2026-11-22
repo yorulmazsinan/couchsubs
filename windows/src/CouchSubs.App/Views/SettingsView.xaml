@@ -119,89 +119,6 @@
                 <c:SpacedStack Gap="l" Margin="{t:Sp '0,0,0,l'}">
                     <!-- Önizleme, yazı boyutu, zemin, yazı ve karakter adı renkleri (AppearanceEditor). -->
                     <ContentControl x:Name="AppearanceHost" Focusable="False" />
-                    <!-- Görünüm ayarları bilgisayar ekranındaki pencereye de uygulanır. -->
-                    <c:Card x:Name="StyleCard" Title="{t:T 'More'}">
-                        <c:SpacedStack>
-                            <!-- Yazı boyutu, zemin ve yazı rengi artık düzenleyicide (AppearanceEditor); bu birimler gizli kalır, ayarın kendisi aynı. -->
-                            <c:Unit x:Name="TextSizeUnit" Title="{t:T 'Text size'}">
-                                <StackPanel>
-                                    <!-- Sürüklerken TV'de örnek altyazı görünür; boyut doğrudan ekranda ayarlanır. -->
-                                    <Slider x:Name="TextSize" Minimum="16" Maximum="50" SmallChange="1" LargeChange="4" TickFrequency="1"
-                                            IsSnapToTickEnabled="True" IsMoveToPointEnabled="True"
-                                            ValueChanged="OnTextSize" PreviewMouseDown="OnPositionStart" />
-                                    <TextBlock x:Name="TextSizeValue" Style="{StaticResource SliderRangeText}" HorizontalAlignment="Right" />
-                                </StackPanel>
-                            </c:Unit>
-                            <!-- Yer ayarları TV içindir; bilgisayar ekranındaki altyazı penceresi sürüklenerek taşınır (2026-11-13). -->
-                            <c:SpacedStack x:Name="TvPlacementPanel">
-                                <c:Unit Title="{t:T 'Placement'}">
-                                    <StackPanel>
-                                        <ComboBox x:Name="Placement" SelectionChanged="OnPlacement">
-                                            <ComboBoxItem Content="{t:T 'Over the English subtitle'}" Tag="Cover" />
-                                            <ComboBoxItem Content="{t:T 'Above the English subtitle'}" Tag="Above" />
-                                            <ComboBoxItem Content="{t:T 'Below the English subtitle'}" Tag="Below" />
-                                            <ComboBoxItem Content="{t:T 'Fixed position'}" Tag="Fixed" />
-                                        </ComboBox>
-                                        <TextBlock x:Name="FollowsHint" Style="{StaticResource HintText}" Margin="{t:Sp '0,unitHint,0,0'}"
-                                                   Text="{t:T 'The translation follows where the game shows its own subtitle.'}" />
-                                    </StackPanel>
-                                </c:Unit>
-                                <c:Unit x:Name="FixedPanel" Title="{t:T 'Position on screen'}"
-                                        Hint="{t:T 'In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.'}">
-                                    <StackPanel>
-                                        <!-- Sürüklerken TV'de örnek altyazı görünür; böylece yer doğrudan ekranda ayarlanır. -->
-                                        <Slider x:Name="Position" Minimum="0" Maximum="85" IsMoveToPointEnabled="True"
-                                                ValueChanged="OnPosition" PreviewMouseDown="OnPositionStart" />
-                                        <DockPanel Style="{StaticResource SliderRange}">
-                                            <TextBlock Text="{t:T 'Bottom'}" Style="{StaticResource SliderRangeText}" />
-                                            <TextBlock DockPanel.Dock="Right" Text="{t:T 'Top'}" Style="{StaticResource SliderRangeText}" />
-                                        </DockPanel>
-                                    </StackPanel>
-                                </c:Unit>
-                            </c:SpacedStack>
-                            <c:Unit x:Name="ComputerPlacementPanel"
-                                    Hint="{t:T 'On the computer screen, move and resize the subtitle with the mouse: press Position the subtitles.'}">
-                                <Button HorizontalAlignment="Left" Content="{t:T 'Position the subtitles'}" Click="OnAdjustOverlay" />
-                            </c:Unit>
-                            <c:Unit x:Name="BackgroundUnit" Title="{t:T 'Background'}">
-                                <StackPanel>
-                                    <Slider x:Name="BackgroundOpacity" Minimum="0" Maximum="100" IsMoveToPointEnabled="True"
-                                            ValueChanged="OnBackground" PreviewMouseDown="OnPositionStart" />
-                                    <DockPanel Style="{StaticResource SliderRange}">
-                                        <TextBlock Text="{t:T 'None'}" Style="{StaticResource SliderRangeText}" />
-                                        <TextBlock DockPanel.Dock="Right" Text="{t:T 'Solid'}" Style="{StaticResource SliderRangeText}" />
-                                    </DockPanel>
-                                </StackPanel>
-                            </c:Unit>
-                            <c:Unit Title="{t:T 'Background area'}"
-                                    Hint="{t:T 'Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.'}">
-                                <ComboBox x:Name="BackgroundShape" SelectionChanged="OnBackgroundShape">
-                                    <ComboBoxItem Content="{t:T 'Fit the text'}" Tag="Fit" />
-                                    <ComboBoxItem Content="{t:T 'Full-width band'}" Tag="Band" />
-                                </ComboBox>
-                            </c:Unit>
-                            <c:SwitchRow x:Name="Bold" Content="{t:T 'Bold text'}" Checked="OnBold" Unchecked="OnBold" />
-                            <c:SwitchRow x:Name="StackPrevious" Content="{t:T 'Keep previous lines above in fast dialogue'}"
-                                         Description="{t:T 'When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.'}"
-                                         Checked="OnStackPrevious" Unchecked="OnStackPrevious" />
-                            <c:Unit x:Name="TextColorUnit" Title="{t:T 'Text color'}">
-                                <ComboBox x:Name="TextColor" SelectionChanged="OnTextColor">
-                                    <ComboBoxItem Content="{t:T 'White'}" Tag="White" />
-                                    <ComboBoxItem Content="{t:T 'Yellow'}" Tag="Yellow" />
-                                </ComboBox>
-                            </c:Unit>
-                            <!-- Yalnız Android TV: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor. -->
-                            <c:Unit x:Name="DisplayModePanel" Title="{t:T 'Picture mode'}" Visibility="Collapsed"
-                                    Hint="{t:T 'Automatic uses Overlay whenever the TV app allows it: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. On some TVs the picture stays black inside the CouchSubs TV app. To show the PS5 inside the CouchSubs TV app instead, choose Inside the app; if no picture arrives there, the TV app switches to Overlay by itself. With Overlay the TV also keeps its picture mode, Game mode and HDR: inside the app the TV handles the PS5 picture as an app, not as its HDMI input.'}">
-                                <ComboBox x:Name="DisplayMode" SelectionChanged="OnDisplayMode">
-                                    <ComboBoxItem Content="{t:T 'Automatic (recommended)'}" Tag="Auto" />
-                                    <ComboBoxItem Content="{t:T 'Inside the app'}" Tag="InAppOnly" />
-                                    <ComboBoxItem Content="{t:T 'Overlay (for a black screen)'}" Tag="Overlay" />
-                                </ComboBox>
-                            </c:Unit>
-                            <Button Content="{t:T 'Send test subtitle'}" Click="OnTest" />
-                        </c:SpacedStack>
-                    </c:Card>
                 </c:SpacedStack>
             </TabItem>
 
@@ -215,9 +132,19 @@
                     </Grid.ColumnDefinitions>
                     <c:Card Title="{t:T 'Translation engine'}" VerticalAlignment="Top">
                         <c:SpacedStack>
-                            <c:Unit Title="{t:T 'Translation engine'}">
+                            <!-- Motor seçimi (Mac AdvancedSettings): her motor bir seçenek kartı (1 px kenarlık, seçiliyken 2 px amber + hafif
+                                 amber dolgu). Seçili motor kodda gizli Engine kutusunda tutulur (eski ayar yolları aynen çalışır). -->
+                            <c:SpacedStack x:Name="EngineOptions" Gap="xs">
+                                <c:OptionCard GroupName="engine" Tag="Free" Content="{t:T 'Free Translation'}" Description="{t:T 'On this computer, offline'}" MinHeight="72" Checked="OnEngineOption" />
+                                <c:OptionCard GroupName="engine" Tag="Gemini" Content="Google Gemini" Description="{t:T 'Better translation with a free Google key.'}" MinHeight="72" Checked="OnEngineOption" />
+                                <c:OptionCard GroupName="engine" Tag="DeepL" Content="DeepL" Description="{t:T 'With your own DeepL key.'}" MinHeight="72" Checked="OnEngineOption" />
+                                <c:OptionCard GroupName="engine" Tag="OpenAi" Content="OpenAI" Description="{t:T 'With your own key.'}" MinHeight="72" Checked="OnEngineOption" />
+                                <c:OptionCard GroupName="engine" Tag="Claude" Content="Anthropic Claude" Description="{t:T 'With your own key.'}" MinHeight="72" Checked="OnEngineOption" />
+                                <c:OptionCard GroupName="engine" Tag="Local" Content="{t:T 'Local Model'}" Description="{t:T 'Ollama or LM Studio; no quota.'}" MinHeight="72" Checked="OnEngineOption" />
+                            </c:SpacedStack>
+                            <c:Unit>
                                 <StackPanel>
-                                    <ComboBox x:Name="Engine" SelectionChanged="OnEngine">
+                                    <ComboBox x:Name="Engine" SelectionChanged="OnEngine" Visibility="Collapsed">
                                         <ComboBoxItem Content="{t:T 'Free (on this computer)'}" Tag="Free" />
                                         <ComboBoxItem Content="DeepL" Tag="DeepL" />
                                         <ComboBoxItem Content="Google Gemini" Tag="Gemini" />
@@ -661,6 +588,89 @@
                                 <c:Callout x:Name="LegacyTvWarning" Text="{t:T 'The TV app is old. Update it.'}" Visibility="Collapsed" />
                             </c:SpacedStack>
                         </c:Card>
+                        <!-- Yer ve biçim (Mac Çıkış Ekranları › AppearanceCard, başlıksız kart): yazı boyutu, zemin ve renkler Altyazı
+                             Görünümü'nde; burada yer, zemin alanı, kalın yazı, önceki satırlar ve Android TV görüntü modu kalır. -->
+                        <c:Card x:Name="StyleCard">
+                            <c:SpacedStack>
+                                <!-- Yazı boyutu, zemin ve yazı rengi artık düzenleyicide (AppearanceEditor); bu birimler gizli kalır, ayarın kendisi aynı. -->
+                                <c:Unit x:Name="TextSizeUnit" Title="{t:T 'Text size'}">
+                                    <StackPanel>
+                                        <!-- Sürüklerken TV'de örnek altyazı görünür; boyut doğrudan ekranda ayarlanır. -->
+                                        <Slider x:Name="TextSize" Minimum="16" Maximum="50" SmallChange="1" LargeChange="4" TickFrequency="1"
+                                                IsSnapToTickEnabled="True" IsMoveToPointEnabled="True"
+                                                ValueChanged="OnTextSize" PreviewMouseDown="OnPositionStart" />
+                                        <TextBlock x:Name="TextSizeValue" Style="{StaticResource SliderRangeText}" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </c:Unit>
+                                <!-- Yer ayarları TV içindir; bilgisayar ekranındaki altyazı penceresi sürüklenerek taşınır (2026-11-13). -->
+                                <c:SpacedStack x:Name="TvPlacementPanel">
+                                    <c:Unit Title="{t:T 'Placement'}">
+                                        <StackPanel>
+                                            <ComboBox x:Name="Placement" SelectionChanged="OnPlacement">
+                                                <ComboBoxItem Content="{t:T 'Over the English subtitle'}" Tag="Cover" />
+                                                <ComboBoxItem Content="{t:T 'Above the English subtitle'}" Tag="Above" />
+                                                <ComboBoxItem Content="{t:T 'Below the English subtitle'}" Tag="Below" />
+                                                <ComboBoxItem Content="{t:T 'Fixed position'}" Tag="Fixed" />
+                                            </ComboBox>
+                                            <TextBlock x:Name="FollowsHint" Style="{StaticResource HintText}" Margin="{t:Sp '0,unitHint,0,0'}"
+                                                       Text="{t:T 'The translation follows where the game shows its own subtitle.'}" />
+                                        </StackPanel>
+                                    </c:Unit>
+                                    <c:Unit x:Name="FixedPanel" Title="{t:T 'Position on screen'}"
+                                            Hint="{t:T 'In fixed position you can also move subtitles with the ▲ and ▼ buttons on the TV remote.'}">
+                                        <StackPanel>
+                                            <!-- Sürüklerken TV'de örnek altyazı görünür; böylece yer doğrudan ekranda ayarlanır. -->
+                                            <Slider x:Name="Position" Minimum="0" Maximum="85" IsMoveToPointEnabled="True"
+                                                    ValueChanged="OnPosition" PreviewMouseDown="OnPositionStart" />
+                                            <DockPanel Style="{StaticResource SliderRange}">
+                                                <TextBlock Text="{t:T 'Bottom'}" Style="{StaticResource SliderRangeText}" />
+                                                <TextBlock DockPanel.Dock="Right" Text="{t:T 'Top'}" Style="{StaticResource SliderRangeText}" />
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </c:Unit>
+                                </c:SpacedStack>
+                                <c:Unit x:Name="ComputerPlacementPanel"
+                                        Hint="{t:T 'On the computer screen, move and resize the subtitle with the mouse: press Position the subtitles.'}">
+                                    <Button HorizontalAlignment="Left" Content="{t:T 'Position the subtitles'}" Click="OnAdjustOverlay" />
+                                </c:Unit>
+                                <c:Unit x:Name="BackgroundUnit" Title="{t:T 'Background'}">
+                                    <StackPanel>
+                                        <Slider x:Name="BackgroundOpacity" Minimum="0" Maximum="100" IsMoveToPointEnabled="True"
+                                                ValueChanged="OnBackground" PreviewMouseDown="OnPositionStart" />
+                                        <DockPanel Style="{StaticResource SliderRange}">
+                                            <TextBlock Text="{t:T 'None'}" Style="{StaticResource SliderRangeText}" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{t:T 'Solid'}" Style="{StaticResource SliderRangeText}" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                </c:Unit>
+                                <c:Unit Title="{t:T 'Background area'}"
+                                        Hint="{t:T 'Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.'}">
+                                    <ComboBox x:Name="BackgroundShape" SelectionChanged="OnBackgroundShape">
+                                        <ComboBoxItem Content="{t:T 'Fit the text'}" Tag="Fit" />
+                                        <ComboBoxItem Content="{t:T 'Full-width band'}" Tag="Band" />
+                                    </ComboBox>
+                                </c:Unit>
+                                <c:SwitchRow x:Name="Bold" Content="{t:T 'Bold text'}" Checked="OnBold" Unchecked="OnBold" />
+                                <c:SwitchRow x:Name="StackPrevious" Content="{t:T 'Keep previous lines above in fast dialogue'}"
+                                             Description="{t:T 'When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.'}"
+                                             Checked="OnStackPrevious" Unchecked="OnStackPrevious" />
+                                <c:Unit x:Name="TextColorUnit" Title="{t:T 'Text color'}">
+                                    <ComboBox x:Name="TextColor" SelectionChanged="OnTextColor">
+                                        <ComboBoxItem Content="{t:T 'White'}" Tag="White" />
+                                        <ComboBoxItem Content="{t:T 'Yellow'}" Tag="Yellow" />
+                                    </ComboBox>
+                                </c:Unit>
+                                <!-- Yalnız Android TV: bazı TV'lerde (ör. TCL) uygulama içindeki PS5 görüntüsü siyah kalıyor. -->
+                                <c:Unit x:Name="DisplayModePanel" Title="{t:T 'Picture mode'}" Visibility="Collapsed"
+                                        Hint="{t:T 'Automatic uses Overlay whenever the TV app allows it: the TV shows the PS5 on its own HDMI input and the subtitles appear on top. On some TVs the picture stays black inside the CouchSubs TV app. To show the PS5 inside the CouchSubs TV app instead, choose Inside the app; if no picture arrives there, the TV app switches to Overlay by itself. With Overlay the TV also keeps its picture mode, Game mode and HDR: inside the app the TV handles the PS5 picture as an app, not as its HDMI input.'}">
+                                    <ComboBox x:Name="DisplayMode" SelectionChanged="OnDisplayMode">
+                                        <ComboBoxItem Content="{t:T 'Automatic (recommended)'}" Tag="Auto" />
+                                        <ComboBoxItem Content="{t:T 'Inside the app'}" Tag="InAppOnly" />
+                                        <ComboBoxItem Content="{t:T 'Overlay (for a black screen)'}" Tag="Overlay" />
+                                    </ComboBox>
+                                </c:Unit>
+                            </c:SpacedStack>
+                        </c:Card>
                         <c:Card Visibility="{Binding ShowsOnTv, Converter={StaticResource VisibleIf}}">
                             <s:TvAppCard />
                         </c:Card>
@@ -743,14 +753,17 @@
                         <!-- Konsol (Mac ConsoleSettingsCard): PS5 ↔ Xbox seçici; Xbox'ta Microsoft hesap kartı (Mac DSAccountCard). -->
                         <c:Card x:Name="ConsoleCard" Title="{t:T 'Console'}">
                             <c:SpacedStack>
-                                <Border Style="{StaticResource SegmentGroup}">
+                                <Border x:Name="ConsoleTabs" Style="{StaticResource SegmentGroup}">
                                     <UniformGrid Rows="1">
                                         <RadioButton x:Name="ConsolePlayStation" Content="PlayStation 5" GroupName="console" Style="{StaticResource SegmentButton}" Checked="OnConsoleKind" Tag="PlayStation" />
                                         <RadioButton x:Name="ConsoleXbox" Content="Xbox" GroupName="console" Style="{StaticResource SegmentButton}" Checked="OnConsoleKind" Tag="Xbox" />
                                     </UniformGrid>
                                 </Border>
-                                <TextBlock x:Name="ConsolePlayStationHint" Style="{StaticResource HintText}"
-                                           Text="{t:T 'With Remote Play and a second PSN account.'}" />
+                                <!-- PS5 bilgi satırı (Mac DSRow): ad, altında IP (yoksa kısa açıklama), sağda Bağlı / Kurulmadı rozeti. -->
+                                <DockPanel x:Name="ConsolePlayStationHint" LastChildFill="True">
+                                    <c:Badge x:Name="ConsolePs5Badge" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="{t:Sp 's,0,0,0'}" />
+                                    <c:SectionTitle x:Name="ConsolePs5Row" Title="PS5" Text="{t:T 'With Remote Play and a second PSN account.'}" />
+                                </DockPanel>
                                 <c:SpacedStack x:Name="ConsoleXboxPanel">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource UnitTitleText}"><Run Text="{t:T 'Xbox and connection'}" /><Run x:Name="ConsoleXboxName" /></TextBlock>
@@ -871,6 +884,17 @@
                                              Description="{t:T 'On: read an Xbox frame every 200 ms to use less CPU. Off (default): every 66 ms for faster subtitles.'}"
                                              Checked="OnXboxLegacyFrameRate" Unchecked="OnXboxLegacyFrameRate" />
                             </c:SpacedStack>
+                        </c:Card>
+                        <!-- TV girişi (Mac ConsoleSettings): kurulumda seçilen HDMI; değişince TV uygulaması o girişi açar (style.hdmiInput). -->
+                        <c:Card x:Name="HdmiCard" Title="{t:T 'TV input (HDMI)'}" Visibility="Collapsed">
+                            <Border Style="{StaticResource SegmentGroup}">
+                                <UniformGrid Rows="1">
+                                    <RadioButton x:Name="Hdmi1" Content="HDMI 1" Tag="1" GroupName="hdmi" Style="{StaticResource SegmentButton}" Checked="OnHdmiInput" />
+                                    <RadioButton x:Name="Hdmi2" Content="HDMI 2" Tag="2" GroupName="hdmi" Style="{StaticResource SegmentButton}" Checked="OnHdmiInput" />
+                                    <RadioButton x:Name="Hdmi3" Content="HDMI 3" Tag="3" GroupName="hdmi" Style="{StaticResource SegmentButton}" Checked="OnHdmiInput" />
+                                    <RadioButton x:Name="Hdmi4" Content="HDMI 4" Tag="4" GroupName="hdmi" Style="{StaticResource SegmentButton}" Checked="OnHdmiInput" />
+                                </UniformGrid>
+                            </Border>
                         </c:Card>
                         <c:Card x:Name="LanguageCard" Title="{t:T 'Language'}">
                             <c:Unit Title="{t:T 'Game language'}">

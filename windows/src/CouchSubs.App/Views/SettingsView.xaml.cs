@@ -216,14 +216,37 @@ public partial class SettingsView : UserControl
         loading = true;
         (xbox ? ConsoleXbox : ConsolePlayStation).IsChecked = true;
         loading = wasLoading;
-        ConsoleCard.Visibility = controller.XboxAvailable ? Visibility.Visible : Visibility.Collapsed;
+        // Kart her zaman görünür (Mac ConsoleSettingsCard); Xbox kapalıysa yalnız PS5 ↔ Xbox seçici gizlenir.
+        ConsoleTabs.Visibility = controller.XboxAvailable ? Visibility.Visible : Visibility.Collapsed;
         ConsolePlayStationHint.Visibility = xbox ? Visibility.Collapsed : Visibility.Visible;
+        var text = Localizer.Current;
+        if (controller.Console is { } ps5)
+        {
+            ConsolePs5Row.Title = string.IsNullOrEmpty(ps5.Name) ? "PS5" : ps5.Name;
+            ConsolePs5Row.Text = ps5.Host;
+            ConsolePs5Badge.Content = text["Connected"];
+            ConsolePs5Badge.Tone = Controls.PillTone.Success;
+        }
+        else
+        {
+            ConsolePs5Row.Title = "PS5";
+            ConsolePs5Row.Text = text["With Remote Play and a second PSN account."];
+            ConsolePs5Badge.Content = text["Not Set Up"];
+            ConsolePs5Badge.Tone = Controls.PillTone.Idle;
+        }
         ConsoleXboxPanel.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
         ConsoleXboxName.Text = controller.SelectedXboxConsole is { } console ? "  ·  " + (string.IsNullOrEmpty(console.Name) ? "Xbox" : console.Name) : "";
         // Microsoft hesap kartı (Mac DSAccountCard): girişliyse "Yeniden Giriş Yap" ve Diğer Giriş Yolları'nda Xbox seçimi ve çıkış.
         MicrosoftAccount.SignedIn = controller.HasXboxAccount;
         MicrosoftAccount.HasOthers = controller.HasXboxAccount;
         if (controller.HasXboxAccount && controller.NeedsXboxLink) MicrosoftAccount.Expanded = true;
+        // TV girişi kartı: PS5'te ve HDMI'ye bağlı TV eşleşmişken (kurulumdaki TV Girişi adımı ile aynı koşul).
+        HdmiCard.Visibility = !xbox && controller.NeedsHdmiStep ? Visibility.Visible : Visibility.Collapsed;
+        var hdmiLoading = loading;
+        loading = true;
+        foreach (var input in new[] { Hdmi1, Hdmi2, Hdmi3, Hdmi4 })
+            input.IsChecked = (string)input.Tag == controller.Settings.Style.HdmiInput?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        loading = hdmiLoading;
         ConsoleXboxLink.Content = Localizer.Current["Choose your Xbox"];
         ConsoleXboxSignedIn.Visibility = controller.HasXboxAccount ? Visibility.Visible : Visibility.Collapsed;
         ShowFrameSource();
@@ -539,7 +562,7 @@ public partial class SettingsView : UserControl
     /// <summary>Altyazı bilgisayar ekranında da gösteriliyorsa görünüm kartı yalnız TV'ye ait değildir.</summary>
     private void ShowStyleTitle()
     {
-        StyleCard.Title = Localizer.Current[controller.Settings.Output == SubtitleOutput.Tv ? "On the TV" : "Subtitle appearance"];
+        // Başlıksız kart (Mac AppearanceCard); TV ya da OBS yokken yalnız bilgisayar ekranı yer düğmesi kalır.
         // Görüntü modu yalnız Android TV uygulamasında var.
         DisplayModePanel.Visibility = controller.ShowsOnTv && controller.Tv?.Brand == TvBrand.AndroidTv
             ? Visibility.Visible : Visibility.Collapsed;
@@ -834,10 +857,29 @@ public partial class SettingsView : UserControl
         ShowEngine();
     }
 
+    /// <summary>Ayarlar › Konsol › TV girişi: seçilen giriş kaydedilir ve TV'de deneme altyazısı gösterilir (Mac ile aynı).</summary>
+    private void OnHdmiInput(object sender, RoutedEventArgs e)
+    {
+        if (loading || sender is not FrameworkElement { Tag: string tag } || !int.TryParse(tag, out var input)) return;
+        if (controller.Settings.Style.HdmiInput == input) return;
+        controller.TryHdmiInput(input, confirmed: true);
+        controller.SendTestSubtitle();
+    }
+
+    /// <summary>Motor seçenek kartı seçildi: gizli Engine kutusu da aynı motora geçer (OnEngine kaydeder).</summary>
+    private void OnEngineOption(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag }) return;
+        var item = Engine.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == tag);
+        if (item is not null && !ReferenceEquals(Engine.SelectedItem, item)) Engine.SelectedItem = item;
+    }
+
     private void ShowEngine()
     {
         var text = Localizer.Current;
         var engine = SelectedEngine;
+        foreach (var option in EngineOptions.Children.OfType<Controls.OptionCard>())
+            option.IsChecked = (string)option.Tag == engine.ToString();
         EngineHint.Text = text[engine switch
         {
             TranslationEngine.Free => "Free. The translation model built into CouchSubs runs on this computer; subtitle text never leaves it.",
@@ -1185,6 +1227,9 @@ public partial class SettingsView : UserControl
     // ───── Yeni arayüz: gezinme, Temel sayfası ─────
 
     /// <summary>Soldaki gezinme satırı seçilince o sayfa açılır.</summary>
+    /// <summary>Menüdeki sırasıyla sayfa açar (0 Temel … 8 Konsol ve Kaynak); ekran görüntüsü aracı için.</summary>
+    public void ShowPage(int index) => Sections.SelectedIndex = index;
+
     private void OnNav(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var index) && Sections.SelectedIndex != index)
