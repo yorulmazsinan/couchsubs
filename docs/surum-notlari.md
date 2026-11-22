@@ -12,7 +12,6 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 - **Eski TV uygulamalarında altyazının bir an görünüp kaybolması** düzeltildi.
 - **DeepL:** Anahtar denemesi her hatayı kendi nedeniyle gösteriyor; yoğunluk (429) "ulaşılamadı" sayılmıyor, anahtardaki görünmez karakterler siliniyor.
 - **"Bağlanıyor…"** 30 sn'yi geçince nedeni ekranda.
-- **Tanı:** Altyazı alanında yazı çıkmayınca nedeni altyazi.log'da (okunmadı, boş okuma, süzgeç, hata).
 
 **beta.80'de gelenler:** PS5'te kullanıcı değiştirince yeniden bağlanma, altyazının iki kez çıkmaması, GTA 6 telefon/harita/menü düzeltmeleri, TV'ye altyazı gelmemesi (Samsung açma, Android TV), LG siyah ekran, Samsung ultra geniş, Xbox ve OBS düzeltmeleri, Mac'te 10 sn bekleme (#822).
 
