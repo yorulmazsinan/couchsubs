@@ -121,6 +121,68 @@ public sealed class Frame(byte[] pixels, int width, int height, int stride)
 public static class TextImage
 {
     /// <summary>
+    /// Otomatik seviye: bölgenin en parlak %0,5'i beyaza çekilir. Karanlık ya da soluk görüntüde (HDR'den dönüştürülmüş
+    /// video, karanlık sahne, geçiş efekti) beyaz altyazı ancak 120-180 parlaklıkta kalıyor, beyaz yazı süzgeçleri hiç
+    /// çalışmıyordu. Yazı zaten beyazsa (en parlak kısım 235 ve üstü) görüntü değişmez. Sonuç dolgusuz yeni bir karedir.
+    ///
+    /// GitHub #903: üç çökme bu döngünün dizi okuma/yazma komutunda oldu (erişilen adres, dizi + sıra toplamının yalnız alt
+    /// 32 biti). Eski döngüde güvensiz kod, sabitleme ya da yerel tampon yoktu; dizi erişimleri sınır denetimliydi ve sıra
+    /// hesapları dizi boyunu aşamıyordu. Döngü yine de satır satır, sınır denetimli <see cref="Span{T}"/> dilimleri
+    /// üzerinde yazıldı: satırın başı 64 bit hesaplanıp bir kez denetlenir, iç döngü yalnız satırın içinde küçük bir sıra
+    /// kullanır, SIMD yok. Kodun bir hatası bulunmadı; bu, kod tarafını sadeleştirip daraltmak için (nedeni kesin değil).
+    /// </summary>
+    public static Frame AutoLevel(Frame image)
+    {
+        if (!image.IsConsistent || image.Width == 0 || image.Height == 0) return image;
+        int width = image.Width, height = image.Height, stride = image.Stride;
+        var rowBytes = width * 4; // IsConsistent: dizi en az bir satır tutuyor, int'e sığar.
+        var source = image.Pixels;
+
+        var hist = new int[256];
+        for (var y = 0; y < height; y++)
+        {
+            ReadOnlySpan<byte> row = source.AsSpan(RowStart(y, stride), rowBytes);
+            for (var i = 0; i < row.Length; i += 4)
+            {
+                int b = row[i], g = row[i + 1], r = row[i + 2];
+                hist[((r * 3) + (g * 6) + b) / 10]++;
+            }
+        }
+
+        var limit = (double)width * height * 0.005;
+        long count = 0;
+        var top = 255;
+        for (; top > 0; top--)
+        {
+            count += hist[top];
+            if (count >= limit) break;
+        }
+        if (top >= 235 || top < 60) return image;
+
+        var scale = 250.0 / top;
+        var lookup = new byte[256];
+        for (var v = 0; v < 256; v++) lookup[v] = (byte)Math.Min(255, v * scale);
+
+        var output = new byte[checked(rowBytes * height)];
+        for (var y = 0; y < height; y++)
+        {
+            ReadOnlySpan<byte> row = source.AsSpan(RowStart(y, stride), rowBytes);
+            var target = output.AsSpan(RowStart(y, rowBytes), rowBytes);
+            for (var i = 0; i < row.Length; i += 4)
+            {
+                target[i] = lookup[row[i]];
+                target[i + 1] = lookup[row[i + 1]];
+                target[i + 2] = lookup[row[i + 2]];
+                target[i + 3] = 255;
+            }
+        }
+        return new Frame(output, width, height, rowBytes);
+    }
+
+    /// <summary>Satırın dizideki başı; 64 bit hesaplanır, int'e sığmazsa (dizi 2 GB'ı aşamaz, olmamalı) istisna.</summary>
+    private static int RowStart(int y, int stride) => checked((int)((long)y * stride));
+
+    /// <summary>
     /// Oyun altyazıları çoğunlukla koyu kenarlı ya da gölgeli beyaz yazıdır. Parlak zeminde (kum, gökyüzü) Windows'un
     /// yazı tanıması harfleri zeminden ayıramıyor ve "CESAREiVJütt'h" gibi okuyordu. Burada yakınında koyu piksel olan
     /// beyaza yakın pikseller siyah yazı, geri kalanı beyaz zemin olur; yazı tanıma en iyi bu biçimi okur.
@@ -135,10 +197,11 @@ public static class TextImage
         for (var y = 0; y < height; y++)
         {
             var rowSum = 0;
+            ReadOnlySpan<byte> row = image.Pixels.AsSpan(RowStart(y, image.Stride), width * 4);
             for (var x = 0; x < width; x++)
             {
-                var i = (y * image.Stride) + (x * 4);
-                int b = image.Pixels[i], g = image.Pixels[i + 1], r = image.Pixels[i + 2];
+                var i = x * 4;
+                int b = row[i], g = row[i + 1], r = row[i + 2];
                 int min = Math.Min(r, Math.Min(g, b)), max = Math.Max(r, Math.Max(g, b));
                 bright[(y * width) + x] = min >= 200 && max - min <= 45;
                 rowSum += (r * 3 + g * 6 + b) / 10 < 110 ? 1 : 0;

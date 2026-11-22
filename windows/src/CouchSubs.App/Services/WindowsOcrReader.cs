@@ -115,44 +115,8 @@ public sealed class WindowsOcrReader : ITextReader
     /// </summary>
     private Reading Recognize(Frame image) => Recognize(image, allowChain: true);
 
-    /// <summary>
-    /// Otomatik seviye: bölgenin en parlak %0,5'i beyaza çekilir. Karanlık ya da soluk görüntüde (HDR'den dönüştürülmüş
-    /// video, karanlık sahne, geçiş efekti) beyaz altyazı ancak 120-180 parlaklıkta kalıyor, beyaz yazı süzgeçleri hiç
-    /// çalışmıyordu. Yazı zaten beyazsa (en parlak kısım 235 ve üstü) görüntü değişmez.
-    /// </summary>
-    public static Frame AutoLevel(Frame image)
-    {
-        if (!image.IsConsistent || image.Width == 0 || image.Height == 0) return image;
-        var hist = new int[256];
-        for (var y = 0; y < image.Height; y++)
-            for (var x = 0; x < image.Width; x++)
-            {
-                var i = (y * image.Stride) + (x * 4);
-                hist[(image.Pixels[i + 2] * 3 + image.Pixels[i + 1] * 6 + image.Pixels[i]) / 10]++;
-            }
-        var limit = image.Width * image.Height * 0.005;
-        int top = 255, count = 0;
-        for (; top > 0; top--)
-        {
-            count += hist[top];
-            if (count >= limit) break;
-        }
-        if (top >= 235 || top < 60) return image;
-        var scale = 250.0 / top;
-        var lookup = new byte[256];
-        for (var v = 0; v < 256; v++) lookup[v] = (byte)Math.Min(255, v * scale);
-        var result = new Frame(new byte[image.Width * image.Height * 4], image.Width, image.Height, image.Width * 4);
-        for (var y = 0; y < image.Height; y++)
-            for (var x = 0; x < image.Width; x++)
-            {
-                int i = (y * image.Stride) + (x * 4), o = (y * result.Stride) + (x * 4);
-                result.Pixels[o] = lookup[image.Pixels[i]];
-                result.Pixels[o + 1] = lookup[image.Pixels[i + 1]];
-                result.Pixels[o + 2] = lookup[image.Pixels[i + 2]];
-                result.Pixels[o + 3] = 255;
-            }
-        return result;
-    }
+    /// <summary>Otomatik seviye (<see cref="TextImage.AutoLevel"/>; Core'da, birim testleri olsun diye).</summary>
+    public static Frame AutoLevel(Frame image) => TextImage.AutoLevel(image);
 
     private Reading Recognize(Frame image, bool allowChain)
     {
@@ -271,10 +235,12 @@ public sealed class WindowsOcrReader : ITextReader
         for (var y = 0; y < height; y++)
         {
             var rowSum = 0;
+            // Satır, sınır denetimli dilim olarak (64 bit başlangıç; bkz. TextImage.AutoLevel, #903).
+            ReadOnlySpan<byte> row = image.Pixels.AsSpan(checked((int)((long)y * image.Stride)), width * 4);
             for (var x = 0; x < width; x++)
             {
-                var i = (y * image.Stride) + (x * 4);
-                int b = image.Pixels[i], g = image.Pixels[i + 1], r = image.Pixels[i + 2];
+                var i = x * 4;
+                int b = row[i], g = row[i + 1], r = row[i + 2];
                 int min = Math.Min(r, Math.Min(g, b)), max = Math.Max(r, Math.Max(g, b));
                 // colored: parlak ve doygun renkli harfler de (açık mavi, kırmızı, sarı) yazı sayılır.
                 bright[(y * width) + x] = (min >= minBright && max - min <= maxSpread)
