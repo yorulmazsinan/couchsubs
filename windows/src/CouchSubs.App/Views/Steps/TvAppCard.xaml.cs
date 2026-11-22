@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.ComponentModel;
+using CouchSubs.App.Theme;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -76,7 +77,7 @@ public partial class TvAppCard : UserControl
             var choose = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 4, 0, 0),
+                Margin = Sp.T("0", "xxs", "0", "0"),
                 Content = text["Install on the TV at %@"].Replace("%@", host),
             };
             choose.Click += async (_, _) =>

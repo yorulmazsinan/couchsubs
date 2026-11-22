@@ -6,18 +6,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:t="clr-namespace:CouchSubs.App.Theme">
     <StackPanel>
-        <TextBlock Text="{t:T 'Show on another device'}" Style="{StaticResource HeadlineText}" Margin="0,0,0,12" />
+        <TextBlock Text="{t:T 'Show on another device'}" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,0,0,s'}" />
         <StackPanel x:Name="Ready">
             <!-- Koyu temada da okunsun diye kod beyaz zeminde; büyütülürken yumuşatılmaz. -->
-            <Border Background="White" CornerRadius="8" Padding="8" HorizontalAlignment="Left" Margin="0,0,0,12">
+            <Border Background="White" CornerRadius="8" Padding="{t:Sp 'xs'}" HorizontalAlignment="Left" Margin="{t:Sp '0,0,0,s'}">
                 <Image x:Name="Code" Width="180" Height="180" RenderOptions.BitmapScalingMode="NearestNeighbor"
                        AutomationProperties.Name="{t:T 'Show on another device'}" />
             </Border>
             <DockPanel>
-                <Button x:Name="CopyButton" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="12,0,0,0" Click="OnCopy" />
+                <Button x:Name="CopyButton" DockPanel.Dock="Right" Content="{t:T 'Copy'}" Margin="{t:Sp 's,0,0,0'}" Click="OnCopy" />
                 <TextBox x:Name="Address" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center" />
             </DockPanel>
-            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,12,0,0"
+            <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,s,0,0'}"
                        Text="{t:T 'Scan the code with the camera of a phone or tablet on the same Wi-Fi. While translating, the subtitles appear large in its browser; no app or internet needed.'}" />
         </StackPanel>
         <TextBlock x:Name="Offline" Style="{StaticResource HintText}" TextWrapping="Wrap" Visibility="Collapsed"

@@ -14,7 +14,7 @@
                     <ColumnDefinition Width="24" />
                     <ColumnDefinition Width="280" />
                 </Grid.ColumnDefinitions>
-                <c:Card Title="{t:T 'DONE ONCE'}">
+                <c:Card Title="{t:T 'Done once'}">
                     <StackPanel>
                         <c:NumberedRow Number="1" Text="{t:T 'Create a free account at playstation.com with a different email address.'}" />
                         <c:NumberedRow Number="2" Text="{t:T 'On the PS5, choose Add User and sign in once with the new account.'}" />
@@ -24,47 +24,47 @@
                 </c:Card>
                 <c:Card Grid.Column="2">
                     <StackPanel HorizontalAlignment="Center">
-                        <Border Background="White" CornerRadius="16" Padding="12" HorizontalAlignment="Center">
+                        <Border Background="White" CornerRadius="16" Padding="{t:Sp 's'}" HorizontalAlignment="Center">
                             <Image x:Name="SignUpCode" Width="168" Height="168" RenderOptions.BitmapScalingMode="NearestNeighbor" />
                         </Border>
-                        <TextBlock Text="{t:T 'Scan with Your Phone'}" Style="{StaticResource RowTitle}" HorizontalAlignment="Center" Margin="0,16,0,0" />
-                        <TextBlock Text="{t:T 'The code opens Sony\'s free account sign-up page.'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="0,4,0,0" />
-                        <Button Content="{t:T 'Open the Page on This Computer'}" Style="{StaticResource SmallSecondaryButton}" HorizontalAlignment="Center" Margin="0,16,0,0" Click="OnOpenSignUp" />
+                        <TextBlock Text="{t:T 'Scan with Your Phone'}" Style="{StaticResource RowTitle}" HorizontalAlignment="Center" Margin="{t:Sp '0,m,0,0'}" />
+                        <TextBlock Text="{t:T 'The code opens Sony\'s free account sign-up page.'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="{t:Sp '0,xxs,0,0'}" />
+                        <Button Content="{t:T 'Open the Page on This Computer'}" Style="{StaticResource SmallSecondaryButton}" HorizontalAlignment="Center" Margin="{t:Sp '0,m,0,0'}" Click="OnOpenSignUp" />
                     </StackPanel>
                 </c:Card>
             </Grid>
             <!-- Kol ikinci hesaba atanırsa ana hesapla açılan oyun onu kendi kolu saymaz (GitHub #231). -->
-            <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                        Text="{t:T 'When you turn on the controller to play, choose your MAIN account on the PS5. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.'}" />
             <!-- PS5 bağlıyken "Uzaktan Oynama bağlandı" yazısı kalıcıdır; bildirim ayarı değil, bu ayar gizler (GitHub #177). -->
-            <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                        Text="{t:T 'To hide the &quot;Remote Play connected&quot; message on the screen: on the PS5, go to Settings › System › Remote Play and turn on Hide Remote Play Connection Status Pop-Up. Do it for both your main account and the second account.'}" />
             <!-- İkinci hesabı olmayanlar: görüntü bu bilgisayardaki Remote Play penceresinden okunur, PSN girişi ve PS5 eşleştirmesi atlanır. -->
-            <c:Card Margin="0,12,0,0">
+            <c:Card Margin="{t:Sp '0,s,0,0'}">
                 <StackPanel>
                     <Grid>
                         <TextBlock Text="{t:T 'No second account? Read the Remote Play window'}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <Button Content="{t:T 'Select'}" HorizontalAlignment="Right" Click="OnUseRemotePlayWindow" />
                     </Grid>
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                                Text="{t:T 'CouchSubs reads the subtitles from PS Remote Play or chiaki-ng on this PC. No second account or PS5 pairing is needed. You can connect a TV later.'}" />
                     <!-- İkisi de kurulu değilse resmi indirme sayfaları (ikisi de denenebilir). -->
-                    <StackPanel x:Name="DownloadPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                    <StackPanel x:Name="DownloadPanel" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed">
                         <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Text="{t:T 'PS Remote Play and chiaki-ng aren\'t installed on this PC.'}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button Content="{t:T 'Download PS Remote Play'}" Margin="0,0,8,0" Click="OnDownloadSony" />
+                        <StackPanel Orientation="Horizontal" Margin="{t:Sp '0,xs,0,0'}">
+                            <Button Content="{t:T 'Download PS Remote Play'}" Margin="{t:Sp '0,0,xs,0'}" Click="OnDownloadSony" />
                             <Button Content="{t:T 'Download chiaki-ng'}" Click="OnDownloadChiaki" />
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </c:Card>
-            <c:Card Margin="0,12,0,0">
+            <c:Card Margin="{t:Sp '0,s,0,0'}">
                 <StackPanel>
                     <Grid>
                         <TextBlock Text="{t:T 'Have OBS or a game window on this PC?'}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <Button Content="{t:T 'Select'}" HorizontalAlignment="Right" Click="OnUseCaptureWindow" />
                     </Grid>
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                                Text="{t:T 'CouchSubs can read only the OBS projector or game window you select in Settings › Picture source. No second PSN account or additional capture app is needed.'}" />
                 </StackPanel>
             </c:Card>

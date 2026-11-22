@@ -14,15 +14,15 @@
         </Grid.ColumnDefinitions>
         <Border Style="{StaticResource CardBorder}" VerticalAlignment="Top">
             <StackPanel>
-                <TextBlock Text="{t:T 'XBOX · MICROSOFT ACCOUNT'}" Style="{StaticResource SectionLabel}" />
-                <TextBlock Text="{t:T 'Sign In with Your Microsoft Account'}" Style="{StaticResource TitleText}" Margin="0,8,0,0" />
+                <TextBlock Text="{t:T 'Xbox · Microsoft account'}" Style="{StaticResource SectionLabel}" />
+                <TextBlock Text="{t:T 'Sign In with Your Microsoft Account'}" Style="{StaticResource TitleText}" Margin="{t:Sp '0,xs,0,0'}" />
                 <TextBlock Text="{t:T 'Link your Xbox account with a Microsoft device code. The sign-in page opens in your default browser.'}"
-                           Style="{StaticResource HintText}" Margin="0,4,0,0" />
-                <Button Content="{t:T 'Signed In'}" Style="{StaticResource SuccessButton}" Margin="0,16,0,0"
+                           Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" />
+                <Button Content="{t:T 'Signed In'}" Style="{StaticResource SuccessButton}" Margin="{t:Sp '0,m,0,0'}"
                         Visibility="{Binding HasXboxAccount, Converter={StaticResource VisibleIf}}" />
                 <!-- Kod: tam yuvarlak kutuda büyük mono yazı, kopyala içte sağda. -->
-                <StackPanel x:Name="CodePanel" Visibility="Collapsed" Margin="0,16,0,0">
-                    <Border Height="64" CornerRadius="32" Background="{DynamicResource surface2Brush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" Padding="24,0,8,0">
+                <StackPanel x:Name="CodePanel" Visibility="Collapsed" Margin="{t:Sp '0,m,0,0'}">
+                    <Border Height="64" CornerRadius="32" Background="{DynamicResource surface2Brush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" Padding="{t:Sp 'l,0,xs,0'}">
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="{t:T 'Copy the Code'}" Style="{StaticResource SmallSecondaryButton}" VerticalAlignment="Center" Click="OnCopyCodeButton" />
                             <TextBox x:Name="Code" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="28" FontWeight="Bold" BorderThickness="0"
@@ -35,34 +35,34 @@
                             </TextBox>
                         </DockPanel>
                     </Border>
-                    <TextBlock Margin="0,12,0,0">
+                    <TextBlock Margin="{t:Sp '0,s,0,0'}">
                         <Hyperlink x:Name="Link" RequestNavigate="OnOpenLink"><Run x:Name="LinkText" /></Hyperlink>
                     </TextBlock>
-                    <TextBlock x:Name="Steps" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                    <TextBlock x:Name="Steps" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
                 </StackPanel>
-                <TextBlock x:Name="Status" Style="{StaticResource HintText}" Margin="0,8,0,0" />
-                <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,8,0,0" />
-                <StackPanel Orientation="Horizontal" Margin="0,24,0,0">
+                <TextBlock x:Name="Status" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
+                <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,xs,0,0'}" />
+                <StackPanel Orientation="Horizontal" Margin="{t:Sp '0,l,0,0'}">
                     <Button x:Name="SignIn" Content="{t:T 'Sign In with Microsoft'}" Style="{StaticResource PrimaryButton}" Click="OnSignIn" />
                     <!-- Hata olunca Xbox satırlarının da yazıldığı günlük açılır (Mac ve PS5 adımındaki gibi). -->
-                    <Button Content="{t:T 'Show Log File'}" Margin="12,0,0,0" Click="OnShowLog"
+                    <Button Content="{t:T 'Show Log File'}" Margin="{t:Sp 's,0,0,0'}" Click="OnShowLog"
                             Visibility="{Binding Text, ElementName=Error, Converter={StaticResource VisibleIf}}" />
                 </StackPanel>
             </StackPanel>
         </Border>
         <StackPanel Grid.Column="2">
-            <c:Card Title="{t:T 'SOUND'}">
+            <c:Card Title="{t:T 'Sound'}">
                 <c:SwitchRow x:Name="XboxSound" Content="{t:T 'Play Xbox Sound on This Computer'}" Description="{t:T 'When off, sound comes only from the TV.'}"
                              Divider="False" Checked="OnXboxSound" Unchecked="OnXboxSound" />
             </c:Card>
             <!-- #853: oyun bu bilgisayardaki Xbox uygulamasında / play.xbox.com'da oynanıyorsa yalnız seçilen pencere okunur. -->
-            <c:Card Margin="0,24,0,0">
+            <c:Card Margin="{t:Sp '0,l,0,0'}">
                 <StackPanel>
                     <TextBlock Text="{t:T 'Playing with the Xbox App or play.xbox.com on This Computer?'}" Style="{StaticResource HeadlineText}" />
-                    <TextBlock Text="{t:T 'Then you don\'t need to sign in with Microsoft; just choose the game window.'}" Style="{StaticResource HintText}" Margin="0,4,0,0" />
-                    <Button Content="{t:T 'Choose the Game Window'}" Margin="0,16,0,0" Click="OnUseXboxWindow" />
+                    <TextBlock Text="{t:T 'Then you don\'t need to sign in with Microsoft; just choose the game window.'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" />
+                    <Button Content="{t:T 'Choose the Game Window'}" Margin="{t:Sp '0,m,0,0'}" Click="OnUseXboxWindow" />
                     <TextBlock Text="{t:T 'CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation.'}"
-                               Style="{StaticResource TertiaryText}" Margin="0,16,0,0" />
+                               Style="{StaticResource TertiaryText}" Margin="{t:Sp '0,m,0,0'}" />
                 </StackPanel>
             </c:Card>
         </StackPanel>

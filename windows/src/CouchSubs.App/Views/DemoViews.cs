@@ -2,6 +2,7 @@
 // Deneme modu: konsol, hesap ve TV olmadan uygulamadaki örnek görüntülerle çeviri (Mac'teki DemoViews.swift ile aynı).
 
 using System.ComponentModel;
+using CouchSubs.App.Theme;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -53,11 +54,11 @@ public abstract class DemoView : UserControl
 /// <summary>Kurulum sihirbazının alt çubuğunda, ana ekranda ve Ayarlar'da görünen "Deneme modu" düğmesi.</summary>
 public sealed class DemoModeButton : DemoView
 {
-    private readonly Button button = new() { Padding = new Thickness(16, 0, 16, 0) };
+    private readonly Button button = new() { Padding = Sp.T("m", "0", "m", "0") };
 
     public DemoModeButton()
     {
-        var glyph = new TextBlock { Text = Glyphs.Play, FontSize = 16, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        var glyph = new TextBlock { Text = Glyphs.Play, FontSize = 16, Margin = Sp.T("0", "0", "xs", "0"), VerticalAlignment = VerticalAlignment.Center };
         glyph.SetResourceReference(StyleProperty, "GlyphText");
         var label = new TextBlock { Text = Localizer.Current["Try demo mode (no console needed)"], VerticalAlignment = VerticalAlignment.Center };
         // Yazı ve simge düğmenin rengini alır (hayalet düğmede sarı, ikincilde birincil yazı rengi).
@@ -128,8 +129,8 @@ public sealed class DemoModeButton : DemoView
 /// <summary>Ayarlar › Görüntü kaynağı: deneme modunu açar ya da kapatır.</summary>
 public sealed class DemoModeCard : DemoView
 {
-    private readonly Button exit = new() { HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(16, 0, 16, 0), Margin = new Thickness(0, 12, 0, 0) };
-    private readonly DemoModeButton start = new() { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly Button exit = new() { HorizontalAlignment = HorizontalAlignment.Left, Padding = Sp.T("m", "0", "m", "0"), Margin = Sp.T("0", "s", "0", "0") };
+    private readonly DemoModeButton start = new() { HorizontalAlignment = HorizontalAlignment.Left, Margin = Sp.T("0", "s", "0", "0") };
 
     public DemoModeCard()
     {
@@ -166,7 +167,7 @@ public sealed class DemoFrameTile : DemoView
     {
         var pill = new Border { Child = new TextBlock { Text = Localizer.Current["Demo mode"], VerticalAlignment = VerticalAlignment.Center } };
         pill.SetResourceReference(StyleProperty, "ProPill");
-        var exit = new Button { Content = Localizer.Current["Exit"], Padding = new Thickness(16, 0, 16, 0) };
+        var exit = new Button { Content = Localizer.Current["Exit"], Padding = Sp.T("m", "0", "m", "0") };
         exit.SetResourceReference(StyleProperty, "SecondaryButton");
         exit.Click += (_, _) => Controller?.ExitDemo();
         System.Windows.Automation.AutomationProperties.SetAutomationId(exit, "demoModeExit");
@@ -175,7 +176,7 @@ public sealed class DemoFrameTile : DemoView
         header.Children.Add(exit);
         header.Children.Add(pill);
         // Kare gelene kadar boş bir alan durur.
-        var picture = new Border { Child = image, Margin = new Thickness(0, 12, 0, 0), MaxHeight = 260, MinHeight = 120 };
+        var picture = new Border { Child = image, Margin = Sp.T("0", "s", "0", "0"), MaxHeight = 260, MinHeight = 120 };
         picture.SetResourceReference(Border.BackgroundProperty, "backgroundBrush");
         picture.SetResourceReference(Border.CornerRadiusProperty, "radius.inner");
         var panel = new StackPanel();

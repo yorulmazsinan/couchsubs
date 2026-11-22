@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 using System.Windows;
+using CouchSubs.App.Theme;
 using System.Windows.Controls;
 using CouchSubs.Core;
 using CouchSubs.Shell;
@@ -35,7 +36,7 @@ public partial class XboxConsoleStep : UserControl
                     Content = $"{console.Name} ({console.Model})" + (console.StreamingEnabled ? "" : " — " + text["Remote play is off"]),
                     GroupName = "xbox", IsEnabled = console.StreamingEnabled,
                     IsChecked = Controller.SelectedXboxConsole?.Id == console.Id,
-                    Margin = new Thickness(0, 0, 0, 12),
+                    Margin = Sp.T("0", "0", "0", "s"),
                 };
                 option.Checked += (_, _) => Controller.SelectXboxConsole(console);
                 Consoles.Children.Add(option);

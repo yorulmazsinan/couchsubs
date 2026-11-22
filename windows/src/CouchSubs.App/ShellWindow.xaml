@@ -19,7 +19,7 @@
         </Grid.RowDefinitions>
 
         <!-- Üst çubuk: üç sütun (1fr auto 1fr), yanlarda 24. -->
-        <Grid x:Name="TopBar" Height="{DynamicResource size.titleBarHeight}" Margin="24,0">
+        <Grid x:Name="TopBar" Height="{DynamicResource size.titleBarHeight}" Margin="{t:Sp 'l,0'}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -27,7 +27,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <c:CouchLogo />
-                <TextBlock Text="CouchSubs" FontWeight="Bold" FontSize="15" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Text="CouchSubs" FontWeight="Bold" FontSize="15" Margin="{t:Sp 's,0,0,0'}" VerticalAlignment="Center" />
             </StackPanel>
             <Border x:Name="Tabs" Grid.Column="1" Style="{StaticResource TabGroup}" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal">

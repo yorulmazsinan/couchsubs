@@ -53,22 +53,22 @@ public sealed class HdmiStep : UserControl
             big.FontSize = 28;
             stack.Children.Add(small);
             stack.Children.Add(big);
-            var tile = new OptionCard { Content = stack, GroupName = "hdmi", MinHeight = 104, Margin = new Thickness(i == 0 ? 0 : 6, 0, i == 3 ? 0 : 6, 0), Tag = number };
+            var tile = new OptionCard { Content = stack, GroupName = "hdmi", MinHeight = 104, Margin = new Thickness(i == 0 ? 0 : Sp.V("titleBody"), 0, i == 3 ? 0 : Sp.V("titleBody"), 0), Tag = number };
             tile.Checked += (_, _) => Try(number);
             inputs[i] = tile;
             tiles.Children.Add(tile);
         }
         left.Children.Add(tiles);
         var auto = new OptionCard { Content = l["I Don't Know, Try Them in Turn"], Description = l["We open the inputs one by one; you confirm when you see the picture."],
-            GroupName = "hdmiAuto", Margin = new Thickness(0, 16, 0, 0) };
+            GroupName = "hdmiAuto", Margin = Sp.T("0", "m", "0", "0") };
         auto.Checked += (_, _) => { inputs[0].IsChecked = true; Try(1); auto.IsChecked = false; };
         left.Children.Add(auto);
-        var how = new Border { Padding = new Thickness(16), CornerRadius = new CornerRadius(16), Margin = new Thickness(0, 16, 0, 0) };
+        var how = new Border { Padding = Sp.T("m"), CornerRadius = new CornerRadius(16), Margin = Sp.T("0", "m", "0", "0") };
         how.SetResourceReference(Border.BackgroundProperty, "surface2Brush");
         var howStack = new StackPanel();
         var howTitle = new TextBlock { Text = l["How Do I Tell?"] };
         howTitle.SetResourceReference(StyleProperty, "RowTitle");
-        var howText = new TextBlock { Text = l["The number is printed on the back of the TV next to the port the PS5 cable is plugged into. If the PS5 is plugged into a sound system (soundbar, amplifier), choose the input the sound system is connected to."], Margin = new Thickness(0, 4, 0, 0) };
+        var howText = new TextBlock { Text = l["The number is printed on the back of the TV next to the port the PS5 cable is plugged into. If the PS5 is plugged into a sound system (soundbar, amplifier), choose the input the sound system is connected to."], Margin = Sp.T("0", "xxs", "0", "0") };
         howText.SetResourceReference(StyleProperty, "HintText");
         howStack.Children.Add(howTitle);
         howStack.Children.Add(howText);
@@ -78,7 +78,7 @@ public sealed class HdmiStep : UserControl
 
         // Sağ: TV önizlemesi ve onay
         var right = new StackPanel();
-        var chip = new Border { Child = badge, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(12) };
+        var chip = new Border { Child = badge, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Margin = Sp.T("s") };
         chip.SetResourceReference(StyleProperty, "SceneChip");
         var line = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White };
         var name = new System.Windows.Documents.Run("Jason: ");
@@ -88,31 +88,31 @@ public sealed class HdmiStep : UserControl
         sample.Child = line;
         sample.Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x10, 0x10, 0x14));
         sample.CornerRadius = new CornerRadius(12);
-        sample.Padding = new Thickness(12, 8, 12, 8);
+        sample.Padding = Sp.T("s", "xs", "s", "xs");
         sample.HorizontalAlignment = HorizontalAlignment.Center;
         sample.VerticalAlignment = VerticalAlignment.Bottom;
-        sample.Margin = new Thickness(16);
+        sample.Margin = Sp.T("m");
         var screen = new Grid { Children = { sample, chip } };
         var frame = new Border { Child = screen };
         frame.SetResourceReference(StyleProperty, "DeviceFrame");
         right.Children.Add(new Views.AspectBox { Child = frame });
-        var question = new TextBlock { Text = l["Do You See the Game Picture on the TV?"], Margin = new Thickness(0, 16, 0, 0) };
+        var question = new TextBlock { Text = l["Do You See the Game Picture on the TV?"], Margin = Sp.T("0", "m", "0", "0") };
         question.SetResourceReference(StyleProperty, "HeadlineText");
         right.Children.Add(question);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "m", "0", "0") };
         yes.Content = l["Yes"];
         yes.SetResourceReference(StyleProperty, "PrimaryButton");
         yes.Click += (_, _) => Confirm();
-        var next = new Button { Content = l["No, Next Input"], Margin = new Thickness(12, 0, 0, 0) };
+        var next = new Button { Content = l["No, Next Input"], Margin = Sp.T("s", "0", "0", "0") };
         next.Click += (_, _) => Next();
         buttons.Children.Add(yes);
         buttons.Children.Add(next);
         right.Children.Add(buttons);
-        var remember = new TextBlock { Text = l["The choice is remembered. You can change it later in Settings › Consoles."], Margin = new Thickness(0, 16, 0, 0) };
+        var remember = new TextBlock { Text = l["The choice is remembered. You can change it later in Settings › Consoles."], Margin = Sp.T("0", "m", "0", "0") };
         remember.SetResourceReference(StyleProperty, "HintText");
         right.Children.Add(remember);
         note.SetResourceReference(StyleProperty, "HintText");
-        note.Margin = new Thickness(0, 8, 0, 0);
+        note.Margin = Sp.T("0", "xs", "0", "0");
         right.Children.Add(note);
         var card = new Border { Child = right };
         card.SetResourceReference(StyleProperty, "CardBorder");

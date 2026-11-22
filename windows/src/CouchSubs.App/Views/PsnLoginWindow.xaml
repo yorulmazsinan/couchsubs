@@ -7,7 +7,7 @@
         Title="PlayStation Network" Width="520" Height="720" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner" Background="{DynamicResource backgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,0,0,1" Padding="{t:Sp 'm,s'}">
             <Grid>
                 <TextBlock Text="PlayStation Network" Style="{StaticResource HeadlineText}" VerticalAlignment="Center" />
                 <Button Content="{t:T 'Cancel'}" HorizontalAlignment="Right" IsCancel="True" Click="OnCancel" />

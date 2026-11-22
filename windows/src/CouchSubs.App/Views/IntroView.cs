@@ -31,7 +31,7 @@ public sealed class IntroView : UserControl
     private readonly Ellipse glow = new() { Width = 520, Height = 300 };
     private readonly TextBlock word = new() { Text = "CouchSubs", FontSize = 34, FontWeight = FontWeights.Bold, Foreground = Light, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly StackPanel by = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly StackPanel cta = new() { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
+    private readonly StackPanel cta = new() { HorizontalAlignment = HorizontalAlignment.Center, Margin = Sp.T("0", "m", "0", "0") };
 
     private static readonly Brush Light = Frozen(Color.FromRgb(0xF3, 0xEE, 0xE4));
     private static readonly Brush Faint = Frozen(Color.FromRgb(0x8D, 0x88, 0x7F));
@@ -52,32 +52,32 @@ public sealed class IntroView : UserControl
         logo.Children.Add(seat);
 
         by.Children.Add(new TextBlock { Text = Localizer.Current["by"], FontFamily = (FontFamily)Application.Current.FindResource("MonoFont"), FontSize = 11, Foreground = Faint, VerticalAlignment = VerticalAlignment.Center });
-        by.Children.Add(new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/enmera-white.png")), Height = 11, Opacity = 0.75, Margin = new Thickness(8, 0, 0, 0) });
+        by.Children.Add(new Image { Source = new BitmapImage(new Uri("pack://application:,,,/Assets/enmera-white.png")), Height = 11, Opacity = 0.75, Margin = Sp.T("xs", "0", "0", "0") });
 
         var start = new Button { Content = Localizer.Current["Let's Get Started"], HorizontalAlignment = HorizontalAlignment.Center };
         start.SetResourceReference(StyleProperty, "WidePrimaryButton");
         start.Click += (_, _) => done();
         cta.Children.Add(start);
-        cta.Children.Add(new TextBlock { Text = Localizer.Current["Setup takes about 3 minutes."], FontSize = 13, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) });
+        cta.Children.Add(new TextBlock { Text = Localizer.Current["Setup takes about 3 minutes."], FontSize = 13, Foreground = Faint, HorizontalAlignment = HorizontalAlignment.Center, Margin = Sp.T("0", "s", "0", "0") });
 
         var center = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
         center.Children.Add(new Viewbox { Width = 240, Height = 185, Child = logo });
-        word.Margin = new Thickness(0, 28, 0, 0);
+        word.Margin = Sp.T("0", "l", "0", "0");
         center.Children.Add(word);
-        by.Margin = new Thickness(0, 28, 0, 0);
+        by.Margin = Sp.T("0", "l", "0", "0");
         center.Children.Add(by);
         center.Children.Add(cta);
 
         var replay = Ghost(Localizer.Current["Replay with Sound"], () => Play(sound: true));
         var silent = Ghost(Localizer.Current["Replay Silently"], () => Play(sound: false));
-        silent.Margin = new Thickness(8, 0, 0, 0);
-        var left = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(24) };
+        silent.Margin = Sp.T("xs", "0", "0", "0");
+        var left = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = Sp.T("l") };
         left.Children.Add(replay);
         left.Children.Add(silent);
         var skip = Ghost(Localizer.Current["Skip Intro"], done);
         skip.HorizontalAlignment = HorizontalAlignment.Right;
         skip.VerticalAlignment = VerticalAlignment.Bottom;
-        skip.Margin = new Thickness(24);
+        skip.Margin = Sp.T("l");
 
         var root = new Grid();
         root.Children.Add(center);
@@ -105,7 +105,7 @@ public sealed class IntroView : UserControl
 
     private static Button Ghost(string text, Action click)
     {
-        var button = new Button { Content = text, Height = 40, MinHeight = 40, Padding = new Thickness(18, 0, 18, 0), FontSize = 13, Foreground = Frozen(Color.FromRgb(0xBD, 0xB8, 0xAE)),
+        var button = new Button { Content = text, Height = 40, MinHeight = 40, Padding = Sp.T("m", "0", "m", "0"), FontSize = 13, Foreground = Frozen(Color.FromRgb(0xBD, 0xB8, 0xAE)),
             Background = Frozen(Color.FromRgb(0x1C, 0x1D, 0x21)), BorderBrush = Frozen(Color.FromRgb(0x33, 0x35, 0x3C)), BorderThickness = new Thickness(1) };
         button.SetResourceReference(StyleProperty, "ButtonBase");
         button.Click += (_, _) => click();

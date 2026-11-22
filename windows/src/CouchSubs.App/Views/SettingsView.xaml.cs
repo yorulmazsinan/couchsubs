@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Diagnostics;
+using CouchSubs.App.Theme;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -309,7 +310,7 @@ public partial class SettingsView : UserControl
                 {
                     Content = target.Title, Description = item == selected && !windows.Contains(target)
                         ? $"{target.ProcessName} · {Localizer.Current["Not currently open"]}" : target.ProcessName,
-                    GroupName = "captureWindow", IsChecked = item == selected, Margin = new Thickness(0, 0, 0, 8), MinHeight = 64,
+                    GroupName = "captureWindow", IsChecked = item == selected, Margin = Sp.T("0", "0", "0", "xs"), MinHeight = 64,
                 };
                 card.Checked += (_, _) => { if (!refreshingCaptureWindows) CaptureWindowChoice.SelectedItem = item; };
                 CaptureWindowCards.Children.Add(card);
@@ -415,18 +416,18 @@ public partial class SettingsView : UserControl
         var active = controller.Settings.ActiveAreaProfile;
         foreach (var profile in controller.GameProfiles)
         {
-            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4), LastChildFill = true };
+            var row = new DockPanel { Margin = Sp.T("0", "xxs", "0", "xxs"), LastChildFill = true };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal };
             DockPanel.SetDock(buttons, Dock.Right);
-            void AddButton(string title, Action run, double left = 8)
+            void AddButton(string title, Action run, string left = "xs")
             {
-                var button = new Button { Content = text[title], Padding = new Thickness(12, 0, 12, 0), Margin = new Thickness(left, 0, 0, 0) };
+                var button = new Button { Content = text[title], Padding = Sp.T("s", "0", "s", "0"), Margin = Sp.T(left, "0", "0", "0") };
                 button.Click += (_, _) => run();
                 buttons.Children.Add(button);
             }
             var key = profile.Key;
             var game = profile.Game;
-            if (key != active) AddButton("Use", () => controller.UseAreaProfile(key), 0);
+            if (key != active) AddButton("Use", () => controller.UseAreaProfile(key), "0");
             AddButton("Rename", () => BeginProfileEdit((key, false), game));
             AddButton("Duplicate", () => BeginProfileEdit((key, true), ""));
             AddButton("Delete profile", () =>
@@ -565,7 +566,7 @@ public partial class SettingsView : UserControl
             PackList.Items.Add(new TextBlock
             {
                 Text = text["No game pack is installed."], Style = (Style)FindResource("HintText"), TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(8),
+                Margin = Sp.T("xs"),
             });
             return;
         }
@@ -619,7 +620,7 @@ public partial class SettingsView : UserControl
         {
             Style = (Style)FindResource("IconButton"), Width = 52, Height = 52, Padding = new Thickness(0),
             BorderThickness = new Thickness(0), Background = Brushes.Transparent,
-            Content = badge, Margin = new Thickness(0, 0, 16, 0), ToolTip = CoverText("Choose game cover…", "Oyun kapağı seç…"),
+            Content = badge, Margin = Sp.T("0", "0", "m", "0"), ToolTip = CoverText("Choose game cover…", "Oyun kapağı seç…"),
         };
         System.Windows.Automation.AutomationProperties.SetName(coverButton,
             CoverText("Choose game cover…", "Oyun kapağı seç…") + " " + pack.Title);
@@ -643,12 +644,12 @@ public partial class SettingsView : UserControl
 
         var name = new TextBlock { Text = pack.Title, Style = (Style)FindResource("HeadlineText") };
         var count = new TextBlock { Text = lines, Style = (Style)FindResource("CaptionText"),
-            Margin = new Thickness(0, 4, 0, 0) };
+            Margin = Sp.T("0", "xxs", "0", "0") };
         var row = new DockPanel();
         DockPanel.SetDock(coverButton, Dock.Left);
         row.Children.Add(coverButton);
         row.Children.Add(new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { name, count } });
-        return new Controls.Card { Content = row, Margin = new Thickness(8) };
+        return new Controls.Card { Content = row, Margin = Sp.T("xs") };
     }
 
     /// <summary>Import and center-crop one cover to a 128px PNG; no network or image dependency is needed.</summary>
@@ -1706,13 +1707,13 @@ public partial class SettingsView : UserControl
                 Text = HotkeyText.Name(action),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 16, 8),
+                Margin = Sp.T("0", "0", "m", "xs"),
             };
             Grid.SetRow(name, row);
             ShortcutGrid.Children.Add(name);
             for (var slot = 0; slot < HotkeyTable.SlotCount; slot++)
             {
-                var button = new Button { MinWidth = 160, Margin = new Thickness(slot == 0 ? 0 : 8, 0, 0, 8), Tag = (action, slot) };
+                var button = new Button { MinWidth = 160, Margin = new Thickness(slot == 0 ? 0 : Sp.V("xs"), 0, 0, Sp.V("xs")), Tag = (action, slot) };
                 button.Click += OnShortcutClick;
                 button.LostKeyboardFocus += (_, _) => { if (recording?.Button == button) StopRecording(); };
                 Grid.SetRow(button, row);

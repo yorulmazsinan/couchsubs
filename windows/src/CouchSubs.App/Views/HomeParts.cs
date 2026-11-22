@@ -26,14 +26,14 @@ public sealed class StatusChip : Border
     public StatusChip()
     {
         Height = 56;
-        Padding = new Thickness(16, 0, 16, 0);
+        Padding = Sp.T("m", "0", "m", "0");
         CornerRadius = new CornerRadius(16);
         label.SetResourceReference(TextBlock.ForegroundProperty, "textSecondaryBrush");
         extra.FontFamily = (FontFamily)Application.Current.FindResource("MonoFont");
         extra.FontSize = 12;
         extra.FontWeight = FontWeights.Medium;
         extra.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "textSecondaryBrush");
-        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = Sp.T("s", "0", "0", "0") };
         texts.Children.Add(label);
         texts.Children.Add(value);
         var row = new DockPanel();
@@ -131,14 +131,14 @@ public sealed class GamePreview : ContentControl
     private readonly Image image = new() { Stretch = Stretch.Fill };
     private readonly Grid stage = new() { ClipToBounds = true };
     private readonly TextBlock liveText = new() { FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Ellipse liveDot = new() { Width = 7, Height = 7, Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0x5A, 0x5A)), Margin = new Thickness(0, 0, 8, 0) };
+    private readonly Ellipse liveDot = new() { Width = 7, Height = 7, Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0x5A, 0x5A)), Margin = Sp.T("0", "0", "xs", "0") };
     private readonly Border rateChip;
     private readonly TextBlock rateText = new() { FontSize = 11, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
     private readonly Border area = new() { BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(10) };
     private readonly Rectangle areaDash = new() { StrokeThickness = 2, StrokeDashArray = [4, 3], RadiusX = 10, RadiusY = 10 };
     private readonly Border lineBox = new()
     {
-        Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x10, 0x10, 0x14)), CornerRadius = new CornerRadius(12), Padding = new Thickness(16, 12, 16, 12),
+        Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x10, 0x10, 0x14)), CornerRadius = new CornerRadius(12), Padding = Sp.T("m", "s", "m", "s"),
         VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Center, Visibility = Visibility.Collapsed,
     };
     private readonly TextBlock lineText = new() { FontSize = 17, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextAlignment = TextAlignment.Center };
@@ -159,8 +159,8 @@ public sealed class GamePreview : ContentControl
             IsHitTestVisible = false,
         });
         areaDash.SetResourceReference(Shape.StrokeProperty, "accentBrush");
-        var areaLabel = new Border { Height = 22, Padding = new Thickness(8, 0, 8, 0), CornerRadius = new CornerRadius(11), HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12, -12, 0, 0) };
+        var areaLabel = new Border { Height = 22, Padding = Sp.T("xs", "0", "xs", "0"), CornerRadius = new CornerRadius(11), HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top, Margin = Sp.T("s", "-s", "0", "0") };
         areaLabel.SetResourceReference(Border.BackgroundProperty, "accentBrush");
         var areaLabelText = new TextBlock { Text = Localizer.Current["Area Read"], FontSize = 11, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
         areaLabelText.SetResourceReference(TextBlock.ForegroundProperty, "onAccentBrush");
@@ -177,12 +177,12 @@ public sealed class GamePreview : ContentControl
         stage.Children.Add(lineBox);
         var live = Chip(new StackPanel { Orientation = Orientation.Horizontal, Children = { liveDot, liveText } });
         live.HorizontalAlignment = HorizontalAlignment.Left;
-        live.Margin = new Thickness(12);
+        live.Margin = Sp.T("s");
         stage.Children.Add(live);
         rateText.FontFamily = (FontFamily)Application.Current.FindResource("MonoFont");
         rateChip = Chip(rateText);
         rateChip.HorizontalAlignment = HorizontalAlignment.Right;
-        rateChip.Margin = new Thickness(12);
+        rateChip.Margin = Sp.T("s");
         stage.Children.Add(rateChip);
         stage.SizeChanged += (_, _) => Layout();
         frame.Child = stage;

@@ -16,7 +16,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Row" Background="Transparent" BorderBrush="{DynamicResource dividerBrush}" BorderThickness="0,0,0,1" Padding="24,12">
+                        <Border x:Name="Row" Background="Transparent" BorderBrush="{DynamicResource dividerBrush}" BorderThickness="0,0,0,1" Padding="{t:Sp 'l,s'}">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -32,7 +32,7 @@
             </Setter>
         </Style>
     </UserControl.Resources>
-    <Grid Margin="24">
+    <Grid Margin="{t:Sp 'l'}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="16" />
@@ -46,11 +46,11 @@
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Border Height="48" CornerRadius="24" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" Padding="16,0">
+            <Border Height="48" CornerRadius="24" Background="{DynamicResource surfaceBrush}" BorderBrush="{DynamicResource borderBrush}" BorderThickness="1" Padding="{t:Sp 'm,0'}">
                 <DockPanel>
                     <Path DockPanel.Dock="Left" Width="18" Height="18" Stretch="Uniform" Stroke="{DynamicResource textSecondaryBrush}" StrokeThickness="2"
                           StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M11,4 A7,7 0 1 1 10.99,4 M20,20 L16,16" VerticalAlignment="Center" />
-                    <Grid Margin="12,0,0,0">
+                    <Grid Margin="{t:Sp 's,0,0,0'}">
                         <TextBlock x:Name="SearchHint" Text="{t:T 'Search Subtitles'}" Foreground="{DynamicResource textTertiaryBrush}" VerticalAlignment="Center" IsHitTestVisible="False" />
                         <TextBox x:Name="Search" Background="Transparent" BorderThickness="0" Padding="0" TextChanged="OnSearch"
                                  AutomationProperties.Name="{t:T 'Search Subtitles'}">
@@ -75,7 +75,7 @@
         <!-- Tablo -->
         <Border Grid.Row="2" Style="{StaticResource CardBorder}" Padding="0" ClipToBounds="True">
             <DockPanel>
-                <Grid DockPanel.Dock="Top" Margin="24,16" >
+                <Grid DockPanel.Dock="Top" Margin="{t:Sp 'l,m'}" >
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="72" />
                         <ColumnDefinition Width="16" />
@@ -85,27 +85,27 @@
                         <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="96" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{t:T 'TIME'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="2" Text="{t:T 'TURKISH'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="4" Text="{t:T 'ENGLISH'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                    <TextBlock Grid.Column="6" Text="{t:T 'SOURCE'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                    <TextBlock Text="{t:T 'Time'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                    <TextBlock Grid.Column="2" Text="{t:T 'Turkish'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                    <TextBlock Grid.Column="4" Text="{t:T 'English'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                    <TextBlock Grid.Column="6" Text="{t:T 'Source'}" Style="{StaticResource SectionLabel}" Margin="0" />
                 </Grid>
                 <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource borderBrush}" />
 
                 <!-- Alt çubuk: satır sayısı ve işler -->
-                <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,1,0,0" Padding="24,12">
+                <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,1,0,0" Padding="{t:Sp 'l,s'}">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Button x:Name="ExportButton" Content="{t:T 'Export'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Click="OnExport" />
-                            <Button x:Name="ReportButton" Content="{t:T 'Report a Wrong Translation'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="8,0,0,0" Click="OnReport" />
-                            <Button x:Name="ClearAll" Content="{t:T 'Clear History'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="8,0,0,0" Click="OnClear" />
+                            <Button x:Name="ReportButton" Content="{t:T 'Report a Wrong Translation'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Click="OnReport" />
+                            <Button x:Name="ClearAll" Content="{t:T 'Clear History'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Click="OnClear" />
                         </StackPanel>
                         <TextBlock x:Name="Summary" FontSize="13" Foreground="{DynamicResource textSecondaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                     </DockPanel>
                 </Border>
 
                 <Grid>
-                    <TextBlock x:Name="EmptyHint" Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="48" TextAlignment="Center" />
+                    <TextBlock x:Name="EmptyHint" Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{t:Sp 'xxl'}" TextAlignment="Center" />
                     <ListBox x:Name="Lines" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource RowItem}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" KeyDown="OnLinesKey">
                         <ListBox.ContextMenu>

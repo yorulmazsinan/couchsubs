@@ -8,28 +8,28 @@
         xmlns:t="clr-namespace:CouchSubs.App.Theme"
         Title="{t:T 'About CouchSubs'}" Width="460" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="True"
         WindowStartupLocation="CenterOwner" Background="{DynamicResource windowBackgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}">
-    <Border Style="{StaticResource CardBorder}" Margin="24">
+    <Border Style="{StaticResource CardBorder}" Margin="{t:Sp 'l'}">
         <StackPanel>
-            <TextBlock Text="{t:T 'ABOUT'}" Style="{StaticResource SectionLabel}" />
-            <c:CouchLogo Width="110" Height="80" HorizontalAlignment="Center" Margin="0,8,0,0" />
-            <TextBlock Text="CouchSubs" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,12,0,0" />
-            <TextBlock x:Name="Version" Style="{StaticResource MonoText}" Foreground="{DynamicResource textSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12" />
+            <TextBlock Text="{t:T 'About'}" Style="{StaticResource SectionLabel}" />
+            <c:CouchLogo Width="110" Height="80" HorizontalAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
+            <TextBlock Text="CouchSubs" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="{t:Sp '0,s,0,0'}" />
+            <TextBlock x:Name="Version" Style="{StaticResource MonoText}" Foreground="{DynamicResource textSecondaryBrush}" HorizontalAlignment="Center" Margin="{t:Sp '0,xxs,0,s'}" />
             <TextBlock Text="{t:T 'Free and open source under the GNU AGPL-3.0 license.'}" Style="{StaticResource HintText}" TextAlignment="Center" />
-            <TextBlock Text="{t:T 'Remote Play connection by chiaki-ng (AGPL-3.0). Thanks to its developers.'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="0,8,0,0" />
-            <TextBlock Text="{t:T 'The Xbox home console picture uses the open source approach of Greenlight (MIT).'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="0,8,0,0" />
-            <TextBlock Text="{t:T 'Translation model: OPUS-MT, University of Helsinki (CC BY 4.0).'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="0,8,0,0" />
+            <TextBlock Text="{t:T 'Remote Play connection by chiaki-ng (AGPL-3.0). Thanks to its developers.'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
+            <TextBlock Text="{t:T 'The Xbox home console picture uses the open source approach of Greenlight (MIT).'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
+            <TextBlock Text="{t:T 'Translation model: OPUS-MT, University of Helsinki (CC BY 4.0).'}" Style="{StaticResource HintText}" TextAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
             <TextBlock Text="{t:T 'CouchSubs is not affiliated with Sony Interactive Entertainment. PlayStation and PS5 are trademarks of Sony Interactive Entertainment Inc.'}"
-                       Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="0,12,0,0" />
+                       Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="{t:Sp '0,s,0,0'}" />
             <TextBlock Text="{t:T 'CouchSubs is not affiliated with Microsoft. Xbox is a trademark of Microsoft Corporation.'}"
-                       Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="0,4,0,0" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                       Style="{StaticResource CaptionText}" TextAlignment="Center" Margin="{t:Sp '0,xxs,0,0'}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="{t:Sp '0,m,0,0'}">
                 <Button Content="{t:T 'Source'}" Style="{StaticResource SmallSecondaryButton}" Height="40" Tag="https://github.com/yorulmazsinan/couchsubs" Click="OnLink" />
-                <Button Content="chiaki-ng" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="8,0,0,0" Tag="https://github.com/chiaki-ng/chiaki-ng" Click="OnLink" />
-                <Button Content="Greenlight" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="8,0,0,0" Tag="https://github.com/unknownskl/greenlight" Click="OnLink" />
+                <Button Content="chiaki-ng" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Tag="https://github.com/chiaki-ng/chiaki-ng" Click="OnLink" />
+                <Button Content="Greenlight" Style="{StaticResource SmallSecondaryButton}" Height="40" Margin="{t:Sp 'xs,0,0,0'}" Tag="https://github.com/unknownskl/greenlight" Click="OnLink" />
             </StackPanel>
-            <Image x:Name="EnmeraLogo" Height="16" Opacity="0.85" HorizontalAlignment="Center" Margin="0,24,0,0" RenderOptions.BitmapScalingMode="HighQuality" />
-            <TextBlock Text="{t:T 'Copyright © 2026 Enmera'}" FontSize="11" Foreground="{DynamicResource textTertiaryBrush}" HorizontalAlignment="Center" Margin="0,8,0,0" />
-            <Button Content="{t:T 'Close'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Margin="0,16,0,0" IsDefault="True" IsCancel="True" Click="OnClose" />
+            <Image x:Name="EnmeraLogo" Height="16" Opacity="0.85" HorizontalAlignment="Center" Margin="{t:Sp '0,l,0,0'}" RenderOptions.BitmapScalingMode="HighQuality" />
+            <TextBlock Text="{t:T 'Copyright © 2026 Enmera'}" FontSize="11" Foreground="{DynamicResource textTertiaryBrush}" HorizontalAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
+            <Button Content="{t:T 'Close'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Margin="{t:Sp '0,m,0,0'}" IsDefault="True" IsCancel="True" Click="OnClose" />
         </StackPanel>
     </Border>
 </Window>

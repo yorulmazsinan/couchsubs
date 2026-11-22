@@ -36,6 +36,8 @@ public static class Palette
         ["knob"] = ("#FFFFFF", "#FFFFFF"),
         ["scene"] = ("#6D6A5D", "#6D6A5D"),
         ["onDanger"] = ("#FFFFFF", "#17181B"),
+        // Ayarlar menüsü seçim hapının halkası: amber %45 (Mac dsAmber.opacity(0.45)).
+        ["amberRing"] = ("#F5B83D73", "#F5B83D73"),
     };
 
     /// <summary>Ad → (açık, koyu) renk; kaynaklarda <c>{ad}Color</c> ve <c>{ad}Brush</c>.</summary>
@@ -93,11 +95,12 @@ public static class Palette
 
     private static Dictionary<string, double> BuildSpace()
     {
+        // Adlar ve değerler tasarim.json › space ile birebir (Mac DS.space(...) aynı adları kullanır):
+        // line 2, xxs 4, titleBody 6, unitHint 6, unitTitle 8, xs 8, related 12, s 12, m 16, unitGap 24, l 24, section 32, xl 32, xxl 40.
         var space = Numbers("space");
-        // Eski adlar: kart içi ve arası 24, öğe arası 16.
-        foreach (var (old, value) in new[] { ("s", 8.0), ("m", 12.0), ("l", 16.0), ("xl", 24.0), ("xxl", 32.0), ("inline", 8.0), ("gap", 16.0),
-                     ("tile", 24.0), ("screen", 24.0), ("card", 24.0) })
-            space[old] = value;
+        // Eski adlar (yalnız dosyada olmayanlar): kart içi ve arası 24, öğe arası 16.
+        foreach (var (old, value) in new[] { ("inline", 8.0), ("gap", 16.0), ("tile", 24.0), ("screen", 24.0), ("card", 24.0) })
+            space.TryAdd(old, value);
         return space;
     }
 

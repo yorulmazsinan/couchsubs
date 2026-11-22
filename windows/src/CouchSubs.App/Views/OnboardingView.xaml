@@ -9,7 +9,7 @@
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:local="clr-namespace:CouchSubs.App.Views">
     <DockPanel>
-        <Grid DockPanel.Dock="Top" Height="{DynamicResource size.titleBarHeight}" Margin="24,0">
+        <Grid DockPanel.Dock="Top" Height="{DynamicResource size.titleBarHeight}" Margin="{t:Sp 'l,0'}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -17,30 +17,30 @@
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <c:CouchLogo />
-                <TextBlock Text="CouchSubs" FontWeight="Bold" FontSize="15" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Text="CouchSubs" FontWeight="Bold" FontSize="15" Margin="{t:Sp 's,0,0,0'}" VerticalAlignment="Center" />
             </StackPanel>
             <StackPanel x:Name="Dots" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" />
             <Button x:Name="LaterButton" Grid.Column="2" Style="{StaticResource LinkButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
                     Content="{t:T 'I\'ll Set Up Later'}" Click="OnLater" />
         </Grid>
 
-        <Grid Margin="120,24,120,40">
+        <Grid Margin="{t:Sp 'wizardSide,l,wizardSide,xxl'}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock x:Name="Counter" Style="{StaticResource SectionLabel}" Margin="0,0,0,8" />
+            <TextBlock x:Name="Counter" Style="{StaticResource SectionLabel}" Margin="{t:Sp '0,0,0,xs'}" />
             <ScrollViewer Grid.Row="1" Style="{StaticResource CardScroll}">
-                <ContentControl x:Name="StepHost" Focusable="False" Margin="0,0,8,0" />
+                <ContentControl x:Name="StepHost" Focusable="False" Margin="{t:Sp '0,0,xs,0'}" />
             </ScrollViewer>
-            <DockPanel Grid.Row="2" Margin="0,32,0,0" LastChildFill="False">
-                <Button x:Name="BackButton" Content="{t:T 'Back'}" Style="{StaticResource SecondaryButton}" Margin="0,0,12,0" Click="OnBack" />
+            <DockPanel Grid.Row="2" Margin="{t:Sp '0,xl,0,0'}" LastChildFill="False">
+                <Button x:Name="BackButton" Content="{t:T 'Back'}" Style="{StaticResource SecondaryButton}" Margin="{t:Sp '0,0,s,0'}" Click="OnBack" />
                 <Button x:Name="ContinueButton" Content="{t:T 'Continue'}" Style="{StaticResource WidePrimaryButton}" IsDefault="True"
                         IsEnabled="{Binding CanAdvance}" Click="OnContinue" />
                 <!-- Her adımda: konsolu olmayan, uygulamayı örnek görüntülerle dener. -->
                 <local:DemoModeButton DockPanel.Dock="Right" ButtonStyle="GhostButton" />
-                <Button DockPanel.Dock="Right" Content="{t:T 'Reset setup'}" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                <Button DockPanel.Dock="Right" Content="{t:T 'Reset setup'}" Style="{StaticResource GhostButton}" Margin="{t:Sp '0,0,xs,0'}"
                         Visibility="{Binding ConsoleKindLocked, Converter={StaticResource VisibleIf}}" Click="OnReset" />
             </DockPanel>
         </Grid>

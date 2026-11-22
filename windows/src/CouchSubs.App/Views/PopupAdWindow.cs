@@ -56,8 +56,8 @@ public static class PopupAdWindow
         };
         var tag = new Border
         {
-            Height = 22, Padding = new Thickness(8, 0, 8, 0), CornerRadius = new CornerRadius(11), Background = new SolidColorBrush(Color.FromArgb(0x73, 0, 0, 0)),
-            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12), IsHitTestVisible = false,
+            Height = 22, Padding = Sp.T("xs", "0", "xs", "0"), CornerRadius = new CornerRadius(11), Background = new SolidColorBrush(Color.FromArgb(0x73, 0, 0, 0)),
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = Sp.T("s"), IsHitTestVisible = false,
             Child = new TextBlock { Text = Localizer.Current["AD"], FontSize = 10, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center,
                 FontFamily = (FontFamily)Application.Current.FindResource("MonoFont") },
         };
@@ -65,7 +65,7 @@ public static class PopupAdWindow
         {
             Content = "×", Width = 32, Height = 32, MinHeight = 32, Padding = new Thickness(0), FontSize = 16, Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(0x73, 0, 0, 0)), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(12), ToolTip = Localizer.Current["Close"],
+            Margin = Sp.T("s"), ToolTip = Localizer.Current["Close"],
         };
         close.SetResourceReference(FrameworkElement.StyleProperty, "ButtonBase");
         close.Click += (_, _) => window.Close();

@@ -8,11 +8,11 @@
                   Message="{t:T 'Your Xbox must be on and on the same network as this computer. Turn on remote play in the Xbox settings.'}">
         <StackPanel>
             <Button x:Name="Refresh" Content="{t:T 'Find consoles'}" Style="{StaticResource PrimaryButton}" Click="OnRefresh" />
-            <TextBlock x:Name="Status" Style="{StaticResource HintText}" Margin="0,12,0,8" TextWrapping="Wrap" />
+            <TextBlock x:Name="Status" Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,xs'}" TextWrapping="Wrap" />
             <StackPanel x:Name="Consoles" />
-            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,12,0,0" TextWrapping="Wrap" />
+            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,s,0,0'}" TextWrapping="Wrap" />
             <!-- Hata olunca Xbox satırlarının da yazıldığı günlük açılır (Mac ve PS5 adımındaki gibi). -->
-            <Button Content="{t:T 'Show log file'}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnShowLog"
+            <Button Content="{t:T 'Show log file'}" HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Click="OnShowLog"
                     Visibility="{Binding Text, ElementName=Error, Converter={StaticResource VisibleIf}}" />
         </StackPanel>
     </c:StepLayout>

@@ -405,7 +405,7 @@ public partial class MainView : UserControl
         var row = new DockPanel { LastChildFill = true };
         if (state is not null)
         {
-            var mark = new TextBlock { Text = state, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            var mark = new TextBlock { Text = state, VerticalAlignment = VerticalAlignment.Center, Margin = Sp.T("s", "0", "0", "0") };
             mark.SetResourceReference(StyleProperty, "MonoText");
             mark.FontSize = 12;
             DockPanel.SetDock(mark, Dock.Right);
@@ -415,7 +415,7 @@ public partial class MainView : UserControl
         var button = new Button
         {
             Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(16, 0, 16, 0), Margin = new Thickness(0, 0, 0, 8),
+            Padding = Sp.T("m", "0", "m", "0"), Margin = Sp.T("0", "0", "0", "xs"),
         };
         button.SetResourceReference(StyleProperty, primary ? "PrimaryButton" : "SecondaryButton");
         button.Click += (_, _) =>
@@ -560,7 +560,7 @@ public partial class MainView : UserControl
         foreach (var name in suggestions)
         {
             var row = new DockPanel();
-            var cover = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 0, 16, 0) };
+            var cover = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(10), Margin = Sp.T("0", "0", "m", "0") };
             cover.SetResourceReference(Border.BackgroundProperty, "tileBrush");
             cover.Child = new TextBlock { Text = Monogram(name), FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(cover, Dock.Left);
@@ -573,7 +573,7 @@ public partial class MainView : UserControl
                 row.Children.Add(tag);
             }
             row.Children.Add(new TextBlock { Text = name, FontSize = 15, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-            var option = new Controls.OptionCard { Content = row, GroupName = "playedGame", MinHeight = 64, Margin = new Thickness(0, 0, 0, 8) };
+            var option = new Controls.OptionCard { Content = row, GroupName = "playedGame", MinHeight = 64, Margin = Sp.T("0", "0", "0", "xs") };
             option.Checked += (_, _) => controller.ChooseGame(name);
             GameList.Children.Add(option);
         }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Diagnostics;
+using CouchSubs.App.Theme;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -85,7 +86,7 @@ public partial class ConsoleStep : UserControl
         {
             Content = text[result switch { Services.CheckResult.Passed => "Passed", Services.CheckResult.Problem => "Problem", _ => "Unknown" }],
             Tone = result switch { Services.CheckResult.Passed => Controls.PillTone.Success, Services.CheckResult.Problem => Controls.PillTone.Live, _ => Controls.PillTone.Idle },
-            MinWidth = 88, Margin = new Thickness(0, 0, 16, 0),
+            MinWidth = 88, Margin = Sp.T("0", "0", "m", "0"),
         };
         var detail = result switch
         {
@@ -100,7 +101,7 @@ public partial class ConsoleStep : UserControl
         if (detail is not null)
         {
             // Mac metni "Bu Mac" der; Windows'ta "bu bilgisayar".
-            var hint = new TextBlock { Text = text[detail].Replace("Mac", text.Language == "tr" ? "bilgisayar" : "computer"), Margin = new Thickness(0, 4, 0, 0) };
+            var hint = new TextBlock { Text = text[detail].Replace("Mac", text.Language == "tr" ? "bilgisayar" : "computer"), Margin = Sp.T("0", "xxs", "0", "0") };
             hint.SetResourceReference(StyleProperty, "HintText");
             texts.Children.Add(hint);
         }
@@ -108,7 +109,7 @@ public partial class ConsoleStep : UserControl
         DockPanel.SetDock(badge, Dock.Left);
         line.Children.Add(badge);
         line.Children.Add(texts);
-        var row = new Border { Child = line, Padding = new Thickness(0, 12, 0, 12) };
+        var row = new Border { Child = line, Padding = Sp.T("0", "s", "0", "s") };
         row.SetResourceReference(StyleProperty, "SettingRow");
         ChecksRows.Children.Add(row);
         Theme.Motion.EnterFrom(row, 8, Theme.Motion.Medium, TimeSpan.FromMilliseconds(60 * ChecksRows.Children.Count));

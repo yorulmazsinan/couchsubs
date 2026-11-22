@@ -8,66 +8,66 @@
     <c:StepLayout Title="{t:T 'Connect your TV'}"
                   Message="{t:T 'Turn on the TV. When you press Connect, the TV asks for permission once — accept it with the remote. If the CouchSubs TV app is missing, this screen helps you install it.'}">
         <StackPanel>
-            <TextBlock x:Name="Done" Style="{StaticResource DoneText}" Margin="0,0,0,12" />
+            <TextBlock x:Name="Done" Style="{StaticResource DoneText}" Margin="{t:Sp '0,0,0,s'}" />
             <!-- Eşleşme kodu iki ekranda (tuval 05). -->
             <s:TvCodeCard />
             <c:Card>
                 <StackPanel>
-                    <Grid Margin="0,0,0,12">
+                    <Grid Margin="{t:Sp '0,0,0,s'}">
                         <TextBlock Text="TV" Style="{StaticResource HeadlineText}" VerticalAlignment="Center" />
                         <Button x:Name="Search" Content="{t:T 'Search again'}" HorizontalAlignment="Right" Click="OnSearch" />
                     </Grid>
                     <TextBlock x:Name="NotFound" Style="{StaticResource HintText}" Text="{t:T 'No LG or Samsung TV found. Make sure the TV is on and on the same network.'}" />
                     <StackPanel x:Name="Tvs" />
                     <!-- Aramada çıkmayan TV (webOS 3.x gibi, #498) adresiyle eklenir. -->
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}" TextWrapping="Wrap"
                                Text="{t:T 'TV not in the list? Enter its IP address (on the TV under Settings › Network).'}" />
-                    <Grid Margin="0,8,0,0">
+                    <Grid Margin="{t:Sp '0,xs,0,0'}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="ManualHost" KeyDown="OnManualHostKey" />
-                        <Button x:Name="AddManual" Grid.Column="1" Margin="8,0,0,0" Content="{t:T 'Add'}" Click="OnAddManual" />
+                        <Button x:Name="AddManual" Grid.Column="1" Margin="{t:Sp 'xs,0,0,0'}" Content="{t:T 'Add'}" Click="OnAddManual" />
                     </Grid>
                     <!-- Alanın hangi TV'ler için olduğu: yazılan adresin türü TV'ye sorulur, Android TV de tanınır. -->
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,0" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" TextWrapping="Wrap"
                                Text="{t:T 'For LG, Samsung and Android TV / Google TV: CouchSubs asks the TV at this address which kind it is.'}" />
                 </StackPanel>
             </c:Card>
-            <c:Card Margin="0,12,0,0">
+            <c:Card Margin="{t:Sp '0,s,0,0'}">
                 <StackPanel>
                     <Grid>
                         <TextBlock Text="Android TV / Google TV" VerticalAlignment="Center" />
                         <Button Content="{t:T 'Select'}" HorizontalAlignment="Right" Click="OnAndroidTv" />
                     </Grid>
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}"
                                Text="{t:T 'Vestel, Arçelik, Beko, Grundig, Philips and other TVs running Android TV.'}" />
                 </StackPanel>
             </c:Card>
             <!-- TV'si olmayanlar (PS5 monitörde ya da PS Remote Play bilgisayarda): TV kurulumu atlanır. -->
-            <c:Card Margin="0,12,0,0">
+            <c:Card Margin="{t:Sp '0,s,0,0'}">
                 <StackPanel>
                     <Grid>
                         <TextBlock Text="{t:T 'No TV? Show on the computer screen'}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <Button Content="{t:T 'Select'}" HorizontalAlignment="Right" Click="OnNoTv" />
                     </Grid>
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                                Text="{t:T 'Subtitles appear in a window over the game or PS Remote Play. You can connect a TV later.'}" />
                 </StackPanel>
             </c:Card>
-            <TextBlock x:Name="Waiting" Style="{StaticResource HintText}" Margin="0,12,0,0" Visibility="Collapsed"
+            <TextBlock x:Name="Waiting" Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed"
                        Text="{t:T 'Accept the request on the TV…'}" />
-            <TextBlock Style="{StaticResource HintText}" Margin="0,12,0,0"
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}"
                        Text="{t:T 'If Windows asks whether CouchSubs may use the network, allow it for private networks.'}" />
-            <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                        Text="{t:T 'If the TV cannot connect: Windows Firewall may be blocking CouchSubs. Allow it in Settings › Windows Firewall, and set this network to Private in Windows.'}" />
-            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="0,12,0,0" />
-            <s:TvAppCard Margin="0,12,0,0" />
-            <c:Card x:Name="ManualInstall" Title="{t:T 'CouchSubs TV app'}" Margin="0,12,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="Error" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,s,0,0'}" />
+            <s:TvAppCard Margin="{t:Sp '0,s,0,0'}" />
+            <c:Card x:Name="ManualInstall" Title="{t:T 'CouchSubs TV app'}" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed">
                 <StackPanel>
                     <TextBlock TextWrapping="Wrap" Text="{t:T 'Install the CouchSubs TV app on this TV using the guide and open it. It finds this computer by itself.'}" />
-                    <Button Content="{t:T 'Open the guide'}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnGuide" />
+                    <Button Content="{t:T 'Open the guide'}" HorizontalAlignment="Left" Margin="{t:Sp '0,xs,0,0'}" Click="OnGuide" />
                 </StackPanel>
             </c:Card>
         </StackPanel>

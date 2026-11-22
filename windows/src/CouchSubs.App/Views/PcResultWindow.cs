@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Windows;
+using CouchSubs.App.Theme;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -46,7 +47,7 @@ public sealed class PcResultWindow : Window
         {
             Background = new SolidColorBrush(Color.FromArgb(0xEE, 0, 0, 0)),
             CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(20, 14, 20, 14),
+            Padding = Sp.T("m", "s", "m", "s"),
             Child = new TextBlock
             {
                 Text = text,

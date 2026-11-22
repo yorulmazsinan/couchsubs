@@ -22,7 +22,7 @@ public sealed class TrayPopup : Window
 {
     private readonly AppController controller;
     private readonly System.Windows.Forms.NotifyIcon icon;
-    private readonly TextBlock detail = new() { FontSize = 12, Margin = new Thickness(0, 4, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+    private readonly TextBlock detail = new() { FontSize = 12, Margin = Sp.T("0", "xxs", "0", "0"), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
     private readonly Badge badge = new();
     private readonly Button main = new() { HorizontalAlignment = HorizontalAlignment.Stretch, Height = 44, MinHeight = 44 };
     private readonly SwitchRow clicks;
@@ -44,7 +44,7 @@ public sealed class TrayPopup : Window
         var tile = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(12), Child = new CouchLogo { Width = 26, Height = 19, Animated = false } };
         tile.SetResourceReference(Border.BackgroundProperty, "surface2Brush");
         detail.SetResourceReference(TextBlock.ForegroundProperty, "textSecondaryBrush");
-        var names = new StackPanel { Margin = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        var names = new StackPanel { Margin = Sp.T("s", "0", "s", "0"), VerticalAlignment = VerticalAlignment.Center };
         names.Children.Add(new TextBlock { Text = "CouchSubs", FontSize = 15, FontWeight = FontWeights.SemiBold });
         names.Children.Add(detail);
         var head = new DockPanel();
@@ -77,14 +77,14 @@ public sealed class TrayPopup : Window
 
         var stack = new StackPanel();
         stack.Children.Add(head);
-        main.Margin = new Thickness(0, 12, 0, 12);
+        main.Margin = Sp.T("0", "s", "0", "s");
         stack.Children.Add(main);
         stack.Children.Add(Divider());
         stack.Children.Add(clicks);
         stack.Children.Add(place);
         stack.Children.Add(Divider());
         stack.Children.Add(open);
-        var card = new Border { Child = stack, Padding = new Thickness(16), CornerRadius = new CornerRadius(20), BorderThickness = new Thickness(1), Margin = new Thickness(16) };
+        var card = new Border { Child = stack, Padding = Sp.T("m"), CornerRadius = new CornerRadius(20), BorderThickness = new Thickness(1), Margin = Sp.T("m") };
         card.SetResourceReference(Border.BackgroundProperty, "surfaceBrush");
         card.SetResourceReference(Border.BorderBrushProperty, "borderBrush");
         card.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 40, ShadowDepth = 16, Direction = 270, Opacity = 0.14, Color = Color.FromRgb(0x1D, 0x1E, 0x22) };
@@ -191,7 +191,7 @@ public sealed class TrayPopup : Window
 
     private static Border Divider()
     {
-        var line = new Border { Height = 1, Margin = new Thickness(0, 4, 0, 4) };
+        var line = new Border { Height = 1, Margin = Sp.T("0", "xxs", "0", "xxs") };
         line.SetResourceReference(Border.BackgroundProperty, "borderBrush");
         return line;
     }
@@ -209,7 +209,7 @@ public sealed class TrayPopup : Window
         }
         row.Children.Add(new TextBlock { Text = label, FontSize = 14, FontWeight = FontWeights.Medium });
         var button = new Button { Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Height = 44, MinHeight = 44, Padding = new Thickness(12, 0, 12, 0) };
+            Height = 44, MinHeight = 44, Padding = Sp.T("s", "0", "s", "0") };
         button.SetResourceReference(StyleProperty, "GhostButton");
         button.SetResourceReference(ForegroundProperty, "textPrimaryBrush");
         button.Click += (_, _) => run();

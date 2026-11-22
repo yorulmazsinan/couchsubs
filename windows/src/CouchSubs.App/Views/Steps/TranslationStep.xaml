@@ -8,13 +8,13 @@
                   Message="{t:T 'CouchSubs translates on this computer, without the internet. The English–Turkish model (about 475 MB) is downloaded once and kept on this computer.'}">
         <StackPanel>
             <StackPanel Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}}">
-                <TextBlock Text="{t:T 'Downloading…'}" Style="{StaticResource HintText}" Margin="0,0,0,8" />
+                <TextBlock Text="{t:T 'Downloading…'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,0,0,xs'}" />
                 <ProgressBar Minimum="0" Maximum="1" Value="{Binding ModelProgress, Mode=OneWay}" />
             </StackPanel>
             <TextBlock Text="{t:T 'The model is ready.'}" Style="{StaticResource DoneText}"
                        Visibility="{Binding ModelInstalled, Converter={StaticResource VisibleIf}}" />
             <StackPanel Visibility="{Binding ModelError, Converter={StaticResource VisibleIf}}">
-                <TextBlock Text="{t:T 'The download did not complete. Check your internet connection and try again.'}" Style="{StaticResource ErrorText}" Margin="0,0,0,12" />
+                <TextBlock Text="{t:T 'The download did not complete. Check your internet connection and try again.'}" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,0,0,s'}" />
                 <Button Content="{t:T 'Try again'}" Style="{StaticResource PrimaryButton}" Click="OnRetry" />
             </StackPanel>
         </StackPanel>

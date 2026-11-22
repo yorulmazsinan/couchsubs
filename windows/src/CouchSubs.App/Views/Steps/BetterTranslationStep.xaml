@@ -10,20 +10,20 @@
         <StackPanel>
             <c:Card>
                 <StackPanel>
-                    <TextBlock Text="{t:T 'Free translation device'}" Margin="0,0,0,8" />
+                    <TextBlock Text="{t:T 'Free translation device'}" Margin="{t:Sp '0,0,0,xs'}" />
                     <ComboBox x:Name="TranslationDeviceChoice" SelectionChanged="OnTranslationDevice" Width="240" HorizontalAlignment="Left">
                         <ComboBoxItem Content="{t:T 'CPU (default)'}" Tag="Cpu" />
                         <ComboBoxItem Content="{t:T 'GPU (Beta) · NVIDIA CUDA'}" Tag="Gpu" />
                     </ComboBox>
-                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                    <TextBlock Style="{StaticResource HintText}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}"
                                Text="{t:T 'CPU works on every computer. GPU needs a compatible NVIDIA card; the first time you choose it, CouchSubs downloads about 565 MB of CUDA files from NVIDIA (about 790 MB on disk). If unavailable, CouchSubs uses CPU.'}" />
-                    <TextBlock Foreground="{DynamicResource warningBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
+                    <TextBlock Foreground="{DynamicResource warningBrush}" TextWrapping="Wrap" Margin="{t:Sp '0,xs,0,0'}"
                                Visibility="{Binding GpuFallbackWarning, Converter={StaticResource VisibleIf}}"
                                Text="{t:T 'GPU could not be used; free translation is running on CPU.'}" />
                 </StackPanel>
             </c:Card>
             <TextBlock x:Name="Ready" Text="{t:T 'Gemini is ready. Subtitles will be translated with Gemini.'}" Style="{StaticResource DoneText}"
-                       TextWrapping="Wrap" Margin="0,16,0,16" Visibility="Collapsed" />
+                       TextWrapping="Wrap" Margin="{t:Sp '0,m'}" Visibility="Collapsed" />
             <StackPanel x:Name="NewKey">
                 <c:Card>
                     <StackPanel>
@@ -31,19 +31,19 @@
                         <c:NumberedRow Number="2" Text="{t:T 'Press Create API key and copy the key.'}" />
                         <c:NumberedRow Number="3" Text="{t:T 'Paste the key here and press Save and test.'}" />
                         <Button Content="{t:T 'Get a free key'}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"
-                                Margin="0,8,0,0" Click="OnGetKey" />
+                                Margin="{t:Sp '0,xs,0,0'}" Click="OnGetKey" />
                     </StackPanel>
                 </c:Card>
-                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <StackPanel Orientation="Horizontal" Margin="{t:Sp '0,s,0,0'}">
                     <PasswordBox x:Name="KeyBox" Width="320" VerticalContentAlignment="Center" PasswordChanged="OnKeyChanged" />
-                    <Button x:Name="KeySave" Content="{t:T 'Save and test'}" Margin="12,0,0,0" IsEnabled="False" Click="OnSave" />
+                    <Button x:Name="KeySave" Content="{t:T 'Save and test'}" Margin="{t:Sp 's,0,0,0'}" IsEnabled="False" Click="OnSave" />
                 </StackPanel>
             </StackPanel>
-            <TextBlock x:Name="KeyStatus" Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-            <TextBlock x:Name="KeyError" Style="{StaticResource ErrorText}" Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-            <TextBlock Style="{StaticResource HintText}" Margin="0,12,0,0" TextWrapping="Wrap"
+            <TextBlock x:Name="KeyStatus" Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock x:Name="KeyError" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,s,0,0'}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,s,0,0'}" TextWrapping="Wrap"
                        Text="{t:T 'Subtitle text is sent to Google. With a free key, Google may use it to improve its products, and people at Google may read it. Only the game\'s subtitles are sent.'}" />
-            <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" TextWrapping="Wrap"
                        Text="{t:T 'The free key has a per-minute limit. When it is reached, that line is translated by the free translation.'}" />
         </StackPanel>
     </c:StepLayout>

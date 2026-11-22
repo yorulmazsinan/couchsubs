@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CouchSubs.App.Controls;
+using CouchSubs.App.Theme;
 using CouchSubs.App.Views.Steps;
 using CouchSubs.Core;
 using CouchSubs.Shell;
@@ -117,7 +118,7 @@ public partial class OnboardingView : UserControl
             var dot = new Border
             {
                 Width = number == group ? 24 : 8, Height = 8, CornerRadius = new CornerRadius(4),
-                Margin = new Thickness(number == 1 ? 0 : 8, 0, 0, 0),
+                Margin = new Thickness(number == 1 ? 0 : Sp.V("xs"), 0, 0, 0),
             };
             dot.SetResourceReference(Border.BackgroundProperty, number <= group ? "accentBrush" : "borderBrush");
             Dots.Children.Add(dot);

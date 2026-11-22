@@ -9,7 +9,7 @@
              xmlns:t="clr-namespace:CouchSubs.App.Theme"
              xmlns:local="clr-namespace:CouchSubs.App.Views"
              xmlns:s="clr-namespace:CouchSubs.App.Views.Steps">
-    <Grid Margin="24">
+    <Grid Margin="{t:Sp 'l'}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="24" />
@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
 
         <!-- Durum çipleri: her biri durum simgesi, ad, değer ve mono ek bilgi. -->
-        <Border x:Name="ChipsCard" Style="{StaticResource CardBorder}" Padding="8">
+        <Border x:Name="ChipsCard" Style="{StaticResource CardBorder}" Padding="{t:Sp 'xs'}">
             <UniformGrid Rows="1">
                 <local:StatusChip x:Name="ConsoleChip" />
                 <local:StatusChip x:Name="TvChip" />
@@ -34,9 +34,9 @@
             </Grid.ColumnDefinitions>
 
             <!-- Sol: oyun görüntüsü ve düğmeler -->
-            <Border Style="{StaticResource CardBorder}" Padding="16">
+            <Border Style="{StaticResource CardBorder}" Padding="{t:Sp 'm'}">
                 <DockPanel>
-                    <Grid DockPanel.Dock="Bottom" Margin="0,16,0,0">
+                    <Grid DockPanel.Dock="Bottom" Margin="{t:Sp '0,m,0,0'}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="1.3*" />
                             <ColumnDefinition Width="12" />
@@ -74,29 +74,29 @@
                 <ScrollViewer x:Name="NoticeScroll" DockPanel.Dock="Top" Style="{StaticResource CardScroll}" MaxHeight="300">
                     <StackPanel x:Name="Notices">
                         <!-- Önceki çalışma yerel bir hatayla kapandı: kayıt yalnız bu bilgisayarda, bir kez bildirilir -->
-                        <c:Card x:Name="CrashCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="CrashCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="{t:T 'CouchSubs closed unexpectedly last time.'}" FontWeight="SemiBold" />
                                 <TextBlock Text="{t:T 'A crash record was saved on this computer. It stays here and is never sent anywhere on its own; you can add it when you report the problem.'}"
-                                           Style="{StaticResource HintText}" Margin="0,4,0,0" />
-                                <WrapPanel Margin="0,8,0,0">
-                                    <Button Content="{t:T 'Show crash record'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnShowCrash" />
-                                    <Button x:Name="CrashCopyButton" Content="{t:T 'Copy summary'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnCopyCrash" />
-                                    <Button Content="{t:T 'Close'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,0,0" Click="OnDismissCrash" />
+                                           Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" />
+                                <WrapPanel Margin="{t:Sp '0,xs,0,0'}">
+                                    <Button Content="{t:T 'Show crash record'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnShowCrash" />
+                                    <Button x:Name="CrashCopyButton" Content="{t:T 'Copy summary'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnCopyCrash" />
+                                    <Button Content="{t:T 'Close'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,0,0'}" Click="OnDismissCrash" />
                                 </WrapPanel>
                             </StackPanel>
                         </c:Card>
 
                         <!-- Yeni sürüm -->
-                        <c:Card x:Name="UpdateCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="UpdateCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{DynamicResource accentTextBrush}" />
-                                <ProgressBar x:Name="UpdateBar" Minimum="0" Maximum="1" Margin="0,16,0,0" Visibility="Collapsed" />
-                                <TextBlock x:Name="UpdateErrorText" Style="{StaticResource ErrorText}" Margin="0,8,0,0" Visibility="Collapsed" />
-                                <Button x:Name="UpdateButton" Content="{t:T 'Update now'}" Style="{StaticResource PrimaryButton}" Margin="0,16,0,0" Click="OnUpdate" />
-                                <Expander x:Name="UpdateNotes" Margin="0,8,0,0" Header="{t:T 'Release notes'}"
+                                <ProgressBar x:Name="UpdateBar" Minimum="0" Maximum="1" Margin="{t:Sp '0,m,0,0'}" Visibility="Collapsed" />
+                                <TextBlock x:Name="UpdateErrorText" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,xs,0,0'}" Visibility="Collapsed" />
+                                <Button x:Name="UpdateButton" Content="{t:T 'Update now'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp '0,m,0,0'}" Click="OnUpdate" />
+                                <Expander x:Name="UpdateNotes" Margin="{t:Sp '0,xs,0,0'}" Header="{t:T 'Release notes'}"
                                           Foreground="{DynamicResource textPrimaryBrush}" Expanded="OnUpdateNotesExpanded">
-                                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="{t:Sp '0,xs,0,0'}">
                                         <TextBlock x:Name="UpdateNotesText" Style="{StaticResource HintText}" />
                                     </ScrollViewer>
                                 </Expander>
@@ -104,73 +104,73 @@
                         </c:Card>
 
                         <!-- Kurulum bitmeden de uygulama örnek görüntülerle denenebilir. -->
-                        <local:DemoModeButton x:Name="DemoButton" ButtonStyle="SecondaryButton" HorizontalAlignment="Stretch" Margin="0,0,0,16" Visibility="Collapsed" />
+                        <local:DemoModeButton x:Name="DemoButton" ButtonStyle="SecondaryButton" HorizontalAlignment="Stretch" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed" />
 
                         <!-- Konsol: Xbox girişi eksik ya da oturum yeniden denemeyi bıraktı (ReconnectOffer). -->
-                        <c:Card x:Name="ConsoleCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="ConsoleCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="{Binding ConsoleTitle}" Style="{StaticResource SectionLabel}" />
-                                <TextBlock Text="{Binding Ps5StatusText}" Style="{StaticResource HintText}" Margin="0,8,0,0" />
-                                <Button Content="{Binding XboxLinkTitle}" Margin="0,16,0,0" Click="OnLinkXbox" Style="{StaticResource PrimaryButton}"
+                                <TextBlock Text="{Binding Ps5StatusText}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
+                                <Button Content="{Binding XboxLinkTitle}" Margin="{t:Sp '0,m,0,0'}" Click="OnLinkXbox" Style="{StaticResource PrimaryButton}"
                                         Visibility="{Binding NeedsXboxLink, Converter={StaticResource VisibleIf}}" />
-                                <Button Content="{t:T 'Connect Again'}" Margin="0,16,0,0" Click="OnReconnect"
+                                <Button Content="{t:T 'Connect Again'}" Margin="{t:Sp '0,m,0,0'}" Click="OnReconnect"
                                         Visibility="{Binding OffersReconnect, Converter={StaticResource VisibleIf}}" />
                             </StackPanel>
                         </c:Card>
 
                         <!-- TV: bağlanmadı, uygulaması eski ya da kaldırıldı; değiştirme ve yeniden kurma burada. -->
-                        <c:Card x:Name="TvCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="TvCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="TV" Style="{StaticResource SectionLabel}" />
-                                <TextBlock Text="{Binding TvStatusText}" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                                <TextBlock Text="{Binding TvStatusText}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
                                 <!-- Çeviri sürüyor ama TV uygulaması bağlı değil: CouchSubs TV'de nerede, otomatik açma neden olmadı. -->
                                 <StackPanel Visibility="{Binding ShowTvOpenHint, Converter={StaticResource VisibleIf}}">
-                                    <TextBlock Text="{Binding TvOpenHintText}" Style="{StaticResource HintText}" Margin="0,8,0,0" />
-                                    <TextBlock Text="{Binding TvOpenReasonText}" Style="{StaticResource ErrorText}" Margin="0,8,0,0"
+                                    <TextBlock Text="{Binding TvOpenHintText}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
+                                    <TextBlock Text="{Binding TvOpenReasonText}" Style="{StaticResource ErrorText}" Margin="{t:Sp '0,xs,0,0'}"
                                                Visibility="{Binding HasTvOpenReason, Converter={StaticResource VisibleIf}}" />
-                                    <Button Content="{t:T 'Open the TV App'}" Style="{StaticResource PrimaryButton}" Margin="0,16,0,0" Click="OnRetryTvOpen" />
+                                    <Button Content="{t:T 'Open the TV App'}" Style="{StaticResource PrimaryButton}" Margin="{t:Sp '0,m,0,0'}" Click="OnRetryTvOpen" />
                                 </StackPanel>
                                 <!-- Deneme yazısı TV'ye gitmediyse: TV'deki kod yazılmaz, bu bilgisayarda onaylanır. -->
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0"
+                                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}"
                                            Text="{t:T 'The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don\'t type it anywhere: approve it in the “Pair this TV?” window that opens on this computer, then test again.'}"
                                            Visibility="{Binding ShowTestTvHint, Converter={StaticResource VisibleIf}}" />
-                                <WrapPanel Margin="0,8,0,0">
-                                    <Button Content="{t:T 'Connect TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnConnectTv"
+                                <WrapPanel Margin="{t:Sp '0,xs,0,0'}">
+                                    <Button Content="{t:T 'Connect TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnConnectTv"
                                             Visibility="{Binding NeedsTv, Converter={StaticResource VisibleIf}}" />
-                                    <Button Content="{t:T 'Connect TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnConnectTv"
+                                    <Button Content="{t:T 'Connect TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnConnectTv"
                                             Visibility="{Binding CanReconnectTv, Converter={StaticResource VisibleIf}}" />
-                                    <Button Content="{t:T 'Update the TV App'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnUpdateTvApp"
+                                    <Button Content="{t:T 'Update the TV App'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnUpdateTvApp"
                                             Visibility="{Binding ShowTvAppUpdate, Converter={StaticResource VisibleIf}}" />
-                                    <Button Content="{t:T 'Reinstall the TV App'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnReinstallTvApp"
+                                    <Button Content="{t:T 'Reinstall the TV App'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnReinstallTvApp"
                                             Visibility="{Binding CanReinstallTvApp, Converter={StaticResource VisibleIf}}" />
-                                    <Button Content="{t:T 'Change the TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,8,0" Click="OnConnectTv"
+                                    <Button Content="{t:T 'Change the TV'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,xs,0'}" Click="OnConnectTv"
                                             Visibility="{Binding CanChangeTv, Converter={StaticResource VisibleIf}}" />
                                 </WrapPanel>
                                 <!-- "TV uygulamasını güncelle": ilerleme, eksik adım, hata ve sonuç burada; TV adımına gidilmez. -->
                                 <StackPanel Visibility="{Binding TvAppUpdating, Converter={StaticResource VisibleIf}}">
-                                    <s:TvAppCard Margin="0,16,0,0" />
-                                    <Button Content="{t:T 'Close'}" Style="{StaticResource SmallSecondaryButton}" Margin="0,8,0,0"
+                                    <s:TvAppCard Margin="{t:Sp '0,m,0,0'}" />
+                                    <Button Content="{t:T 'Close'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp '0,xs,0,0'}"
                                             Click="OnDismissTvAppUpdate" Visibility="{Binding ShowTvAppUpdateDone, Converter={StaticResource VisibleIf}}" />
                                 </StackPanel>
                             </StackPanel>
                         </c:Card>
 
                         <!-- Oynanan oyun ve iki dakika sonra çıkan "Hangi Oyunu Oynuyorsunuz?" -->
-                        <c:Card x:Name="GameCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="GameCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <DockPanel x:Name="GameRow">
                                     <Button x:Name="GameChangeButton" DockPanel.Dock="Right" Style="{StaticResource SmallSecondaryButton}" VerticalAlignment="Center" Click="OnChangeGame" />
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{t:T 'GAME BEING PLAYED'}" Style="{StaticResource SectionLabel}" Margin="0" />
-                                        <TextBlock x:Name="PlayedGameText" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{t:T 'Game being played'}" Style="{StaticResource SectionLabel}" Margin="0" />
+                                        <TextBlock x:Name="PlayedGameText" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,xxs,0,0'}" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </DockPanel>
                                 <!-- Oyunun kayıtlı alanları: uygulandı ("Geri al") ya da paketten tanınan oyunda soru ("Kullan" / "Hayır") -->
-                                <StackPanel x:Name="AreaProfileRow" Margin="0,16,0,0" Visibility="Collapsed">
+                                <StackPanel x:Name="AreaProfileRow" Margin="{t:Sp '0,m,0,0'}" Visibility="Collapsed">
                                     <TextBlock x:Name="AreaProfileText" Style="{StaticResource HintText}" />
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="{t:Sp '0,xs,0,0'}">
                                         <Button x:Name="AreaProfileUse" Content="{t:T 'Use'}" Style="{StaticResource SmallSecondaryButton}" Click="OnUseAreaProfile" />
-                                        <Button x:Name="AreaProfileNo" Content="{t:T 'No'}" Style="{StaticResource SmallSecondaryButton}" Margin="8,0,0,0" Click="OnDeclineAreaProfile" />
+                                        <Button x:Name="AreaProfileNo" Content="{t:T 'No'}" Style="{StaticResource SmallSecondaryButton}" Margin="{t:Sp 'xs,0,0,0'}" Click="OnDeclineAreaProfile" />
                                         <Button x:Name="AreaProfileUndo" Content="{t:T 'Undo'}" Style="{StaticResource SmallSecondaryButton}" Click="OnUndoAreaProfile" />
                                     </StackPanel>
                                 </StackPanel>
@@ -178,57 +178,57 @@
                         </c:Card>
 
                         <!-- PS5 ya da TV uzun süredir bağlanamıyor ve güvenlik duvarında izin yok -->
-                        <local:FirewallCard Margin="0,0,0,16" />
+                        <local:FirewallCard Margin="{t:Sp '0,0,0,m'}" />
 
                         <!-- Çeviri modeli eksik -->
-                        <c:Card x:Name="ModelCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="ModelCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="{t:T 'The translation model is not downloaded yet.'}" FontWeight="SemiBold" Foreground="{DynamicResource liveTextBrush}" />
-                                <StackPanel Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}}" Margin="0,16,0,0">
-                                    <TextBlock Text="{t:T 'Downloading…'}" Style="{StaticResource HintText}" Margin="0,0,0,8" />
+                                <StackPanel Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}}" Margin="{t:Sp '0,m,0,0'}">
+                                    <TextBlock Text="{t:T 'Downloading…'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,0,0,xs'}" />
                                     <ProgressBar Minimum="0" Maximum="1" Value="{Binding ModelProgress, Mode=OneWay}" />
                                 </StackPanel>
-                                <Button Content="{t:T 'Download the model'}" Margin="0,16,0,0" Click="OnDownload"
+                                <Button Content="{t:T 'Download the model'}" Margin="{t:Sp '0,m,0,0'}" Click="OnDownload"
                                         Visibility="{Binding ModelDownloading, Converter={StaticResource VisibleIf}, ConverterParameter=invert}" />
                             </StackPanel>
                         </c:Card>
 
-                        <c:Card Margin="0,0,0,16" Visibility="{Binding GpuFallbackWarning, Converter={StaticResource VisibleIf}}">
+                        <c:Card Margin="{t:Sp '0,0,0,m'}" Visibility="{Binding GpuFallbackWarning, Converter={StaticResource VisibleIf}}">
                             <TextBlock Style="{StaticResource HintText}" Foreground="{DynamicResource liveTextBrush}"
                                        Text="{t:T 'GPU could not be used; free translation is running on CPU.'}" />
                         </c:Card>
                         <!-- Ücretsiz çeviri motoru bu bilgisayarda açılamadı: çevrimiçi motor önerilir -->
-                        <c:Card x:Name="EngineCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="EngineCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="{t:T 'The free translation engine could not start on this computer.'}" FontWeight="SemiBold" Foreground="{DynamicResource liveTextBrush}" />
-                                <TextBlock Text="{t:T 'Choose Gemini (free) or DeepL in Settings › Translation.'}" Style="{StaticResource HintText}" Margin="0,4,0,16" />
+                                <TextBlock Text="{t:T 'Choose Gemini (free) or DeepL in Settings › Translation.'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,m'}" />
                                 <Button Content="{t:T 'Settings'}" Click="OnTranslationSettings" />
                             </StackPanel>
                         </c:Card>
 
                         <!-- Çevrimiçi motor çeviremiyor: satırlar bu arada ücretsiz çeviriyle geliyor -->
-                        <c:Card x:Name="OnlineCard" Margin="0,0,0,16" Visibility="Collapsed">
+                        <c:Card x:Name="OnlineCard" Margin="{t:Sp '0,0,0,m'}" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock x:Name="OnlineTitle" FontWeight="SemiBold" Foreground="{DynamicResource liveTextBrush}" />
-                                <TextBlock x:Name="OnlineReason" Style="{StaticResource HintText}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="OnlineReason" Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}" />
                             </StackPanel>
                         </c:Card>
 
                         <!-- Yazı tanıma dili eksik -->
-                        <c:Card Margin="0,0,0,16" Visibility="{Binding OcrMissing, Converter={StaticResource VisibleIf}}">
+                        <c:Card Margin="{t:Sp '0,0,0,m'}" Visibility="{Binding OcrMissing, Converter={StaticResource VisibleIf}}">
                             <StackPanel>
                                 <TextBlock Text="{t:T 'Text recognition for the game language is not installed on this computer.'}" FontWeight="SemiBold" Foreground="{DynamicResource liveTextBrush}" />
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,16"
+                                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,m'}"
                                            Text="{t:T 'Without it Windows reads the subtitles with your system language and the translation turns into nonsense. Install it once; Windows asks for permission.'}" />
                                 <WrapPanel>
-                                    <Button x:Name="InstallOcr" Content="{t:T 'Install text recognition'}" Click="OnInstallOcr" Margin="0,0,8,8" />
-                                    <Button Content="{t:T 'Open Language and Region'}" Click="OnLanguageSettings" Margin="0,0,0,8" />
+                                    <Button x:Name="InstallOcr" Content="{t:T 'Install text recognition'}" Click="OnInstallOcr" Margin="{t:Sp '0,0,xs,xs'}" />
+                                    <Button Content="{t:T 'Open Language and Region'}" Click="OnLanguageSettings" Margin="{t:Sp '0,0,0,xs'}" />
                                 </WrapPanel>
                             </StackPanel>
                         </c:Card>
 
                         <!-- Kısa ipuçları: ana hesap, otomatik ekran yazısı, kullanım verisi -->
-                        <c:Card Margin="0,0,0,16">
+                        <c:Card Margin="{t:Sp '0,0,0,m'}">
                             <c:Card.Style>
                                 <Style TargetType="c:Card" BasedOn="{StaticResource {x:Type c:Card}}">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -245,11 +245,11 @@
                                            Text="{t:T 'To play without the connection dropping: 1. On the PS5, start the game with your MAIN account first. 2. Then start translating. 3. Don\'t switch users during the game; when you turn on the controller, choose your MAIN account. Don\'t play with the second account CouchSubs signs in with, or the controller will turn off by itself or won\'t work in the game.'}"
                                            Visibility="{Binding ShowsMainAccountTip, Converter={StaticResource VisibleIf}}" />
                                 <!-- Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir. -->
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,0"
+                                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}"
                                            Text="{t:T 'Automatic on-screen text translation is experimental; you can turn it on in Settings.'}"
                                            Visibility="{Binding ShowsAutoScreenTextNotice, Converter={StaticResource VisibleIf}}" />
                                 <!-- Kullanım verisi ilk açılışta bir kez söylenir; ilk çeviride ya da ayar değişince kaybolur. -->
-                                <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,0"
+                                <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xxs,0,0'}"
                                            Text="{t:T 'CouchSubs measures how the app is used without linking it to you; no subtitle text, picture or account data is sent. You can turn this off in Settings › Game packs › Usage data.'}"
                                            Visibility="{Binding ShowsUsageNotice, Converter={StaticResource VisibleIf}}" />
                             </StackPanel>
@@ -258,19 +258,19 @@
                 </ScrollViewer>
 
                 <!-- Durum: satır sayısı ve hızı, paketten oranı, ortalama gecikme -->
-                <Border x:Name="StatusCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Margin="0,0,0,24">
+                <Border x:Name="StatusCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Margin="{t:Sp '0,0,0,l'}">
                     <StackPanel>
-                        <TextBlock Text="{t:T 'STATUS'}" Style="{StaticResource SectionLabel}" />
-                        <TextBlock x:Name="StateTitle" Style="{StaticResource HeadlineText}" Margin="0,4,0,12" />
+                        <TextBlock Text="{t:T 'Status'}" Style="{StaticResource SectionLabel}" />
+                        <TextBlock x:Name="StateTitle" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,xxs,0,s'}" />
                         <UniformGrid Rows="1">
-                            <Border Style="{StaticResource Tile}" Margin="0,0,4,0" MinHeight="112">
+                            <Border Style="{StaticResource Tile}" Margin="{t:Sp '0,0,xxs,0'}" MinHeight="112">
                                 <Grid>
                                     <TextBlock x:Name="LineCount" Style="{StaticResource MonoValue}" VerticalAlignment="Top" />
-                                    <local:Sparkline x:Name="LineSpark" Height="36" VerticalAlignment="Center" Margin="-12,8,-12,0" />
+                                    <local:Sparkline x:Name="LineSpark" Height="36" VerticalAlignment="Center" Margin="{t:Sp '-s,xs,-s,0'}" />
                                     <TextBlock x:Name="LineRate" Style="{StaticResource CaptionText}" VerticalAlignment="Bottom" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight" />
                                 </Grid>
                             </Border>
-                            <Border Style="{StaticResource Tile}" Margin="4,0" MinHeight="112">
+                            <Border Style="{StaticResource Tile}" Margin="{t:Sp 'xxs,0'}" MinHeight="112">
                                 <Grid>
                                     <DockPanel VerticalAlignment="Top">
                                         <local:Ring x:Name="PackRing" DockPanel.Dock="Right" Width="40" Height="40" />
@@ -279,10 +279,10 @@
                                     <TextBlock x:Name="PackShare" Style="{StaticResource CaptionText}" VerticalAlignment="Bottom" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight" />
                                 </Grid>
                             </Border>
-                            <Border Style="{StaticResource Tile}" Margin="4,0,0,0" MinHeight="112">
+                            <Border Style="{StaticResource Tile}" Margin="{t:Sp 'xxs,0,0,0'}" MinHeight="112">
                                 <Grid>
                                     <TextBlock x:Name="DelayValue" Style="{StaticResource MonoValue}" VerticalAlignment="Top" />
-                                    <local:Bars x:Name="DelayBars" Height="24" VerticalAlignment="Center" Margin="0,8,0,0" />
+                                    <local:Bars x:Name="DelayBars" Height="24" VerticalAlignment="Center" Margin="{t:Sp '0,xs,0,0'}" />
                                     <TextBlock Text="{t:T 'Average Delay'}" Style="{StaticResource CaptionText}" VerticalAlignment="Bottom" TextWrapping="Wrap" LineHeight="15" LineStackingStrategy="BlockLineHeight" />
                                 </Grid>
                             </Border>
@@ -291,21 +291,21 @@
                 </Border>
 
                 <!-- Sessizlik nedeni ("Sorun Var"): solda kırmızı şerit, kaç saniyedir sessiz, neden, açıklama, çözüm düğmeleri. -->
-                <Border x:Name="ProblemCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Padding="0" Margin="0,0,0,24" Visibility="Collapsed">
+                <Border x:Name="ProblemCard" DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Padding="0" Margin="{t:Sp '0,0,0,l'}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="4" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource liveBrush}" CornerRadius="24,0,0,24" />
-                        <StackPanel Grid.Column="1" Margin="20,24,24,24">
+                        <StackPanel Grid.Column="1" Margin="{t:Sp 'm,l,l,l'}">
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse Width="8" Height="8" Fill="{DynamicResource liveBrush}" VerticalAlignment="Center" t:Motion.Pulse="True" />
-                                <TextBlock x:Name="SilentFor" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource liveBrush}" Margin="8,0,0,0" />
+                                <TextBlock x:Name="SilentFor" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource liveBrush}" Margin="{t:Sp 'xs,0,0,0'}" />
                             </StackPanel>
-                            <TextBlock x:Name="ProblemTitle" Style="{StaticResource HeadlineText}" Margin="0,4,0,0" />
-                            <TextBlock x:Name="ProblemText" Style="{StaticResource HintText}" FontSize="14" Margin="0,4,0,0" />
-                            <StackPanel x:Name="ProblemFixes" Margin="0,16,0,0" />
+                            <TextBlock x:Name="ProblemTitle" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,xxs,0,0'}" />
+                            <TextBlock x:Name="ProblemText" Style="{StaticResource HintText}" FontSize="14" Margin="{t:Sp '0,xxs,0,0'}" />
+                            <StackPanel x:Name="ProblemFixes" Margin="{t:Sp '0,m,0,0'}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -313,20 +313,20 @@
                 <!-- Canlı akış: bu oturumun son satırları, en yenisi üstte; "Geçmiş →" -->
                 <Border Style="{StaticResource CardBorder}">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <DockPanel DockPanel.Dock="Top" Margin="{t:Sp '0,0,0,xs'}">
                             <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="{t:T 'History →'}" Click="OnHistory" />
-                            <TextBlock Text="{t:T 'LIVE FEED'}" Style="{StaticResource SectionLabel}" Margin="0" VerticalAlignment="Center" />
+                            <TextBlock Text="{t:T 'Live feed'}" Style="{StaticResource SectionLabel}" Margin="0" VerticalAlignment="Center" />
                         </DockPanel>
                         <Grid>
-                            <TextBlock x:Name="FeedEmpty" Text="{t:T 'Subtitles will appear here while you play.'}" Style="{StaticResource HintText}" Margin="0,8,0,0" />
+                            <TextBlock x:Name="FeedEmpty" Text="{t:T 'Subtitles will appear here while you play.'}" Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}" />
                             <ScrollViewer Style="{StaticResource CardScroll}">
                                 <ItemsControl x:Name="Feed" Focusable="False">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,0,0,1" Padding="0,8">
+                                            <Border BorderBrush="{DynamicResource borderBrush}" BorderThickness="0,0,0,1" Padding="{t:Sp '0,xs'}">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Translation}" FontSize="14" FontWeight="Medium" />
-                                                    <TextBlock Text="{Binding Source}" Style="{StaticResource CaptionText}" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding Source}" Style="{StaticResource CaptionText}" Margin="{t:Sp '0,line,0,0'}" />
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
@@ -341,25 +341,25 @@
 
         <!-- "Hangi Oyunu Oynuyorsunuz?" (tuval 11): ana ekran bulanıklaşır, ortada 560 genişlikte kart; arama, oyun
              seçenekleri (paketi olan "Paket Var", son oynanan "Son Oynanan"), havuz notu, "Listede Yok" ve "Sorma". -->
-        <Grid x:Name="GameAsk" Grid.RowSpan="3" Margin="-24" Visibility="Collapsed" Background="#59F3F0EA">
+        <Grid x:Name="GameAsk" Grid.RowSpan="3" Margin="{t:Sp '-l'}" Visibility="Collapsed" Background="#59F3F0EA">
             <Border Style="{StaticResource CardBorder}" Width="560" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="60" ShadowDepth="24" Direction="270" Opacity="0.18" Color="Black" />
                 </Border.Effect>
                 <StackPanel>
-                    <TextBlock Text="{t:T 'GAME BEING PLAYED'}" Style="{StaticResource SectionLabel}" />
-                    <TextBlock Text="{t:T 'Which Game Are You Playing?'}" Style="{StaticResource TitleText}" FontWeight="SemiBold" Margin="0,8,0,16" />
+                    <TextBlock Text="{t:T 'Game being played'}" Style="{StaticResource SectionLabel}" />
+                    <TextBlock Text="{t:T 'Which Game Are You Playing?'}" Style="{StaticResource TitleText}" FontWeight="SemiBold" Margin="{t:Sp '0,xs,0,m'}" />
                     <Grid>
                         <TextBox x:Name="GameSearch" TextChanged="OnGameSearch" KeyDown="OnGameSearchKey" AutomationProperties.Name="{t:T 'Search Games'}" />
-                        <TextBlock x:Name="GameSearchHint" Text="{t:T 'Search Games'}" Foreground="{DynamicResource textTertiaryBrush}" Margin="17,0,0,0"
+                        <TextBlock x:Name="GameSearchHint" Text="{t:T 'Search Games'}" Foreground="{DynamicResource textTertiaryBrush}" Margin="{t:Sp 'm,0,0,0'}"
                                    VerticalAlignment="Center" IsHitTestVisible="False" />
                     </Grid>
-                    <StackPanel x:Name="GameList" Margin="0,16,0,0" />
-                    <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0"
+                    <StackPanel x:Name="GameList" Margin="{t:Sp '0,m,0,0'}" />
+                    <TextBlock Style="{StaticResource HintText}" Margin="{t:Sp '0,xs,0,0'}"
                                Text="{t:T 'Lines not in a pack go to the shared pool with the game\'s name, so a ready translation for that game arrives sooner.'}" />
-                    <UniformGrid Rows="1" Margin="0,16,0,0">
-                        <Button x:Name="GameCustom" Content="{t:T 'Not in the List'}" HorizontalAlignment="Stretch" Margin="0,0,4,0" Click="OnCustomGame" />
-                        <Button Content="{t:T 'Don\'t Ask'}" HorizontalAlignment="Stretch" Margin="4,0,0,0" Click="OnDontAskGame" />
+                    <UniformGrid Rows="1" Margin="{t:Sp '0,m,0,0'}">
+                        <Button x:Name="GameCustom" Content="{t:T 'Not in the List'}" HorizontalAlignment="Stretch" Margin="{t:Sp '0,0,xxs,0'}" Click="OnCustomGame" />
+                        <Button Content="{t:T 'Don\'t Ask'}" HorizontalAlignment="Stretch" Margin="{t:Sp 'xxs,0,0,0'}" Click="OnDontAskGame" />
                     </UniformGrid>
                 </StackPanel>
             </Border>

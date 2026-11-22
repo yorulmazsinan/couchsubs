@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Diagnostics;
+using CouchSubs.App.Theme;
 using System.Windows;
 using System.Windows.Controls;
 using CouchSubs.Core;
@@ -46,7 +47,7 @@ public partial class TvStep : UserControl
 
     private void AddRow(LgTv tv)
     {
-        var row = new Grid { Margin = new Thickness(0, 4, 0, 4), Tag = tv.Host };
+        var row = new Grid { Margin = Sp.T("0", "xxs", "0", "xxs"), Tag = tv.Host };
         row.Children.Add(new TextBlock { Text = $"{tv.Name} — {tv.Host}", VerticalAlignment = VerticalAlignment.Center });
         var connect = new Button { Content = Localizer.Current["Connect"], Style = (Style)FindResource("PrimaryButton"), HorizontalAlignment = HorizontalAlignment.Right };
         connect.Click += async (_, _) => await PairAsync(tv);

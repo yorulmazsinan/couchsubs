@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.ComponentModel;
+using CouchSubs.App.Theme;
 using System.Windows;
 using System.Windows.Controls;
 using CouchSubs.Core;
@@ -99,7 +100,7 @@ public partial class DubbingCard : UserControl
         Voices.Children.Add(VoiceRow(Localizer.Current["Second speaker in dialogue"], cast.Partner,
             voice => Update(s => s with { Dubbing = s.Dubbing with { Cast = WithRoles(s.Dubbing.Cast, partner: voice) } })));
         if (cast.Assignments.Count == 0) return;
-        Voices.Children.Add(new TextBlock { Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
+        Voices.Children.Add(new TextBlock { Text = Localizer.Current["Characters"], FontWeight = FontWeights.SemiBold, Margin = Sp.T("0", "s", "0", "xxs") });
         foreach (var name in cast.Assignments.Keys.Order(StringComparer.Ordinal))
             Voices.Children.Add(VoiceRow(DisplayName(name), cast.Assignments[name], voice => controller?.AssignVoice(voice, name)));
     }
@@ -126,12 +127,12 @@ public partial class DubbingCard : UserControl
 
     private Grid VoiceRow(string title, DubbingVoice selected, Action<DubbingVoice> choose)
     {
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        var row = new Grid { Margin = Sp.T("0", "0", "0", "xs") };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var label = new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 12, 0) };
-        var picker = new ComboBox { Margin = new Thickness(0, 0, 8, 0) };
+        var label = new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = Sp.T("0", "0", "s", "0") };
+        var picker = new ComboBox { Margin = Sp.T("0", "0", "xs", "0") };
         foreach (var voice in DubbingVoices.All)
             picker.Items.Add(new ComboBoxItem { Content = Label(voice), Tag = voice, IsSelected = voice == selected });
         picker.SelectionChanged += (_, _) =>

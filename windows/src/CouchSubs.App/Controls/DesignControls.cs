@@ -84,10 +84,16 @@ public class OptionCard : RadioButton
 public class NavItem : RadioButton
 {
     public static readonly DependencyProperty HintProperty = DependencyProperty.Register(nameof(Hint), typeof(string), typeof(NavItem));
+    /// <summary>Segoe Fluent Icons simgesi (Mac'teki SF Symbol karşılığı).</summary>
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(string), typeof(NavItem));
+    /// <summary>Simge karesinin tonu (tasarim.json: amber, peach, olive, teal, plum, sky, live).</summary>
+    public static readonly DependencyProperty TintProperty = DependencyProperty.Register(nameof(Tint), typeof(Brush), typeof(NavItem));
 
     static NavItem() => DefaultStyleKeyProperty.OverrideMetadata(typeof(NavItem), new FrameworkPropertyMetadata(typeof(NavItem)));
 
     public string? Hint { get => (string?)GetValue(HintProperty); set => SetValue(HintProperty, value); }
+    public string? Icon { get => (string?)GetValue(IconProperty); set => SetValue(IconProperty, value); }
+    public Brush? Tint { get => (Brush?)GetValue(TintProperty); set => SetValue(TintProperty, value); }
 }
 
 /// <summary>Renk seçimi noktası (32 ya da 24 px daire); seçiliyken amber halka.</summary>

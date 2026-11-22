@@ -40,7 +40,7 @@ public sealed class AppearanceEditor : Grid
     private static readonly (string Name, string Line)[] Sample = [("Jason", "Tamam. Gidelim."), ("Lucia", "Yakınımda kal. Bunu birlikte yapacağız."), ("Cal", "Bir sürü silah sesi duyuyorum!")];
 
     private readonly AppController controller;
-    private readonly StackPanel previewLines = new() { VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(16) };
+    private readonly StackPanel previewLines = new() { VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center, Margin = Sp.T("m") };
     private readonly TextBlock lowContrast = new();
     private readonly TextBlock sizeValue = new();
     private readonly Slider size = new() { Minimum = 16, Maximum = 50, SmallChange = 1, LargeChange = 4, IsSnapToTickEnabled = true, TickFrequency = 1 };
@@ -76,7 +76,7 @@ public sealed class AppearanceEditor : Grid
         preview.Children.Add(new AspectBox { Child = frame });
         lowContrast.Text = l["The text color is too close to the background; it may be hard to read on the TV."];
         lowContrast.SetResourceReference(StyleProperty, "ErrorText");
-        lowContrast.Margin = new Thickness(0, 16, 0, 0);
+        lowContrast.Margin = Sp.T("0", "m", "0", "0");
         preview.Children.Add(lowContrast);
         preview.Children.Add(Hint("The settings apply the same on the TV, phone and computer screen.", new Thickness(0, 16, 0, 0)));
         var left = Card(preview);
@@ -91,9 +91,9 @@ public sealed class AppearanceEditor : Grid
         sizeHead.Children.Add(sizeValue);
         sizeHead.Children.Add(new TextBlock { Text = l["Text Size"], FontWeight = FontWeights.SemiBold });
         right.Children.Add(sizeHead);
-        var sizeRow = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var sizeRow = new DockPanel { Margin = Sp.T("0", "m", "0", "0") };
         var small = Hint("A", new Thickness(0, 0, 12, 0));
-        var large = new TextBlock { Text = "A", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(12, 0, 0, 0) };
+        var large = new TextBlock { Text = "A", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = Sp.T("s", "0", "0", "0") };
         large.SetResourceReference(TextBlock.ForegroundProperty, "textSecondaryBrush");
         DockPanel.SetDock(small, Dock.Left);
         DockPanel.SetDock(large, Dock.Right);
@@ -110,7 +110,7 @@ public sealed class AppearanceEditor : Grid
         right.Children.Add(Divider());
 
         right.Children.Add(new TextBlock { Text = l["Background Color"], FontWeight = FontWeights.SemiBold });
-        backgroundSwatches.Margin = new Thickness(0, 16, 0, 0);
+        backgroundSwatches.Margin = Sp.T("0", "m", "0", "0");
         for (var i = 0; i < Backgrounds.Length; i++)
         {
             var index = i;
@@ -124,9 +124,9 @@ public sealed class AppearanceEditor : Grid
         }
         right.Children.Add(backgroundSwatches);
         backgroundName.SetResourceReference(StyleProperty, "HintText");
-        backgroundName.Margin = new Thickness(0, 16, 0, 0);
+        backgroundName.Margin = Sp.T("0", "m", "0", "0");
         right.Children.Add(backgroundName);
-        var darkRow = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var darkRow = new DockPanel { Margin = Sp.T("0", "m", "0", "0") };
         var darkLabel = new TextBlock { Text = l["Darkness"], Width = 72, FontSize = 14, FontWeight = FontWeights.Medium, VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(darkLabel, Dock.Left);
         darkRow.Children.Add(darkLabel);
@@ -139,7 +139,7 @@ public sealed class AppearanceEditor : Grid
         right.Children.Add(Divider());
 
         right.Children.Add(new TextBlock { Text = l["Text Color"], FontWeight = FontWeights.SemiBold });
-        textSwatches.Margin = new Thickness(0, 16, 0, 0);
+        textSwatches.Margin = Sp.T("0", "m", "0", "0");
         for (var i = 0; i < TextColors.Length; i++)
         {
             var index = i;
@@ -157,7 +157,7 @@ public sealed class AppearanceEditor : Grid
         }
         right.Children.Add(textSwatches);
         textName.SetResourceReference(StyleProperty, "HintText");
-        textName.Margin = new Thickness(0, 16, 0, 0);
+        textName.Margin = Sp.T("0", "m", "0", "0");
         right.Children.Add(textName);
         right.Children.Add(Divider());
 
@@ -169,9 +169,9 @@ public sealed class AppearanceEditor : Grid
             ShowNameArea();
             Preview();
         });
-        modes.Margin = new Thickness(0, 16, 0, 0);
+        modes.Margin = Sp.T("0", "m", "0", "0");
         right.Children.Add(modes);
-        nameArea.Margin = new Thickness(0, 16, 0, 0);
+        nameArea.Margin = Sp.T("0", "m", "0", "0");
         right.Children.Add(nameArea);
         var rightCard = Card(right);
         SetColumn(rightCard, 2);
@@ -269,7 +269,7 @@ public sealed class AppearanceEditor : Grid
         for (var c = 0; c < characters.Length; c++)
         {
             var character = c;
-            var line = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
+            var line = new DockPanel { Margin = Sp.T("0", "0", "0", "s") };
             var name = new TextBlock { Text = characters[c], Width = 72, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(NameColors[perCharacter[c]].Value),
                 VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(name, Dock.Left);
@@ -315,7 +315,7 @@ public sealed class AppearanceEditor : Grid
             if (bg is null) line.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 3, ShadowDepth = 1, Opacity = 0.85, Color = Colors.Black };
             previewLines.Children.Add(new Border
             {
-                Child = line, Padding = new Thickness(12, 6, 12, 6), CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Center,
+                Child = line, Padding = Sp.T("s", "titleBody", "s", "titleBody"), CornerRadius = new CornerRadius(10), Margin = Sp.T("0", "titleBody", "0", "0"), HorizontalAlignment = HorizontalAlignment.Center,
                 Background = bg is { } color ? new SolidColorBrush(Color.FromArgb((byte)(darkness * 255), color.R, color.G, color.B)) : Brushes.Transparent,
             });
         }
@@ -354,7 +354,7 @@ public sealed class AppearanceEditor : Grid
 
     private ColorSwatch Swatch(Brush brush, string label, string group, double diameter, Action picked)
     {
-        var swatch = new ColorSwatch { Swatch = brush, Diameter = diameter, GroupName = group + GetHashCode(), ToolTip = label, Margin = new Thickness(0, 0, diameter > 24 ? 12 : 8, 8) };
+        var swatch = new ColorSwatch { Swatch = brush, Diameter = diameter, GroupName = group + GetHashCode(), ToolTip = label, Margin = new Thickness(0, 0, Sp.V(diameter > 24 ? "s" : "xs"), Sp.V("xs")) };
         System.Windows.Automation.AutomationProperties.SetName(swatch, label);
         swatch.Checked += (_, _) => { if (!loading) picked(); };
         return swatch;
@@ -388,7 +388,7 @@ public sealed class AppearanceEditor : Grid
 
     private static TextBlock Label(string key)
     {
-        var label = new TextBlock { Text = Localizer.Current[key], Margin = new Thickness(0, 0, 0, 24) };
+        var label = new TextBlock { Text = Localizer.Current[key], Margin = Sp.T("0", "0", "0", "l") };
         label.SetResourceReference(StyleProperty, "SectionLabel");
         return label;
     }
@@ -402,7 +402,7 @@ public sealed class AppearanceEditor : Grid
 
     private static Border Divider()
     {
-        var line = new Border { Height = 1, Margin = new Thickness(0, 24, 0, 24) };
+        var line = new Border { Height = 1, Margin = Sp.T("0", "l", "0", "l") };
         line.SetResourceReference(Border.BackgroundProperty, "borderBrush");
         return line;
     }

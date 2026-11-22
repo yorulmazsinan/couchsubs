@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System.Windows;
+using CouchSubs.App.Theme;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CouchSubs.App.Controls;
@@ -19,13 +20,13 @@ public sealed class DesignGallery : UserControl
     {
         var text = Localizer.Current;
         var root = new DockPanel();
-        var titleBar = new Grid { Height = 72, Margin = new Thickness(24, 0, 24, 0) };
+        var titleBar = new Grid { Height = 72, Margin = Sp.T("l", "0", "l", "0") };
         titleBar.ColumnDefinitions.Add(new ColumnDefinition());
         titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         titleBar.ColumnDefinitions.Add(new ColumnDefinition());
         var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         brand.Children.Add(new CouchLogo());
-        brand.Children.Add(new TextBlock { Text = "CouchSubs", FontWeight = FontWeights.Bold, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        brand.Children.Add(new TextBlock { Text = "CouchSubs", FontWeight = FontWeights.Bold, Margin = Sp.T("s", "0", "0", "0"), VerticalAlignment = VerticalAlignment.Center });
         titleBar.Children.Add(brand);
         var tabs = Group("TabGroup", "TopTab", [text["Home"], text["History"], text["Settings"]], 0);
         Grid.SetColumn(tabs, 1);
@@ -39,7 +40,7 @@ public sealed class DesignGallery : UserControl
         DockPanel.SetDock(band, Dock.Bottom);
         root.Children.Add(band);
 
-        var grid = new Grid { Margin = new Thickness(24) };
+        var grid = new Grid { Margin = Sp.T("l") };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -48,22 +49,22 @@ public sealed class DesignGallery : UserControl
         foreach (var (style, label) in new[] { ("PrimaryButton", "Çeviriyi Başlat"), ("LiveButton", "Çeviriyi Durdur"), ("SecondaryButton", "Ekranı Çevir"),
                      ("DarkButton", "Devam"), ("SuccessButton", "Eşleşti"), ("GhostButton", "Atla") })
         {
-            var button = new Button { Content = label, Margin = new Thickness(0, 0, 12, 12) };
+            var button = new Button { Content = label, Margin = Sp.T("0", "0", "s", "s") };
             button.SetResourceReference(StyleProperty, style);
             buttons.Children.Add(button);
         }
-        var busy = new Button { Content = "Aranıyor…", IsEnabled = false, Margin = new Thickness(0, 0, 12, 12) };
+        var busy = new Button { Content = "Aranıyor…", IsEnabled = false, Margin = Sp.T("0", "0", "s", "s") };
         busy.SetResourceReference(StyleProperty, "SecondaryButton");
         buttons.Children.Add(busy);
         var leftStack = new StackPanel();
         leftStack.Children.Add(buttons);
         leftStack.Children.Add(Group("SegmentGroup", "SegmentButton", ["Hızlı", "Dengeli", "Doğru"], 1));
-        leftStack.Children.Add(new System.Windows.Controls.TextBox { Text = "192.168.1.20", Margin = new Thickness(0, 16, 0, 0) });
-        var badges = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
+        leftStack.Children.Add(new System.Windows.Controls.TextBox { Text = "192.168.1.20", Margin = Sp.T("0", "m", "0", "0") });
+        var badges = new StackPanel { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "m", "0", "0") };
         foreach (var (tone, label) in new[] { (PillTone.Success, "Açık"), (PillTone.Live, "Kapalı"), (PillTone.Idle, "Bilinmiyor"), (PillTone.Attention, "Önerilir") })
-            badges.Children.Add(new Badge { Tone = tone, Content = label, Margin = new Thickness(0, 0, 8, 0) });
+            badges.Children.Add(new Badge { Tone = tone, Content = label, Margin = Sp.T("0", "0", "xs", "0") });
         leftStack.Children.Add(badges);
-        var slider = new Slider { Minimum = 16, Maximum = 50, Value = 28, Margin = new Thickness(0, 16, 0, 0) };
+        var slider = new Slider { Minimum = 16, Maximum = 50, Value = 28, Margin = Sp.T("0", "m", "0", "0") };
         leftStack.Children.Add(slider);
         left.Content = leftStack;
         grid.Children.Add(left);
@@ -72,13 +73,13 @@ public sealed class DesignGallery : UserControl
         var rightStack = new StackPanel();
         rightStack.Children.Add(new SwitchRow { Content = "Açılış Sesi", Description = "Yalnız ilk açılışta çalar.", IsChecked = true });
         rightStack.Children.Add(new SwitchRow { Content = "Geçiş Animasyonları", Description = "Kapalıyken yalnız kısa solma kullanılır.", Divider = false });
-        rightStack.Children.Add(new OptionCard { Content = "Gemini", Description = "Ücretsiz Google anahtarıyla daha iyi çeviri.", IsChecked = true, GroupName = "g", Margin = new Thickness(0, 16, 0, 8) });
+        rightStack.Children.Add(new OptionCard { Content = "Gemini", Description = "Ücretsiz Google anahtarıyla daha iyi çeviri.", IsChecked = true, GroupName = "g", Margin = Sp.T("0", "m", "0", "xs") });
         rightStack.Children.Add(new OptionCard { Content = "DeepL", Description = "Kendi DeepL anahtarınızla.", GroupName = "g" });
-        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
+        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "m", "0", "0") };
         foreach (var (hex, on) in new[] { ("#101014", true), ("#0E1A30", false), ("#2B2D33", false), ("#FFFFFF", false) })
-            swatches.Children.Add(new ColorSwatch { Swatch = (Brush)new BrushConverter().ConvertFromString(hex)!, IsChecked = on, GroupName = "s", Margin = new Thickness(0, 0, 12, 0) });
+            swatches.Children.Add(new ColorSwatch { Swatch = (Brush)new BrushConverter().ConvertFromString(hex)!, IsChecked = on, GroupName = "s", Margin = Sp.T("0", "0", "s", "0") });
         rightStack.Children.Add(swatches);
-        var nav = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var nav = new StackPanel { Margin = Sp.T("0", "m", "0", "0") };
         nav.Children.Add(new NavItem { Content = "Temel", Hint = "Çeviri, Ses", IsChecked = true, GroupName = "n" });
         nav.Children.Add(new NavItem { Content = "Oyun Paketleri", GroupName = "n" });
         rightStack.Children.Add(nav);

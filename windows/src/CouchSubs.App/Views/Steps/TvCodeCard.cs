@@ -20,9 +20,9 @@ public sealed class TvCodeCard : Border
     /// <summary>Kart ekrandayken açılır onay kartı gösterilmez.</summary>
     public static bool Showing { get; private set; }
 
-    private readonly StackPanel digits = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
+    private readonly StackPanel digits = new() { Orientation = Orientation.Horizontal, Margin = Sp.T("0", "m", "0", "0") };
     private readonly TextBlock waiting = new();
-    private readonly StackPanel question = new() { Margin = new Thickness(0, 24, 0, 0) };
+    private readonly StackPanel question = new() { Margin = Sp.T("0", "l", "0", "0") };
     private readonly Button confirm = new();
     private readonly Button paired = new();
     private readonly DispatcherTimer poll = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -32,19 +32,19 @@ public sealed class TvCodeCard : Border
     {
         var l = Localizer.Current;
         SetResourceReference(StyleProperty, "CardBorder");
-        Margin = new Thickness(0, 0, 0, 24);
+        Margin = Sp.T("0", "0", "0", "l");
         var stack = new StackPanel();
         var label = new TextBlock { Text = l["CODE SHOWN ON THE TV"] };
         label.SetResourceReference(StyleProperty, "SectionLabel");
         stack.Children.Add(label);
         waiting.Text = l["Open CouchSubs on the TV. When it shows a code, it appears here too."];
         waiting.SetResourceReference(StyleProperty, "HintText");
-        waiting.Margin = new Thickness(0, 16, 0, 0);
+        waiting.Margin = Sp.T("0", "m", "0", "0");
         stack.Children.Add(waiting);
         stack.Children.Add(digits);
         var title = new TextBlock { Text = l["Do You See This Code on Your TV Too?"] };
         title.SetResourceReference(StyleProperty, "HeadlineText");
-        var hint = new TextBlock { Text = l["If you see the same code, you're on the right TV. Approving completes the pairing."], Margin = new Thickness(0, 4, 0, 16) };
+        var hint = new TextBlock { Text = l["If you see the same code, you're on the right TV. Approving completes the pairing."], Margin = Sp.T("0", "xxs", "0", "m") };
         hint.SetResourceReference(StyleProperty, "HintText");
         confirm.Content = l["I See This Code on the TV"];
         confirm.SetResourceReference(StyleProperty, "PrimaryButton");
@@ -86,7 +86,7 @@ public sealed class TvCodeCard : Border
         digits.Children.Clear();
         foreach (var digit in ticket.Code.Where(char.IsLetterOrDigit))
         {
-            var box = new Border { Width = 64, Height = 80, CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 12, 0) };
+            var box = new Border { Width = 64, Height = 80, CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1), Margin = Sp.T("0", "0", "s", "0") };
             box.SetResourceReference(Border.BackgroundProperty, "surface2Brush");
             box.SetResourceReference(Border.BorderBrushProperty, "borderBrush");
             var text = new TextBlock { Text = digit.ToString(), FontSize = 36, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

@@ -7,10 +7,10 @@
         WindowStartupLocation="CenterOwner" Background="{DynamicResource windowBackgroundBrush}" Foreground="{DynamicResource textPrimaryBrush}"
         FocusManager.FocusedElement="{Binding ElementName=GameTitle}">
     <StackPanel Margin="{DynamicResource pad.screen}">
-        <TextBlock Text="{t:T 'Game title'}" Style="{StaticResource HeadlineText}" Margin="0,0,0,8" />
+        <TextBlock Text="{t:T 'Game title'}" Style="{StaticResource HeadlineText}" Margin="{t:Sp '0,0,0,xs'}" />
         <TextBox x:Name="GameTitle" AutomationProperties.Name="{t:T 'Game title'}" TextChanged="OnTitleChanged" />
 
-        <Grid Margin="0,12,0,0">
+        <Grid Margin="{t:Sp '0,s,0,0'}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -21,21 +21,21 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="{t:T 'Usable entries'}" Style="{StaticResource BodyText}" Margin="0,0,12,6" />
+            <TextBlock Grid.Row="0" Text="{t:T 'Usable entries'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
             <TextBlock Grid.Row="0" Grid.Column="1" x:Name="UsableEntries" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="1" Text="{t:T 'Invalid records'}" Style="{StaticResource BodyText}" Margin="0,0,12,6" />
+            <TextBlock Grid.Row="1" Text="{t:T 'Invalid records'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
             <TextBlock Grid.Row="1" Grid.Column="1" x:Name="InvalidRecords" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="2" Text="{t:T 'Duplicate pairs'}" Style="{StaticResource BodyText}" Margin="0,0,12,6" />
+            <TextBlock Grid.Row="2" Text="{t:T 'Duplicate pairs'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
             <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DuplicatePairs" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="3" Text="{t:T 'Conflicting entries'}" Style="{StaticResource BodyText}" Margin="0,0,12,0" />
+            <TextBlock Grid.Row="3" Text="{t:T 'Conflicting entries'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,0'}" />
             <TextBlock Grid.Row="3" Grid.Column="1" x:Name="ConflictingEntries" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
         </Grid>
 
-        <TextBlock x:Name="InstallError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"
+        <TextBlock x:Name="InstallError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Polite" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="{t:T 'Cancel'}" IsCancel="True" Margin="0,0,8,0" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="{t:Sp '0,s,0,0'}">
+            <Button Content="{t:T 'Cancel'}" IsCancel="True" Margin="{t:Sp '0,0,xs,0'}" />
             <Button x:Name="InstallPack" Content="{t:T 'Install pack'}" Style="{StaticResource PrimaryButton}"
                     IsDefault="True" Click="OnInstall" IsEnabled="False" />
         </StackPanel>

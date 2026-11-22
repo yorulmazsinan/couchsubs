@@ -21,8 +21,11 @@ public class StepLayout : ContentControl
     public string Message { get => (string)GetValue(MessageProperty); set => SetValue(MessageProperty, value); }
 }
 
-/// <summary>Karonun görünümü: sıradan ya da etkin (seçili seçenek: 1 px sarı çerçeve). Parıltı ve degrade yok.</summary>
-public enum TileKind { Normal, Active }
+/// <summary>
+/// Kartın görünümü (Mac DSCard): sıradan; etkin (seçili: 2 px amber halka); vurgulu (uyarı/geliştirici: kartı köşe
+/// yarıçapıyla komple saran 1,5 px amber kenarlık + %5 amber zemin); deneysel (aynısı turuncu-kırmızı). Sol şerit yok.
+/// </summary>
+public enum TileKind { Normal, Active, Accent, Experimental }
 
 /// <summary>Başlıklı ya da başlıksız içerik kartı (karo).</summary>
 public class Card : ContentControl
@@ -30,11 +33,14 @@ public class Card : ContentControl
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(nameof(Title), typeof(string), typeof(Card));
     public static readonly DependencyProperty KindProperty = DependencyProperty.Register(nameof(Kind), typeof(TileKind), typeof(Card),
         new FrameworkPropertyMetadata(TileKind.Normal));
+    /// <summary>Başlık satırının sağındaki küçük öğe (ör. "Geçmiş →", "Yeniden Ara"); başlıkla dikeyde ortalı.</summary>
+    public static readonly DependencyProperty TrailingProperty = DependencyProperty.Register(nameof(Trailing), typeof(object), typeof(Card));
 
     static Card() => DefaultStyleKeyProperty.OverrideMetadata(typeof(Card), new FrameworkPropertyMetadata(typeof(Card)));
 
     public string? Title { get => (string?)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public TileKind Kind { get => (TileKind)GetValue(KindProperty); set => SetValue(KindProperty, value); }
+    public object? Trailing { get => GetValue(TrailingProperty); set => SetValue(TrailingProperty, value); }
 }
 
 /// <summary>Numaralı talimat satırı.</summary>
