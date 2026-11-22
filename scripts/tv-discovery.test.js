@@ -134,7 +134,9 @@ function startTv({ saved, alive, localIp, hasLocalAddress, consolePort, savedHdm
       probes.push(this.url);
       const target = new URL(this.url);
       const base = target.origin;
-      if (alive.has(base)) {
+      // auth.unanswered: telefon eşleştirme isteğine yanıt vermiyor (/hello yanıt verir; #1058).
+      const unanswered = auth && auth.unanswered && target.pathname === '/pair' && this.method === 'POST';
+      if (alive.has(base) && !unanswered) {
         clock.setTimeout(() => {
           this.status = 200;
           let data = Object.assign({ app: 'couchsubs' }, (hello || {})[base]);
@@ -966,6 +968,43 @@ test('eşleştirmeye kapalı sunucu (409): yönlendirme gösterilir, kendiliğin
   auth.approved = true;
   tv.clock.advance(2000);
   assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+});
+
+// GitHub #1058 (LG UK6470 + iPhone): eşleştirme isteği yanıtsız kalınca TV sessizce yeniden deniyor, bu arada kod
+// olmadan "Bu kodu telefon/bilgisayarda karşılaştırıp onaylayın" yazıyordu. Kod gelmeden o yazı çıkmaz; yanıtsız
+// denemeler sürerse ne yapılacağı ve nedeni görünür; istek ulaşınca kod çıkar, onayla bağlanır.
+test('eşleştirme isteği yanıtsızken kodsuz "bu kodu karşılaştırın" yazılmaz; yönerge çıkar, yanıt gelince kod görünür', () => {
+  const auth = { key: secureKey, id: secureId, unanswered: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  const seen = [];
+  for (let i = 0; i < 400; i++) {
+    tv.clock.advance(50);
+    seen.push(tv.element('pairing').textContent);
+  }
+  for (const text of seen) {
+    if (/karşılaştırıp/.test(text)) assert.match(text, /[0-9]{6}/, 'kodsuz karşılaştırma yazısı: ' + text);
+  }
+  assert(seen.some((text) => /isteniyor/.test(text)));
+  assert.match(tv.element('pairing').textContent, /yanıt vermiyor/);
+  assert.match(tv.element('pairing').textContent, /pair 0/);
+  assert(tv.requests.filter(r => r.method === 'POST').length >= 2);
+  assert.strictEqual(tv.lastOpened(), undefined);
+  auth.unanswered = false;
+  tv.clock.advance(12000);
+  assert.match(tv.element('pairing').textContent, /123456/);
+  assert.match(tv.element('pairing').textContent, /karşılaştırıp/);
+  auth.approved = true;
+  tv.clock.advance(2000);
+  assert.strictEqual(tv.lastOpened(), secureAddress + '/events?k=' + secureKey);
+  assert.strictEqual(tv.element('pairing').className, 'hidden');
+});
+
+test('süresi dolan kodun yerine yenisi istenirken yönerge değil "kod isteniyor" yazar', () => {
+  const auth = { key: secureKey, id: secureId, expired: true };
+  const tv = startTv({ saved: secureAddress, alive: new Set([secureAddress]), auth });
+  tv.clock.advance(1000);
+  assert.match(tv.element('pairing').textContent, /isteniyor/);
+  assert.doesNotMatch(tv.element('pairing').textContent, /karşılaştırıp|yanıt vermiyor/);
 });
 
 test('eski sunucu (auth bildirmeyen, ör. Android telefon beta.62): yeni TV eşleştirme istemeden anahtarsız bağlanır', () => {

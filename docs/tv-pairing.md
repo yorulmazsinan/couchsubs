@@ -5,6 +5,8 @@ TV uygulaması, bilgisayar/telefon üzerindeki CouchSubs ile aynı yerel ağda �
 ulaştırabiliyorsa ek işlem gerekmez. Android TV veya yalnız ağ taramasıyla bağlanan
 TV, iki ekranda aynı altı haneli kodu gösterir. **Kodu karşılaştırıp bilgisayar veya
 telefondan onaylayın.** Kumandayla kod girilmez. Tanımadığınız isteği reddedin.
+Kod gelmeden TV "kod isteniyor" yazar; istek art arda yanıtsız kalırsa (TV uygulaması 0.9.81'den beri) ne
+yapılacağını ve köşeli parantezde nedenini (`pair 0`: yanıt yok, `hello 0`: CouchSubs'a ulaşılamıyor) gösterir.
 
 Eşleştirme isteği iki dakika geçerlidir; aynı anda bir istek bekler. TV'de yeniden
 denenen istek (Tamam'a basmak, uygulamayı yeniden açmak) iki saniyeden eski onaysız

@@ -10,6 +10,11 @@
       // Sunucu eşleştirmeye kapalı (409): çeviri sürmüyor ve onay penceresi açılmamış. TV birkaç saniyede bir yeniden dener.
       pairClosed: 'Eşleştirme için telefonda/bilgisayarda Çeviriyi başlat\'a ya da Ayarlar\'daki TV eşleştir\'e basın; kod burada çıkar.',
       pairServer: 'Bu kodu telefon/bilgisayarda karşılaştırıp onaylayın.',
+      // Kod henüz gelmedi (istek gönderildi ya da süresi dolan kodun yerine yenisi isteniyor). Kodsuz "bu kodu
+      // karşılaştırın" yazılmaz (GitHub #1058).
+      pairAsking: 'Telefondaki/bilgisayardaki CouchSubs\'tan eşleştirme kodu isteniyor…',
+      // Eşleştirme isteği art arda yanıtsız kaldı ya da bozuk yanıt geldi; TV yeniden denemeyi sürdürür.
+      pairNoAnswer: 'Telefondaki/bilgisayardaki CouchSubs eşleştirme isteğine yanıt vermiyor; yeniden deneniyor. CouchSubs açık ve ekranda olsun, TV ile aynı Wi-Fi\'da olsun; olmazsa CouchSubs\'ı kapatıp yeniden açın.',
       // Telefondan kuranların çoğunun bilgisayarı yoktur: önce telefon söylenir (#113).
       waiting: 'Telefonda (ya da bilgisayarda) CouchSubs\'ı açıp Çeviriyi başlat\'a basın.',
       waitingHint: 'Bilgisayar gerekmez. Altyazı hedefi TV olsun, telefon ve TV aynı Wi-Fi\'da olsun: CouchSubs bu TV\'yi bulup altyazıları buraya gönderir.',
@@ -68,6 +73,8 @@
       pairRetry: 'Pairing did not finish. Press OK to try again.',
       pairClosed: 'To pair, press Start translation or Pair TV in Settings on your phone/computer; the code appears here.',
       pairServer: 'Compare this code and approve on your phone/computer.',
+      pairAsking: 'Asking CouchSubs on your phone/computer for a pairing code…',
+      pairNoAnswer: 'CouchSubs on your phone/computer is not answering the pairing request; retrying. Keep CouchSubs open and on screen, on the same Wi-Fi as the TV; if it still fails, close and reopen CouchSubs.',
       waiting: 'Open CouchSubs on your phone (or computer) and start translating.',
       waitingHint: 'No computer needed. Set the subtitle target to TV and keep the phone and TV on the same Wi-Fi: CouchSubs finds this TV and sends subtitles here.',
       panelTitle: 'CouchSubs',

@@ -1,0 +1,1 @@
+0.9.81: The TV no longer says "Compare this code" before a pairing code arrives; it says it is asking for one, and shows what to do if your phone/computer does not answer.

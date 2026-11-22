@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.80';
+  var APP_VERSION = '0.9.81';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -1991,10 +1991,25 @@
   // tamamlanmadı, Tamam'a basın"da kalıyor, yeni istek göndermiyordu; telefonda çeviri sürse de onay penceresi hiç
   // çıkmıyordu.
   var PAIR_RETRY_MS = 3000;
-  function retryPairing(address, generation, ms) {
+  // Art arda yanıtsız kalan (ya da bozuk yanıt alan) eşleştirme isteği sayısı. GitHub #1058 (LG UK6470, iPhone): istek
+  // telefona ulaşmadığında TV birkaç saniyede bir sessizce yeniden deniyor, bu arada kod olmadan "Bu kodu telefon/
+  // bilgisayarda karşılaştırıp onaylayın" yazıyordu; kullanıcı olmayan kodu arıyordu. Artık kod gelene kadar "kod
+  // isteniyor" yazar; ikinci yanıtsız denemeden sonra ne yapılacağı ve nedeni (tanı için) görünür.
+  var pairMisses = 0;
+  var PAIR_MISSES_BEFORE_HINT = 2;
+  // failure: isteğin neden tamamlanmadığı ("pair 0": yanıt yok, "pair 500": bozuk yanıt); yoksa kodun süresi doldu ya
+  // da istek telefonda düştü (yanıt geldi, yeni kod istenir).
+  function notePairMiss(failure) {
+    if (failure) {
+      pairMisses++;
+      noteError(failure);
+    } else pairMisses = 0;
+    setPairing(pairMisses >= PAIR_MISSES_BEFORE_HINT ? t('pairNoAnswer') + ' [' + failure + ']' : t('pairAsking'));
+  }
+  function retryPairing(address, generation, ms, failure) {
     pairingActive = false;
     pairingFailed = false;
-    setPairing(t('pairServer'));
+    notePairMiss(failure);
     clearTimeout(pairingTimer);
     pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, ms || PAIR_RETRY_MS);
   }
@@ -2034,9 +2049,16 @@
     eventSource = null;
     if (address !== server) failures = 0;
     server = address;
-    pairRequest('GET', address, '/hello', function (hello) {
+    pairRequest('GET', address, '/hello', function (hello, status) {
       if (generation !== connectionGeneration) return;
-      if (!hello || hello.app !== 'couchsubs') { scanForServer(); return; }
+      if (!hello || hello.app !== 'couchsubs') {
+        // Eşleştirme sürerken CouchSubs yanıt vermez olduysa (telefonda uygulama kapandı/arka plana düştü, adres
+        // değişti) "kod isteniyor" yazısı takılı kalmaz; ağ taranırken ne yapılacağı görünür.
+        var asking = $('pairing').textContent;
+        if (asking && asking !== t('pairRetry') && asking !== t('pairClosed')) notePairMiss('hello ' + status);
+        scanForServer();
+        return;
+      }
       // Do not restart discovery while waiting for human approval.
       cancelScan();
       if (hello.auth !== 1) { connectStream(address); return; }
@@ -2054,7 +2076,7 @@
           if (generation !== connectionGeneration) return;
           if (result && result.state === 'valid') { remember(key); connectStream(address); }
           // Yanıt gelmedi (ağ bir an koptu, sunucu yeniden açılıyor): anahtar geçerli olabilir, boşuna onay istenmez.
-          else if (!status) retryPairing(address, generation, 5000);
+          else if (!status) retryPairing(address, generation, 5000, 'validate 0');
           else beginPair();
         });
       } else beginPair();
@@ -2065,8 +2087,9 @@
       function beginPair() {
         pairingActive = true;
         $('waiting').className = '';
-        // Eşleştirmeye kapalı sunucuya yeniden denerken yönlendirme yazısı her denemede silinip gelmesin.
-        if ($('pairing').textContent !== t('pairClosed')) setPairing(t('pairServer'));
+        // Eşleştirmeye kapalı sunucuya ya da yanıt vermeyen isteğe yeniden denerken yönlendirme yazısı her denemede silinip
+        // gelmesin. Kod gelmeden "bu kodu karşılaştırın" yazılmaz (#1058).
+        if (pairMisses < PAIR_MISSES_BEFORE_HINT && $('pairing').textContent !== t('pairClosed')) setPairing(t('pairAsking'));
         pairRequest('POST', address, '/pair', function (ticket, status) {
           if (generation !== connectionGeneration) return;
           if (status === 409) {
@@ -2075,16 +2098,18 @@
             // söylenir ve birkaç saniyede bir kendiliğinden yeniden denenir; onay penceresi açılınca kod hemen çıkar.
             pairingActive = false;
             pairingFailed = true;
+            pairMisses = 0;
             setPairing(t('pairClosed'));
             pairingTimer = setTimeout(function () { if (generation === connectionGeneration) connect(address); }, 5000);
             return;
           }
           if (!ticket || !/^[A-Za-z0-9_-]{22}$/.test(ticket.id || '') || !/^[0-9]{6}$/.test(ticket.code || '')) {
             // İstek ulaşmadı ya da yanıt bozuk: "tamamlanmadı" denmez, birkaç saniye sonra yeniden denenir.
-            retryPairing(address, generation, 5000);
+            retryPairing(address, generation, 5000, 'pair ' + status);
             return;
           }
           var deadline = Date.now() + 120000;
+          pairMisses = 0;
           setPairing(t('pairCode') + ' ' + ticket.code + ' — ' + t('pairServer'));
           setStatus('st-conn', t('pairCode') + ' ' + ticket.code, 'muted');
           function poll() {

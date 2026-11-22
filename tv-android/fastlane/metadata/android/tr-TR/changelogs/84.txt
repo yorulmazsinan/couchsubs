@@ -1,0 +1,1 @@
+0.9.81: Eşleştirme kodu gelmeden TV "Bu kodu karşılaştırıp onaylayın" yazmıyor; kod istenirken bunu söylüyor, telefon/bilgisayar yanıt vermezse ne yapılacağını gösteriyor.
