@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using CouchSubs.App.Controls;
 using CouchSubs.App.Theme;
@@ -161,14 +162,16 @@ public partial class TvStep : UserControl
         var selected = Controller.Tv?.Host == tv.Host || pairingHost == tv.Host;
         var mark = new Border { Margin = Sp.T("0", "0", "s", "0") };
         mark.SetResourceReference(StyleProperty, "BrandMark");
-        mark.Child = new TextBlock
+        var markText = new TextBlock
         {
-            Text = BrandShort(tv.Brand), FontSize = tv.Brand == TvBrand.Lg ? 14 : 9, FontWeight = FontWeights.Black,
+            Text = BrandShort(tv.Brand), FontSize = tv.Brand == TvBrand.Lg ? 14 : 9, FontWeight = FontWeights.Black, TextWrapping = TextWrapping.NoWrap,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         };
+        // Uzun marka adı (SAMSUNG) kareye tek satırda sığsın diye küçülür (Mac TVBrandMark).
+        mark.Child = tv.Brand == TvBrand.Lg ? markText : new Viewbox { Child = markText, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, Margin = Sp.T("xxs") };
         var name = new TextBlock { Text = tv.Name.Length == 0 ? BrandName(tv.Brand) : tv.Name, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
         name.SetResourceReference(StyleProperty, "UnitTitleText");
-        var host = new TextBlock { Text = tv.Host, FontSize = 12, Margin = Sp.T("0", "line", "0", "0") };
+        var host = new TextBlock { Text = tv.Host, FontSize = 12, TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis, Margin = Sp.T("0", "line", "0", "0") };
         host.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
         host.SetResourceReference(TextBlock.ForegroundProperty, "mutedBrush");
         var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

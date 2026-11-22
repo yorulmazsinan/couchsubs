@@ -1357,7 +1357,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="&#xE719;" Style="{StaticResource GlyphText}" FontSize="11" Margin="{m:Sp '0,0,unitHint,0'}" />
                                             <TextBlock Text="App Store" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock x:Name="AppStoreSoon" Text="{theme:T 'Coming Soon'}" FontSize="10" Foreground="{DynamicResource faintBrush}"
+                                            <TextBlock x:Name="AppStoreSoon" Text="{theme:T 'Coming Soon'}" Visibility="{Binding Current.HasAppStore, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource VisibleIf}, ConverterParameter=invert}" FontSize="10" Foreground="{DynamicResource faintBrush}"
                                                        VerticalAlignment="Center" Margin="{m:Sp 'unitHint,0,0,0'}" />
                                         </StackPanel>
                                     </Button>
@@ -1366,7 +1366,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="&#xE768;" Style="{StaticResource GlyphText}" FontSize="11" Margin="{m:Sp '0,0,unitHint,0'}" />
                                             <TextBlock Text="Google Play" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock x:Name="GooglePlaySoon" Text="{theme:T 'Coming Soon'}" FontSize="10" Foreground="{DynamicResource faintBrush}"
+                                            <TextBlock x:Name="GooglePlaySoon" Text="{theme:T 'Coming Soon'}" Visibility="{Binding Current.HasGooglePlay, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource VisibleIf}, ConverterParameter=invert}" FontSize="10" Foreground="{DynamicResource faintBrush}"
                                                        VerticalAlignment="Center" Margin="{m:Sp 'unitHint,0,0,0'}" />
                                         </StackPanel>
                                     </Button>
@@ -1376,14 +1376,6 @@
                                        Foreground="{DynamicResource faintBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{m:Sp '0,unitHint,xs,0'}" />
                         </Grid>
                     </Border>
-                    <ControlTemplate.Triggers>
-                        <DataTrigger Binding="{Binding Current.HasAppStore, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
-                            <Setter TargetName="AppStoreSoon" Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Current.HasGooglePlay, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
-                            <Setter TargetName="GooglePlaySoon" Property="Visibility" Value="Collapsed" />
-                        </DataTrigger>
-                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

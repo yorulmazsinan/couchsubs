@@ -73,7 +73,7 @@
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Right" Text="&#xE76C;" Style="{StaticResource GlyphText}" FontSize="12" Foreground="{DynamicResource faintBrush}" />
                             <Border DockPanel.Dock="Left" Style="{StaticResource BrandMark}" Margin="{t:Sp '0,0,s,0'}">
-                                <TextBlock Text="Android" FontSize="9" FontWeight="Black" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <TextBlock Text="Android" FontSize="9" FontWeight="Black" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <c:SectionTitle Title="Android TV / Google TV" Text="{t:T 'Vestel, Arçelik, Beko, Grundig, Philips and other TVs running Android TV.'}"
                                             VerticalAlignment="Center" Margin="{t:Sp '0,0,s,0'}" />
