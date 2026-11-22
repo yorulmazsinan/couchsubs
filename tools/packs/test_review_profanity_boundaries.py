@@ -15,7 +15,7 @@ class ReviewProfanityBoundariesTests(unittest.TestCase):
     def review(self, proposed):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("review.py", "common.py"):
+            for name in ("review.py", "common.py", "atomic_json.py"):
                 shutil.copy2(HERE / name, root / name)
             (root / "translate_rules.py").write_text(
                 "GLOSSARY = {'ds': ''}\nRULES = ''\n", encoding="utf-8")

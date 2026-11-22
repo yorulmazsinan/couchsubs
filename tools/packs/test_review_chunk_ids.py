@@ -15,7 +15,7 @@ class ReviewChunkTests(unittest.TestCase):
     def test_second_review_chunk_cannot_rewrite_a_previous_subtitle(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("review.py", "common.py"):
+            for name in ("review.py", "common.py", "atomic_json.py"):
                 shutil.copyfile(HERE / name, root / name)
             (root / "translate_rules.py").write_text(
                 "GLOSSARY = {'ds': ''}\nRULES = ''\n", encoding="utf-8")
@@ -46,7 +46,7 @@ class ReviewChunkTests(unittest.TestCase):
     def test_duplicate_review_corrections_do_not_choose_last_arbitrarily(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("review.py", "common.py"):
+            for name in ("review.py", "common.py", "atomic_json.py"):
                 shutil.copyfile(HERE / name, root / name)
             (root / "translate_rules.py").write_text(
                 "GLOSSARY = {'ds': ''}\nRULES = ''\n", encoding="utf-8")

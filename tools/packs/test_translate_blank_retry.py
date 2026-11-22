@@ -19,7 +19,7 @@ class RetryBlankAiTests(unittest.TestCase):
     def test_manual_translator_retries_a_blank_first_response(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("translate.py", "common.py"):
+            for name in ("translate.py", "common.py", "atomic_json.py"):
                 shutil.copy2(HERE / name, root / name)
             (root / "llm.py").write_text(
                 "calls = 0\n"
