@@ -121,7 +121,9 @@ public static partial class ChildProcessGuard
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch (Exception error) when (error is InvalidOperationException or Win32Exception or NotSupportedException or AggregateException)
             {
-                killFailed = true;
+                // TerminateJobObject süreci zaten kapatıyor olabilir: HasExited ile Kill arasında çıkan süreçte Kill
+                // "süreç çıktı" hatası verir. Bu kapanmama sayılmaz; yalnız hâlâ açık süreçte öldürme hatası sayılır.
+                if (!IsGone(process)) killFailed = true;
             }
         }
         var running = 0;
