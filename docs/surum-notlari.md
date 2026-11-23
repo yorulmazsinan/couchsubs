@@ -6,11 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Windows: yeni arayüz.** Windows uygulaması Mac'teki yeni tasarımla geliyor; özellikler ve ayarlar aynı. Ana ekran, Ayarlar, kurulum ve TV ekranları yenilendi, "Günlüğü Kopyala" Windows'ta da var. Açılışta bir sorun olursa uygulama düzeltilmiş sürümü kendiliğinden kurmayı dener.
-- **GTA 6 telefon mesajları oynamıyor:** Panel ve balonlar yerinde duruyor, aynı mesaj yeniden çevrilmiyor, kısa okunamamada panel yanıp sönmüyor.
-- **Konuşan adı rengi yalnız adı boyuyor:** "Konuşan adını renklendir" açıkken cümle Yazı rengi ayarında kalıyor.
-- **LG'de aralıklı kararma:** Açık ve bağlı TV uygulamasına yeniden açma komutu gitmiyor; çeviri sırasında ekran kararıp "HDR" yazısıyla geri gelmiyor (TV uygulaması 0.9.80).
-- **TV'de eşleştirme kodu:** Kod görünmeden "karşılaştırın" yazması düzeltildi (TV uygulaması 0.9.81).
+- **Yeni tasarım (Mac, Windows):** Koyu tema ve sinematik görünüm; ana ekran, Ayarlar ve kurulum yenilendi, Geçmiş daha okunaklı. Özellikler ve ayarlar aynı.
+- **Xbox'ta bağlantı döngüsü:** "Uzaktan yürütme başlatıldı / durdu" diye sürekli başlayıp duran bağlantı düzeltildi.
+- **PS5'te bağlan-kop döngüsü:** PS5 bağlantıyı kapattığında (örneğin ikinci hesapla girilince) uygulama sürekli yeniden bağlanıp oyunu bölmüyor; durunca nedenini söylüyor ve "Yeniden bağlan" düğmesi çıkıyor.
+- **Windows'ta nadir çökme:** Oyun görüntüsü işlenirken nadiren yaşanan çökmeye karşı önlem.
+
+**beta.87'de gelenler:** Windows'ta yeni arayüz, GTA 6 telefon mesajlarının yerinde durması, konuşan adı renginin yalnız adı boyaması, LG'de aralıklı kararma (TV uygulaması 0.9.80), TV'de eşleştirme kodu (TV uygulaması 0.9.81).
 
 **beta.86'da gelenler:** Mac'te yeni arayüz, TV bağlantısı koptuğunda "Yeniden bağlanılıyor…" ve TV uygulamasının kendiliğinden yeniden açılması, yapay zekâ çevirisinde kaybolan satırlar (#893), GTA 6 telefon mesajlarının yanda panelde gösterilmesi, plaka ve tabela yazılarının çevrilmemesi, Samsung "Sunucu bakım altında" uyarısı, Windows'ta güncelleme döngüsü.
 
