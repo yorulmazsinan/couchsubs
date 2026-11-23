@@ -6,10 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Yeni tasarım (Mac, Windows):** Koyu tema ve sinematik görünüm; ana ekran, Ayarlar ve kurulum yenilendi, Geçmiş daha okunaklı. Özellikler ve ayarlar aynı.
-- **Xbox'ta bağlantı döngüsü:** "Uzaktan yürütme başlatıldı / durdu" diye sürekli başlayıp duran bağlantı düzeltildi.
-- **PS5'te bağlan-kop döngüsü:** PS5 bağlantıyı kapattığında (örneğin ikinci hesapla girilince) uygulama sürekli yeniden bağlanıp oyunu bölmüyor; durunca nedenini söylüyor ve "Yeniden bağlan" düğmesi çıkıyor.
-- **Windows'ta nadir çökme:** Oyun görüntüsü işlenirken nadiren yaşanan çökmeye karşı önlem.
+- **LG'de kararma:** Çeviri başlarken ve PS tuşundan dönünce ekranın 2 sn aralıkla kararması giderildi (TV uygulaması 0.9.82).
+- **Android TV'de çökme:** Bazı Android TV'lerde altyazı katmanı çizilirken uygulama çöküyorsa bir sonraki açılışta daha güvenli çizime geçiyor (TV uygulaması 0.9.83).
+- **Android TV'de "Uygulama içinde":** Görüntü modu "Uygulama içinde" seçiliyse TV uygulaması kendiliğinden katmana geçmiyor (TV uygulaması 0.9.84).
+- **LG'de "TV bağlantıyı reddetti":** TV bağlantıyı reddettiğinde "TV yanıt vermedi" yerine TV'yi yeniden başlatma önerisi ve webOS Hub uyarısı çıkıyor.
+- **Xbox'ta oyun seçimi:** Oyun tanınmazsa son seçtiğiniz oyun kullanılıyor; GTA 6 telefonu seçilince hemen açılıyor.
+- **Açık zeminde koyu yazı:** Duvardaki kâğıt ilan gibi açık zemin üstündeki koyu yazılar da okunup çevriliyor (#1124).
+- **Eksik Türkçe metinler** tamamlandı.
+
+**beta.88'de gelenler:** yeni tasarım (Mac, Windows), Xbox'ta "Uzaktan yürütme başlatıldı / durdu" döngüsü, PS5'te bağlan-kop döngüsü, Windows'ta nadir çökmeye karşı önlem.
 
 **beta.87'de gelenler:** Windows'ta yeni arayüz, GTA 6 telefon mesajlarının yerinde durması, konuşan adı renginin yalnız adı boyaması, LG'de aralıklı kararma (TV uygulaması 0.9.80), TV'de eşleştirme kodu (TV uygulaması 0.9.81).
 
