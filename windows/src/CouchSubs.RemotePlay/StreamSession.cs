@@ -196,6 +196,58 @@ internal sealed class CrashRetryLimit
 }
 
 /// <summary>
+/// Yeniden bağlanma kaç kez denenir (Mac/iPhone ve Android'deki ReconnectLimit ile aynı kural; GitHub #353).
+/// PS5 akışı kendisi kapattıysa (<see cref="DisconnectKind.ConsoleClosed"/>: kullanıcı PS5'te kolu açıp CouchSubs'ın giriş
+/// yaptığı ikinci hesabı seçti ya da PS5 başka bir uzaktan oynatmayı tercih etti) en çok
+/// <see cref="MaxConsoleClosedRetries"/> kez yeniden denenir. Eskiden 8 sn'den 60 sn'ye büyüyen beklemeyle sınırsız
+/// deneniyordu: PS5'te durmadan "uzaktan oynatma bağlandı/koptu" bildirimi çıkıyor, kullanıcının oyunu bölünüyordu. Ağ
+/// kopmasında (ağ, bulunamadı, TCP reddi, görüntü yok, diğer) art arda en çok <see cref="MaxNetworkRetries"/> kez denenir.
+/// Sonra durulur; kullanıcıya nedeni ve "Yeniden bağlan" düğmesi gösterilir. Sayaçlar çeviri başlayınca, ağ değişince
+/// ("Yeniden bağlan" dahil) ve <see cref="ReconnectPolicy.StableAfter"/> kadar süren oturumdan sonra sıfırlanır; kısa süren
+/// bağlantı sıfırlamaz (bağlan-kop döngüsü sayılsın diye).
+/// </summary>
+internal sealed class ReconnectLimit
+{
+    public const int MaxConsoleClosedRetries = 1;
+    public const int MaxNetworkRetries = 5;
+    private long? connectedAt;
+
+    /// <summary>Art arda PS5'in kendisinin kapattığı oturum sayısı.</summary>
+    public int ConsoleClosed { get; private set; }
+    /// <summary>Art arda ağ kaynaklı kopma ya da açılamayan oturum sayısı.</summary>
+    public int NetworkFailures { get; private set; }
+
+    public void Reset()
+    {
+        ConsoleClosed = 0;
+        NetworkFailures = 0;
+        connectedAt = null;
+    }
+
+    public void Connected(long nowMs) => connectedAt = nowMs;
+
+    /// <summary>Oturum kapandı ya da açılamadı: yeniden denenecekse null, durulacaksa kullanıcıya gösterilecek neden.</summary>
+    public DisconnectKind? Ended(DisconnectKind kind, long nowMs)
+    {
+        if (connectedAt is { } at && nowMs - at >= (long)ReconnectPolicy.StableAfter.TotalMilliseconds)
+        {
+            ConsoleClosed = 0;
+            NetworkFailures = 0;
+        }
+        connectedAt = null;
+        switch (kind)
+        {
+            case DisconnectKind.ConsoleClosed:
+                return ++ConsoleClosed > MaxConsoleClosedRetries ? DisconnectKind.ConsoleClosedRepeatedly : null;
+            case DisconnectKind.Network or DisconnectKind.NotFound or DisconnectKind.Refused or DisconnectKind.Other:
+                return ++NetworkFailures > MaxNetworkRetries ? DisconnectKind.ReconnectGaveUp : null;
+            default:
+                return null;
+        }
+    }
+}
+
+/// <summary>
 /// Bağlantı sık kopuyorsa görüntü 720p'ye düşürülür (Mac ve Android'deki QualityFallback ile aynı kural).
 /// 1080p akış ~15 Mbit/sn, 720p ~10 Mbit/sn ister. Kablosuz ağda PS5 akışı birkaç dakikada bir kopuyor ya da görüntü
 /// takılıyordu (GitHub #388, #401); altyazı okumak için 720p yeterlidir. <see cref="Window"/> içinde
@@ -456,6 +508,8 @@ public sealed class StreamSession : IStreamSession
     private readonly PictureWatchdog watchdog = new();
     /// <summary>PS5'teki Uzaktan Oynatma çöktüyse en çok iki kez yeniden denenir (yalnız kuyrukta).</summary>
     private readonly CrashRetryLimit crashLimit = new();
+    /// <summary>PS5 akışı kendisi kapattıysa en çok bir, ağ kopmasında art arda en çok beş kez yeniden denenir (yalnız kuyrukta).</summary>
+    private readonly ReconnectLimit retryLimit = new();
     /// <summary>Yalnız kuyrukta okunup yazılır.</summary>
     private SessionBox? box;
 
@@ -484,6 +538,7 @@ public sealed class StreamSession : IStreamSession
             policy.Reset();
             wakePolicy.Reset();
             crashLimit.Reset();
+            retryLimit.Reset();
             search.Reset();
             Connect(current);
         });
@@ -506,6 +561,7 @@ public sealed class StreamSession : IStreamSession
             CloseBox();
             policy.Reset();
             crashLimit.Reset();
+            retryLimit.Reset();
             Connect(current);
         });
     }
@@ -682,6 +738,7 @@ public sealed class StreamSession : IStreamSession
                     policy.Connected(Environment.TickCount64);
                     wakePolicy.Streamed();
                     crashLimit.Reset();
+                    retryLimit.Connected(Environment.TickCount64);
                     search.Connected();
                     streaming = true;
                     watchdog.Connected(Environment.TickCount64);
@@ -711,7 +768,7 @@ public sealed class StreamSession : IStreamSession
                 var reason = DisconnectReasons.FromNative(quitReason, text, sessionRequestHint);
                 RemotePlayLog.Write(1, $"Oturum kapandı: neden {quitReason} ({reason.Kind}) {text}");
                 if (reason.Kind == DisconnectKind.ConsoleClosed)
-                    RemotePlayLog.Write(1, $"PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"{text}\"); ağ kopması değil, çoğunlukla PS5'te kullanıcı değişince olur; yeniden bağlanılıyor");
+                    RemotePlayLog.Write(1, $"PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"{text}\"); ağ kopması değil, çoğunlukla PS5'te kullanıcı değişince olur");
                 queue.Post(() =>
                 {
                     // Eski bir oturumun (ör. ReconnectNow ile kapatılanın) kapanma olayı yeni oturumu etkilemez.
@@ -786,6 +843,14 @@ public sealed class StreamSession : IStreamSession
     private void ScheduleReconnect(int current, DisconnectReason reason)
     {
         reason = search.Classify(reason, console.Host);
+        // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).
+        if (IsCurrent(current) && retryLimit.Ended(reason.Kind, Environment.TickCount64) is { } stop)
+        {
+            RemotePlayLog.Note($"PS5 oturumu: yeniden bağlanma durduruldu ({stop}; PS5 kapattı {retryLimit.ConsoleClosed}, ağ {retryLimit.NetworkFailures} kez)");
+            GiveUp();
+            Emit(new SessionState(SessionPhase.Disconnected, new DisconnectReason(stop)));
+            return;
+        }
         Emit(new SessionState(SessionPhase.Disconnected, reason));
         if (!IsCurrent(current)) return;
         var delay = policy.NextDelay(inUse: reason.Kind == DisconnectKind.InUse);

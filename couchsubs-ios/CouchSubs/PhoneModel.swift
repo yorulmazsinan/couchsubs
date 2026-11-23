@@ -829,7 +829,8 @@ final class PhoneModel: ObservableObject {
     static func reconnectsOnReturn(after state: SessionState) -> Bool {
         guard case .disconnected(let reason) = state else { return true }
         switch reason {
-        case .registrationInvalid, .loginPasscode, .loginPasscodeIncorrect, .stopped: return false
+        // PS5 oturumu bilerek iki kez kapattı: kendiliğinden yeniden bağlanmak PS5'teki oyunu yine böler (GitHub #353).
+        case .registrationInvalid, .loginPasscode, .loginPasscodeIncorrect, .stopped, .consoleClosedRepeatedly: return false
         default: return true
         }
     }
@@ -1945,6 +1946,9 @@ final class PhoneModel: ObservableObject {
             // Eskiden İngilizce "Remote Play on Console has crashed" ile sonsuza kadar "Yeniden bağlanılıyor…" (GitHub #519).
             // PS5 akışı kendisi kapattı (ör. oyun sırasında PS5'te kullanıcı değişti): eskiden "kabloyla bağlayın" deniyordu.
             case .consoleClosed: return String(localized: "The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…")
+            // PS5 yeniden bağlanmadan sonra da kapattı: durulur (eskiden sınırsız deneniyor, oyun bölünüyordu; GitHub #353).
+            case .consoleClosedRepeatedly: return String(localized: "The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses.")
+            case .reconnectGaveUp: return String(localized: "The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect.")
             case .consoleRemotePlayCrashed: return String(localized: "Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again.")
             case .other(let detail) where isXbox: return detail
             case .other, .stopped: return String(localized: "Reconnecting…")

@@ -961,10 +961,10 @@ final class AppModelRunTests: XCTestCase {
     }
 
     func testReconnectsOnReturnUnlessRetryingEndsTheSameWay() {
-        for reason in [DisconnectReason.registrationInvalid, .loginPasscode, .loginPasscodeIncorrect, .stopped] {
+        for reason in [DisconnectReason.registrationInvalid, .loginPasscode, .loginPasscodeIncorrect, .stopped, .consoleClosedRepeatedly] {
             XCTAssertFalse(AppModel.reconnectsOnReturn(after: .disconnected(reason)), "\(reason)")
         }
-        for reason in [DisconnectReason.consoleRemotePlayCrashed, .noPicture, .network] {
+        for reason in [DisconnectReason.consoleRemotePlayCrashed, .noPicture, .network, .reconnectGaveUp] {
             XCTAssertTrue(AppModel.reconnectsOnReturn(after: .disconnected(reason)), "\(reason)")
         }
         XCTAssertTrue(AppModel.reconnectsOnReturn(after: .connecting))
@@ -1077,6 +1077,14 @@ final class AppModelRunTests: XCTestCase {
     func testConsoleClosedStatusNamesUserSwitch() {
         XCTAssertEqual(AppModel.statusText(.disconnected(.consoleClosed("x")), running: true),
                        String(localized: "The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…"))
+    }
+
+    /// GitHub #353: PS5 yeniden bağlanmadan sonra da kapatınca durulur; ana hesapla oynaması söylenir.
+    func testStoppedReconnectingIsExplained() {
+        XCTAssertEqual(AppModel.statusText(.disconnected(.consoleClosedRepeatedly), running: true),
+                       String(localized: "The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses."))
+        XCTAssertEqual(AppModel.statusText(.disconnected(.reconnectGaveUp), running: true),
+                       String(localized: "The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect."))
     }
 
     /// GitHub #519: İngilizce "Remote Play on Console has crashed" yerine yerelleştirilmiş yönlendirme.

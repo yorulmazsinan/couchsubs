@@ -3,6 +3,7 @@ package com.couchsubs.mobile.remoteplay
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -140,5 +141,55 @@ class ReconnectTest {
         limit.reset()
         assertEquals(0, limit.crashes)
         assertTrue(limit.crashed())
+    }
+
+    /** GitHub #353: PS5 akışı kendisi kapattı (ikinci hesap PS5'te seçildi) → en çok bir yeniden deneme, sonra dur. */
+    @Test
+    fun consoleClosedRetriesOnceThenStops() {
+        val limit = ReconnectLimit()
+        assertEquals(1, ReconnectLimit.MAX_CONSOLE_CLOSED_RETRIES)
+        val closed = DisconnectKind.fromNative(NativeBridge.QUIT_CONSOLE_CLOSED)
+        limit.connected(1_000)
+        assertNull(limit.ended(closed, 21_000))          // 1. kapatma: bir kez yeniden dene
+        limit.connected(41_000)                           // yeniden bağlandı, kısa sürdü
+        assertEquals(DisconnectKind.CONSOLE_CLOSED_REPEATEDLY, limit.ended(DisconnectKind.CONSOLE_CLOSED, 61_000))
+    }
+
+    /** Ağ kopmasında beklemeli deneme sürer ama art arda beşten fazla olmaz; sonra "Yeniden bağlan". */
+    @Test
+    fun networkDropsStopAfterFiveRetries() {
+        val limit = ReconnectLimit()
+        assertEquals(5, ReconnectLimit.MAX_NETWORK_RETRIES)
+        for (kind in listOf(DisconnectKind.NETWORK, DisconnectKind.NOT_FOUND, DisconnectKind.REFUSED, DisconnectKind.OTHER,
+                DisconnectKind.fromNative(NativeBridge.QUIT_NETWORK))) assertNull(limit.ended(kind, 0))
+        assertEquals(DisconnectKind.RECONNECT_GAVE_UP, limit.ended(DisconnectKind.NETWORK, 0))
+    }
+
+    /** PS5 kapalıyken açılması, başka cihazda kullanılırken bırakılması beklenir: bunlar sayılmaz. */
+    @Test
+    fun waitingReasonsAreNotCounted() {
+        val limit = ReconnectLimit()
+        repeat(20) {
+            assertNull(limit.ended(DisconnectKind.CONSOLE_ASLEEP, 0))
+            assertNull(limit.ended(DisconnectKind.IN_USE, 0))
+        }
+        assertEquals(0, limit.networkFailures)
+        assertEquals(0, limit.consoleClosed)
+    }
+
+    /** Uzun (kararlı) oturumdan sonraki kapatma yeni sayılır; saatler sonra yine hesap değişirse bir deneme var. */
+    @Test
+    fun stableSessionResetsLimitCounters() {
+        val limit = ReconnectLimit()
+        assertNull(limit.ended(DisconnectKind.CONSOLE_CLOSED, 0))
+        repeat(5) { assertNull(limit.ended(DisconnectKind.NETWORK, 0)) }
+        limit.connected(0)
+        assertNull(limit.ended(DisconnectKind.CONSOLE_CLOSED, ReconnectPolicy.STABLE_AFTER_MS))
+        assertEquals(0, limit.networkFailures)
+        assertEquals(1, limit.consoleClosed)
+        // Çeviri yeniden başlayınca, ağ değişince ya da "Yeniden bağlan"a basınca sayaçlar baştan.
+        assertEquals(DisconnectKind.CONSOLE_CLOSED_REPEATEDLY, limit.ended(DisconnectKind.CONSOLE_CLOSED, 0))
+        limit.reset()
+        assertNull(limit.ended(DisconnectKind.CONSOLE_CLOSED, 0))
     }
 }

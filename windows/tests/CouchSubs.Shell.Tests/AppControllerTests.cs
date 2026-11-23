@@ -2204,6 +2204,13 @@ public class AppControllerRunTests
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosed, "x"), true, text));
         Assert.Equal("PS5 Uzaktan Oynatma'yı kapattı. Bu çoğunlukla oyun sırasında PS5'te kullanıcı değiştirilince olur. Yeniden bağlanılıyor…",
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosed, "x"), true, Localizer.ForLanguage("tr")));
+        // GitHub #353: PS5 yeniden bağlanmadan sonra da kapatınca durulur; ana hesapla oynaması söylenir.
+        Assert.Equal("PS5 uzaktan oynatmayı kapattı. Oynarken PS5'te kendi ana hesabınızı seçin; CouchSubs'ın kullandığı ikinci hesapla oynamayın.",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosedRepeatedly), true, Localizer.ForLanguage("tr")));
+        Assert.Equal("The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses.",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleClosedRepeatedly), true, text));
+        Assert.Equal("PS5 bağlantısı art arda koptu, yeniden bağlanma durduruldu. PS5'in açık ve aynı ağda olduğundan emin olun, sonra Yeniden bağlan'a basın.",
+            AppController.StatusText(SessionState.Disconnected(DisconnectKind.ReconnectGaveUp), true, Localizer.ForLanguage("tr")));
         // GitHub #519: İngilizce "Remote Play on Console has crashed" yerine yerelleştirilmiş yönlendirme.
         Assert.Equal("Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again.",
             AppController.StatusText(SessionState.Disconnected(DisconnectKind.ConsoleRemotePlayCrashed), true, text));

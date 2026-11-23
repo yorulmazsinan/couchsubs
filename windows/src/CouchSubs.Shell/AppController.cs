@@ -2616,7 +2616,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public static bool ReconnectsOnReturn(SessionState state) =>
         state.Phase != SessionPhase.Disconnected || state.Reason?.Kind is not
             (DisconnectKind.RegistrationInvalid or DisconnectKind.LoginPasscode or DisconnectKind.LoginPasscodeIncorrect
-             or DisconnectKind.Stopped);
+             or DisconnectKind.Stopped
+             // PS5 oturumu bilerek iki kez kapattı: kendiliğinden yeniden bağlanmak PS5'teki oyunu yine böler (GitHub #353).
+             or DisconnectKind.ConsoleClosedRepeatedly);
 
     /// <summary>
     /// Ana ekrandaki "Yeniden bağlan" düğmesi: oturum yeniden denemeyi bıraktıysa hemen, süren denemelerde 45 sn sonra
@@ -2703,6 +2705,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // Eskiden İngilizce "Remote Play on Console has crashed" ile sonsuza kadar "Yeniden bağlanılıyor…" (GitHub #519).
             // PS5 akışı kendisi kapattı (ör. oyun sırasında PS5'te kullanıcı değişti): eskiden "kabloyla bağlayın" deniyordu.
             DisconnectKind.ConsoleClosed => text["The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…"],
+            // PS5 yeniden bağlanmadan sonra da kapattı: durulur (eskiden sınırsız deneniyor, oyun bölünüyordu; GitHub #353).
+            DisconnectKind.ConsoleClosedRepeatedly => text["The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses."],
+            DisconnectKind.ReconnectGaveUp => text["The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect."],
             DisconnectKind.ConsoleRemotePlayCrashed => text["Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again."],
             DisconnectKind.Other when !string.IsNullOrEmpty(detail) => text.Format("Reconnecting… (%@)", detail),
             _ => text["Reconnecting…"],
@@ -4164,7 +4169,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var ps5Trouble = !IsXbox && isRunning && sessionState.Phase != SessionPhase.Streaming && sessionState.Reason?.Kind is not
             (DisconnectKind.ConsoleAsleep or DisconnectKind.InUse or DisconnectKind.Refused or DisconnectKind.LoginPasscode
              or DisconnectKind.LoginPasscodeIncorrect or DisconnectKind.RegistrationInvalid or DisconnectKind.Rejected
-             or DisconnectKind.ConsoleRemotePlayCrashed or DisconnectKind.ConsoleClosed);
+             or DisconnectKind.ConsoleRemotePlayCrashed or DisconnectKind.ConsoleClosed
+             or DisconnectKind.ConsoleClosedRepeatedly);
         ps5TroubleSince = ps5Trouble ? ps5TroubleSince ?? now : null;
         // Altyazı TV'ye gitmiyorsa ya da TV yoksa TV beklenmez.
         tvWaitingSince = isRunning && ShowsOnTv && HasTv && tvClients == 0 ? tvWaitingSince ?? now : null;

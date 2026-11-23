@@ -122,6 +122,52 @@ struct CrashRetryLimit {
     }
 }
 
+/// Yeniden bağlanma kaç kez denenir (Windows ve Android'deki ReconnectLimit ile aynı kural; GitHub #353).
+///
+/// PS5 akışı kendisi kapattıysa (`.consoleClosed`: kullanıcı PS5'te kolu açıp CouchSubs'ın giriş yaptığı ikinci hesabı
+/// seçti ya da PS5 başka bir uzaktan oynatmayı tercih etti) en çok `maxConsoleClosedRetries` kez yeniden denenir.
+/// Eskiden 8 sn'den 60 sn'ye büyüyen beklemeyle sınırsız deneniyordu: PS5'te durmadan "uzaktan oynatma bağlandı/koptu"
+/// bildirimi çıkıyor, kullanıcının oyunu bölünüyordu. Ağ kopmasında (ağ, bulunamadı, TCP reddi, görüntü yok, diğer)
+/// art arda en çok `maxNetworkRetries` kez denenir. Sonra durulur; kullanıcıya nedeni ve "Yeniden bağlan" düğmesi
+/// gösterilir. Sayaçlar çeviri başlayınca, ağ değişince ("Yeniden bağlan" dahil) ve `ReconnectPolicy.stableAfter` kadar
+/// süren oturumdan sonra sıfırlanır; kısa süren bağlantı sıfırlamaz (bağlan-kop döngüsü sayılsın diye).
+struct ReconnectLimit {
+    static let maxConsoleClosedRetries = 1
+    static let maxNetworkRetries = 5
+    /// Art arda PS5'in kendisinin kapattığı oturum sayısı.
+    private(set) var consoleClosed = 0
+    /// Art arda ağ kaynaklı kopma ya da açılamayan oturum sayısı.
+    private(set) var networkFailures = 0
+    private var connectedAt: Date?
+
+    mutating func reset() {
+        consoleClosed = 0
+        networkFailures = 0
+        connectedAt = nil
+    }
+
+    mutating func connected(at now: Date = Date()) { connectedAt = now }
+
+    /// Oturum kapandı ya da açılamadı: yeniden denenecekse nil, durulacaksa kullanıcıya gösterilecek neden.
+    mutating func ended(_ reason: DisconnectReason, at now: Date = Date()) -> DisconnectReason? {
+        if let connectedAt, now.timeIntervalSince(connectedAt) >= ReconnectPolicy.stableAfter {
+            consoleClosed = 0
+            networkFailures = 0
+        }
+        connectedAt = nil
+        switch reason {
+        case .consoleClosed:
+            consoleClosed += 1
+            return consoleClosed > Self.maxConsoleClosedRetries ? .consoleClosedRepeatedly : nil
+        case .network, .notFound, .refused, .other:
+            networkFailures += 1
+            return networkFailures > Self.maxNetworkRetries ? .reconnectGaveUp : nil
+        default:
+            return nil
+        }
+    }
+}
+
 /// Bağlantı sık kopuyorsa görüntü 720p'ye düşürülür (Windows ve Android'deki QualityFallback ile aynı kural).
 ///
 /// 1080p akış ~15 Mbit/sn, 720p ~10 Mbit/sn ister. Kablosuz ağda PS5 akışı birkaç dakikada bir kopuyor ya da görüntü
@@ -325,8 +371,13 @@ public enum DisconnectReason: Equatable, Sendable {
     /// ileti gelmez, libchiaki STREAM_CONNECTION_UNKNOWN verir. Kullanıcılar bunu oyun sırasında PS5'te ana hesaba geçince
     /// görüyor (X, 21 Kas: "ana hesaba geçtiğim zaman sürekli bağlantı kopuyor"); eskiden `.network` sayılıp "kabloyla
     /// bağlayın" deniyor ve kopma görüntüyü 720p'ye düşürüyordu. Değer: PS5'in gönderdiği neden metni (günlükte görünsün
-    /// diye; boş olabilir). Yeniden bağlanılır.
+    /// diye; boş olabilir). En çok `ReconnectLimit.maxConsoleClosedRetries` kez yeniden bağlanılır.
     case consoleClosed(String)
+    /// PS5 yeniden bağlanmadan sonra da akışı kapattı; yeniden bağlanma durduruldu (GitHub #353). Kullanıcı PS5'te
+    /// CouchSubs'ın ikinci hesabıyla oynuyordur; eskiden sınırsız denenip PS5'te durmadan bildirim çıkıyordu.
+    case consoleClosedRepeatedly
+    /// Ağ kopmasından sonra art arda `ReconnectLimit.maxNetworkRetries` deneme tutmadı; yeniden bağlanma durduruldu.
+    case reconnectGaveUp
     case other(String)
 
     /// Altyazı günlüğüne (altyazi.log) yazılan kısa neden: adres ve ayrıntı olmadan, yalnız türü. Kullanıcılar çoğu zaman
@@ -346,6 +397,8 @@ public enum DisconnectReason: Equatable, Sendable {
         case .rejected(let code): code.map { String(format: "rejected 0x%08x", $0) } ?? "rejected"
         case .consoleRemotePlayCrashed: "consoleRemotePlayCrashed"
         case .consoleClosed(let text): text.isEmpty ? "consoleClosed" : "consoleClosed: \(text)"
+        case .consoleClosedRepeatedly: "consoleClosedRepeatedly"
+        case .reconnectGaveUp: "reconnectGaveUp"
         case .other(let text): text.isEmpty ? "other" : "other: \(text)"
         }
     }
@@ -587,6 +640,8 @@ public final class StreamSession: @unchecked Sendable {
     private let watchLock = NSLock()
     /// PS5'teki Uzaktan Oynatma çöktüyse en çok iki kez yeniden denenir (yalnız `queue`).
     private var crashLimit = CrashRetryLimit()
+    /// PS5 akışı kendisi kapattıysa en çok bir, ağ kopmasında art arda en çok beş kez yeniden denenir (yalnız `queue`).
+    private var retryLimit = ReconnectLimit()
 
     /// Durdurma isteği ve kuşak numarası; her başlat/durdur yeni bir kuşak açar ve eski
     /// bloklar (yeniden deneme, eski oturumun kapanma olayı) kendini iptal eder.
@@ -613,6 +668,7 @@ public final class StreamSession: @unchecked Sendable {
             self?.policy.reset()
             self?.wakePolicy.reset()
             self?.crashLimit.reset()
+            self?.retryLimit.reset()
             self?.search.reset()
             self?.watch { $0.reset() }
             self?.connect(current)
@@ -634,6 +690,7 @@ public final class StreamSession: @unchecked Sendable {
             self.closeBox()
             self.policy.reset()
             self.crashLimit.reset()
+            self.retryLimit.reset()
             self.watch { $0.reset() }
             self.connect(current)
         }
@@ -825,6 +882,7 @@ public final class StreamSession: @unchecked Sendable {
                 self.policy.connected()
                 self.wakePolicy.streamed()
                 self.crashLimit.reset()
+                self.retryLimit.connected()
                 self.search.connected()
                 self.streaming = true
                 self.watch { $0.connected() }
@@ -862,7 +920,7 @@ public final class StreamSession: @unchecked Sendable {
                 }
                 if case .consoleClosed(let text) = reason {
                     RemotePlayLog.write("PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"\(text)\"); ağ kopması değil, "
-                        + "çoğunlukla PS5'te kullanıcı değişince olur; yeniden bağlanılıyor")
+                        + "çoğunlukla PS5'te kullanıcı değişince olur")
                 }
                 self.closeBox()
                 self.policy.ended()
@@ -931,7 +989,15 @@ public final class StreamSession: @unchecked Sendable {
     private func scheduleReconnect(_ current: Int, reason: DisconnectReason, initialized: Bool = true, box failed: ChiakiSessionBox? = nil) {
         // Başlatılamamış kutunun join edilecek iş parçacığı yok; yalnız belleği bırakılır.
         if let failed, !initialized { failed.markUnused() }
-        emit(.disconnected(search.classify(reason, host: console.host)))
+        let classified = search.classify(reason, host: console.host)
+        // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).
+        if isCurrent(current), let stop = retryLimit.ended(classified) {
+            RemotePlayLog.write("PS5 oturumu: yeniden bağlanma durduruldu (\(stop.logName); PS5 kapattı \(retryLimit.consoleClosed), "
+                + "ağ \(retryLimit.networkFailures) kez)")
+            giveUp()
+            return emit(.disconnected(stop))
+        }
+        emit(.disconnected(classified))
         guard isCurrent(current) else { return }
         let delay = policy.nextDelay(inUse: reason == .inUse)
         RemotePlayLog.write("PS5 oturumu: \(delay) sn sonra yeniden denenecek")

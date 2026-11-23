@@ -4819,6 +4819,8 @@
         }
       }
     },
+    "The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don't play with the second account CouchSubs uses."}},"tr":{"stringUnit":{"state":"translated","value":"PS5 uzaktan oynatmayı kapattı. Oynarken PS5'te kendi ana hesabınızı seçin; CouchSubs'ın kullandığı ikinci hesapla oynamayın."}}}},
+    "The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect."}},"tr":{"stringUnit":{"state":"translated","value":"PS5 bağlantısı art arda koptu, yeniden bağlanma durduruldu. PS5'in açık ve aynı ağda olduğundan emin olun, sonra Yeniden bağlan'a basın."}}}},
     "The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…": {
       "localizations": {
         "en": {

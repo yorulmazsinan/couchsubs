@@ -122,6 +122,8 @@ public class ReconnectTests
     [InlineData(DisconnectKind.LoginPasscode, false)]
     [InlineData(DisconnectKind.LoginPasscodeIncorrect, false)]
     [InlineData(DisconnectKind.Stopped, false)]
+    [InlineData(DisconnectKind.ConsoleClosedRepeatedly, false)]
+    [InlineData(DisconnectKind.ReconnectGaveUp, true)]
     [InlineData(DisconnectKind.ConsoleRemotePlayCrashed, true)]
     [InlineData(DisconnectKind.Refused, true)]
     [InlineData(DisconnectKind.Network, true)]

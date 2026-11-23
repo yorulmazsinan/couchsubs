@@ -546,6 +546,67 @@ final class CrashRetryLimitTests: XCTestCase {
     }
 }
 
+final class ReconnectLimitTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_000)
+
+    /// GitHub #353: PS5 akışı kendisi kapattı (ikinci hesap PS5'te seçildi) → en çok bir yeniden deneme, sonra dur.
+    func testConsoleClosedRetriesOnceThenStops() {
+        var limit = ReconnectLimit()
+        XCTAssertEqual(ReconnectLimit.maxConsoleClosedRetries, 1)
+        let closed = DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED, remoteText: "Client disconnected")
+        limit.connected(at: start)
+        XCTAssertNil(limit.ended(closed, at: start.addingTimeInterval(20)))          // 1. kapatma: bir kez yeniden dene
+        limit.connected(at: start.addingTimeInterval(40))                            // yeniden bağlandı, kısa sürdü
+        XCTAssertEqual(limit.ended(.consoleClosed("Server shutting down"), at: start.addingTimeInterval(60)),
+                       .consoleClosedRepeatedly)                                     // 2. kapatma: dur
+    }
+
+    /// Ağ kopmasında beklemeli deneme sürer ama art arda beşten fazla olmaz; sonra "Yeniden bağlan".
+    func testNetworkDropsStopAfterFiveRetries() {
+        var limit = ReconnectLimit()
+        XCTAssertEqual(ReconnectLimit.maxNetworkRetries, 5)
+        let drops: [DisconnectReason] = [.network, .notFound("192.168.1.70"), .refused, .other(PictureWatchdog.reason), .network]
+        for drop in drops { XCTAssertNil(limit.ended(drop, at: start)) }
+        XCTAssertEqual(limit.ended(DisconnectReason(quit: CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN), at: start), .reconnectGaveUp)
+    }
+
+    /// PS5 kapalıyken açılması beklenir, başka cihazda kullanılırken beklenir: bunlar sayılmaz.
+    func testWaitingReasonsAreNotCounted() {
+        var limit = ReconnectLimit()
+        for _ in 0..<20 {
+            XCTAssertNil(limit.ended(.consoleAsleep, at: start))
+            XCTAssertNil(limit.ended(.inUse, at: start))
+        }
+        XCTAssertEqual(limit.networkFailures, 0)
+        XCTAssertEqual(limit.consoleClosed, 0)
+    }
+
+    /// Uzun (kararlı) oturumdan sonraki kapatma yeni sayılır; kullanıcı saatler sonra yine hesap değiştirirse bir deneme var.
+    func testStableSessionResetsCounters() {
+        var limit = ReconnectLimit()
+        XCTAssertNil(limit.ended(.consoleClosed(""), at: start))
+        for _ in 0..<5 { XCTAssertNil(limit.ended(.network, at: start)) }
+        limit.connected(at: start)
+        XCTAssertNil(limit.ended(.consoleClosed(""), at: start.addingTimeInterval(ReconnectPolicy.stableAfter)))
+        XCTAssertEqual(limit.networkFailures, 0)
+        XCTAssertEqual(limit.consoleClosed, 1)
+    }
+
+    /// Çeviri yeniden başlayınca, ağ değişince ya da "Yeniden bağlan"a basınca sayaçlar baştan.
+    func testResetAllowsRetriesAgain() {
+        var limit = ReconnectLimit()
+        _ = limit.ended(.consoleClosed(""), at: start)
+        XCTAssertEqual(limit.ended(.consoleClosed(""), at: start), .consoleClosedRepeatedly)
+        limit.reset()
+        XCTAssertNil(limit.ended(.consoleClosed(""), at: start))
+    }
+
+    func testLogNames() {
+        XCTAssertEqual(DisconnectReason.consoleClosedRepeatedly.logName, "consoleClosedRepeatedly")
+        XCTAssertEqual(DisconnectReason.reconnectGaveUp.logName, "reconnectGaveUp")
+    }
+}
+
 final class ConsoleSearchStateTests: XCTestCase {
     /// Arama yanıtı kaçıp "yine de bağlanılıyor" ile kurulan oturum saatlerce sürse de sonraki kopma eskiden
     /// "PS5 … adresinde bulunamadı" oluyordu. Bağlanınca PS5'e ulaşıldığı bilinir.

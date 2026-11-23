@@ -29,6 +29,8 @@
     <string name="phase_rejected_code">The PS5 rejected the connection (code %1$s). Another Remote Play app (PS Remote Play) may be open, or the PS5 may be in another session. Close PS Remote Play, restart the PS5, then try again.</string>
     <string name="phase_rejected">The PS5 didn\'t start the session. Another Remote Play app (PS Remote Play) may be open, or the PS5 may be in another session. Close PS Remote Play, restart the PS5, then try again.</string>
     <string name="phase_registration_invalid">The PS5 didn\'t accept this pairing. Pair the PS5 again with the second account in Settings.</string>
+    <string name="phase_console_closed_repeatedly">The PS5 ended Remote Play. While playing, choose your own main account on the PS5; don\'t play with the second account CouchSubs uses.</string>
+    <string name="phase_reconnect_gave_up">The connection to the PS5 kept dropping, so reconnecting stopped. Make sure the PS5 is on and on the same network, then press Reconnect.</string>
     <string name="phase_console_closed">The PS5 ended Remote Play. This usually happens when the user is switched on the PS5 during the game. Reconnecting…</string>
     <string name="phase_console_rp_crashed">Remote Play on the PS5 has crashed. Turn the PS5 off completely (not rest mode) and back on, then connect again.</string>
     <string name="phase_no_picture">No picture from the PS5. Is Remote Play turned off, or is the PS5 in rest mode? Check, then start translating again.</string>

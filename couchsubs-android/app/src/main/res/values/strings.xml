@@ -29,6 +29,8 @@
     <string name="phase_rejected_code">PS5 bağlantıyı reddetti (kod %1$s). Başka bir Uzaktan Oynatma (PS Remote Play) açık olabilir ya da PS5 başka bir oturumda olabilir. PS Remote Play\'i kapat, PS5\'i yeniden başlatıp tekrar dene.</string>
     <string name="phase_rejected">PS5 oturumu başlatmadı. Başka bir Uzaktan Oynatma (PS Remote Play) açık olabilir ya da PS5 başka bir oturumda olabilir. PS Remote Play\'i kapat, PS5\'i yeniden başlatıp tekrar dene.</string>
     <string name="phase_registration_invalid">PS5 bu eşlemeyi kabul etmedi. Ayarlar\'dan PS5\'i ikinci hesapla yeniden eşle.</string>
+    <string name="phase_console_closed_repeatedly">PS5 uzaktan oynatmayı kapattı. Oynarken PS5\'te kendi ana hesabınızı seçin; CouchSubs\'ın kullandığı ikinci hesapla oynamayın.</string>
+    <string name="phase_reconnect_gave_up">PS5 bağlantısı art arda koptu, yeniden bağlanma durduruldu. PS5\'in açık ve aynı ağda olduğundan emin olun, sonra Yeniden bağlan\'a basın.</string>
     <string name="phase_console_closed">PS5 Uzaktan Oynatma\'yı kapattı. Bu çoğunlukla oyun sırasında PS5\'te kullanıcı değiştirilince olur. Yeniden bağlanılıyor…</string>
     <string name="phase_console_rp_crashed">PS5\'teki Uzaktan Oynatma çöktü. PS5\'i tamamen kapatıp (bekleme modu değil) aç, sonra yeniden bağlan.</string>
     <string name="phase_no_picture">PS5 görüntüsü alınamıyor; PS Remote Play kapalı mı, PS5 uykuda mı? Kontrol edip çeviriyi yeniden başlat.</string>

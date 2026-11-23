@@ -47,9 +47,17 @@ enum class DisconnectKind {
      * PS5 akışı kendisi kapattı: Takion bağlantısında "disconnect" iletisi gönderdi (libchiaki
      * STREAM_CONNECTION_REMOTE_DISCONNECTED / _REMOTE_SHUTDOWN). Ağ kopması değildir; ağ gidince PS5'ten ileti gelmez.
      * Kullanıcılar bunu oyun sırasında PS5'te ana hesaba geçince görüyor (X, 21 Kas); eskiden NETWORK sayılıp "kabloyla
-     * bağla" deniyor ve kopma görüntüyü 720p'ye düşürüyordu. Ayrıntı: PS5'in neden metni. Yeniden bağlanılır.
+     * bağla" deniyor ve kopma görüntüyü 720p'ye düşürüyordu. Ayrıntı: PS5'in neden metni. En çok
+     * [ReconnectLimit.MAX_CONSOLE_CLOSED_RETRIES] kez yeniden bağlanılır.
      */
     CONSOLE_CLOSED,
+    /**
+     * PS5 yeniden bağlanmadan sonra da akışı kapattı; yeniden bağlanma durduruldu (GitHub #353). Kullanıcı PS5'te
+     * CouchSubs'ın ikinci hesabıyla oynuyordur; eskiden sınırsız denenip PS5'te durmadan bildirim çıkıyordu.
+     */
+    CONSOLE_CLOSED_REPEATEDLY,
+    /** Ağ kopmasından sonra art arda [ReconnectLimit.MAX_NETWORK_RETRIES] deneme tutmadı; yeniden bağlanma durduruldu. */
+    RECONNECT_GAVE_UP,
     OTHER;
 
     companion object {
@@ -246,6 +254,59 @@ class CrashRetryLimit {
 
     /** PS5 çöktü dedi: yeniden denenecekse true, durulacaksa false. */
     fun crashed(): Boolean = ++crashes <= MAX_RETRIES
+}
+
+/**
+ * Yeniden bağlanma kaç kez denenir (Mac/iPhone ve Windows'taki ReconnectLimit ile aynı kural; GitHub #353).
+ * PS5 akışı kendisi kapattıysa ([DisconnectKind.CONSOLE_CLOSED]: kullanıcı PS5'te kolu açıp CouchSubs'ın giriş yaptığı
+ * ikinci hesabı seçti ya da PS5 başka bir uzaktan oynatmayı tercih etti) en çok [MAX_CONSOLE_CLOSED_RETRIES] kez yeniden
+ * denenir. Eskiden 8 sn'den 60 sn'ye büyüyen beklemeyle sınırsız deneniyordu: PS5'te durmadan "uzaktan oynatma
+ * bağlandı/koptu" bildirimi çıkıyor, kullanıcının oyunu bölünüyordu. Ağ kopmasında (ağ, bulunamadı, TCP reddi, görüntü
+ * yok, diğer) art arda en çok [MAX_NETWORK_RETRIES] kez denenir. Sonra durulur; kullanıcıya nedeni ve "Yeniden bağlan"
+ * düğmesi gösterilir. Sayaçlar çeviri başlayınca, ağ değişince ("Yeniden bağlan" dahil) ve
+ * [ReconnectPolicy.STABLE_AFTER_MS] kadar süren oturumdan sonra sıfırlanır; kısa süren bağlantı sıfırlamaz (bağlan-kop
+ * döngüsü sayılsın diye).
+ */
+class ReconnectLimit {
+    companion object {
+        const val MAX_CONSOLE_CLOSED_RETRIES = 1
+        const val MAX_NETWORK_RETRIES = 5
+    }
+
+    /** Art arda PS5'in kendisinin kapattığı oturum sayısı. */
+    var consoleClosed = 0
+        private set
+    /** Art arda ağ kaynaklı kopma ya da açılamayan oturum sayısı. */
+    var networkFailures = 0
+        private set
+    private var connectedAt: Long? = null
+
+    fun reset() {
+        consoleClosed = 0
+        networkFailures = 0
+        connectedAt = null
+    }
+
+    fun connected(nowMs: Long) {
+        connectedAt = nowMs
+    }
+
+    /** Oturum kapandı ya da açılamadı: yeniden denenecekse null, durulacaksa kullanıcıya gösterilecek neden. */
+    fun ended(kind: DisconnectKind, nowMs: Long): DisconnectKind? {
+        val at = connectedAt
+        if (at != null && nowMs - at >= ReconnectPolicy.STABLE_AFTER_MS) {
+            consoleClosed = 0
+            networkFailures = 0
+        }
+        connectedAt = null
+        return when (kind) {
+            DisconnectKind.CONSOLE_CLOSED ->
+                if (++consoleClosed > MAX_CONSOLE_CLOSED_RETRIES) DisconnectKind.CONSOLE_CLOSED_REPEATEDLY else null
+            DisconnectKind.NETWORK, DisconnectKind.NOT_FOUND, DisconnectKind.REFUSED, DisconnectKind.OTHER ->
+                if (++networkFailures > MAX_NETWORK_RETRIES) DisconnectKind.RECONNECT_GAVE_UP else null
+            else -> null
+        }
+    }
 }
 
 /**
@@ -517,6 +578,8 @@ class StreamSession(
     private val watchdog = PictureWatchdog()
     /** PS5'teki Uzaktan Oynatma çöktüyse en çok iki kez yeniden denenir (yalnız kuyrukta). */
     private val crashLimit = CrashRetryLimit()
+    /** PS5 akışı kendisi kapattıysa en çok bir, ağ kopmasında art arda en çok beş kez yeniden denenir (yalnız kuyrukta). */
+    private val retryLimit = ReconnectLimit()
     private val stateLock = Any()
     private var running = false
     private var generation = 0
@@ -535,6 +598,7 @@ class StreamSession(
             wakePolicy.reset()
             watchdog.reset()
             crashLimit.reset()
+            retryLimit.reset()
             search.reset()
             connect(current)
         }
@@ -560,6 +624,7 @@ class StreamSession(
             policy.reset()
             watchdog.reset()
             crashLimit.reset()
+            retryLimit.reset()
             connect(current)
         }
     }
@@ -725,6 +790,7 @@ class StreamSession(
                 policy.connected(SystemClock.elapsedRealtime())
                 wakePolicy.streamed()
                 crashLimit.reset()
+                retryLimit.connected(SystemClock.elapsedRealtime())
                 search.connected()
                 streaming = true
                 watchdog.connected(SystemClock.elapsedRealtime())
@@ -773,7 +839,7 @@ class StreamSession(
                     }
                     if (kind == DisconnectKind.CONSOLE_CLOSED) {
                         val note = "PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"${text.orEmpty()}\"); ağ kopması değil, " +
-                            "çoğunlukla PS5'te kullanıcı değişince olur; yeniden bağlanılıyor"
+                            "çoğunlukla PS5'te kullanıcı değişince olur"
                         Log.i(TAG, note)
                         Backend.breadcrumb(note)
                     }
@@ -859,6 +925,17 @@ class StreamSession(
     private fun scheduleReconnect(current: Int, state: SessionState.Disconnected) {
         // Ağ hatasıyla düştüyse ve PS5 aramaya da yanıt vermediyse neden "bulunamadı"dır.
         val classified = search.classify(state, console.host)
+        // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).
+        val stop = if (isCurrent(current)) retryLimit.ended(classified.kind, SystemClock.elapsedRealtime()) else null
+        if (stop != null) {
+            val text = "PS5 oturumu: yeniden bağlanma durduruldu ($stop; PS5 kapattı ${retryLimit.consoleClosed}, " +
+                "ağ ${retryLimit.networkFailures} kez)"
+            Log.w(TAG, text)
+            Backend.breadcrumb(text)
+            giveUp()
+            emit(SessionState.Disconnected(stop))
+            return
+        }
         emit(classified)
         if (!isCurrent(current)) return
         queue.schedule({ connect(current) }, policy.nextDelaySeconds(inUse = state.kind == DisconnectKind.IN_USE).toLong(), TimeUnit.SECONDS)

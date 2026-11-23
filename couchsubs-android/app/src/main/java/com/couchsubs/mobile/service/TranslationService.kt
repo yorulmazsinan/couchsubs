@@ -1472,6 +1472,9 @@ class TranslationService : Service() {
             DisconnectKind.CONSOLE_RP_CRASHED -> getString(R.string.phase_console_rp_crashed)
             // PS5 akışı kendisi kapattı (ör. oyun sırasında PS5'te kullanıcı değişti): eskiden "kabloyla bağla" deniyordu.
             DisconnectKind.CONSOLE_CLOSED -> getString(R.string.phase_console_closed)
+            // PS5 yeniden bağlanmadan sonra da kapattı: durulur (eskiden sınırsız deneniyor, oyun bölünüyordu; GitHub #353).
+            DisconnectKind.CONSOLE_CLOSED_REPEATEDLY -> getString(R.string.phase_console_closed_repeatedly)
+            DisconnectKind.RECONNECT_GAVE_UP -> getString(R.string.phase_reconnect_gave_up)
             DisconnectKind.CONSOLE_ASLEEP -> getString(R.string.phase_asleep)
             DisconnectKind.LOGIN_PASSCODE -> getString(R.string.phase_passcode)
             DisconnectKind.LOGIN_PASSCODE_INCORRECT -> getString(R.string.phase_passcode_incorrect)
