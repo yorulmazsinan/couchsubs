@@ -6,7 +6,9 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Kısa satırlar TV'de basık değil:** Kısa konuşma satırları TV'de artık dar ya da basık çizilmiyor; Android TV'de ekran yazısının dar yazı tipi altyazıya geçmiyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.103).
+- **Donma:** Ekran yazısı çevirisi açıkken uygulamanın donması düzeltildi (Windows, Mac, iPhone, Android).
+
+**beta.97'de gelenler:** kısa konuşma satırlarının TV'de dar ya da basık çizilmemesi (TV uygulaması 0.9.103).
 
 **beta.96'da gelenler:** menü ve kart yazılarının yerinde birebir Türkçe çizilmesi (TV uygulaması 0.9.102), adresi değişen TV'nin kimliğiyle yeniden bulunması (TV uygulaması 0.9.100), menü sanılınca kaybolan altyazı, GTA 6 Mesajlar listesinin TV'de sabit kalması (TV uygulaması 0.9.101), Samsung TV açma denemelerinin seyrelmesi, Xbox yeniden bağlanma döngüsü, "yazı okuma yanıt vermiyor" takılması, geçersiz ölçü değerinde çökme.
 
