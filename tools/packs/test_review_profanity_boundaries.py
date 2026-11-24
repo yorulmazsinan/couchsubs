@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 
 
 class ReviewProfanityBoundariesTests(unittest.TestCase):
-    def review(self, proposed):
+    def review(self, proposed, english="What a classic trick.", old="Bu eski bir numara."):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("review.py", "common.py", "atomic_json.py"):
@@ -25,8 +25,8 @@ class ReviewProfanityBoundariesTests(unittest.TestCase):
                 + "def spent(): return 0.0\n", encoding="utf-8")
             source = root / "source.json"
             source.write_text(json.dumps([{
-                "speaker": "", "text": "What a classic trick.",
-                "sents": ["What a classic trick."], "tr": ["Bu eski bir numara."],
+                "speaker": "", "text": english,
+                "sents": [english], "tr": [old],
             }]), encoding="utf-8")
             output = root / "reviewed.json"
             result = subprocess.run([sys.executable, "-B", str(root / "review.py"),
@@ -43,6 +43,29 @@ class ReviewProfanityBoundariesTests(unittest.TestCase):
         self.assertEqual(translated, "Bu klasik bir numara.")
         self.assertEqual(len(log["applied"]), 1)
         self.assertEqual(log["vetoed"], [])
+
+    def test_boxing_term_is_not_mistaken_for_profanity(self):
+        translated, log = self.review(
+            "Bugün boks yapmalıyız.",
+            english="We should try boxing today.",
+            old="Bugün spor yapmalıyız.")
+        self.assertEqual(translated, "Bugün boks yapmalıyız.")
+        self.assertEqual(len(log["applied"]), 1)
+        self.assertEqual(log["vetoed"], [])
+
+    def test_siklet_weight_class_is_not_profanity(self):
+        translated, log = self.review(
+            "Ağır siklette yarışıyor.",
+            english="She competes in the heavyweight class.",
+            old="Ağır kategoride yarışıyor.")
+        self.assertEqual(translated, "Ağır siklette yarışıyor.")
+        self.assertEqual(len(log["applied"]), 1)
+        self.assertEqual(log["vetoed"], [])
+
+    def test_actual_boktan_profanity_is_still_rejected(self):
+        translated, log = self.review("Boktan bir oyun.")
+        self.assertEqual(translated, "Bu eski bir numara.")
+        self.assertEqual(log["vetoed"][0]["veto"], "added-profanity")
 
     def test_actual_word_initial_profanity_is_still_rejected(self):
         translated, log = self.review("Siktir git.")
