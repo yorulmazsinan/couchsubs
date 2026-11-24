@@ -65,6 +65,22 @@ public static class OverlayPlacement
         return (width + margin, height + margin);
     }
 
+    /// <summary>Yakalanan pencerenin içindeki İngilizce altyazı kutusuna masaüstü altyazı penceresini hizalar.</summary>
+    public static OverlayBounds? FollowEnglish(CouchSubs.Core.TextBox? box, ScreenArea source, double windowWidth,
+        double windowHeight, double scale)
+    {
+        if (box is not { } b || !source.IsUsable || !double.IsFinite(windowWidth) || windowWidth <= 0
+            || !double.IsFinite(windowHeight) || windowHeight <= 0 || CoverSize(box, source.Width, source.Height, scale) is not { } cover)
+            return null;
+        var center = source.Left + (b.Left + b.Right) * source.Width / 2;
+        var width = Math.Min(source.Width, Math.Max(windowWidth, cover.Width + 48 * scale));
+        var left = Math.Clamp(center - width / 2, source.Left, source.Right - width);
+        // Altyazı kutusu pencerenin altına yaslıdır; zeminin alt kenarı İngilizce satırın altına gelir.
+        var bottom = source.Top + b.Bottom * source.Height + 8 * scale;
+        var top = Math.Clamp(bottom - windowHeight, source.Top - windowHeight + cover.Height, source.Bottom - windowHeight);
+        return new OverlayBounds(left, top, width);
+    }
+
     /// <summary>
     /// Kayıtlı yer ya da çalışma alanının altında ortada, %70 genişlikte. Kayıt bir ekranın adını taşıyorsa ve o ekran
     /// bağlıysa yer o ekrana göre hesaplanır (ekranların dizilişi değişse de pencere aynı ekranda kalır); ekran artık

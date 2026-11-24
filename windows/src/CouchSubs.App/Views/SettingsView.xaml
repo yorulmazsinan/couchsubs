@@ -660,6 +660,12 @@
                                         Hint="{t:T 'On the computer screen, move and resize the subtitle with the mouse: press Position the subtitles.'}">
                                     <Button HorizontalAlignment="Left" Content="{t:T 'Position the subtitles'}" Click="OnAdjustOverlay" />
                                 </c:Unit>
+                                <c:Unit x:Name="ComputerCoverPanel" Title="{t:T 'Placement'}">
+                                    <ComboBox x:Name="ComputerCoverChoice" SelectionChanged="OnComputerCover">
+                                        <ComboBoxItem Content="{t:T 'Fixed position'}" Tag="Fixed" />
+                                        <ComboBoxItem Content="{t:T 'Over the English subtitle'}" Tag="Cover" />
+                                    </ComboBox>
+                                </c:Unit>
                                 <c:Unit x:Name="BackgroundUnit" Title="{t:T 'Background'}">
                                     <StackPanel>
                                         <Slider x:Name="BackgroundOpacity" Minimum="0" Maximum="100" IsMoveToPointEnabled="True"

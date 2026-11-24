@@ -272,6 +272,21 @@ public sealed class RemotePlayWindowStream : IStreamSession
         return best;
     }
 
+    /// <summary>Bilgisayar altyazısını yakalanan Remote Play penceresine hizalamak için görünen oyun penceresi.</summary>
+    internal static IntPtr OverlayTarget(RemotePlayApp app) => FindGameWindow(app switch
+    {
+        RemotePlayApp.Sony => SonyProcesses,
+        RemotePlayApp.Chiaki => ChiakiProcesses,
+        _ => [.. SonyProcesses, .. ChiakiProcesses],
+    });
+
+    internal static (int Left, int Top, int Right, int Bottom)? OverlayTargetBounds(RemotePlayApp app)
+    {
+        var window = OverlayTarget(app);
+        return window != IntPtr.Zero && Native.GetWindowRect(window, out var rect)
+            ? (rect.Left, rect.Top, rect.Right, rect.Bottom) : null;
+    }
+
     /// <summary>Yalnız kullanıcıya görünür ve uygulamanın kendisine ait olmayan pencereler seçilebilir.</summary>
     public static IReadOnlyList<WindowCaptureTarget> ListCaptureWindows()
     {

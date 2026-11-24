@@ -50,6 +50,8 @@ public partial class SettingsView : UserControl
         TextSizeValue.Text = ((int)TextSize.Value).ToString();
         Position.Value = settings.Style.BottomPercent;
         Placement.SelectedItem = Placement.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Style.Placement.ToString());
+        ComputerCoverChoice.SelectedItem = ComputerCoverChoice.Items.Cast<ComboBoxItem>()
+            .First(item => (string)item.Tag == (settings.Style.Placement == SubtitlePlacement.Cover ? "Cover" : "Fixed"));
         ShowPlacement(settings.Style.Placement);
         BackgroundOpacity.Value = settings.Style.Background;
         BackgroundShape.SelectedItem = BackgroundShape.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == settings.Style.BackgroundShape.ToString());
@@ -585,6 +587,25 @@ public partial class SettingsView : UserControl
         // OBS katmanı da yeri kullanır ("Yalnız OBS (yayın)").
         TvPlacementPanel.Visibility = controller.ShowsOnTv || controller.Settings.Output == SubtitleOutput.Obs ? Visibility.Visible : Visibility.Collapsed;
         ComputerPlacementPanel.Visibility = controller.ShowsOnComputer ? Visibility.Visible : Visibility.Collapsed;
+        ComputerCoverPanel.Visibility = !controller.IsXbox && controller.ShowsOnComputer && !controller.ShowsOnTv
+            && controller.Settings.FrameSource == FrameSource.RemotePlayWindow ? Visibility.Visible : Visibility.Collapsed;
+        var placement = controller.Settings.Style.Placement.ToString();
+        if (Placement.SelectedItem is not ComboBoxItem { Tag: string tvTag } || tvTag != placement)
+        {
+            var wasLoading = loading;
+            loading = true;
+            Placement.SelectedItem = Placement.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == placement);
+            loading = wasLoading;
+            ShowPlacement(controller.Settings.Style.Placement);
+        }
+        var wanted = controller.Settings.Style.Placement == SubtitlePlacement.Cover ? "Cover" : "Fixed";
+        if (ComputerCoverChoice.SelectedItem is not ComboBoxItem { Tag: string tag } || tag != wanted)
+        {
+            var wasLoading = loading;
+            loading = true;
+            ComputerCoverChoice.SelectedItem = ComputerCoverChoice.Items.Cast<ComboBoxItem>().First(item => (string)item.Tag == wanted);
+            loading = wasLoading;
+        }
     }
 
     private void OnAdjustOverlay(object sender, RoutedEventArgs e) => controller.OverlayAdjusting = true;
@@ -1513,6 +1534,12 @@ public partial class SettingsView : UserControl
         var placement = Enum.Parse<SubtitlePlacement>(tag);
         ShowPlacement(placement);
         Update(s => s with { Style = s.Style with { Placement = placement } });
+    }
+
+    private void OnComputerCover(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || ComputerCoverChoice.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        Update(s => s with { Style = s.Style with { Placement = Enum.Parse<SubtitlePlacement>(tag) } });
     }
 
     /// <summary>Elle ayarlanan yükseklik yalnız sabit yerleşimde anlamlıdır.</summary>
