@@ -6,10 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Karakter Adı "Tüm Satır":** Yeni seçenekle konuşanın adı ve cümlesi o karakterin renginde yazılıyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.93).
-- **LG'de kararma:** Kare sayacı olmayan LG modellerinde (65UR serisi vb.) PS tuşuna basınca, çeviri başlarken ve belli aralıklarla ekran kararmıyor; görüntü yeniden kurulmuyor (TV uygulaması 0.9.94).
-- **"Çevirileri kaldır":** Telefonda bu düğme çeviriyi hemen kapatıyor; ekran yeniden çevrilmiyor, kaldırılan çeviri geri gelmiyor (Android, iPhone).
-- **Windows hata pencereleri:** PS5/TV arama adımından arama sürerken çıkınca ve test adımından çıkınca uygulama hatası vermiyor.
+- **GTA 6 telefonu:** Oyun içi telefonun otomatik çevirisi artık varsayılan açık; daha önce kapalı kalmışsa bir kez açılıyor. Telefonda mesajları kaydırınca çeviri yenileniyor, ek alan çevirisi tek karelik ıskada silinmiyor (Windows, Mac, iPhone, Android).
+- **Kalan ekran yazısı çevirisi:** Menü, tabela ve yardım kutusu yazısı oyundan kalkınca çevirisi de TV'den ve ekrandan kalkıyor, oyunun önünde asılı kalmıyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.96).
+- **Eski TV uygulaması:** TV'deki uygulama eskiyse telefonda güncelleme önerisi çeviri ekranında da çıkıyor ve tek dokunuşla kuruluyor; TV'deki panelde "TV uygulaması eski" uyarısı görünüyor (iPhone, Android; TV uygulaması 0.9.95).
+- **Altyazı günlüğü:** Bir satır gösterilmeyip düşürülünce ya da bekletilince nedeni altyazı günlüğüne yazılıyor; sorun bildiriminde nedeni bulmayı kolaylaştırıyor.
+
+**beta.92'de gelenler:** Karakter Adı "Tüm Satır" (TV uygulaması 0.9.93), kare sayacı olmayan LG'lerde kararma (TV uygulaması 0.9.94), telefonda "Çevirileri kaldır", Windows hata pencereleri.
 
 **beta.91'de gelenler:** "Üstünde"de çevirinin İngilizce satıra binmemesi (TV uygulaması 0.9.89–0.9.91), ekran yazısı çevirisinin oturum boyunca aynı boy ve renkte kalması, Windows yayın penceresinde yerinde çizim, oyun takılması, Samsung'da silinen TV uygulaması, PS5'in IP'si değişince bulunması, sıkışık altyazı, reklam şeridi, Windows'ta PS5/Xbox akışı.
 
