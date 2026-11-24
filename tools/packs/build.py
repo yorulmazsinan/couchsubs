@@ -4,24 +4,37 @@ sys.path.insert(0, __file__.rsplit("/", 1)[0])
 import common as c
 
 src, out, pack_id, title, source = sys.argv[1:6]
+extra_args = sys.argv[6:]
+strict = "--strict" in extra_args
 # Var olan paketlerin anahtarları (canon noktalamayı attığı için "Dead?" ile "Dead." aynı anahtar): yeni paket bunları
 # tam satır olarak değil parça olarak taşır, böylece birleşik sözlükte eski paketlerin tam satırı yerinde kalır.
 import gzip, os
 taken = set()
-for d in sys.argv[6:]:
+for d in (arg for arg in extra_args if arg != "--strict"):
     for f in os.listdir(d):
         if f.endswith(".json.gz") and not f.startswith(pack_id + "."):
             p = json.load(gzip.open(os.path.join(d, f)))
             taken.update(k.lower() for k in p.get("entries", {}))
 lines = json.load(open(src, encoding="utf-8"))
 entries, segments, english = {}, {}, {}
+entry_source, segment_source = {}, {}
+conflicts = []
 
 
 def put(table, en, tr):
     k = c.key(en)
     if not k or not tr:
         return
+    sources = entry_source if table is entries else segment_source
+    if k in table:
+        if table[k] != tr:
+            message = (f"conflicting reviewed translations for subtitle key {k}: "
+                       f"{sources.get(k, en)!r} => {table[k]!r}; {en!r} => {tr!r}")
+            print(f"warning: {message}", file=sys.stderr)
+            conflicts.append(message)
+        return  # Keep the first reviewed translation for a shared key.
     table[k] = tr
+    sources.setdefault(k, en)
     english.setdefault(k, en)
 
 
@@ -48,6 +61,7 @@ for l in lines:
         rk = c.key(l["raw"])
         if rk and rk not in entries:
             segments.setdefault(rk, whole)
+            segment_source.setdefault(rk, l["raw"])
 
 for k in list(entries):
     if k in taken:
@@ -56,6 +70,8 @@ for k in list(segments):
     if k in entries:
         del segments[k]
 print("demoted (taken by older packs)", sum(1 for k in segments if k in taken))
+if strict and conflicts:
+    raise SystemExit(f"{len(conflicts)} conflicting reviewed translations; refusing strict pack build")
 # Every client rejects an archive without full-line entries, even if it has
 # fragments: never publish a successfully generated but unloadable pack.
 if not entries:

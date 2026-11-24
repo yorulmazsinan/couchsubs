@@ -19,6 +19,18 @@ yazılır. Kaynaklar ve lisansları THIRD-PARTY-NOTICES.md'de.
 `sentences.py`: çok cümleli satırların cümlelerini, Türkçesi aynı sayıda cümleye bölünüyorsa API'siz parça olarak ekler
 (GTA V'te ~51 bin, RDR2'de ~47 bin yeni parça; paketler ~3 MB büyür). Henüz gömülü paketlere uygulanmadı.
 
+## Elle paket oluştururken çakışan çeviriler
+
+`build.py` aynı kanonik altyazı anahtarına düşen iki farklı onaylı Türkçe çeviri
+bulursa **varsayılan olarak ilk görülen çeviriyi tutar** ve `stderr` üzerinde
+anahtarı, iki İngilizce kaynak satırını ve iki Türkçe çeviriyi uyarı olarak listeler.
+Bu, noktalama farklılığının büyük bir paketin yayınını gereksiz yere durdurmasını
+önler. Uyarıları yerel veri üzerinde inceleyin; bu uyarılar oyun metni içerebilir.
+
+Bütün çakışmaları yayından önce **zorunlu hata** saymak için mevcut komutun sonuna
+`--strict` eklenir. Bu durumda çıkış kodu 1 olur ve paket yazılmaz. Mevcut
+paket klasörleri için konumsal argümanlar değişmez.
+
 ## Havuzdan otomatik paket (sunucuda, her gece)
 
 `server/pool` Worker'ı (`src/autopack.js`) bu dosyadaki temizlik kurallarıyla her gece 03:02–05:57 UTC arasında (beş dakikada bir) kendisi
