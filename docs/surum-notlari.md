@@ -6,15 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Koyu zemin OLED'de tam siyah:** Koyu zemin seçiliyken bütün altyazı kutuları (önceki satırlar dahil) tam opak saf siyah çiziliyor; LG OLED gibi TV'lerde karanlık sahnede gri kutu görünmüyor (LG, Samsung, Android TV; TV uygulaması 0.9.97).
-- **Mac'te "yazı okuma yanıt vermiyor" uyarısı:** Arka planda süren telefon ya da ekran yazısı okuması altyazıyı bekletince bu uyarı artık yanlışlıkla çıkmıyor; çeviriler bozulmuyor, düzelmesi için uygulamayı yeniden başlatmak gerekmiyor (Mac, iPhone).
-- **Konuşan adı ve renkleri:** Oyunun cümleden ayrı satırda okunan konuşan adı ("Lucia:" gibi) artık her replikte cümlenin başında gösteriliyor. Ad renkleri koyu zeminde okunaklı on ayrı tona yayıldı; karakterler birbirinden kolayca ayrılıyor (Windows, Mac, iPhone, Android).
-- **TV'de ses yok:** TV uygulaması açıkken oyunun sesi gelmeyen TV'ler için bilgi panelinde ses durumu gösteriliyor; kurulum rehberine "Altyazı var ama oyunun sesi yok" bölümü eklendi (LG, Android TV; TV uygulaması 0.9.98).
-- **Ekran yazısı çevirisi:** Çeviri oyundaki tuş simgelerini örtmüyor; yana taşmak yerine küçülüp aşağı uzuyor, kısa cümleler dar ve basık çıkmıyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.99).
-- **Xbox yayını kopması:** Xbox yayını kısa kopmalarda kendiliğinden, sessizce yeniden bağlanıyor (5, 15 ve 30 sn arayla üç deneme); PS5'te kopma nedeni günlüğe yazılıyor (Windows, Mac, iPhone, Android).
-- **Küfür:** Çevirilerde küfürler artık yumuşatılmıyor, İngilizcedeki sertliğiyle Türkçeye aktarılıyor.
-- **Çevrimdışı kuyruk:** Sunucuya ulaşılamazken biriken altyazı satırları kaydedilemezse kayıt yeniden deneniyor; uygulama kapanınca satırlar kaybolmuyor (Windows, Mac).
-- **Deneysel: Ekranı Yerinde Türkçe Çiz (Mac):** GTA 6 telefonundaki yazıyı yerinde Türkçe çizer. Varsayılan kapalı; Ayarlar › Alanlar'dan açılır.
+- **GTA 6 telefon mesajları:** Elde hafifçe sallanan oyun içi telefonun mesajları artık her seferinde çevriliyor; "bir kez çeviriyor, sonra takılıyor" sorunu giderildi, yeni gelen mesaj da hemen gösteriliyor (Windows, Mac, iPhone, Android).
+- **Yanıp sönen çeviri kutusu:** Arkasında sahne oynayan sabit tabela, ipucu ve menü yazısının çeviri kutusu artık birkaç saniyede bir kalkıp geri gelmiyor; yazı gerçekten kalkınca çevirisi de hemen kalkıyor (Windows, Mac, iPhone, Android).
+- **Reklam şeridinin boşluğu:** Çeviri sürerken gizlenen reklam şeridi düğmelerin altında boş koyu alan bırakmıyor; içerik pencerenin altına kadar uzanıyor (Mac, Windows).
+- **TV kartı metinleri:** TV kartındaki düğme ve bekleme metinleri dört platformda aynı; eşli olmayan TV için hepsinde "TV'yi Eşleştir" yazıyor (Windows, Mac, iPhone, Android).
+
+**beta.94'te gelenler:** koyu zeminin OLED'de tam siyah olması (TV uygulaması 0.9.97), Mac'te yanlış "yazı okuma yanıt vermiyor" uyarısı, her replikte konuşan adı ve on ad rengi, TV'de ses durumu (TV uygulaması 0.9.98), tuş simgelerini örtmeyen ekran yazısı çevirisi (TV uygulaması 0.9.99), Xbox yayınının kendiliğinden yeniden bağlanması, PS5'in adresi değişince kimliğiyle yeniden bulunması, Mac'te altyazı önizlemesinin ince şerit olmaması, TV kartında doğru eşleştirme düğmeleri ve süren iş göstergesi, yumuşatılmayan küfür, çevrimdışı kuyruk.
 
 **beta.93'te gelenler:** GTA 6 telefonu çevirisinin varsayılan açık gelmesi, oyundan kalkan ekran yazısı çevirisinin TV'de kalmaması (TV uygulaması 0.9.96), eski TV uygulaması için çeviri ekranında güncelleme önerisi (TV uygulaması 0.9.95), altyazı günlüğü.
 
