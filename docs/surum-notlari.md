@@ -6,14 +6,9 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Menü ve kart yazıları yerinde birebir Türkçe:** Menü, ipucu ve görev kartı yazılarının çevirisi özgün yazının yerinde, zeminle aynı renkte opak kutuda çiziliyor; aynı listedeki satırlar aynı boyda, uzun çeviri boş tarafa uzuyor, görev kartında satır arası boşluk kalmıyor. Map, Settings ve Exit de çevriliyor; "Set Destination" artık "Hedef Belirle" (Windows, Mac, iPhone, Android; TV uygulaması 0.9.102).
-- **TV yeniden bulunuyor:** TV kapanıp açılınca ya da modem yeniden başlayınca adresi değişen TV artık kimliğiyle (UUID/MAC) bulunuyor; ad değişse ya da aynı adlı iki TV olsa da doğru TV seçiliyor. Android TV ve telefonun arka planı yeni adresi izliyor, bilgisayarın ya da telefonun adresi değişince TV'ye hemen bildiriliyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.100).
-- **Menü sanılınca kaybolan altyazı:** Ekran yanlışlıkla menü sanıldığında konuşma satırı artık atılmıyor; ipucu ve görev yazısı menü sayılmıyor, GTA 6'da altyazı atlanmıyor (Windows, Mac, iPhone, Android).
-- **GTA 6 Mesajlar listesi:** Elde sallanan telefonda TV'deki mesaj listesi iki düzen arasında gidip gelmiyor, sabit kalıyor; kişi adı kalın, önizleme altında, kesik önizlemeden yarım sözcük uydurulmuyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.101).
-- **Samsung TV açma denemeleri:** TV uygulaması bağlı değilken açma denemeleri artık 30 sn'de bir sınırsız sürmüyor; aralar uzuyor (30 sn, 1, 2, 5 dk) ve çeviri başına en çok 6 deneme yapılıyor. "Otomatik açılamadı" uyarısı ve TV'yi fişten çekme gereği ortadan kalkıyor (Windows, Mac, iPhone, Android).
-- **Xbox yeniden bağlanma döngüsü:** Kısa kopmalarda sessiz yeniden bağlanma artık sınırlı; "Yeniden bağlanılıyor" bildirimi döngüye girmiyor, deneme hakkı dolunca "Xbox bağlantısı koptu" gösteriliyor (Windows, Mac, iPhone, Android).
-- **"Yazı okuma yanıt vermiyor" takılması:** Hiç dönmeyen yazı okuması bırakılıp okuyucu yeniden kuruluyor; yeni okuyucu çalışınca yedek yoldan çıkılıyor ve uyarı kalkıyor (Mac, iPhone).
-- **Çökme:** Deneysel yerinde çizimde geçersiz bir ölçü değeri uygulamayı çökertmiyor (Windows, Mac, iPhone, Android).
+- **Kısa satırlar TV'de basık değil:** Kısa konuşma satırları TV'de artık dar ya da basık çizilmiyor; Android TV'de ekran yazısının dar yazı tipi altyazıya geçmiyor (Windows, Mac, iPhone, Android; TV uygulaması 0.9.103).
+
+**beta.96'da gelenler:** menü ve kart yazılarının yerinde birebir Türkçe çizilmesi (TV uygulaması 0.9.102), adresi değişen TV'nin kimliğiyle yeniden bulunması (TV uygulaması 0.9.100), menü sanılınca kaybolan altyazı, GTA 6 Mesajlar listesinin TV'de sabit kalması (TV uygulaması 0.9.101), Samsung TV açma denemelerinin seyrelmesi, Xbox yeniden bağlanma döngüsü, "yazı okuma yanıt vermiyor" takılması, geçersiz ölçü değerinde çökme.
 
 **beta.95'te gelenler:** GTA 6 telefon mesajlarının her seferinde çevrilmesi, sabit yazının çeviri kutusunun yanıp sönmemesi, reklam şeridinin boşluk bırakmaması, TV kartı metinlerinin her platformda aynı olması.
 
