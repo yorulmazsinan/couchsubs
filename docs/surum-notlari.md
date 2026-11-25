@@ -4,15 +4,19 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)
 
-**Bu sürümde yeni**
+**Bu sürümde yeni** (görsel güncelleme)
 
-- **TV'de basık ya da küçük altyazı yok** (#1255, #1259): Kısa konuşma satırları hiçbir TV'de basık, dar ya da çok küçük çizilmiyor; sığmazsa satır bölünüyor. Android TV'de Katman'ın yanlışlıkla yavaş çizime geçmesi düzeltildi, TV'nin yazı boyutu ayarı altyazıyı etkilemiyor; "Uygulama içinde" seçiliyken TV görüntüyü kendi HDMI ekranına alırsa altyazı Katman'da sürüyor (TV uygulaması 0.9.107).
-- **GTA 6 telefonu yeni görünümde:** Koyu kart yok; her Türkçe balon İngilizcesiyle aynı yükseklikte, telefonun kendi balon renginde, gelen solda giden sağda. Yazı küçülmüyor, panel yumuşak açılıp kapanıyor; bilgisayardaki saydam altyazı penceresinde de aynı balonlar (TV uygulaması 0.9.106).
-- **Ekran yazısında yama yok** (deneysel ekran yazısı çevirisi): Bildirimin Türkçesi özgün balonun hemen üstünde aynı biçimde ikinci balon olarak; "GREET" gibi istemlerin Türkçesi kutusuz, aynı stilde yanında. Menü ve kartlar eskisi gibi örtülüyor (TV uygulaması 0.9.108).
-- **Telefon çevirisi kapalıyken** GTA 6 telefonundaki mesajlar altyazı gibi çevrilip gidip gelmiyor; açmak için ipucu bir kez çıkıyor (#1282).
-- **Android:** Çeviri yeniden başlatılınca GTA 6 paketi bellek yetmediği için açılamıyordu, düzeltildi (#1282). Xbox'ta "bağlandı, sonra yapılamadı" için telefon Xbox'a daha yüksek görüntü biçimi de teklif ediyor; günlükte görüntü kodeği ve çözücü yazıyor (#1252). Harita tuş listesinin rengi diğer platformlarla aynı.
-- **Android TV:** Açılıp bağlanmayan TV uygulaması kapatılıp temiz açılıyor; aynı TV'ye işler sırayla gidiyor, "güncelle"ye iki kez basmak ikinci kurulum başlatmıyor (#1223).
-- **Windows:** Ayarlar'da seçili çeviri motorunun işareti kaybolmuyor (#1298); koyu temada siyaha yakın görünen etiketler okunuyor, dar pencerede sayfa kesilmiyor.
+- **Menüler örtülmüyor:** Soldaki menüler, üstteki sekmeler ve tuş listeleri (Ortala, 2B Görünüm, Hedef Belirle…) üstüne kutu çizilmeden, oyunun yazı stiliyle arka plansız olarak yanına Türkçe yazılıyor; bir gruptaki tüm Türkçeler aynı boy ve hizada. Ekrandaki tüm kart başlıkları birlikte çevriliyor.
+- **Kutular ikiz:** Görev kutuları, harita kartları, bildirimler ve ipucu kutuları örtülmüyor; Türkçesi özgün kutunun aynısı olarak yanındaki boş alana çiziliyor. Menü ve kutu çevirileri oyunun yazısına benzeyen dar-kalın bir yazı tipiyle.
+- **GTA 6 telefonu:** Mesajlar listesi telefondaki gibi satır kartlarıyla (avatar, ad, önizleme) telefonun boş tarafında; ana ekran kutuları da aynı biçimde. Sohbet ekranındaki üst ad başlığı kalktı; kesik önizlemeler uydurulmuyor.
+- **Görev yazısı altyazıya karışmıyor:** Türkçesi kehribar renkli ayrı kutuda.
+- **Duraklatma menüsündeki konuşma geçmişi** altyazı sanılmıyor; satırlar parçalanmadan bütün çevriliyor, liste kayınca eski çeviriler kalkıyor.
+- **Mac:** Yazı okuma takılınca uyarı saatlerce kalmıyor; okuma yedekte sürüyor, düzelince kendiliğinden dönüyor.
+- **Ayarlar:** "Deneysel" bölümü kalktı; ekran yazısı ve telefon ayarları Ayarlar › Gelişmiş › Ekran yazıları'nda, iki telefon ayarı tek "GTA 6 Telefonunu Çevir" oldu.
+- **Android:** Çeviri yeniden başlatılınca oluşan bellek hatası (#1282), Xbox'ta görüntü gelmemesi (#1252); Android TV'de bağlanmayan uygulama yeniden açılıyor (#1223).
+- **Windows:** Çeviri motoru işareti kaybolmuyor (#1298); koyu temada yazılar okunuyor.
+
+**beta.100'de gelenler:** TV'de basık ya da küçük altyazı düzeltmesi, GTA 6 telefonunun hizalı balonları, Windows koyu tema ve motor işareti, Android Xbox ve bellek düzeltmeleri.
 
 **beta.99'da gelenler:** Samsung'da ara ara kopma (TV uygulaması 0.9.104), GTA 6 telefonu çevirisinin oynamaması (0.9.105), kamerayla kayan plaka ve tabelaların çevrilmemesi, TV uygulaması güncellemesinin takılmaması, ekranda kalan yazılar, harita tuş listesi ve görev kartı, menü simgelerinin örtülmemesi.
 
