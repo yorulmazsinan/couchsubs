@@ -290,12 +290,45 @@ public struct Reading: Equatable, Sendable {
         let centered = Self.withoutStale(middle, age: age, skipped: stale)
         // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
         // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
-        if let spoken = centered.first(where: { SpeakerPrefix.split($0.lines[0].text) != nil }) { return spoken }
+        // Aynı anda konuşan kişilerin alt alta duran ayrı blokları (`spokenTogether`) tek altyazıda, her biri kendi satırında.
+        if let spoken = centered.indices.first(where: { Self.isSpoken(centered[$0]) }) {
+            return Self.spokenTogether(from: spoken, centered, in: area)
+        }
         if let lowest = centered.indices.max(by: { centered[$0].box!.bottom < centered[$1].box!.bottom }) {
             return Self.objectiveBelow(lowest, centered, in: area) ?? centered[lowest]
         }
         return candidates.filter { $0.text.split(whereSeparator: \.isWhitespace).count >= 3 }
             .max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
+    }
+
+    private static func isSpoken(_ block: Reading) -> Bool {
+        SpeakerPrefix.split(block.lines[0].text) != nil
+    }
+
+    /// Ayrı konuşma blokları arasındaki en büyük boşluk (satır yüksekliğine oranla) — aynı anda konuşulduğu sayılır.
+    static let togetherGap = 3.0
+
+    /// Kalabalık sahnede birden çok kişi aynı anda konuşur (GTA 6 yan konuşmaları; X, beta.100): ekranda alt alta, her biri
+    /// konuşan adıyla başlayan 2–3 ayrı blok durur. Önceden yalnız en üstteki seçiliyor, öbürleri atılıyor; sonraki karede
+    /// başka blok seçilince TV'de çeviriler birbirinin yerine geçip yığılıyordu. Adla başlayan ilk bloğun altındaki, yine
+    /// adla başlayan, aynı yazı boyundaki (1,25 kat) ve arası en çok `togetherGap` satır boyu olan bloklar yukarıdan aşağı
+    /// tek altyazıda birleşir: her konuşan kendi satırında, adıyla (`SubtitleSegmenter` adda yeni parça açar). Arada adsız
+    /// blok (görev satırı) varsa birleştirme orada durur. Windows (Reading.SpokenTogether) ve Android (spokenTogether) aynı.
+    private static func spokenTogether(from index: Int, _ centered: [Reading], in area: TextBox) -> Reading {
+        let ordered = centered.indices.sorted { centered[$0].box!.top < centered[$1].box!.top }
+        guard let start = ordered.firstIndex(of: index) else { return centered[index] }
+        var lines = centered[index].lines
+        for other in ordered[(start + 1)...] {
+            let block = centered[other]
+            guard isSpoken(block), let upper = lines.last?.box?.placed(in: area),
+                  let lower = block.lines[0].box?.placed(in: area) else { break }
+            let own = lower.bottom - lower.top, previous = upper.bottom - upper.top
+            guard own > 0, previous > 0, max(own, previous) <= 1.25 * min(own, previous),
+                  lower.top >= upper.bottom - min(own, previous) * 0.25,
+                  lower.top - upper.bottom <= max(own, previous) * togetherGap else { break }
+            lines += block.lines
+        }
+        return lines.count == centered[index].lines.count ? centered[index] : Reading(lines: lines)
     }
 
     /// En alttaki blok, hemen üstündeki konuşmanın altına onunla aynı anda gelen görev satırı mı: tek satır ve üstündeki
@@ -496,11 +529,19 @@ public struct Reading: Equatable, Sendable {
                 first = first ?? pitch
                 run.append(next)
             }
-            if run.count >= 3 { return true }
+            if run.count >= 3, !Self.centeredSpeech(run.map { rows[$0].box! }) { return true }
             if run.count == 2, run.allSatisfy({ SpeakerPrefix.split(rows[$0].text) != nil }),
                abs(rows[run[0]].box!.left - rows[run[1]].box!.left) <= Self.menuEdge { return true }
         }
         return false
+    }
+
+    /// Satırlar ortaya hizalı ve boyları farklı mı (sol kenarları hizasız, ortaları hizalı): aynı anda konuşan kişilerin
+    /// ayrı altyazı blokları böyle durur (X, beta.100, GTA 6 kalabalık sahne). Menünün geçmiş listesi sola yaslıdır; üç
+    /// eşit aralıklı ortalı konuşma satırı liste sayılıp altyazının tamamı atılıyordu (Windows ve Android aynı).
+    static func centeredSpeech(_ boxes: [TextBox]) -> Bool {
+        let lefts = boxes.map(\.left), centers = boxes.map { ($0.left + $0.right) / 2 }
+        return lefts.max()! - lefts.min()! > Self.menuEdge * 2 && centers.max()! - centers.min()! <= Self.menuEdge * 2
     }
 
     /// Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").

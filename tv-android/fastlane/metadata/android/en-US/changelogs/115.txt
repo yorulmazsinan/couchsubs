@@ -1,0 +1,1 @@
+0.9.112: Translation boxes no longer overlap; simultaneous speakers, previous lines, the mission box and on-screen text stay apart.

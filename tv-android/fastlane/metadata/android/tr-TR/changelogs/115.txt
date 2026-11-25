@@ -1,0 +1,1 @@
+0.9.112: Çeviri kutuları üst üste binmiyor; aynı anda konuşanlar, önceki satırlar, görev kutusu ve ekran yazısı ayrı duruyor.

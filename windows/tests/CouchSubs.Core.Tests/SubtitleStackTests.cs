@@ -19,6 +19,22 @@ public class SubtitleStackTests
         Assert.Equal(["Kapıyı tut!"], Texts(stack, 0.6));
     }
 
+    /// <summary>Aynı anda konuşanlar tek satırda birleşince önceki satırlar ikinci kez görünmez (Mac ile aynı).</summary>
+    [Fact]
+    public void JoinedSpeakersDoNotRepeatPreviousLines()
+    {
+        var stack = new SubtitleStack();
+        stack.Show("Satıcı: Bugün ne alırsın?", 6000, false, 0);
+        stack.Show("Şoför: Çek arabayı!", 6000, false, 0.3);
+        stack.Show("Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!", 6000, false, 0.6, replaces: true);
+        Assert.Equal(["Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!"], Texts(stack, 0.7));
+        stack.Show("Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!\nÇocuk: Bak!", 6000, false, 0.9);
+        Assert.Equal(["Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!\nÇocuk: Bak!"], Texts(stack, 1));
+        Assert.True(SubtitleStack.WithinLines("Şoför: Çek arabayı!", "Satıcı: Ne?\nŞoför: Çek arabayı!"));
+        Assert.False(SubtitleStack.WithinLines("Çocuk: Bak!", "Satıcı: Ne?\nŞoför: Çek arabayı!"));
+        Assert.False(SubtitleStack.WithinLines("Kapı", "Kapı"));
+    }
+
     [Fact]
     public void LineStaysForGivenDuration()
     {

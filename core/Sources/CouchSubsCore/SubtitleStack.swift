@@ -95,12 +95,16 @@ public struct SubtitleStack: Equatable, Sendable {
         if replaces, current != nil, !paragraphs {
             // Üstteki satırlar olduğu gibi kalır.
         } else if stackPrevious, let shown = current, now - shown.shownAt < Self.stackWithin, !paragraphs, !shown.paragraphs,
-           !Self.sameLine(shown.text, text) {
+           !Self.sameLine(shown.text, text), !Self.withinLines(shown.text, text) {
             pushPrevious(shown.text, now: now)
-        } else {
+        } else if paragraphs || !Self.withinLines(current?.text ?? "", text) {
             previous = nil
             older = nil
         }
+        // Aynı anda konuşan kişiler tek satırda birleşir (her konuşan kendi satırında): üstte kalan önceki satır yeni
+        // satırın içinde zaten varsa ikinci kez görünmez (TV: dropRepeated).
+        if let slot = previous, Self.withinLines(slot.text, text) { previous = nil }
+        if let slot = older, Self.withinLines(slot.text, text) { older = nil }
         let length = Double(text.utf16.count)
         let reading = 2 + length * 0.06
         let visible = durationMs > 0 ? max(Self.minVisible, Double(durationMs) / 1000) : min(8, reading)
@@ -169,6 +173,16 @@ public struct SubtitleStack: Equatable, Sendable {
     }
 
     /// Büyük-küçük harf ve noktalama dışında aynı mı, ya da biri ötekinin başı/devamı mı ("Kapı" → "Kapı daha fazla…").
+    /// `a`'nın her satırı `b`'nin satırlarından biriyle aynı mı (`sameLine`): `b`, `a`'yı da içeren çok konuşanlı satır
+    /// (TV: withinLines, Windows: WithinLines).
+    public static func withinLines(_ a: String, _ b: String) -> Bool {
+        guard !a.isEmpty, b.contains("\n") else { return false }
+        let theirs = b.components(separatedBy: "\n")
+        return a.components(separatedBy: "\n").allSatisfy { line in
+            line.trimmingCharacters(in: .whitespaces).isEmpty || theirs.contains { sameLine(line, $0) }
+        }
+    }
+
     public static func sameLine(_ a: String, _ b: String) -> Bool {
         let x = plain(a)
         let y = plain(b)

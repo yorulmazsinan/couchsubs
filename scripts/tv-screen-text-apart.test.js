@@ -30,7 +30,7 @@ function render() {
     <div id="subtitle"><span id="subtitle-text">Lucia: Bunu bir daha yapmayacağız.</span></div>
     <div id="subtitle-cover" class="hidden"></div><div id="regions"></div><pre id="result"></pre><script>
     function $(id) { return document.getElementById(id); }
-    var regionBoxes = {};
+    var regionBoxes = {}, MISSION_ID = 'auto-mission';
     var hideTimer = null, shownAt = 0, diag = {};
     function renderDiag() {}
     function hidePrevious() {}

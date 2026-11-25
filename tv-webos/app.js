@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.111';
+  var APP_VERSION = '0.9.112';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -973,11 +973,14 @@
     if (replacesCurrent(replaces, paragraphs)) {
       // Üstteki daha eski satırlar olduğu gibi kalır.
     } else if (stackPrevious && $('subtitle').className !== 'hidden' && current && now - shownAt < STACK_WITHIN_MS &&
-        !paragraphs && !shownParagraphs && !sameLine(current, text)) {
+        !paragraphs && !shownParagraphs && !sameLine(current, text) && !withinLines(current, text)) {
       showPrevious(current, $('subtitle-text').speakers);
-    } else {
+    } else if (!withinLines(current, text) || paragraphs) {
       hidePrevious();
     }
+    // Aynı anda konuşan kişiler bilgisayarda tek satırda birleşir (her konuşan kendi satırında): üstte kalan önceki satır
+    // yeni satırın içinde zaten varsa ikinci kez görünmez.
+    dropRepeated(text);
     shownAt = now;
     shownParagraphs = !!paragraphs;
     holdUntil = shownAt + Math.min(HOLD_MAX_MS, 2000 + text.length * 60);
@@ -1071,12 +1074,36 @@
     var timers = previousTimers[id];
     clearTimeout(timers[0]);
     clearTimeout(timers[1]);
+    if ($(id).className === 'hidden') return;
     $(id).className = 'hidden';
+    // Önceki satır kalkınca ondan kaçan görev/ekran yazısı kutusu yerine yaklaşır.
+    avoidRegions();
   }
 
   function hidePrevious() {
     hideSlot('subtitle-prev');
     hideSlot('subtitle-prev2');
+  }
+
+  // a'nın her satırı b'nin satırlarından biriyle aynı mı (sameLine): b, a'yı da içeren çok konuşanlı satır.
+  function withinLines(a, b) {
+    if (!a || !b || String(b).indexOf('\n') < 0) return false;
+    var mine = String(a).split('\n');
+    var theirs = String(b).split('\n');
+    for (var i = 0; i < mine.length; i++) {
+      if (!plainText(mine[i])) continue;
+      var found = false;
+      for (var j = 0; j < theirs.length && !found; j++) found = sameLine(mine[i], theirs[j]);
+      if (!found) return false;
+    }
+    return true;
+  }
+
+  function dropRepeated(text) {
+    var ids = ['subtitle-prev', 'subtitle-prev2'];
+    for (var i = 0; i < ids.length; i++) {
+      if ($(ids[i]).className !== 'hidden' && withinLines(rawText(ids[i] + '-text'), text)) hideSlot(ids[i]);
+    }
   }
 
   // Büyük-küçük harf ve noktalama dışında aynı mı, ya da biri ötekinin başı/devamı mı ("Kapı" → "Kapı daha fazla…").
@@ -2405,10 +2432,17 @@
     }
   }
 
-  // --- Ekran yazısı ile altyazının ayrımı ---
+  // --- Ekran yazısı ile altyazının ayrımı: hiçbir iki çeviri kutusu üst üste binmez ---
   // Görev/hedef satırı çoğu oyunda altyazıya bitişik (ikisi de altta ortada). Altyazının yeri kullanıcının seçimidir ve
   // hiçbir ekran yazısı onu değiştirmez: altyazıyla üst üste binecek ek alan/ekran yazısı kutusu kendisi, yalnız
   // gerektiği kadar (aralarında küçük boşlukla) altyazıdan uzağa kayar; kaydığı yer ekranın dışındaysa öbür yana.
+  // Ortak çakışma çözücü (X, beta.100, GTA 6 kalabalık sahne: "çeviriler üst üste", "görevlerin yarısı üst üste"):
+  // sabit kutular altyazının bütün yığınıdır (son satır, önceki iki satır, örtü) ve oyun telefonu; eskiden yalnız son satır
+  // ölçülüyor, görev kutusu önceki satırların üstüne biniyordu. Ek alanların ve "Ekranı çevir"in kutuları da birbirine
+  // göre çözülür (eskiden yalnız altyazıya göre; kayan görev kutusu ekran yazısı ikizinin üstüne düşüyordu): sırayla görev
+  // kutusu, "Ekranı çevir", sonra ek alanlar eskiden yeniye yerleşir; her biri, kendinden önce yerleşmiş başka katmanın
+  // kutularıyla kesişmeyen ve ekranın içinde kalan en küçük dikey kaymayı alır. Aynı alanın kendi kutuları (menü ikizleri)
+  // placeItems'ta yerleşir, birbirine göre kaydırılmaz. Gizlenen (resolveLayers) kutu yer kaplamaz.
   var AVOID_GAP = 0.006;
   var setApart = true;
 
@@ -2420,36 +2454,88 @@
 
   function regionParts() {
     var parts = [];
+    var screen = $('screen');
+    if (screen && screen.className !== 'hidden') {
+      for (var s = 0; s < screen.children.length; s++) parts.push({ el: screen.children[s], layer: 'screen', rank: 1 });
+    }
     for (var id in regionBoxes) {
       // Oyun telefonu kaydırılmaz; altyazı telefonun üstüne binmez, kendisi kayar (avoidPhone).
       if (!Object.prototype.hasOwnProperty.call(regionBoxes, id) || id === 'game-phone') continue;
       var host = regionBoxes[id];
       var list = host.className === 'region-blocks' ? host.children : [host];
-      for (var i = 0; i < list.length; i++) parts.push(list[i]);
+      // Görev kutusu ilk yerleşir (yerinden en az oynayan o olur); diğerleri eskiden yeniye.
+      var rank = id === MISSION_ID ? 0 : 2 + (host.couchsubsStamp || 0);
+      for (var i = 0; i < list.length; i++) parts.push({ el: list[i], layer: id, rank: rank });
     }
+    parts.sort(function (a, b) { return a.rank - b.rank; });
     return parts;
+  }
+
+  // Altyazı yığınının ekrandaki kutuları (son satır, önceki satırlar, örtü); gizliyse boş.
+  function subtitleRects() {
+    var rects = [];
+    var el = $('subtitle');
+    if (!el || el.className === 'hidden') return rects;
+    var ids = ['subtitle-text', 'subtitle-prev-text', 'subtitle-prev2-text', 'subtitle-cover'];
+    for (var i = 0; i < ids.length; i++) {
+      var part = $(ids[i]);
+      if (!part || (ids[i] === 'subtitle-cover' && part.className === 'hidden')) continue;
+      var r = part.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) rects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    }
+    return rects;
+  }
+
+  function rectsMeet(a, b, gap) {
+    return a.right > b.left && a.left < b.right && a.bottom + gap > b.top && a.top - gap < b.bottom;
+  }
+
+  // r kutusunun, placed içindeki başka katman kutularıyla kesişmeyen ve ekranda kalan en küçük dikey kayması.
+  // Hiçbiri yoksa en az kutuyla kesişen ekran içi kayma (o da yoksa 0).
+  function freeShift(r, layer, placed, gap, height) {
+    var candidates = [0];
+    for (var i = 0; i < placed.length; i++) {
+      var o = placed[i].rect;
+      if (placed[i].layer === layer || r.right <= o.left || r.left >= o.right) continue;
+      candidates.push(Math.floor(o.top - gap - r.bottom), Math.ceil(o.bottom + gap - r.top));
+    }
+    candidates.sort(function (a, b) { return Math.abs(a) - Math.abs(b) || a - b; });
+    var best = 0, bestHits = Infinity;
+    for (var c = 0; c < candidates.length; c++) {
+      var dy = candidates[c];
+      if (r.top + dy < 0 || r.bottom + dy > height) continue;
+      var moved = { left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy };
+      var hits = 0;
+      for (var j = 0; j < placed.length; j++) {
+        if (placed[j].layer !== layer && rectsMeet(moved, placed[j].rect, gap)) hits++;
+      }
+      if (!hits) return dy;
+      if (hits < bestHits) { best = dy; bestHits = hits; }
+    }
+    return best;
   }
 
   function avoidRegions() {
     var parts = regionParts();
-    for (var i = 0; i < parts.length; i++) setShift(parts[i], 0);
+    for (var i = 0; i < parts.length; i++) setShift(parts[i].el, 0);
     avoidPhone();
-    var el = $('subtitle');
-    if (!el || !$('subtitle-text') || el.className === 'hidden' || !parts.length) return;
-    var sub = $('subtitle-text').getBoundingClientRect();
-    if (!(sub.height > 0)) return;
+    if (!parts.length) return;
     var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
     var gap = Math.max(4, Math.round(height * AVOID_GAP));
+    var placed = [];
+    var fixed = subtitleRects();
+    for (var f = 0; f < fixed.length; f++) placed.push({ rect: fixed[f], layer: 'subtitle' });
+    var phone = phoneRect();
+    if (phone) placed.push({ rect: phone, layer: 'game-phone' });
     for (var j = 0; j < parts.length; j++) {
-      var r = parts[j].getBoundingClientRect();
-      if (!(r.width > 0) || r.right <= sub.left || r.left >= sub.right) continue;
-      if (r.bottom + gap <= sub.top || r.top - gap >= sub.bottom) continue;
-      var up = sub.top - gap - r.bottom;
-      var down = sub.bottom + gap - r.top;
-      var above = (r.top + r.bottom) / 2 < (sub.top + sub.bottom) / 2;
-      var dy = above ? up : down;
-      if (r.top + dy < 0 || r.bottom + dy > height) dy = above ? down : up;
-      setShift(parts[j], dy);
+      var el = parts[j].el;
+      if (el.style.visibility === 'hidden') continue;
+      var b = el.getBoundingClientRect();
+      if (!(b.width > 0) || !(b.height > 0)) continue;
+      var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+      var dy = freeShift(r, parts[j].layer, placed, gap, height);
+      setShift(el, dy);
+      placed.push({ rect: { left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy }, layer: parts[j].layer });
     }
   }
 

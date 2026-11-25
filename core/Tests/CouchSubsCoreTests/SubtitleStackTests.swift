@@ -29,6 +29,20 @@ final class SubtitleStackTests: XCTestCase {
         XCTAssertTrue(stack.isEmpty(at: 2.31))
     }
 
+    /// Aynı anda konuşanlar tek satırda birleşince (her konuşan kendi satırında) önceki satırlar ikinci kez görünmez.
+    func testJoinedSpeakersDoNotRepeatPreviousLines() {
+        var stack = SubtitleStack()
+        stack.show("Satıcı: Bugün ne alırsın?", durationMs: 6000, now: 0)
+        stack.show("Şoför: Çek arabayı!", durationMs: 6000, now: 0.3)
+        stack.show("Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!", durationMs: 6000, replaces: true, now: 0.6)
+        XCTAssertEqual(texts(stack, at: 0.7), ["Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!"])
+        stack.show("Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!\nÇocuk: Bak!", durationMs: 6000, now: 0.9)
+        XCTAssertEqual(texts(stack, at: 1), ["Satıcı: Bugün ne alırsın?\nŞoför: Çek arabayı!\nÇocuk: Bak!"])
+        XCTAssertTrue(SubtitleStack.withinLines("Şoför: Çek arabayı!", "Satıcı: Ne?\nŞoför: Çek arabayı!"))
+        XCTAssertFalse(SubtitleStack.withinLines("Çocuk: Bak!", "Satıcı: Ne?\nŞoför: Çek arabayı!"))
+        XCTAssertFalse(SubtitleStack.withinLines("Kapı", "Kapı"))
+    }
+
     func testFastSpeechStacksUpToThreeLines() {
         var stack = SubtitleStack()
         stack.show("Birinci", durationMs: 8000, now: 0)

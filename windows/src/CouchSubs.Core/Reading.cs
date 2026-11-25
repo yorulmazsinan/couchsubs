@@ -292,7 +292,8 @@ public sealed class Reading
         // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
         // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
         centered = WithoutStale(centered, age, stale);
-        if (centered.FirstOrDefault(reading => SpeakerPrefix.Parse(reading.Lines[0].Text) is not null) is { } spoken) return spoken;
+        // Aynı anda konuşan kişilerin alt alta duran ayrı blokları (SpokenTogether) tek altyazıda, her biri kendi satırında.
+        if (centered.FirstOrDefault(IsSpoken) is { } spoken) return SpokenTogether(spoken, centered, area);
         if (centered.Count > 0)
         {
             var lowest = centered.MaxBy(reading => reading.Box!.Value.Bottom)!;
@@ -530,12 +531,56 @@ public sealed class Reading
                     first ??= pitch;
                     run.Add(next);
                 }
-                if (run.Count >= 3) return true;
+                if (run.Count >= 3 && !CenteredSpeech(run.Select(index => rows[index].Box!.Value).ToList())) return true;
                 if (run.Count == 2 && run.All(index => SpeakerPrefix.Parse(rows[index].Text) is not null)
                     && Math.Abs(rows[run[0]].Box!.Value.Left - rows[run[1]].Box!.Value.Left) <= MenuEdge) return true;
             }
             return false;
         }
+    }
+
+    /// <summary>
+    /// Satırlar ortaya hizalı ve boyları farklı mı (sol kenarları hizasız, ortaları hizalı): aynı anda konuşan kişilerin
+    /// ayrı altyazı blokları böyle durur (X, beta.100, GTA 6 kalabalık sahne). Menünün geçmiş listesi sola yaslıdır; üç
+    /// eşit aralıklı ortalı konuşma satırı liste sayılıp altyazının tamamı atılıyordu (Mac/iPhone ve Android aynı).
+    /// </summary>
+    internal static bool CenteredSpeech(IReadOnlyList<TextBox> boxes)
+    {
+        var lefts = boxes.Select(box => box.Left).ToList();
+        var centers = boxes.Select(box => (box.Left + box.Right) / 2).ToList();
+        return lefts.Max() - lefts.Min() > MenuEdge * 2 && centers.Max() - centers.Min() <= MenuEdge * 2;
+    }
+
+    private static bool IsSpoken(Reading block) => SpeakerPrefix.Parse(block.Lines[0].Text) is not null;
+
+    /// <summary>Ayrı konuşma blokları arasındaki en büyük boşluk (satır yüksekliğine oranla).</summary>
+    internal const double TogetherGap = 3.0;
+
+    /// <summary>
+    /// Kalabalık sahnede birden çok kişi aynı anda konuşur (GTA 6 yan konuşmaları; X, beta.100): ekranda alt alta, her biri
+    /// konuşan adıyla başlayan 2–3 ayrı blok durur. Önceden yalnız en üstteki seçiliyor, öbürleri atılıyordu. Adla başlayan
+    /// ilk bloğun altındaki, yine adla başlayan, aynı yazı boyundaki (1,25 kat) ve arası en çok <see cref="TogetherGap"/>
+    /// satır boyu olan bloklar yukarıdan aşağı tek altyazıda birleşir: her konuşan kendi satırında, adıyla. Arada adsız blok
+    /// (görev satırı) varsa birleştirme orada durur. Mac/iPhone (Reading.spokenTogether) ve Android (spokenTogether) aynı.
+    /// </summary>
+    private static Reading SpokenTogether(Reading first, List<Reading> centered, TextBox area)
+    {
+        var ordered = centered.OrderBy(reading => reading.Box!.Value.Top).ToList();
+        var start = ordered.FindIndex(reading => ReferenceEquals(reading, first));
+        if (start < 0) return first;
+        var lines = first.Lines.ToList();
+        foreach (var block in ordered.Skip(start + 1))
+        {
+            if (!IsSpoken(block) || lines[^1].Box is not { } upperBox || block.Lines[0].Box is not { } lowerBox) break;
+            var upper = upperBox.PlacedIn(area);
+            var lower = lowerBox.PlacedIn(area);
+            double own = lower.Bottom - lower.Top, previous = upper.Bottom - upper.Top;
+            if (own <= 0 || previous <= 0 || Math.Max(own, previous) > 1.25 * Math.Min(own, previous)
+                || lower.Top < upper.Bottom - Math.Min(own, previous) * 0.25
+                || lower.Top - upper.Bottom > Math.Max(own, previous) * TogetherGap) break;
+            lines.AddRange(block.Lines);
+        }
+        return lines.Count == first.Lines.Count ? first : new Reading(lines);
     }
 
     /// <summary>Tek başına okunan etkileşim/HUD etiketi (GTA 6: "SIT", "• ADD TO TRUNK").</summary>

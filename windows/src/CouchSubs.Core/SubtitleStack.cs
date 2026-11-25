@@ -62,15 +62,20 @@ public sealed class SubtitleStack
         {
             // Üstteki satırlar olduğu gibi kalır.
         }
-        else if (StackPrevious && current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text))
+        else if (StackPrevious && current is { } shown && now - shown.ShownAt < StackWithin && !paragraphs && !shown.Paragraphs && !SameLine(shown.Text, text)
+                 && !WithinLines(shown.Text, text))
         {
             PushPrevious(shown.Text, now);
         }
-        else
+        else if (paragraphs || !WithinLines(current?.Text ?? "", text))
         {
             previous = null;
             older = null;
         }
+        // Aynı anda konuşan kişiler tek satırda birleşir (her konuşan kendi satırında): üstte kalan önceki satır yeni
+        // satırın içinde zaten varsa ikinci kez görünmez (TV: dropRepeated).
+        if (previous is { } prev && WithinLines(prev.Text, text)) previous = null;
+        if (older is { } old && WithinLines(old.Text, text)) older = null;
         var reading = 2 + text.Length * 0.06;
         var visible = durationMs > 0 ? Math.Max(MinVisible, durationMs / 1000.0) : Math.Min(8, reading);
         current = new Current(NextId(), text, paragraphs, now, now + visible, now + Math.Min(HoldMax, reading));
@@ -134,6 +139,17 @@ public sealed class SubtitleStack
     }
 
     private int NextId() => ++lastId;
+
+    /// <summary>
+    /// <paramref name="a"/>'nın her satırı <paramref name="b"/>'nin satırlarından biriyle aynı mı (<see cref="SameLine"/>):
+    /// b, a'yı da içeren çok konuşanlı satır (TV: withinLines, Mac/iPhone: SubtitleStack.withinLines).
+    /// </summary>
+    public static bool WithinLines(string a, string b)
+    {
+        if (string.IsNullOrEmpty(a) || !b.Contains('\n')) return false;
+        var theirs = b.Split('\n');
+        return a.Split('\n').All(line => string.IsNullOrWhiteSpace(line) || theirs.Any(other => SameLine(line, other)));
+    }
 
     /// <summary>Büyük-küçük harf ve noktalama dışında aynı mı, ya da biri ötekinin başı/devamı mı ("Kapı" → "Kapı daha fazla…").</summary>
     public static bool SameLine(string a, string b)

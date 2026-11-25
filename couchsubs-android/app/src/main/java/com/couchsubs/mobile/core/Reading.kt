@@ -68,6 +68,9 @@ class Reading(lines: List<TextLine>) {
 
         /** [isMenu]: menü satırlarının sol ya da sağ kenarı bu kadar içinde hizalı (okunan alana oranla). */
         const val MENU_EDGE = 0.012
+
+        /** Ayrı konuşma blokları arasındaki en büyük boşluk (satır yüksekliğine oranla); bkz. spokenTogether. */
+        const val TOGETHER_GAP = 3.0
         /** Menü listesi sayılıp atılan okumanın günlük nedeni ([isHistoryList]). */
         const val LIST_REASON = "menü listesi (eşit aralıklı satırlar), altyazı değil"
         /** Liste satırlarının aralığı satır yüksekliğinin en az bu katı (altyazının satırları bitişiktir). */
@@ -324,7 +327,9 @@ class Reading(lines: List<TextLine>) {
         // Görev satırı altyazıyla aynı anda belirince ayrı blok olur (aralık ya da yazı boyu farkı): konuşan adı taşıyan
         // blok altyazıdır ("Lucia: …" görevin üstünde de dursa).
         val centered = withoutStale(middle, age, stale)
-        centered.firstOrNull { SpeakerPrefix.split(it.lines[0].text) != null }?.let { return it }
+        // Aynı anda konuşan kişilerin alt alta duran ayrı blokları ([spokenTogether]) tek altyazıda, her biri kendi satırında.
+        val spoken = centered.indexOfFirst { isSpoken(it) }
+        if (spoken >= 0) return spokenTogether(spoken, centered, area)
         if (centered.isNotEmpty()) {
             val lowest = centered.indices.maxBy { centered[it].box!!.bottom }
             return objectiveBelow(lowest, centered, area) ?: centered[lowest]
@@ -339,6 +344,46 @@ class Reading(lines: List<TextLine>) {
      * olarak altyazı seçiliyor, konuşma hiç çevrilmiyordu. Görev ekranda kalınca sonraki konuşmalarda [StickyRows] onu
      * ayırır (Windows ve Mac ile aynı).
      */
+    private fun isSpoken(block: Reading): Boolean = SpeakerPrefix.split(block.lines[0].text) != null
+
+    /**
+     * Kalabalık sahnede birden çok kişi aynı anda konuşur (GTA 6 yan konuşmaları; X, beta.100): ekranda alt alta, her biri
+     * konuşan adıyla başlayan 2–3 ayrı blok durur. Önceden yalnız en üstteki seçiliyor, öbürleri atılıyordu. Adla başlayan
+     * ilk bloğun altındaki, yine adla başlayan, aynı yazı boyundaki (1,25 kat) ve arası en çok [TOGETHER_GAP] satır boyu olan
+     * bloklar yukarıdan aşağı tek altyazıda birleşir: her konuşan kendi satırında, adıyla. Arada adsız blok (görev satırı)
+     * varsa birleştirme orada durur. Mac/iPhone (Reading.spokenTogether) ve Windows (Reading.SpokenTogether) aynı.
+     */
+    private fun spokenTogether(index: Int, centered: List<Reading>, area: TextBox): Reading {
+        val ordered = centered.indices.sortedBy { centered[it].box!!.top }
+        val start = ordered.indexOf(index)
+        if (start < 0) return centered[index]
+        val lines = centered[index].lines.toMutableList()
+        for (other in ordered.drop(start + 1)) {
+            val block = centered[other]
+            if (!isSpoken(block)) break
+            val upper = lines.last().box?.placedIn(area) ?: break
+            val lower = block.lines[0].box?.placedIn(area) ?: break
+            val own = lower.bottom - lower.top
+            val previous = upper.bottom - upper.top
+            if (own <= 0 || previous <= 0 || maxOf(own, previous) > 1.25 * minOf(own, previous) ||
+                lower.top < upper.bottom - minOf(own, previous) * 0.25 ||
+                lower.top - upper.bottom > maxOf(own, previous) * TOGETHER_GAP) break
+            lines += block.lines
+        }
+        return if (lines.size == centered[index].lines.size) centered[index] else Reading(lines)
+    }
+
+    /**
+     * Satırlar ortaya hizalı ve boyları farklı mı (sol kenarları hizasız, ortaları hizalı): aynı anda konuşan kişilerin
+     * ayrı altyazı blokları böyle durur (X, beta.100, GTA 6 kalabalık sahne). Menünün geçmiş listesi sola yaslıdır; üç
+     * eşit aralıklı ortalı konuşma satırı liste sayılıp altyazının tamamı atılıyordu (Mac/iPhone ve Windows aynı).
+     */
+    private fun centeredSpeech(boxes: List<TextBox>): Boolean {
+        val lefts = boxes.map { it.left }
+        val centers = boxes.map { (it.left + it.right) / 2 }
+        return lefts.max() - lefts.min() > MENU_EDGE * 2 && centers.max() - centers.min() <= MENU_EDGE * 2
+    }
+
     private fun objectiveBelow(index: Int, centered: List<Reading>, area: TextBox): Reading? {
         val lowest = centered[index]
         if (lowest.lines.size != 1) return null
@@ -485,7 +530,7 @@ class Reading(lines: List<TextLine>) {
                     if (f == null) first = pitch
                     run.add(next)
                 }
-                if (run.size >= 3) return true
+                if (run.size >= 3 && !centeredSpeech(run.map { rows[it].box!! })) return true
                 if (run.size == 2 && run.all { SpeakerPrefix.split(rows[it].text) != null } &&
                     kotlin.math.abs(rows[run[0]].box!!.left - rows[run[1]].box!!.left) <= MENU_EDGE) return true
             }
