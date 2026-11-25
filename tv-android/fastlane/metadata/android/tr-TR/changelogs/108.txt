@@ -1,0 +1,2 @@
+0.9.105: GTA 6 telefonu çevirisi aynı ekranda sabit kalıyor; yazı boyu ve kutu oynamıyor.
+0.9.104: Samsung'da kopan bağlantı TV uygulaması tarafından kendiliğinden yeniden kuruluyor; alındı ulaşmayınca TV beklemeden yeniden bağlanıyor.

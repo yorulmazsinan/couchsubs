@@ -1,0 +1,2 @@
+0.9.105: The GTA 6 phone translation stays steady on the same screen; text size and box no longer jump.
+0.9.104: On Samsung the TV app re-establishes a dropped connection by itself; the TV reconnects right away when its acknowledgements stop arriving.

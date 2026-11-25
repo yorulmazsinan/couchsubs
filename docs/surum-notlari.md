@@ -6,7 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Donma:** Ekran yazısı çevirisi açıkken uygulamanın donması düzeltildi (Windows, Mac, iPhone, Android).
+- **Samsung'da ara ara kopma** (#1248): Bağlantı kopunca TV uygulaması yalnız öne gelip akışa bağlanmıyordu; artık bağlanmazsa kapatılıp temiz açılıyor, TV uygulaması da kendisi yeniden bağlanıyor. TV'yi fişten çekmek gerekmiyor (TV uygulaması 0.9.104).
+- **GTA 6 telefonu çevirisi oynamıyor:** Aynı ekran açıkken Türkçe kutunun yazı boyu, boyutu ve çevirisi birebir aynı kalıyor; aynı mesaj iki kez yazılmıyor, telefon elde oynasa da kutu zıplamıyor (TV uygulaması 0.9.105).
+- **Plaka, tabela ve dükkân adları** kamerayla kayarken artık altyazı sanılıp çevrilmiyor ve konuşmanın başına yapışmıyor (#1259, #1203).
+- **TV uygulaması güncellemesi takılmıyor:** Her adımın süre sınırı var; takılırsa bir kez daha deneniyor, olmazsa "Tekrar dene" çıkıyor. Güncellemeden önce TV'deki eski uygulama kapatılıyor (Samsung, Android TV).
+- **Ekranda kalan yazılar** (#1271, #1268): Donan uygulamanın son çevirisi TV'de kalmıyor, kendiliğinden kalkıyor.
+- **GTA 6 harita ekranı** (#1268): Sağ alttaki tuş listesi (Ortala, 2B Görünüm…) ve haritadaki görev kartı tam çevriliyor.
+- **Menü simgeleri** (#1270, #1264, #1266, #1267): Türkçe kutu tuş ve menü simgesinin üstüne çizilmiyor; görev yazısı ortalı, seçim kayınca eski kutular kalkıyor.
+
+**beta.98'de gelenler:** ekran yazısı çevirisi açıkken uygulamanın donması düzeltmesi.
 
 **beta.97'de gelenler:** kısa konuşma satırlarının TV'de dar ya da basık çizilmemesi (TV uygulaması 0.9.103).
 
