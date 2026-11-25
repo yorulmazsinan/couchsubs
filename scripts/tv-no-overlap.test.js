@@ -195,11 +195,11 @@ for (const placement of ['cover', 'above', 'below', 'fixed']) {
     assertApart(r.stack, placement + ' yığın');
     assertApart(r.joined, placement + ' birleşik');
     assertApart(r.later, placement + ' sonra');
-    // Önceki satırlar kalkınca görev kutusu daha yukarıda durmaz (yerine yaklaşır ya da yerinde kalır).
+    // Önceki satırlar kalkınca (son satır aynı) görev kutusu kendi yerinden daha uzakta durmaz: yerine yaklaşır ya da kalır.
     const missionTop = m => m.boxes.find(b => b[5].indexOf('Pazara') >= 0)[2];
+    const away = m => Math.abs(missionTop(m) - 0.74 * m.height);
     assert.ok(!r.later.prev && !r.later.prev2, 'önceki satırlar kalkmadı');
-    assert.ok(Math.abs(missionTop(r.later) - 0.74 * 1080) <= Math.abs(missionTop(r.stack) - 0.74 * 1080) + 1,
-      `görev kutusu geri dönmedi: ${missionTop(r.stack)} → ${missionTop(r.later)}`);
+    assert.ok(away(r.later) <= away(r.joined) + 1, `görev kutusu geri dönmedi: ${missionTop(r.joined)} → ${missionTop(r.later)}`);
   });
 }
 
