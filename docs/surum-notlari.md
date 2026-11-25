@@ -6,13 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Samsung'da ara ara kopma** (#1248): Bağlantı kopunca TV uygulaması yalnız öne gelip akışa bağlanmıyordu; artık bağlanmazsa kapatılıp temiz açılıyor, TV uygulaması da kendisi yeniden bağlanıyor. TV'yi fişten çekmek gerekmiyor (TV uygulaması 0.9.104).
-- **GTA 6 telefonu çevirisi oynamıyor:** Aynı ekran açıkken Türkçe kutunun yazı boyu, boyutu ve çevirisi birebir aynı kalıyor; aynı mesaj iki kez yazılmıyor, telefon elde oynasa da kutu zıplamıyor (TV uygulaması 0.9.105).
-- **Plaka, tabela ve dükkân adları** kamerayla kayarken artık altyazı sanılıp çevrilmiyor ve konuşmanın başına yapışmıyor (#1259, #1203).
-- **TV uygulaması güncellemesi takılmıyor:** Her adımın süre sınırı var; takılırsa bir kez daha deneniyor, olmazsa "Tekrar dene" çıkıyor. Güncellemeden önce TV'deki eski uygulama kapatılıyor (Samsung, Android TV).
-- **Ekranda kalan yazılar** (#1271, #1268): Donan uygulamanın son çevirisi TV'de kalmıyor, kendiliğinden kalkıyor.
-- **GTA 6 harita ekranı** (#1268): Sağ alttaki tuş listesi (Ortala, 2B Görünüm…) ve haritadaki görev kartı tam çevriliyor.
-- **Menü simgeleri** (#1270, #1264, #1266, #1267): Türkçe kutu tuş ve menü simgesinin üstüne çizilmiyor; görev yazısı ortalı, seçim kayınca eski kutular kalkıyor.
+- **TV'de basık ya da küçük altyazı yok** (#1255, #1259): Kısa konuşma satırları hiçbir TV'de basık, dar ya da çok küçük çizilmiyor; sığmazsa satır bölünüyor. Android TV'de Katman'ın yanlışlıkla yavaş çizime geçmesi düzeltildi, TV'nin yazı boyutu ayarı altyazıyı etkilemiyor; "Uygulama içinde" seçiliyken TV görüntüyü kendi HDMI ekranına alırsa altyazı Katman'da sürüyor (TV uygulaması 0.9.107).
+- **GTA 6 telefonu yeni görünümde:** Koyu kart yok; her Türkçe balon İngilizcesiyle aynı yükseklikte, telefonun kendi balon renginde, gelen solda giden sağda. Yazı küçülmüyor, panel yumuşak açılıp kapanıyor; bilgisayardaki saydam altyazı penceresinde de aynı balonlar (TV uygulaması 0.9.106).
+- **Ekran yazısında yama yok** (deneysel ekran yazısı çevirisi): Bildirimin Türkçesi özgün balonun hemen üstünde aynı biçimde ikinci balon olarak; "GREET" gibi istemlerin Türkçesi kutusuz, aynı stilde yanında. Menü ve kartlar eskisi gibi örtülüyor (TV uygulaması 0.9.108).
+- **Telefon çevirisi kapalıyken** GTA 6 telefonundaki mesajlar altyazı gibi çevrilip gidip gelmiyor; açmak için ipucu bir kez çıkıyor (#1282).
+- **Android:** Çeviri yeniden başlatılınca GTA 6 paketi bellek yetmediği için açılamıyordu, düzeltildi (#1282). Xbox'ta "bağlandı, sonra yapılamadı" için telefon Xbox'a daha yüksek görüntü biçimi de teklif ediyor; günlükte görüntü kodeği ve çözücü yazıyor (#1252). Harita tuş listesinin rengi diğer platformlarla aynı.
+- **Android TV:** Açılıp bağlanmayan TV uygulaması kapatılıp temiz açılıyor; aynı TV'ye işler sırayla gidiyor, "güncelle"ye iki kez basmak ikinci kurulum başlatmıyor (#1223).
+- **Windows:** Ayarlar'da seçili çeviri motorunun işareti kaybolmuyor (#1298); koyu temada siyaha yakın görünen etiketler okunuyor, dar pencerede sayfa kesilmiyor.
+
+**beta.99'da gelenler:** Samsung'da ara ara kopma (TV uygulaması 0.9.104), GTA 6 telefonu çevirisinin oynamaması (0.9.105), kamerayla kayan plaka ve tabelaların çevrilmemesi, TV uygulaması güncellemesinin takılmaması, ekranda kalan yazılar, harita tuş listesi ve görev kartı, menü simgelerinin örtülmemesi.
 
 **beta.98'de gelenler:** ekran yazısı çevirisi açıkken uygulamanın donması düzeltmesi.
 
