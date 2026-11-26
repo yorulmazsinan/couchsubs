@@ -261,6 +261,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// </summary>
     public bool FindsPhone { get; set; } = true;
     /// <summary>
+    /// Oyunun altyazısı bilinen açık renkli yazı (GTA 6; uygulama <see cref="FindsPhone"/> ile birlikte ayarlar): açık
+    /// zemindeki koyu yazı kuralı (InkTone) oturumda kapanmaz; telefon bulunamasa da sohbet balonları altyazı olmaz.
+    /// </summary>
+    public bool LightInkGame { get; set; }
+    /// <summary>
     /// Telefon arandı (bulundu mu); <see cref="FindsPhone"/> açıkken GamePhoneTracker.IntervalMs arayla. Telefon çevirisi
     /// kapalıyken "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (<see cref="GamePhoneHint.ObservePhone"/>, #1282).
     /// Kararları değiştirmez; okuma iş parçacığında çağrılır.
@@ -548,6 +553,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             // Açık zemindeki koyu yazı (duvardaki kâğıt ilan) altyazı değildir (InkTone, GitHub #1124); oyunun altyazısı koyu
             // yazıysa (DarkInkStyle) renge bakılmaz.
             var darkBlocks = new List<Reading>();
+            darkInkStyle.LightInk = LightInkGame;
             var darkInk = darkInkStyle.IsGameStyle || cropped is null ? null : InkTone.Sampler(cropped);
             if (listed) LogSceneText(rows.Text, Reading.ListReason);
             reading = (listed ? Reading.Empty : rows).SubtitleBlock(area, subtitleBand, (block, reason) =>

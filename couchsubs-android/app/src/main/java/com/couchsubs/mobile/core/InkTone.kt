@@ -201,11 +201,19 @@ class DarkInkStyle {
 
     private val texts = mutableListOf<String>()
 
-    val isGameStyle: Boolean get() = texts.size >= DISTINCT_BLOCKS
+    /**
+     * Oyunun altyazısı bilinen açık renkli yazı (GTA 6: beyaz): kural hiç kapanmaz, koyu bloklar sayılmaz. Kullanıcı
+     * bildirimi (X, beta-104): telefon bulunamadığı anlarda sohbet balonları atılıyor, dört farklı mesaj sayılınca kural
+     * kapanıyor, sonraki balonlar altyazı sanılıp telefonun ortasından geçen satır olarak ya da balonların üstüne üst üste
+     * çiziliyordu (Mac/iPhone ve Windows ile aynı).
+     */
+    var lightInk = false
+
+    val isGameStyle: Boolean get() = !lightInk && texts.size >= DISTINCT_BLOCKS
 
     /** Koyu yazılı diye atılan blok (satır kutuları [area]'ya oranlı). Kural bu blokla kapandıysa true. */
     fun observe(block: Reading, area: TextBox): Boolean {
-        if (isGameStyle) return false
+        if (lightInk || isGameStyle) return false
         val box = block.box?.placedIn(area) ?: return false
         if (!SceneText.isCentered(box)) return false
         val text = TextMatch.normalize(block.text)

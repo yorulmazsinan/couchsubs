@@ -214,12 +214,20 @@ public sealed class DarkInkStyle
 
     private readonly List<string> texts = [];
 
-    public bool IsGameStyle => texts.Count >= DistinctBlocks;
+    /// <summary>
+    /// Oyunun altyazısı bilinen açık renkli yazı (GTA 6: beyaz): kural hiç kapanmaz, koyu bloklar sayılmaz. Kullanıcı
+    /// bildirimi (X, beta-104, Windows): telefon bulunamadığı anlarda sohbet balonları atılıyor, dört farklı mesaj
+    /// sayılınca kural kapanıyor, sonraki balonlar altyazı sanılıp telefonun ortasından geçen satır olarak ya da balonların
+    /// üstüne üst üste çiziliyordu (Mac/iPhone ve Android DarkInkStyle.lightInk ile aynı).
+    /// </summary>
+    public bool LightInk { get; set; }
+
+    public bool IsGameStyle => !LightInk && texts.Count >= DistinctBlocks;
 
     /// <summary>Koyu yazılı diye atılan blok (satır kutuları <paramref name="area"/>'ya oranlı). Kural bu blokla kapandıysa true.</summary>
     public bool Observe(Reading block, TextBox area)
     {
-        if (IsGameStyle || block.Box is not { } whole || !SceneText.IsCentered(whole.PlacedIn(area))) return false;
+        if (LightInk || IsGameStyle || block.Box is not { } whole || !SceneText.IsCentered(whole.PlacedIn(area))) return false;
         var text = TextMatch.Normalize(block.Text);
         if (text.Length == 0
             || texts.Any(seen => seen.Contains(text, StringComparison.Ordinal) || text.Contains(seen, StringComparison.Ordinal)

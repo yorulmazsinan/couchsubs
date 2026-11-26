@@ -6,6 +6,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -84,16 +85,23 @@ class InkToneTest {
         for (i in 0 until style.length()) {
             val vector = style.getJSONObject(i)
             val name = vector.getString("name")
-            val seen = DarkInkStyle()
-            val blocks = vector.getJSONArray("blocks")
-            for (j in 0 until blocks.length()) {
-                val block = blocks.getJSONObject(j)
-                val b = box(block.getJSONArray("box"))
-                seen.observe(Reading(block.getString("text").split("\n").map { TextLine(it, b) }), area)
+            val lightInk = vector.optBoolean("lightInk", false)
+            fun run(knownLight: Boolean): DarkInkStyle {
+                val style = DarkInkStyle().apply { this.lightInk = knownLight }
+                val blocks = vector.getJSONArray("blocks")
+                for (j in 0 until blocks.length()) {
+                    val block = blocks.getJSONObject(j)
+                    val b = box(block.getJSONArray("box"))
+                    style.observe(Reading(block.getString("text").split("\n").map { TextLine(it, b) }), area)
+                }
+                return style
             }
+            val seen = run(lightInk)
             assertEquals(name, vector.getBoolean("gameStyle"), seen.isGameStyle)
             seen.reset()
             assertFalse(name, seen.isGameStyle)
+            // Açık yazılı oyunda kuralı kapatmayan bloklar başka oyunda kapatır (vektör anlamlı).
+            if (lightInk) assertTrue(name, run(false).isGameStyle)
         }
     }
 }

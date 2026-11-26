@@ -183,6 +183,11 @@ class SubtitlePipeline(
     private val subtitleBand = SubtitleBand()
     /** Oyunun altyazısı koyu yazı mı (açık zemindeki koyu yazı kuralı o oturumda kapanır, [InkTone]; GitHub #1124). */
     private val darkInkStyle = DarkInkStyle()
+    /**
+     * Oyunun altyazısı bilinen açık renkli yazı (GTA 6; hizmet oyun değişince ayarlar): açık zemindeki koyu yazı kuralı
+     * ([InkTone]) oturumda kapanmaz; telefon bulunamasa da sohbet balonları altyazı olmaz ([DarkInkStyle.lightInk]).
+     */
+    @Volatile var lightInkGame = false
     /** Günlüğe yazılmış son sahne yazıları (her karede yeniden yazılmasın). */
     private val loggedSceneText = ArrayDeque<String>()
     /**
@@ -453,6 +458,7 @@ class SubtitlePipeline(
             // Açık zemindeki koyu yazı (duvardaki kâğıt ilan) altyazı değildir ([InkTone], GitHub #1124); oyunun altyazısı
             // koyu yazıysa ([DarkInkStyle]) renge bakılmaz.
             val darkBlocks = mutableListOf<Reading>()
+            darkInkStyle.lightInk = lightInkGame
             if (listed) logSceneText(rows.text, Reading.LIST_REASON)
             (if (listed) Reading.Empty else filtered).subtitleBlock(area, subtitleBand, notices = { block ->
                 edge.add(Reading(block.lines.map { it.copy(box = it.box?.placedIn(area)) }))

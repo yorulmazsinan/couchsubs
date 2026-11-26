@@ -3308,6 +3308,8 @@ final class AppModel: ObservableObject {
         // altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak çevrilip
         // gidip geliyordu; bulunan telefonun satırları altyazı sayılmaz, ipucu gösterilir (iPhone, Windows, Android ile aynı).
         pipeline?.findsPhone = Self.findsGamePhone(running: pipeline != nil, game: gameChoice.game?.name)
+        // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
+        pipeline?.lightInkGame = pipeline?.findsPhone ?? false
     }
 
     /// Altyazı hattı telefonu arar mı: çeviri sürüyor ve oyun GTA 6 (telefon ayarından bağımsız, #1282).

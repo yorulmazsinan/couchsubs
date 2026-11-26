@@ -362,6 +362,9 @@ static void read_output_format(CouchSubsVideoDecoder *decoder)
 	f->height = format_int(format, AMEDIAFORMAT_KEY_HEIGHT, 0);
 	f->stride = format_int(format, "stride", f->width);
 	f->slice_height = format_int(format, "slice-height", f->height);
+	f->color_range = format_int(format, "color-range", 0);
+	f->full_range = f->color_range == 1;
+	f->color_standard = format_int(format, "color-standard", 0);
 	int32_t left, top, right, bottom;
 	if(AMediaFormat_getInt32(format, "crop-left", &left) && AMediaFormat_getInt32(format, "crop-top", &top)
 			&& AMediaFormat_getInt32(format, "crop-right", &right) && AMediaFormat_getInt32(format, "crop-bottom", &bottom))
@@ -388,9 +391,10 @@ static void read_output_format(CouchSubsVideoDecoder *decoder)
 		&& f->crop_right - f->crop_left >= MIN_FRAME_SIDE && f->crop_bottom - f->crop_top >= MIN_FRAME_SIDE;
 	f->supported = sized && is_linear_yuv420(f->color_format);
 	if(f->supported)
-		CHIAKI_LOGI(decoder->log, "Video decoder: output 0x%x %dx%d stride %d slice %d crop %d,%d-%d,%d",
+		CHIAKI_LOGI(decoder->log, "Video decoder: output 0x%x %dx%d stride %d slice %d crop %d,%d-%d,%d range %d (%s) standard %d",
 				(unsigned)f->color_format, f->width, f->height, f->stride, f->slice_height,
-				f->crop_left, f->crop_top, f->crop_right, f->crop_bottom);
+				f->crop_left, f->crop_top, f->crop_right, f->crop_bottom, f->color_range,
+				f->full_range ? "full, mapped to limited" : "limited", f->color_standard);
 	else
 		CHIAKI_LOGE(decoder->log, "Video decoder: unreadable output 0x%x %dx%d stride %d crop %d,%d-%d,%d; frames skipped",
 				(unsigned)f->color_format, f->width, f->height, f->stride,
@@ -487,6 +491,29 @@ static bool copy_chroma(CouchSubsVideoDecoder *decoder, const uint8_t *base, siz
 	}
 }
 
+/* Tam aralıklı (0–255) kare sınırlı aralığa (Y 16–235, U/V 16–240) çevrilir: Kotlin tarafı (PhoneFrames.phoneTone,
+ * RegionPixels.color, yazı tanıma) karenin sınırlı aralıklı olduğunu varsayar; tam aralıklı akışta (MediaCodec
+ * "color-range" 1) karanlık ve açık tonlar kırpılıyor, telefon araması dosyadaki kareden farklı parlaklık görüyordu
+ * (Mac/iPhone FrameColor, Windows sws_setColorspaceDetails ile aynı amaç: tek bilinen biçim). */
+static void limit_range(uint8_t *frame, size_t luma, size_t chroma)
+{
+	static uint8_t y_table[256], c_table[256];
+	static atomic_bool ready = false;
+	if(!atomic_load(&ready))
+	{
+		for(int v = 0; v < 256; v++)
+		{
+			y_table[v] = (uint8_t)(16 + (v * 219 + 127) / 255);
+			c_table[v] = (uint8_t)(16 + (v * 224 + 127) / 255);
+		}
+		atomic_store(&ready, true);
+	}
+	for(size_t i = 0; i < luma; i++)
+		frame[i] = y_table[frame[i]];
+	for(size_t i = luma; i < luma + chroma; i++)
+		frame[i] = c_table[frame[i]];
+}
+
 /* Çıkış arabelleğinin görünür Y bölgesini sıkışık (satır aralığı = en) biçimde kare arabelleğine kopyalar
  * (output_mutex tutulurken, çözücü durdurulmamışken). Okunamıyorsa false; kare atlanır. */
 static bool copy_luma(CouchSubsVideoDecoder *decoder, JNIEnv *env, size_t index, const AMediaCodecBufferInfo *info)
@@ -529,6 +556,8 @@ static bool copy_luma(CouchSubsVideoDecoder *decoder, JNIEnv *env, size_t index,
 	for(size_t y = 0; y < height; y++)
 		memcpy(dst + y * width, src + y * stride, width);
 	decoder->frame_chroma = copy_chroma(decoder, base, start, end, width, height);
+	if(f->full_range)
+		limit_range(dst, width * height, decoder->frame_chroma ? 2 * chroma_width * chroma_height : 0);
 	return true;
 }
 

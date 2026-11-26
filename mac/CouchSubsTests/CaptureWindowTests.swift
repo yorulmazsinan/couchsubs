@@ -2,6 +2,7 @@
 
 import CouchSubsCore
 import RemotePlay
+import ScreenCaptureKit
 import XCTest
 @testable import CouchSubs
 
@@ -202,5 +203,13 @@ final class CaptureWindowTests: XCTestCase {
     func testScreenRecordingSettingsPageIsThePrivacyPane() {
         XCTAssertEqual(RemotePlayWindowStream.screenRecordingSettingsURL.absoluteString,
                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    }
+
+    /// Pencere karesi BGRA ve sRGB'de istenir (ekranın renk uzayında değil): telefon araması dosyadaki karelerle aynı
+    /// değerleri görür (X, Mac mini, beta-101).
+    func testWindowFramesArriveAsSRGB() {
+        let configuration = RemotePlayWindowStream.configuration(for: CGSize(width: 1280, height: 720))
+        XCTAssertEqual(configuration.pixelFormat, kCVPixelFormatType_32BGRA)
+        XCTAssertEqual(configuration.colorSpaceName as String, CGColorSpace.sRGB as String)
     }
 }

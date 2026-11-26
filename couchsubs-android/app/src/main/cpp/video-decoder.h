@@ -33,6 +33,11 @@ typedef struct couchsubs_output_format_t
 	int32_t crop_top;
 	int32_t crop_right;
 	int32_t crop_bottom;
+	/* MediaCodec "color-range": 1 tam aralık (0–255; kare sınırlıya çevrilir), 2 sınırlı, yoksa 0 (sınırlı sayılır). */
+	int32_t color_range;
+	bool full_range;
+	/* MediaCodec "color-standard" (1 BT.709, 2/4 BT.601, 6 BT.2020; yoksa 0): yalnız tanı için günlüğe. */
+	int32_t color_standard;
 } CouchSubsOutputFormat;
 
 typedef struct couchsubs_video_decoder_t

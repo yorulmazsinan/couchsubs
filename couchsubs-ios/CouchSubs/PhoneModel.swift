@@ -1560,6 +1560,8 @@ final class PhoneModel: ObservableObject {
         // altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak çevrilip
         // gidip geliyordu; bulunan telefonun satırları altyazı sayılmaz, ipucu gösterilir (Mac, Windows, Android ile aynı).
         pipeline?.findsPhone = Self.tracksGamePhone(running: pipeline != nil, enabled: true, game: gameChoice.game?.name)
+        // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
+        pipeline?.lightInkGame = pipeline?.findsPhone ?? false
     }
 
     static func tracksGamePhone(running: Bool, enabled: Bool, game: String?) -> Bool {

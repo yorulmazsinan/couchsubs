@@ -21,7 +21,7 @@ final class InkToneTests: XCTestCase {
         struct Line: Decodable { let text: String; let box: [Double]; let dark: Bool? }
         struct Block: Decodable { let name: String; let lines: [Line]; let subtitle: String }
         struct Seen: Decodable { let text: String; let box: [Double] }
-        struct Style: Decodable { let name: String; let blocks: [Seen]; let gameStyle: Bool }
+        struct Style: Decodable { let name: String; let blocks: [Seen]; let gameStyle: Bool; let lightInk: Bool? }
         let area: [Double]
         let images: [Image]
         let blocks: [Block]
@@ -97,14 +97,21 @@ final class InkToneTests: XCTestCase {
         let vectors = try vectors()
         let area = Self.box(vectors.area)
         for vector in vectors.style {
-            var style = DarkInkStyle()
-            for seen in vector.blocks {
-                style.observe(Reading(lines: seen.text.split(separator: "\n").map { TextLine(String($0), box: Self.box(seen.box)) }),
-                              in: area)
+            func run(lightInk: Bool) -> DarkInkStyle {
+                var style = DarkInkStyle()
+                style.lightInk = lightInk
+                for seen in vector.blocks {
+                    style.observe(Reading(lines: seen.text.split(separator: "\n").map { TextLine(String($0), box: Self.box(seen.box)) }),
+                                  in: area)
+                }
+                return style
             }
+            var style = run(lightInk: vector.lightInk ?? false)
             XCTAssertEqual(style.isGameStyle, vector.gameStyle, vector.name)
             style.reset()
             XCTAssertFalse(style.isGameStyle, vector.name)
+            // Açık yazılı oyunda kuralı kapatmayan bloklar başka oyunda kapatır (vektör anlamlı).
+            if vector.lightInk == true { XCTAssertTrue(run(lightInk: false).isGameStyle, vector.name) }
         }
     }
 }

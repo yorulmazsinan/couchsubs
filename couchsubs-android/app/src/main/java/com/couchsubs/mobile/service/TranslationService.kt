@@ -861,6 +861,8 @@ class TranslationService : Service() {
         val held = com.couchsubs.mobile.core.MenuHeldSender(subtitleServer, { detector.menu }, { Log.i(TAG, it) })
         menuSender = held
         pipeline =SubtitlePipeline(translator, held).apply {
+            // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
+            lightInkGame = playsGta6
             // Altyazı alanında konuşan adıyla satır okundu: ekranda menü yok (#1240).
             onDialogue = { detector.noteDialogue() }
             // Altyazı alanında menünün geçmiş listesi okundu: menü sürer, listeden bekletilen satır gönderilmez.
@@ -1125,6 +1127,7 @@ class TranslationService : Service() {
                 regionWatcher?.reset()
                 playedGame = game?.name
                 playsGta6 = game?.name?.let { com.couchsubs.mobile.core.GameName.key(it) == "gta 6" } == true
+                pipeline?.lightInkGame = playsGta6
                 refreshPresetAreas()
                 resetScreenText()
                 linePool.setGame(game)

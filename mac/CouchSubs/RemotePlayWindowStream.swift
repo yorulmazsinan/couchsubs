@@ -320,6 +320,9 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
         configuration.height = max(2, Int(height.rounded()))
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: framesPerSecond)
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
+        // Kare ekranın renk uzayında (Display P3, ekranın ICC profili) değil sRGB'de gelir: okuma, telefon araması ve renk
+        // örnekleri dosyadaki karelerle aynı değerleri görür (X, Mac mini, beta-101: canlıda telefon bulunmuyordu).
+        configuration.colorSpaceName = CGColorSpace.sRGB
         configuration.showsCursor = false
         configuration.capturesAudio = false
         configuration.queueDepth = 3

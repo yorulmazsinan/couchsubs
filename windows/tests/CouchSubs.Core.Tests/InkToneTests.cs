@@ -97,15 +97,23 @@ public class InkToneTests
         foreach (var vector in vectors.RootElement.GetProperty("style").EnumerateArray())
         {
             var name = vector.GetProperty("name").GetString();
-            var style = new DarkInkStyle();
-            foreach (var seen in vector.GetProperty("blocks").EnumerateArray())
+            var lightInk = vector.TryGetProperty("lightInk", out var lightValue) && lightValue.GetBoolean();
+            DarkInkStyle Run(bool knownLight)
             {
-                var box = Box(seen.GetProperty("box"));
-                style.Observe(new Reading(seen.GetProperty("text").GetString()!.Split('\n').Select(text => new TextLine(text, box)).ToList()), area);
+                var seenStyle = new DarkInkStyle { LightInk = knownLight };
+                foreach (var seen in vector.GetProperty("blocks").EnumerateArray())
+                {
+                    var box = Box(seen.GetProperty("box"));
+                    seenStyle.Observe(new Reading(seen.GetProperty("text").GetString()!.Split('\n').Select(text => new TextLine(text, box)).ToList()), area);
+                }
+                return seenStyle;
             }
+            var style = Run(lightInk);
             Assert.True(vector.GetProperty("gameStyle").GetBoolean() == style.IsGameStyle, name);
             style.Reset();
             Assert.False(style.IsGameStyle, name);
+            // Açık yazılı oyunda kuralı kapatmayan bloklar başka oyunda kapatır (vektör anlamlı).
+            if (lightInk) Assert.True(Run(false).IsGameStyle, name);
         }
     }
 }

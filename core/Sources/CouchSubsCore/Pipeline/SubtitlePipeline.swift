@@ -170,6 +170,9 @@ public final class SubtitlePipeline {
     /// kısmındaki mesajlar (telefon ortaya yakın tutulunca bütün sohbet) altyazı sanılıp ekranın ortasında tek uzun satır
     /// olarak çevriliyor, telefonun çevirisi de altyazının altında kalıyordu. Varsayılan açık (Windows ve Android ile aynı).
     public var findsPhone = true
+    /// Oyunun altyazısı bilinen açık renkli yazı (GTA 6; uygulama `findsPhone` ile birlikte ayarlar): açık zemindeki koyu
+    /// yazı kuralı (`InkTone`) oturumda kapanmaz; telefon bulunamasa da sohbet balonları altyazı olmaz (`DarkInkStyle`).
+    public var lightInkGame = false
     /// Telefon arandı (bulundu mu); `findsPhone` açıkken `GamePhoneTracker.intervalMs` arayla. Telefon çevirisi kapalıyken
     /// "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (`GamePhoneHint.observePhone`, #1282). Kararları değiştirmez.
     public var onPhoneLooked: ((Bool) -> Void)?
@@ -424,6 +427,7 @@ public final class SubtitlePipeline {
             onList?()
             logSceneText(cleaned.text, Reading.listReason)
         }
+        darkInkStyle.lightInk = lightInkGame
         let darkInk = darkInkStyle.isGameStyle ? nil : InkTone.sampler(area)
         let reading = listed ? Reading.empty : rows.subtitleBlock(in: place, band: subtitleBand, darkInk: darkInk, dropped: { [weak self] block, reason in
             sceneTexts += block.lines.map(\.text)

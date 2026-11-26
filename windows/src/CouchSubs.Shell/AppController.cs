@@ -3759,6 +3759,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             },
             // Telefon ayarı kapalıyken de GTA 6'da telefon aranır (#1282; yalnız bulmak için, okunmaz, çevrilmez).
             FindsPhone = GameName.Key(gameSense.Current?.Name) == "gta 6",
+            // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
+            LightInkGame = GameName.Key(gameSense.Current?.Name) == "gta 6",
         };
         built.MetricsReady += metrics => post(() =>
         {
@@ -3951,7 +3953,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // şeritteki altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak
             // çevrilip gidip geliyordu; bulunan telefonun satırları altyazı sayılmaz, ipucu gösterilir (Mac, iPhone, Android
             // ile aynı).
-            if (pipeline is { } current) current.FindsPhone = running && GameName.Key(gameSense.Current?.Name) == "gta 6";
+            if (pipeline is { } current)
+            {
+                current.FindsPhone = running && GameName.Key(gameSense.Current?.Name) == "gta 6";
+                current.LightInkGame = current.FindsPhone;
+            }
             if (running && settings.AutoScreenText && !settings.ExtraAreasPausedByFullScreen)
                 // Harita düzeni bulundu/bitti (#1365 tanısı).
                 screenText ??= new ScreenTextDetector { OnLog = SubtitleLog.Write };

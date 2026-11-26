@@ -1,5 +1,5 @@
 {
- "about": "Açık zemin üzerindeki koyu yazı (kâğıt ilan) altyazı değildir (GitHub #1124; InkTone, DarkInkStyle). Mac/iPhone InkToneTests.swift, Windows InkToneTests.cs, Android InkToneTest.kt aynı dosyayı okur. images: gri tonlu sentetik görüntü (fill zemin, rects [x0, y0, x1, y1, parlaklık] sırayla boyanır, sağ/alt hariç), box görüntüye oranla, dark beklenen (InkTone.isDarkOnLight). blocks: satırların koyu yazı olup olmadığı (dark) verilince seçilen altyazı (Reading.subtitleBlock darkInk ile; kutular area'ya oranla). style: sırayla atılan koyu yazılı bloklardan sonra oyunun altyazısı koyu yazı mı (DarkInkStyle.isGameStyle).",
+ "about": "Açık zemin üzerindeki koyu yazı (kâğıt ilan) altyazı değildir (GitHub #1124; InkTone, DarkInkStyle). Mac/iPhone InkToneTests.swift, Windows InkToneTests.cs, Android InkToneTest.kt aynı dosyayı okur. images: gri tonlu sentetik görüntü (fill zemin, rects [x0, y0, x1, y1, parlaklık] sırayla boyanır, sağ/alt hariç), box görüntüye oranla, dark beklenen (InkTone.isDarkOnLight). blocks: satırların koyu yazı olup olmadığı (dark) verilince seçilen altyazı (Reading.subtitleBlock darkInk ile; kutular area'ya oranla). style: sırayla atılan koyu yazılı bloklardan sonra oyunun altyazısı koyu yazı mı (DarkInkStyle.isGameStyle); lightInk true ise oyunun altyazısı bilinen açık renkli yazıdır (GTA 6), kural hiç kapanmaz.",
  "area": [0.14, 0.62, 0.86, 0.97],
  "images": [
   {
@@ -2954,7 +2954,7 @@
    "subtitle": "I told you not to go there,\nand you went anyway.\nNow look at us."
   }
  ],
- "style": [
+ "style": [{"name": "GTA 6 (altyazısı açık renkli oyun, lightInk): telefon bulunamayınca atılan dört farklı sohbet balonu kuralı kapatmaz (X, beta-104)", "lightInk": true, "blocks": [{"text": "Yeah, we're good.", "box": [0.3, 0.3, 0.6, 0.4]}, {"text": "We heard. You OK?", "box": [0.35, 0.42, 0.65, 0.5]}, {"text": "Yeah Im good. I saw Linda at the store and you wanna see the look on her face.", "box": [0.3, 0.52, 0.65, 0.7]}, {"text": "Just stopped by the motel and what the fuckkkkk??? Yall ok?", "box": [0.3, 0.2, 0.65, 0.3]}, {"text": "Fine. Get in the car.", "box": [0.25, 0.8, 0.75, 0.88]}], "gameStyle": false}, 
   {
    "name": "farklı dört koyu yazılı replik: oyunun stili, kural kapanır",
    "blocks": [

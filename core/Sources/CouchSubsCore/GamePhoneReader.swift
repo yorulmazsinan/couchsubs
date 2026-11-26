@@ -57,7 +57,7 @@ enum GamePhoneReader {
         rgba = darkScreenPrepared(rgba)
         guard let provider = CGDataProvider(data: rgba as CFData),
               let flat = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
-                                 space: frame.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpaceCreateDeviceRGB(),
+                                 space: pixels.space,
                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return .empty }
         func map(_ box: TextBox) -> TextBox {

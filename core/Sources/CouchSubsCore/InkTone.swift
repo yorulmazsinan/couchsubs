@@ -212,19 +212,26 @@ public enum InkTone {
 /// `distinctBlocks` koyu yazılı blok atılınca oyunun altyazısı koyu yazı sayılır ve `InkTone` kuralı o oturumda kapanır
 /// (`isGameStyle`). Duvardaki ilan hep aynı yazıdır (kısmi okunsa da), sayılmaz. Hat sıfırlanınca unutulur
 /// (Windows: DarkInkStyle, Android: DarkInkStyle).
+///
+/// `lightInk`: oyunun altyazısı bilinen açık renkli yazı (GTA 6: beyaz); kural o oyunda hiç kapanmaz, koyu bloklar
+/// sayılmaz. Kullanıcı bildirimi (X, beta-104, Windows): GTA 6 telefonu bulunamadığı anlarda ekranın ortasındaki sohbet
+/// balonları (açık zeminde koyu yazı) atılıyor, dört farklı mesaj sayılınca kural oturumda kapanıyordu; sonraki balonlar
+/// altyazı sanılıp telefonun ortasından geçen satır olarak ya da balonların üstüne üst üste çiziliyordu.
 public struct DarkInkStyle: Equatable, Sendable {
     public static let distinctBlocks = 4
 
     private(set) var texts: [String] = []
+    /// Oyunun altyazısı bilinen açık renkli yazı: kural kapanmaz (GTA 6).
+    public var lightInk = false
 
     public init() {}
 
-    public var isGameStyle: Bool { texts.count >= Self.distinctBlocks }
+    public var isGameStyle: Bool { !lightInk && texts.count >= Self.distinctBlocks }
 
     /// Koyu yazılı diye atılan blok (satır kutuları `area`'ya oranlı). Kural bu blokla kapandıysa true.
     @discardableResult
     public mutating func observe(_ block: Reading, in area: TextBox) -> Bool {
-        guard !isGameStyle, let box = block.box?.placed(in: area), SceneText.isCentered(box) else { return false }
+        guard !lightInk, !isGameStyle, let box = block.box?.placed(in: area), SceneText.isCentered(box) else { return false }
         let text = TextMatch.normalize(block.text)
         guard !text.isEmpty,
               !texts.contains(where: { $0.contains(text) || text.contains($0) || TextMatch.isSimilar($0, text) })

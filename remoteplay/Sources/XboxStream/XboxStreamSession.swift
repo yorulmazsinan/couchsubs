@@ -760,7 +760,9 @@ extension XboxStreamSession: RTCVideoRenderer {
         }
     }
 
-    /// VideoToolbox karesi doğrudan CGImage olur; yazılım çözücüsünün I420 karesinden gri (Y düzlemi) resim.
+    /// VideoToolbox karesi doğrudan CGImage olur; yazılım çözücüsünün I420 karesinden gri (Y düzlemi) resim. WebRTC'nin
+    /// I420'si sınırlı aralıklıdır (16–235): gri resim tam aralığa açılır (`VideoRange.expandLuma`), telefon araması
+    /// VideoToolbox karesiyle ve dosyadaki kareyle aynı parlaklığı görür.
     public static func image(from buffer: RTCVideoFrameBuffer) -> CGImage? {
         if let pixel = buffer as? RTCCVPixelBuffer {
             var image: CGImage?
@@ -769,7 +771,8 @@ extension XboxStreamSession: RTCVideoRenderer {
         }
         let i420 = buffer.toI420()
         let width = Int(i420.width), height = Int(i420.height), stride = Int(i420.strideY)
-        let data = Data(bytes: i420.dataY, count: stride * height)
+        var data = Data(bytes: i420.dataY, count: stride * height)
+        VideoRange.expandLuma(&data)
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: stride,
                        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
