@@ -58,7 +58,7 @@ const phone = { id: 'game-phone', text: 'x', box: { left: 0.6, top: 0.26, right:
 ] };
 
 // screen: TV'nin bildirdiği ekran (CSS pikseli), ratio: piksel oranı, legacy: Chromium 38 ölçüleri, source: app.js metni.
-function render(screen, ratio, legacy, source, view) {
+function render(screen, ratio, legacy, source, view, tight) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-webos-zoom-'));
   try {
     for (const file of fs.readdirSync(tvRoot)) {
@@ -127,7 +127,22 @@ function render(screen, ratio, legacy, source, view) {
       var es = window.STREAM;
       if (!es) { finish(); return; }
       es.fire('style', { placement: 'fixed', fontSize: 46, background: 80 });
-      es.fire('screen', { items: ${JSON.stringify(corners)}, duration: 60000 });
+      var items = ${JSON.stringify(corners)};
+      // tight: kutu yazının kendi genişliğinin 1,12 katı (tarayıcının yazı tipiyle ölçülür); yazı 1,5 kat geniş ölçülürse
+      // sığmıyor sanılır ve küçülür.
+      if (${tight ? 'true' : 'false'}) {
+        var ctx = document.createElement('canvas').getContext('2d');
+        var pageH = H / (window.COUCHSUBS_ZOOM || 1), pageW = W / (window.COUCHSUBS_ZOOM || 1);
+        ctx.font = '700 ' + (0.03 * pageH * 0.95) + 'px ' + getComputedStyle(document.body).fontFamily;
+        items = items.map(function (it) {
+          var w = ctx.measureText(it.text).width * 1.12 / pageW, b = it.box;
+          var box = it.align === 'right' ? { left: b.right - w, top: b.top, right: b.right, bottom: b.bottom }
+            : { left: b.left, top: b.top, right: b.left + w, bottom: b.bottom };
+          var cover = { left: box.left - 0.001, top: box.top - 0.002, right: box.right + 0.001, bottom: box.bottom + 0.002 };
+          return Object.assign({}, it, { box: box, cover: cover, grow: cover });
+        });
+      }
+      es.fire('screen', { items: items, duration: 60000 });
       wait(200, function () {
         out.corners = Array.prototype.slice.call(document.querySelectorAll('#screen .item')).map(function (el) {
           var r = rect(el); r.text = el.textContent;
@@ -260,8 +275,12 @@ test('eski app.js (0.9.116) Chromium 38 ölçüleriyle köşe yazılarını kü�
   { skip: !browser && 'Chromium yok' }, () => {
     const old = spawnSync('git', ['show', '5d524446:tv-webos/app.js'], { cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     if (old.status !== 0) return; // sığ klon: eski sürüm yok
-    const got = render([1280, 720], 1, true, old.stdout);
-    const issues = problems(got);
-    if (process.env.ZOOM_DEBUG) console.log(JSON.stringify(got.corners));
-    assert.ok(issues.some(p => /yazısı küçüldü/.test(p)), 'eski hâlde köşe yazıları küçülmeliydi: ' + issues.join('\n'));
+    // Kutular yazıya dar (1,12 kat): yeni kod yazıyı özgün boyda tutar, eski kod 1,5 kat ölçüp küçültür.
+    const now = render([1280, 720], 1, true, null, null, true);
+    const nominal = 0.03 * now.H * 0.95;
+    const got = render([1280, 720], 1, true, old.stdout, null, true);
+    if (process.env.ZOOM_DEBUG) console.log(JSON.stringify(now.corners), JSON.stringify(got.corners));
+    assert.equal(now.corners.length, 4);
+    for (const c of now.corners) assert.ok(c.font >= nominal * 0.9, 'yeni kod küçültmemeli: ' + JSON.stringify(now.corners));
+    assert.ok(got.corners.some(c => c.font < nominal * 0.85), 'eski hâlde köşe yazıları küçülmeliydi: ' + JSON.stringify(got.corners));
   });
