@@ -47,6 +47,19 @@ public enum TranslatorError: Error, Equatable {
 
 public enum TranslatorStatus: Equatable {
     case ready, needsDownload, unsupported
+
+    /// Çeviri sonucunun ana ekrana yansıyan durumu. Çevrimiçi motor (DeepL, yapay zekâ, yerel model) açıkken satır
+    /// yalnız motor çeviremeyince yerel yedeğe düşer; yedeğin bu sistemde olmaması (`unsupported`) asıl sorun değildir ve
+    /// "Apple çevirisi iOS 26 ister" uyarısı motorun gerçek hatasını (anahtar, kota, ağ) gizliyordu (GitHub #1322). Motorun
+    /// hatası ayrı uyarıda (`onlineIssue`) söylenir. Dil paketi eksikliği (`needsDownload`) yine gösterilir: indirilirse
+    /// yedek çalışır. Android ve Windows'ta yerel yedek her sistemde vardır; motor hatası aynı biçimde ayrı uyarıda.
+    public static func after(_ error: TranslatorError?, onlineActive: Bool) -> TranslatorStatus {
+        switch error {
+        case nil: .ready
+        case .needsDownload: .needsDownload
+        case .unsupported: onlineActive ? .ready : .unsupported
+        }
+    }
 }
 
 /// Apple'ın cihaz üstü çevirisi. Dil paketi yüklü olmalı; değilse `needsDownload` atar.

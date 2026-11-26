@@ -83,9 +83,40 @@ public static class SubtitleAccess
     }
 
     // Paketli TV uygulamaları: webOS/Android TV "null", Samsung Tizen ise (en az 5.0'da, POST isteklerinde) "file://" gönderir.
-    private static bool PackagedOrigin(string origin) => origin is "null" or "file://" ||
+    // Eski webOS (4.x) "file:///" ya da yol ekli "file:///..." gönderebilir (GitHub #1132): ana makinesi boş, sorgu/parça/kullanıcı
+    // içermeyen her file: değeri kabul edilir. Web sayfaları file: Origin'i üretemez; "file://evil.example" gibi ana makineli değerler reddedilir.
+    private static bool PackagedOrigin(string origin) => origin is "null" || IsFileOrigin(origin) ||
         Uri.TryCreate(origin, UriKind.Absolute, out var url) && url.Scheme == "app" && url.Host.Length > 0
         && url.UserInfo.Length == 0 && url.Query.Length == 0 && url.Fragment.Length == 0 && url.AbsolutePath is "" or "/";
+
+    /// <summary>Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok.</summary>
+    public static bool IsFileOrigin(string origin)
+    {
+        if (!origin.StartsWith("file://", StringComparison.Ordinal)) return false;
+        var rest = origin[7..];
+        return rest.Length == 0 || rest.StartsWith('/') && rest.IndexOfAny(['?', '#', '@', '\\']) < 0;
+    }
+
+    /// <summary>403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır.</summary>
+    public static string RejectedOriginLine(Request request)
+    {
+        var origin = request.Origin ?? "";
+        var host = request.Host;
+        return $"altyazı sunucusu isteği reddetti (403): Origin \"{origin[..Math.Min(origin.Length, 120)]}\" kabul edilmedi (yol {request.Path}, Host {host[..Math.Min(host.Length, 80)]})";
+    }
+
+    /// <summary>Reddedilen Origin değerlerini günlüğe bir kez yazdırır: aynı değer tekrar yazılmaz, en çok 16 farklı değer.</summary>
+    public sealed class RejectedOrigins
+    {
+        private readonly HashSet<string> seen = [];
+        /// <summary>Yazılacak satır; bu Origin daha önce yazıldıysa ya da sınır dolduysa null.</summary>
+        public string? Line(Request request)
+        {
+            bool fresh;
+            lock (seen) fresh = seen.Count < 16 && seen.Add(request.Origin ?? "");
+            return fresh ? RejectedOriginLine(request) : null;
+        }
+    }
 
     public static bool OriginAllowed(Request request)
     {

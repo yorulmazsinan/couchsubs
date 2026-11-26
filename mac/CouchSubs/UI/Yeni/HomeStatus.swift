@@ -296,9 +296,9 @@ struct HomeNotices: View {
                 Button("No") { model.gameAreas.declineOffered() }.buttonStyle(.dsSecondary)
             }
         case .online:
-            NoticeCard(text: String(format: String(localized: "%@ is not translating right now"), model.settings.onlineEngine.displayName) + ". "
-                       + (model.onlineIssue.map { TranslationCard.describe($0, engine: model.settings.onlineEngine, server: model.settings.localAIServer) } ?? "")
-                       + " " + String(localized: "Meanwhile the free translation is used.")) { EmptyView() }
+            NoticeCard(text: OnlineIssueText.notice(model.onlineIssue, engine: model.settings.onlineEngine, server: model.settings.localAIServer,
+                                                    keychainFailure: String(localized: "The API key could not be saved to the Mac keychain."),
+                                                    freeTranslation: Translator.isAvailable)) { EmptyView() }
         case .autoScreenText:
             NoticeCard(text: String(localized: "Automatic on-screen text translation was turned off; you can turn it on in Settings › Advanced › On-screen text.")) { EmptyView() }
         case .gamePhone:

@@ -405,6 +405,10 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         // Otomatik ekran yazısı beta.63'te açık geliyordu; bir kez kapatıldı, kullanıcıya söylenir.
         if (com.couchsubs.mobile.settings.AppSettings.autoScreenTextNotice)
             NoteTile(stringResource(R.string.auto_screen_text_notice), Tokens.Color.secondary)
+        // Çevrimiçi motor çeviremiyor: gerçek nedeni (anahtar, kota, ağ) söylenir (GitHub #1322; Mac, iPhone, Windows ile aynı).
+        if (status.running) status.onlineIssue?.let { issue ->
+            NoteTile(onlineIssueText(issue, status.engineLabel))
+        }
         // Görüntü bir dakikadır geliyor ama hiç altyazı satırı okunmadı (GitHub #503, #566, #572; SubtitleOffTip).
         if (status.subtitleOffTip) {
             NoteTile(stringResource(R.string.subtitle_off_tip), Tokens.Color.secondary)
@@ -744,4 +748,20 @@ fun ScreenTranslateButton(status: LiveStatus, modifier: Modifier = Modifier) {
         LiveStatus.ScreenState.SHOWN -> R.string.screen_remove
     }
     SecondaryButton(stringResource(label), modifier) { com.couchsubs.mobile.service.TranslationService.translateScreen() }
+}
+
+/** Çevrimiçi motor hatasının ana ekran metni: "DeepL şu an çevirmiyor. <neden> Bu arada ücretsiz çeviri kullanılıyor." */
+@Composable
+internal fun onlineIssueText(issue: com.couchsubs.mobile.translation.OnlineKeyState, engine: String): String =
+    stringResource(R.string.online_issue_title, engine) + ". " +
+        (onlineIssueReason(issue)?.let { stringResource(it, engine) + " " } ?: "") + stringResource(R.string.online_issue_meanwhile)
+
+/** Hatanın nedeni (Mac/iPhone OnlineIssueText.describe, Windows Contracts.Describe ile aynı metinler); yoksa null. */
+internal fun onlineIssueReason(issue: com.couchsubs.mobile.translation.OnlineKeyState): Int? = when (issue) {
+    com.couchsubs.mobile.translation.OnlineKeyState.INVALID -> R.string.online_issue_invalid
+    com.couchsubs.mobile.translation.OnlineKeyState.QUOTA_EXCEEDED -> R.string.online_issue_quota
+    com.couchsubs.mobile.translation.OnlineKeyState.MODEL_REJECTED -> R.string.online_issue_model
+    com.couchsubs.mobile.translation.OnlineKeyState.UNREACHABLE -> R.string.online_issue_unreachable
+    com.couchsubs.mobile.translation.OnlineKeyState.BUSY -> R.string.online_issue_busy
+    else -> null
 }

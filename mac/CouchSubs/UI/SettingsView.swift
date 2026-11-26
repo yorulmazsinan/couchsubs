@@ -1179,17 +1179,8 @@ struct TranslationCard: View {
     /// Çevrimiçi motor hatasının kullanıcıya söylenişi (ayarlar ve ana ekran aynı metni kullanır). Yerel modelde
     /// `server` sunucunun adresini ve modeli iletiye koyar.
     static func describe(_ state: OnlineKeyState, engine: TranslationEngine, server: LocalAIServer? = nil) -> String {
-        if engine == .local { return describeLocal(state, server: server) }
-        let name = engine.displayName
-        return switch state {
-        case .valid: String(localized: "It works.")
-        case .invalid: String(format: String(localized: "%@ did not accept this key. Copy it again from your account page."), name)
-        case .quotaExceeded: String(format: String(localized: "Your %@ account has no credit left or has reached its limit."), name)
-        case .modelRejected: String(format: String(localized: "%@ did not accept the request. Choose the other model or try again later."), name)
-        case .unreachable: String(format: String(localized: "%@ could not be reached. Check your internet connection."), name)
-        case .busy: String(format: String(localized: "%@ is busy or did not answer in time. Try again in a moment, or choose the faster model."), name)
-        case .keychainWriteFailed: String(localized: "The API key could not be saved to the Mac keychain.")
-        }
+        OnlineIssueText.describe(state, engine: engine, server: server,
+                                 keychainFailure: String(localized: "The API key could not be saved to the Mac keychain."))
     }
 
     /// Yerel model sunucusunun (Ollama, LM Studio) hatası; sunucunun türüne göre ne yapılacağı söylenir (Windows ile aynı).

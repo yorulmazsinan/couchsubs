@@ -55,6 +55,11 @@ data class LiveStatus(
     val startedAt: Long = 0,
     /** Seçili çeviri motorunun görünen adı ("DeepL", "Ücretsiz"). */
     val engineLabel: String = "",
+    /**
+     * Çevrimiçi motor (DeepL, yapay zekâ, yerel model) şu an çeviremiyor: nedeni (anahtar, kota, ağ) ana ekranda söylenir;
+     * düzelince null (GitHub #1322; Mac, iPhone ve Windows'taki "… şu an çevirmiyor" uyarısıyla aynı).
+     */
+    val onlineIssue: com.couchsubs.mobile.translation.OnlineKeyState? = null,
     /** Bu oturumda gösterilen satır ve paketten gelenler. */
     val shownLines: Int = 0,
     val packLines: Int = 0,

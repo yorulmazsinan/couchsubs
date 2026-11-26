@@ -86,10 +86,38 @@ public enum SubtitleAccess {
 
     private static func packagedOrigin(_ origin: String) -> Bool {
         // Paketli TV uygulamaları: webOS/Android TV "null", Samsung Tizen ise (en az 5.0'da, POST isteklerinde) "file://" gönderir.
-        if origin == "null" || origin == "file://" { return true }
+        // Eski webOS (4.x) "file:///" ya da yol ekli "file:///..." gönderebilir (GitHub #1132): ana makinesi boş, sorgu/parça/kullanıcı
+        // içermeyen her file: değeri kabul edilir. Web sayfaları file: Origin'i üretemez; "file://evil.example" gibi ana makineli değerler reddedilir.
+        if origin == "null" || isFileOrigin(origin) { return true }
         guard let url = URLComponents(string: origin) else { return false }
         return url.scheme == "app" && !(url.host ?? "").isEmpty && url.user == nil && url.password == nil
             && ["", "/"].contains(url.path) && url.query == nil && url.fragment == nil
+    }
+    /// Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok.
+    static func isFileOrigin(_ origin: String) -> Bool {
+        guard origin.hasPrefix("file://") else { return false }
+        let rest = origin.dropFirst(7)
+        return rest.isEmpty || rest.hasPrefix("/") && !rest.contains(where: { "?#@\\".contains($0) })
+    }
+    /// 403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır.
+    public static func rejectedOriginLine(_ request: Request) -> String {
+        "altyazı sunucusu isteği reddetti (403): Origin \"\(String((request.origin ?? "").prefix(120)))\" kabul edilmedi (yol \(request.path), Host \(String(request.host.prefix(80))))"
+    }
+    /// Reddedilen Origin değerlerini günlüğe bir kez yazdırır: aynı değer tekrar yazılmaz, en çok 16 farklı değer.
+    public final class RejectedOrigins: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen = Set<String>()
+        public init() {}
+        /// Yazılacak satır; bu Origin daha önce yazıldıysa ya da sınır dolduysa nil.
+        public func line(_ request: Request) -> String? {
+            let origin = request.origin ?? ""
+            let fresh = lock.withLock { () -> Bool in
+                guard seen.count < 16, !seen.contains(origin) else { return false }
+                seen.insert(origin)
+                return true
+            }
+            return fresh ? SubtitleAccess.rejectedOriginLine(request) : nil
+        }
     }
     public static func originAllowed(_ request: Request) -> Bool {
         guard let value = request.origin else { return true }

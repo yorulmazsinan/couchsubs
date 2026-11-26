@@ -20,12 +20,25 @@ class SubtitleAccessTest {
                 val result = SubtitleAccess.authorize(request, vectors.getString("key"), row.getBoolean("legacy"))
                 assertEquals(head, row.getInt("status"), result.status)
                 assertEquals(head, row.getBoolean("usedLegacy"), result.legacy)
-                val cors = if (origin == "null" || origin == "file://" || origin == "app://couchsubs") "Access-Control-Allow-Origin: $origin\r\nVary: Origin\r\n" else ""
+                // Paketli (http olmayan) ve kabul edilen her Origin aynen geri yansıtılır.
+                val cors = if (row.getInt("status") != 403 && origin != null && !origin.startsWith("http")) "Access-Control-Allow-Origin: $origin\r\nVary: Origin\r\n" else ""
                 assertEquals(cors, SubtitleAccess.cors(request))
             }
         }
         val peers = vectors.getJSONObject("peers")
         for (address in peers.keys()) assertEquals(address, peers.getBoolean(address), SubtitleAccess.isLocalPeer(InetAddress.getByName(address)))
+    }
+    /** Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Mac/iPhone ve Windows'ta aynı). */
+    @Test fun rejectedOriginIsLoggedOnce() {
+        val log = SubtitleAccess.RejectedOrigins()
+        val request = SubtitleAccess.parse("POST /pair HTTP/1.1\r\nHost: 192.168.1.20:8787\r\nOrigin: http://other.example\r\n")!!
+        assertEquals(403, SubtitleAccess.authorize(request, "anahtar", true).status)
+        assertEquals("altyazı sunucusu isteği reddetti (403): Origin \"http://other.example\" kabul edilmedi (yol /pair, Host 192.168.1.20:8787)", log.line(request))
+        assertNull(log.line(request))
+        for (index in 0 until 20) {
+            val other = SubtitleAccess.parse("GET /events HTTP/1.1\r\nHost: a\r\nOrigin: http://o$index.example\r\n")!!
+            assertEquals(index < 15, log.line(other) != null)
+        }
     }
     @Test fun keysAndAmbiguousRequests() {
         val key = SubtitleAccess.createKey()

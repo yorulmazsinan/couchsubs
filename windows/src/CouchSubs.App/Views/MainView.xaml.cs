@@ -244,7 +244,11 @@ public partial class MainView : UserControl
         {
             var engine = controller.Settings.OnlineEngine;
             OnlineTitle.Text = text.Format("%@ is not translating right now", engine.DisplayName());
-            OnlineReason.Text = state.Describe(engine, text, controller.Settings.LocalAiServer) + " " + text["Meanwhile the free translation is used."];
+            // Cihaz üstü model kurulu değilse ya da açılamadıysa "ücretsiz çeviri kullanılıyor" denmez: bu arada yalnız
+            // oyun paketleri çevirir (GitHub #1322; Mac ve iPhone ile aynı metin).
+            var freeTranslation = controller.ModelInstalled && controller.TranslatorStatus != TranslatorStatus.EngineFailed;
+            OnlineReason.Text = state.Describe(engine, text, controller.Settings.LocalAiServer) + " "
+                + text[freeTranslation ? "Meanwhile the free translation is used." : "The free translation doesn't work on this system, so meanwhile only game packs translate."];
         }
         Preview.SetLive(running);
         ShowNotices();

@@ -193,7 +193,13 @@ struct HomeScreen: View {
             if model.readingStuck {
                 MobileNote(text: String(localized: "Text reading got stuck. It usually recovers within a minute or two: the system prepares its text model after the first launch or an update. Keep CouchSubs open. If it doesn't recover, close CouchSubs and open it again."))
             }
-            if model.translatorStatus == .unsupported, !Translator.isAvailable {
+            // Çevrimiçi motor (DeepL, yapay zekâ) çeviremiyorsa gerçek nedeni söylenir; yerel yedeğin bu iPhone'da
+            // olmaması onu gizlemez (GitHub #1322, Mac ile aynı).
+            if model.isRunning, model.onlineIssue != nil {
+                MobileNote(text: OnlineIssueText.notice(model.onlineIssue, engine: model.settings.onlineEngine, server: model.settings.localAIServer,
+                                                        keychainFailure: String(localized: "The API key could not be saved to this iPhone's keychain."),
+                                                        freeTranslation: Translator.isAvailable))
+            } else if model.translatorStatus == .unsupported, !Translator.isAvailable {
                 MobileNote(text: String(localized: "Apple's free translation needs iOS 26 or later. Game packs, DeepL and AI translation work on this device."))
             }
             LogShareButton()

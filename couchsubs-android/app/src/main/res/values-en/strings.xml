@@ -915,4 +915,11 @@
     <string name="tv_remove_pairing">Remove Pairing</string>
     <string name="tv_remove_pairing_title">Remove Pairing?</string>
     <string name="tv_remove_pairing_confirm">The paired TV will be removed. You can choose a TV again with Change the TV.</string>
+    <string name="online_issue_title">%1$s is not translating right now</string>
+    <string name="online_issue_invalid">%1$s did not accept this key. Copy it again from your account page.</string>
+    <string name="online_issue_quota">Your %1$s account has no credit left or has reached its limit.</string>
+    <string name="online_issue_model">%1$s did not accept the request. Choose the other model or try again later.</string>
+    <string name="online_issue_unreachable">%1$s could not be reached. Check your internet connection.</string>
+    <string name="online_issue_busy">%1$s is busy or did not answer in time. Try again in a moment, or choose the faster model.</string>
+    <string name="online_issue_meanwhile">Meanwhile the free translation is used.</string>
 </resources>

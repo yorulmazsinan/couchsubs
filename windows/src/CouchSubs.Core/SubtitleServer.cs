@@ -162,6 +162,8 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     public event Action? LegacyClientConnected;
     public string AccessKey { get { lock (gate) return accessKey; } }
     public bool HasLegacyClient => Volatile.Read(ref legacySeen) != 0;
+    /// <summary>403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132).</summary>
+    private readonly SubtitleAccess.RejectedOrigins rejectedOrigins = new();
 
     /// <summary>Anahtar değişince mevcut akışlar da kapanır; eski anahtar yeniden bağlanamaz.</summary>
     public void RotateKey(string key)
@@ -955,6 +957,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             var checkedKey = AccessKey;
             var status = SubtitleAccess.Authorize(request, checkedKey, allowLegacy, out var legacy);
             var cors = SubtitleAccess.Cors(request);
+            if (status == 403 && rejectedOrigins.Line(request) is { } rejected) SubtitleLog.Write(rejected);
             if (status != 200) { await RespondAndClose(tcp, status == 403 ? "403 Forbidden" : "401 Unauthorized", cors: status == 403 ? "" : cors); return; }
             var method = request.Method;
             var path = request.Path;

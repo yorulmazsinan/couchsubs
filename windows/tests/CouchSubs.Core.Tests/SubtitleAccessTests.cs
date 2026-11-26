@@ -20,10 +20,27 @@ public class SubtitleAccessTests
                 (origin is null ? "" : $"Origin: {origin}\r\n"))!;
             Assert.Equal(row.GetProperty("status").GetInt32(), SubtitleAccess.Authorize(request, key, row.GetProperty("legacy").GetBoolean(), out var legacy));
             Assert.Equal(row.GetProperty("usedLegacy").GetBoolean(), legacy);
-            Assert.Equal(origin is "null" or "file://" or "app://couchsubs" ? $"Access-Control-Allow-Origin: {origin}\r\nVary: Origin\r\n" : "", SubtitleAccess.Cors(request));
+            // Paketli (http olmayan) ve kabul edilen her Origin aynen geri yansıtılır.
+            Assert.Equal(row.GetProperty("status").GetInt32() != 403 && origin is not null && !origin.StartsWith("http") ? $"Access-Control-Allow-Origin: {origin}\r\nVary: Origin\r\n" : "", SubtitleAccess.Cors(request));
         }
         foreach (var peer in fixture.RootElement.GetProperty("peers").EnumerateObject())
             Assert.Equal(peer.Value.GetBoolean(), SubtitleAccess.IsLocalPeer(IPAddress.Parse(peer.Name)));
+    }
+
+    /// <summary>Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Mac/iPhone ve Android'de aynı).</summary>
+    [Fact]
+    public void RejectedOriginIsLoggedOnce()
+    {
+        var log = new SubtitleAccess.RejectedOrigins();
+        var request = SubtitleAccess.Parse("POST /pair HTTP/1.1\r\nHost: 192.168.1.20:8787\r\nOrigin: http://other.example\r\n")!;
+        Assert.Equal(403, SubtitleAccess.Authorize(request, "anahtar", true, out _));
+        Assert.Equal("altyazı sunucusu isteği reddetti (403): Origin \"http://other.example\" kabul edilmedi (yol /pair, Host 192.168.1.20:8787)", log.Line(request));
+        Assert.Null(log.Line(request));
+        for (var index = 0; index < 20; index++)
+        {
+            var other = SubtitleAccess.Parse($"GET /events HTTP/1.1\r\nHost: a\r\nOrigin: http://o{index}.example\r\n")!;
+            Assert.Equal(index < 15, log.Line(other) is not null);
+        }
     }
 
     [Theory]

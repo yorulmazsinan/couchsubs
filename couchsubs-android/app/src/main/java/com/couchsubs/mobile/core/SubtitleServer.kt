@@ -136,6 +136,8 @@ class SubtitleServer(
     @Volatile var hasLegacyClient = false
         private set
     var onLegacyClient: (() -> Unit)? = null
+    /** 403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132; uygulamanın günlüğü, [DropLog.sink]). */
+    private val rejectedOrigins = SubtitleAccess.RejectedOrigins()
     fun rotateKey(key: String) {
         val closing = synchronized(lock) {
             accessKey = key
@@ -835,6 +837,7 @@ class SubtitleServer(
             val access = SubtitleAccess.authorize(request, checkedKey, allowLegacy)
             val cors = SubtitleAccess.cors(request)
             if (access.status != 200) {
+                if (access.status == 403) rejectedOrigins.line(request)?.let { line -> DropLog.sink?.invoke(line) }
                 respondAndClose(socket, if (access.status == 403) "403 Forbidden" else "401 Unauthorized", cors = if (access.status == 403) "" else cors)
                 return
             }

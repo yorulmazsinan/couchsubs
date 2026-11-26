@@ -19,7 +19,8 @@ final class SubtitleAccessTests: XCTestCase {
                 let result = SubtitleAccess.authorize(request, key: vectors.key, allowLegacy: row.legacy)
                 XCTAssertEqual(result.status, row.status, head)
                 XCTAssertEqual(result.legacy, row.usedLegacy, head)
-                let cors = row.origin == "null" || row.origin == "file://" || row.origin == "app://couchsubs" ? "Access-Control-Allow-Origin: \(row.origin!)\r\nVary: Origin\r\n" : ""
+                // Paketli (http olmayan) ve kabul edilen her Origin aynen geri yansıtılır.
+                let cors = row.status != 403 && row.origin.map { !$0.hasPrefix("http") } == true ? "Access-Control-Allow-Origin: \(row.origin!)\r\nVary: Origin\r\n" : ""
                 XCTAssertEqual(SubtitleAccess.cors(request), cors)
             }
         }
@@ -37,6 +38,19 @@ final class SubtitleAccessTests: XCTestCase {
         // Tarayıcı aynı adresten açtığı sayfanın akışına Origin ile bağlanır.
         let same = try XCTUnwrap(SubtitleAccess.parse("GET /events?viewer=second&k=anahtar HTTP/1.1\r\nHost: 192.168.1.20:8787\r\nOrigin: http://192.168.1.20:8787\r\n"))
         XCTAssertEqual(SubtitleAccess.authorize(same, key: "anahtar", allowLegacy: true).status, 200)
+    }
+
+    /// Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Windows ve Android'de aynı).
+    func testRejectedOriginIsLoggedOnce() throws {
+        let log = SubtitleAccess.RejectedOrigins()
+        let request = try XCTUnwrap(SubtitleAccess.parse("POST /pair HTTP/1.1\r\nHost: 192.168.1.20:8787\r\nOrigin: http://other.example\r\n"))
+        XCTAssertEqual(SubtitleAccess.authorize(request, key: "anahtar", allowLegacy: true).status, 403)
+        XCTAssertEqual(log.line(request), "altyazı sunucusu isteği reddetti (403): Origin \"http://other.example\" kabul edilmedi (yol /pair, Host 192.168.1.20:8787)")
+        XCTAssertNil(log.line(request))
+        for index in 0..<20 {
+            let other = try XCTUnwrap(SubtitleAccess.parse("GET /events HTTP/1.1\r\nHost: a\r\nOrigin: http://o\(index).example\r\n"))
+            XCTAssertEqual(log.line(other) != nil, index < 15)
+        }
     }
 
     func testKeysAndAmbiguousRequests() throws {

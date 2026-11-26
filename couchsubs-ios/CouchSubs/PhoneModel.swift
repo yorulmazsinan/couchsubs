@@ -1470,13 +1470,11 @@ final class PhoneModel: ObservableObject {
                 if self?.readingStuck != stuck { self?.readingStuck = stuck }
             }
         }
+        // Çevrimiçi motor açıkken yerel yedeğin bu iPhone'da olmaması (iOS 26 öncesi) gösterilmez; motorun gerçek hatası
+        // (anahtar, kota, ağ) `onlineIssue` ile ana ekranda söylenir (GitHub #1322, Mac ile aynı).
         pipeline.onTranslationResult = { [weak self] error in
-            let status: TranslatorStatus = switch error {
-            case nil: .ready
-            case .needsDownload: .needsDownload
-            case .unsupported: .unsupported
-            }
-            self?.translatorStatus = status
+            guard let self else { return }
+            self.translatorStatus = TranslatorStatus.after(error, onlineActive: self.onlineTranslationActive)
         }
         // Ek alan okuyucusu yeni dil ve motorla, ilk ek alan karesinde yeniden kurulur.
         regionWatcher?.reset()
@@ -1767,7 +1765,10 @@ final class PhoneModel: ObservableObject {
         } else {
             return local
         }
-        online.onFailureChanged = { [weak self] state in Task { @MainActor in self?.onlineIssue = state } }
+        online.onFailureChanged = { [weak self] state in
+            if let state { SubtitleLog.write("çevrimiçi motor çeviremedi: \(engine.rawValue) \(state); yedek: \(Translator.isAvailable ? "ücretsiz çeviri" : "yok (iOS 26 öncesi), yalnız oyun paketleri")") }
+            Task { @MainActor in self?.onlineIssue = state }
+        }
         return online
     }
 

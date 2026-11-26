@@ -75,9 +75,29 @@ object SubtitleAccess {
     private fun uri(value: String): URI? = try { URI(value) } catch (_: Exception) { null }
     private fun packagedOrigin(origin: String): Boolean {
         // Paketli TV uygulamaları: webOS/Android TV "null", Samsung Tizen ise (en az 5.0'da, POST isteklerinde) "file://" gönderir.
-        if (origin == "null" || origin == "file://") return true
+        // Eski webOS (4.x) "file:///" ya da yol ekli "file:///..." gönderebilir (GitHub #1132): ana makinesi boş, sorgu/parça/kullanıcı
+        // içermeyen her file: değeri kabul edilir. Web sayfaları file: Origin'i üretemez; "file://evil.example" gibi ana makineli değerler reddedilir.
+        if (origin == "null" || isFileOrigin(origin)) return true
         val url = uri(origin) ?: return false
         return url.scheme == "app" && !url.host.isNullOrEmpty() && url.rawUserInfo == null && url.rawPath in listOf("", "/") && url.rawQuery == null && url.rawFragment == null
+    }
+    /** Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok. */
+    fun isFileOrigin(origin: String): Boolean {
+        if (!origin.startsWith("file://")) return false
+        val rest = origin.substring(7)
+        return rest.isEmpty() || rest.startsWith("/") && rest.none { it in "?#@\\" }
+    }
+    /** 403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır. */
+    fun rejectedOriginLine(request: Request): String =
+        "altyazı sunucusu isteği reddetti (403): Origin \"${(request.origin ?: "").take(120)}\" kabul edilmedi (yol ${request.path}, Host ${request.host.take(80)})"
+    /** Reddedilen Origin değerlerini günlüğe bir kez yazdırır: aynı değer tekrar yazılmaz, en çok 16 farklı değer. */
+    class RejectedOrigins {
+        private val seen = HashSet<String>()
+        /** Yazılacak satır; bu Origin daha önce yazıldıysa ya da sınır dolduysa null. */
+        fun line(request: Request): String? {
+            val fresh = synchronized(seen) { seen.size < 16 && seen.add(request.origin ?: "") }
+            return if (fresh) rejectedOriginLine(request) else null
+        }
     }
     fun originAllowed(request: Request): Boolean {
         val value = request.origin ?: return true

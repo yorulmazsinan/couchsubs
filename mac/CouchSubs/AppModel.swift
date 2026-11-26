@@ -2829,7 +2829,7 @@ final class AppModel: ObservableObject {
         do {
             result = try await RegionTranslation.translateOnce(frame, region: region, reader: reader, translator: makeTranslator())
         } catch let error as TranslatorError {
-            translatorStatus = Self.translatorStatus(after: error)
+            translatorStatus = TranslatorStatus.after(error, onlineActive: onlineTranslationActive)
             return (.translatorUnavailable, nil)
         } catch {
             return (.failed, nil)
@@ -2949,7 +2949,7 @@ final class AppModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch let error as TranslatorError {
-                self?.translatorStatus = Self.translatorStatus(after: error)
+                if let self { self.translatorStatus = TranslatorStatus.after(error, onlineActive: self.onlineTranslationActive) }
                 // İzlemenin yenilemesi başarısızsa eski kart kalır; aynı görüntü yeniden denenmez.
                 if refresh { self?.followPhone(in: frame) } else { self?.showScreenFailure(error, translator: translator) }
             } catch {
@@ -3233,8 +3233,10 @@ final class AppModel: ObservableObject {
         }
         pipeline.onMetrics = { [weak self] metrics in self?.lastMetrics = metrics }
         // Dil paketi bu arada indirilmiş olabilir; her çeviri sonucu durumu günceller.
+        // Çevrimiçi motor açıkken yerel yedeğin bu Mac'te olmaması gösterilmez: motorun hatası ayrı uyarıda (#1322).
         pipeline.onTranslationResult = { [weak self] error in
-            self?.translatorStatus = Self.translatorStatus(after: error)
+            guard let self else { return }
+            self.translatorStatus = TranslatorStatus.after(error, onlineActive: self.onlineTranslationActive)
         }
         pipeline.onReadResult = { [weak self] error in self?.noteRead(error) }
         pipeline.onSpeech = { [weak self] lines in self?.speak(lines) }
@@ -3720,11 +3722,7 @@ final class AppModel: ObservableObject {
     }
 
     static func translatorStatus(after error: TranslatorError?) -> TranslatorStatus {
-        switch error {
-        case nil: .ready
-        case .needsDownload: .needsDownload
-        case .unsupported: .unsupported
-        }
+        TranslatorStatus.after(error, onlineActive: false)
     }
 
     /// Çeviri başlamamışken bağlı olmamak bir sorun değildir; nokta gri kalır.

@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "The free translation doesn't work on this system, so meanwhile only game packs translate.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "The free translation doesn't work on this system, so meanwhile only game packs translate."}}, "tr": {"stringUnit": {"state": "translated", "value": "Ücretsiz çeviri bu sistemde çalışmıyor; bu arada yalnız oyun paketleri çeviriyor."}}}},
     "The Xbox connection dropped. Press Reconnect; if it keeps dropping, connect the Xbox with a network cable or restart it.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "The Xbox connection dropped. Press Reconnect; if it keeps dropping, connect the Xbox with a network cable or restart it."}}, "tr": {"stringUnit": {"state": "translated", "value": "Xbox bağlantısı koptu. Yeniden bağlan'a basın; sık kopuyorsa Xbox'ı ağa kabloyla bağlayın ya da yeniden başlatın."}}}},
     "Voice for Unknown Characters": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Voice for Unknown Characters"}}, "tr": {"stringUnit": {"state": "translated", "value": "Tanınmayan Karakterlerin Sesi"}}}},
     "Voice for unknown characters": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Voice for unknown characters"}}, "tr": {"stringUnit": {"state": "translated", "value": "Tanınmayan karakterlerin sesi"}}}},

@@ -56,6 +56,8 @@ targets:
       - path: ../mac/CouchSubs/UI/DubbingVoiceText.swift
       # Yerel model sunucusunun durum iletileri Mac uygulamasıyla ortak.
       - path: ../mac/CouchSubs/UI/LocalAIText.swift
+      # Çevrimiçi motor hatasının ana ekran uyarısı Mac uygulamasıyla ortak (GitHub #1322).
+      - path: ../mac/CouchSubs/UI/OnlineIssueText.swift
       # Altyazı bölgesinin canlı önizlemesi (sürüklenen çerçeve).
       - path: ../mac/CouchSubs/UI/RegionPreview.swift
       # Ekran yazısının yerinde birebir çizimi (ScreenFit.exact; Mac yayın penceresiyle aynı görünüm).

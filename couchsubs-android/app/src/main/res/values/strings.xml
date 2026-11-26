@@ -925,4 +925,11 @@
     <string name="tv_remove_pairing">Eşleşmeyi Kaldır</string>
     <string name="tv_remove_pairing_title">Eşleşme Kaldırılsın mı?</string>
     <string name="tv_remove_pairing_confirm">Eşli TV kaldırılacak. TV\'yi Değiştir ile yeniden TV seçebilirsiniz.</string>
+    <string name="online_issue_title">%1$s şu an çevirmiyor</string>
+    <string name="online_issue_invalid">%1$s bu anahtarı kabul etmedi. Hesap sayfanızdan yeniden kopyalayın.</string>
+    <string name="online_issue_quota">%1$s hesabınızda bakiye kalmadı ya da sınıra ulaşıldı.</string>
+    <string name="online_issue_model">%1$s isteği kabul etmedi. Diğer modeli seçin ya da daha sonra yeniden deneyin.</string>
+    <string name="online_issue_unreachable">%1$s hizmetine ulaşılamadı. İnternet bağlantınızı denetleyin.</string>
+    <string name="online_issue_busy">%1$s şu an yoğun ya da zamanında yanıt vermedi. Biraz sonra yeniden deneyin ya da daha hızlı modeli seçin.</string>
+    <string name="online_issue_meanwhile">Bu arada ücretsiz çeviri kullanılıyor.</string>
 </resources>

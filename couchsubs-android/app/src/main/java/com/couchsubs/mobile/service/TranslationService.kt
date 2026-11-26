@@ -1471,7 +1471,16 @@ class TranslationService : Service() {
     private fun engineTranslator(free: TextTranslator): TextTranslator =
         (onlineTranslator(free) ?: free).let { if (demo) DemoTranslator(it) else it }
 
-    private fun onlineTranslator(free: TextTranslator): TextTranslator? {
+    private fun onlineTranslator(free: TextTranslator): TextTranslator? =
+        onlineEngine(free)?.also { online ->
+            // Motor çeviremeyince nedeni ana ekranda söylenir, düzelince kalkar (GitHub #1322; Mac/iPhone/Windows ile aynı).
+            online.onFailureChanged = { state ->
+                if (state != null) Log.i(TAG, "çevrimiçi motor çeviremedi: ${settings.engine} $state; yedek: ücretsiz çeviri")
+                LiveState.update { it.copy(onlineIssue = state) }
+            }
+        }
+
+    private fun onlineEngine(free: TextTranslator): com.couchsubs.mobile.translation.SentenceTranslator<*>? {
         // Çevrimiçi motorlar yalnız İngilizce oyunları çevirir; diğer oyun dilleri ücretsiz çeviriyle (Mac/iPhone ile aynı).
         if (settings.sourceLanguage != "en") return null
         val engine = settings.engine

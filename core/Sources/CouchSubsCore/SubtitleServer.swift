@@ -218,6 +218,8 @@ public final class SubtitleServer: @unchecked Sendable {
     private var key: String
     private let allowLegacy: Bool
     public let pairing: SubtitlePairing
+    /// 403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132).
+    private let rejectedOrigins = SubtitleAccess.RejectedOrigins()
     public var onPairingRequest: (@Sendable (SubtitlePairing.Ticket) -> Void)?
     private var legacySeen = false
     public var onLegacyClient: (@Sendable () -> Void)?
@@ -1002,6 +1004,7 @@ public final class SubtitleServer: @unchecked Sendable {
         let access = SubtitleAccess.authorize(request, key: key, allowLegacy: allowLegacy)
         let cors = SubtitleAccess.cors(request)
         guard access.status == 200 else {
+            if access.status == 403, let line = rejectedOrigins.line(request) { SubtitleLog.write(line) }
             respondAndClose(connection, status: access.status == 403 ? "403 Forbidden" : "401 Unauthorized", cors: access.status == 403 ? "" : cors)
             return
         }
