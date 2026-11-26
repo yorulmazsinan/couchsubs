@@ -19,8 +19,10 @@ cp tv-tizen/platform.js tv-tizen/config.xml tv-tizen/icon.png "$OUT/"
 # Panel başlığındaki küçük simge webOS'taki gibi icon.png adını kullanamaz: Tizen'in simgesi büyüktür.
 # Samsung'un ürün API'leri (ekran koruyucuyu kapatmak için webapis.appcommon) platform.js'ten önce yüklenir.
 # Görünüm ortak sayfadaki gibi sabit "width=1920" kalır: Samsung UHD TV'de web uygulamasının standart çözünürlüğü
-# (0.9.55; config.xml'deki açıklama). Geniş yüzeyde görünümü platform.js genişletir.
+# (0.9.55; config.xml'deki açıklama). Geniş yüzeyde görünümü platform.js genişletir. LG Full HD için sayfa açılırken
+# görünümü değiştiren blok (#1098, yalnız PalmSystem'de çalışır) Samsung paketine girmez.
 sed -e 's/src="icon.png"/src="panel-icon.png"/' \
+    -e '/<!-- LG Full HD/,/<\/script>/d' \
     -e 's|  <script src="platform.js"></script>|  <script src="$WEBAPIS/webapis/webapis.js"></script>\n  <script src="platform.js"></script>|' \
     tv-webos/index.html > "$OUT/index.html"
 # Masaüstü uygulamalarına gömülen imzasız paket: CouchSubs kurarken TV'ye özel sertifikayla imzalar.

@@ -6,13 +6,62 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.116';
+  var APP_VERSION = '0.9.117';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
   var KEY = { RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: platform.backKey };
-  // Sayfa ölçüleri (innerWidth, clientWidth ...) window.COUCHSUBS_ZOOM'a bölünür (platform sayfayı CSS zoom ile
-  // büyütürse; Samsung 0.9.55'ten beri büyütmez, değer tanımsız yani 1).
+  // Sayfa ölçüleri pageSize()/pageRect() ile alınır (platform sayfayı CSS zoom ile ölçeklerse window.COUCHSUBS_ZOOM;
+  // Samsung 0.9.55'ten beri ölçeklemez, değer tanımsız yani 1).
+
+  // --- Sayfa ölçüsü (#1098) ---
+  // Eski LG'de (43LH590V, webOS 3.x, Chromium 38) platform.js sayfayı CSS zoom ile 1920x1080 uzayına sığdırır
+  // (COUCHSUBS_ZOOM 0.6667). Chromium 38 kök öğenin clientWidth/clientHeight'ını ve getBoundingClientRect'i zaten bu
+  // ölçekli uzayda (1920x1080) verir; yeni Chromium ekran pikselinde (1280x720). 0.9.115'te ölçüler her yerde zoom'a bir
+  // kez daha bölünüyordu: eski LG sayfayı 2880x1620 sandı (tanı satırı "y 159-244/1619.9"), "Ekranı çevir" kutuları,
+  // oyunun altyazısının yerine göre konan çeviri, telefon ve örtü 1,5 kat uzağa, ekranın sağ ve alt üçte birinin dışına
+  // çiziliyordu (yalnız yüzdeyle konan deneme altyazısı görünüyordu). Sayfanın uzayı ekranı kaplayan sabit bir ölçü
+  // öğesinin offset ölçüsüdür (iki tarayıcıda da ölçekli uzay); dikdörtgenlerin ölçeği aynı öğenin dikdörtgeni / offset
+  // ölçüsüdür (Chromium 38'de 1, yeni Chromium'da zoom). Ölçek yoksa (bütün diğer TV'ler) eski ölçüler aynen kullanılır.
+  var pageProbe = null;
+  // inner: ölçek yokken innerWidth/innerHeight (kutu yerleşimi), yoksa kök öğenin clientWidth/clientHeight'ı.
+  function pageSize(inner) {
+    var root = document.documentElement || {};
+    var width = (inner ? 0 : root.clientWidth) || window.innerWidth || 1920;
+    var height = (inner ? 0 : root.clientHeight) || window.innerHeight || 1080;
+    var zoom = window.COUCHSUBS_ZOOM || 1;
+    if (zoom === 1) return { width: width, height: height, scale: 1 };
+    try {
+      if (!pageProbe || !pageProbe.parentNode) {
+        pageProbe = document.createElement('div');
+        pageProbe.id = 'page-probe';
+        pageProbe.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;visibility:hidden;pointer-events:none;z-index:-1';
+        (document.body || document.documentElement).appendChild(pageProbe);
+      }
+      var w = pageProbe.offsetWidth;
+      var h = pageProbe.offsetHeight;
+      if (w > 0 && h > 0) {
+        var r = pageProbe.getBoundingClientRect();
+        var scale = r.width > 0 ? r.width / w : 1;
+        return { width: w, height: h, scale: Math.abs(scale - 1) < 0.005 ? 1 : scale };
+      }
+    } catch (e) {}
+    return { width: width / zoom, height: height / zoom, scale: zoom };
+  }
+
+  // Ekrandaki dikdörtgen (getBoundingClientRect, getClientRects) sayfa uzayında.
+  function pageRect(r, scale) {
+    var s = scale || pageSize().scale;
+    if (s === 1 || !r) return r;
+    return { left: r.left / s, top: r.top / s, right: r.right / s, bottom: r.bottom / s, width: r.width / s, height: r.height / s };
+  }
+
+  // Tanı satırı için: sayfanın uzayı ve dikdörtgen ölçeği ("pg 1920x1080 r 0.67"; ölçek yoksa boş).
+  function pageText() {
+    if ((window.COUCHSUBS_ZOOM || 1) === 1) return '';
+    var page = pageSize();
+    return 'pg ' + Math.round(page.width) + 'x' + Math.round(page.height) + ' r ' + Math.round(page.scale * 100) / 100;
+  }
 
   var server = null;
   var eventSource = null;
@@ -121,7 +170,8 @@
     if (!el || !$('panel') || $('panel').className === 'hidden') return;
     var text = '';
     try { text = typeof platform.diagnostics === 'function' ? String(platform.diagnostics() || '') : ''; } catch (e) { text = ''; }
-    var page = 'reg ' + diag.regions + ' · big ' + diag.big + ' · ' + coverageText() +
+    var size = pageText();
+    var page = (size ? size + ' · ' : '') + 'reg ' + diag.regions + ' · big ' + diag.big + ' · ' + coverageText() +
       (diag.speechWeb || diag.speechElement ? ' · tts w' + diag.speechWeb + ' a' + diag.speechElement : '') +
       // Dublaj çalarken açık Web Audio bağlamı (dublaj hiç çalmadıysa bağlam yoktur, HDMI sesine karışamaz).
       (audioContext ? ' ac ' + audioContext.state : '');
@@ -145,11 +195,12 @@
     var panel = $('panel');
     if (!panel || panel.className === 'hidden') return;
     try {
-      var zoom = window.COUCHSUBS_ZOOM || 1;
-      var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / zoom;
-      var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / zoom;
+      var page = pageSize();
+      var width = page.width;
+      var height = page.height;
       var visual = window.visualViewport;
-      if (visual && visual.height > 0 && visual.width > 0) {
+      // Görsel görünüm ekran pikselindedir; sayfa uzayına çevrilir.
+      if (visual && visual.height > 0 && visual.width > 0 && (window.COUCHSUBS_ZOOM || 1) === 1) {
         width = Math.min(width, visual.width);
         height = Math.min(height, visual.height);
       }
@@ -167,11 +218,11 @@
     var count = 0;
     var largest = 0;
     try {
-      var width = (window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-      var height = (window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+      var width = pageSize(true).width;
+      var height = pageSize(true).height;
       var boxes = document.querySelectorAll('#screen .item, #regions .item, #regions .region, #subtitle-cover');
       for (var i = 0; i < boxes.length; i++) {
-        var rect = boxes[i].getBoundingClientRect();
+        var rect = pageRect(boxes[i].getBoundingClientRect());
         if (!(rect.width > 0 && rect.height > 0)) continue;
         count++;
         largest = Math.max(largest, rect.width * rect.height / (width * height));
@@ -908,8 +959,8 @@
 
   function coverSize(textId) {
     if (textId !== 'subtitle-text' || placement !== 'cover' || !currentBox) return null;
-    var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var width = pageSize().width;
+    var height = pageSize().height;
     var box = coverBounds(screenBox(currentBox, isOverlay()), isOverlay());
     return {
       width: bandShape ? width : (box.right - box.left) * width,
@@ -918,7 +969,7 @@
   }
 
   function wrapToWidth(text, el, size, cover) {
-    var viewport = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
+    var viewport = pageSize().width;
     // Yatay iç boşluk iki yanda 0.5em: toplam bir yazı boyu.
     var room = viewport * WRAP_WIDTH - size;
     var width = lineWidths(el, text, size);
@@ -960,7 +1011,7 @@
   function coverWrap(text, el, base, cover) {
     if (text.indexOf('\n') >= 0) return { text: text, scale: 1 };
     var words = wrapTokens(text);
-    var viewport = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
+    var viewport = pageSize().width;
     var room = viewport * WRAP_WIDTH - base;
     var width = lineWidths(el, text, base);
     if (!width || room <= 0) return wrapAt(text);
@@ -1028,18 +1079,19 @@
       range.selectNodeContents(el);
       var rects = range.getClientRects ? range.getClientRects() : null;
       if (!rects || !rects.length) return;
+      var scale = pageSize().scale;
       var left = Infinity;
       var right = -Infinity;
       for (var i = 0; i < rects.length; i++) {
         if (!(rects[i].width > 0)) continue;
-        left = Math.min(left, rects[i].left);
-        right = Math.max(right, rects[i].right);
+        left = Math.min(left, rects[i].left / scale);
+        right = Math.max(right, rects[i].right / scale);
       }
       if (!(right > left)) return;
       var style = window.getComputedStyle(el);
       var pad = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
       var needed = Math.ceil(right - left + pad) + 1;
-      if (el.getBoundingClientRect().width - needed > 4) el.style.width = needed + 'px';
+      if (pageRect(el.getBoundingClientRect(), scale).width - needed > 4) el.style.width = needed + 'px';
     } catch (e) {
       el.style.width = '';
     }
@@ -1105,9 +1157,9 @@
   // Yazının ekrandaki gerçek yeri ve görünürlüğü (tanı için).
   function notePlace() {
     var el = $('subtitle-text');
-    var rect = el.getBoundingClientRect();
-    var height = (document.documentElement.clientHeight || window.innerHeight || 0) / (window.COUCHSUBS_ZOOM || 1);
-    diag.place = 'y ' + Math.round(rect.top) + '-' + Math.round(rect.bottom) + '/' + height + ' ' +
+    var rect = pageRect(el.getBoundingClientRect());
+    var height = pageSize().height;
+    diag.place = 'y ' + Math.round(rect.top) + '-' + Math.round(rect.bottom) + '/' + Math.round(height) + ' ' +
       window.getComputedStyle($('subtitle')).visibility + ' f' + window.getComputedStyle(el).fontSize;
     renderDiag();
   }
@@ -1275,7 +1327,7 @@
   var DIALOGUE_MIN_SHARE = 0.022;
 
   function dialogueMinFont(height) {
-    var page = height || (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var page = height || pageSize().height;
     return Math.max(12, Math.round(page * DIALOGUE_MIN_SHARE));
   }
 
@@ -1669,8 +1721,8 @@
 
   function placeItems(host, items, regionId) {
     var phone = regionId === 'game-phone';
-    var width = (window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-    var height = (window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var width = pageSize(true).width;
+    var height = pageSize(true).height;
     var pad = phone ? 0.001 : SCREEN_PAD;
     var minWidth = phone ? 1 : 80;
     var card = panelCard(items);
@@ -2308,6 +2360,7 @@
     probe.style.left = '-10000px';
     probe.style.top = '0';
     host.appendChild(probe);
+    var scale = pageSize().scale;
     var inputs = [];
     for (var i = 0; i < items.length; i++) inputs.push(exactInput(items[i], width, height));
     function measure(text, size, index) {
@@ -2316,7 +2369,7 @@
       probe.style.fontSize = size + 'px';
       probe.textContent = text;
       // Ölçü yukarı yuvarlanır: kesirli piksel yazıyı kutudan taşırmasın.
-      return Math.ceil(probe.getBoundingClientRect().width / (window.COUCHSUBS_ZOOM || 1)) + 1;
+      return Math.ceil(pageRect(probe.getBoundingClientRect(), scale).width) + 1;
     }
     var placed = exactLayout(inputs, measure);
     host.removeChild(probe);
@@ -2477,8 +2530,8 @@
       return;
     }
     if (tooBig(box)) return hideRegion(id);
-    var width = (window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-    var height = (window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var width = pageSize(true).width;
+    var height = pageSize(true).height;
     fillText(el, data.text, data.icons);
     el.style.left = el.style.right = el.style.top = el.style.bottom = '';
     if ((box.left + box.right) / 2 > 0.5) {
@@ -2628,7 +2681,7 @@
     for (var i = 0; i < ids.length; i++) {
       var part = $(ids[i]);
       if (!part || (ids[i] === 'subtitle-cover' && part.className === 'hidden')) continue;
-      var r = part.getBoundingClientRect();
+      var r = pageRect(part.getBoundingClientRect());
       if (r.width > 0 && r.height > 0) rects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
     }
     return rects;
@@ -2668,7 +2721,7 @@
     for (var i = 0; i < parts.length; i++) setShift(parts[i].el, 0);
     avoidPhone();
     if (!parts.length) return;
-    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var height = pageSize().height;
     var gap = Math.max(4, Math.round(height * AVOID_GAP));
     var placed = [];
     var fixed = subtitleRects();
@@ -2678,7 +2731,7 @@
     for (var j = 0; j < parts.length; j++) {
       var el = parts[j].el;
       if (el.style.visibility === 'hidden') continue;
-      var b = el.getBoundingClientRect();
+      var b = pageRect(el.getBoundingClientRect());
       if (!(b.width > 0) || !(b.height > 0)) continue;
       var r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
       var dy = freeShift(r, parts[j].layer, placed, gap, height);
@@ -2700,7 +2753,7 @@
     var list = host.className === 'region-blocks' ? host.children : [host];
     var rect = null;
     for (var i = 0; i < list.length; i++) {
-      var r = list[i].getBoundingClientRect();
+      var r = pageRect(list[i].getBoundingClientRect());
       if (!(r.width > 0) || !(r.height > 0)) continue;
       rect = rect ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top),
         right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom) }
@@ -2722,10 +2775,10 @@
     setSubtitleShift(0, 0);
     var phone = el.className === 'hidden' ? null : phoneRect();
     if (!phone) return;
-    var sub = $('subtitle-text').getBoundingClientRect();
+    var sub = pageRect($('subtitle-text').getBoundingClientRect());
     if (!(sub.width > 0) || !(sub.height > 0)) return;
-    var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var width = pageSize().width;
+    var height = pageSize().height;
     var gap = Math.max(4, Math.round(width * PHONE_GAP));
     if (sub.right + gap <= phone.left || sub.left - gap >= phone.right ||
         sub.bottom + gap <= phone.top || sub.top - gap >= phone.bottom) return;
@@ -2812,7 +2865,7 @@
     // Altyazı yokken (ör. ayar değişince yeniden yerleşirken) örtü tek başına boş siyah kutu olarak kalmasın.
     if (!box || el.className === 'hidden') return avoidRegions();
 
-    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var height = pageSize().height;
     // "Üstünde"/"Altında": çevirinin kutusu ile İngilizce satır arasında ekran yüksekliğinin %2,4'ü (1080'de 26 piksel,
     // 46 piksellik yazıda satır yüksekliğinin ~%45'i) boşluk. Eskiden %1,2 (13 piksel) idi; oyunun bildirdiği kutu harflere
     // sıkı oturduğundan çevirinin zemini İngilizce yazıya değiyormuş gibi görünüyordu (X, beta.90). OBS katmanı ile aynı.
@@ -2832,7 +2885,7 @@
       // İngilizce yazı koyu bir zeminle örtülür, çeviri onun ortasına gelir.
       var middle = (1 - (box.top + box.bottom) / 2) * height;
       el.style.bottom = Math.max(0, Math.round(middle - $('subtitle-text').offsetHeight / 2)) + 'px';
-      placeCover(cover, box, $('subtitle-text').getBoundingClientRect());
+      placeCover(cover, box, pageRect($('subtitle-text').getBoundingClientRect()));
       // Zemini örtü verir; çevirinin kendi yarı saydam zemini örtünün üstünde ikinci bir kutu gibi görünmesin.
       $('subtitle-text').style.background = 'transparent';
     } else if (mode === 'above') {
@@ -2877,8 +2930,8 @@
   }
 
   function placeCover(cover, box, text) {
-    var width = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
-    var height = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
+    var width = pageSize().width;
+    var height = pageSize().height;
     var bounds = coverBounds(box, isOverlay());
     var left = bounds.left * width;
     var top = bounds.top * height;
@@ -2907,9 +2960,9 @@
   // Bazı TV'lerde (Samsung, Android TV) sayfanın bildirdiği yükseklik ekranla uyuşmayabiliyor; altyazı ekranın
   // dışına düşerse hiç görünmüyordu. Yerleştirilen altyazı görünür alanda değilse sabit yüksekliğe döner.
   function keepOnScreen(el, cover) {
-    var rect = el.getBoundingClientRect();
-    var viewHeight = (document.documentElement.clientHeight || window.innerHeight || 1080) / (window.COUCHSUBS_ZOOM || 1);
-    var viewWidth = (document.documentElement.clientWidth || window.innerWidth || 1920) / (window.COUCHSUBS_ZOOM || 1);
+    var rect = pageRect(el.getBoundingClientRect());
+    var viewHeight = pageSize().height;
+    var viewWidth = pageSize().width;
     var visible = rect.height > 0 && rect.top >= -2 && rect.bottom <= viewHeight + 2 && rect.right > 0 && rect.left < viewWidth;
     if (visible) return;
     el.style.left = '8%';

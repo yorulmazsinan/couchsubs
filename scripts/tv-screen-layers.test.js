@@ -48,6 +48,7 @@ function render() {
       function $(id) { return document.getElementById(id); }
       function hideSubtitle() {}
       var diag = { regions: 0, big: 0 };
+      ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
       ${app.slice(validStart, validEnd)}
       ${needsFill ? app.slice(fillStart, fillEnd) : ''}
       ${app.slice(start, end)}

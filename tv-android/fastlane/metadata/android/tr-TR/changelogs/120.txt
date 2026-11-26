@@ -1,0 +1,1 @@
+0.9.117: Eski LG Full HD TV'lerde sayfa açılırken ekranın tamamına yerleşiyor; ölçekli sayfada ekran çevirisi kutuları, alttaki altyazı ve telefon kartları ekranın içinde ve yerinde çiziliyor.

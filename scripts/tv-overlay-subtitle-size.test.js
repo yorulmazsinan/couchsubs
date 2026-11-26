@@ -62,6 +62,8 @@ function render(cssWidth, cssHeight, ratio, android) {
     function dimmedColor(id, color) { return color; }
     var diag = { regions: 0, big: 0 };
     var setApart = true, bandShape = false, placement = 'cover', currentBox = ${JSON.stringify(BOX)}, fontBase = 46;
+    // Sayfa ölçüsü (app.js pageSize/pageRect, #1098).
+    ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
     ${slice('  function validBox(box)', '\n  //')}
     ${slice('  function fillText(el, text, icons)', '\n  //')}
     ${slice('  function speakerMap(list)', '\n  var SUBTITLE_MAX_HEIGHT')}

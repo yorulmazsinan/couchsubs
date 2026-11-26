@@ -1,0 +1,1 @@
+0.9.117: On older LG Full HD TVs the page fits the whole screen from launch; on the scaled page, screen translation boxes, the subtitle at the bottom and phone cards are drawn inside the screen and in place.

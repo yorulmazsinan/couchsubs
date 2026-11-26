@@ -34,6 +34,7 @@ function render() {
     var hideTimer = null, shownAt = 0, diag = {};
     function renderDiag() {}
     function hidePrevious() {}
+    ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
     ${app.slice(start, end)}
     ${app.slice(hideStart, hideEnd)}
     function box(id, left, top, w, h) {

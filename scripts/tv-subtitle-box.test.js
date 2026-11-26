@@ -29,6 +29,7 @@ function render() {
     <div id="subtitle" style="left:0;right:0;width:1000px"><span id="subtitle-text"></span></div><pre id="result"></pre><script>
     function $(id) { return document.getElementById(id); }
     var bandShape = false;
+    ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
     ${app.slice(start, end)}
     function measure(el) {
       var range = document.createRange(); range.selectNodeContents(el);

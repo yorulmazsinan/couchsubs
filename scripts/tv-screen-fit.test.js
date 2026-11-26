@@ -59,6 +59,8 @@ function render(width, height, zoom, shot) {
       function resolveLayers() {}
       var diag = { regions: 0, big: 0 };
       var setApart = true;
+      // Sayfa ölçüsü (app.js pageSize/pageRect, #1098).
+      ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
       ${slice('  function validBox(box)', '\n  //')}
       ${slice('  function fillText(el, text, icons)', '\n  //')}
       ${slice('  var screenTimer = null;', '\n  // --- Ek alanlar')}

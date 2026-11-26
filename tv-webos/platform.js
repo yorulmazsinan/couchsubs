@@ -67,9 +67,23 @@
       var root = document.documentElement || {};
       var iw = root.clientWidth || window.innerWidth || 0;
       var ih = root.clientHeight || window.innerHeight || 0;
-      return 'scr ' + (scr.width || '?') + 'x' + (scr.height || '?') + ' dpr ' + Math.round(dpr * 100) / 100 +
+      var text = 'scr ' + (scr.width || '?') + 'x' + (scr.height || '?') + ' dpr ' + Math.round(dpr * 100) / 100 +
         ' vp ' + (screenFit.content === 'width=device-width' ? 'device' : PAGE_WIDTH) +
         (screenFit.zoom !== 1 ? ' z ' + screenFit.zoom : '') + ' iw ' + iw + 'x' + ih;
+      // Ölçek varsa (#1098): görünüm sayfa ayrıştırılırken mi alındı (early), tarayıcının görünüm alanı (in: innerWidth x
+      // innerHeight; LG grafik çözünürlüğü) ve ekranın sağ alt köşesinin sayfaya düşüp düşmediği (br: oradaki öğe, "-"
+      // ise sayfa orada çizilmiyor; 43LH590V'de sayfa yalnız sol üst 1280x720'de çiziliyordu).
+      if (screenFit.zoom !== 1 || window.COUCHSUBS_EARLY_VIEWPORT) {
+        var corner = null;
+        try {
+          var w = window.innerWidth || 0;
+          var h = window.innerHeight || 0;
+          corner = document.elementFromPoint ? document.elementFromPoint(Math.floor(w * 0.95), Math.floor(h * 0.95)) : null;
+        } catch (e) {}
+        text += (window.COUCHSUBS_EARLY_VIEWPORT ? ' early' : '') + ' in ' + (window.innerWidth || 0) + 'x' +
+          (window.innerHeight || 0) + ' br ' + (corner ? (corner.id || corner.tagName || '?') : '-');
+      }
+      return text;
     } catch (e) {
       return 'scr ?';
     }

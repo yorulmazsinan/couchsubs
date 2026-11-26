@@ -56,6 +56,7 @@ function page(script, source) {
     function hideSubtitle() {}
     var diag = { regions: 0, big: 0 };
     var SIDE_MIN = 0.05;
+    ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
     ${valid}
     ${fill}
     ${screen}

@@ -58,6 +58,7 @@ function render(width, height) {
       function $(id) { return document.getElementById(id); }
       var hidden = []; function hideSubtitle(reason) { hidden.push(reason); }
       var diag = { regions: 0, big: 0 };
+      ${app.indexOf('  var pageProbe = null;') >= 0 ? app.slice(app.indexOf('  var pageProbe = null;'), app.indexOf('\n  var server = null;')) : ''}
       ${app.slice(validStart, validEnd)}
       ${app.slice(start, end)}
       ${app.slice(regionStart, regionEnd)}

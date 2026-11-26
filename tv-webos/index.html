@@ -10,6 +10,25 @@
        sığdırma ölçeğini MainActivity hesaplar. Samsung paketi de bu görünümü kullanır (Samsung UHD TV'de
        web uygulamasının standart çözünürlüğü); geniş yüzeyde görünümü tv-tizen/platform.js genişletir (#304). -->
   <meta name="viewport" content="width=1920">
+  <!-- LG Full HD modellerinin grafik katmanı 1280x720 (LG: "Full HD models support graphics display resolution up to
+       1280x720"). 43LH590V'de (webOS 3.x, #1098) sabit 1920 görünümde sayfa yalnız sol üst 1280x720 CSS pikselinde
+       çiziliyor (ekranın sol üst üçte ikisi); platform.js'in görünümü sayfa açıldıktan sonra değiştirmesi bu TV'de
+       işlemedi (tanı satırı "iw 1920x1080" kaldı, sayfa CSS zoom ile küçülüp sol üste sığdı; sağ ve alt üçte birdeki
+       çeviriler, alttaki altyazı ve telefon görünmedi). Ekranı 1920'den dar ya da piksel oranı 1 olmayan LG'de görünüm sayfa
+       ayrıştırılırken ekran genişliğine alınır (son viewport etiketi geçerlidir); platform.js sayfayı yine zoom ile
+       1920x1080 uzayına sığdırır. Diğer TV'lerde (PalmSystem yok, ya da 1920 ekran) hiçbir şey değişmez. -->
+  <script>
+    (function () {
+      try {
+        var s = window.screen || {};
+        var r = window.devicePixelRatio || 1;
+        if (window.PalmSystem && s.width > 0 && s.height > 0 && (s.width < 1920 || Math.abs(r - 1) >= 0.01)) {
+          document.write('<meta name="viewport" content="width=device-width">');
+          window.COUCHSUBS_EARLY_VIEWPORT = 1;
+        }
+      } catch (e) {}
+    })();
+  </script>
   <title>CouchSubs</title>
   <link rel="stylesheet" href="style.css">
 </head>
