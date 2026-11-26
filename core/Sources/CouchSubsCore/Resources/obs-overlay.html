@@ -261,7 +261,10 @@
   /// "Örtsün"ün zemini seçilen zemin renginde ve "Zemin koyuluğu"ndan bağımsız tam opaktır: oyundaki altyazıyı kapatmak bu
   /// yerleşimin işi (TV app.js ownBackground ile aynı). Eskiden koyuluğu izliyordu (#225): varsayılan %72'de ve kaydırıcı
   /// düşükken İngilizce satır Türkçenin altından görünüyordu (X, MertTurna19). Renkli sayfada (chroma key) siyah.
+  /// "Zeminsiz" (koyuluk 0) seçildiyse örtü de çizilmez (beta.105, #1378: zeminsiz seçim tam opak kutuya dönüyordu, X).
   function coverColor() {
+    var bg = fixed.bg !== null ? Number(fixed.bg) : (lastStyle && lastStyle.background);
+    if (typeof bg === 'number' && !isNaN(bg) && bg <= 0) return 'transparent';
     return pageColor ? '#000' : 'rgb(' + boxRgb + ')';
   }
 

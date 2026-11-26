@@ -16,12 +16,22 @@ final class OverlayCoverTests: XCTestCase {
     /// Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.
     /// "Örtsün"ün güncel satırı her koyulukta tam opak (X, MertTurna19); öbür yerleşimlerde ve önceki satırda koyuluk geçerli.
     func testCoverBoxIsOpaqueAtEveryDarkness() {
-        for background in [0, 30, 72, 100] {
+        for background in [1, 30, 72, 100] {
             XCTAssertEqual(OverlayCover.boxOpacity(background: background, covering: true, current: true), 1)
         }
         XCTAssertEqual(OverlayCover.boxOpacity(background: 30, covering: false, current: true), 0.3, accuracy: 1e-9)
         XCTAssertEqual(OverlayCover.boxOpacity(background: 100, covering: true, current: false), 0.83, accuracy: 1e-9)
         XCTAssertEqual(OverlayCover.boxOpacity(background: 150, covering: false, current: true), 1)
+    }
+
+    /// "Zeminsiz" (koyuluk 0) "Örtsün"de de zemin çizmez (X, beta.105: saydam seçen kullanıcı gri kutu görüyordu).
+    func testNoBackgroundIsTransparentInEveryPlacement() {
+        for covering in [true, false] {
+            for current in [true, false] {
+                XCTAssertEqual(OverlayCover.boxOpacity(background: 0, covering: covering, current: current), 0)
+                XCTAssertEqual(OverlayCover.boxOpacity(background: -5, covering: covering, current: current), 0)
+            }
+        }
     }
 
     func testBoxesThatAreNotASubtitleKeepTheTextSizedBox() {

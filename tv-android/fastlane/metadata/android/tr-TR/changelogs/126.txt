@@ -1,0 +1,1 @@
+0.9.123: "Zeminsiz" seçildiğinde "Altyazının üstünü örtsün"de de altyazının arkasında kutu çizilmiyor.

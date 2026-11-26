@@ -35,7 +35,7 @@ public class OverlayPlacementTests
 
     /// <summary>"Örtsün"ün güncel satırı her koyulukta tam opak (X, MertTurna19); öbür yerleşimlerde ve önceki satırda koyuluk geçerli.</summary>
     [Theory]
-    [InlineData(0)]
+    [InlineData(1)]
     [InlineData(30)]
     [InlineData(72)]
     [InlineData(100)]
@@ -44,6 +44,18 @@ public class OverlayPlacementTests
         Assert.Equal(1.0, OverlayPlacement.BoxOpacity(background, covering: true, current: true));
         Assert.Equal(background / 100.0, OverlayPlacement.BoxOpacity(background, covering: false, current: true), 9);
         Assert.Equal(background / 100.0 * 0.83, OverlayPlacement.BoxOpacity(background, covering: true, current: false), 9);
+    }
+
+    /// <summary>"Zeminsiz" (koyuluk 0) "Örtsün"de de zemin çizmez (X, beta.105: saydam seçen kullanıcı gri kutu görüyordu).</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void NoBackgroundIsTransparentInEveryPlacement(bool covering, bool current)
+    {
+        Assert.Equal(0.0, OverlayPlacement.BoxOpacity(0, covering, current));
+        Assert.Equal(0.0, OverlayPlacement.BoxOpacity(-5, covering, current));
     }
 
     /// <summary>Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.</summary>

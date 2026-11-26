@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.122';
+  var APP_VERSION = '0.9.123';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -3066,7 +3066,8 @@
   // Çevirinin kendi zemini. "Örtsün"de (örtü çizilemeyen, yeri gelmeyen satırda da) zemin hep tam opaktır: oyundaki
   // altyazıyı kapatmak bu yerleşimin işi. Eskiden örtü ve bu zemin "Zemin koyuluğu"nu izliyordu (#225); varsayılan %72'de
   // ve kaydırıcı düşükken İngilizce satır Türkçenin altından görünüyor, test yazısı zeminsiz kalıyordu (X, MertTurna19, TV).
-  // Saydam zemin isteyen "Üstünde"/"Altında"/"Sabit"i seçer; orada koyuluk aynen geçerlidir.
+  // Saydam zemin isteyen "Üstünde"/"Altında"/"Sabit"i seçer; orada koyuluk aynen geçerlidir. "Zeminsiz" (koyuluk 0) her
+  // yerleşimde zeminsizdir (coverBackground 'transparent').
   function ownBackground() {
     return placement === 'cover' && !SUBTITLE_BAND ? coverBackground || 'rgb(0, 0, 0)' : textBackground;
   }
@@ -3156,7 +3157,8 @@
     if (typeof style.background === 'number') {
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;
       // Zemin saydamsa yazıya sert kontur eklenir (style.css, body.thin-bg).
-      setBodyClass('thin-bg', alpha < 0.5 && placement !== 'cover');
+      // "Zeminsiz" (koyuluk 0) "Örtsün"de de zeminsizdir; o zaman yazıya kontur eklenir.
+      setBodyClass('thin-bg', alpha < 0.5 && (placement !== 'cover' || alpha === 0));
       // Yeni arayüz zemin rengini gönderir (style.backgroundColor, "#RRGGBB"); göndermeyen bilgisayarda siyah.
       // Siyah seçeneği saf siyah çizilir (tvBackgroundRgb).
       var rgb = tvBackgroundRgb(hexRgb(style.backgroundColor) || [0, 0, 0]);
@@ -3166,7 +3168,8 @@
       solidBackground = style.background >= 100;
       setBodyClass('solid-bg', solidBackground);
       textBackground = solidBackground ? 'rgb(' + base + ')' : 'rgba(' + base + ', ' + alpha + ')';
-      coverBackground = 'rgb(' + base + ')';
+      // "Zeminsiz" seçildiyse örtü de çizilmez (beta.105, #1378: zeminsiz seçim tam opak kutuya dönüyordu, X).
+      coverBackground = alpha > 0 ? 'rgb(' + base + ')' : 'transparent';
       var previousBackground = solidBackground ? textBackground : 'rgba(' + base + ', ' + (alpha * 0.83).toFixed(2) + ')';
       $('subtitle-text').style.background = ownBackground();
       $('subtitle-prev-text').style.background = previousBackground;

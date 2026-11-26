@@ -71,10 +71,16 @@ public static class OverlayPlacement
     /// Türkçenin altından görünüyordu (X, MertTurna19). Öbür yerleşimlerde ve önceki satırlarda koyuluk aynen geçerli (önceki
     /// satır %83'ü). Mac/iPhone OverlayCover.boxOpacity, TV app.js ownBackground ve OBS katmanı aynı kural.
     /// </summary>
+    /// <remarks>
+    /// "Zeminsiz" (koyuluk 0) hiçbir yerleşimde zemin çizmez: beta.105'te (#1378) "Örtsün" (varsayılan yerleşim) zeminsiz
+    /// seçimi de tam opak kutuya çeviriyordu, saydam isteyen kullanıcı gri/siyah kutu görüyordu (X, beta.105).
+    /// </remarks>
     public static double BoxOpacity(int background, bool covering, bool current)
     {
+        var percent = Math.Clamp(background, 0, 100);
+        if (percent == 0) return 0;
         if (covering && current) return 1;
-        return Math.Clamp(background, 0, 100) / 100.0 * (current ? 1 : 0.83);
+        return percent / 100.0 * (current ? 1 : 0.83);
     }
 
     /// <summary>

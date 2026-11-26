@@ -274,7 +274,7 @@ test('TV: kısa çeviri iki satırlık İngilizce altyazıyı tamamen örter (ek
 test('TV: örtü her zemin koyuluğunda tam opak, İngilizce altyazı hiç görünmez (MertTurna19)', { skip }, (t) => {
   const subtitle = (text, box) => `__send('subtitle', ${JSON.stringify({ text, duration: 8000, box })});`;
   const red = {};
-  for (const background of [0, 30, 72]) {
+  for (const background of [1, 30, 72]) {
     const style = Object.assign(tvStyle('cover', 46, background), { backgroundColor: '#0E1A30' });
     red['cover' + background] = tvShot(`__send('style', ${JSON.stringify(style)});` + subtitle(SHORT, ENGLISH));
     red['medium' + background] = tvShot(`__send('style', ${JSON.stringify(style)});` + subtitle(MEDIUM, ENGLISH));
@@ -308,6 +308,37 @@ test('TV: "Örtsün"de yeri bilinmeyen test yazısının zemini tam opak, başka
   }
 });
 
+// X (beta.105): "Zeminsiz" seçen kullanıcı "Örtsün"de (varsayılan yerleşim) gri/siyah kutu görüyordu; #1378 örtüyü koyuluk
+// 0'da da tam opak yapmıştı. "Zeminsiz" her yerleşimde zeminsiz: örtü çizilmez, yazının kendi zemini saydam, kontur eklenir.
+test('TV: "Zeminsiz"de "Örtsün" kutu çizmez, yazı konturlu', { skip }, (t) => {
+  const subtitle = (text, box) => `__send('subtitle', ${JSON.stringify({ text, duration: 8000, box })});`;
+  const style = Object.assign(tvStyle('cover', 46, 0), { backgroundColor: '#2B2D33' });
+  const red = tvShot(`__send('style', ${JSON.stringify(style)});` + subtitle(SHORT, ENGLISH));
+  const below = tvShot(`__send('style', ${JSON.stringify(tvStyle('below', 46, 0))});` + subtitle(SHORT, ENGLISH));
+  t.diagnostic(JSON.stringify({ red, below }));
+  // Örtü yokken İngilizce (kırmızı) görünür; yalnız Türkçe yazının harfleri bir kısmını kapatır.
+  assert.ok(red > below * 0.5, 'zeminsizde örtü çizilmemeli: ' + JSON.stringify({ red, below }));
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-cover-clear-'));
+  try {
+    const events = `var out = {};
+      function bg(id) { return getComputedStyle(document.getElementById(id)).backgroundColor; }
+      __send('style', ${JSON.stringify(style)});
+      __send('subtitle', ${JSON.stringify({ text: SHORT, duration: 8000, box: ENGLISH })});
+      out.cover = bg('subtitle-cover'); out.text = bg('subtitle-text');
+      __send('subtitle', ${JSON.stringify({ text: MEDIUM, duration: 8000 })}); out.noBox = bg('subtitle-text');
+      out.thin = document.body.className.indexOf('thin-bg') >= 0;
+      var pre = document.createElement('pre'); pre.id = 'result';
+      pre.textContent = btoa(JSON.stringify(out)); document.body.appendChild(pre);`;
+    const m = result(run(['--virtual-time-budget=31000', '--dump-dom', tvPage(temp, events)], temp));
+    assert.equal(m.cover, 'rgba(0, 0, 0, 0)', JSON.stringify(m));
+    assert.equal(m.text, 'rgba(0, 0, 0, 0)', JSON.stringify(m));
+    assert.equal(m.noBox, 'rgba(0, 0, 0, 0)', JSON.stringify(m));
+    assert.equal(m.thin, true, JSON.stringify(m));
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test('TV: örtüde yazı boyu sabit, uzun satırda da küçülmez', { skip }, () => {
   const fonts = tvFonts();
   // Seçilen boy 46: 3 satıra sığmayan satır da 46 (daha çok satıra bölünür); boy ayarı değişince yeni boy.
@@ -331,7 +362,7 @@ test('OBS: kısa çeviri iki satırlık İngilizce altyazıyı tamamen örter (e
 
 test('OBS: örtü her zemin koyuluğunda tam opak, İngilizce altyazı hiç görünmez (MertTurna19)', { skip }, (t) => {
   const red = {};
-  for (const background of [0, 30, 72]) {
+  for (const background of [1, 30, 72]) {
     const style = `fire('style', ${JSON.stringify(Object.assign(obsStyle('cover', 48, background), { backgroundColor: '#0E1A30' }))});`;
     red['cover' + background] = obsRun(style + obsSend(SHORT, ENGLISH), 'shot');
   }
@@ -339,6 +370,16 @@ test('OBS: örtü her zemin koyuluğunda tam opak, İngilizce altyazı hiç gör
   t.diagnostic(JSON.stringify(red));
   assert.ok(red.below > 10000, 'denetim sahnesinde İngilizce altyazı görünmeli: ' + JSON.stringify(red));
   for (const [name, count] of Object.entries(red)) if (name !== 'below') assert.equal(count, 0, name + ': ' + JSON.stringify(red));
+});
+
+test('OBS: "Zeminsiz"de "Örtsün" kutu çizmez (X, beta.105)', { skip }, (t) => {
+  const style = `fire('style', ${JSON.stringify(Object.assign(obsStyle('cover', 48, 0), { backgroundColor: '#2B2D33' }))});`;
+  const red = obsRun(style + obsSend(SHORT, ENGLISH), 'shot');
+  const noBox = obsRun(style + obsSend(SHORT, ENGLISH) + obsSend(MEDIUM), 'shot');
+  const below = obsRun(`fire('style', ${JSON.stringify(obsStyle('below', 48, 0))});` + obsSend(SHORT, ENGLISH), 'shot');
+  t.diagnostic(JSON.stringify({ red, noBox, below }));
+  assert.ok(red > below * 0.5, 'zeminsizde örtü çizilmemeli: ' + JSON.stringify({ red, noBox, below }));
+  assert.ok(noBox > below * 0.5, 'zeminsizde örtü çizilmemeli: ' + JSON.stringify({ red, noBox, below }));
 });
 
 test('OBS: örtüde yazı boyu sabit, uzun satırda da küçülmez', { skip }, () => {

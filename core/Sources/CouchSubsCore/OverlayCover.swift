@@ -24,9 +24,13 @@ public enum OverlayCover {
     /// altyazıyı kapatmak bu yerleşimin işi. Eskiden koyuluğu izliyordu; varsayılan %72'de ve kaydırıcı düşükken İngilizce satır
     /// Türkçenin altından görünüyordu (X, MertTurna19). Öbür yerleşimlerde ve önceki satırlarda koyuluk aynen geçerli (önceki
     /// satır %83'ü). TV (app.js ownBackground), OBS katmanı ve Windows (OverlayPlacement.BoxOpacity) aynı kural.
+    /// "Zeminsiz" (koyuluk 0) hiçbir yerleşimde zemin çizmez: beta.105'te (#1378) "Örtsün" (varsayılan yerleşim) zeminsiz
+    /// seçimi de tam opak kutuya çeviriyordu, saydam isteyen kullanıcı gri/siyah kutu görüyordu (X, beta.105).
     public static func boxOpacity(background: Int, covering: Bool, current: Bool) -> Double {
+        let percent = max(0, min(100, background))
+        if percent == 0 { return 0 }
         if covering && current { return 1 }
-        return Double(max(0, min(100, background))) / 100 * (current ? 1 : 0.83)
+        return Double(percent) / 100 * (current ? 1 : 0.83)
     }
 }
 

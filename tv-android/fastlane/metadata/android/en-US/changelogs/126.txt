@@ -1,0 +1,1 @@
+0.9.123: With "No Background" selected, no box is drawn behind the subtitle in "Cover the subtitle" either.
