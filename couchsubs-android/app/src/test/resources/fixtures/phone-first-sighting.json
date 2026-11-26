@@ -1,0 +1,31 @@
+{
+  "about": "GTA 6 telefonunun ilk açılışı (#1251, beta-102: telefon çoğu zaman hiç tanınmadı, mesajlar altyazı gibi çevrildi). Ortak deneme: Mac/iPhone GamePhoneFirstSightingTests.swift, Windows GamePhoneFirstSightingTests.cs, Android GamePhoneFirstSightingTest.kt. 'sequences': izleyiciye verilen gözlemler (strict: sıkı arama buldu, 2 puan; weak: gevşek doğrulama ya da yanları zayıf aday, 1 puan; none: bulunamadı); telefon puan 3'e varınca açılır, bekleyen gözlem arada ıska varsa 1000 ms geçerli. 'pose' [topX, topY, bottomX, bottomY] karenin 0..1'i; yoksa 'defaultPose'. 'opensAt': telefonun açıldığı örneğin sırası (null: açılmaz). 'frames': testdata/frames gerçek kareleri; 'transform' none | shiftUp (görüntü karenin 1/12'si yukarı: telefon yukarıda tutulmuş) | lowContrast (128 + (ton - 128) × 0,6: akışta soluk görüntü) | dark (ton × 0,6); 'cover' [sol, üst, sağ, alt] (0..1) verilirse dönüşümden sonra o dikdörtgen el rengiyle (R 196, G 140, B 110) örtülür. 'noPhone': telefonsuz bütün kareler bu dönüşümlerle 'samples' kez arka arkaya verilir; telefon açılmamalı, altyazı hattı aday da bulmamalı. 'candidates': altyazı hattının doğrulanmamış adayı (sıkı arama ıskalar, aday var; adayın yerinde gevşek doğrulama telefonu bulur).",
+  "defaultPose": [0.7, 0.25, 0.7, 0.8],
+  "sequences": [
+    {"name": "iki sıkı gözlem açar (önceki kural)", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "strict"}], "opensAt": 1},
+    {"name": "sıkı gözlem ve yerinde gevşek doğrulama açar (#1251)", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "weak"}], "opensAt": 1},
+    {"name": "tek sıkı gözlem açmaz", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "none"}, {"t": 660, "kind": "none"}, {"t": 990, "kind": "none"}], "opensAt": null},
+    {"name": "arada ıska: sıkı, ıska, gevşek doğrulama 1 sn içinde açar (el bir karede örttü)", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "none"}, {"t": 660, "kind": "weak"}], "opensAt": 2},
+    {"name": "arada ıska: iki sıkı gözlem 1 sn içinde açar", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "none"}, {"t": 990, "kind": "strict"}], "opensAt": 2},
+    {"name": "bekleyen gözlemin süresi dolar", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "none"}, {"t": 660, "kind": "none"}, {"t": 990, "kind": "none"}, {"t": 1320, "kind": "weak"}], "opensAt": null},
+    {"name": "üç zayıf gözlem açar (yanları zayıf telefon)", "samples": [{"t": 0, "kind": "weak"}, {"t": 330, "kind": "weak"}, {"t": 660, "kind": "weak"}], "opensAt": 2},
+    {"name": "iki zayıf gözlem açmaz", "samples": [{"t": 0, "kind": "weak"}, {"t": 330, "kind": "weak"}, {"t": 660, "kind": "none"}, {"t": 990, "kind": "none"}, {"t": 1320, "kind": "none"}], "opensAt": null},
+    {"name": "seyrek örnekleme: ıskasız art arda iki sıkı gözlem süreye bakılmadan açar", "samples": [{"t": 0, "kind": "strict"}, {"t": 1500, "kind": "strict"}], "opensAt": 1},
+    {"name": "başka yerdeki gözlem yeniden başlatır", "samples": [{"t": 0, "kind": "strict"}, {"t": 330, "kind": "weak", "pose": [0.45, 0.25, 0.45, 0.8]}, {"t": 660, "kind": "weak", "pose": [0.45, 0.25, 0.45, 0.8]}, {"t": 990, "kind": "weak", "pose": [0.45, 0.25, 0.45, 0.8]}], "opensAt": 3}
+  ],
+  "frames": [
+    {"name": "telefon yukarıda tutulmuş: yan kenarlar zayıf, sıkı arama hiç bulmuyor; üç gözlemde açılır", "samples": [{"t": 0, "frame": "gta6-telefon-sohbet-2", "transform": "shiftUp"}, {"t": 330, "frame": "gta6-telefon-sohbet-2", "transform": "shiftUp"}, {"t": 660, "frame": "gta6-telefon-sohbet-2", "transform": "shiftUp"}], "opensAt": 2},
+    {"name": "el telefonun yan kenarını örttü, sıkı arama ıskalıyor; ilk gözlemin yerinde gevşek doğrulama açar", "samples": [{"t": 0, "frame": "gta6-telefon-sohbet-1", "transform": "none"}, {"t": 330, "frame": "gta6-telefon-sohbet-1", "transform": "none", "cover": [0.55, 0.25, 0.7, 0.65]}], "opensAt": 1},
+    {"name": "telefon bir karede kayboldu (el, geçiş): 1 sn içinde yeniden görülünce açılır", "samples": [{"t": 0, "frame": "gta6-telefon-sohbet-1", "transform": "none"}, {"t": 330, "frame": "gta6-01-lucia", "transform": "none"}, {"t": 660, "frame": "gta6-telefon-sohbet-1", "transform": "dark"}], "opensAt": 2},
+    {"name": "telefon karanlıkta: sıkı arama ana ekranda hoparlör yarığını bulmuyor, açılmaz (günlükte ıska nedeni)", "samples": [{"t": 0, "frame": "gta6-telefon-ana-1", "transform": "dark"}, {"t": 330, "frame": "gta6-telefon-ana-1", "transform": "dark"}, {"t": 660, "frame": "gta6-telefon-ana-1", "transform": "dark"}], "opensAt": null}
+  ],
+  "noPhone": {"transforms": ["none", "dark"], "samples": 3},
+  "candidates": [
+    {"name": "telefon yukarıda tutulmuş: altyazı hattı adayı bekletir, adayın yerinde telefonu doğrular", "frame": "gta6-telefon-sohbet-2", "transform": "shiftUp"}
+  ],
+  "missLog": {
+    "name": "soluk telefon 20 sn bulunamadı: tek satır, ıska nedeni (Mac/Windows: yan kenarlar zayıf; Android çözücüsünde boy/oran)",
+    "frame": "gta6-telefon-sohbet-2", "transform": "lowContrast", "intervalMs": 330, "durationMs": 20500,
+    "contains": ["telefon ilk aramada bulunamadı (", "arama): en ileri ölçüt ", ", doğrulanmayan gözlem "]
+  }
+}

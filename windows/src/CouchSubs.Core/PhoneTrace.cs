@@ -26,6 +26,33 @@ public static class PhoneTrace
     /// <summary>Okunacak karede telefon izlenen yerden çok uzakta: tur atlandı.</summary>
     public static string Displaced(double share) => $"telefon karede yerinde değil, tur atlandı (%{Percent(share)} oynama)";
 
+    /// <summary>Sıkı aramanın ıska ölçütü (<see cref="GamePhoneGeometry.Step"/>) günlükte (Mac/iPhone ve Android ile aynı metinler).</summary>
+    internal static string Reason(GamePhoneGeometry.Step step) => step switch
+    {
+        GamePhoneGeometry.Step.NoPicture => "16:9 görüntü yok",
+        GamePhoneGeometry.Step.NoTopSlot => "hoparlör yarığı yok",
+        GamePhoneGeometry.Step.TopCrowded => "üst şeritte çok aday",
+        GamePhoneGeometry.Step.NoBottomSlot => "alt çentik yok",
+        GamePhoneGeometry.Step.BottomCrowded => "alt şeritte çok aday",
+        GamePhoneGeometry.Step.NoCamera => "ön kamera yok",
+        GamePhoneGeometry.Step.Shape => "boy/oran tutmadı",
+        GamePhoneGeometry.Step.Rim => "kasa kenarı düz değil",
+        GamePhoneGeometry.Step.Sides => "yan kenarlar zayıf",
+        GamePhoneGeometry.Step.Implausible => "kutu akla yatkın değil",
+        _ => "bulundu",
+    };
+
+    /// <summary>
+    /// Telefon açık değilken ilk açılış ıskalandı (#1251): <paramref name="samples"/> aramada en ileri geçilen ölçüt, en sık
+    /// ıska, en iyi adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz) ve tek görülüp doğrulanmayan gözlemler.
+    /// </summary>
+    public static string MissedFirst(int samples, string furthest, string common, int commonCount, int side, int unconfirmed, int strict)
+    {
+        var candidate = side >= 0 ? $", en iyi aday yan gücü {side}/{GamePhoneGeometry.SideThreshold}" : "";
+        return $"telefon ilk aramada bulunamadı ({samples} arama): en ileri ölçüt {furthest}, en sık {common} ({commonCount}){candidate}, "
+               + $"doğrulanmayan gözlem {unconfirmed} ({strict} sıkı)";
+    }
+
     /// <summary>Oranın yüzdesi (tam sayı).</summary>
     public static int Percent(double share) => (int)Math.Round(share * 100, MidpointRounding.AwayFromZero);
 
@@ -33,4 +60,61 @@ public static class PhoneTrace
     public static double Shift(CropRegion a, CropRegion b) =>
         Math.Max(Math.Max(Math.Abs(a.Top - b.Top), Math.Abs(a.Bottom - b.Bottom)),
                  Math.Max(Math.Abs(a.Left - b.Left), Math.Abs(a.Right - b.Right)));
+}
+
+/// <summary>
+/// İlk açılışın ıskalanma nedenleri (#1251; GamePhoneTracker). Telefon açık değilken her aramanın ıska ölçütü
+/// <see cref="WindowMs"/> boyunca toplanır; pencerede telefona benzer bir şey varsa (kameralı hoparlör yarığı bulundu ya da daha
+/// ileri, şerit kalabalık, tek görülüp doğrulanmayan gözlem) pencere sonunda tek satır yazılır
+/// (<see cref="PhoneTrace.MissedFirst"/>). Telefonsuz oyunda aramaların hemen hepsi "hoparlör yarığı yok"ta kalır, satır
+/// yazılmaz. Mac/iPhone (PhoneMissLog, PhoneTrace.swift) ve Android (PhoneTrace.kt) ile aynı.
+/// </summary>
+internal sealed class PhoneMissLog
+{
+    /// <summary>Özet penceresi (ms): en çok bu aralıkla bir satır.</summary>
+    internal const long WindowMs = 20_000;
+    private long? windowStart;
+    private int samples, unconfirmed, unconfirmedStrict, side = -1;
+    private GamePhoneGeometry.Step furthest;
+    private readonly Dictionary<GamePhoneGeometry.Step, int> counts = [];
+
+    /// <summary>Doğrulanmayı bekleyen gözlem süresi dolup ya da başka yerde gözlem gelip bırakıldı.</summary>
+    internal void Unconfirmed(bool strict)
+    {
+        unconfirmed++;
+        if (strict) unconfirmedStrict++;
+    }
+
+    internal void Note(GamePhoneGeometry.Probe probe, long now, Action<string> log)
+    {
+        if (windowStart is not { } start || now < start) windowStart = start = now;
+        samples++;
+        counts[probe.Step] = counts.GetValueOrDefault(probe.Step) + 1;
+        if (probe.Step > furthest) furthest = probe.Step;
+        if (probe.Side > side) side = probe.Side;
+        if (now - start < WindowMs) return;
+        if (Suspicious)
+        {
+            var common = counts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).First();
+            log(PhoneTrace.MissedFirst(samples, PhoneTrace.Reason(furthest), PhoneTrace.Reason(common.Key), common.Value, side,
+                unconfirmed, unconfirmedStrict));
+        }
+        Begin(now);
+    }
+
+    /// <summary>Pencerede telefona benzer bir şey görüldü mü.</summary>
+    private bool Suspicious => furthest >= GamePhoneGeometry.Step.NoBottomSlot || unconfirmed > 0
+        || counts.ContainsKey(GamePhoneGeometry.Step.TopCrowded) || counts.ContainsKey(GamePhoneGeometry.Step.BottomCrowded);
+
+    /// <summary>Telefon açıldı ya da izleyici sıfırlandı: pencere baştan.</summary>
+    internal void Reset() => Begin(null);
+
+    private void Begin(long? now)
+    {
+        windowStart = now;
+        samples = unconfirmed = unconfirmedStrict = 0;
+        side = -1;
+        furthest = GamePhoneGeometry.Step.NoPicture;
+        counts.Clear();
+    }
 }

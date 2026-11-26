@@ -474,6 +474,12 @@ class TranslationService : Service() {
      * aramada bulunamazsa kalkar ([com.couchsubs.mobile.core.SubtitlePipeline.heldPhone]; Mac/iPhone ve Windows ile aynı).
      */
     private var subtitlePhoneMisses = 0
+    /**
+     * Doğrulanmamış telefon adayı ve ilk görüldüğü an: ekranındaki satırlar kısa süre altyazı sayılmaz
+     * ([com.couchsubs.mobile.core.SubtitlePipeline.CANDIDATE_HOLD_MS]; #1251, Mac/iPhone ve Windows ile aynı).
+     */
+    private var subtitlePhoneCandidate: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null
+    private var subtitlePhoneCandidateSince = 0L
     @Volatile private var playsGta6 = false
     /** "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (oturumda bir kez; [com.couchsubs.mobile.core.GamePhoneHint]). */
     private val gamePhoneHint = com.couchsubs.mobile.core.GamePhoneHint()
@@ -1003,28 +1009,37 @@ class TranslationService : Service() {
                 if (!playsGta6) {
                     subtitlePhone = null
                     subtitlePhoneMisses = 0
+                    subtitlePhoneCandidate = null
                 } else if (now - subtitlePhoneAt >= com.couchsubs.mobile.core.GamePhoneTracker.INTERVAL_MS || now < subtitlePhoneAt) {
                     subtitlePhoneAt = now
-                    val near = subtitlePhone
+                    // Doğrulanmamış adayın yerinde de gevşek doğrulama denenir (#1251).
+                    val near = subtitlePhone ?: subtitlePhoneCandidate
                     val looked = try {
-                        com.couchsubs.mobile.core.ScreenPhoneCard.phone(com.couchsubs.mobile.ocr.LivePhoneImage(frame), near)
+                        com.couchsubs.mobile.core.ScreenPhoneCard.search(com.couchsubs.mobile.ocr.LivePhoneImage(frame), near)
                     } catch (error: Exception) {
                         null
                     }
-                    val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked, near, subtitlePhoneMisses)
+                    val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked?.phone, subtitlePhone, subtitlePhoneMisses)
                     subtitlePhone = next
                     subtitlePhoneMisses = misses
+                    val (candidate, since) = com.couchsubs.mobile.core.SubtitlePipeline.candidate(
+                        if (next == null) looked?.candidate else null, subtitlePhoneCandidate, subtitlePhoneCandidateSince, now)
+                    subtitlePhoneCandidate = candidate
+                    subtitlePhoneCandidateSince = since
                     val found = subtitlePhone != null
                     if (synchronized(gamePhoneHint) { gamePhoneHint.observePhone(found, settings.readsGamePhone, playedGame) }) {
                         Log.i(TAG, "telefon ipucu: telefon çevirisi kapalı, GTA 6 telefonu ekranda bulundu")
                         LiveState.update { it.copy(gamePhoneHint = true) }
                     }
                 }
-                val phone = subtitlePhone
+                // Telefon doğrulanmadıysa doğrulanmayı bekleyen adayın ekranındaki satırlar kısa süre bekletilir.
+                val unconfirmed = subtitlePhone == null && playsGta6 && com.couchsubs.mobile.core.SubtitlePipeline.holdsCandidate(
+                    subtitlePhoneCandidate, subtitlePhoneCandidateSince, now)
+                val phone = subtitlePhone ?: if (unconfirmed) subtitlePhoneCandidate else null
                 SubtitleReader.copyRegion(frame, area)?.let { pixels ->
                     lastRead = now
                     reading.set(true)
-                    ocr.execute { read(pixels, area, capturedAt, phone) }
+                    ocr.execute { read(pixels, area, capturedAt, phone, unconfirmed) }
                 }
             }
             offerGamePhone(frame)
@@ -1434,7 +1449,7 @@ class TranslationService : Service() {
     }
 
     private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long,
-                     phone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null) {
+                     phone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null, unconfirmed: Boolean = false) {
         try {
             // Bölge değişmediyse (aynı altyazı duruyor) yeniden okunmaz; son okuma hattı yine besler (kararlılık ve
             // silme saate bağlıdır, Windows'taki ReadScheduler gibi). Aynı okuma en çok 20 kare (hızlı okumada 2) kullanılır.
@@ -1455,7 +1470,7 @@ class TranslationService : Service() {
                 com.couchsubs.mobile.core.RegionSignature.of(pixels.nv21, pixels.width, pixels.height),
                 capturedAt, ocrMs, phone, reused = reused,
                 darkInk = com.couchsubs.mobile.core.InkTone.sampler(pixels.gray),
-                packageLook = com.couchsubs.mobile.core.PackageText.sampler(pixels.gray, pixels.color))
+                packageLook = com.couchsubs.mobile.core.PackageText.sampler(pixels.gray, pixels.color), unconfirmed = unconfirmed)
         } catch (error: java.util.concurrent.TimeoutException) {
             pipeline?.noteReadFailure(error)
             // Okuma süresinde bitmedi: takılan tanıyıcı bırakılır, sonraki kare yenisiyle okunur (yoksa yeni okuma da

@@ -265,10 +265,21 @@ public static class ScreenPhoneCard
     /// Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır. <paramref name="near"/>: açık
     /// telefonun son yeri (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır.
     /// </summary>
-    public static Handset? Phone(Frame frame, Handset? near = null)
+    public static Handset? Phone(Frame frame, Handset? near = null) => Phone(frame, near, out _);
+
+    /// <summary>
+    /// <see cref="Phone(Frame, Handset?)"/>; telefon bulunamazsa <paramref name="candidate"/>: sıkı aramada yanları zayıf
+    /// kalan akla yatkın aday (<see cref="GamePhoneGeometry.Probe.Weak"/>), yoksa null. Aday telefon sayılmaz; altyazı hattı
+    /// ekranındaki satırları kısa süre bekletir.
+    /// </summary>
+    internal static Handset? Phone(Frame frame, Handset? near, out Handset? candidate)
     {
-        if (!GamePhoneGeometry.TryLocate(frame, near?.Pose, out var pose) || !GamePhoneTracker.Plausible(pose.Bounds, frame)) return null;
-        return new Handset(pose, frame.Width / (double)Math.Max(1, frame.Height));
+        candidate = null;
+        var aspect = frame.Width / (double)Math.Max(1, frame.Height);
+        if (GamePhoneGeometry.TryLocate(frame, near?.Pose, out var pose, out var probe))
+            return GamePhoneTracker.Plausible(pose.Bounds, frame) ? new Handset(pose, aspect) : null;
+        if (probe.Weak is { } weak && GamePhoneTracker.Plausible(weak.Bounds, frame)) candidate = new Handset(weak, aspect);
+        return null;
     }
 
     /// <summary>

@@ -15,10 +15,12 @@ public sealed partial class RegionWatcher
     // Yakalama, telefonun konumunu OCR turundan bağımsız aralıklarla günceller. Son konum
     // geçerli görünse de bu karede kasa kaybolmuş olabilir. Denetim yalnız telefon işinde çalışır.
     // Telefon bu karede yoksa ya da izlenen yerden çok uzaktaysa nedeni günlüğe yazılır (PhoneTrace; önceden sessizdi, #1251).
+    // İzleyici gibi açık telefonun yerinde gevşek doğrulama da denenir: önceden yalnız sıkı arama vardı, izleyicinin açık
+    // tuttuğu telefonun turları "PhoneMissing" ile atlanıyordu (#1251; Mac ile aynı).
     private bool PhoneMissing(Frame frame, WatchedArea area)
     {
         if (!area.PhonePose.HasValue) return false;
-        if (!GamePhoneGeometry.TryLocate(frame, out var pose))
+        if (!GamePhoneGeometry.TryLocate(frame, area.PhonePose, out var pose))
         {
             Trace(PhoneTrace.Missing, area);
             return true;

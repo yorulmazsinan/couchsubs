@@ -64,6 +64,30 @@ class SubtitlePipeline(
          * telefon artık izleyicinin toleransıyla tutulur ve son yerinde gevşek doğrulanır ([GamePhoneGeometry.locate] near;
          * Mac/iPhone ve Windows ile aynı).
          */
+        /**
+         * Doğrulanmamış telefon adayının (sıkı aramada yanları zayıf kalan; [GamePhoneGeometry.Probe.weak]) ekranındaki
+         * satırların en çok bekletildiği süre (ms). Sonraki aramada adayın yerinde gevşek doğrulama telefonu bulursa süzgeç
+         * telefonu tutar, bulamazsa satırlar süre dolunca altyazıya geçer (#1251: telefon mesajları telefon bulunana dek
+         * altyazı gibi çevriliyordu; Mac/iPhone ve Windows ile aynı).
+         */
+        const val CANDIDATE_HOLD_MS = 1500L
+
+        /**
+         * Aramadan sonra doğrulanmamış telefon adayı ve ilk görüldüğü an: aday yoksa null; önceki adayın yakınındaysa ilk
+         * görüldüğü an korunur (bekletme süresi uzamaz), değilse şimdi başlar.
+         */
+        fun candidate(weak: ScreenPhoneCard.Handset?, previous: ScreenPhoneCard.Handset?, since: Long,
+                      now: Long): Pair<ScreenPhoneCard.Handset?, Long> {
+            if (weak == null) return null to 0L
+            fun region(box: TextBox) = CropRegion(box.top, box.bottom, box.left, box.right)
+            val same = previous != null && region(weak.bounds).isClose(region(previous.bounds), 0.035)
+            return weak to if (same && now >= since) since else now
+        }
+
+        /** Doğrulanmamış adayın satırları hâlâ bekletilir mi ([CANDIDATE_HOLD_MS]). */
+        fun holdsCandidate(candidate: ScreenPhoneCard.Handset?, since: Long, now: Long): Boolean =
+            candidate != null && now >= since && now - since < CANDIDATE_HOLD_MS
+
         fun heldPhone(found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?,
                       misses: Int): Pair<ScreenPhoneCard.Handset?, Int> {
             if (found != null) return found to 0
@@ -335,11 +359,12 @@ class SubtitlePipeline(
      * Bir karenin okuması ve okunan alanın karedeki yeri. [signature]: bölgenin izi ([RegionSignature.of]); okuma boş
      * dönse de satırın yeri değişmediyse satır silinmez (parlak zemin). [darkInk]: okunan alanın görüntüsünde satır kutusu
      * açık zeminde koyu yazı mı ([InkTone.sampler]; kâğıt ilan altyazı değildir, GitHub #1124). [packageLook]: satırın
-     * görünüşü ([PackageText.sampler]; ürün/ambalaj yazısı altyazı değildir).
+     * görünüşü ([PackageText.sampler]; ürün/ambalaj yazısı altyazı değildir). [unconfirmed]: [phone] doğrulanmamış aday
+     * ([CANDIDATE_HOLD_MS]); ekranındaki satırlar yine altyazı sayılmaz, günlükte "telefon adayı" yazılır.
      */
     fun process(raw: Reading, area: TextBox, signature: ByteArray? = null, capturedAt: Long? = null, ocrMs: Int? = null,
                 phone: ScreenPhoneCard.Handset? = null, reused: Boolean = false, darkInk: ((TextBox) -> Boolean)? = null,
-                packageLook: ((TextBox, List<TextBox>) -> PackageText.Look?)? = null) {
+                packageLook: ((TextBox, List<TextBox>) -> PackageText.Look?)? = null, unconfirmed: Boolean = false) {
         frameAt = capturedAt
         frameOcrMs = ocrMs
         synchronized(lock) {
@@ -362,7 +387,9 @@ class SubtitlePipeline(
                 val text = seen.lines.filter { it !in kept }.joinToString(" ") { it.text }
                 val fresh = synchronized(lock) { (text != loggedPhone).also { loggedPhone = text } }
                 val excerpt = if (text.length > 120) text.take(120) + "…" else text
-                if (fresh) onLog?.invoke("telefon yazısı: \"$excerpt\" telefonun ekranında, altyazı sayılmadı")
+                if (fresh) onLog?.invoke(
+                    if (unconfirmed) "telefon adayı: \"$excerpt\" telefon doğrulanana dek bekletildi, altyazı sayılmadı"
+                    else "telefon yazısı: \"$excerpt\" telefonun ekranında, altyazı sayılmadı")
                 seen = Reading(kept)
             }
         }

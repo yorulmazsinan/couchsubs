@@ -2,12 +2,14 @@
 
 import CoreGraphics
 
-/// The two aligned observations keep a single menu or subtitle frame from opening a phone session.
+/// GTA 6'da elde açık telefon. Uyumlu gözlemlerle açılır (`openPoints`): iki sıkı gözlem, ya da bir sıkı gözlem ve onun
+/// yerinde gevşek doğrulama / yanları zayıf aday, ya da üç zayıf gözlem. Tek menü ya da altyazı karesi telefon açmaz.
 public final class GamePhoneTracker {
     public static let intervalMs = 330
-    private let locate: (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?
+    /// Gözlem: bulunan yer, sıkı aramayla mı bulundu ve sıkı aramanın sonucu (gerçek aramada; denemelerde nil).
+    typealias Sighting = (pose: GamePhoneGeometry.Pose?, strict: Bool, probe: GamePhoneGeometry.Probe?)
+    private let sight: (CGImage, GamePhoneGeometry.Pose?) -> Sighting
     private var lastTime: Int?
-    private var previous: GamePhoneGeometry.Pose?
     private var shown: GamePhoneGeometry.Pose?
 
     private var clock = 0
@@ -16,29 +18,75 @@ public final class GamePhoneTracker {
     /// günlüğü (Windows ve Android ile aynı satırlar).
     public var onLog: ((String) -> Void)?
 
-    public init() { locate = { GamePhoneGeometry.locate($0, near: $1) } }
-    init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { self.locate = { image, _ in locate(image) } }
-    init(locate: @escaping (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) { self.locate = locate }
+    public init() {
+        sight = { image, near in
+            let (pose, probe) = GamePhoneGeometry.search(image, near: near)
+            return (pose, pose != nil && probe.step == .found, probe)
+        }
+    }
+    init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { sight = { image, _ in (locate(image), true, nil) } }
+    init(locate: @escaping (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) {
+        sight = { image, near in (locate(image, near), true, nil) }
+    }
+    /// Denemeler: gözlem ve gücü (strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday).
+    init(sight: @escaping (CGImage) -> (pose: GamePhoneGeometry.Pose, strict: Bool)?) {
+        self.sight = { image, _ in
+            guard let seen = sight(image) else { return (nil, false, nil) }
+            return (seen.pose, seen.strict, nil)
+        }
+    }
 
     private func note(_ reason: String) { trace.note(PhoneTrace.component, reason, "", log: onLog) }
+
+    /// Sıkı aramayla bulunan telefonun gözlem puanı.
+    static let strongPoints = 2
+    /// Gevşek doğrulamanın (doğrulanmayı bekleyen gözlemin yerinde hoparlör, kamera ve alt çentik) ya da yanları zayıf
+    /// adayın (`GamePhoneGeometry.weakSide`) gözlem puanı.
+    static let weakPoints = 1
+    /// Yeni telefon, art arda uyumlu gözlemlerin puanı buna varınca açılır: iki sıkı gözlem (önceki kural), sıkı gözlem ve
+    /// gevşek doğrulama, ya da üç zayıf gözlem. Önceden yalnız art arda iki sıkı gözlem açıyordu: sıkı arama telefonu ara
+    /// sıra bulunca (açık kasa açık zeminde, el örtüyor, karanlık) telefon hiç açılmıyor, mesajları altyazı gibi okunuyordu
+    /// (#1251, beta-102: altyazı süzgeci telefonu tek sıkı gözlem ve gevşek doğrulamayla 3 sn tuttu, izleyici hiç açmadı;
+    /// Windows ve Android ile aynı).
+    static let openPoints = 3
+    /// Doğrulanmayı bekleyen gözlem, arada ıskalı örnek olsa da bu kadar süre (ms) geçerli kalır; ıskasız art arda örnekler
+    /// süreye bakılmadan birleşir (seyrek örneklemede de telefon açılır).
+    static let pendingMs = 1000
+    private var pending: GamePhoneGeometry.Pose?
+    private var pendingAt = 0
+    private var pendingPoints = 0
+    private var pendingMisses = 0
+    private var pendingStrict = false
+    private let missLog = PhoneMissLog()
 
     public func sample(_ image: CGImage, now: Int) -> (sampled: Bool, pose: GamePhoneGeometry.Pose?) {
         if let lastTime, now >= lastTime, now - lastTime < Self.intervalMs { return (false, shown) }
         lastTime = now
         clock = now
         let wasShown = shown != nil
+        // Açık telefonun ya da doğrulanmayı bekleyen gözlemin yerinde gevşek doğrulama da denenir
+        // (`GamePhoneGeometry.locate(near:)`): beyaz ya da mavi ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları
+        // zemine karışıyor, sıkı arama ıskalıyordu. Yeni telefonda sıkı arama ıskalarsa yanları zayıf aday (`Probe.weak`)
+        // zayıf gözlem sayılır.
+        let seen = sight(image, shown ?? (pendingFresh(now) ? pending : nil))
+        var found = seen.pose
+        var strict = seen.strict
+        var probe = seen.probe
+        if found == nil, shown == nil, let weak = probe?.weak {
+            found = weak
+            strict = false
+        }
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (menüde ya da koyu ekranda yanlış
         // eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı (Windows ile aynı).
-        // Açık telefon yerinde ararken gevşek doğrulama da denenir (`GamePhoneGeometry.locate(near:)`): beyaz ya da mavi
-        // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
-        var found = locate(image, shown)
-        if let pose = found, !Self.plausible(pose.bounds, width: image.width, height: image.height) { found = nil }
+        if let pose = found, !Self.plausible(pose.bounds, width: image.width, height: image.height) {
+            if strict { probe?.step = .implausible }
+            found = nil
+            strict = false
+        }
+        let points = found == nil ? 0 : strict ? Self.strongPoints : Self.weakPoints
         var unseen = (ms: 0, misses: 0)
-        if let found, let previous, found.bounds.isClose(to: previous.bounds, tolerance: 0.035) {
-            shown = found
-            misses = 0
-            lastSeen = now
-        } else if let current = shown, let found, found.bounds.isClose(to: current.bounds, tolerance: 0.035) {
+        var movedFrom: GamePhoneGeometry.Pose?
+        if let current = shown, let found, found.bounds.isClose(to: current.bounds, tolerance: 0.035) {
             // Açık telefonun yakınında tek bir gözlem: aynı telefon, yeri güncellenir.
             shown = found
             misses = 0
@@ -48,10 +96,37 @@ public final class GamePhoneTracker {
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
             // bildirim). Telefon gerçekten indirilince `missGraceMs` sonra kapanır (`closes`).
             misses += 1
-        } else {
-            if shown != nil { unseen = (Self.elapsed(since: lastSeen, now), misses + 1) }
+        } else if shown != nil {
+            unseen = (Self.elapsed(since: lastSeen, now), misses + 1)
             shown = nil
             misses = 0
+            clearPending()
+        } else if let found {
+            // Yeni telefon: doğrulanmayı bekleyen gözlemin yakınındaysa puanı eklenir, değilse yeni bekleyen gözlem olur.
+            if let pending, found.bounds.isClose(to: pending.bounds, tolerance: 0.035), pendingMisses == 0 || pendingFresh(now) {
+                pendingPoints += points
+            } else {
+                if let pending, pendingMisses == 0 { movedFrom = pending }
+                if pending != nil { missLog.unconfirmed(strict: pendingStrict) }
+                pendingPoints = points
+                pendingStrict = false
+            }
+            pending = found
+            pendingAt = now
+            pendingMisses = 0
+            pendingStrict = pendingStrict || strict
+            if pendingPoints >= Self.openPoints {
+                shown = found
+                misses = 0
+                lastSeen = now
+                clearPending()
+            }
+        } else if pending != nil {
+            pendingMisses += 1
+            if !pendingFresh(now) {
+                missLog.unconfirmed(strict: pendingStrict)
+                clearPending()
+            }
         }
         if !wasShown, shown != nil {
             note(PhoneTrace.opened)
@@ -59,11 +134,25 @@ public final class GamePhoneTracker {
             note(PhoneTrace.closed(afterMs: unseen.ms, misses: unseen.misses))
         }
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
-        if shown == nil, let found, let previous {
-            note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, previous.bounds)))
+        if shown == nil, let found, let movedFrom {
+            note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, movedFrom.bounds)))
         }
-        previous = found
+        // İlk açılış ıskalanınca nedeni (en ileri geçilen ölçüt, en iyi aday) sınırlı aralıkla günlüğe (#1251).
+        if shown != nil {
+            missLog.reset()
+        } else if let probe {
+            missLog.note(probe, now: now) { [weak self] line in self?.note(line) }
+        }
         return (true, shown)
+    }
+
+    private func pendingFresh(_ now: Int) -> Bool { pending != nil && now >= pendingAt && now - pendingAt <= Self.pendingMs }
+
+    private func clearPending() {
+        pending = nil
+        pendingPoints = 0
+        pendingMisses = 0
+        pendingStrict = false
     }
 
     /// Açık telefon bu kadar süre (ms) görülmezse kapanır; çevirisi hemen kalkar (izleyici `closePhone`). Önceden süre
@@ -108,10 +197,11 @@ public final class GamePhoneTracker {
 
     public func reset() {
         lastTime = nil
-        previous = nil
         shown = nil
         misses = 0
         lastSeen = 0
+        clearPending()
+        missLog.reset()
     }
 }
 
@@ -208,8 +298,62 @@ public enum GamePhoneGeometry {
     /// kaybolunca balonlar kalkıyor ("arada kaçıyor", 3417), telefonun yazıları altyazıya (3418, 3420, 3421) ve ekran
     /// yazısı kutularına (3420–3425) gidiyordu. Gevşek doğrulama yalnız açık telefonun yerinde yapılır: yeni telefon yine
     /// sıkı aramayla ve iki gözlemle açılır (Windows ve Android ile aynı).
-    public static func locate(_ image: CGImage, near: Pose? = nil) -> Pose? {
-        guard image.width >= 400, image.height >= 225 else { return nil }
+    public static func locate(_ image: CGImage, near: Pose? = nil) -> Pose? { search(image, near: near).pose }
+
+    /// Sıkı aramanın ıska nedeni: aramanın geçemediği ilk ölçüt (sırayla). Telefon ekrandayken ilk açılış ıskalanınca hangi
+    /// ölçütün tuttuğu günlükte görünsün diye (#1251; Windows ve Android ile aynı adlar ve sıra).
+    enum Step: Int, Comparable {
+        /// Karede 16:9 oyun görüntüsü yok.
+        case noPicture
+        /// Üst şeritte hoparlör yarığına benzer koyu çizgi yok.
+        case noTopSlot
+        /// Üst şeritte çok aday (menü, yazı satırları): arama bırakıldı.
+        case topCrowded
+        /// Hoparlör yarığının yanında ön kamera yok.
+        case noCamera
+        /// Alt şeritte alt çentiğe benzer koyu çizgi yok.
+        case noBottomSlot
+        /// Alt şeritte çok aday: arama bırakıldı.
+        case bottomCrowded
+        /// Yarık ile çentik telefon boyunda ve oranında değil.
+        case shape
+        /// Yarığın ya da çentiğin çevresi düz kasa değil.
+        case rim
+        /// Telefonun yan kenarları zayıf (açık kasa açık zeminde, el örtüyor).
+        case sides
+        /// Sıkı arama buldu ama kutu akla yatkın değil (`GamePhoneTracker.plausible`; izleyici koyar).
+        case implausible
+        /// Bulundu.
+        case found
+
+        static func < (a: Step, b: Step) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    /// Yan kenarların sıkı aramadaki eşiği (ikisi de en az bu kadar güçlü olmalı).
+    static let sideThreshold = 12
+
+    /// Yanları zayıf adayın zayıf gözlem sayılması için zayıf yanının en az gücü. Gerçek telefonsuz karelerin
+    /// (testdata/frames; karartılmış, açılmış, düşük karşıtlıklı hâlleriyle) hiçbiri yan ölçütüne gelmiyor; gerçek telefon
+    /// (480p akış, yukarıda tutulan) 10–11'de kalıp bulunmuyordu (Windows ve Android ile aynı).
+    static let weakSide = 8
+
+    /// Sıkı aramanın sonucu: `step` ıskanın nedeni; `side` yan ölçütüne gelen adaylardan zayıf yanı en güçlü olanın zayıf
+    /// yanı (yoksa -1); `candidate` o aday (yarık, kamera, çentik, oran ve kasa tutuyor, yanları zayıf). Aday tek başına
+    /// telefon açmaz.
+    struct Probe: Equatable {
+        var step: Step
+        var side = -1
+        var candidate: Pose?
+
+        static func missed(_ step: Step) -> Probe { Probe(step: step) }
+
+        /// Zayıf gözlem sayılan aday (`weakSide`).
+        var weak: Pose? { side >= GamePhoneGeometry.weakSide ? candidate : nil }
+    }
+
+    /// `locate`; `probe`: sıkı aramanın ıska nedeni ve en iyi adayı (karenin tamamına göre).
+    static func search(_ image: CGImage, near: Pose? = nil) -> (pose: Pose?, probe: Probe) {
+        guard image.width >= 400, image.height >= 225 else { return (nil, .missed(.noPicture)) }
         if abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 { return locatePicture(image, near: near) }
         // Kare küçültülerek okunur (en çok 960 piksel genişlik); şeritlerin yeri piksel piksel gerekmez.
         let scale = min(1, 960 / Double(image.width))
@@ -219,7 +363,9 @@ public enum GamePhoneGeometry {
                   let p = (min(sh - 1, Int(Double(y) * scale)) * sw + min(sw - 1, Int(Double(x) * scale))) * 4
                   return (77 * Int(small.bytes[p]) + 150 * Int(small.bytes[p + 1]) + 29 * Int(small.bytes[p + 2])) >> 8
               }),
-              let cropped = image.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)) else { return nil }
+              let cropped = image.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)) else {
+            return (nil, .missed(.noPicture))
+        }
         let w = Double(image.width), h = Double(image.height)
         // Açık telefonun yeri görüntünün içine taşınır.
         let local = near.map { pose in
@@ -227,18 +373,23 @@ public enum GamePhoneGeometry {
                  bottomX: (pose.bottomX * w - Double(area.x)) / Double(area.width),
                  bottomY: (pose.bottomY * h - Double(area.y)) / Double(area.height))
         }
-        guard let pose = locatePicture(cropped, near: local) else { return nil }
         func x(_ value: Double) -> Double { (Double(area.x) + value * Double(area.width)) / w }
         func y(_ value: Double) -> Double { (Double(area.y) + value * Double(area.height)) / h }
-        return Pose(topX: x(pose.topX), topY: y(pose.topY), bottomX: x(pose.bottomX), bottomY: y(pose.bottomY))
+        func outside(_ pose: Pose) -> Pose {
+            Pose(topX: x(pose.topX), topY: y(pose.topY), bottomX: x(pose.bottomX), bottomY: y(pose.bottomY))
+        }
+        var (pose, probe) = locatePicture(cropped, near: local)
+        probe.candidate = probe.candidate.map(outside)
+        return (pose.map(outside), probe)
     }
 
-    private static func locatePicture(_ image: CGImage, near: Pose? = nil) -> Pose? {
+    private static func locatePicture(_ image: CGImage, near: Pose? = nil) -> (pose: Pose?, probe: Probe) {
         guard image.width >= 400, image.height >= 225,
-              abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 else { return nil }
-        if let pose = strictPicture(image) { return pose }
-        guard let near else { return nil }
-        return confirmPicture(image, near: near)
+              abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 else { return (nil, .missed(.noPicture)) }
+        let (strict, probe) = strictPicture(image)
+        if let strict { return (strict, probe) }
+        guard let near else { return (nil, probe) }
+        return (confirmPicture(image, near: near), probe)
     }
 
     /// Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir.
@@ -275,38 +426,56 @@ public enum GamePhoneGeometry {
         return pose
     }
 
-    private static func strictPicture(_ image: CGImage) -> Pose? {
-        guard let topBand = Grid(image, columns: 80..<320, height: 90) else { return nil }
+    private static func strictPicture(_ image: CGImage) -> (pose: Pose?, probe: Probe) {
+        guard let topBand = Grid(image, columns: 80..<320, height: 90) else { return (nil, .missed(.noPicture)) }
         // Normal gameplay ends here. Only sample the body after seeing both a speaker and a camera in the upper band.
-        let upper = slots(topBand, rows: 17..<75, lengths: 8...19, maximum: 12).filter { hasCamera(topBand, $0) }
-        guard !upper.isEmpty, let grid = Grid(image, columns: 40..<360, height: 225) else { return nil }
-        let lower = slots(grid, rows: 145..<217, lengths: 5...14, maximum: 16)
+        let speakers = scan(topBand, rows: 17..<75, lengths: 8...19, maximum: 12)
+        guard !speakers.slots.isEmpty else { return (nil, .missed(speakers.crowded ? .topCrowded : .noTopSlot)) }
+        let upper = speakers.slots.filter { hasCamera(topBand, $0) }
+        guard !upper.isEmpty else { return (nil, .missed(.noCamera)) }
+        guard let grid = Grid(image, columns: 40..<360, height: 225) else { return (nil, .missed(.noPicture)) }
+        let notches = scan(grid, rows: 145..<217, lengths: 5...14, maximum: 16)
+        guard !notches.slots.isEmpty else { return (nil, .missed(notches.crowded ? .bottomCrowded : .noBottomSlot)) }
         var best = 0.0, pose: Pose?
+        var probe = Probe(step: .shape)
         for top in upper {
-            for bottom in lower {
+            for bottom in notches.slots {
                 let h = Double(bottom.y - top.y), dx = bottom.x - top.x
                 guard (115...179).contains(h), abs(dx) <= h * 0.24,
                       Double(bottom.length) >= Double(top.length) * 0.46, bottom.length <= top.length,
                       h >= 7.9 * Double(top.length), h <= 16.5 * Double(top.length),
-                      h >= 12 * Double(bottom.length), h <= 30 * Double(bottom.length),
-                      smoothRim(grid, top, dx, h), smoothRim(grid, bottom, dx, h) else { continue }
+                      h >= 12 * Double(bottom.length), h <= 30 * Double(bottom.length) else { continue }
+                probe.step = max(probe.step, .rim)
+                guard smoothRim(grid, top, dx, h), smoothRim(grid, bottom, dx, h) else { continue }
+                probe.step = max(probe.step, .sides)
                 let left = sideStrength(grid, top, dx, h, side: -1)
-                guard left >= 12 else { continue }
                 let right = sideStrength(grid, top, dx, h, side: 1)
-                guard right >= 12 else { continue }
+                let found = Pose(topX: top.x / 400, topY: Double(top.y) / 225, bottomX: bottom.x / 400, bottomY: Double(bottom.y) / 225)
+                guard left >= sideThreshold, right >= sideThreshold else {
+                    if min(left, right) > probe.side {
+                        probe.side = min(left, right)
+                        probe.candidate = found
+                    }
+                    continue
+                }
                 let edges = Double(min(left, right)) + 0.25 * Double(max(left, right))
                 let rims = rimBoundary(grid, top, dx, h, lower: false) + rimBoundary(grid, bottom, dx, h, lower: true)
                 let score = edges + 0.1 * Double(min(top.contrast, bottom.contrast)) + 0.5 * Double(rims)
                 if score > best {
                     best = score
-                    pose = Pose(topX: top.x / 400, topY: Double(top.y) / 225, bottomX: bottom.x / 400, bottomY: Double(bottom.y) / 225)
+                    pose = found
                 }
             }
         }
-        return pose
+        return pose == nil ? (nil, probe) : (pose, Probe(step: .found))
     }
 
     private static func slots(_ grid: Grid, rows: Range<Int>, lengths: ClosedRange<Int>, maximum: Int) -> [Slot] {
+        scan(grid, rows: rows, lengths: lengths, maximum: maximum).slots
+    }
+
+    /// Şeritteki yarıklar; `maximum`'dan çoksa hiçbiri (`crowded`: menü ya da yazı satırları, telefon aranmaz).
+    private static func scan(_ grid: Grid, rows: Range<Int>, lengths: ClosedRange<Int>, maximum: Int) -> (slots: [Slot], crowded: Bool) {
         let left = 95, width = 211
         var band = [UInt8](repeating: 0, count: (rows.count + 8) * width)
         for y in (rows.lowerBound - 4)..<(rows.upperBound + 4) {
@@ -332,14 +501,14 @@ public enum GamePhoneGeometry {
                     let tone = (Int(rim[3]) + Int(rim[4])) / 2
                     let contrast = tone - Int(band[center])
                     if contrast >= limit(tone / 3, 20, 33), Int(rim[7]) - Int(rim[0]) <= max(24, contrast * 3 / 4) {
-                        guard found.count < maximum else { return [] }
+                        guard found.count < maximum else { return ([], true) }
                         found.append(Slot(x: Double(left) + Double(s + x - 1) / 2, y: y, length: x - s, contrast: contrast))
                     }
                 }
                 start = nil
             }
         }
-        return found
+        return (found, false)
     }
 
     private static func hasCamera(_ grid: Grid, _ top: Slot) -> Bool {

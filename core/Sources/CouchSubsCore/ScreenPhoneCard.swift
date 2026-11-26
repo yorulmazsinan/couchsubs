@@ -244,10 +244,22 @@ public enum ScreenPhoneCard {
 
     /// Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday (bkz. `GamePhoneTracker.plausible`) yok sayılır.
     /// `near`: açık telefonun son yeri (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır.
-    public static func phone(in frame: CGImage, near: Handset? = nil) -> Handset? {
-        guard let pose = GamePhoneGeometry.locate(frame, near: near?.pose),
-              GamePhoneTracker.plausible(pose.bounds, width: frame.width, height: frame.height) else { return nil }
-        return Handset(pose: pose, aspect: Double(frame.width) / Double(max(1, frame.height)))
+    public static func phone(in frame: CGImage, near: Handset? = nil) -> Handset? { search(in: frame, near: near).phone }
+
+    /// `phone(in:near:)`; telefon bulunamazsa `candidate`: sıkı aramada yanları zayıf kalan akla yatkın aday
+    /// (`GamePhoneGeometry.Probe.weak`), yoksa nil. Aday telefon sayılmaz; altyazı hattı ekranındaki satırları kısa süre
+    /// bekletir (Windows: ScreenPhoneCard.Phone(frame, near, out candidate), Android: ScreenPhoneCard.search).
+    static func search(in frame: CGImage, near: Handset? = nil) -> (phone: Handset?, candidate: Handset?) {
+        let aspect = Double(frame.width) / Double(max(1, frame.height))
+        let (pose, probe) = GamePhoneGeometry.search(frame, near: near?.pose)
+        if let pose {
+            guard GamePhoneTracker.plausible(pose.bounds, width: frame.width, height: frame.height) else { return (nil, nil) }
+            return (Handset(pose: pose, aspect: aspect), nil)
+        }
+        guard let weak = probe.weak, GamePhoneTracker.plausible(weak.bounds, width: frame.width, height: frame.height) else {
+            return (nil, nil)
+        }
+        return (nil, Handset(pose: weak, aspect: aspect))
     }
 
     /// Kartın yeri: telefonun yanında, telefon boyunda; iki yanda da yer yoksa telefonun altında, orada da yer yoksa

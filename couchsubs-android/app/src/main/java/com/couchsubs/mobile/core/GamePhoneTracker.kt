@@ -40,18 +40,29 @@ interface PhoneImage {
 }
 
 /**
- * GTA 6'nın oyun içi telefonunu izler ("GTA 6'daki telefonu otomatik çevir"). Hizalı iki gözlem şartı, tek bir menü ya
- * da altyazı karesinin telefon oturumu açmasını önler (Mac/iPhone GamePhoneTracker.swift, Windows GamePhoneTracker.cs
- * ile aynı kurallar).
+ * GTA 6'nın oyun içi telefonunu izler ("GTA 6'daki telefonu otomatik çevir"). Uyumlu gözlemlerle açılır ([OPEN_POINTS]):
+ * iki sıkı gözlem, ya da bir sıkı gözlem ve onun yerinde gevşek doğrulama / yanları zayıf aday, ya da üç zayıf gözlem.
+ * Tek bir menü ya da altyazı karesi telefon oturumu açmaz (Mac/iPhone GamePhoneTracker.swift, Windows
+ * GamePhoneTracker.cs ile aynı kurallar).
  */
-class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) {
-    constructor() : this({ image, near -> GamePhoneGeometry.locate(image, near) })
-    constructor(locate: (PhoneImage) -> GamePhoneGeometry.Pose?) : this({ image, _ -> locate(image) })
+class GamePhoneTracker internal constructor(
+    private val sight: (PhoneImage, GamePhoneGeometry.Pose?) -> Sighting,
+    @Suppress("UNUSED_PARAMETER") marker: Unit,
+) {
+    constructor() : this({ image, near ->
+        val search = GamePhoneGeometry.search(image, near)
+        Sighting(search.pose, search.pose != null && search.probe.step == GamePhoneGeometry.Step.FOUND, search.probe)
+    }, Unit)
+    constructor(locateNear: (PhoneImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) :
+        this({ image, near -> Sighting(locateNear(image, near), true, null) }, Unit)
+    constructor(locate: (PhoneImage) -> GamePhoneGeometry.Pose?) : this({ image, _ -> Sighting(locate(image), true, null) }, Unit)
+
+    /** Gözlem: bulunan yer, sıkı aramayla mı bulundu ve sıkı aramanın sonucu (gerçek aramada; denemelerde null). */
+    class Sighting(val pose: GamePhoneGeometry.Pose?, val strict: Boolean, val probe: GamePhoneGeometry.Probe?)
 
     class Sample(val sampled: Boolean, val pose: GamePhoneGeometry.Pose?)
 
     private var lastTime: Long? = null
-    private var previous: GamePhoneGeometry.Pose? = null
     private var shown: GamePhoneGeometry.Pose? = null
     private var clock = 0L
     private val trace = DropLog({ clock })
@@ -61,26 +72,49 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
 
     private fun note(reason: String) = trace.note(PhoneTrace.COMPONENT, reason, "", onLog)
 
+    private var pending: GamePhoneGeometry.Pose? = null
+    private var pendingAt = 0L
+    private var pendingPoints = 0
+    private var pendingMisses = 0
+    private var pendingStrict = false
+    private val missLog = PhoneMissLog()
+
     @Synchronized
     fun sample(image: PhoneImage, now: Long): Sample {
         lastTime?.let { if (now >= it && now - it < INTERVAL_MS) return Sample(false, shown) }
         lastTime = now
         clock = now
         val wasShown = shown != null
+        // Açık telefonun ya da doğrulanmayı bekleyen gözlemin yerinde gevşek doğrulama da denenir ([GamePhoneGeometry.locate]
+        // near): beyaz ya da mavi ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama
+        // ıskalıyordu. Yeni telefonda sıkı arama ıskalarsa yanları zayıf aday ([GamePhoneGeometry.Probe.weak]) zayıf gözlem
+        // sayılır.
+        val seen = sight(image, shown ?: if (pendingFresh(now)) pending else null)
+        var found = seen.pose
+        var strict = seen.strict
+        var probe = seen.probe
+        if (found == null && shown == null) probe?.weak?.let {
+            found = it
+            strict = false
+        }
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (menüde ya da koyu ekranda yanlış
         // eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı.
-        // Açık telefon yerinde ararken gevşek doğrulama da denenir ([GamePhoneGeometry.locate] near): beyaz ya da mavi
-        // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
-        var found = locateNear(image, shown)
-        if (found != null && !plausible(found.bounds, image.width, image.height)) found = null
-        val before = previous
+        found?.let {
+            if (!plausible(it.bounds, image.width, image.height)) {
+                if (strict) probe = probe?.copy(step = GamePhoneGeometry.Step.IMPLAUSIBLE)
+                found = null
+                strict = false
+            }
+        }
+        val points = if (found == null) 0 else if (strict) STRONG_POINTS else WEAK_POINTS
         val current = shown
         var unseenMs = 0L
         var unseenMisses = 0
-        if (found != null && ((before != null && found.bounds.isClose(before.bounds, 0.035)) ||
-                (current != null && found.bounds.isClose(current.bounds, 0.035)))) {
-            // İki uyumlu gözlem ya da açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir.
-            shown = found
+        var movedFrom: GamePhoneGeometry.Pose? = null
+        val sighted = found
+        if (current != null && sighted != null && sighted.bounds.isClose(current.bounds, 0.035)) {
+            // Açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir.
+            shown = sighted
             misses = 0
             lastSeen = now
         } else if (current != null && !closes(misses + 1, elapsed(lastSeen, now))) {
@@ -88,20 +122,59 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
             // bildirim). Telefon gerçekten indirilince [MISS_GRACE_MS] sonra kapanır ([closes]).
             misses++
-        } else {
-            if (current != null) {
-                unseenMs = elapsed(lastSeen, now)
-                unseenMisses = misses + 1
-            }
+        } else if (current != null) {
+            unseenMs = elapsed(lastSeen, now)
+            unseenMisses = misses + 1
             shown = null
             misses = 0
+            clearPending()
+        } else if (sighted != null) {
+            // Yeni telefon: doğrulanmayı bekleyen gözlemin yakınındaysa puanı eklenir, değilse yeni bekleyen gözlem olur.
+            val waiting = pending
+            if (waiting != null && sighted.bounds.isClose(waiting.bounds, 0.035) && (pendingMisses == 0 || pendingFresh(now))) {
+                pendingPoints += points
+            } else {
+                if (waiting != null && pendingMisses == 0) movedFrom = waiting
+                if (waiting != null) missLog.unconfirmed(pendingStrict)
+                pendingPoints = points
+                pendingStrict = false
+            }
+            pending = sighted
+            pendingAt = now
+            pendingMisses = 0
+            pendingStrict = pendingStrict || strict
+            if (pendingPoints >= OPEN_POINTS) {
+                shown = sighted
+                misses = 0
+                lastSeen = now
+                clearPending()
+            }
+        } else if (pending != null) {
+            pendingMisses++
+            if (!pendingFresh(now)) {
+                missLog.unconfirmed(pendingStrict)
+                clearPending()
+            }
         }
         if (!wasShown && shown != null) note(PhoneTrace.OPENED)
         else if (wasShown && shown == null) note(PhoneTrace.closed(unseenMs, unseenMisses))
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
-        if (shown == null && found != null && before != null) note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, before.bounds)))
-        previous = found
+        val moved = movedFrom
+        if (shown == null && sighted != null && moved != null) note(PhoneTrace.moving(PhoneTrace.shift(sighted.bounds, moved.bounds)))
+        // İlk açılış ıskalanınca nedeni (en ileri geçilen ölçüt, en iyi aday) sınırlı aralıkla günlüğe (#1251).
+        val missed = probe
+        if (shown != null) missLog.reset()
+        else if (missed != null) missLog.note(missed, now) { note(it) }
         return Sample(true, shown)
+    }
+
+    private fun pendingFresh(now: Long): Boolean = pending != null && now >= pendingAt && now - pendingAt <= PENDING_MS
+
+    private fun clearPending() {
+        pending = null
+        pendingPoints = 0
+        pendingMisses = 0
+        pendingStrict = false
     }
 
     private var misses = 0
@@ -111,14 +184,39 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
     @Synchronized
     fun reset() {
         lastTime = null
-        previous = null
         shown = null
         misses = 0
         lastSeen = 0L
+        clearPending()
+        missLog.reset()
     }
 
     companion object {
         const val INTERVAL_MS = 330L
+
+        /** Sıkı aramayla bulunan telefonun gözlem puanı. */
+        const val STRONG_POINTS = 2
+        /**
+         * Gevşek doğrulamanın (doğrulanmayı bekleyen gözlemin yerinde hoparlör, kamera ve alt çentik) ya da yanları zayıf
+         * adayın ([GamePhoneGeometry.WEAK_SIDE]) gözlem puanı.
+         */
+        const val WEAK_POINTS = 1
+        /**
+         * Yeni telefon, art arda uyumlu gözlemlerin puanı buna varınca açılır: iki sıkı gözlem (önceki kural), sıkı gözlem
+         * ve gevşek doğrulama, ya da üç zayıf gözlem. Önceden yalnız art arda iki sıkı gözlem açıyordu: sıkı arama telefonu
+         * ara sıra bulunca (açık kasa açık zeminde, el örtüyor, karanlık) telefon hiç açılmıyor, mesajları altyazı gibi
+         * okunuyordu (#1251, beta-102; Mac/iPhone ve Windows ile aynı).
+         */
+        const val OPEN_POINTS = 3
+        /**
+         * Doğrulanmayı bekleyen gözlem, arada ıskalı örnek olsa da bu kadar süre (ms) geçerli kalır; ıskasız art arda
+         * örnekler süreye bakılmadan birleşir (seyrek örneklemede de telefon açılır).
+         */
+        const val PENDING_MS = 1000L
+
+        /** Denemeler: gözlem ve gücü (strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday). */
+        internal fun sighting(sight: (PhoneImage) -> Pair<GamePhoneGeometry.Pose, Boolean>?): GamePhoneTracker =
+            GamePhoneTracker({ image, _ -> sight(image)?.let { Sighting(it.first, it.second, null) } ?: Sighting(null, false, null) }, Unit)
 
         /**
          * Açık telefon bu kadar süre (ms) görülmezse kapanır; çevirisi hemen kalkar (izleyici closePhone). Önceden süre
@@ -259,10 +357,65 @@ object GamePhoneGeometry {
      * yazısı kutularına (3420–3425) gidiyordu. Gevşek doğrulama yalnız açık telefonun yerinde yapılır: yeni telefon yine
      * sıkı aramayla ve iki gözlemle açılır (Mac/iPhone ve Windows ile aynı).
      */
-    fun locate(image: PhoneImage, near: Pose? = null): Pose? {
-        if (image.width < 400 || image.height < 225) return null
+    fun locate(image: PhoneImage, near: Pose? = null): Pose? = search(image, near).pose
+
+    /**
+     * Sıkı aramanın ıska nedeni: aramanın geçemediği ilk ölçüt (sırayla). Telefon ekrandayken ilk açılış ıskalanınca
+     * hangi ölçütün tuttuğu günlükte görünsün diye (#1251; Mac/iPhone ve Windows ile aynı adlar ve sıra).
+     */
+    enum class Step {
+        /** Karede 16:9 oyun görüntüsü yok. */
+        NO_PICTURE,
+        /** Üst şeritte hoparlör yarığına benzer koyu çizgi yok. */
+        NO_TOP_SLOT,
+        /** Üst şeritte çok aday (menü, yazı satırları): arama bırakıldı. */
+        TOP_CROWDED,
+        /** Hoparlör yarığının yanında ön kamera yok. */
+        NO_CAMERA,
+        /** Alt şeritte alt çentiğe benzer koyu çizgi yok. */
+        NO_BOTTOM_SLOT,
+        /** Alt şeritte çok aday: arama bırakıldı. */
+        BOTTOM_CROWDED,
+        /** Yarık ile çentik telefon boyunda ve oranında değil. */
+        SHAPE,
+        /** Yarığın ya da çentiğin çevresi düz kasa değil. */
+        RIM,
+        /** Telefonun yan kenarları zayıf (açık kasa açık zeminde, el örtüyor). */
+        SIDES,
+        /** Sıkı arama buldu ama kutu akla yatkın değil ([GamePhoneTracker.plausible]; izleyici koyar). */
+        IMPLAUSIBLE,
+        /** Bulundu. */
+        FOUND,
+    }
+
+    /** Yan kenarların sıkı aramadaki eşiği (ikisi de en az bu kadar güçlü olmalı). */
+    const val SIDE_THRESHOLD = 12
+
+    /**
+     * Yanları zayıf adayın zayıf gözlem sayılması için zayıf yanının en az gücü. Gerçek telefonsuz karelerin
+     * (testdata/frames; karartılmış, açılmış, düşük karşıtlıklı hâlleriyle) hiçbiri yan ölçütüne gelmiyor; gerçek telefon
+     * (480p akış, yukarıda tutulan) 10–11'de kalıp bulunmuyordu (Mac/iPhone ve Windows ile aynı).
+     */
+    const val WEAK_SIDE = 8
+
+    /**
+     * Sıkı aramanın sonucu: [step] ıskanın nedeni; [side] yan ölçütüne gelen adaylardan zayıf yanı en güçlü olanın zayıf
+     * yanı (yoksa -1); [candidate] o aday (yarık, kamera, çentik, oran ve kasa tutuyor, yanları zayıf). Aday tek başına
+     * telefon açmaz.
+     */
+    data class Probe(val step: Step, val side: Int = -1, val candidate: Pose? = null) {
+        /** Zayıf gözlem sayılan aday ([WEAK_SIDE]). */
+        val weak: Pose? get() = if (side >= WEAK_SIDE) candidate else null
+    }
+
+    /** Arama: bulunan telefon (sıkı arama ya da [near]'da gevşek doğrulama) ve sıkı aramanın sonucu. */
+    class Search(val pose: Pose?, val probe: Probe)
+
+    /** [locate]; [Search.probe]: sıkı aramanın ıska nedeni ve en iyi adayı (karenin tamamına göre). */
+    fun search(image: PhoneImage, near: Pose? = null): Search {
+        if (image.width < 400 || image.height < 225) return Search(null, Probe(Step.NO_PICTURE))
         if (widescreen(image.width, image.height)) return locatePicture(image, near)
-        val area = picture(image.width, image.height) { x, y -> image.tone(x, y) shr 8 } ?: return null
+        val area = picture(image.width, image.height) { x, y -> image.tone(x, y) shr 8 } ?: return Search(null, Probe(Step.NO_PICTURE))
         val w = image.width.toDouble()
         val h = image.height.toDouble()
         // Açık telefonun yeri görüntünün içine taşınır.
@@ -270,16 +423,18 @@ object GamePhoneGeometry {
             Pose((pose.topX * w - area.x) / area.width, (pose.topY * h - area.y) / area.height,
                 (pose.bottomX * w - area.x) / area.width, (pose.bottomY * h - area.y) / area.height)
         }
-        val pose = locatePicture(Cropped(image, area), local) ?: return null
+        val inside = locatePicture(Cropped(image, area), local)
         fun x(value: Double) = (area.x + value * area.width) / w
         fun y(value: Double) = (area.y + value * area.height) / h
-        return Pose(x(pose.topX), y(pose.topY), x(pose.bottomX), y(pose.bottomY))
+        fun outside(pose: Pose) = Pose(x(pose.topX), y(pose.topY), x(pose.bottomX), y(pose.bottomY))
+        return Search(inside.pose?.let(::outside), inside.probe.copy(candidate = inside.probe.candidate?.let(::outside)))
     }
 
-    private fun locatePicture(image: PhoneImage, near: Pose? = null): Pose? {
-        if (image.width < 400 || image.height < 225 || !widescreen(image.width, image.height)) return null
-        strictPicture(image)?.let { return it }
-        return near?.let { confirmPicture(image, it) }
+    private fun locatePicture(image: PhoneImage, near: Pose? = null): Search {
+        if (image.width < 400 || image.height < 225 || !widescreen(image.width, image.height)) return Search(null, Probe(Step.NO_PICTURE))
+        val strict = strictPicture(image)
+        if (strict.pose != null) return strict
+        return Search(near?.let { confirmPicture(image, it) }, strict.probe)
     }
 
     /** Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir. */
@@ -322,40 +477,60 @@ object GamePhoneGeometry {
         return pose
     }
 
-    private fun strictPicture(image: PhoneImage): Pose? {
+    private fun strictPicture(image: PhoneImage): Search {
         val grid = Grid(image)
         // Olağan oyun görüntüsü burada biter. Gövdeye ancak üst bantta hem hoparlör hem kamera görülünce bakılır.
-        val upper = slots(grid, 17 until 75, 8..19, 12).filter { hasCamera(grid, it) }
-        if (upper.isEmpty()) return null
-        val lower = slots(grid, 145 until 217, 5..14, 16)
+        val speakers = scan(grid, 17 until 75, 8..19, 12)
+        if (speakers.slots.isEmpty()) return Search(null, Probe(if (speakers.crowded) Step.TOP_CROWDED else Step.NO_TOP_SLOT))
+        val upper = speakers.slots.filter { hasCamera(grid, it) }
+        if (upper.isEmpty()) return Search(null, Probe(Step.NO_CAMERA))
+        val notches = scan(grid, 145 until 217, 5..14, 16)
+        if (notches.slots.isEmpty()) return Search(null, Probe(if (notches.crowded) Step.BOTTOM_CROWDED else Step.NO_BOTTOM_SLOT))
         var best = 0.0
         var pose: Pose? = null
+        var step = Step.SHAPE
+        var weakSide = -1
+        var weak: Pose? = null
         for (top in upper) {
-            for (bottom in lower) {
+            for (bottom in notches.slots) {
                 val h = (bottom.y - top.y).toDouble()
                 val dx = bottom.x - top.x
                 if (!(h >= 115 && h <= 179 && abs(dx) <= h * 0.24 &&
                         bottom.length >= top.length * 0.46 && bottom.length <= top.length &&
                         h >= 7.9 * top.length && h <= 16.5 * top.length &&
-                        h >= 12 * bottom.length && h <= 30 * bottom.length &&
-                        smoothRim(grid, top, dx, h) && smoothRim(grid, bottom, dx, h))) continue
+                        h >= 12 * bottom.length && h <= 30 * bottom.length)) continue
+                if (step < Step.RIM) step = Step.RIM
+                if (!(smoothRim(grid, top, dx, h) && smoothRim(grid, bottom, dx, h))) continue
+                if (step < Step.SIDES) step = Step.SIDES
                 val left = sideStrength(grid, top, dx, h, -1)
-                if (left < 12) continue
                 val right = sideStrength(grid, top, dx, h, 1)
-                if (right < 12) continue
+                val found = Pose(top.x / 400, top.y / 225.0, bottom.x / 400, bottom.y / 225.0)
+                if (left < SIDE_THRESHOLD || right < SIDE_THRESHOLD) {
+                    if (minOf(left, right) > weakSide) {
+                        weakSide = minOf(left, right)
+                        weak = found
+                    }
+                    continue
+                }
                 val edges = minOf(left, right) + 0.25 * maxOf(left, right)
                 val rims = rimBoundary(grid, top, dx, h, lower = false) + rimBoundary(grid, bottom, dx, h, lower = true)
                 val score = edges + 0.1 * minOf(top.contrast, bottom.contrast) + 0.5 * rims
                 if (score > best) {
                     best = score
-                    pose = Pose(top.x / 400, top.y / 225.0, bottom.x / 400, bottom.y / 225.0)
+                    pose = found
                 }
             }
         }
-        return pose
+        return if (pose != null) Search(pose, Probe(Step.FOUND)) else Search(null, Probe(step, weakSide, weak))
     }
 
-    private fun slots(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): List<Slot> {
+    private fun slots(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): List<Slot> =
+        scan(grid, rows, lengths, maximum).slots
+
+    private class Scan(val slots: List<Slot>, val crowded: Boolean)
+
+    /** Şeritteki yarıklar; [maximum]'dan çoksa hiçbiri (crowded: menü ya da yazı satırları, telefon aranmaz). */
+    private fun scan(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): Scan {
         val left = 95
         val width = 211
         val count = rows.last - rows.first + 1
@@ -388,14 +563,14 @@ object GamePhoneGeometry {
                     val tone = (rim[3] + rim[4]) / 2
                     val contrast = tone - band[center]
                     if (contrast >= limit(tone / 3, 20, 33) && rim[7] - rim[0] <= maxOf(24, contrast * 3 / 4)) {
-                        if (found.size >= maximum) return emptyList()
+                        if (found.size >= maximum) return Scan(emptyList(), true)
                         found.add(Slot(left + (s + x - 1) / 2.0, y, x - s, contrast))
                     }
                 }
                 start = null
             }
         }
-        return found
+        return Scan(found, false)
     }
 
     private fun hasCamera(grid: Grid, top: Slot): Boolean {

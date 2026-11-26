@@ -277,6 +277,16 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private int phoneMisses;
     /// <summary>Günlüğe yazılmış son telefon yazısı (her karede yeniden yazılmasın).</summary>
     private string? loggedPhone;
+    /// <summary>
+    /// Doğrulanmamış telefon adayı (sıkı aramada yanları zayıf kalan; <see cref="GamePhoneGeometry.Probe.Weak"/>) ve ilk
+    /// görüldüğü an. Adayın ekranındaki satırlar <see cref="CandidateHoldMs"/> boyunca altyazı sayılmaz; sonraki aramada
+    /// adayın yerinde gevşek doğrulama telefonu bulursa süzgeç telefonu tutar, bulamazsa satırlar süre dolunca altyazıya
+    /// geçer (#1251: telefon mesajları telefon bulunana dek altyazı gibi çevriliyordu; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    private ScreenPhoneCard.Handset? phoneCandidate;
+    private long phoneCandidateSince;
+    /// <summary>Doğrulanmamış adayın satırlarının en çok bekletildiği süre (ms).</summary>
+    internal const long CandidateHoldMs = 1500;
     /// <summary>Doğruysa bu karede okunan blok kaydedilmez (ekranda menü var, altyazı gönderilmiyor).</summary>
     public Func<bool>? EchoPaused { get; init; }
     /// <summary>
@@ -360,11 +370,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             if (looksForPhone)
             {
-                ScreenPhoneCard.Handset? near, found = null;
-                lock (gate) near = phone;
-                try { found = ScreenPhoneCard.Phone(frame, near); } catch { }
+                ScreenPhoneCard.Handset? near, found = null, weak = null;
+                lock (gate) near = phone ?? phoneCandidate;
+                try { found = ScreenPhoneCard.Phone(frame, near, out weak); } catch { }
                 ScreenPhoneCard.Handset? next;
-                lock (gate) next = phone = HeldPhone(found, phone, ref phoneMisses);
+                lock (gate)
+                {
+                    next = phone = HeldPhone(found, phone, ref phoneMisses);
+                    (phoneCandidate, phoneCandidateSince) = Candidate(next is null ? weak : null, phoneCandidate, phoneCandidateSince, captured);
+                }
                 PhoneLooked?.Invoke(next is not null);
             }
             byte[]? signature = null;
@@ -428,7 +442,17 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // Karede kendi altyazımız (OBS Program projektörü, CouchSubs'ın OBS katmanı) varsa okunmaz (bkz. OwnSubtitles).
         var (seen, ownLines) = Own.Split(raw, area);
         ScreenPhoneCard.Handset? handset;
-        lock (gate) handset = FindsPhone ? phone : null;
+        var unconfirmed = false;
+        lock (gate)
+        {
+            handset = FindsPhone ? phone : null;
+            // Telefon doğrulanmadıysa doğrulanmayı bekleyen adayın ekranındaki satırlar kısa süre bekletilir (CandidateHoldMs).
+            if (handset is null && FindsPhone && HoldsCandidate(phoneCandidate, phoneCandidateSince, captured))
+            {
+                handset = phoneCandidate;
+                unconfirmed = true;
+            }
+        }
         if (handset is not null)
         {
             var kept = seen.Lines.Where(line => line.Box is not { } box || !ScreenPhoneCard.Holds(box.PlacedIn(area), handset)).ToList();
@@ -441,7 +465,10 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     fresh = phoneText != loggedPhone;
                     loggedPhone = phoneText;
                 }
-                if (fresh) Write($"telefon yazısı: {SubtitleLog.Excerpt(phoneText)} telefonun ekranında, altyazı sayılmadı");
+                if (fresh)
+                    Write(unconfirmed
+                        ? $"telefon adayı: {SubtitleLog.Excerpt(phoneText)} telefon doğrulanana dek bekletildi, altyazı sayılmadı"
+                        : $"telefon yazısı: {SubtitleLog.Excerpt(phoneText)} telefonun ekranında, altyazı sayılmadı");
                 seen = new Reading(kept);
             }
         }
@@ -1415,6 +1442,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             phoneLookedAt = null;
             phoneMisses = 0;
             loggedPhone = null;
+            phoneCandidate = null;
+            phoneCandidateSince = 0;
             if (stabilizer.Reset() == StabilizerAction.Clear) ClearScreen();
             Own.Reset();
         }
@@ -1424,6 +1453,23 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// Aramanın sonucundan sonra süzgecin kullanacağı telefon: bulunduysa o; açık telefon bulunamadıysa
     /// <see cref="GamePhoneTracker.MissGrace"/> arama boyunca son yeri kalır, sonra null (Mac/iPhone ve Android ile aynı).
     /// </summary>
+    /// <summary>
+    /// Aramadan sonra doğrulanmamış telefon adayı ve ilk görüldüğü an: aday yoksa null; önceki adayın yakınındaysa ilk
+    /// görüldüğü an korunur (bekletme süresi uzamaz), değilse şimdi başlar (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static (ScreenPhoneCard.Handset? Candidate, long Since) Candidate(ScreenPhoneCard.Handset? weak,
+        ScreenPhoneCard.Handset? previous, long previousSince, long now)
+    {
+        if (weak is null) return (null, 0);
+        var same = previous is not null && new CropRegion(weak.Bounds.Top, weak.Bounds.Bottom, weak.Bounds.Left, weak.Bounds.Right)
+            .IsClose(new CropRegion(previous.Bounds.Top, previous.Bounds.Bottom, previous.Bounds.Left, previous.Bounds.Right), 0.035);
+        return (weak, same && now >= previousSince ? previousSince : now);
+    }
+
+    /// <summary>Doğrulanmamış adayın satırları hâlâ bekletilir mi (<see cref="CandidateHoldMs"/>).</summary>
+    internal static bool HoldsCandidate(ScreenPhoneCard.Handset? candidate, long since, long now) =>
+        candidate is not null && now >= since && now - since < CandidateHoldMs;
+
     internal static ScreenPhoneCard.Handset? HeldPhone(ScreenPhoneCard.Handset? found, ScreenPhoneCard.Handset? shown, ref int misses)
     {
         if (found is not null)

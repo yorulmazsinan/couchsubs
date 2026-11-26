@@ -260,10 +260,26 @@ object ScreenPhoneCard {
      * Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır. [near]: açık telefonun son yeri
      * (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır ([GamePhoneGeometry.locate]).
      */
-    fun phone(image: PhoneImage, near: Handset? = null): Handset? {
-        val pose = GamePhoneGeometry.locate(image, near?.pose) ?: return null
-        if (!GamePhoneTracker.plausible(pose.bounds, image.width, image.height)) return null
-        return Handset(pose, image.width.toDouble() / maxOf(1, image.height))
+    fun phone(image: PhoneImage, near: Handset? = null): Handset? = search(image, near).phone
+
+    /** Altyazı hattının araması: bulunan telefon ya da (bulunamazsa) doğrulanmamış aday. */
+    class Search(val phone: Handset?, val candidate: Handset?)
+
+    /**
+     * [phone]; telefon bulunamazsa [Search.candidate]: sıkı aramada yanları zayıf kalan akla yatkın aday
+     * ([GamePhoneGeometry.Probe.weak]), yoksa null. Aday telefon sayılmaz; altyazı hattı ekranındaki satırları kısa süre
+     * bekletir (Mac/iPhone: ScreenPhoneCard.search, Windows: ScreenPhoneCard.Phone(frame, near, out candidate)).
+     */
+    fun search(image: PhoneImage, near: Handset? = null): Search {
+        val aspect = image.width.toDouble() / maxOf(1, image.height)
+        val found = GamePhoneGeometry.search(image, near?.pose)
+        found.pose?.let { pose ->
+            if (!GamePhoneTracker.plausible(pose.bounds, image.width, image.height)) return Search(null, null)
+            return Search(Handset(pose, aspect), null)
+        }
+        val weak = found.probe.weak ?: return Search(null, null)
+        if (!GamePhoneTracker.plausible(weak.bounds, image.width, image.height)) return Search(null, null)
+        return Search(null, Handset(weak, aspect))
     }
 
     /**

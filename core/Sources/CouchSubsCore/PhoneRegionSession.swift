@@ -16,9 +16,11 @@ final class PhoneRegionSession {
 
         func isPresent() -> Bool { absence() == nil }
 
-        /// Telefon bu karede yoksa ya da izlenen yerden çok uzaktaysa nedeni (`PhoneTrace`); yerindeyse nil.
+        /// Telefon bu karede yoksa ya da izlenen yerden çok uzaktaysa nedeni (`PhoneTrace`); yerindeyse nil. İzleyici gibi
+        /// açık telefonun yerinde gevşek doğrulama da denenir: önceden yalnız sıkı arama vardı, izleyicinin açık tuttuğu
+        /// telefonun turları "PhoneMissing" ile atlanıyordu (#1251; Windows ile aynı).
         func absence() -> String? {
-            guard let found = GamePhoneGeometry.locate(frame) else { return PhoneTrace.missing }
+            guard let found = GamePhoneGeometry.locate(frame, near: pose) else { return PhoneTrace.missing }
             return region.isClose(to: found.bounds, tolerance: 0.035) ? nil
                 : PhoneTrace.displaced(PhoneTrace.shift(found.bounds, region))
         }
