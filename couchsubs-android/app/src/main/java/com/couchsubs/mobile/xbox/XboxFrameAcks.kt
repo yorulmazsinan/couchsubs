@@ -68,22 +68,36 @@ internal class XboxDecoderFactory(
     }
 }
 
-/** Telefonun donanım H.264 çözücüsü High (ya da Constrained High) profilini çözebiliyor mu (MediaCodecList'ten). */
+/**
+ * Telefonun H.264 çözücüleri (MediaCodecList'ten) ve High (640c1f) teklif kararı (bkz. XboxAvcDecoders). Eskiden
+ * yalnız listedeki ilk donanım çözücüsüne bakılıyordu; o çözücü High'ı bildirmeyince (#1252) telefon yalnız Baseline
+ * teklif ediyordu.
+ */
 internal object AvcHighProfile {
     private const val MIME = "video/avc"
     private val SOFTWARE = listOf("OMX.google.", "OMX.SEC.", "c2.android")
 
-    val supported: Boolean by lazy {
+    val decoders: List<XboxAvcDecoder> by lazy {
         runCatching {
-            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info ->
-                !info.isEncoder && !info.name.endsWith(".secure") && hardware(info) &&
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { info ->
+                !info.isEncoder && !info.name.endsWith(".secure") &&
                     info.supportedTypes.any { it.equals(MIME, ignoreCase = true) }
-            }?.getCapabilitiesForType(MIME)?.profileLevels?.any {
-                it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh ||
-                    it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedHigh
-            } ?: false
-        }.getOrDefault(false)
+            }.map { info ->
+                val high = runCatching {
+                    info.getCapabilitiesForType(MIME).profileLevels.any {
+                        it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh ||
+                            it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedHigh
+                    }
+                }.getOrDefault(false)
+                XboxAvcDecoder(info.name, hardware(info), high)
+            }
+        }.getOrDefault(emptyList())
     }
+
+    val supported: Boolean get() = XboxAvcDecoders.offersHigh(decoders)
+
+    /** Günlük satırı: çözücüler ve teklif kararı. */
+    val note: String get() = XboxAvcDecoders.note(decoders)
 
     private fun hardware(info: MediaCodecInfo): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.isHardwareAccelerated

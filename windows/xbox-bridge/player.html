@@ -35,7 +35,116 @@
   const STAT_TYPES = ['inbound-rtp', 'candidate-pair', 'local-candidate', 'remote-candidate', 'transport', 'codec'];
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d', { willReadFrequently: true });
+  // Kare yakalama (#1314): eskiden tam çözünürlükte drawImage + toDataURL('image/jpeg', 0.94) 100-333 ms'de bir ana iş
+  // parçacığında yapılıyordu. Kare onayları da (xCloudPlayer Input.ts, 16 ms'lik setInterval) ana iş parçacığında
+  // gider; JPEG kodlaması onları geciktirince Xbox görüntü kanalını kapatıyor, ses cızırdıyor, oturum yeniden
+  // kuruluyordu. Şimdi kare createImageBitmap ile küçültülerek alınır, JPEG'e bir Worker'da (OffscreenCanvas) çevrilir
+  // ve uygulamanın paylaşılan arabelleğine ikili yazılır (base64 yok). Worker ya da arabellek yoksa eski yol küçültülmüş
+  // kareyle sürer.
+  const MAX_FRAME_WIDTH = 1280;
+  const JPEG_QUALITY = 0.8;
+  const ENCODER_SOURCE = `
+    let canvas, context;
+    onmessage = async ({ data }) => {
+      const started = performance.now();
+      try {
+        const bitmap = data.bitmap;
+        if (!canvas || canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+          canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          context = canvas.getContext('2d');
+        }
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: data.quality });
+        const bytes = await blob.arrayBuffer();
+        postMessage({ bytes, encodeMs: performance.now() - started }, [bytes]);
+      } catch (error) {
+        try { data.bitmap?.close(); } catch {}
+        postMessage({ error: String(error?.message || error) });
+      }
+    };`;
+  let encoder = null;
+  let encoderBroken = false;
+  // Uygulamanın gönderdiği paylaşılan arabellek (CoreWebView2SharedBuffer): JPEG baytları buraya yazılır.
+  let frameBuffer = null;
+  // 10 sn'lik tanı: ana iş parçacığında yakalamaya giden süre, Worker'da kodlama süresi, kare onayı aralıkları.
+  const pipe = { frames: 0, mainMs: 0, mainMax: 0, encodeMs: 0, encodeMax: 0, binary: 0 };
+  const acks = { last: 0, sends: 0, maxGap: 0, over: 0 };
+  let pipeTimer = 0;
   function send(message) { window.chrome.webview.postMessage(message); }
+  function makeEncoder() {
+    if (encoder || encoderBroken) return encoder;
+    try {
+      if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function') throw new Error('OffscreenCanvas yok');
+      encoder = new Worker(URL.createObjectURL(new Blob([ENCODER_SOURCE], { type: 'text/javascript' })));
+      encoder.onmessage = ({ data }) => encoded(data);
+      encoder.onerror = event => {
+        log('kare kodlayıcı hatası: ' + (event.message || '?') + '; ana iş parçacığında küçültülmüş kodlamaya dönülüyor');
+        encoderBroken = true;
+        encoder?.terminate();
+        encoder = null;
+        frameWaiting = false;
+      };
+    } catch (error) {
+      log('kare kodlayıcı kurulamadı: ' + (error?.message || error) + '; ana iş parçacığında küçültülmüş kodlama');
+      encoderBroken = true;
+      encoder = null;
+    }
+    return encoder;
+  }
+  function encoded(data) {
+    if (!player) return;
+    if (data.error) {
+      log('kare kodlanamadı: ' + data.error);
+      frameWaiting = false;
+      return;
+    }
+    pipe.encodeMs += data.encodeMs;
+    pipe.encodeMax = Math.max(pipe.encodeMax, data.encodeMs);
+    deliver(new Uint8Array(data.bytes));
+  }
+  // JPEG baytları uygulamaya: paylaşılan arabellek varsa ikili (yalnız uzunluk iletilir), yoksa base64 (eski yol).
+  function deliver(bytes) {
+    if (frameBuffer && bytes.byteLength <= frameBuffer.byteLength) {
+      new Uint8Array(frameBuffer).set(bytes);
+      pipe.binary++;
+      send({ kind: 'frameBinary', length: bytes.byteLength });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => send({ kind: 'frame', image: reader.result });
+    reader.onerror = () => { frameWaiting = false; };
+    reader.readAsDataURL(new Blob([bytes], { type: 'image/jpeg' }));
+  }
+  // Kare onayları input kanalından gider (xCloudPlayer Channel/Base.ts send → RTCDataChannel.send); her gönderim anı
+  // tutulur. Aralık uzarsa (ana iş parçacığı takıldı) Xbox görüntü kanalını kapatabilir.
+  function watchAcks() {
+    const input = player?.getDataChannel('input');
+    if (!input || input.__couchsubsAcks) return;
+    input.__couchsubsAcks = true;
+    const original = input.send.bind(input);
+    input.send = data => {
+      const now = performance.now();
+      if (acks.last) {
+        const gap = now - acks.last;
+        acks.maxGap = Math.max(acks.maxGap, gap);
+        if (gap > 250) acks.over++;
+      }
+      acks.last = now;
+      acks.sends++;
+      return original(data);
+    };
+  }
+  function ackSince() { return acks.last ? Math.round(performance.now() - acks.last) : -1; }
+  function reportPipe() {
+    if (!pipe.frames && !acks.sends) return;
+    send({ kind: 'pipe', frames: pipe.frames, binary: pipe.binary,
+      mainAvg: pipe.frames ? pipe.mainMs / pipe.frames : 0, mainMax: pipe.mainMax,
+      encodeAvg: pipe.frames ? pipe.encodeMs / pipe.frames : 0, encodeMax: pipe.encodeMax,
+      ackSends: acks.sends, ackMaxGap: acks.maxGap, ackOver: acks.over, worker: !!encoder });
+    Object.assign(pipe, { frames: 0, mainMs: 0, mainMax: 0, encodeMs: 0, encodeMax: 0, binary: 0 });
+    Object.assign(acks, { sends: 0, maxGap: 0, over: 0 });
+  }
   function rpc(command, args) {
     const id = ++nextId;
     send({ kind: 'rpc', id, command, args });
@@ -93,11 +202,32 @@
     lastFrame = now;
     frameSentAt = now;
     frameWaiting = true;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0);
-    // JPEG keeps the WebView2 message bounded while preserving OCR legibility.
-    send({ kind: 'frame', image: canvas.toDataURL('image/jpeg', 0.94) });
+    // En çok 1280 piksel genişlik (PS5 Uzaktan Oynatma'nın 720p karesi gibi): yazı okunur kalır, kodlama ucuzlar.
+    const scale = Math.min(1, MAX_FRAME_WIDTH / video.videoWidth);
+    const width = Math.max(1, Math.round(video.videoWidth * scale));
+    const height = Math.max(1, Math.round(video.videoHeight * scale));
+    const worker = makeEncoder();
+    if (worker) {
+      // Küçültme tarayıcının kendi iş parçacığında; ana iş parçacığında yalnız istek kurulur.
+      createImageBitmap(video, { resizeWidth: width, resizeHeight: height, resizeQuality: 'medium' })
+        .then(bitmap => {
+          if (!player || encoder !== worker) { bitmap.close(); frameWaiting = false; return; }
+          worker.postMessage({ bitmap, quality: JPEG_QUALITY }, [bitmap]);
+        })
+        .catch(error => {
+          log('kare alınamadı: ' + (error?.message || error));
+          frameWaiting = false;
+        });
+    } else {
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(video, 0, 0, width, height);
+      send({ kind: 'frame', image: canvas.toDataURL('image/jpeg', JPEG_QUALITY) });
+    }
+    const spent = performance.now() - now;
+    pipe.frames++;
+    pipe.mainMs += spent;
+    pipe.mainMax = Math.max(pipe.mainMax, spent);
   }
   async function start() {
     if (player) return;
@@ -107,13 +237,21 @@
     });
     player.bind();
     player.setControllerRumble(false);
+    watchAcks();
+    pipeTimer = setInterval(reportPipe, 10000);
     player.getDataChannel('control')?.addEventListener('open', notifyKeyframeReady);
     // Veri kanallarının açılışı ve message kanalının el sıkışması günlüğe girer (telefonlardaki "kanal …" satırları gibi):
     // HandshakeAck gelmezse oynatıcı kontrol kanalında yetki isteğini göndermez, Xbox da görüntü göndermez.
     for (const name of ['input', 'control', 'message', 'chat']) {
       const channel = player.getDataChannel(name);
       channel?.addEventListener('open', () => log('kanal ' + name + ': open'));
-      channel?.addEventListener('close', () => log('kanal ' + name + ': closed'));
+      channel?.addEventListener('close', () => {
+        if (name !== 'input') return log('kanal ' + name + ': closed');
+        // Xbox görüntü kanalını kapattı: kare onayı o an gidiyor muydu (#1314, #1252).
+        const since = ackSince();
+        log('kanal input: closed; son kare onayı ' + (since < 0 ? 'gönderilmedi' : since + ' ms önce') +
+          ', bu penceredeki en uzun onay aralığı ' + Math.round(acks.maxGap) + ' ms');
+      });
     }
     // Xbox'ın metin iletileri (kapatma bildirimi gibi) telefonlardaki "kanal …" satırları gibi günlüğe girer; kapanmanın
     // nedeni Xbox'tan geliyorsa burada görünür.
@@ -199,6 +337,9 @@
   function stop() {
     clearInterval(frameTimer);
     clearInterval(pictureTimer);
+    clearInterval(pipeTimer);
+    encoder?.terminate();
+    encoder = null;
     audioObserver?.disconnect();
     audioObserver = undefined;
     for (const item of pending.values()) item.reject(new Error('Xbox stream stopped'));
@@ -236,6 +377,10 @@
       }
     }
     else if (message.kind === 'stop') stop();
+  });
+  // Uygulama kare baytları için paylaşılan arabellek gönderir (CoreWebView2SharedBuffer); gelmezse base64 yolu sürer.
+  window.chrome.webview.addEventListener('sharedbufferreceived', event => {
+    if (event.additionalData?.kind === 'frameBuffer') frameBuffer = event.getBuffer();
   });
   window.addEventListener('error', event => log('hata: ' + (event.error?.stack || event.error || event.message)));
   window.addEventListener('unhandledrejection', event => log('yakalanmamış söz: ' + (event.reason?.stack || event.reason)));

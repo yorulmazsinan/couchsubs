@@ -15,7 +15,6 @@ import com.couchsubs.mobile.account.Backend
 import com.couchsubs.mobile.remoteplay.DisconnectKind
 import com.couchsubs.mobile.remoteplay.FrameSource
 import com.couchsubs.mobile.remoteplay.SessionState
-import com.couchsubs.mobile.remoteplay.ChromaPlanes
 import com.couchsubs.mobile.remoteplay.VideoFrame
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -114,6 +113,14 @@ class XboxStreamSession(
     @Volatile private var keepalive: ScheduledFuture<*>? = null
     @Volatile private var lastConverted = 0L
     @Volatile private var firstFrameAt = 0L
+    /** Son karenin ve son kare onayı paketinin anı (kapanma satırı için: Xbox kapattığında akış ve onay sürüyor muydu). */
+    @Volatile private var lastFrameAt = 0L
+    @Volatile private var lastAckAt = 0L
+    /** Alıcıdan okuma hattına kare aktarımı ve süreleri (#1308, bkz. XboxFramePipe.kt). */
+    private val pipeStats = XboxFramePipeStats()
+    private val frameWorker = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs Xbox kare").apply { isDaemon = true } }
+    private val handoff = XboxFrameHandoff(frameWorker, pipeStats) { frame -> if (!stopped.get()) onFrame(frame) }
+    @Volatile private var pipeTask: ScheduledFuture<*>? = null
     /** Bu bağlantının çözücü durumu ve Xbox'ın SDP yanıtında seçtiği görüntü kodeği (tanı satırı için, #1252). */
     @Volatile private var decoderNote = XboxDecoderNote()
     @Volatile private var negotiatedCodec: String? = null
@@ -164,6 +171,8 @@ class XboxStreamSession(
         }
         worker.shutdown()
         timers.shutdown()
+        handoff.close()
+        frameWorker.shutdown()
     }
 
     private fun log(text: String) {
@@ -369,32 +378,38 @@ class XboxStreamSession(
         frameSession = negotiatedFrames
         // İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
         val watchPicture = XboxPictureWatch().also { pictureWatch = it }
+        // Alıcı libwebrtc'nin iş parçacığındadır ve hemen dönmelidir (#1308): kare yalnız önceden ayrılmış arabelleğe
+        // kopyalanıp okuma hattının iş parçacığına verilir; okuma hattının işi orada yapılır (bkz. XboxFramePipe.kt).
         val sink = VideoSink { frame ->
-            if (stopped.get()) return@VideoSink
-            val sessionFrames = frameCounter.recordFrame(negotiatedFrames) ?: return@VideoSink
-            val now = SystemClock.elapsedRealtime()
-            watchPicture.frameArrived(now)
-            if (sessionFrames == 1L) {
-                firstFrameAt = now
-                val waited = watch?.let { current ->
-                    current.frameArrived()
-                    ", bağlantıdan ${"%.1f".format(java.util.Locale.ROOT, (now - connectedAt) / 1000.0)} sn sonra, keyframe isteği ${current.keyframesRequested}"
-                } ?: ""
-                log("ilk kare ${frame.buffer.width}x${frame.buffer.height}$waited")
-                frameCounter.runIfCurrent(negotiatedFrames) {
-                    if (!stopped.get() && machine.streaming()) onState(SessionState.Streaming)
-                }
-            }
-            if (now - lastConverted < FRAME_INTERVAL_MS) return@VideoSink
-            lastConverted = now
-            val i420 = frame.buffer.toI420() ?: return@VideoSink
+            val started = System.nanoTime()
             try {
-                if (frameCounter.framesInSession(negotiatedFrames) > 0) {
-                    val chroma = if (i420.strideU == i420.strideV) ChromaPlanes(i420.dataU, i420.dataV, i420.strideU) else null
-                    onFrame(VideoFrame(i420.dataY, i420.width, i420.height, i420.strideY, chroma = chroma))
+                if (stopped.get()) return@VideoSink
+                val sessionFrames = frameCounter.recordFrame(negotiatedFrames) ?: return@VideoSink
+                val now = SystemClock.elapsedRealtime()
+                lastFrameAt = now
+                watchPicture.frameArrived(now)
+                if (sessionFrames == 1L) {
+                    firstFrameAt = now
+                    val waited = watch?.let { current ->
+                        current.frameArrived()
+                        ", bağlantıdan ${"%.1f".format(java.util.Locale.ROOT, (now - connectedAt) / 1000.0)} sn sonra, keyframe isteği ${current.keyframesRequested}"
+                    } ?: ""
+                    log("ilk kare ${frame.buffer.width}x${frame.buffer.height}$waited")
+                    frameCounter.runIfCurrent(negotiatedFrames) {
+                        if (!stopped.get() && machine.streaming()) onState(SessionState.Streaming)
+                    }
+                }
+                if (now - lastConverted < FRAME_INTERVAL_MS) return@VideoSink
+                lastConverted = now
+                if (frameCounter.framesInSession(negotiatedFrames) <= 0) return@VideoSink
+                val i420 = frame.buffer.toI420() ?: return@VideoSink
+                try {
+                    handoff.offer(i420.width, i420.height, i420.dataY, i420.strideY, i420.dataU, i420.strideU, i420.dataV, i420.strideV)
+                } finally {
+                    i420.release()
                 }
             } finally {
-                i420.release()
+                pipeStats.sink(System.nanoTime() - started)
             }
         }
         val done = CountDownLatch(1).also { ended = it }
@@ -403,7 +418,10 @@ class XboxStreamSession(
         lastError = null
         lastKind = null
         firstFrameAt = 0L
+        lastFrameAt = 0L
+        lastAckAt = 0L
         negotiatedCodec = null
+        startPipeLog()
         connectedAt = 0L
         acking = false
         acks.clear()
@@ -411,6 +429,7 @@ class XboxStreamSession(
         acksSent = 0L
         clockStart = SystemClock.elapsedRealtime()
         val pcFactory = createFactory().also { factory = it }
+        log(AvcHighProfile.note)
         val gathered = CountDownLatch(1)
         val local = ArrayList<XboxIceCandidate>()
         val config = PeerConnection.RTCConfiguration(listOf(
@@ -442,6 +461,9 @@ class XboxStreamSession(
             override fun onRenegotiationNeeded() {}
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState?) {
                 log("bağlantı: $state")
+                if (!stopped.get() && (state == PeerConnection.PeerConnectionState.FAILED || state == PeerConnection.PeerConnectionState.CLOSED)) {
+                    log("WebRTC bağlantısı kapandı ($state): ${closeContext()}")
+                }
                 if (state == PeerConnection.PeerConnectionState.FAILED) {
                     end("Xbox WebRTC bağlantısı kesildi (ICE failed)", XboxError.NETWORK)
                     done.countDown()
@@ -552,6 +574,7 @@ class XboxStreamSession(
                     startWatch()
                 }
                 state == DataChannel.State.CLOSED && name == "input" -> {
+                    if (!stopped.get()) log("input kanalı kapandı (Xbox görüntü kanalını kapattı): ${closeContext()}")
                     end("Xbox görüntü kanalını kapattı", XboxError.SERVER_CLOSED)
                     done.countDown()
                 }
@@ -601,6 +624,7 @@ class XboxStreamSession(
                 val sequence = ++ackSequence
                 send("input", XboxChannels.frameAckPacket(sequence, (SystemClock.elapsedRealtime() - clockStart).toDouble(), frames), binary = true)
                 acksSent += frames.size
+                lastAckAt = SystemClock.elapsedRealtime()
                 if (sequence == 1) log("kare onayı başladı")
             } catch (error: Exception) {
                 log("kare onayı: ${error.message}")
@@ -695,6 +719,33 @@ class XboxStreamSession(
         }, KEEPALIVE_MS, KEEPALIVE_MS, TimeUnit.MILLISECONDS)
     }
 
+    /**
+     * Bağlantı sürerken 10 sn'de bir kare hattının satırı (#1308): alıcıda geçen süre, atlanan kare ve bellek. Bellek
+     * büyüyorsa ya da alıcı yavaşsa sonraki günlükte görünür.
+     */
+    private fun startPipeLog() {
+        pipeTask?.cancel(false)
+        pipeStats.take(0, "")
+        pipeTask = timers.scheduleWithFixedDelay({
+            try {
+                pipeStats.take(XboxFramePipeStats.WINDOW_MS, memory())?.let(::log)
+            } catch (error: Exception) {
+                log("kare hattı: ${error.message}")
+            }
+        }, XboxFramePipeStats.WINDOW_MS, XboxFramePipeStats.WINDOW_MS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun memory(): String {
+        val runtime = Runtime.getRuntime()
+        val java = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        val native = android.os.Debug.getNativeHeapAllocatedSize() / (1024 * 1024)
+        return "bellek java $java MB, yerel $native MB"
+    }
+
+    /** Kapanma anında akış ve onay sürüyor muydu (input kanalı ya da WebRTC bağlantısı kapanınca yazılır). */
+    private fun closeContext(): String =
+        XboxCloseContext.describe(SystemClock.elapsedRealtime(), lastFrameAt, lastAckAt, acksSent)
+
     private fun closePeer() {
         synchronized(watchLock) {
             watchTask?.cancel(false)
@@ -703,6 +754,9 @@ class XboxStreamSession(
             videoTrack = null
         }
         pictureWatch = null
+        pipeTask?.cancel(false)
+        pipeTask = null
+        handoff.clear()
         frameSession?.let(frameCounter::endSession)
         frameSession = null
         keepalive?.cancel(false)

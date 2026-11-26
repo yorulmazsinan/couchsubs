@@ -27,6 +27,8 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private TaskCompletionSource<bool>? browserEnded;
     private bool started;
     private int frameBusy;
+    /// <summary>Oynatıcının JPEG kareleri yazdığı paylaşılan arabellek (#1314, bkz. <see cref="ShareFrameBuffer"/>).</summary>
+    private CoreWebView2SharedBuffer? frameBuffer;
     /// <summary>İlk kare gelene kadar anahtar kare isteği ve tanı satırı (bkz. <see cref="XboxFirstFrameWatch"/>).</summary>
     private XboxFirstFrameWatch? watch;
     private DispatcherTimer? watchTimer;
@@ -319,12 +321,44 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         {
             try
             {
-                if (result.IsSuccess) browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "start", legacyFrameRate, playAudio = playAudioNow }));
+                if (result.IsSuccess)
+                {
+                    ShareFrameBuffer(environment);
+                    browser?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "start", legacyFrameRate, playAudio = playAudioNow }));
+                }
                 else browserEnded?.TrySetResult(true);
             }
             catch { browserEnded?.TrySetResult(true); }
         };
         browser.CoreWebView2.Navigate("https://couchsubs-xbox.local/player.html");
+    }
+
+    /// <summary>
+    /// Kare baytları için paylaşılan arabellek (#1314): sayfa JPEG'i buraya ikili yazar, iletide yalnız uzunluk gelir
+    /// (base64 yok). Kurulamazsa sayfa eski yoldan (base64) gönderir.
+    /// </summary>
+    private void ShareFrameBuffer(CoreWebView2Environment environment)
+    {
+        try
+        {
+            frameBuffer?.Dispose();
+            frameBuffer = environment.CreateSharedBuffer(XboxPlayerPipe.FrameBufferBytes);
+            browser?.CoreWebView2?.PostSharedBufferToScript(frameBuffer, CoreWebView2SharedBufferAccess.ReadWrite, "{\"kind\":\"frameBuffer\"}");
+        }
+        catch (Exception error)
+        {
+            frameBuffer = null;
+            Log($"kare arabelleği paylaşılamadı, kareler base64 gelecek: {error.Message}");
+        }
+    }
+
+    /// <summary>Sayfanın paylaşılan arabelleğe yazdığı JPEG'in kopyası (ileti geldiği anda; sayfa sonrakini frameDone'dan sonra yazar).</summary>
+    private byte[]? ReadSharedFrame(long length)
+    {
+        var shared = frameBuffer;
+        if (shared == null) return null;
+        using var stream = shared.OpenStream();
+        return XboxPlayerPipe.ReadFrame(stream, length, (long)shared.Size);
     }
 
     private async void OnMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
@@ -337,7 +371,18 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             {
                 case "frame":
                     if (Interlocked.Exchange(ref frameBusy, 1) != 0) return;
-                    OfferFrame(message.GetProperty("image").GetString()!);
+                    OfferFrame(message.GetProperty("image").GetString()!, null);
+                    break;
+                case "frameBinary":
+                    if (Interlocked.Exchange(ref frameBusy, 1) != 0) return;
+                    byte[]? jpeg = null;
+                    try { jpeg = ReadSharedFrame(message.GetProperty("length").GetInt64()); }
+                    catch (Exception error) { Log($"kare arabelleği okunamadı: {error.Message}"); }
+                    OfferFrame(null, jpeg);
+                    break;
+                case "pipe":
+                    // Oynatıcının 10 sn'lik özeti: yakalama ana iş parçacığını ne kadar tuttu, kare onayı aralıkları (#1314).
+                    Log(XboxPlayerPipe.Describe(message));
                     break;
                 case "ice":
                     // RTCPeerConnection.iceConnectionState: görüntü bekçisi asıl ICE durumunu görür (Mac/iPhone, Android gibi).
@@ -564,17 +609,24 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     /// yavaşlayınca kareler WebView2 ileti kuyruğunda birikiyor, saniyeler önceki kare okunuyordu. Bitince oynatıcıya
     /// haber verilir; oynatıcı ancak o zaman yeni kare gönderir.
     /// </summary>
-    private void OfferFrame(string data)
+    /// <remarks>Kare ya paylaşılan arabellekten kopyalanmış JPEG baytları (<paramref name="jpeg"/>) ya da eski yolun base64
+    /// data URL'sidir (<paramref name="dataUrl"/>); ikisi de yoksa yalnız "frameDone" gider.</remarks>
+    private void OfferFrame(string? dataUrl, byte[]? jpeg)
     {
         var view = browser;
         _ = Task.Run(() =>
         {
             try
             {
-                var comma = data.IndexOf(',');
-                if (comma >= 0)
+                var bytes = jpeg;
+                if (bytes == null && dataUrl != null)
                 {
-                    var frame = DecodeJpeg(Convert.FromBase64String(data[(comma + 1)..]));
+                    var comma = dataUrl.IndexOf(',');
+                    if (comma >= 0) bytes = Convert.FromBase64String(dataUrl[(comma + 1)..]);
+                }
+                if (bytes != null)
+                {
+                    var frame = DecodeJpeg(bytes);
                     Interlocked.Increment(ref connectionFrames);
                     FrameReceived?.Invoke(frame);
                 }
@@ -683,6 +735,8 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         browser?.Dispose();
         window = null;
         browser = null;
+        frameBuffer?.Dispose();
+        frameBuffer = null;
     }
 
     public void Stop()

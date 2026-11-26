@@ -5,8 +5,9 @@
 // telefonlar Xbox'a yalnız Constrained Baseline (42e01f) teklif ediyordu. iPhone, Mac (VideoToolbox) ve Windows
 // (Chromium) Constrained High (640c1f) teklif eder; Android'de görüntünün geldiği tek kayıt da (#285, OnePlus 5,
 // OMX.qcom) High teklif edilen oturumdu. #1252'deki Poco M6 Pro'da (c2.mtk) Xbox sesi gönderiyor, görüntüde yalnız
-// dolgu paketi var ("video paket 150, bayt 0"). Burada donanım çözücüsü High'ı destekliyorsa telefon da 640c1f teklif
-// eder ve H.264 teklifin başına alınır; SDP'deki kodekler ve çözücünün durumu günlüğe yazılır.
+// dolgu paketi var ("video paket 150, bayt 0"). Burada telefonda herhangi bir H.264 çözücüsü varsa telefon da 640c1f
+// teklif eder ve H.264 teklifin başına alınır (XboxAvcDecoders); SDP'deki kodekler, telefonun H.264 çözücüleri ve
+// kurulan çözücünün durumu günlüğe yazılır.
 package com.couchsubs.mobile.xbox
 
 /** SDP'nin görüntü bölümündeki kodekler (oynatıcı günlüğü ve tanı satırı için). iPhone/Mac ve Windows'la aynı biçim. */
@@ -53,6 +54,29 @@ object XboxSdp {
         val offered = videoCodecs(offer).joinToString(", ").ifEmpty { "yok" }
         val chosen = videoCodecs(answer).joinToString(", ").ifEmpty { "görüntü yok" }
         return "SDP görüntü kodekleri: teklif $offered; Xbox yanıtı $chosen"
+    }
+}
+
+/** Telefondaki bir H.264 çözücüsü: MediaCodec adı, donanım mı, High (ya da Constrained High) profilini bildiriyor mu. */
+data class XboxAvcDecoder(val name: String, val hardware: Boolean, val high: Boolean)
+
+/**
+ * High (640c1f) teklif kararı (#1252). Eskiden yalnız listedeki ilk donanım çözücüsünün bildirdiği profillere
+ * bakılıyordu; o çözücü High'ı bildirmeyince telefon Xbox'a yalnız Constrained Baseline teklif ediyordu, Xbox da
+ * görüntü kodlamıyordu. Android'in H.264 çözücüleri pratikte High'ı çözer (donanım çözemezse libwebrtc yazılım
+ * çözücüsüne, c2.android.avc.decoder'a geçer); iPhone, Mac ve Windows da High teklif eder. Bu yüzden telefonda herhangi
+ * bir H.264 çözücüsü varsa High teklif edilir; çözücüler ve bildirdikleri günlüğe yazılır.
+ */
+object XboxAvcDecoders {
+    fun offersHigh(decoders: List<XboxAvcDecoder>): Boolean = decoders.isNotEmpty()
+
+    /** "H.264 çözücüleri: c2.mtk.avc.decoder (donanım, High yok), c2.android.avc.decoder (yazılım, High); High (640c1f) teklif ediliyor" */
+    fun note(decoders: List<XboxAvcDecoder>): String {
+        if (decoders.isEmpty()) return "H.264 çözücüsü yok; High teklif edilmiyor"
+        val list = decoders.joinToString(", ") {
+            "${it.name} (${if (it.hardware) "donanım" else "yazılım"}, ${if (it.high) "High" else "High yok"})"
+        }
+        return "H.264 çözücüleri: $list; High (${XboxCodecOrder.CONSTRAINED_HIGH}) teklif ediliyor"
     }
 }
 

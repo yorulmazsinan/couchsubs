@@ -36,6 +36,18 @@ class XboxCodecsTest {
         assertEquals(listOf(high, baseline, vp8), ordered)
     }
 
+    /** #1252: ilk donanım çözücüsü High bildirmese de telefonda H.264 çözücüsü varsa High teklif edilir. */
+    @Test fun anyH264DecoderOffersHighAndIsNamedInTheLog() {
+        val decoders = listOf(XboxAvcDecoder("c2.mtk.avc.decoder", hardware = true, high = false),
+            XboxAvcDecoder("c2.android.avc.decoder", hardware = false, high = true))
+        assertTrue(XboxAvcDecoders.offersHigh(decoders))
+        assertTrue(XboxAvcDecoders.offersHigh(decoders.take(1)))
+        assertEquals("H.264 çözücüleri: c2.mtk.avc.decoder (donanım, High yok), c2.android.avc.decoder (yazılım, High); " +
+            "High (640c1f) teklif ediliyor", XboxAvcDecoders.note(decoders))
+        assertEquals(false, XboxAvcDecoders.offersHigh(emptyList()))
+        assertEquals("H.264 çözücüsü yok; High teklif edilmiyor", XboxAvcDecoders.note(emptyList()))
+    }
+
     @Test fun noH264MeansNothingIsInvented() {
         assertEquals(listOf(vp8, vp9), XboxCodecOrder.order(listOf(vp8, vp9), highSupported = true))
     }

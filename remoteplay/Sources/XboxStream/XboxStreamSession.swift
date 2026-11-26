@@ -79,6 +79,16 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     private var negotiatedCodec: String?
     /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (kareler ve ICE olayları buraya yazılır).
     private var picture = XboxPictureWatch()
+    /// Görüntü alıcısından okuma hattına kare aktarımı (#1308): alıcı (WebRTC'nin iş parçacığı) yalnız kareyi kutuya
+    /// bırakıp döner; kareyi resme çevirme ve okuma hattına verme ayrı bir sırada, yalnız en son kareyle yapılır.
+    /// Eskiden çevirme ve `onFrame` alıcıda çalışıyordu; alıcı yavaşlayınca WebRTC'nin kare kuyruğu büyüyordu.
+    private let frameBox = FrameMailbox<RTCVideoFrameBuffer>()
+    private let frameQueue = DispatchQueue(label: "CouchSubs Xbox kare", qos: .userInitiated)
+    private var pipeStats = XboxFramePipeStats()
+    private var pipeTask: Task<Void, Never>?
+    /// Son karenin ve son kare onayı paketinin anı (ms; kapanma satırı için).
+    private var lastFrameAtMs = 0
+    private var lastAckAtMs = 0
 
     /// Oyun sesi bu cihazda çalınır (Android'deki `playAudio` ile aynı). Çeviri sürerken `setPlayAudio` ile değişir.
     private var playAudio: Bool
@@ -299,6 +309,9 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         watchTask = nil
         ackTask?.cancel()
         ackTask = nil
+        pipeTask?.cancel()
+        pipeTask = nil
+        frameBox.clear()
         locked {
             acking = false
             pendingAcks = []
@@ -353,8 +366,12 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             connectedAt = 0
             negotiatedCodec = nil
             picture = XboxPictureWatch()
+            lastFrameAtMs = 0
+            lastAckAtMs = 0
+            pipeStats = XboxFramePipeStats()
         }
         Self.decoders.reset()
+        startPipeLog()
         let config = RTCConfiguration()
         config.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]), RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"])]
         config.sdpSemantics = .unifiedPlan
@@ -482,9 +499,45 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         case ("input", .open):
             startKeepalive()
             startWatch()
-        case ("input", .closed): end("Xbox görüntü kanalını kapattı", .serverClosed)
+        case ("input", .closed):
+            if !stopped { log("input kanalı kapandı (Xbox görüntü kanalını kapattı): \(closeContext())") }
+            end("Xbox görüntü kanalını kapattı", .serverClosed)
         default: break
         }
+    }
+
+    /// Kapanma anında akış ve onay sürüyor muydu (input kanalı ya da WebRTC bağlantısı kapanınca yazılır).
+    private func closeContext() -> String {
+        let (frameAt, ackAt, acks) = locked { (lastFrameAtMs, lastAckAtMs, acksSent) }
+        return XboxCloseContext.describe(nowMs: Self.nowMs(), lastFrameAtMs: frameAt, lastAckAtMs: ackAt, acksSent: acks)
+    }
+
+    /// Bağlantı sürerken 10 sn'de bir kare hattının satırı (#1308): alıcıda geçen süre, atlanan kare ve bellek.
+    private func startPipeLog() {
+        pipeTask?.cancel()
+        pipeTask = Task.detached { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(XboxFramePipeStats.windowMs) * 1_000_000)
+                guard let self, !Task.isCancelled else { return }
+                let dropped = self.frameBox.takeDropped()
+                let line = self.locked { () -> String? in
+                    self.pipeStats.dropped(dropped)
+                    return self.pipeStats.take(windowMs: XboxFramePipeStats.windowMs, memory: Self.memory())
+                }
+                if let line { self.log(line) }
+            }
+        }
+    }
+
+    /// Uygulamanın bellek ayak izi (Xcode'un ve iOS'un bellek sınırında saydığı phys_footprint).
+    private static func memory() -> String {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        guard result == KERN_SUCCESS else { return "bellek ?" }
+        return "bellek \(info.phys_footprint / (1024 * 1024)) MB"
     }
 
     fileprivate func channelMessage(_ name: String, _ buffer: RTCDataBuffer) {
@@ -529,6 +582,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
                     self.pendingAcks.removeFirst(frames.count)
                     self.ackSequence &+= 1
                     self.acksSent += frames.count
+                    self.lastAckAtMs = Self.nowMs()
                     return (frames, self.ackSequence)
                 }
                 guard let batch else { continue }
@@ -632,11 +686,19 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
 extension XboxStreamSession: RTCVideoRenderer {
     public func setSize(_ size: CGSize) {}
 
+    /// Alıcı WebRTC'nin iş parçacığındadır ve hemen dönmelidir (#1308): kare yalnız kutuya bırakılır, resme çevirme ve
+    /// `onFrame` `frameQueue`'da yapılır (yalnız en son kare; yetişilemeyen kare atlanır).
     public func renderFrame(_ frame: RTCVideoFrame?) {
         guard let frame else { return }
+        let started = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let spent = DispatchTime.now().uptimeNanoseconds &- started
+            locked { pipeStats.sink(nanos: spent) }
+        }
         let now = ProcessInfo.processInfo.systemUptime
         let (count, due) = locked { () -> (Int, Bool) in
             framesReceived += 1
+            lastFrameAtMs = Int(now * 1000)
             if framesReceived == 1 { firstFrameAt = now }
             picture.frameArrived(atMs: Int(now * 1000))
             let due = now - lastConverted >= Self.frameInterval
@@ -660,8 +722,21 @@ extension XboxStreamSession: RTCVideoRenderer {
             log("ilk kare \(frame.width)x\(frame.height)\(waited)")
             if locked({ machine.streaming() }) { onState?(.streaming) }
         }
-        guard due, let image = Self.image(from: frame.buffer) else { return }
-        onFrame?(image)
+        guard due else { return }
+        locked { pipeStats.handedOver() }
+        guard frameBox.put(frame.buffer) else { return }
+        frameQueue.async { [weak self] in self?.drainFrames() }
+    }
+
+    /// `frameQueue`'da: kutudaki en son kare resme çevrilip okuma hattına verilir; kutu boşalınca biter.
+    private func drainFrames() {
+        while let buffer = frameBox.take() {
+            guard !stopped else { continue }
+            let started = DispatchTime.now().uptimeNanoseconds
+            if let image = Self.image(from: buffer) { onFrame?(image) }
+            let spent = DispatchTime.now().uptimeNanoseconds &- started
+            locked { pipeStats.processed(nanos: spent) }
+        }
     }
 
     /// VideoToolbox karesi doğrudan CGImage olur; yazılım çözücüsünün I420 karesinden gri (Y düzlemi) resim.
@@ -710,6 +785,9 @@ extension XboxStreamSession: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCPeerConnectionState) {
         log("bağlantı: \(newState.rawValue)")
         guard locked({ peer === peerConnection }) else { return }
+        if (newState == .failed || newState == .closed) && !stopped {
+            log("WebRTC bağlantısı kapandı (\(newState == .failed ? "FAILED" : "CLOSED")): \(closeContext())")
+        }
         if newState == .failed { end("Xbox WebRTC bağlantısı kesildi (ICE failed)", .network) }
         else if newState == .closed { end("Xbox WebRTC bağlantısını kapattı", .serverClosed) }
     }
