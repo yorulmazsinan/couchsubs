@@ -72,6 +72,8 @@ public struct SubtitleStabilizer {
     /// Gönderilen satırın kaç kez aynı okunduğu ve gönderilenden farklı okunan, art arda gelen aynı okuma (düzeltme adayı).
     private var sentReads = 0
     private var correction: (text: String, raw: String, count: Int)?
+    /// Şu anki adayın ilk okunduğu an (gecikme dökümü için; kararları değiştirmez).
+    public var candidateStartedAt: Int { candidateSince }
     /// Son `feed` çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.
     public private(set) var note: StabilizerNote?
 

@@ -88,7 +88,7 @@ object TextMatch {
         val x = normalize(new)
         val y = normalize(old)
         if (x.isEmpty() || y.isEmpty()) return false
-        if (isGrowth(new, old) || isGrowth(old, new)) return true
+        if (isLooseGrowth(new, old) || isLooseGrowth(old, new)) return true
         if (isSimilar(x, y, 0.8)) return true
         val a = cleanWords(x)
         val b = cleanWords(y)
@@ -204,6 +204,68 @@ object TextMatch {
         }
         return 1 - previous[y.size].toDouble() / maxOf(x.size, y.size)
     }
+
+    /** Gevşek uzamada eski okumanın en az bu kadar harfi olmalı; kısa satırda bir harf bile anlamı değiştirir. */
+    const val LOOSE_GROWTH_LETTERS = 12
+
+    /**
+     * [new], [old]'un uzamış hali mi; eski okumanın sözcükleri yazı tanıma farkıyla başka okunmuş olabilir. Uzun satır
+     * aşama aşama belirir (daktilo efekti) ya da iki satırlık altyazının önce ilk satırı okunur; her okumada bir iki harf
+     * başka çıkınca ("Enzo" / "Enz0", "family" / "farnily") [isGrowth] sözcük sözcük eşleşmeyi bulamıyor, yarım okumanın
+     * çevirisi tamamının çevirisiyle üst üste duruyor, sırada bekleyen yarım okumalar da tek tek çevrilip gecikme
+     * birikiyordu (beta-104, Mafia: The Old Country). Boşluksuz harf dizisinde eski okuma yenisinin başına (satırın başı
+     * okunmamışsa sonuna) %85 benziyorsa uzamadır (Mac: TextMatch.isLooseGrowth, Windows: TextMatch.IsLooseGrowth).
+     */
+    fun isLooseGrowth(new: String, old: String): Boolean {
+        if (isGrowth(new, old)) return true
+        val x = normalize(new).split(' ').filter { it.isNotEmpty() }
+        val y = normalize(old).split(' ').filter { it.isNotEmpty() }
+        if (y.size < 3 || x.size < y.size) return false
+        val a = x.joinToString("")
+        val b = y.joinToString("")
+        if (b.length < LOOSE_GROWTH_LETTERS || a.length < b.length + 3) return false
+        return isSimilar(a.take(b.length), b, 0.85) || isSimilar(a.takeLast(b.length), b, 0.85)
+    }
+
+    /** Uzun satır sayılan okumanın en az harf sayısı ([isJitterOf]). */
+    const val JITTER_LETTERS = 30
+
+    /**
+     * [reread], [shown]'ın yalnız yazı tanıma farkıyla başka okunmuş hali mi (uzun satır): bir iki harf başka ("Enz0",
+     * "y0u"), sonuna çöp parça eklenmiş ("quietly. Il"), cümle ortasında kesilmiş ya da arada bir sözcüğü düşmüş okuma.
+     * Böyle okuma motora yeniden gitmez; ekrandaki (ya da beklenen) çevirisi kalır. Anlam işareti (olumsuzluk, sayı)
+     * ekleyen ya da düşüren, gerçek sözcükle uzayan, cümle sonuyla biten kısa ve bozuk sözcüğü onaran okuma
+     * (SubtitleStabilizer düzeltmesi, #854) farklıdır, yeniden çevrilir. Yalnız uzun satırlarda ([JITTER_LETTERS])
+     * geçerlidir (Mac: TextMatch.isJitter, Windows: TextMatch.IsJitterOf).
+     */
+    fun isJitterOf(reread: String, shown: String): Boolean {
+        val x = normalize(reread).split(' ').filter { it.isNotEmpty() }
+        val y = normalize(shown).split(' ').filter { it.isNotEmpty() }
+        val a = x.joinToString("")
+        val b = y.joinToString("")
+        if (minOf(a.length, b.length) < JITTER_LETTERS) return false
+        if (addsMeaning(reread, shown) || addsMeaning(shown, reread)) return false
+        if (x.size == y.size) return isSimilar(a, b, 0.9) && !SubtitleStabilizer.repairsWords(x, y)
+        // Cümle ortasında kesilen okuma (satırın bir bölümü okunamadı): gösterilen tamamı kalır. Cümle sonuyla biten kısa
+        // okuma aynı sözlerle başlayan ayrı bir söz olabilir; ona dokunulmaz.
+        if (x.size < y.size) {
+            return !SubtitleStabilizer.endsSentence(reread) && (isLooseGrowth(shown, reread) || isSimilar(a, b, 0.9))
+        }
+        // Uzayan okuma ancak eklenen parçalar çöpse aynı satırdır; gerçek sözcükle uzayan satır yeniden çevrilir.
+        val prefix = startsWith(x, y)
+        val suffix = endsWith(x, y)
+        if (prefix || suffix) return (if (prefix) x.drop(y.size) else x.dropLast(y.size)).all(::isJunkToken)
+        return isSimilar(a, b, 0.9) && x.count { !isJunkToken(it) } <= y.size
+    }
+
+    /** İngilizcede tek başına geçen kısa sözcükler (Windows: SubtitleStabilizer.ShortWords). */
+    private val shortWords = setOf(
+        "a", "i", "o", "an", "am", "as", "at", "be", "by", "do", "go", "ha", "he", "hi", "if", "in", "is", "it", "me", "mr",
+        "ms", "mrs", "dr", "st", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "tv", "uh", "um", "up", "us", "we", "ya", "ye",
+    )
+
+    /** Yazı tanımanın uydurduğu parça: bilinen kısa sözcük olmayan 1–2 harf ya da sözcük olamayacak harf dizisi. */
+    internal fun isJunkToken(word: String): Boolean = (word.length <= 2 && word !in shortWords) || OcrNoise.isNonWord(word)
 
     private fun startsWith(words: List<String>, part: List<String>) = words.take(part.size) == part
 

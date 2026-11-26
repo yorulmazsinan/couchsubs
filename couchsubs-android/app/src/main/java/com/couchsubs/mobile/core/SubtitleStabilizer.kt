@@ -90,6 +90,8 @@ class SubtitleStabilizer(
     private var candidate = ""
     private var candidateCount = 0
     private var candidateSince = 0L
+    /** Şu anki adayın ilk okunduğu an (gecikme dökümü için; kararları değiştirmez). */
+    val candidateStartedAt: Long get() = candidateSince
     /** Ekrandaki (gönderilmiş) satır: sadeleştirilmiş satırlar alt alta, ve ilk okunduğu hali. */
     private var sent = ""
     private var sentRaw = ""

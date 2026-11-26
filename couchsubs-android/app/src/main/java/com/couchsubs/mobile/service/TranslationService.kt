@@ -902,6 +902,8 @@ class TranslationService : Service() {
             }
             // Altyazı alanında okunup sahne yazısı sayılan bloklar nedeniyle günlüğe (GitHub #822).
             onLog = { Log.i(TAG, it) }
+            // Altyazının gecikme dökümü 30 sn'de bir tek satır (kare aralığı, yazı tanıma, kararlılık, bekletme, sıra, çeviri).
+            onTiming = { Log.i(TAG, it) }
             onPairShown = { pair ->
                 LiveState.shown(pair, pair.packId?.let { packTitles?.get(it) ?: it })
                 // Türkçe dublaj (iPhone ve masaüstüyle aynı): yeni altyazının cümleleri telefonun Türkçe sesiyle okunur.

@@ -70,6 +70,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
         "ms", "mrs", "dr", "st", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "tv", "uh", "um", "up", "us", "we", "ya", "ye",
     };
 
+    /// <summary>İngilizcede tek başına geçen kısa sözcüklerden mi (<see cref="TextMatch.IsJunkToken"/> çöp parçayı bundan ayırır).</summary>
+    internal static bool IsShortWord(string word) => ShortWords.Contains(word);
+
     /// <summary>
     /// Okumada çöp parça yok mu: her parça (noktalama ayıklanınca) harf, rakam, kesme ve tireden oluşur; 1–2 harflik
     /// parçalar bilinen kısa sözcüklerdir. Yanlış "kirli" sayılan satır yalnız bir kare gecikir.
@@ -112,6 +115,9 @@ public sealed class SubtitleStabilizer(double similarity = 0.85, int stableFrame
     /// <summary>Gönderilen satırın kaç kez aynı okunduğu ve gönderilenden farklı okunan, art arda gelen aynı okuma (düzeltme adayı).</summary>
     private int sentReads;
     private (string Text, string Raw, int Count)? correction;
+
+    /// <summary>Şu anki adayın ilk okunduğu an (gecikme dökümü için; kararları değiştirmez).</summary>
+    public long CandidateSince => candidateSince;
 
     /// <summary>Son <see cref="Feed"/> çağrısında bırakılan satır (günlük için); her çağrıda sıfırlanır.</summary>
     public StabilizerNote? Note { get; private set; }

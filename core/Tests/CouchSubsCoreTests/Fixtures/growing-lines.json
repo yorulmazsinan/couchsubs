@@ -1,0 +1,113 @@
+{
+  "about": "Uzun altyazı satırları (beta-104, Windows → TCL Android TV, Mafia: The Old Country: 'uzun konuşmalarda aynı çeviri tekrar tekrar geliyor, ekran yarım çevirilerle doluyor, her oyunda gecikme var'). Mac/iPhone GrowingLinesTests.swift, Windows GrowingLinesTests.cs ve Android GrowingLinesTest.kt bu dosyayı okur. reads: okumalar sırayla (her biri times kez, okumalar arası frameMs); hat paket yokken de bekletir (HoldWithoutPacks, varsayılan bekleme süreleri). translator: instant (çeviri hemen gelir) ya da blocked (bütün çeviriler okumalar bitince gelir: yavaş motor, sıra birikir). Çeviri 'TR: ' + gönderilen metnin harfleri ROT13 ile kaydırılmış hali (çeviri kaynağına benzemesin; 'zaten hedef dilde' sayılmasın). Beklenen: engineCalls (motora giden metinler, sırayla) ya da maxEngineCalls; shown (TV'ye giden çevirilerin kaynakları, sırayla); fresh: TV'de yeni altyazı açan gönderim sayısı (replace olmadan; gerisi yerine koyar); last: son gösterilen çevirinin kaynağı.",
+  "cases": [
+    {
+      "name": "üç aşamada beliren uzun satır tek altyazı, yerinde güncellenir",
+      "translator": "instant",
+      "frameMs": 200,
+      "reads": [
+        { "text": "Listen to me, Enzo. The Don wants you down", "times": 3 },
+        { "text": "Listen to me, Enz0. The Don wants you down at the docks before the sun", "times": 3 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before the sun\ncomes up, and he wants it done quietly.", "times": 5 }
+      ],
+      "expect": {
+        "maxEngineCalls": 3,
+        "fresh": 1,
+        "last": "Listen to me, Enzo. The Don wants you down at the docks before the sun\ncomes up, and he wants it done quietly."
+      }
+    },
+    {
+      "name": "üç aşamada beliren uzun satır, yavaş motor: yarım okumalar sırada birikmez, yalnız tamamı gösterilir",
+      "translator": "blocked",
+      "frameMs": 200,
+      "reads": [
+        { "text": "Listen to me, Enzo. The Don wants you down", "times": 3 },
+        { "text": "Listen to me, Enz0. The Don wants you down at the docks before the sun", "times": 3 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before the sun\ncomes up, and he wants it done quietly.", "times": 5 }
+      ],
+      "expect": {
+        "shown": [
+          "Listen to me, Enzo. The Don wants you down at the docks before the sun\ncomes up, and he wants it done quietly."
+        ],
+        "fresh": 1,
+        "last": "Listen to me, Enzo. The Don wants you down at the docks before the sun\ncomes up, and he wants it done quietly."
+      }
+    },
+    {
+      "name": "iki satırlık altyazı önce ilk satırı (bozuk), sonra iki satırı okunur: tek altyazı",
+      "translator": "instant",
+      "frameMs": 250,
+      "reads": [
+        { "text": "You think the family forgets what you did for us", "times": 3 },
+        { "text": "You think the farnily forgets what you did for us\nback in Sicily? Nobody forgets, Enzo.", "times": 5 }
+      ],
+      "expect": {
+        "maxEngineCalls": 2,
+        "fresh": 1,
+        "last": "You think the farnily forgets what you did for us\nback in Sicily? Nobody forgets, Enzo."
+      }
+    },
+    {
+      "name": "yazı tanıma farkıyla okunan uzun satır motora bir kez gider",
+      "translator": "instant",
+      "frameMs": 200,
+      "reads": [
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 3 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly. Il", "times": 3 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 2 },
+        { "text": "Listen to me, Enz0. The Don wants y0u down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 3 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done", "times": 2 },
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 2 }
+      ],
+      "expect": {
+        "engineCalls": [
+          "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly."
+        ],
+        "fresh": 1,
+        "last": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly."
+      }
+    },
+    {
+      "name": "art arda iki farklı uzun satır ikisi de gösterilir",
+      "translator": "instant",
+      "frameMs": 200,
+      "reads": [
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 4 },
+        { "text": "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard.", "times": 4 }
+      ],
+      "expect": {
+        "engineCalls": [
+          "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.",
+          "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+        ],
+        "shown": [
+          "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.",
+          "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+        ],
+        "fresh": 2,
+        "last": "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+      }
+    },
+    {
+      "name": "art arda iki farklı uzun satır, yavaş motor: ikisi de sırayla gösterilir",
+      "translator": "blocked",
+      "frameMs": 200,
+      "reads": [
+        { "text": "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.", "times": 4 },
+        { "text": "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard.", "times": 4 }
+      ],
+      "expect": {
+        "engineCalls": [
+          "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.",
+          "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+        ],
+        "shown": [
+          "Listen to me, Enzo. The Don wants you down at the docks before\nthe sun comes up, and he wants it done quietly.",
+          "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+        ],
+        "fresh": 2,
+        "last": "Listen to me, Enzo. Nobody else can know about this job,\nnot your brother and not the girl from the vineyard."
+      }
+    }
+  ]
+}

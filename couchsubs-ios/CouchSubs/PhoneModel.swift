@@ -1471,6 +1471,8 @@ final class PhoneModel: ObservableObject {
         // altyazi.log'a yazılır. Eskiden iPhone'da bağlı değildi: paylaşılan günlükte yalnız ek alan satırları vardı,
         // altyazının neden çevrilmediği görülemiyordu (1.0.6, 2026-11-22).
         pipeline.onLog = { SubtitleLog.write($0) }
+        // Altyazının gecikme dökümü 30 sn'de bir tek satır (kare aralığı, yazı tanıma, kararlılık, bekletme, sıra, çeviri).
+        pipeline.onTiming = { SubtitleLog.write($0) }
         pipeline.onSceneTextDropped = { [weak self] reason in
             guard let self, self.gamePhoneHint.observe(reason: reason, readsPhone: self.settings.readsGamePhone,
                                                        game: self.gameChoice.game?.name) else { return }

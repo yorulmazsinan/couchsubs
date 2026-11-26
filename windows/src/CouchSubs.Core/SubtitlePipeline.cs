@@ -126,7 +126,46 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private static long DefaultClock() => Environment.TickCount64;
 
     /// <summary>Satırın okunduğu kare: geliş anı, okumanın süresi ve yazı tanımanın güveni (0–1).</summary>
-    private readonly record struct ReadInfo(long CapturedAt, int? OcrMs, double? Confidence);
+    /// <param name="FirstSeenAt">Satırın (kararlayıcının adayının) ilk okunduğu karenin geldiği an; bilinmiyorsa null.</param>
+    private readonly record struct ReadInfo(long CapturedAt, int? OcrMs, double? Confidence, long? FirstSeenAt = null);
+
+    /// <summary>
+    /// Altyazının gecikme dökümü (<see cref="StageTiming"/>): kare aralığı, yazı tanıma, kararlılık beklemesi (satırın ilk
+    /// okunduğu kareden doğrulandığı kareye), okuma ve bekletme (doğrulanan kareden çeviri sırasına), çeviri sırası,
+    /// çeviri ve toplam (ilk okumadan TV'ye). 30 sn'de bir <see cref="TimingLog"/>'a tek satır: kullanıcı "gecikme var"
+    /// dediğinde gecikmenin hangi aşamada biriktiği günlükte görünsün (beta-104). Mac/iPhone ve Android aynı adlar.
+    /// </summary>
+    public StageTiming Timing { get; } = new();
+    /// <summary><see cref="Timing"/> satırı (uygulama altyazı günlüğüne yazar; <see cref="Log"/>'dan ayrı).</summary>
+    public Action<string>? TimingLog { get; set; }
+    internal const string StageFrameGap = "kare aralığı";
+    internal const string StageOcr = "yazı tanıma";
+    internal const string StageSettle = "kararlılık";
+    internal const string StageHold = "okuma+bekletme";
+    internal const string StageQueue = "çeviri sırası";
+    internal const string StageEngine = "çeviri";
+    internal const string StageTotal = "ilk okumadan TV'ye";
+    /// <summary>Kararlayıcının son adayının başladığı an ve o adayın ilk okunduğu karenin geldiği an.</summary>
+    private long stabilizerSince = long.MinValue;
+    private long candidateSeenAt;
+    private long? lastCapturedAt;
+
+    private void Stage(string name, long ms) => Timing.Add(name, TimeSpan.FromMilliseconds(Math.Clamp(ms, 0, int.MaxValue)));
+
+    /// <summary>TV'ye giden satırın aşama süreleri (gate tutulurken çağrılır).</summary>
+    private void MeasureStages(Request request, (long Started, long Finished)? translation, long sentAt)
+    {
+        var read = request.Read;
+        var first = Math.Min(read.FirstSeenAt ?? read.CapturedAt, read.CapturedAt);
+        Stage(StageSettle, read.CapturedAt - first);
+        Stage(StageHold, request.EnqueuedAt - read.CapturedAt);
+        if (translation is { } t)
+        {
+            Stage(StageQueue, t.Started - request.EnqueuedAt);
+            Stage(StageEngine, t.Finished - t.Started);
+        }
+        Stage(StageTotal, sentAt - first);
+    }
 
     private sealed class Request(int number, string source, TextBox? box, int session)
     {
@@ -135,6 +174,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         public string Source { get; set; } = source;
         public TextBox? Box { get; } = box;
         public int Session { get; } = session;
+        /// <summary>İsteğin çeviri sırasına (ya da pakete) verildiği an.</summary>
+        public long EnqueuedAt { get; init; }
         /// <summary>Baştaki konuşan adı ("ARTHUR: …"); çeviriye yalnız cümle gider.</summary>
         public SpeakerPrefix.Split? Prefix { get; set; } = SpeakerPrefix.Parse(source);
         /// <summary>Satırın ekrandan kalktığı an (hâlâ ekrandaysa null).</summary>
@@ -421,6 +462,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 var read = recognized;
                 lock (gate) { if (recognized.Lines.Count == 0) quiet.Empty++; }
                 readMs = (int)Math.Clamp(now() - readStarted, 0, int.MaxValue);
+                Stage(StageOcr, readMs.Value);
                 lock (gate)
                 {
                     if (startedSession == session)
@@ -617,6 +659,17 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             // Altyazının yerinde yalnız kendi çevirimiz okunduysa (örtme ya da üst üste binen katman) satır kalkmış sayılmaz.
             var ownOnly = ownLines.Count > 0 && reading.Lines.Count == 0 && OwnSubtitles.CoversLine(ownLines, LastBox);
             var action = ownOnly ? StabilizerAction.None : stabilizer.Feed(reading.Text, signature, reading.Box);
+            // Gecikme dökümü: kararlayıcının adayı bu karede başladıysa satır bu karede ilk kez okundu.
+            if (stabilizer.CandidateSince != stabilizerSince)
+            {
+                stabilizerSince = stabilizer.CandidateSince;
+                candidateSeenAt = captured;
+            }
+            if (action.Kind == StabilizerKind.Translate) currentRead = currentRead.Value with { FirstSeenAt = candidateSeenAt };
+            // Değişmeyen ekranda kare gelmez; uzun boşluklar kare aralığı sayılmaz.
+            if (lastCapturedAt is { } previousFrame && captured > previousFrame && captured - previousFrame <= 2000)
+                Stage(StageFrameGap, captured - previousFrame);
+            lastCapturedAt = captured;
             // Ekranda duran kötü yeniden okuma her karede not edilir; günlüğe bir kez yazılır.
             if (stabilizer.Note is { } note && note != lastNote)
             {
@@ -661,6 +714,20 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                         {
                             held = null;
                             after = Enqueue(merged, box ?? waiting.Box, waiting.Read);
+                        }
+                    }
+                    else if (TextMatch.IsLooseGrowth(source, waiting.Source))
+                    {
+                        // Bekleyen yarım okumanın uzamış hali (daktilo efekti, iki satırlık altyazının ikinci satırı; sözcükleri
+                        // yazı tanıma farkıyla başka okunmuş olabilir): yarım okuma çevrilmez, yerine uzamış okuma bekler.
+                        // Bekleme süresi baştan başlamaz (gecikme birikmesin).
+                        held = (source, box ?? waiting.Box, waiting.Since, wait, ReadingScore(source), waiting.Read);
+                        action = StabilizerAction.None;
+                        LineLeft();
+                        if (now() - waiting.Since >= wait)
+                        {
+                            held = null;
+                            after = Enqueue(source, box ?? waiting.Box, waiting.Read);
                         }
                     }
                     else if ((IsRereadOf(source, waiting.Source) || IsRereadOf(waiting.Source, source)) && now() - waiting.Since < wait)
@@ -708,7 +775,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                     // Aynı satır bu kez düzgün okundu: paketteki Türkçesi gösterilir, bozuk okuma çevrilmez.
                     held = null;
                     var request = new Request(++lastRequested, reading.Text.Trim(), box ?? waiting.Box, session)
-                        { Read = waiting.Read ?? currentRead ?? new ReadInfo(now(), null, null) };
+                        { Read = waiting.Read ?? currentRead ?? new ReadInfo(now(), null, null), EnqueuedAt = now() };
                     lineOnScreen = request.Number;
                     after = ShowPacked(request, packed);
                 }
@@ -753,6 +820,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                                         ("sabit satır (görev/HUD)", rows.Lines),
                                         ("altyazı bloğu seçilmedi (sahne yazısı, menü ya da başka blok)", reading.Lines)], area);
         }
+        // Gecikme dökümü 30 sn'de bir tek satır (StageTiming kendi sınırlar).
+        if (Timing.Report(now()) is { } timing) TimingLog?.Invoke("altyazı " + timing);
         // Olaylar ve iptal kilidin dışında çağrılır. Cancel, çevirmeni ve kuyruğu eşzamanlı ilerletebilir.
         try
         {
@@ -1092,7 +1161,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// <returns>Kilit bırakıldıktan sonra çağrılacak olaylar (paketten gelen satır).</returns>
     private Action? Enqueue(string source, TextBox? box, ReadInfo? read = null)
     {
-        var request = new Request(++lastRequested, source, box, session) { Read = read ?? currentRead ?? new ReadInfo(now(), null, null) };
+        if (KeepsJittered(source, box)) return null;
+        var request = new Request(++lastRequested, source, box, session)
+            { Read = read ?? currentRead ?? new ReadInfo(now(), null, null), EnqueuedAt = now() };
         lineOnScreen = request.Number;
         lastSent = (source, ReadingScore(source), now());
         // Türkçe satır (harfleri bozulmuş da olsa) pakette aranmaz: paket anahtarları İngilizcedir; PS5'in Türkçe menü
@@ -1131,7 +1202,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             }
             // Süren çeviri bu cümlenin yarım okumasınınsa (daktilo efekti) beklenmez: bırakılır, tamamı hemen çevrilir.
             // İptal en sonda: sıra iptalle aynı iş parçacığında ilerleyebilir, yeni satır o zaman sırada olmalı.
-            if (!current.Superseded && !current.Abandoned && current.Session == session && TextMatch.IsGrowth(source, current.Source))
+            if (!current.Superseded && !current.Abandoned && current.Session == session && TextMatch.IsLooseGrowth(source, current.Source))
             {
                 Write(current, $"bırakıldı: uzamış okuması geldi (#{request.Number})");
                 current.Superseded = true;
@@ -1139,6 +1210,34 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             }
         }
         return missed is null ? null : () => missed(missedText);
+    }
+
+    /// <summary>
+    /// Okuma, son istenen ya da ekranda duran uzun satırın yalnız yazı tanıma farkıyla başka okunmuş hali mi
+    /// (<see cref="TextMatch.IsJitterOf"/>): öyleyse motora yeniden gitmez. Çevirisi bekleniyorsa o istek ekrandaki satır
+    /// sayılır; gösterildiyse aynı çeviri yerine konur (temizlendiyse yeniden görünür). Uzun satırda bir harfi başka okunan
+    /// her okuma ayrı çevrilip TV'de aynı cümlenin çevirileri art arda geliyordu (beta-104, Mafia: The Old Country).
+    /// Mac/iPhone (keepsJittered) ve Android (keepsJittered) aynı.
+    /// </summary>
+    private bool KeepsJittered(string source, TextBox? box)
+    {
+        var pending = Requests.Where(r => r.Session == session && !r.Superseded && !r.Abandoned).ToList();
+        if (pending.Count > 0)
+        {
+            var newest = pending[^1];
+            if (newest.Partial is not null || !TextMatch.IsJitterOf(source, newest.Source)) return false;
+            newest.LeftAt = null;
+            lineOnScreen = newest.Number;
+            lastSent = (newest.Source, ReadingScore(newest.Source), now());
+            Write(newest, $"yazı tanıma farkıyla yeniden okundu: {SubtitleLog.Excerpt(source)} çevirisi bekleniyor, motora gitmedi");
+            return true;
+        }
+        if (LastPair is not { } last || lastShown == 0 || !TextMatch.IsJitterOf(source, last.Source)) return false;
+        lineOnScreen = lastShown;
+        lastSent = (last.Source, ReadingScore(last.Source), now());
+        Write($"#{lastShown} yazı tanıma farkıyla yeniden okundu: {SubtitleLog.Excerpt(source)} ekrandaki çeviri kaldı, motora gitmedi");
+        Send(last.Translation, last.Source, 15000, box ?? LastBox, replaces: true);
+        return true;
     }
 
     private static string PartialNote(Request request) =>
@@ -1154,7 +1253,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     {
         var full = waiting.LastOrDefault(w => w.Source == source);
         if (full?.LeftAt is not { } left || left <= lastClearAt) return false;
-        bool Fragment(Request w) => w.Number > full.Number && TextMatch.IsGrowth(source, w.Source);
+        bool Fragment(Request w) => w.Number > full.Number && TextMatch.IsLooseGrowth(source, w.Source);
         if (!waiting.Any(Fragment)) return false;
         foreach (var old in waiting.Where(Fragment)) Write(old, $"atıldı: tam okuması geri geldi (#{full.Number})");
         waiting.RemoveAll(Fragment);
@@ -1167,7 +1266,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
     // Yerleşim için benzerlik simetriktir; kuyruktan silme değildir. Kısalan okuma daha tam olanı silemez.
     private static bool ReplacesQueued(string source, string previous) =>
-        TextMatch.IsRevision(source, previous) && !TextMatch.IsGrowth(previous, source);
+        TextMatch.IsRevision(source, previous) && !TextMatch.IsLooseGrowth(previous, source);
 
     /// <summary>Satır az önce gösterilenin uzamış ya da düzelmiş okuması mı (TV yerine koyar, üstüne yığmaz).</summary>
     private bool RevisesShown(string source) => LastPair is { } shown && TextMatch.IsRevision(source, shown.Source);
@@ -1198,6 +1297,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         var read = request.Read;
         var metrics = LineMetrics.Measure(read.CapturedAt, read.OcrMs, null, now(), read.Confidence, LineOrigin.Pack);
         LastMetrics = metrics;
+        MeasureStages(request, null, now());
         var measured = MetricsReady;
         var shown = PairShown;
         var speech = SpeechReady;
@@ -1405,6 +1505,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             var read = request.Read;
             metrics = LineMetrics.Measure(read.CapturedAt, read.OcrMs, (started, finished), now(), read.Confidence, LineOrigin.Engine);
             LastMetrics = metrics;
+            MeasureStages(request, (started, finished), now());
         }
         MetricsReady?.Invoke(metrics);
         PairShown?.Invoke(source, translated);
@@ -1445,6 +1546,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             lastOcrReading = Reading.Empty;
             lastReadMs = null;
             currentRead = null;
+            stabilizerSince = long.MinValue;
+            lastCapturedAt = null;
             schedule.Reset();
             stickyRows.Reset();
             sceneMotion.Reset();

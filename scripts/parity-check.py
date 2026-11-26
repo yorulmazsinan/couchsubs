@@ -267,6 +267,25 @@ CAPABILITIES = {
         ("windows", _WIN_TESTS + "SettledTextTests.cs", r"settled-text\.json"),
         ("android", _DROID_TESTS + "SettledTextTest.kt", r"settled-text\.json"),
     ],
+    # beta-104 (Mafia: The Old Country): aşama aşama beliren uzun satır tek altyazı (gevşek uzama), yazı tanıma farkıyla
+    # okunan uzun satır motora bir kez gider, altyazının gecikme dökümü 30 sn'de bir günlükte.
+    "Ortak deneme dosyası growing-lines.json": [
+        ("mac", _CORE_TESTS + "GrowingLinesTests.swift", r"growing-lines\.json"),
+        ("windows", _WIN_TESTS + "GrowingLinesTests.cs", r"growing-lines\.json"),
+        ("android", _DROID_TESTS + "GrowingLinesTest.kt", r"growing-lines\.json"),
+    ],
+    "Uzun satırda gevşek uzama, yazı tanıma farkı ve altyazı gecikme dökümü": [
+        ("mac", _CORE + "TextMatch.swift", r"static func isLooseGrowth\("),
+        ("windows", _WIN + "TextMatch.cs", r"public static bool IsLooseGrowth\("),
+        ("android", _DROID + "TextMatch.kt", r"fun isLooseGrowth\("),
+        ("mac", _CORE + "TextMatch.swift", r"static func isJitter\("),
+        ("windows", _WIN + "TextMatch.cs", r"public static bool IsJitterOf\("),
+        ("android", _DROID + "TextMatch.kt", r"fun isJitterOf\("),
+        ("mac", "mac/CouchSubs/AppModel.swift", r"pipeline\.onTiming = "),
+        ("ios", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"pipeline\.onTiming = "),
+        ("windows", "windows/src/CouchSubs.Shell/AppController.cs", r"built\.TimingLog = "),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/TranslationService.kt", r"onTiming = \{ Log\.i\(TAG, it\) \}"),
+    ],
     # GitHub #884/#891: TV uygulaması sürümünü altyazı akışıyla bildirir (/events?v=); eskiyse dört platformda da ana
     # ekranda "TV uygulamasını güncelle" çıkar (LG geliştirici modu kapalı / anahtar başka cihazdayken de).
     "Eski TV uygulamasını akıştaki sürümden tanıma ve ana ekranda güncelleme önerisi": [

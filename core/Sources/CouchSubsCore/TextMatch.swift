@@ -87,7 +87,7 @@ public enum TextMatch {
     public static func isRevision(_ new: String, of old: String) -> Bool {
         let x = normalize(new), y = normalize(old)
         guard !x.isEmpty, !y.isEmpty else { return false }
-        if isGrowth(new, of: old) || isGrowth(old, of: new) { return true }
+        if isLooseGrowth(new, of: old) || isLooseGrowth(old, of: new) { return true }
         if isSimilar(x, y, threshold: 0.8) { return true }
         let a = cleanWords(x), b = cleanWords(y)
         let shorter = min(a.count, b.count), longer = max(a.count, b.count)
@@ -210,6 +210,66 @@ public enum TextMatch {
         let x = normalize(new).split(separator: " "), y = normalize(old).split(separator: " ")
         guard !y.isEmpty, x.count > y.count else { return false }
         return x.starts(with: y) || (y.count >= 2 && x.suffix(y.count).elementsEqual(y))
+    }
+
+    /// Gevşek uzamada eski okumanın en az bu kadar harfi olmalı; kısa satırda bir harf bile anlamı değiştirir.
+    static let looseGrowthLetters = 12
+
+    /// `new`, `old`'un uzamış hali mi; eski okumanın sözcükleri yazı tanıma farkıyla başka okunmuş olabilir. Uzun satır
+    /// aşama aşama belirir (daktilo efekti) ya da iki satırlık altyazının önce ilk satırı okunur; her okumada bir iki harf
+    /// başka çıkınca ("Enzo" / "Enz0", "family" / "farnily") `isGrowth` sözcük sözcük eşleşmeyi bulamıyor, yarım okumanın
+    /// çevirisi tamamının çevirisiyle üst üste duruyor, sırada bekleyen yarım okumalar da tek tek çevrilip gecikme
+    /// birikiyordu (beta-104, Mafia: The Old Country). Boşluksuz harf dizisinde eski okuma yenisinin başına (satırın başı
+    /// okunmamışsa sonuna) %85 benziyorsa uzamadır (Windows: TextMatch.IsLooseGrowth, Android: TextMatch.isLooseGrowth).
+    public static func isLooseGrowth(_ new: String, of old: String) -> Bool {
+        if isGrowth(new, of: old) { return true }
+        let x = normalize(new).split(separator: " "), y = normalize(old).split(separator: " ")
+        guard y.count >= 3, x.count >= y.count else { return false }
+        let a = Array(x.joined()), b = Array(y.joined())
+        guard b.count >= looseGrowthLetters, a.count >= b.count + 3 else { return false }
+        return isSimilar(String(a.prefix(b.count)), String(b), threshold: 0.85)
+            || isSimilar(String(a.suffix(b.count)), String(b), threshold: 0.85)
+    }
+
+    /// Uzun satır sayılan okumanın en az harf sayısı (`isJitter`).
+    static let jitterLetters = 30
+
+    /// `reread`, `shown`'ın yalnız yazı tanıma farkıyla başka okunmuş hali mi (uzun satır): bir iki harf başka ("Enz0",
+    /// "y0u"), sonuna çöp parça eklenmiş ("quietly. Il"), cümle ortasında kesilmiş ya da arada bir sözcüğü düşmüş okuma.
+    /// Böyle okuma motora yeniden gitmez; ekrandaki (ya da beklenen) çevirisi kalır. Anlam işareti (olumsuzluk, sayı)
+    /// ekleyen ya da düşüren, gerçek sözcükle uzayan, cümle sonuyla biten kısa ve bozuk sözcüğü onaran okuma
+    /// (SubtitleStabilizer düzeltmesi, #854) farklıdır, yeniden çevrilir. Yalnız uzun satırlarda (`jitterLetters`)
+    /// geçerlidir (Windows: TextMatch.IsJitterOf, Android: TextMatch.isJitterOf).
+    public static func isJitter(_ reread: String, of shown: String) -> Bool {
+        let x = normalize(reread).split(separator: " ").map(String.init)
+        let y = normalize(shown).split(separator: " ").map(String.init)
+        let a = x.joined(), b = y.joined()
+        guard min(a.count, b.count) >= jitterLetters else { return false }
+        if addsMeaning(reread, to: shown) || addsMeaning(shown, to: reread) { return false }
+        if x.count == y.count {
+            return isSimilar(a, b, threshold: 0.9) && !SubtitleStabilizer.repairsWords(x, y)
+        }
+        // Cümle ortasında kesilen okuma (satırın bir bölümü okunamadı): gösterilen tamamı kalır. Cümle sonuyla biten kısa
+        // okuma aynı sözlerle başlayan ayrı bir söz olabilir; ona dokunulmaz.
+        if x.count < y.count {
+            return !SubtitleStabilizer.endsSentence(reread)
+                && (isLooseGrowth(shown, of: reread) || isSimilar(a, b, threshold: 0.9))
+        }
+        // Uzayan okuma ancak eklenen parçalar çöpse aynı satırdır; gerçek sözcükle uzayan satır yeniden çevrilir.
+        let prefix = x.starts(with: y), suffix = x.suffix(y.count).elementsEqual(y)
+        if prefix || suffix { return (prefix ? Array(x.dropFirst(y.count)) : Array(x.dropLast(y.count))).allSatisfy(isJunkToken) }
+        return isSimilar(a, b, threshold: 0.9) && x.filter { !isJunkToken($0) }.count <= y.count
+    }
+
+    /// İngilizcede tek başına geçen kısa sözcükler (Windows: SubtitleStabilizer.ShortWords).
+    private static let shortWords: Set<String> = [
+        "a", "i", "o", "an", "am", "as", "at", "be", "by", "do", "go", "ha", "he", "hi", "if", "in", "is", "it", "me", "mr",
+        "ms", "mrs", "dr", "st", "my", "no", "of", "oh", "ok", "on", "or", "so", "to", "tv", "uh", "um", "up", "us", "we", "ya", "ye",
+    ]
+
+    /// Yazı tanımanın uydurduğu parça: bilinen kısa sözcük olmayan 1–2 harf ya da sözcük olamayacak harf dizisi.
+    static func isJunkToken(_ word: String) -> Bool {
+        (word.count <= 2 && !shortWords.contains(word)) || OcrNoise.isNonWord(word)
     }
 
     /// Baştan (ya da sondan) `count` sözcük tam satırlara denk geliyor mu.

@@ -81,21 +81,62 @@ public final class SubtitlePipeline {
         /// Mevcut gösterim kurallarına göre elendi (daha yeni satır gösterildi ya da süresi doldu); iptali dinlemeyen
         /// motorun sonucu da gösterilmez.
         var abandoned = false
-        init(number: Int, source: String, box: TextBox?, session: Int, read: ReadInfo) {
+        /// İsteğin çeviri sırasına (ya da pakete) verildiği an.
+        let enqueuedAt: Int
+        init(number: Int, source: String, box: TextBox?, session: Int, read: ReadInfo, enqueuedAt: Int) {
             self.number = number
             self.source = source
             self.box = box
             self.session = session
             self.read = read
+            self.enqueuedAt = enqueuedAt
             prefix = SpeakerPrefix.split(source)
         }
     }
 
-    /// Bir karenin okunması: karenin geldiği an, yazı tanımanın süresi (ms) ve güveni (0–1).
+    /// Bir karenin okunması: karenin geldiği an, yazı tanımanın süresi (ms) ve güveni (0–1); `firstSeenAt`: satırın
+    /// (kararlayıcının adayının) ilk okunduğu karenin geldiği an.
     fileprivate struct ReadInfo {
         var capturedAt: Int
         var ocrMs: Int?
         var confidence: Double?
+        var firstSeenAt: Int?
+    }
+
+    /// Altyazının gecikme dökümü (`StageTiming`): kare aralığı, yazı tanıma, kararlılık beklemesi (satırın ilk okunduğu
+    /// kareden doğrulandığı kareye), okuma ve bekletme (doğrulanan kareden çeviri sırasına), çeviri sırası, çeviri ve toplam
+    /// (ilk okumadan TV'ye). 30 sn'de bir `onTiming`'e tek satır: kullanıcı "gecikme var" dediğinde gecikmenin hangi
+    /// aşamada biriktiği günlükte görünsün (beta-104). Windows ve Android aynı adlar.
+    public let timing = StageTiming()
+    /// `timing` satırı (uygulama altyazı günlüğüne yazar; `onLog`'dan ayrı).
+    public var onTiming: ((String) -> Void)?
+    static let stageFrameGap = "kare aralığı"
+    static let stageOcr = "yazı tanıma"
+    static let stageSettle = "kararlılık"
+    static let stageHold = "okuma+bekletme"
+    static let stageQueue = "çeviri sırası"
+    static let stageEngine = "çeviri"
+    static let stageTotal = "ilk okumadan TV'ye"
+    /// Kararlayıcının son adayının başladığı an ve o adayın ilk okunduğu karenin geldiği an.
+    private var stabilizerSince = Int.min
+    private var candidateSeenAt = 0
+    private var lastCapturedAt: Int?
+
+    private func stage(_ name: String, _ ms: Int) {
+        timing.add(name, milliseconds: max(0, ms))
+    }
+
+    /// TV'ye giden satırın aşama süreleri.
+    private func measureStages(_ request: Request, translation: (started: Int, finished: Int)?) {
+        let read = request.read
+        let first = min(read.firstSeenAt ?? read.capturedAt, read.capturedAt)
+        stage(Self.stageSettle, read.capturedAt - first)
+        stage(Self.stageHold, request.enqueuedAt - read.capturedAt)
+        if let translation {
+            stage(Self.stageQueue, translation.started - request.enqueuedAt)
+            stage(Self.stageEngine, translation.finished - translation.started)
+        }
+        stage(Self.stageTotal, now() - first)
     }
 
     private let reader: TextReader
@@ -355,6 +396,7 @@ public final class SubtitlePipeline {
                 return
             }
             lastReadMs = now() - started
+            stage(Self.stageOcr, now() - started)
             lastOcrReading = (try? result.get()) ?? .empty
             visible = lastOcrReading
             onReadResult?(result.failure)
@@ -463,6 +505,17 @@ public final class SubtitlePipeline {
         let ownOnly = !ownLines.isEmpty && reading.lines.isEmpty && OwnSubtitles.coversLine(ownLines, line: lastBox)
         var action: StabilizerAction = ownOnly ? .none
             : stabilizer.feed(reading.text, signature: signature, box: reading.box)
+        // Gecikme dökümü: kararlayıcının adayı bu karede başladıysa satır bu karede ilk kez okundu.
+        if stabilizer.candidateStartedAt != stabilizerSince {
+            stabilizerSince = stabilizer.candidateStartedAt
+            candidateSeenAt = captured
+        }
+        if case .translate = action { currentRead.firstSeenAt = candidateSeenAt }
+        // Değişmeyen ekranda kare gelmez; uzun boşluklar kare aralığı sayılmaz.
+        if let previous = lastCapturedAt, captured > previous, captured - previous <= 2000 { stage(Self.stageFrameGap, captured - previous) }
+        lastCapturedAt = captured
+        // Gecikme dökümü 30 sn'de bir tek satır (`StageTiming` kendi sınırlar).
+        if let line = timing.report(now: now()) { onTiming?("altyazı " + line) }
         // Ekranda duran kötü yeniden okuma her karede not edilir; günlüğe bir kez yazılır.
         if let note = stabilizer.note, note != lastNote {
             lastNote = note
@@ -487,6 +540,15 @@ public final class SubtitlePipeline {
                     let merged = Rereads.keepMissingLines(source, older: waiting.source)
                     held = Held(source: merged, box: box ?? waiting.box, since: waiting.since, wait: wait,
                                 score: Rereads.score(merged), read: waiting.read)
+                    action = .none
+                    lineLeft()
+                    if time - waiting.since >= wait { flushHeld() }
+                } else if TextMatch.isLooseGrowth(source, of: waiting.source) {
+                    // Bekleyen yarım okumanın uzamış hali (daktilo efekti, iki satırlık altyazının ikinci satırı; sözcükleri
+                    // yazı tanıma farkıyla başka okunmuş olabilir): yarım okuma çevrilmez, yerine uzamış okuma bekler.
+                    // Bekleme süresi baştan başlamaz (gecikme birikmesin). Windows ve Android aynı.
+                    held = Held(source: source, box: box ?? waiting.box, since: waiting.since, wait: wait,
+                                score: Rereads.score(source), read: waiting.read)
                     action = .none
                     lineLeft()
                     if time - waiting.since >= wait { flushHeld() }
@@ -754,9 +816,34 @@ public final class SubtitlePipeline {
         return Rereads.looksComplete(source) ? 0 : max(0, cleanWait)
     }
 
+    /// Okuma, son istenen ya da ekranda duran uzun satırın yalnız yazı tanıma farkıyla başka okunmuş hali mi
+    /// (`TextMatch.isJitter`): öyleyse motora yeniden gitmez. Çevirisi bekleniyorsa o istek ekrandaki satır sayılır;
+    /// gösterildiyse aynı çeviri yerine konur (temizlendiyse yeniden görünür). Uzun satırda bir harfi başka okunan her okuma
+    /// ayrı çevrilip TV'de aynı cümlenin çevirileri art arda geliyordu (beta-104, Mafia: The Old Country). Windows
+    /// (KeepsJittered) ve Android (keepsJittered) aynı.
+    private func keepsJittered(_ source: String, box: TextBox?) -> Bool {
+        let pending = requests.filter { $0.session == session && !$0.superseded && !$0.abandoned }
+        if let newest = pending.last {
+            guard TextMatch.isJitter(source, of: newest.source) else { return false }
+            newest.leftAt = nil
+            lineOnScreen = newest.number
+            lastSent = (newest.source, Rereads.score(newest.source), now())
+            log(newest, "yazı tanıma farkıyla yeniden okundu: \(SubtitleLog.excerpt(source)) çevirisi bekleniyor, motora gitmedi")
+            return true
+        }
+        guard let last = lastPair, lastShown > 0, TextMatch.isJitter(source, of: last.source) else { return false }
+        lineOnScreen = lastShown
+        lastSent = (last.source, Rereads.score(last.source), now())
+        log("#\(lastShown) yazı tanıma farkıyla yeniden okundu: \(SubtitleLog.excerpt(source)) ekrandaki çeviri kaldı, motora gitmedi")
+        send(last.translation, source: last.source, durationMs: 15000, box: box ?? lastBox, replaces: true)
+        return true
+    }
+
     private func enqueue(_ source: String, box: TextBox?, read: ReadInfo? = nil) {
+        if keepsJittered(source, box: box) { return }
         lastRequested += 1
-        let request = Request(number: lastRequested, source: source, box: box, session: session, read: read ?? currentRead)
+        let request = Request(number: lastRequested, source: source, box: box, session: session, read: read ?? currentRead,
+                              enqueuedAt: now())
         lineOnScreen = request.number
         lastSent = (source, Rereads.score(source), now())
         // Türkçe satır (harfleri bozulmuş da olsa) pakette aranmaz: paket anahtarları İngilizcedir; PS5'in Türkçe menü
@@ -790,7 +877,7 @@ public final class SubtitlePipeline {
             waiting.removeFirst(waiting.count - Self.maxWaiting)
         }
         // Süren çeviri bu cümlenin yarım okumasınınsa (daktilo efekti) beklenmez: bırakılır, tamamı hemen çevrilir.
-        if !current.superseded, !current.abandoned, current.session == session, TextMatch.isGrowth(source, of: current.source) {
+        if !current.superseded, !current.abandoned, current.session == session, TextMatch.isLooseGrowth(source, of: current.source) {
             log(current, "bırakıldı: uzamış okuması geldi (#\(request.number))")
             current.superseded = true
             work?.cancel()
@@ -802,7 +889,7 @@ public final class SubtitlePipeline {
     private func restoreQueued(_ source: String) -> Bool {
         guard let full = waiting.last(where: { $0.source == source }),
               let left = full.leftAt, left > lastClearAt else { return false }
-        let fragment: (Request) -> Bool = { $0.number > full.number && TextMatch.isGrowth(source, of: $0.source) }
+        let fragment: (Request) -> Bool = { $0.number > full.number && TextMatch.isLooseGrowth(source, of: $0.source) }
         guard waiting.contains(where: fragment) else { return false }
         for old in waiting where fragment(old) { log(old, "atıldı: tam okuması geri geldi (#\(full.number))") }
         waiting.removeAll(where: fragment)
@@ -815,7 +902,7 @@ public final class SubtitlePipeline {
 
     // Yerleşim benzerliği simetriktir; kısalan okuma daha tam kuyruk kaydını silemez.
     private func replacesQueued(_ source: String, _ previous: String) -> Bool {
-        TextMatch.isRevision(source, of: previous) && !TextMatch.isGrowth(previous, of: source)
+        TextMatch.isRevision(source, of: previous) && !TextMatch.isLooseGrowth(previous, of: source)
     }
 
     /// Satır az önce gösterilenin uzamış ya da düzelmiş okuması mı (TV yerine koyar, üstüne yığmaz).
@@ -993,7 +1080,8 @@ public final class SubtitlePipeline {
 
     /// Satır şimdi TV'ye gidiyor: okunduğu kareden bu ana kadarki ölçümler.
     private func measure(_ request: Request, translation: (started: Int, finished: Int)?, origin: LineMetrics.Origin) -> LineMetrics {
-        LineMetrics.measure(capturedAt: request.read.capturedAt, ocrMs: request.read.ocrMs, translation: translation, sentAt: now(),
+        measureStages(request, translation: translation)
+        return LineMetrics.measure(capturedAt: request.read.capturedAt, ocrMs: request.read.ocrMs, translation: translation, sentAt: now(),
                             confidence: request.read.confidence, origin: origin)
     }
 
@@ -1136,6 +1224,8 @@ public final class SubtitlePipeline {
         pairs.removeAll()
         lastOcrReading = .empty
         lastReadMs = nil
+        stabilizerSince = Int.min
+        lastCapturedAt = nil
         scheduler.reset()
         stickyRows.reset()
         sceneMotion.reset()

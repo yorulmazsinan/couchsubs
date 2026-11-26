@@ -3264,6 +3264,8 @@ final class AppModel: ObservableObject {
         pipeline.onReadResult = { [weak self] error in self?.noteRead(error) }
         pipeline.onSpeech = { [weak self] lines in self?.speak(lines) }
         pipeline.onLog = { SubtitleLog.write($0) }
+        // Altyazının gecikme dökümü 30 sn'de bir tek satır (kare aralığı, yazı tanıma, kararlılık, bekletme, sıra, çeviri).
+        pipeline.onTiming = { SubtitleLog.write($0) }
         pipeline.onSceneTextDropped = { [weak self] reason in
             guard let self, self.gamePhoneHint.observe(reason: reason, readsPhone: self.settings.readsGamePhone,
                                                        game: self.gameChoice.game?.name) else { return }

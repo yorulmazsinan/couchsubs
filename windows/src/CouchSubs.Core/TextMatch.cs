@@ -100,7 +100,7 @@ public static class TextMatch
         var x = Normalize(newText);
         var y = Normalize(oldText);
         if (x.Length == 0 || y.Length == 0) return false;
-        if (IsGrowth(newText, oldText) || IsGrowth(oldText, newText)) return true;
+        if (IsLooseGrowth(newText, oldText) || IsLooseGrowth(oldText, newText)) return true;
         if (IsSimilar(x, y, 0.8)) return true;
         var a = CleanWords(x);
         var b = CleanWords(y);
@@ -234,6 +234,65 @@ public static class TextMatch
         if (y.Count == 0 || x.Count <= y.Count) return false;
         return StartsWith(x, y) || (y.Count >= 2 && EndsWith(x, y));
     }
+
+    /// <summary>Gevşek uzamada eski okumanın en az bu kadar harfi olmalı; kısa satırda bir harf bile anlamı değiştirir.</summary>
+    internal const int LooseGrowthLetters = 12;
+
+    /// <summary>
+    /// <paramref name="newText"/>, <paramref name="oldText"/>'in uzamış hali mi; eski okumanın sözcükleri yazı tanıma farkıyla
+    /// başka okunmuş olabilir. Uzun satır aşama aşama belirir (daktilo efekti) ya da iki satırlık altyazının önce ilk satırı
+    /// okunur; her okumada bir iki harf başka çıkınca ("Enzo" / "Enz0", "family" / "farnily") <see cref="IsGrowth"/> sözcük
+    /// sözcük eşleşmeyi bulamıyor, yarım okumanın çevirisi tamamının çevirisiyle üst üste duruyor, sırada bekleyen yarım
+    /// okumalar da tek tek çevrilip gecikme birikiyordu (beta-104, Mafia: The Old Country). Boşluksuz harf dizisinde eski
+    /// okuma yenisinin başına (satırın başı okunmamışsa sonuna) %85 benziyorsa uzamadır. Mac/iPhone (isLooseGrowth) ve
+    /// Android (isLooseGrowth) aynı kuralı uygular.
+    /// </summary>
+    public static bool IsLooseGrowth(string newText, string oldText)
+    {
+        if (IsGrowth(newText, oldText)) return true;
+        var x = Normalize(newText).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var y = Normalize(oldText).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (y.Length < 3 || x.Length < y.Length) return false;
+        var a = string.Concat(x);
+        var b = string.Concat(y);
+        if (b.Length < LooseGrowthLetters || a.Length < b.Length + 3) return false;
+        return IsSimilar(a[..b.Length], b, 0.85) || IsSimilar(a[^b.Length..], b, 0.85);
+    }
+
+    /// <summary>Uzun satır sayılan okumanın en az harf sayısı (<see cref="IsJitterOf"/>).</summary>
+    internal const int JitterLetters = 30;
+
+    /// <summary>
+    /// <paramref name="reread"/>, <paramref name="shown"/>'ın yalnız yazı tanıma farkıyla başka okunmuş hali mi (uzun satır):
+    /// bir iki harf başka ("Enz0", "y0u"), sonuna çöp parça eklenmiş ("quietly. Il"), sondan ya da baştan kesilmiş ya da
+    /// arada bir sözcüğü düşmüş okuma. Böyle okuma motora yeniden gitmez; ekrandaki (ya da beklenen) çevirisi kalır. Anlam
+    /// işareti (olumsuzluk, sayı) ekleyen ya da düşüren, gerçek sözcükle uzayan ve bozuk sözcüğü onaran okuma
+    /// (SubtitleStabilizer düzeltmesi, #854) farklıdır, yeniden çevrilir. Kısa satırda tek harf anlamı değiştirdiği için
+    /// yalnız uzun satırlarda (<see cref="JitterLetters"/>) geçerlidir. Mac/iPhone (isJitter) ve Android (isJitterOf) aynı.
+    /// </summary>
+    public static bool IsJitterOf(string reread, string shown)
+    {
+        var x = Normalize(reread).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var y = Normalize(shown).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var a = string.Concat(x);
+        var b = string.Concat(y);
+        if (Math.Min(a.Length, b.Length) < JitterLetters) return false;
+        if (AddsMeaning(reread, shown) || AddsMeaning(shown, reread)) return false;
+        if (x.Length == y.Length) return IsSimilar(a, b, 0.9) && !SubtitleStabilizer.RepairsWords(x, y);
+        // Cümle ortasında kesilen okuma (satırın bir bölümü okunamadı): gösterilen tamamı kalır. Cümle sonuyla biten kısa
+        // okuma ("Huh? Jumping out of airplanes?") aynı sözlerle başlayan ayrı bir söz olabilir; ona dokunulmaz.
+        if (x.Length < y.Length)
+            return !SubtitleStabilizer.EndsSentence(reread) && (IsLooseGrowth(shown, reread) || IsSimilar(a, b, 0.9));
+        // Uzayan okuma ancak eklenen parçalar çöpse aynı satırdır; gerçek sözcükle uzayan satır yeniden çevrilir.
+        var prefix = x.Take(y.Length).SequenceEqual(y);
+        var suffix = x.Skip(x.Length - y.Length).SequenceEqual(y);
+        if (prefix || suffix) return (prefix ? x.Skip(y.Length) : x.Take(x.Length - y.Length)).All(IsJunkToken);
+        return IsSimilar(a, b, 0.9) && x.Count(word => !IsJunkToken(word)) <= y.Length;
+    }
+
+    /// <summary>Yazı tanımanın uydurduğu parça: bilinen kısa sözcük olmayan 1–2 harf ya da sözcük olamayacak harf dizisi.</summary>
+    internal static bool IsJunkToken(string word) =>
+        (word.Length <= 2 && !SubtitleStabilizer.IsShortWord(word)) || OcrNoise.IsNonWord(word);
 
     private static bool StartsWith(List<string> words, List<string> part) => words.Take(part.Count).SequenceEqual(part);
 

@@ -3795,6 +3795,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         built.SpeechReady += lines => post(() => Speak(lines));
         built.PackMissed += OfferToPool;
         built.Log = SubtitleLog.Write;
+        // Altyazının gecikme dökümü 30 sn'de bir tek satır (kare aralığı, yazı tanıma, kararlılık, bekletme, sıra, çeviri).
+        built.TimingLog = SubtitleLog.Write;
         built.PackName = () => services.GamePacks?.SearchScope;
         built.MissionChanged += OnMissionChanged;
         built.OnSceneTextDropped += OnSceneTextDropped;
