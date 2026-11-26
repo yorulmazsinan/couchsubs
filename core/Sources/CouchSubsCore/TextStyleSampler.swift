@@ -212,12 +212,25 @@ public enum TextStyleSampler {
 
     private static func isCondensed(_ frame: CGImage, _ lines: [TextLine]) -> Bool {
         let ratios = lines.compactMap { line -> Double? in
-            let count = line.text.trimmingCharacters(in: .whitespaces).count
+            let count = characters(line.text)
             guard let box = line.box, count > 0 else { return nil }
             let height = max(1, (box.bottom - box.top) * Double(frame.height))
             return (box.right - box.left) * Double(frame.width) / Double(count) / height
         }
         return !ratios.isEmpty && ratios.reduce(0, +) / Double(ratios.count) < condensedWidth
+    }
+
+    /// Dar yazı ölçüsündeki harf sayısı: baştaki/sondaki boşluklar ve tuş simgesi imleri sayılmaz (Windows/Android aynı).
+    public static func characters(_ text: String) -> Int {
+        text.filter { $0 != ButtonIcons.marker }.trimmingCharacters(in: .whitespaces).count
+    }
+
+    /// Yazının yalnız harflerinin genişliği (piksel; kutunun ucundaki tuş simgesi çıkarılmış) ve satır yüksekliğiyle dar
+    /// yazı mı. Tuş çubuğunda simgesi kutuya katılan kısa etiketin ("SELECT ✕", "BACK ○") harf başına genişliği şişip
+    /// dar sayılmıyordu; Türkçesi geniş yazı tipinde çiziliyordu (#1360).
+    public static func isCondensed(width: Double, height: Double, characters: Int) -> Bool {
+        guard characters > 0, height > 0, width > 0 else { return false }
+        return width / Double(characters) / height < condensedWidth
     }
 
     private static func alignment(_ boxes: [TextBox]) -> TextLook.Align {

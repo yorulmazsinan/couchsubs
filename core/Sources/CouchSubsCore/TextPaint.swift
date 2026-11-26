@@ -232,6 +232,8 @@ public enum TextPainter {
     public static let growLines = 12.0
     /// Aynı grup: satır yükseklikleri en çok bu oranda farklı (`ScreenFit.sameLine`).
     public static let sameLine = ScreenFit.sameLine
+    /// Aynı satırdaki tuş istemlerinde (tuş çubuğu) satır yüksekliği farkı en çok bu oranda (simge kimi kutuya katılır, #1360).
+    public static let promptLine = 0.35
 
     // MARK: Kip seçimi sabitleri (Windows TextPaint.cs, Android TextPaint.kt aynı)
 
@@ -263,6 +265,8 @@ public enum TextPainter {
     public static let besideReachLines = 12.0
     /// İkiz panel özgün panelle aynı boyda (Sinan Bey, beta.100: "AYNI punto, küçültme yok"; #1296'daki 0,58 kalktı).
     public static let twinScale = 1.0
+    /// Birden çok tek satırlık etiketin kutusunda yazıların kapladığı en küçük pay; altındaysa kutu değildir (#1362).
+    public static let twinFill = 0.08
     /// İkizdeki yazı özgün panelin genişliğini en çok bu katı kadar aşabilir (boş yer varsa; kutu içeriğe göre uzar).
     public static let twinWiden = 0.5
     /// Kenar çizgisi en çok bu kadar piksel kalın aranır.
@@ -656,8 +660,15 @@ public enum TextPainter {
                         return distance(color(x, y), ground) <= panelTolerance
                     }
                 if let panel { panels[index] = panel }
+                // Düz zeminde boş alan zeminin bittiği yerde (panel kenarı, ayırıcı çizgi, başka panel) biter: kumanda şeması
+                // önizlemesinde Türkçeler soldaki panele, seçicinin ve başlığın üstüne taşıyordu (#1362).
+                let flat = !paint.patterned && paint.background2 == nil
                 rooms.append(measureRoom(l: cl, t: ct, r: cr, b: cb, line: line, width: width, height: height,
-                                         iconLeft: iconLeft, iconRight: iconRight) { x, y in
+                                         iconLeft: iconLeft, iconRight: iconRight, walls: flat,
+                                         wall: { x, y in
+                                             let c = color(x, y)
+                                             return distance(c, ground) > ScreenFit.inkDistance && distance(c, fg) > besideInk
+                                         }) { x, y in
                     if others(x, y) { return nil }
                     return distance(color(x, y), fg) <= besideInk
                 })
@@ -670,7 +681,8 @@ public enum TextPainter {
             min(a.r, b.r) > max(a.l, b.l) && min(a.b, b.b) > max(a.t, b.t)
         }
         // Listeler (`groups`): aynı sütunda ya da aynı satırda duran, aynı boydaki tek satırlık etiketler.
-        let lists = groups(targets)
+        let iconed = Set(result.indices.filter { result[$0].iconSide != nil })
+        let lists = groups(targets, iconed: iconed)
         var listOf: [Int: Int] = [:]
         for (k, list) in lists.enumerated() { for m in list.0 { listOf[m] = k } }
 
@@ -716,6 +728,14 @@ public enum TextPainter {
         // Sarmayan alan kutu değildir, satırlar yanına yazılır (Windows TextPaint.cs, Android TextPaint.kt aynı).
         func hugs(_ members: [Int], _ l: Int, _ t: Int, _ r: Int, _ b: Int) -> Bool {
             let prompt = members.allSatisfy { targets[$0].prompt }
+            // Kendi kutusu olmayan düz etiketler (kumanda şeması önizlemesinde kolun çevresindeki "PARTNER MENU", "RUN",
+            // "MOVE") koyu zeminin büyük bir parçasını panel sanıp ekranın ~%24×%33'ü boyunda ikiz kutuya yazılıyordu
+            // (#1362). Hepsi tek satırlık birden çok etiketin kutusu, yazıları kutunun en az `twinFill`'ini kaplamıyorsa
+            // kutu değildir; etiketler yanına yazılır.
+            if members.count >= 2, members.allSatisfy({ targets[$0].rows <= 1 }) {
+                let text = members.reduce(0) { $0 + (covers[$1].r - covers[$1].l) * (covers[$1].b - covers[$1].t) }
+                if Double(text) < twinFill * Double(max(1, (r - l) * (b - t))) { return false }
+            }
             guard members.allSatisfy({ targets[$0].rows <= 1 }), prompt || members.count == 1 else { return true }
             let ul = members.map { covers[$0].l }.min()!, ut = members.map { covers[$0].t }.min()!
             let ur = members.map { covers[$0].r }.max()!, ub = members.map { covers[$0].b }.max()!
@@ -951,6 +971,30 @@ public enum TextPainter {
         // 4) Grup: aynı sütunda (ortak sol ya da sağ kenar, düzenli aralık) ya da aynı satırda duran, BÜYÜK HARF'i ve
         // satır yüksekliği aynı tek satırlık etiketler.
         for (members, id) in lists { for i in members { result[i].group = id } }
+        // Aynı satırdaki tuş istemleri tek boyda ve tek taban çizgisinde (#1360): örtü kutusunun (ve yanına yazılan yerin)
+        // üstü/altı ve satır aralığı grubun ortancası olur; TV grubun yazı boyunu bunlardan ölçer.
+        for (members, _) in lists where members.count >= 2 && members.contains(where: { targets[$0].prompt || iconed.contains($0) }) {
+            let covers = members.map { result[$0].cover }
+            guard covers.map(\.top).max()! < covers.map(\.bottom).min()! else { continue }
+            func median(_ values: [Double]) -> Double { let s = values.sorted(); return s[s.count / 2] }
+            let top = median(covers.map(\.top)), bottom = median(covers.map(\.bottom))
+            let pitch = median(members.map { result[$0].pitch })
+            let spots = members.compactMap { result[$0].mode == .beside ? result[$0].spot : nil }
+            let spotTop = spots.isEmpty ? top : median(spots.map(\.top))
+            for i in members {
+                result[i].cover.top = top
+                result[i].cover.bottom = bottom
+                result[i].pitch = pitch
+                if let grow = result[i].grow { result[i].grow = TextBox(left: grow.left, top: top, right: grow.right, bottom: bottom) }
+                if result[i].mode == .beside, let spot = result[i].spot {
+                    let spotBottom = spotTop + (bottom - top)
+                    result[i].spot = TextBox(left: spot.left, top: spotTop, right: spot.right, bottom: spotBottom)
+                    if let room = result[i].spotRoom {
+                        result[i].spotRoom = TextBox(left: room.left, top: spotTop, right: room.right, bottom: spotBottom)
+                    }
+                }
+            }
+        }
         return result
     }
 
@@ -977,8 +1021,12 @@ public enum TextPainter {
 
     /// Boş alan ölçümü. `free(x, y)`: nil başka hedef ya da simge (alan orada biter), true yazı rengine yakın nokta, false
     /// boş zemin. Bir sütun/satır, yazı rengindeki noktaları `besideShare`'den azsa boştur.
+    /// `wall(x, y)`: düz zeminli yazıda zemin de yazı rengi de olmayan nokta; sütununun en az `panelShare`'i böyleyse
+    /// (dikey panel kenarı, ayırıcı çizgi, başka renkte panel) yana uzanan alan orada biter. `walls` false: desenli zemin,
+    /// denetlenmez.
     static func measureRoom(l: Int, t: Int, r: Int, b: Int, line: Double, width: Int, height: Int, iconLeft: Bool,
-                            iconRight: Bool, free: (Int, Int) -> Bool?) -> Room {
+                            iconRight: Bool, walls: Bool = false, wall: (Int, Int) -> Bool = { _, _ in false },
+                            free: (Int, Int) -> Bool?) -> Room {
         let w = r - l, h = b - t
         var room = Room(l: l, t: t, r: r, b: b, line: line, near: max(2, Int((besideGapLines * line).rounded())),
                         far: max(1, Int((ScreenFit.gapLines * line).rounded(.up))),
@@ -986,6 +1034,7 @@ public enum TextPainter {
         guard w > 0, h > 0, t >= 0, b <= height else { return room }
         func column(_ x: Int, _ y0: Int, _ y1: Int) -> Bool {
             guard x >= 0, x < width, y0 >= 0, y1 <= height, y1 > y0 else { return false }
+            if walls, shareAtLeast(from: y0, to: y1, step: 1, share: panelShare, { wall(x, $0) }) { return false }
             return roomOpen(from: y0, to: y1) { free(x, $0) }
         }
         func row(_ y: Int, _ x0: Int, _ x1: Int) -> Bool {
@@ -1125,7 +1174,8 @@ public enum TextPainter {
     }
 
     /// Grup üyeleri ve numarası (grubun en küçük sıra numarası); tek üyeli grup yok.
-    static func groups(_ targets: [Target]) -> [([Int], Int)] {
+    /// `iconed`: kutusunun ucunda tuş simgesi bulunan hedefler (`TextPaint.iconSide`); tuş istemi sayılır.
+    static func groups(_ targets: [Target], iconed: Set<Int> = []) -> [([Int], Int)] {
         let labels = targets.indices.filter { targets[$0].rows <= 1 }
         var parent = Dictionary(uniqueKeysWithValues: labels.map { ($0, $0) })
         func root(_ i: Int) -> Int { var i = i; while parent[i]! != i { i = parent[i]! }; return i }
@@ -1136,7 +1186,12 @@ public enum TextPainter {
             for b in labels where b > a {
                 let x = targets[a], y = targets[b]
                 let line = max(x.lineHeight, y.lineHeight)
-                guard x.upper == y.upper, abs(x.lineHeight - y.lineHeight) <= sameLine * line else { continue }
+                // Aynı satırdaki tuş istemi tuş çubuğudur (#1360: "PHOTO STUDIO ▢ · SELECT ✕ · BACK ○"): simgesi kutuya
+                // katılmayan "SELECT" öbürlerinden ~%16 kısa okunup gruptan düşüyor, "SEÇ" öbürlerinden büyük ve aşağıda
+                // çiziliyordu. Birinde tuş simgesi varsa satır yükseklikleri `promptLine`'a kadar farklı olabilir.
+                let prompt = x.prompt || y.prompt || iconed.contains(a) || iconed.contains(b)
+                let limit = prompt && overlap(x.box, y.box) >= 0.5 ? promptLine : sameLine
+                guard x.upper == y.upper, abs(x.lineHeight - y.lineHeight) <= limit * line else { continue }
                 // Satır yüksekliği kareye oranla; yatay pay aynı piksele denk gelsin diye en-boy oranı bilinmez, yarım satır
                 // yüksekliğinin yarısı kadar (16:9'da ~0,28 satır) alınır.
                 let tolerance = 0.5 * line * 9 / 16

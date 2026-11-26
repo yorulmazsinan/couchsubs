@@ -94,6 +94,38 @@ final class DenseMenuTests: XCTestCase {
         XCTAssertEqual(first.map(\.translation), moved.map(\.translation))
     }
 
+    /// #1359: seçim çubuğu hareket edip yeni seçili satır o tur okunamayınca bütün kutular kalkıyor, ancak iki aynı okumayla
+    /// geri geliyordu. Artık yazısı aynı kalan satırlar yerinde kalır (stili kendi satırının şimdiki zemininden), okunamayan
+    /// satır yerinde tutulur ve stili kendi yerinden yeniden örneklenir; seçimin bıraktığı satır seçili rengi taşımaz.
+    func testMovingSelectionKeepsUnchangedRowsWhenTheNewSelectionIsUnread() async throws {
+        let reader = Reader(), translator = Batch(), server = Server()
+        reader.lines = Self.pauseRows.enumerated().map { TextLine($1, box: Self.row($0)) }
+        let watcher = RegionWatcher(reader: reader, translator: translator, server: server)
+        watcher.translatesUiCommands = true
+        await watcher.pass(Self.pause(2), areas: [area])
+        await watcher.pass(Self.pause(2), areas: [area])
+        XCTAssertEqual(try XCTUnwrap(server.blocks.last ?? nil).count, 6, "\(server.blocks.map { $0?.map(\.source) })")
+
+        // Seçim "Help"e geçti; açık şeritteki soluk "Help" bu tur okunamadı.
+        reader.lines = Self.pauseRows.enumerated().filter { $0.offset != 3 }.map { TextLine($0.element, box: Self.row($0.offset)) }
+        await watcher.pass(Self.pause(3), areas: [area])
+        let kept = try XCTUnwrap(server.blocks.last ?? nil, "satırlar kalkmamalı")
+        XCTAssertEqual(kept.count, 6, "\(kept.map(\.source)) \(server.blocks.count)")
+        func row(_ source: String) -> ScreenTranslation.Item? { kept.first { $0.source == source } }
+        XCTAssertEqual(row("Map")?.translation, "Harita")
+        XCTAssertFalse(Self.light(try XCTUnwrap(row("Store")?.style).background), "seçimin bıraktığı satır koyu zeminde")
+        XCTAssertTrue(Self.light(try XCTUnwrap(row("Help")?.style).background), "yeni seçili satır açık zeminde")
+        XCTAssertEqual(translator.requests, 0)
+
+        // Okuma doğrulanınca bütün menü yeniden kurulur, yine motorsuz.
+        reader.lines = Self.pauseRows.enumerated().map { TextLine($1, box: Self.row($0)) }
+        await watcher.pass(Self.pause(3), areas: [area])
+        await watcher.pass(Self.pause(3), areas: [area])
+        XCTAssertEqual(try XCTUnwrap(server.blocks.last ?? nil).count, 6, "\(server.blocks.map { $0?.map(\.source) })")
+        XCTAssertFalse(server.blocks.contains { $0 == nil }, "alan hiç boşalmadı")
+        XCTAssertEqual(translator.requests, 0)
+    }
+
     // --- (b) Kontrol şeması: sağa yaslı tuş etiketleri, sola yaslı simgeli etiketler, sayaçlar ---
 
     private static func label(_ text: String, _ left: Double, _ right: Double, _ row: Int) -> TextLine {
@@ -148,9 +180,11 @@ final class DenseMenuTests: XCTestCase {
         await watcher.pass(Self.pause(-1), areas: [area])
         await watcher.pass(Self.pause(-1), areas: [area])
         XCTAssertEqual(translator.requests, 1)
-        XCTAssertGreaterThanOrEqual(translator.texts.count, 20)
-        // Tuş adları ve sayaçlar çeviriye gitmez, sözlükteki etiketler de ("SELECT", "BACK").
+        XCTAssertGreaterThanOrEqual(translator.texts.count, 5)
+        // Tuş adları ve sayaçlar çeviriye gitmez, sözlükteki etiketler de ("SELECT", "BACK"; kumanda şeması komutları
+        // "RUN", "HOLSTER", "MELEE", #1362).
         XCTAssertFalse(translator.texts.contains { $0.contains("(L1)") || $0.contains("1 / 3") || $0 == "SELECT" || $0 == "BACK" })
+        XCTAssertFalse(translator.texts.contains { ["RUN", "HOLSTER", "MELEE", "AIM", "JUMP"].contains($0) })
         let sent = try XCTUnwrap(server.blocks.last { $0 != nil } ?? nil)
         func translation(_ source: String) -> String? { sent.first { $0.source == source }?.translation }
         // Tuş adı kutunun dışında kalır (ekranda görünür, #860); etiket çevrilir.

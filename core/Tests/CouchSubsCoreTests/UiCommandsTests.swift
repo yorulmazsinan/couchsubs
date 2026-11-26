@@ -12,6 +12,7 @@ final class UiCommandsTests: XCTestCase {
         let translate: [Case]
         let translateLabel: [Case]
         let translateLabelLoosely: [Case]
+        let withoutKeyGlyph: [Case]
     }
 
     func testSharedCasesMatchWindowsAndAndroid() throws {
@@ -21,6 +22,7 @@ final class UiCommandsTests: XCTestCase {
             ("translate", vectors.translate, UiCommands.translate),
             ("translateLabel", vectors.translateLabel, UiCommands.translateLabel),
             ("translateLabelLoosely", vectors.translateLabelLoosely, UiCommands.translateLabelLoosely),
+            ("withoutKeyGlyph", vectors.withoutKeyGlyph, { UiCommands.withoutKeyGlyph($0) }),
         ]
         for (name, cases, function) in checks {
             XCTAssertGreaterThanOrEqual(cases.count, 5, name)

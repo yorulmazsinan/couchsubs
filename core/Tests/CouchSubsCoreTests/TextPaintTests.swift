@@ -42,7 +42,7 @@ final class TextPaintTests: XCTestCase {
         struct ModeExpect: Decodable {
             let mode: String; let spot: [Double]?; let room: [Double]?; let twin: [Double]?; let radius: Double?
             let scale: Double?; let tail: String?; let portrait: [Double]?; let portraitTwin: [Double]?
-            let edge: [Double]?
+            let edge: [Double]?; let group: Int?; let cover: [Double]?
         }
         struct ModePaint: Decodable {
             let id: String; let width: Int; let height: Int; let background: Background; let rects: [Rect]
@@ -195,6 +195,8 @@ final class TextPaintTests: XCTestCase {
                     for (a, b) in zip(got, want) { XCTAssertEqual(a, b, accuracy: tolerance, "\(name) \(what) \(got)") }
                 }
                 near(px(paint.spot), e.spot, "spot")
+                near(px(paint.cover), e.cover, "cover")
+                if let group = e.group { XCTAssertEqual(paint.group, group, "\(name) grup") }
                 near(px(paint.spotRoom).map { [$0[0], $0[2]] }, e.room, "room")
                 near(px(paint.twin), e.twin, "twin")
                 if let radius = e.radius { XCTAssertEqual(paint.radius * h, radius, accuracy: 1.5, "\(name) radius") }

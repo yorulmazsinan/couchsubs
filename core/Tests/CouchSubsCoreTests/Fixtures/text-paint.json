@@ -1,5 +1,5 @@
 {
-  "_": "Yerinde birebir çizimin ortak deneme dosyası (Mac/iPhone: TextPaintTests.swift, Windows: TextPaintTests.cs, Android: TextPaintTest.kt, TV: scripts/tv-exact-fit.test.js). 'paint': yapay kare (zemin: solid/h/v/checker; üstüne çizilen dikdörtgenler) ve TextPainter.paints'in beklenen sonucu (piksel; kutular ±1, renkler kanal başına ±4; verilmeyen alan denetlenmez, grow null: uzamaz; side: kutunun ucundaki simgenin yanı, TextPaint.iconSide; hedefte words: sözcük sayısı). 'exact': ScreenFit.exact yerleşimi; ölçü: genişlik = harf sayısı × charWidth × yazı boyu (±0,05). 'modes': çizim kipi (TextPaint.mode; hedefte kind: ScreenTextKind, prompt: tuş istemi; dikdörtgende radius: yuvarlak köşe, nokta merkezi köşe dairesinin içindeyse boyanır; tail: o alt köşe köşeli kalır, balon kuyruğu). Beklenen: mode; edge [üst, sağ, alt, sol] (ikizin kenar çizgisi, piksel ±0,5); spot [l,t,r,b], room [sol,sağ] (spotRoom), twin [l,t,r,b], radius (piksel ±1,5), scale, tail, portrait [l,t,r,b] ve portraitTwin (null: resim yok); kutular ±1.",
+  "_": "Yerinde birebir çizimin ortak deneme dosyası (Mac/iPhone: TextPaintTests.swift, Windows: TextPaintTests.cs, Android: TextPaintTest.kt, TV: scripts/tv-exact-fit.test.js). 'paint': yapay kare (zemin: solid/h/v/checker; üstüne çizilen dikdörtgenler) ve TextPainter.paints'in beklenen sonucu (piksel; kutular ±1, renkler kanal başına ±4; verilmeyen alan denetlenmez, grow null: uzamaz; side: kutunun ucundaki simgenin yanı, TextPaint.iconSide; hedefte words: sözcük sayısı). 'exact': ScreenFit.exact yerleşimi; ölçü: genişlik = harf sayısı × charWidth × yazı boyu (±0,05). 'modes': çizim kipi (TextPaint.mode; hedefte kind: ScreenTextKind, prompt: tuş istemi; dikdörtgende radius: yuvarlak köşe, nokta merkezi köşe dairesinin içindeyse boyanır; tail: o alt köşe köşeli kalır, balon kuyruğu). Beklenen: mode; edge [üst, sağ, alt, sol] (ikizin kenar çizgisi, piksel ±0,5); spot [l,t,r,b], room [sol,sağ] (spotRoom), twin [l,t,r,b], radius (piksel ±1,5), scale, tail, portrait [l,t,r,b] ve portraitTwin (null: resim yok); kutular ±1. group: grup numarası (TextPaint.group); cover [l,t,r,b] örtü kutusu (±1).",
   "paint": [
     {
       "id": "duz-zemin-tasan-harf",
@@ -2817,7 +2817,7 @@
           "mode": "beside",
           "room": [
             255,
-            324
+            316
           ],
           "spot": [
             255,
@@ -2897,6 +2897,437 @@
             321,
             166,
             337
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kumanda-semasi-duz-etiketler-dev-ikiz-yok",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#6A7480"
+      },
+      "rects": [
+        {
+          "box": [
+            320,
+            200,
+            600,
+            320
+          ],
+          "color": "#121416"
+        },
+        {
+          "box": [
+            340,
+            215,
+            372,
+            225
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            340,
+            250,
+            380,
+            260
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            340,
+            285,
+            368,
+            295
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            340,
+            214,
+            372,
+            226
+          ],
+          "line": 12,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            340,
+            249,
+            380,
+            261
+          ],
+          "line": 12,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            340,
+            284,
+            368,
+            296
+          ],
+          "line": 12,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "kind": "menu"
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "room": [
+            387,
+            453
+          ],
+          "spot": [
+            387,
+            213,
+            421,
+            227
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            387,
+            466
+          ],
+          "spot": [
+            387,
+            248,
+            429,
+            262
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            387,
+            447
+          ],
+          "spot": [
+            387,
+            283,
+            417,
+            297
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ayirici-cizgide-biter-sol-panele-tasmaz",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#14181C"
+      },
+      "rects": [
+        {
+          "box": [
+            240,
+            0,
+            242,
+            360
+          ],
+          "color": "#5A6470"
+        },
+        {
+          "box": [
+            330,
+            100,
+            380,
+            112
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            340,
+            130,
+            380,
+            142
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            320,
+            160,
+            380,
+            172
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            330,
+            99,
+            380,
+            113
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#14181C",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "right",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            340,
+            129,
+            380,
+            143
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#14181C",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "right",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            320,
+            159,
+            380,
+            173
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#14181C",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "right",
+          "kind": "menu"
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "room": [
+            246,
+            312
+          ],
+          "spot": [
+            260,
+            98,
+            312,
+            114
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            246,
+            312
+          ],
+          "spot": [
+            270,
+            128,
+            312,
+            144
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            246,
+            312
+          ],
+          "spot": [
+            250,
+            158,
+            312,
+            174
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tus-cubugu-kisa-okunan-etiket-ayni-grupta",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#6A7480"
+      },
+      "rects": [
+        {
+          "box": [
+            40,
+            228,
+            320,
+            350
+          ],
+          "color": "#121416"
+        },
+        {
+          "box": [
+            60,
+            322,
+            74,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            80,
+            324,
+            118,
+            334
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            150,
+            324,
+            186,
+            334
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            236,
+            322,
+            250,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            256,
+            324,
+            300,
+            334
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            60,
+            322,
+            118,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        },
+        {
+          "box": [
+            150,
+            324,
+            186,
+            335
+          ],
+          "line": 11,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help"
+        },
+        {
+          "box": [
+            236,
+            322,
+            300,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "group": 0,
+          "room": [
+            79,
+            134
+          ],
+          "spot": [
+            79,
+            344,
+            119,
+            360
+          ]
+        },
+        {
+          "mode": "beside",
+          "group": 0,
+          "room": [
+            134,
+            206
+          ],
+          "spot": [
+            149,
+            344,
+            187,
+            360
+          ]
+        },
+        {
+          "mode": "beside",
+          "group": 0,
+          "room": [
+            255,
+            316
+          ],
+          "spot": [
+            255,
+            344,
+            301,
+            360
           ]
         }
       ]

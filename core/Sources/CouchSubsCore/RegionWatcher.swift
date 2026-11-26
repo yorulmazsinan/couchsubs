@@ -497,22 +497,66 @@ public final class RegionWatcher {
             // Liste kaydı (Sinan Bey beta.100 3381, 3383): menüde liste kayınca eski kutular eski yerinde başka satırın
             // üstünde kalıyordu ("Hazır olunca çık"); yazının bir kısmı hâlâ göründüğü için kararsız okuma da kaldırmıyordu.
             // Gösterilen bir satır başka yerde okunuyor ya da yerinde başka yazı var: eski kutular hemen kalkar.
+            // Satır farkı (#1359, #1362): seçim çubuğu ya da liste oynayınca bütün kutular kalkıp ancak iki aynı okumayla
+            // geri geliyordu; kumandaya basıldıkça menü boş kalıyordu (GTA 6 duraklatma menüsü, kumanda şeması önizlemesi).
+            // Artık yalnız yazısı değişen satır kalkar: yazısı aynı kalan satırın çevirisi korunur, yeri ve stili bu okumadan
+            // (kendi satırının şimdiki zemininden) alınır; bu turda okunamayan satır (seçili satırın açık zemindeki soluk
+            // yazısı) yerinde kalır, stili kendi yerinden yeniden örneklenir. Yeni satır önbellekteki çevirisiyle hemen,
+            // yoksa okuma doğrulanınca çizilir. Windows ve Android aynı.
             let rendered = state.renderedBlocks?.map(\.item) ?? []
+            let texts = Self.blockTexts(candidate)
+            let listShifted = area.menu && Self.listMoved(rendered: rendered, current: texts)
             if !(state.renderedText ?? "").isEmpty,
-               Self.selectionMoved(rendered: rendered, current: candidate.blocks ?? [])
-                || (area.menu && Self.listMoved(rendered: rendered, current: Self.blockTexts(candidate))) {
-                server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+               listShifted || Self.selectionMoved(rendered: rendered, current: candidate.blocks ?? []) {
+                let diff = Self.carriedRows(rendered: rendered, current: texts, listMoved: listShifted)
+                var kept: [(group: Int, item: ScreenTranslation.Item)] = []
+                var unread = 0
+                for row in diff.kept {
+                    var item = rendered[row.rendered]
+                    if let c = row.current, let block = candidate.blocks?[c] {
+                        item.box = block.box
+                        item.lineHeight = block.lineHeight
+                        item.style = block.style ?? item.style
+                        item.look = block.look ?? item.look
+                        item.paint = block.paint ?? item.paint
+                        kept.append((c, item))
+                    } else {
+                        unread += 1
+                        kept.append((-1, Self.restyled(item, frame: crop, region: region)))
+                    }
+                }
+                var fresh = 0
+                for c in diff.fresh {
+                    guard let block = candidate.blocks?[c], block.count == 1, let item = freshRow(block, text: texts[c].text) else { continue }
+                    kept.append((c, item))
+                    fresh += 1
+                }
+                if kept.isEmpty {
+                    server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+                    state.shownText = ""
+                    state.renderedText = nil
+                    state.renderedBlocks = nil
+                    onLog?("ek alan \(area.name): seçim kaydı, eski kutular kaldırıldı")
+                } else {
+                    kept.sort { ($0.item.box.top, $0.item.box.left) < ($1.item.box.top, $1.item.box.left) }
+                    let text = kept.map(\.item.translation).joined(separator: "\n")
+                    server.sendRegion(id: area.id, text: text, box: candidate.box, lineHeight: candidate.lineHeight,
+                                      icons: nil, blocks: kept.map(\.item))
+                    state.shownText = candidate.text
+                    state.renderedText = text
+                    state.renderedBlocks = kept
+                    onLog?("ek alan \(area.name): seçim kaydı, \(kept.count - unread - fresh) satır yerinde kaldı, "
+                           + "\(unread) okunamayan satır korundu, \(fresh) satır önbellekten, "
+                           + "\(rendered.count - kept.count + fresh) satır kaldırıldı\(listShifted ? " (liste kaydı)" : "")")
+                }
+                // Bütün çeviri yeni okuma doğrulanınca yeniden kurulur (önbellekten, motora gitmeden).
                 state.shown = ""
-                state.shownText = ""
                 state.shownIcons = 0
                 state.renderedKey = nil
-                state.renderedText = nil
                 state.renderedIcons = nil
                 state.renderedBox = nil
                 state.renderedLineHeight = nil
                 state.renderedLayout = nil
-                state.renderedBlocks = nil
-                onLog?("ek alan \(area.name): seçim kaydı, eski kutular kaldırıldı")
             }
             state.lastRead = candidate.key
             state.held = nil
@@ -704,8 +748,15 @@ public final class RegionWatcher {
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
         // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
         // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+        // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
         let lines = ScreenTranslation.withoutDuplicateLines(read.map(ScreenTranslation.withoutEdgeMarks)
-            .map(ScreenTranslation.withoutEdgeIcons))
+            .map(ScreenTranslation.withoutEdgeIcons)
+            .map { line in
+                guard auto else { return line }
+                var line = line
+                line.text = UiCommands.withoutKeyGlyph(line.text)
+                return line
+            })
         var paragraphs = ScreenTranslation.paragraphs(lines)
         let boxes = lines.compactMap(\.box)
         let box = boxes.dropFirst().reduce(boxes.first) { $0?.union($1) }?.placed(in: place)
@@ -783,7 +834,16 @@ public final class RegionWatcher {
                     list[i].paint = whole == nil ? paints[k].placed(in: place) : paints[k]
                     // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
                     if let side = paints[k].iconSide { list[i].look?.align = side }
+                    // Simgesi kutuya katılan kısa etiketin dar yazısı simgesiz harf genişliğiyle yeniden ölçülür (#1360).
+                    if paints[k].iconSide != nil, list[i].look?.condensed == false, groups[i].paragraphs.count == 1,
+                       let cover = list[i].paint?.cover {
+                        let width = (cover.right - cover.left) / max(1e-9, region.right - region.left) * Double(frame.width)
+                        let characters = TextStyleSampler.characters(IconText.plain(groups[i].paragraphs[0]))
+                        list[i].look?.condensed = TextStyleSampler.isCondensed(
+                            width: width, height: groups[i].lineHeight * Double(frame.height), characters: characters)
+                    }
                 }
+                list = Self.condensedTogether(list)
             }
             // Görev/hedef satırı altyazıdan ve öbür ekran yazılarından ayrı görünür: koyu kehribar kutu, başında hedef imi
             // (`MissionLine.style`, `MissionLine.marker`). Yerinde birebir çizim (örtü/yanına yazma) uygulanmaz; kutu
@@ -868,6 +928,92 @@ public final class RegionWatcher {
                 return rows >= 0.5 && min(a.right, b.right) > max(a.left, b.left)
             }
         }
+    }
+
+    /// Aynı gruptaki (`TextPaint.group`: tuş çubuğu, menü sütunu) etiketlerden biri dar yazıysa hepsi dar yazıyla çizilir:
+    /// tuş çubuğunda kimi etiket dar, kimi geniş yazı tipiyle çiziliyordu (#1360). Windows ve Android aynı.
+    static func condensedTogether(_ blocks: [Block]) -> [Block] {
+        let narrow = Set(blocks.compactMap { $0.look?.condensed == true ? $0.paint?.group : nil })
+        guard !narrow.isEmpty else { return blocks }
+        return blocks.map { block in
+            guard let group = block.paint?.group, narrow.contains(group), block.look != nil else { return block }
+            var block = block
+            block.look?.condensed = true
+            return block
+        }
+    }
+
+    /// Satır farkı (#1359, #1362): seçim ya da liste kaydında gösterilen satırlardan hangileri kalır.
+    /// - Yazısı yeni okumada da olan satır (okuma oynamaları aynı yazı sayılır) kalır; yeni yeri o bloktur (`current`).
+    ///   Liste kaymadıysa blok satırın yerinde (satırının en az yarısı örtüşen) olmalı; kaydıysa aynı yazının en yakın yeri.
+    /// - Yeni okumada olmayan satır (seçili satırın soluk yazısı o tur okunamadı) liste kaymadıysa ve yerinde başka yazı
+    ///   yoksa yerinde kalır (`current` nil); liste kaydıysa kalkar.
+    /// `fresh`: gösterilen hiçbir satıra denk gelmeyen yeni bloklar. Windows ve Android aynı kuralı uygular.
+    static func carriedRows(rendered: [ScreenTranslation.Item], current: [(box: TextBox, text: String)],
+                            listMoved: Bool) -> (kept: [(rendered: Int, current: Int?)], fresh: [Int]) {
+        func same(_ a: String, _ b: String) -> Bool {
+            let x = IconText.plain(a).replacingOccurrences(of: "\n", with: " ")
+            let y = IconText.plain(b).replacingOccurrences(of: "\n", with: " ")
+            return matches(textKey([x]), textKey([y])) || isPartOf(x, y) || isPartOf(y, x)
+        }
+        func rows(_ a: TextBox, _ b: TextBox) -> Double {
+            max(0, min(a.bottom, b.bottom) - max(a.top, b.top)) / max(1e-9, min(a.bottom - a.top, b.bottom - b.top))
+        }
+        func across(_ a: TextBox, _ b: TextBox) -> Bool { min(a.right, b.right) > max(a.left, b.left) }
+        var taken = Set<Int>()
+        var kept: [(rendered: Int, current: Int?)] = []
+        for (r, item) in rendered.enumerated() {
+            let source = item.source
+            let found = current.indices.filter { c in
+                !taken.contains(c) && same(current[c].text, source) && across(current[c].box, item.box)
+                    && (listMoved || rows(current[c].box, item.box) >= 0.5)
+            }
+            if let c = found.min(by: { abs(current[$0].box.top - item.box.top) < abs(current[$1].box.top - item.box.top) }) {
+                taken.insert(c)
+                kept.append((r, c))
+                continue
+            }
+            let occupied = current.contains { rows($0.box, item.box) >= 0.5 && across($0.box, item.box) }
+            if !listMoved, !occupied, source.contains(where: \.isLetter) { kept.append((r, nil)) }
+        }
+        let fresh = current.indices.filter { c in
+            !taken.contains(c) && current[c].text.contains(where: \.isLetter)
+        }
+        return (kept, fresh)
+    }
+
+    /// Bu turda okunamayan (yerinde tutulan) satırın stili kendi yerinden, şimdiki kareden yeniden örneklenir: seçim
+    /// satırdan ayrılınca çevirisi seçili satırın renginde kalıyordu (#1359). `frame` okunan alan, `region` onun karedeki yeri.
+    static func restyled(_ item: ScreenTranslation.Item, frame: CGImage, region: CropRegion) -> ScreenTranslation.Item {
+        guard item.style != nil else { return item }
+        let w = max(1e-9, region.right - region.left), h = max(1e-9, region.bottom - region.top)
+        let local = TextBox(left: (item.box.left - region.left) / w, top: (item.box.top - region.top) / h,
+                            right: (item.box.right - region.left) / w, bottom: (item.box.bottom - region.top) / h)
+        let (surface, _) = TextStyleSampler.sample(frame, box: local, lines: [], source: item.source)
+        var item = item
+        item.style = surface
+        if var paint = item.paint, paint.mode == .cover {
+            paint.background = surface.background
+            paint.background2 = nil
+            paint.direction = nil
+            item.paint = paint
+        }
+        return item
+    }
+
+    /// Satır farkında yeni beliren satır: çevirisi önbellekte (etiket sözlüğü ya da daha önce çevrilmiş etiket) varsa
+    /// hemen çizilir; yoksa nil (okuma doğrulanınca çevrilir).
+    private func freshRow(_ block: Block, text: String) -> ScreenTranslation.Item? {
+        guard !text.contains(ButtonIcons.marker) else { return nil }
+        let core = text.trimmingCharacters(in: .whitespaces)
+        guard var translation = terms[core] ?? (translatesUiCommands ? UiCommands.translateLabelLoosely(core) : nil) else { return nil }
+        if block.look?.upper == true { translation = TextStyleSampler.turkishUpper(translation) }
+        var item = ScreenTranslation.Item(source: core, translation: translation, box: block.box, lineHeight: block.lineHeight)
+        item.style = block.style
+        item.look = block.look
+        item.paint = block.paint
+        item.rows = max(item.rows, block.rows)
+        return item
     }
 
     /// Adayın blokları: karedeki yeri ve yazısı (bloğun parçaları birleşik).
@@ -1094,6 +1240,7 @@ public final class RegionWatcher {
             if let rendered = state.renderedBlocks, let current = candidate.blocks {
                 moved = rendered.map { block -> (group: Int, item: ScreenTranslation.Item) in
                     var item = block.item
+                    guard current.indices.contains(block.group) else { return block }
                     item.box = current[block.group].box
                     item.lineHeight = current[block.group].lineHeight
                     // Seçim gezince yalnız renkler değişir: çeviri yeniden istenmez, zemin/yazı rengi güncellenir.
@@ -1210,7 +1357,14 @@ public final class RegionWatcher {
         if let layout = candidate.blocks, let summary = Self.paintSummary(layout) { onLog?("ek alan \(area.name): çizim \(summary)") }
         let rendered = IconText.render(text.joined(separator: "\n"), slots: slots)
         let icons = rendered.icons.isEmpty ? nil : rendered.icons
-        let blocks = candidate.blocks.map { Self.renderBlocks(candidate, layout: $0, text: text, similar: similar, slots: slots) }
+        var blocks = candidate.blocks.map { Self.renderBlocks(candidate, layout: $0, text: text, similar: similar, slots: slots) }
+        // Satır farkıyla yerinde tutulan, bu okumada da okunamayan satır (seçili satırın soluk yazısı, #1359) kalkmaz: ekran
+        // durunca doğrulanan okumada o satır yoktu, çevirisi kayboluyordu. Yalnız satır farkından hemen sonraki çizimde
+        // (`renderedKey` nil) ve yerinde başka yazı yoksa.
+        if blocks != nil, let carried = states[area.id]?.renderedBlocks, states[area.id]?.renderedKey == nil {
+            let diff = Self.carriedRows(rendered: carried.map(\.item), current: Self.blockTexts(candidate), listMoved: false)
+            for row in diff.kept where row.current == nil { blocks?.append((-1, carried[row.rendered].item)) }
+        }
         server.sendRegion(id: area.id, text: rendered.text, box: candidate.box, lineHeight: candidate.lineHeight, icons: icons,
                           blocks: blocks?.map(\.item))
         states[area.id]?.renderedKey = candidate.key

@@ -35,6 +35,13 @@
     { "text": "EXIT", "expected": "ÇIK" },
     { "text": "SET DESTINATI0N", "expected": "HEDEF BELİRLE" },
     { "text": "SETTINQS", "expected": "AYARLAR" },
+    { "text": "RUN", "expected": "KOŞ" },
+    { "text": "Run", "expected": "Koş" },
+    { "text": "MOVE", "expected": "HAREKET" },
+    { "text": "Detonate Explosives", "expected": "Patlayıcıları Patlat" },
+    { "text": "DETONATE EXPLOSIVES", "expected": "PATLAYICILARI PATLAT" },
+    { "text": "RADIO CONTROLS", "expected": "RADYO KONTROLLERİ" },
+    { "text": "HOLSTER", "expected": "SİLAHI KILIFA KOY" },
     { "text": "Open the door", "expected": null }
   ],
   "translateLabelLoosely": [
@@ -44,5 +51,18 @@
     { "text": "EXIT OR", "expected": "ÇIK OR" },
     { "text": "SELECT ￼", "expected": "SEÇ ￼" },
     { "text": "Open the door", "expected": null }
+  ],
+  "withoutKeyGlyph": [
+    { "text": "RADIO CONTROLS f", "expected": "RADIO CONTROLS" },
+    { "text": "RADIO CONTROLS F", "expected": "RADIO CONTROLS" },
+    { "text": "RADIO MENU (I", "expected": "RADIO MENU" },
+    { "text": "OBJECTIVE / MINIMAP o", "expected": "OBJECTIVE / MINIMAP" },
+    { "text": "DETONATE EXPLOSIVES X", "expected": "DETONATE EXPLOSIVES" },
+    { "text": "HOLD TO PRESS A", "expected": "HOLD TO PRESS A" },
+    { "text": "PLAN B", "expected": "PLAN B" },
+    { "text": "GO TO PLAN B", "expected": "GO TO PLAN B" },
+    { "text": "GRAND THEFT AUTO V", "expected": "GRAND THEFT AUTO V" },
+    { "text": "Radio Controls F", "expected": "Radio Controls F" },
+    { "text": "RUN", "expected": "RUN" }
   ]
 }
