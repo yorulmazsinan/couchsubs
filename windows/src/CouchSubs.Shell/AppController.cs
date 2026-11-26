@@ -3966,7 +3966,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     watcherRequested = phoneArea is not null || autoAreas.Count > 0 || missionArea is not null || noticeAreas.Count > 0;
                     return;
                 }
-                regionWatcher = new RegionWatcher(reader, MakeTranslator(), server) { Log = SubtitleLog.Write, SubtitleEcho = SubtitleEcho };
+                regionWatcher = new RegionWatcher(reader, MakeTranslator(), server) { Log = SubtitleLog.Write, TimingLog = SubtitleLog.Write, SubtitleEcho = SubtitleEcho };
             }
             // Okunup yazısız ya da gürültülü çıkan otomatik alan dedektöre bildirilir (o görüntüde yeniden önerilmez).
             var detector = screenText;
@@ -4027,8 +4027,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var requestWatcher = false;
         try
         {
+            var tracking = System.Diagnostics.Stopwatch.GetTimestamp();
             if (phoneTracker is not null && phoneTracker.TrySample(frame, arrived, out var region))
             {
+                // Telefon izlemenin süresi ek alanların aşama süreleri satırına (StageTiming; Mac/iPhone ve Android aynı).
+                Volatile.Read(ref regionWatcher)?.Timing.Add(RegionWatcher.StageTrack, System.Diagnostics.Stopwatch.GetElapsedTime(tracking));
                 // Telefon görünüyorsa ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun okunması ayarla.
                 var seen = region is not null;
                 if (seen != phoneSeen)

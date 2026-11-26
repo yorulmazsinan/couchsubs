@@ -197,34 +197,54 @@ object TextPainter {
     data class Corner(val radius: Double, val tail: String?)
 
     /**
+     * [from]..[until] aralığında [step] adımla alınan noktaların en az [share]'i [ok] mu (en az bir nokta). Sonuç belli
+     * olunca durur: kalan noktalar sonucu değiştiremez ([ok] yan etkisiz; bütün kare ölçümünde çağrı sayısı yarıya iner,
+     * sonuç aynı). Mac/iPhone TextPaint.swift ve Windows TextPaint.cs aynı.
+     */
+    internal inline fun shareAtLeast(from: Int, until: Int, step: Int, share: Double, ok: (Int) -> Boolean): Boolean {
+        if (until <= from) return false
+        val total = (until - from + step - 1) / step
+        val need = share * total
+        var hits = 0
+        var seen = 0
+        var at = from
+        while (at < until) {
+            if (ok(at)) {
+                hits++
+                if (hits >= need) return true
+            }
+            seen++
+            if (hits + (total - seen) < need) return false
+            at += step
+        }
+        return hits >= need
+    }
+
+    /**
+     * Boş alan sütunu/satırı ([measureRoom]): [from]..[until] noktalarından hiçbiri engel (null) değil ve yazı rengindekiler
+     * [BESIDE_SHARE]'den az. İlk engelde ya da pay dolunca durur (sonuç aynı).
+     */
+    internal inline fun roomOpen(from: Int, until: Int, free: (Int) -> Boolean?): Boolean {
+        if (until <= from) return false
+        val limit = BESIDE_SHARE * (until - from)
+        var ink = 0
+        for (at in from until until) {
+            val cell = free(at) ?: return false
+            if (cell) {
+                ink++
+                if (ink >= limit) return false
+            }
+        }
+        return true
+    }
+
+    /**
      * Yazının (örtü kutusu) çevresindeki düz alan: kutu, satır/sütunlarının en az [PANEL_SHARE]'i zemin ([like]) olduğu
      * sürece dört yana büyür. Karenin kenarına değen ya da çok büyük alan açık zemindir: null.
      */
     internal fun findPanel(l: Int, t: Int, r: Int, b: Int, width: Int, height: Int, like: (Int, Int) -> Boolean): Box? {
-        fun row(y: Int, x0: Int, x1: Int): Boolean {
-            val step = max(1, (x1 - x0) / 64)
-            var n = 0
-            var ok = 0
-            var x = x0
-            while (x < x1) {
-                n++
-                if (like(x, y)) ok++
-                x += step
-            }
-            return n > 0 && ok >= PANEL_SHARE * n
-        }
-        fun column(x: Int, y0: Int, y1: Int): Boolean {
-            val step = max(1, (y1 - y0) / 64)
-            var n = 0
-            var ok = 0
-            var y = y0
-            while (y < y1) {
-                n++
-                if (like(x, y)) ok++
-                y += step
-            }
-            return n > 0 && ok >= PANEL_SHARE * n
-        }
+        fun row(y: Int, x0: Int, x1: Int): Boolean = shareAtLeast(x0, x1, max(1, (x1 - x0) / 64), PANEL_SHARE) { like(it, y) }
+        fun column(x: Int, y0: Int, y1: Int): Boolean = shareAtLeast(y0, y1, max(1, (y1 - y0) / 64), PANEL_SHARE) { like(x, it) }
         if (r <= l || b <= t) return null
         val maxW = (PANEL_MAX_WIDTH * width).toInt()
         val maxH = (PANEL_MAX_HEIGHT * height).toInt()
@@ -353,17 +373,13 @@ object TextPainter {
         val most = round(BESIDE_MAX * max(0, w) + line)
         val base = Room(l, t, r, b, line, near, far, most, iconLeft, iconRight)
         if (w <= 0 || h <= 0 || t < 0 || b > height) return base
-        fun open(cells: List<Boolean?>): Boolean {
-            if (cells.isEmpty() || cells.any { it == null }) return false
-            return cells.count { it == true } < BESIDE_SHARE * cells.size
-        }
         fun column(x: Int, y0: Int, y1: Int): Boolean {
             if (x < 0 || x >= width || y0 < 0 || y1 > height || y1 <= y0) return false
-            return open((y0 until y1).map { free(x, it) })
+            return roomOpen(y0, y1) { free(x, it) }
         }
         fun row(y: Int, x0: Int, x1: Int): Boolean {
             if (y < 0 || y >= height || x0 < 0 || x1 > width || x1 <= x0) return false
-            return open((x0 until x1).map { free(it, y) })
+            return roomOpen(x0, x1) { free(it, y) }
         }
         fun run(x: Int, step: Int, y0: Int, y1: Int, cap: Int): Int {
             var n = 0
@@ -840,11 +856,11 @@ object TextPainter {
                 val panel = if (paint.patterned || paint.background2 != null) null
                 else findPanel(cl, ct, cr, cb, width, height) { px, py ->
                     if (rectHit(px, py, index) || (px >= cl && px < cr && py >= ct && py < cb)) true
-                    else distance(pixel(px, py), ground) <= PANEL_TOLERANCE
+                    else distance(color(px, py), ground) <= PANEL_TOLERANCE
                 }
                 if (panel != null) panels[index] = panel
                 rooms.add(measureRoom(cl, ct, cr, cb, line, width, height, iconLeft, iconRight) { px, py ->
-                    if (others(px, py)) null else distance(pixel(px, py), fg) <= BESIDE_INK
+                    if (others(px, py)) null else distance(color(px, py), fg) <= BESIDE_INK
                 })
             } else {
                 rooms.add(null)
@@ -1178,6 +1194,10 @@ object TextPainter {
     fun hex(c: Rgb): String = String.format(java.util.Locale.ROOT, "#%02X%02X%02X", c.r.coerceIn(0, 255), c.g.coerceIn(0, 255), c.b.coerceIn(0, 255))
 
     fun distance(a: Rgb, b: Rgb): Int = maxOf(abs(a.r - b.r), abs(a.g - b.g), abs(a.b - b.b))
+
+    /** [distance]; [a] 0xRRGGBB (sıcak döngüde nokta başına nesne yaratılmaz, sonuç aynı). */
+    fun distance(a: Int, b: Rgb): Int =
+        maxOf(abs(((a shr 16) and 255) - b.r), abs(((a shr 8) and 255) - b.g), abs((a and 255) - b.b))
 
     internal fun mean(list: List<Rgb>): Rgb {
         val n = max(1, list.size)

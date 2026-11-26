@@ -269,25 +269,49 @@ public enum TextPainter {
     /// (`like`: zemin, yazının kendi örtü kutusu ya da başka hedef; harf noktası sayılmaz, koyu oyun dünyası koyu yazıya
     /// benzer) olduğu sürece dört yana büyür. Karenin kenarına değen ya da `panelMaxWidth`/`panelMaxHeight`'tan büyük alan
     /// açık zemindir (gökyüzü, menünün kendisi): nil.
+    /// `from..<to` aralığında `step` adımla alınan noktaların en az `share`'i `ok` mu (en az bir nokta). Sonuç belli olunca
+    /// durur: kalan noktalar sonucu değiştiremez (`ok` yan etkisiz; bütün kare ölçümünde çağrı sayısı azalır, sonuç aynı).
+    /// Android TextPaint.kt ve Windows TextPaint.cs aynı.
+    static func shareAtLeast(from: Int, to: Int, step: Int, share: Double, _ ok: (Int) -> Bool) -> Bool {
+        guard to > from else { return false }
+        let total = (to - from + step - 1) / step
+        let need = share * Double(total)
+        var hits = 0, seen = 0, at = from
+        while at < to {
+            if ok(at) {
+                hits += 1
+                if Double(hits) >= need { return true }
+            }
+            seen += 1
+            if Double(hits + (total - seen)) < need { return false }
+            at += step
+        }
+        return Double(hits) >= need
+    }
+
+    /// Boş alan sütunu/satırı (`measureRoom`): `from..<to` noktalarından hiçbiri engel (nil) değil ve yazı rengindekiler
+    /// `besideShare`'den az. İlk engelde ya da pay dolunca durur (sonuç aynı).
+    static func roomOpen(from: Int, to: Int, _ free: (Int) -> Bool?) -> Bool {
+        guard to > from else { return false }
+        let limit = besideShare * Double(to - from)
+        var ink = 0
+        for at in from..<to {
+            guard let cell = free(at) else { return false }
+            if cell {
+                ink += 1
+                if Double(ink) >= limit { return false }
+            }
+        }
+        return true
+    }
+
     static func findPanel(l: Int, t: Int, r: Int, b: Int, width: Int, height: Int,
                           like: (Int, Int) -> Bool) -> (l: Int, t: Int, r: Int, b: Int)? {
         func row(_ y: Int, _ x0: Int, _ x1: Int) -> Bool {
-            let step = max(1, (x1 - x0) / 64)
-            var n = 0, ok = 0
-            for x in stride(from: x0, to: x1, by: step) {
-                n += 1
-                if like(x, y) { ok += 1 }
-            }
-            return n > 0 && Double(ok) >= panelShare * Double(n)
+            shareAtLeast(from: x0, to: x1, step: max(1, (x1 - x0) / 64), share: panelShare) { like($0, y) }
         }
         func column(_ x: Int, _ y0: Int, _ y1: Int) -> Bool {
-            let step = max(1, (y1 - y0) / 64)
-            var n = 0, ok = 0
-            for y in stride(from: y0, to: y1, by: step) {
-                n += 1
-                if like(x, y) { ok += 1 }
-            }
-            return n > 0 && Double(ok) >= panelShare * Double(n)
+            shareAtLeast(from: y0, to: y1, step: max(1, (y1 - y0) / 64), share: panelShare) { like(x, $0) }
         }
         guard r > l, b > t else { return nil }
         let maxW = Int(panelMaxWidth * Double(width)), maxH = Int(panelMaxHeight * Double(height))
@@ -394,7 +418,11 @@ public enum TextPainter {
     /// Kare (CGImage) üzerinden kişi resmi.
     public static func portraitImage(_ box: TextBox, frame: CGImage) -> String? {
         guard let pixels = GamePhonePixels(frame) else { return nil }
-        return portraitImage(box, width: pixels.width, height: pixels.height) { x, y in
+        return portraitImage(box, pixels: pixels)
+    }
+
+    static func portraitImage(_ box: TextBox, pixels: GamePhonePixels) -> String? {
+        portraitImage(box, width: pixels.width, height: pixels.height) { x, y in
             let p = pixels.offset(x, y)
             return (Int(pixels.bytes[p]), Int(pixels.bytes[p + 1]), Int(pixels.bytes[p + 2]))
         }
@@ -932,18 +960,13 @@ public enum TextPainter {
                         far: max(1, Int((ScreenFit.gapLines * line).rounded(.up))),
                         most: Int((besideMax * Double(max(0, w)) + line).rounded()), iconLeft: iconLeft, iconRight: iconRight)
         guard w > 0, h > 0, t >= 0, b <= height else { return room }
-        func open(_ cells: [Bool?]) -> Bool {
-            guard !cells.isEmpty, !cells.contains(where: { $0 == nil }) else { return false }
-            let ink = cells.filter { $0 == true }.count
-            return Double(ink) < besideShare * Double(cells.count)
-        }
         func column(_ x: Int, _ y0: Int, _ y1: Int) -> Bool {
             guard x >= 0, x < width, y0 >= 0, y1 <= height, y1 > y0 else { return false }
-            return open((y0..<y1).map { free(x, $0) })
+            return roomOpen(from: y0, to: y1) { free(x, $0) }
         }
         func row(_ y: Int, _ x0: Int, _ x1: Int) -> Bool {
             guard y >= 0, y < height, x0 >= 0, x1 <= width, x1 > x0 else { return false }
-            return open((x0..<x1).map { free($0, y) })
+            return roomOpen(from: x0, to: x1) { free($0, y) }
         }
         func run(from x: Int, step: Int, _ y0: Int, _ y1: Int, cap: Int) -> Int {
             var n = 0
@@ -1059,7 +1082,12 @@ public enum TextPainter {
     /// Kare (CGImage) üzerinden ölçüm.
     public static func paints(_ targets: [Target], frame: CGImage) -> [TextPaint] {
         guard let pixels = GamePhonePixels(frame) else { return [] }
-        return paints(targets, width: pixels.width, height: pixels.height) { x, y in
+        return paints(targets, pixels: pixels)
+    }
+
+    /// Önceden çizilmiş kare üzerinden ölçüm (bütün kare turda bir kez çizilir; `RegionWatcher.ScreenFrame`).
+    static func paints(_ targets: [Target], pixels: GamePhonePixels) -> [TextPaint] {
+        paints(targets, width: pixels.width, height: pixels.height) { x, y in
             let p = pixels.offset(x, y)
             return (Int(pixels.bytes[p]), Int(pixels.bytes[p + 1]), Int(pixels.bytes[p + 2]))
         }

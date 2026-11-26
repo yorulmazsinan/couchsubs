@@ -293,23 +293,53 @@ public static class TextPainter
     /// dünyası koyu yazıya benzer) olduğu sürece dört yana büyür. Karenin kenarına değen ya da
     /// <see cref="PanelMaxWidth"/>/<see cref="PanelMaxHeight"/>'tan büyük alan açık zemindir (gökyüzü, menünün kendisi): null.
     /// </summary>
+    /// <summary>
+    /// [from, until) aralığında step adımla alınan noktaların en az share'i ok mu (en az bir nokta). Sonuç belli olunca
+    /// durur: kalan noktalar sonucu değiştiremez (ok yan etkisiz; bütün kare ölçümünde çağrı sayısı azalır, sonuç aynı).
+    /// Mac/iPhone TextPaint.swift ve Android TextPaint.kt aynı.
+    /// </summary>
+    internal static bool ShareAtLeast(int from, int until, int step, double share, Func<int, bool> ok)
+    {
+        if (until <= from) return false;
+        var total = (until - from + step - 1) / step;
+        var need = share * total;
+        int hits = 0, seen = 0;
+        for (var at = from; at < until; at += step)
+        {
+            if (ok(at))
+            {
+                hits++;
+                if (hits >= need) return true;
+            }
+            seen++;
+            if (hits + (total - seen) < need) return false;
+        }
+        return hits >= need;
+    }
+
+    /// <summary>
+    /// Boş alan sütunu/satırı (MeasureRoom): [from, until) noktalarından hiçbiri engel (null) değil ve yazı rengindekiler
+    /// BesideShare'den az. İlk engelde ya da pay dolunca durur (sonuç aynı).
+    /// </summary>
+    internal static bool RoomOpen(int from, int until, Func<int, bool?> free)
+    {
+        if (until <= from) return false;
+        var limit = BesideShare * (until - from);
+        var ink = 0;
+        for (var at = from; at < until; at++)
+        {
+            var cell = free(at);
+            if (cell == null) return false;
+            if (cell == true && ++ink >= limit) return false;
+        }
+        return true;
+    }
+
     internal static (int L, int T, int R, int B)? FindPanel(int l, int t, int r, int b, int width, int height,
                                                            Func<int, int, bool> like)
     {
-        bool Row(int y, int x0, int x1)
-        {
-            var step = Math.Max(1, (x1 - x0) / 64);
-            int n = 0, ok = 0;
-            for (var x = x0; x < x1; x += step) { n++; if (like(x, y)) ok++; }
-            return n > 0 && ok >= PanelShare * n;
-        }
-        bool Column(int x, int y0, int y1)
-        {
-            var step = Math.Max(1, (y1 - y0) / 64);
-            int n = 0, ok = 0;
-            for (var y = y0; y < y1; y += step) { n++; if (like(x, y)) ok++; }
-            return n > 0 && ok >= PanelShare * n;
-        }
+        bool Row(int y, int x0, int x1) => ShareAtLeast(x0, x1, Math.Max(1, (x1 - x0) / 64), PanelShare, x => like(x, y));
+        bool Column(int x, int y0, int y1) => ShareAtLeast(y0, y1, Math.Max(1, (y1 - y0) / 64), PanelShare, y => like(x, y));
         if (r <= l || b <= t) return null;
         int maxW = (int)(PanelMaxWidth * width), maxH = (int)(PanelMaxHeight * height);
         int pl = Math.Max(0, l), pt = Math.Max(0, t), pr = Math.Min(width, r), pb = Math.Min(height, b);
@@ -464,23 +494,10 @@ public static class TextPainter
             Most = RoundHalfUp((BesideMax * Math.Max(0, w)) + line), IconLeft = iconLeft, IconRight = iconRight,
         };
         if (w <= 0 || h <= 0 || t < 0 || b > height) return room;
-        bool Open(IEnumerable<bool?> cells)
-        {
-            int n = 0, ink = 0;
-            foreach (var cell in cells)
-            {
-                if (cell == null) return false;
-                n++;
-                if (cell == true) ink++;
-            }
-            return n > 0 && ink < BesideShare * n;
-        }
-        IEnumerable<bool?> ColumnCells(int x, int y0, int y1) { for (var y = y0; y < y1; y++) yield return free(x, y); }
-        IEnumerable<bool?> RowCells(int y, int x0, int x1) { for (var x = x0; x < x1; x++) yield return free(x, y); }
         bool Column(int x, int y0, int y1) =>
-            x >= 0 && x < width && y0 >= 0 && y1 <= height && y1 > y0 && Open(ColumnCells(x, y0, y1));
+            x >= 0 && x < width && y0 >= 0 && y1 <= height && y1 > y0 && RoomOpen(y0, y1, y => free(x, y));
         bool Row(int y, int x0, int x1) =>
-            y >= 0 && y < height && x0 >= 0 && x1 <= width && x1 > x0 && Open(RowCells(y, x0, x1));
+            y >= 0 && y < height && x0 >= 0 && x1 <= width && x1 > x0 && RoomOpen(x0, x1, x => free(x, y));
         int Run(int x, int step, int y0, int y1, int cap)
         {
             var n = 0;

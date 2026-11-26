@@ -79,6 +79,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class TranslationService : Service() {
     companion object {
         private const val TAG = "CouchSubsService"
+        private val WHOLE_FRAME = CropRegion(0.0, 1.0, 0.0, 1.0)
         /** Değişmeyen bölgenin son okuması kaç kare yeniden kullanılır (Mac/iPhone/Windows ReadScheduler ile aynı). */
         private const val DEFAULT_MAX_REUSE = 20
         private const val FAST_MAX_REUSE = 2
@@ -506,6 +507,8 @@ class TranslationService : Service() {
     /** Ek alanları ana altyazıdan ayrı ve seyrek (saniyede bir) okuyan; kendi okuyucusu ve iş parçacığı var. */
     @Volatile private var regionWatcher: com.couchsubs.mobile.core.RegionWatcher? = null
     @Volatile private var regionReader: SubtitleReader? = null
+    /** Ek alan turunun bütün kare kopyası için yeniden kullanılan arabellek (tur sürerken boştur). */
+    private val screenBuffer = java.util.concurrent.atomic.AtomicReference<RegionPixels?>(null)
     private val regionWork = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs extra areas").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     /** Ek alan yazısı kararlı mı diye beklenirken çevirisinin önceden istendiği iş parçacığı (turu bekletmesin). */
     private val regionPrefetch = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs extra area translations").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
@@ -544,7 +547,9 @@ class TranslationService : Service() {
         val reads = settings.readsGamePhone
         var seen = false
         val capture = try {
+            val started = System.nanoTime()
             val sample = phoneTracker.sample(com.couchsubs.mobile.ocr.LivePhoneImage(frame), com.couchsubs.mobile.core.monotonicClock())
+            if (sample.sampled) watcher.timing.add(com.couchsubs.mobile.core.RegionWatcher.STAGE_TRACK, System.nanoTime() - started)
             if (!sample.sampled) {
                 // Ayar kapatıldıysa açık telefon oturumu sonraki örneği beklemeden kapanır.
                 if (!reads && phoneOpen) {
@@ -924,6 +929,8 @@ class TranslationService : Service() {
             readPhone = { flat -> areaReader.read(RegionPixels(flat.nv21, flat.width, flat.height, 0L)) }).apply {
             prefetchesTranslations = earlyTranslator != null
             subtitleEcho = com.couchsubs.mobile.core.SubtitleEcho.shared
+            // Aşama süreleri (okuma, çizim, telefon izleme, bütün kare kopyası) 30 sn'de bir (beta.103 yavaşlık bildirimi).
+            onTiming = { Log.i(TAG, it) }
             // Ek alanda (telefon mesajı, görev, bildirim) okunup çevrilmeyen yazının nedeni altyazı günlüğüne.
             onLog = { Log.i(TAG, it) }
             // Ayarlar'daki ekran yazısı türleri (telefon, görev, yardım/eylemler, menüler, diğer).
@@ -1014,11 +1021,13 @@ class TranslationService : Service() {
                     subtitlePhoneAt = now
                     // Doğrulanmamış adayın yerinde de gevşek doğrulama denenir (#1251).
                     val near = subtitlePhone ?: subtitlePhoneCandidate
+                    val started = System.nanoTime()
                     val looked = try {
                         com.couchsubs.mobile.core.ScreenPhoneCard.search(com.couchsubs.mobile.ocr.LivePhoneImage(frame), near)
                     } catch (error: Exception) {
                         null
                     }
+                    regionWatcher?.timing?.add(com.couchsubs.mobile.core.RegionWatcher.STAGE_TRACK, System.nanoTime() - started)
                     val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked?.phone, subtitlePhone, subtitlePhoneMisses)
                     subtitlePhone = next
                     subtitlePhoneMisses = misses
@@ -1048,14 +1057,29 @@ class TranslationService : Service() {
             // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz (telefon çevirisi
             // kapalıyken de: görünen telefon, [phoneSeen]).
             val notices = if (phoneOpen || phoneSeen) emptyList() else noticeAreas
-            // Bütün kare turda bir kez kopyalanır: ekran yazısının çizim kipi ve yanına yazmanın boş alanı onda ölçülür (#1339).
-            val screen by lazy { SubtitleReader.copyRegion(frame, com.couchsubs.mobile.core.CropRegion(0.0, 1.0, 0.0, 1.0)) }
-            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, { r ->
+            // Bütün kare, ekran yazısının çizim kipi ve yanına yazmanın boş alanı onda ölçülsün diye (#1339) yalnız turda
+            // okunacak alan varsa ve turda bir kez kopyalanır; arabelleği turlar arasında yeniden kullanılır (beta.103'te her
+            // turda yeni ~4 MB kopya alınıyordu).
+            var screenTaken: RegionPixels? = null
+            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, crop = { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
-                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color,
-                        screen?.gray, screen?.color)
+                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
                 }
-            }) { task -> regionWork.execute(task) }
+            }, screen = {
+                SubtitleReader.copyRegion(frame, WHOLE_FRAME, screenBuffer.getAndSet(null))?.let {
+                    screenTaken = it
+                    com.couchsubs.mobile.core.RegionWatcher.Screen(it.gray, it.color)
+                }
+            }, run = { task ->
+                val used = screenTaken
+                regionWork.execute {
+                    try {
+                        task.run()
+                    } finally {
+                        if (used != null) screenBuffer.set(used)
+                    }
+                }
+            })
             FramePreview.offer(frame, now)
         }
         val onState: (SessionState) -> Unit = { state ->

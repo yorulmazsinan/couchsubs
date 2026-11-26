@@ -382,6 +382,37 @@ class AreasTest {
         assertEquals(0, recorder.cleared)
     }
 
+    /**
+     * Bütün kare (çizim kipi ve boş alan ölçümü, #1339) yalnız turda okunacak alan varsa ve turda bir kez istenir: izi
+     * değişmeyen alanın turunda kopyalanmaz (beta.103'te Android her turda ~4 MB kopyalıyordu). Okunan alana verilir.
+     */
+    @Test
+    fun wholeFrameIsCopiedOnlyWhenAnAreaIsRead() {
+        val recorder = Recorder()
+        var now = 0L
+        val seen = mutableListOf<GrayFrame?>()
+        val watcher = RegionWatcher({ crop -> seen.add(crop.screen); Reading.fromText("Quest updated.") }, { "TR: $it" }, recorder,
+            clock = { now })
+        val areas = listOf(ExtraArea(id = "n", name = "Bildirim", region = ExtraAreaPreset.NOTIFICATION.region),
+            ExtraArea(id = "m", name = "Görev", region = ExtraAreaPreset.QUEST.region))
+        var value = 5
+        val crop: (CropRegion) -> RegionWatcher.Crop? = { RegionWatcher.Crop(Unit, signature(value)) }
+        var copies = 0
+        val whole = GrayFrame(ByteArray(64 * 36), 64, 36)
+        val screen = { copies++; RegionWatcher.Screen(whole) }
+        assertTrue(watcher.offer(areas, crop, screen) { it.run() })
+        assertEquals(1, copies)
+        assertEquals(listOf<GrayFrame?>(whole, whole), seen)
+        now += 1000
+        assertTrue(watcher.offer(areas, crop, screen) { it.run() })
+        assertEquals(1, copies)
+        now += 1000
+        value = 90
+        assertTrue(watcher.offer(areas, crop, screen) { it.run() })
+        assertEquals(2, copies)
+        assertEquals(4, seen.size)
+    }
+
     /** Görev alanı: [text] okunur, çevirmene gidenler [calls]'a yazılır (Windows RegionWatcherTests ile aynı durumlar). */
     private inner class Scene(prefetch: Boolean = false) {
         var text = ""

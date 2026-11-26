@@ -316,6 +316,14 @@ class RegionWatcher(
         /** Otomatik ekran yazısı alanı varken iki tur arasındaki en uzun süre. */
         const val AUTO_INTERVAL_MS = 500L
 
+        /** [timing] aşamaları (Mac/iPhone ve Windows aynı adlar). */
+        const val STAGE_READ = "okuma"
+        const val STAGE_PAINT = "çizim"
+        const val STAGE_PASS = "tur"
+        const val STAGE_PHONE = "telefon okuması"
+        const val STAGE_SCREEN = "bütün kare"
+        const val STAGE_TRACK = "telefon izleme"
+
         /** Dünya yazısı sayılan yazı bu kadar süre bir daha çevrilmez (10 dk). */
         const val WORLD_TEXT_MS = 10 * 60 * 1000L
 
@@ -939,7 +947,13 @@ class RegionWatcher(
         /** Bütün kare ve rengi: çizim kipi ve yanına yazmanın boş alanı onda ölçülür (#1339); null: okunan alanda. */
         val screen: GrayFrame? = null,
         val screenColor: ((Int, Int) -> Int)? = null,
-    )
+    ) {
+        /** Aynı alan, bütün kareyle ([offer]'ın screen'i). */
+        fun withScreen(whole: Screen): Crop = Crop(pixels, signature, frame, color, whole.frame, whole.color)
+    }
+
+    /** Bütün kare ve rengi (0xRRGGBB; kare renk taşımıyorsa null). */
+    class Screen(val frame: GrayFrame, val color: ((Int, Int) -> Int)? = null)
 
     /**
      * Alanda ayrı duran bir yazı grubu: [Candidate.paragraphs] içinde [start]'tan başlayan [count] parça, karedeki yeri ve
@@ -1154,7 +1168,14 @@ class RegionWatcher(
      * Her karede çağrılır: tur zamanı geldiyse ve önceki tur bittiyse alanların kareleri [crop] ile alınır ve tur
      * [run] ile (çağıranın iş parçacığında) başlatılır; true döner. Yoksa hemen false.
      */
-    fun offer(offered: List<ExtraArea>, crop: (CropRegion) -> Crop?, run: (Runnable) -> Unit): Boolean {
+    /**
+     * [screen]: bütün kare ve rengi ([Crop.screen]); yalnız turda okunacak (izi değişen) bir alan varsa, turda bir kez
+     * istenir. Önceden her turda kopyalanıyordu (1080p'de ~4 MB; #1339 sonrası beta.103, Android).
+     */
+    fun offer(offered: List<ExtraArea>, crop: (CropRegion) -> Crop?, run: (Runnable) -> Unit): Boolean =
+        offer(offered, crop, null, run)
+
+    fun offer(offered: List<ExtraArea>, crop: (CropRegion) -> Crop?, screen: (() -> Screen?)?, run: (Runnable) -> Unit): Boolean {
         val areas = offered.filter(::wanted)
         var manualDue = false
         var phone: PhoneRegionSession? = null
@@ -1175,16 +1196,21 @@ class RegionWatcher(
         }
         fun finish(): Unit = synchronized(lock) { if (started == session) busy = false }
         try {
-            val crops = if (manualDue) areas.mapNotNull { area -> crop(area.region)?.let { area to it } } else emptyList()
+            val cut = if (manualDue) areas.mapNotNull { area -> crop(area.region)?.let { area to it } } else emptyList()
+            // Bütün kare yalnız izi değişen (okunacak) alan varsa kopyalanır: çizim kipi ve boş alan okunan yazıda ölçülür.
+            val whole = if (screen != null && synchronized(lock) { cut.any { (area, c) -> willRead(area.id, c.signature) } })
+                timing.measure(STAGE_SCREEN) { screen() } else null
+            val crops = if (whole == null) cut else cut.map { (area, c) -> area to c.withScreen(whole) }
             val due = phone
             run(Runnable {
                 try {
-                    if (manualDue) pass(areas.map { it.id }.toSet(), crops, started)
+                    if (manualDue) timing.measure(STAGE_PASS) { pass(areas.map { it.id }.toSet(), crops, started) }
                     if (due != null && started == session && synchronized(lock) { phoneSession === due }) {
-                        due.visit(packLookup, skipsTurkish, englishPhoneMessages)
+                        timing.measure(STAGE_PHONE) { due.visit(packLookup, skipsTurkish, englishPhoneMessages) }
                     }
                 } finally {
                     finish()
+                    timing.report(clock())?.let { line -> onTiming?.invoke(line) }
                 }
             })
         } catch (error: RejectedExecutionException) {
@@ -1196,6 +1222,19 @@ class RegionWatcher(
         }
         return true
     }
+
+    /** Alanın izi son okunandan değişti mi (tur onu okuyacak; [visit]); bilinmeyen alan okunur. Kilit altında çağrılır. */
+    private fun willRead(id: String, signature: ByteArray): Boolean =
+        states[id]?.signature?.let { RegionSignature.changed(it, signature) } ?: true
+
+    /**
+     * Aşama süreleri ([StageTiming]; okuma, çizim ölçümü, tur, telefon okuması, bütün kare kopyası); kare iş parçacığının
+     * işleri (telefon izleme) de buraya eklenir. 30 sn'de bir [onTiming]'e tek satır.
+     */
+    val timing = StageTiming()
+
+    /** [timing] satırı (uygulama altyazı günlüğüne yazar; [onLog]'dan ayrı, okuma nedenlerini sayan denemeler karışmasın). */
+    @Volatile var onTiming: ((String) -> Unit)? = null
 
     /** Bir tur: kaldırılan alanların kutusu kalkar, her açık alan gerekirse okunur ve kararlı yazısı çevrilir. */
     fun pass(offeredIds: Set<String>, offered: List<Pair<ExtraArea, Crop>>, started: Int = session) {
@@ -1280,7 +1319,7 @@ class RegionWatcher(
         }
         state.panelMisses = 0
         val reading = try {
-            read(crop)
+            timing.measure(STAGE_READ) { read(crop) }
         } catch (error: Exception) {
             // OCR hatası boş alan değildir. Eski kutuyu koru; aynı kareyi sonraki normal turda yeniden oku.
             // Başarısız kare, önceki adayın kararlılığını da doğrulayamaz.
@@ -1343,13 +1382,15 @@ class RegionWatcher(
                 onAutoRejected?.invoke(area.id)
                 return
             }
-            candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true,
-                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor).copy(auto = true)
+            val plain = candidate
+            candidate = timing.measure(STAGE_PAINT) { styled(plain, text, area.region, crop.frame, crop.color, modes = true,
+                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor) }.copy(auto = true)
         } else {
             // Oyunun hazır alanı ve kullanıcının alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda, çizim
             // kipiyle çizilir (siyah kutu değil, #856; tuş simgesini örtmez, yazı boyu sabit, #1324).
-            candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true, kind = ScreenTextKind.of(area),
-                screen = crop.screen, screenColor = crop.screenColor)
+            val plain = candidate
+            candidate = timing.measure(STAGE_PAINT) { styled(plain, text, area.region, crop.frame, crop.color, modes = true,
+                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor) }
         }
         state.rejectPending = false
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma

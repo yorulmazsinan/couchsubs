@@ -3,7 +3,10 @@ package com.couchsubs.mobile.remoteplay
 
 import com.couchsubs.mobile.core.CropRegion
 import com.couchsubs.mobile.ocr.SubtitleReader
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -36,6 +39,28 @@ class VideoFrameTest {
         // Arabellek biçimin söylediğinden küçük: okuma sınır dışına taşmaz, kare atlanır.
         val small = VideoFrame(ByteBuffer.allocateDirect(64 * 10), 64, 48, 64)
         assertNull(SubtitleReader.copyRegion(small, CropRegion(top = 0.5, bottom = 1.0, left = 0.0, right = 1.0)))
+    }
+
+    /** Bütün kare kopyası önceki kopyanın dizilerine yazılır; sonuç yeni kopyayla aynı, boyu tutmayan dizi kullanılmaz. */
+    @Test fun reusesPreviousCopyArrays() {
+        val width = 64
+        val height = 48
+        val buffer = ByteBuffer.allocateDirect(width * height * 3 / 2)
+        for (i in 0 until buffer.capacity()) buffer.put(i, (i * 7).toByte())
+        val source = VideoFrame(buffer, width, height, width, chroma = ChromaPlanes.after(buffer, width, height))
+        val whole = CropRegion(0.0, 1.0, 0.0, 1.0)
+        val first = SubtitleReader.copyRegion(source, whole)!!
+        java.util.Arrays.fill(first.nv21, 3)
+        java.util.Arrays.fill(first.chroma!!, 9)
+        val reused = SubtitleReader.copyRegion(source, whole, first)!!
+        val fresh = SubtitleReader.copyRegion(source, whole)!!
+        assertTrue(reused.nv21 === first.nv21)
+        assertTrue(reused.chroma === first.chroma)
+        assertArrayEquals(fresh.nv21, reused.nv21)
+        assertArrayEquals(fresh.chroma, reused.chroma)
+        assertEquals(fresh.signature, reused.signature)
+        val other = SubtitleReader.copyRegion(source, CropRegion(top = 0.5, bottom = 1.0, left = 0.0, right = 1.0), first)!!
+        assertFalse(other.nv21 === first.nv21)
     }
 
     @Test fun rejectsStrideBelowWidth() {

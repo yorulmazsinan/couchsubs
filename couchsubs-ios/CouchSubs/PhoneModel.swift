@@ -1568,6 +1568,7 @@ final class PhoneModel: ObservableObject {
         watcher.skipsTurkish = settings.targetLanguage == "tr"
         watcher.translatesUiCommands = settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
         watcher.onLog = { SubtitleLog.write($0) }
+        watcher.onTiming = { SubtitleLog.write($0) }
         // Okunup yazısız ya da gürültülü çıkan otomatik alan dedektöre bildirilir (o görüntüde yeniden önerilmez).
         watcher.onAutoRejected = { [weak self] id in self?.screenTextDetector?.reject(id) }
         // Menüde okunan tuş ipucu ya da görev/HUD yazısı menü bileşeni sayılmaz (#1240).
@@ -1615,7 +1616,13 @@ final class PhoneModel: ObservableObject {
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         // Oyun telefonu açıkken ekranı ayrıca okunur; hazır alanlardaki telefon mesajı ve otomatik ekran yazısı o sırada okunmaz.
         // Telefon görünüyorsa (`seen`) ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun okunması ayarla (`pose`).
-        let seen = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        let tracking = DispatchTime.now().uptimeNanoseconds
+        let tracked = gamePhoneTracker?.sample(frame, now: capturedAt)
+        // Telefon izlemenin süresi ek alanların aşama süreleri satırına (StageTiming; Android ve Windows aynı).
+        if tracked?.sampled == true {
+            regionWatcher?.timing.add(RegionWatcher.stageTrack, nanoseconds: Int64(DispatchTime.now().uptimeNanoseconds - tracking))
+        }
+        let seen = tracked?.pose
         let pose = settings.readsGamePhone ? seen : nil
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
         if settings.autoScreenText, let missionRegion {

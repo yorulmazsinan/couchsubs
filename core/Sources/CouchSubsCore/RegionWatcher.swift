@@ -221,6 +221,53 @@ public final class RegionWatcher {
     /// Kısa İngilizce tuş komutlarını Türkçeye çevirir. Yalnız en → tr için açılır.
     public var translatesUiCommands = false
     public var onLog: ((String) -> Void)?
+
+    /// Aşama süreleri (`StageTiming`; okuma, çizim ölçümü, tur, telefon okuması, bütün karenin çizimi); 30 sn'de bir
+    /// `onTiming`'e tek satır. Uygulama kare iş parçacığının işlerini (telefon izleme) de ekleyebilir. Android ve Windows aynı.
+    public let timing = StageTiming()
+    /// `timing` satırı (uygulama altyazı günlüğüne yazar; `onLog`'dan ayrı, günlük satırlarını sayan denemeler karışmasın).
+    public var onTiming: ((String) -> Void)?
+    public static let stageRead = "okuma"
+    public static let stagePaint = "çizim"
+    public static let stagePass = "tur"
+    public static let stagePhone = "telefon okuması"
+    public static let stageScreen = "bütün kare"
+    public static let stageTrack = "telefon izleme"
+
+    /// Turun bütün karesi: noktaları (çizim kipi ve boş alan ölçümü için) en çok bir kez çizilir.
+    final class ScreenFrame: @unchecked Sendable {
+        let image: CGImage
+        private var pixels: GamePhonePixels?
+        private var drawn = false
+        private let timing: StageTiming?
+
+        init(_ image: CGImage, timing: StageTiming? = nil) {
+            self.image = image
+            self.timing = timing
+        }
+
+        /// Noktalar (çizilmediyse şimdi çizilir).
+        func measured() -> GamePhonePixels? {
+            if !drawn {
+                pixels = GamePhonePixels(image)
+                drawn = true
+            }
+            return pixels
+        }
+
+        /// Noktaları ana iş parçacığının dışında çizer (turda bir kez).
+        @MainActor func prepare() async {
+            guard !drawn else { return }
+            let image = self.image
+            let started = DispatchTime.now().uptimeNanoseconds
+            let drawnPixels = await Task.detached(priority: .utility) { GamePhonePixels(image) }.value
+            if !drawn {
+                pixels = drawnPixels
+                drawn = true
+            }
+            timing?.add(RegionWatcher.stageScreen, nanoseconds: Int64(DispatchTime.now().uptimeNanoseconds - started))
+        }
+    }
     /// Düşürülen ya da bekletilen okumanın nedeni, sınırlı ve tekrarsız (`DropLog`).
     private let drops: DropLog
     /// Telefonun sessiz yolları (`PhoneTrace`): ayrı sınır, telefon her açılışta yeniden başlamaz.
@@ -298,11 +345,18 @@ public final class RegionWatcher {
         let session = self.session
         running = Task { [weak self] in
             guard let self, self.session == session else { return }
-            if manualDue { await self.pass(frame, areas: areas) }
+            if manualDue {
+                let begun = self.now()
+                await self.pass(frame, areas: areas)
+                self.timing.add(Self.stagePass, milliseconds: self.now() - begun)
+            }
             if phoneDue, let phone, self.phoneSession === phone, self.session == session {
+                let begun = self.now()
                 await phone.visit(packLookup: self.packLookup, skipsTurkish: self.skipsTurkish,
                                   english: self.englishPhoneMessages)
+                self.timing.add(Self.stagePhone, milliseconds: self.now() - begun)
             }
+            if let line = self.timing.report(now: self.now()) { self.onTiming?(line) }
             // Bu arada sıfırlandıysa yeni oturumun turuna dokunulmaz.
             if self.session == session { self.running = nil }
         }
@@ -323,14 +377,17 @@ public final class RegionWatcher {
             if !state.shown.isEmpty { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
             states[id] = nil
         }
+        // Bütün kare (çizim kipi ve boş alan ölçümü, #1339) turda en çok bir kez, ilk okunan yazıda ve ana iş parçacığının
+        // dışında çizilir; önceden her okunan alanda ve her kişi resminde ana iş parçacığında yeniden çiziliyordu (beta.103).
+        let screen = ScreenFrame(frame, timing: timing)
         for area in areas {
             guard session == started else { return }
-            await visit(area, frame: frame, session: started)
+            await visit(area, frame: frame, screen: screen, session: started)
             server.regionsAlive()
         }
     }
 
-    private func visit(_ area: ExtraArea, frame: CGImage, session: Int) async {
+    private func visit(_ area: ExtraArea, frame: CGImage, screen: ScreenFrame, session: Int) async {
         let region = area.region
         let (crop, signature) = await Task.detached(priority: .utility) {
             let crop = RegionCropper.crop(frame, to: region)
@@ -405,6 +462,11 @@ public final class RegionWatcher {
         }
         reads += 1
         onReadMs?(now() - started)
+        timing.add(Self.stageRead, milliseconds: now() - started)
+        if !reading.lines.isEmpty {
+            await screen.prepare()
+            guard session == self.session else { return }
+        }
         // Altyazı alanındaki ya da altyazı hattının okuduğu satırlar ekran yazısı değildir; altyazı iki yerde çizilmesin
         // (bkz. `SubtitleEcho`). Menüde, görev satırının ve kenar bildiriminin kendi alanında
         // yalnız metin eşleşmesi uygulanır.
@@ -415,8 +477,10 @@ public final class RegionWatcher {
         // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.
+        let painting = DispatchTime.now().uptimeNanoseconds
         let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
-                                       styled: true, kind: ScreenTextKind.of(area), screen: frame)
+                                       styled: true, kind: ScreenTextKind.of(area), screen: screen)
+        timing.add(Self.stagePaint, nanoseconds: Int64(DispatchTime.now().uptimeNanoseconds - painting))
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
         // kararı `clearIfUnsteady`'de (özgün yazının izi ya da süre).
         let emptyWhileShown = candidate.key.isEmpty && !(state.renderedText ?? "").isEmpty
@@ -616,7 +680,7 @@ public final class RegionWatcher {
     /// `screen`: bütün kare (verilirse çizim kipi ve boş alan onda ölçülür; `frame` yalnız okunan alandır).
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
                           menu: Bool = false, styled: Bool = false, kind: ScreenTextKind? = nil,
-                          screen: CGImage? = nil) -> Candidate {
+                          screen: ScreenFrame? = nil) -> Candidate {
         let styled = auto || styled
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         let marked = reading.withButtonIcons(frame: frame, monochrome: auto)
@@ -709,10 +773,11 @@ public final class RegionWatcher {
                                               kind: Self.paintKind(group, lines: lines, cards: cards, area: kind),
                                               prompt: joined.contains(ButtonIcons.marker) || ButtonPrompts.isPrompt(IconText.plain(joined)))
                 }
-                let measured = whole ?? frame
-                var paints = TextPainter.paints(targets, frame: measured)
+                // Kare bir kez çizilir (ölçüm ve kişi resmi aynı noktalardan; bütün kare turda bir kez, `ScreenFrame`).
+                let pixels = whole != nil ? whole!.measured() : GamePhonePixels(frame)
+                var paints = pixels.map { TextPainter.paints(targets, pixels: $0) } ?? []
                 for k in paints.indices {
-                    if let face = paints[k].portrait { paints[k].portraitImage = TextPainter.portraitImage(face, frame: measured) }
+                    if let face = paints[k].portrait, let pixels { paints[k].portraitImage = TextPainter.portraitImage(face, pixels: pixels) }
                 }
                 for (k, i) in painted.enumerated() where k < paints.count {
                     list[i].paint = whole == nil ? paints[k].placed(in: place) : paints[k]

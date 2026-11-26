@@ -58,8 +58,12 @@ class SubtitleReader(language: String = "en") : AutoCloseable {
     else TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     companion object {
-        /** Karenin (Y düzlemi) bölgesini NV21 gri görüntüye kopyalar (en ve boy çift sayıya yuvarlanır). */
-        fun copyRegion(frame: VideoFrame, region: CropRegion): RegionPixels? {
+        /**
+         * Karenin (Y düzlemi) bölgesini NV21 gri görüntüye kopyalar (en ve boy çift sayıya yuvarlanır). [reuse]: boyu
+         * tutuyorsa dizileri yeniden kullanılır (artık kullanılmayan önceki kopya; bütün kare kopyası her turda yeni ~4 MB
+         * ayırmasın).
+         */
+        fun copyRegion(frame: VideoFrame, region: CropRegion, reuse: RegionPixels? = null): RegionPixels? {
             val frameWidth = frame.width
             val frameHeight = frame.height
             if (frameWidth <= 0 || frameHeight <= 0 || frame.rowStride < frameWidth) return null
@@ -72,7 +76,7 @@ class SubtitleReader(language: String = "en") : AutoCloseable {
             val buffer = frame.buffer.duplicate()
             val rowStride = frame.rowStride
             if ((top + height - 1).toLong() * rowStride + left + width > buffer.capacity()) return null
-            val out = ByteArray(width * height * 3 / 2)
+            val out = reuse?.nv21?.takeIf { it.size == width * height * 3 / 2 } ?: ByteArray(width * height * 3 / 2)
             var signature = 1125899906842597L
             for (y in 0 until height) {
                 val base = y * width
@@ -86,7 +90,7 @@ class SubtitleReader(language: String = "en") : AutoCloseable {
             val chroma = frame.chroma?.let { planes ->
                 val cw = width / 2
                 val ch = height / 2
-                val result = ByteArray(2 * cw * ch)
+                val result = reuse?.chroma?.takeIf { it.size == 2 * cw * ch } ?: ByteArray(2 * cw * ch)
                 val u = planes.u.duplicate()
                 val v = planes.v.duplicate()
                 val end = ((top / 2 + ch - 1) * planes.stride + left / 2 + cw).toLong()

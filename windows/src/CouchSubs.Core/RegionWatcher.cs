@@ -239,6 +239,19 @@ public sealed partial class RegionWatcher
     /// </summary>
     internal static bool SplitsMenuRows(string? game) => GameName.Key(game) == "gta 6";
     public Action<string>? Log { get; set; }
+
+    /// <summary>
+    /// Aşama süreleri (<see cref="StageTiming"/>; okuma, çizim ölçümü, tur, telefon okuması); 30 sn'de bir <see cref="Log"/>'a
+    /// tek satır. Uygulama kare işlerini (telefon izleme) de ekleyebilir. Mac/iPhone ve Android aynı.
+    /// </summary>
+    public StageTiming Timing { get; } = new();
+    /// <summary><see cref="Timing"/> satırı (uygulama altyazı günlüğüne yazar; <see cref="Log"/>'dan ayrı, günlük satırlarını sayan denemeler karışmasın).</summary>
+    public Action<string>? TimingLog { get; set; }
+    public const string StageRead = "okuma";
+    public const string StagePaint = "çizim";
+    public const string StagePass = "tur";
+    public const string StagePhone = "telefon okuması";
+    public const string StageTrack = "telefon izleme";
     /// <summary>Altyazı hattının son satırları ve alanı (bkz. <see cref="CouchSubs.Core.SubtitleEcho"/>); uygulama altyazı hattınınkini verir.</summary>
     public SubtitleEcho? SubtitleEcho { get; set; }
     /// <summary>
@@ -355,6 +368,7 @@ public sealed partial class RegionWatcher
         if (Volatile.Read(ref session) != started) return;
         // Tur dönüyor: TV'deki alanlar yenilenebilir (#1271). Tur takılırsa (donma) yenileme durur, TV alanları kendisi kaldırır.
         server.RegionsAlive();
+        var begun = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             await PassAreasAsync(frame, all, started, regularDue, confirmOnly, phoneDue).ConfigureAwait(false);
@@ -362,6 +376,8 @@ public sealed partial class RegionWatcher
         finally
         {
             server.RegionsAlive();
+            Timing.Add(StagePass, System.Diagnostics.Stopwatch.GetElapsedTime(begun));
+            if (Timing.Report(now()) is { } line) TimingLog?.Invoke(line);
         }
     }
 
@@ -397,7 +413,12 @@ public sealed partial class RegionWatcher
             {
                 if (!phoneDue) continue;
                 var observed = current is null ? area : current.Value.Areas.FirstOrDefault(item => item.PanelLifetime == area.PanelLifetime);
-                if (observed is not null) await VisitPhoneAsync(observed, current?.Frame ?? frame, map, started).ConfigureAwait(false);
+                if (observed is not null)
+                {
+                    var phoneBegun = System.Diagnostics.Stopwatch.GetTimestamp();
+                    await VisitPhoneAsync(observed, current?.Frame ?? frame, map, started).ConfigureAwait(false);
+                    Timing.Add(StagePhone, System.Diagnostics.Stopwatch.GetElapsedTime(phoneBegun));
+                }
             }
             else if ((regularDue || confirmOnly) && (current is null || current.Value.Areas.Contains(area)))
                 await VisitAsync(area, current?.Frame ?? frame, map, started, confirmOnly).ConfigureAwait(false);
@@ -732,6 +753,7 @@ public sealed partial class RegionWatcher
         // point") ve koyu zeminli ipucu kutusu yazıları düşüyordu. 720p akışta küçük yazı (telefon mesajı, ipucu) iki kat
         // büyütülerek okunur.
         var image = frame.Height < 900 ? crop.Scaled(2) : crop;
+        var readBegun = System.Diagnostics.Stopwatch.GetTimestamp();
         try { reading = reader.ReadScreen(image); }
         catch
         {
@@ -745,6 +767,7 @@ public sealed partial class RegionWatcher
         if (Volatile.Read(ref session) != started) return null;
         Interlocked.Increment(ref reads);
         ReadMeasured?.Invoke(now() - clock);
+        Timing.Add(StageRead, System.Diagnostics.Stopwatch.GetElapsedTime(readBegun));
         state.Signature = signature;
         state.LastReadCrop = crop;
         state.LastFullCheck = now();
@@ -761,8 +784,11 @@ public sealed partial class RegionWatcher
         // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Android aynı.
-        return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
-                             styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
+        var paintBegun = System.Diagnostics.Stopwatch.GetTimestamp();
+        var made = MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
+                                 styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
+        Timing.Add(StagePaint, System.Diagnostics.Stopwatch.GetElapsedTime(paintBegun));
+        return made;
     }
 
     private static int IconCount(Candidate candidate) =>
