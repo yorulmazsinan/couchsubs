@@ -114,6 +114,43 @@
         { "text": "Driver: Move it!", "box": [0.20, 0.45, 0.45, 0.55] }
       ],
       "expected": ["Clerk: Need a hand?", "Driver: Move it!"]
+    },
+    {
+      "name": "tuş çubuğunun simgeli istemleri ayrı kalır",
+      "aspect": 3.0,
+      "lines": [
+        { "text": "￼ Back", "box": [0.50, 0.40, 0.60, 0.50] },
+        { "text": "￼ Select", "box": [0.65, 0.40, 0.78, 0.50] }
+      ],
+      "expected": ["￼ Back", "￼ Select"]
+    },
+    {
+      "name": "tuş çubuğunun okunan işaretli istemleri ayrı kalır",
+      "aspect": 3.0,
+      "lines": [
+        { "text": "◯ Back", "box": [0.50, 0.40, 0.60, 0.50] },
+        { "text": "✕ Select", "box": [0.65, 0.40, 0.78, 0.50] },
+        { "text": "Zoom R3", "box": [0.82, 0.40, 0.95, 0.50] }
+      ],
+      "expected": ["◯ Back", "✕ Select", "Zoom R3"]
+    },
+    {
+      "name": "harfe dönüşen tuşlu istemler ayrı kalır",
+      "aspect": 3.0,
+      "lines": [
+        { "text": "O Back", "box": [0.50, 0.40, 0.60, 0.50] },
+        { "text": "X Select", "box": [0.65, 0.40, 0.78, 0.50] }
+      ],
+      "expected": ["O Back", "X Select"]
+    },
+    {
+      "name": "fiilden sonra simgeden bölünen istem tek satır",
+      "aspect": 3.0,
+      "lines": [
+        { "text": "Press ✕", "box": [0.30, 0.40, 0.42, 0.50] },
+        { "text": "to jump", "box": [0.47, 0.40, 0.57, 0.50] }
+      ],
+      "expected": ["Press ✕ to jump"]
     }
   ],
   "cuts": [

@@ -181,3 +181,31 @@ test('ikiz bildirim ekranın sağ kenarından taşmaz, yazısıyla birlikte sola
   for (const line of text.lines) assert.ok(line.right <= W + 0.5 && line.left >= -0.5, 'yazı ekranın içinde: ' + JSON.stringify(line));
   for (const line of text.lines) assert.ok(line.left >= panel.left - 0.5 && line.right <= panel.right + 0.5, 'yazı panelin içinde');
 });
+
+// beta.103 (TCL Android TV): bilgisayar koyu oyun dünyasını (ekranın altındaki karartı) kutu sanıp tuş çubuğundaki "◯ Back"ı
+// ekranın yarısı boyunda dev siyah ikize yazabiliyordu. TV 0.9.115 eski bilgisayarda da tek satırlık yazının (tek yazı ya
+// da aynı satırdaki istemler) ikizini yazının çevresine kırpar: her yanda en çok 3 satır, yanlarda yazının genişliği kadar.
+test('tek satırlık istemin dev ikizi yazının çevresine kırpılır; aynı satırdaki istemler de; alt alta yazılı kutu değişmez', { skip: !browser && 'tarayıcı yok' }, () => {
+  const prompt = (text, l, r) => ({ text, box: px(l, 1000, r, 1028), line: 28 / H, lineH: 28 / H, cover: px(l, 1000, r, 1028),
+    bg: '#121416', fg: '#FFFFFF', weight: 700, upper: true, align: 'left', mode: 'twin', scale: 1, radius: 0,
+    twinBox: px(1160, 520, 1900, 1060), spot: px(l + 1000, 1000, r + 1000, 1028), spotRoom: px(l + 1000, 1000, r + 1060, 1028),
+    surface: { background: '#121416', foreground: '#FFFFFF', flat: true }, style: { align: 'left', bold: true, condensed: true, upper: true } });
+  // Tek istem.
+  let drawn = render([prompt('GERİ', 200, 280)]);
+  let panel = drawn.find(el => / twin/.test(el.cls) && !el.lines.length);
+  const text = drawn.find(el => el.lines.length);
+  assert.ok(panel && text, 'ikiz çizildi');
+  assert.ok(panel.bottom - panel.top <= 28 + 2 * 3 * 28 + 1, 'ikiz satırın çevresinde: ' + panel.top + '-' + panel.bottom);
+  assert.ok(panel.right - panel.left <= 80 + 2 * 3 * 28 + 1, 'ikiz yazının çevresinde: ' + panel.left + '-' + panel.right);
+  for (const line of text.lines) assert.ok(line.top >= panel.top - 0.5 && line.bottom <= panel.bottom + 0.5, 'yazı panelin içinde');
+  assert.equal(text.lines.length, 1, 'tek satır');
+  assert.ok(Math.abs(text.font - 0.95 * 28) <= 0.5, 'yazı özgün boyda: ' + text.font);
+  // Aynı satırdaki iki istem (eski bilgisayar ikisini aynı dev ikize koyuyordu).
+  drawn = render([prompt('GERİ', 200, 280), prompt('SEÇ', 340, 400)]);
+  panel = drawn.find(el => / twin/.test(el.cls) && !el.lines.length);
+  assert.ok(panel.bottom - panel.top <= 28 + 2 * 3 * 28 + 1, 'satırdaki istemlerin ikizi kırpılır: ' + panel.top + '-' + panel.bottom);
+  // Alt alta yazılı kutu (bildirim: ad, mesaj) özgün boyunda kalır (ilk testteki balon 800-960, uzar).
+  drawn = render(items.slice(1, 3));
+  panel = drawn.find(el => / twin/.test(el.cls) && !el.lines.length);
+  assert.ok(Math.abs(panel.top - (800 - 4)) <= 1 && panel.bottom > 960, 'bildirim ikizi değişmez: ' + panel.top + '-' + panel.bottom);
+});

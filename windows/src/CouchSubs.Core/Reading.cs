@@ -663,6 +663,32 @@ public static class ButtonPrompts
     private static readonly char[] Separators = [' ', '\t', '+', '/'];
     private static readonly char[] Brackets = ['(', ')', '[', ']', '{', '}', '<', '>', '「', '」'];
 
+    /// <summary>
+    /// Tuş çubuğunun kendi başına tam bir istemi: tuş simgesiyle (kareden bulunmuş simge, tuş adı ya da işareti; "X"/"O"
+    /// ardından büyük harfle başlayan eylem) başlayan ya da biten, büyük harfle başlayan, fiille başlamayan en çok üç
+    /// sözcüklük parça ("◯ Back", "Select ✕", "O Back"). Aynı satırda yan yana iki böyle parça tek cümlenin parçaları
+    /// değil, ayrı istemlerdir (beta.103: tuş çubuğu tek satıra birleşip tek kutuda çiziliyordu). Mac isBarPiece,
+    /// Android isBarPiece aynı.
+    /// </summary>
+    public static bool IsBarPiece(string text)
+    {
+        var tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 2) return false;
+        static bool Icon(string token)
+        {
+            if (token[0] == ButtonIcons.Marker) return true;
+            var bare = BracketIcons.TryGetValue(token, out var icon) ? icon : token.Trim(Brackets);
+            return bare.Length > 0 && Buttons.Contains(bare);
+        }
+        var words = tokens.Where(token => !Icon(token) && token.Any(char.IsLetter)).ToList();
+        // Eylem büyük harfle başlar, fiille başlamaz ("Press ✕" + "to jump" tek cümledir).
+        if (words.Count is 0 or > 3 || !char.IsUpper(words[0][0]) || Verbs.Contains(words[0]) ||
+            SubtitleStabilizer.EndsSentence(text))
+            return false;
+        if (Icon(tokens[0]) || Icon(tokens[^1])) return true;
+        return Lookalikes.Contains(tokens[0]) && char.IsUpper(tokens[1][0]);
+    }
+
     public static bool IsPrompt(string line)
     {
         var tokens = line.Split(Separators, StringSplitOptions.RemoveEmptyEntries)

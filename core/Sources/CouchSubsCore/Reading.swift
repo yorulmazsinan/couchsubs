@@ -608,6 +608,27 @@ public enum ButtonPrompts {
     /// Yalnız ayraçtan oluşan sözcük okunmuş simgedir: □ "[]", ○ "()".
     private static let bracketIcons: [String: String] = ["[]": "□", "()": "○"]
 
+    /// Tuş çubuğunun kendi başına tam bir istemi: tuş simgesiyle (kareden bulunmuş simge, tuş adı ya da işareti; "X"/"O"
+    /// ardından büyük harfle başlayan eylem) başlayan ya da biten, büyük harfle başlayan, fiille başlamayan en çok üç
+    /// sözcüklük parça ("◯ Back", "Select ✕", "O Back"). Aynı satırda yan yana iki böyle parça tek cümlenin parçaları
+    /// değil, ayrı istemlerdir (beta.103: tuş çubuğu tek satıra birleşip tek kutuda çiziliyordu). Windows IsBarPiece,
+    /// Android isBarPiece aynı.
+    public static func isBarPiece(_ text: String) -> Bool {
+        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard tokens.count >= 2 else { return false }
+        func icon(_ token: String) -> Bool {
+            if token.unicodeScalars.first == ButtonIcons.markerScalar { return true }
+            let bare = bracketIcons[token] ?? token.trimmingCharacters(in: brackets)
+            return !bare.isEmpty && buttons.contains(bare.uppercased())
+        }
+        let words = tokens.filter { !icon($0) && $0.contains(where: \.isLetter) }
+        // Eylem büyük harfle başlar, fiille başlamaz ("Press ✕" + "to jump" tek cümledir).
+        guard !words.isEmpty, words.count <= 3, words[0].first?.isUppercase == true, !verbs.contains(words[0].lowercased()),
+              !SubtitleStabilizer.endsSentence(text) else { return false }
+        if icon(tokens[0]) || icon(tokens[tokens.count - 1]) { return true }
+        return lookalikes.contains(tokens[0]) && tokens[1].first?.isUppercase == true
+    }
+
     public static func isPrompt(_ line: String) -> Bool {
         let tokens = line
             .components(separatedBy: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "+/")))

@@ -122,6 +122,29 @@ class TextPaintTest {
                 box("portraitTwin", px(paint.portraitTwin))
                 // Kenar çizgisi [üst, sağ, alt, sol] piksel.
                 box("edge", paint.edge?.let { listOf(it.top * h, it.right * h, it.bottom * h, it.left * h) }, 0.51)
+                // hug: ikiz özgün yazıyı her yanda en çok bu kadar satır aşar; yanına yazılan Türkçenin yeri özgünün satır
+                // yüksekliğinde ve genişliğinde, Türkçeler birbirine binmez (tuş çubuğu, beta.103).
+                if (frame.has("hug")) {
+                    val tb = doubles(raw.getJSONObject(k).getJSONArray("box"))
+                    val pad = frame.getDouble("hug") * raw.getJSONObject(k).getDouble("line")
+                    paint.twin?.let { twin ->
+                        assertTrue("$name dev ikiz", (twin.right - twin.left) * w <= tb[2] - tb[0] + 2 * pad &&
+                            (twin.bottom - twin.top) * h <= tb[3] - tb[1] + 2 * pad)
+                    }
+                    val spot = paint.spot
+                    if (paint.mode == TextPaint.MODE_BESIDE && spot != null) {
+                        val cover = paint.cover
+                        near((spot.bottom - spot.top) * h, (cover.bottom - cover.top) * h, 0.5, "$name satır yüksekliği")
+                        assertTrue(name, (spot.bottom - spot.top) * h <= tb[3] - tb[1] + 2.0 * TextPainter.MARGIN_MAX)
+                        near((spot.right - spot.left) * w, (cover.right - cover.left) * w, 0.5, "$name genişlik")
+                        for (j in k + 1 until paints.size) {
+                            val o = paints[j].spot ?: continue
+                            if (paints[j].mode != TextPaint.MODE_BESIDE) continue
+                            assertTrue("$name ile #$j binişiyor", !(minOf(o.right, spot.right) > maxOf(o.left, spot.left) &&
+                                minOf(o.bottom, spot.bottom) > maxOf(o.top, spot.top)))
+                        }
+                    }
+                }
                 if (e.has("radius")) near(paint.radius * h, e.getDouble("radius"), 1.5, "$name radius")
                 if (e.has("scale")) near(paint.scale, e.getDouble("scale"), 0.001, "$name scale")
                 if (e.has("twin")) {

@@ -745,6 +745,24 @@ public final class RegionWatcher {
                          text: textKey(paragraphs), missionCard: missionCard)
     }
 
+    /// Günlük için blokların çizim kipi ve boyu (kareye oranla yüzde, genişlik×yükseklik): "ikiz 43.8×33.9 (yazı 9.1×3.9)",
+    /// "yan 6.3×3.9", "örtü 6.3×3.9". Tuş istemi ekranın altında dev bir ikiz kutuda çiziliyordu (beta.103, TCL Android
+    /// TV); sonraki günlük kutunun boyunu gösterir. Windows PaintSummary, Android paintSummary aynı.
+    static func paintSummary(_ blocks: [Block]) -> String? {
+        func size(_ b: TextBox) -> String {
+            String(format: "%.1f×%.1f", (b.right - b.left) * 100, (b.bottom - b.top) * 100)
+        }
+        let parts = blocks.compactMap { block -> String? in
+            guard let paint = block.paint else { return nil }
+            switch paint.mode {
+            case .twin: return "ikiz \(paint.twin.map(size) ?? "?") (yazı \(size(paint.cover)))"
+            case .beside: return "yan \(paint.spot.map(size) ?? "?")"
+            case .cover: return "örtü \(size(paint.cover))"
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
     /// Menüdeki otomatik alanla kesişen hazır alan (GTA 6 sağdaki mesaj kartı alanı haritanın tuş listesine biniyor) o turda
     /// okunmaz: liste iki alana bölünüp yarısı hazır alanda (ayrı grup, ayrı yazı boyu, örtme), yarısı menü alanında
     /// çiziliyor, bölünme yerindeki satır ("ADD MARKER") hiç çevrilmiyordu (beta.100, 3385). Windows ve Android aynı.
@@ -944,6 +962,8 @@ public final class RegionWatcher {
         guard min(a, b) > 0, max(a, b) <= 1.3 * min(a, b),
               min(next.bottom, box.bottom) - max(next.top, box.top) >= 0.6 * min(a, b) else { return false }
         guard text.contains(where: \.isLowercase) || row.text.contains(where: \.isLowercase) else { return false }
+        // Tuş çubuğu ("◯ Back  ✕ Select"): her parça kendi başına bir istemse ayrı kalır, ayrı küçük etiket olarak çizilir.
+        if ButtonPrompts.isBarPiece(text) && ButtonPrompts.isBarPiece(row.text) { return false }
         let gap = (next.left - box.right) * aspect
         return gap >= -0.5 * max(a, b) && gap <= pieceGap * max(a, b)
     }
@@ -1122,6 +1142,7 @@ public final class RegionWatcher {
         }
         let origin = cached != nil || readyCount == candidate.paragraphs.count ? "hazır çeviri" : readyCount > 0 ? "hazır çeviri+motor" : "motor"
         onLog?("ek alan \(area.name): \(SubtitleLog.excerpt(IconText.plain(candidate.paragraphs.joined(separator: " ")))) → \(origin)")
+        if let layout = candidate.blocks, let summary = Self.paintSummary(layout) { onLog?("ek alan \(area.name): çizim \(summary)") }
         let rendered = IconText.render(text.joined(separator: "\n"), slots: slots)
         let icons = rendered.icons.isEmpty ? nil : rendered.icons
         let blocks = candidate.blocks.map { Self.renderBlocks(candidate, layout: $0, text: text, similar: similar, slots: slots) }

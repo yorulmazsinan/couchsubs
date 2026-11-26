@@ -555,6 +555,40 @@
     panel.style.height = (parseFloat(panel.style.height) + widths.top + widths.bottom) + 'px';
   }
 
+  // Tek satırlık yazının (tek yazı ya da aynı satırdaki tuş istemleri) ikizi yazıyı her yanda en çok TWIN_PAD_LINES satır
+  // aşar, yanlarda yazının genişliği kadar da (TV 0.9.115 ile aynı). beta.103 bilgisayarı koyu oyun dünyasını (ekranın altındaki
+  // karartı) kutu sanıp tuş çubuğundaki "◯ Back"ı ekranın yarısı boyunda dev siyah ikize yazabiliyordu (TCL Android TV);
+  // TV eski bilgisayarda da ikizi yazının çevresine kırpar. Alt alta yazılı kutu (bildirim: ad ve gövde) dokunulmaz.
+  var TWIN_PAD_LINES = 3;
+  function twinFrame(items, key, width, height) {
+    var first = null, ul = Infinity, ut = Infinity, ur = -Infinity, ub = -Infinity, line = 0, members = [];
+    for (var j = 0; j < items.length; j++) {
+      var tb = items[j].twinBox;
+      if (exactMode(items[j]) !== 'twin' || [tb.left, tb.top, tb.right, tb.bottom].join(',') !== key) continue;
+      if (!first) first = tb;
+      members.push(items[j]);
+    }
+    for (j = 0; j < members.length; j++) {
+      var s = members[j].spot;
+      if (members[j].rows > 1 || String(members[j].text).indexOf('\n') >= 0) return first;
+      ul = Math.min(ul, s.left * width); ur = Math.max(ur, s.right * width);
+      ut = Math.min(ut, s.top * height); ub = Math.max(ub, s.bottom * height);
+      line = Math.max(line, (typeof members[j].line === 'number' && members[j].line > 0 ? members[j].line : s.bottom - s.top) * height);
+    }
+    // Alt alta duran yazılar (satırları örtüşmeyen) gerçek kutudur.
+    for (j = 0; j < members.length; j++) {
+      for (var k = j + 1; k < members.length; k++) {
+        if (members[j].spot.bottom <= members[k].spot.top || members[k].spot.bottom <= members[j].spot.top) return first;
+      }
+    }
+    var padY = TWIN_PAD_LINES * line, padX = Math.max(padY, ur - ul);
+    var left = Math.max(first.left * width, ul - padX), right = Math.min(first.right * width, ur + padX);
+    var top = Math.max(first.top * height, ut - padY), bottom = Math.min(first.bottom * height, ub + padY);
+    if (left <= first.left * width && right >= first.right * width && top <= first.top * height &&
+      bottom >= first.bottom * height) return first;
+    return { left: left / width, top: top / height, right: right / width, bottom: bottom / height };
+  }
+
   // İkiz paneller (aynı twinBox'ı paylaşan öğeler tek panel), yazılardan önce host'a eklenir. Genişlik içeriğe göre: en
   // sağdaki yazı ya da resim + sol iç boşluk. Dönen: eklenen öğeler.
   function exactTwins(host, items, placed, width, height) {
@@ -565,6 +599,7 @@
       var t = item.twinBox, key = [t.left, t.top, t.right, t.bottom].join(',');
       if (seen[key]) continue;
       seen[key] = true;
+      t = twinFrame(items, key, width, height);
       var left = t.left * width, least = Infinity, right = 0, bottom = 0, spotBottom = 0, j;
       for (j = 0; j < items.length; j++) {
         var other = items[j].twinBox;

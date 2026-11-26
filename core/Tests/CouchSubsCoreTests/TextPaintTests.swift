@@ -47,6 +47,9 @@ final class TextPaintTests: XCTestCase {
         struct ModePaint: Decodable {
             let id: String; let width: Int; let height: Int; let background: Background; let rects: [Rect]
             let targets: [Target]; let expect: [ModeExpect]
+            /// Verilirse: ikiz özgün yazıyı her yanda en çok bu kadar satır aşar, yanına yazılan Türkçenin yeri özgünün
+            /// satır yüksekliğinde ve genişliğinde, Türkçeler birbirine binmez (tuş çubuğu, beta.103).
+            let hug: Double?
         }
         struct ExactItem: Decodable {
             let text: String; let box: [Double]; let grow: [Double]?; let line: Double; let pitch: Double?; let rows: Int?
@@ -201,6 +204,24 @@ final class TextPaintTests: XCTestCase {
                 near(px(paint.portrait), e.portrait, "portrait")
                 near(px(paint.portraitTwin), e.portraitTwin, "portraitTwin")
                 near(paint.edge.map { [$0.top * h, $0.right * h, $0.bottom * h, $0.left * h] }, e.edge, "edge", 0.51)
+                if let hug = frame.hug {
+                    let t = frame.targets[k], pad = hug * t.line
+                    if let twin = paint.twin {
+                        XCTAssertTrue(twin.right * w - twin.left * w <= t.box[2] - t.box[0] + 2 * pad
+                                      && twin.bottom * h - twin.top * h <= t.box[3] - t.box[1] + 2 * pad, "\(name) dev ikiz \(px(twin)!)")
+                    }
+                    if let spot = paint.spot, paint.mode == .beside {
+                        let cover = paint.cover
+                        XCTAssertEqual(spot.bottom * h - spot.top * h, cover.bottom * h - cover.top * h, accuracy: 0.5, "\(name) satır yüksekliği")
+                        XCTAssertLessThanOrEqual(spot.bottom * h - spot.top * h, t.box[3] - t.box[1] + 2.0 * Double(TextPainter.marginMax), name)
+                        XCTAssertEqual(spot.right * w - spot.left * w, cover.right * w - cover.left * w, accuracy: 0.5, "\(name) genişlik")
+                        for (j, other) in paints.enumerated() where j > k && other.mode == .beside {
+                            guard let o = other.spot else { continue }
+                            XCTAssertFalse(min(o.right, spot.right) > max(o.left, spot.left) && min(o.bottom, spot.bottom) > max(o.top, spot.top),
+                                           "\(name) ile #\(j) binişiyor")
+                        }
+                    }
+                }
                 // Örtmeyen kipte Türkçe özgün yazıya (ve kutunun ucundaki simgeye) binmez; ikiz özgün paneli örtmez.
                 if paint.mode != .cover, let room = paint.spotRoom {
                     let target = frame.targets[k].box

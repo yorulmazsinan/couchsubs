@@ -1,0 +1,1 @@
+0.9.115: Tuş ipuçlarının Türkçesi ekranın altında dev siyah kutuya değil, ipucunun kendi boyunda yanına yazılıyor.

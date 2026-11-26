@@ -119,6 +119,29 @@ public class TextPaintTests
                     else Near(Px(paint.Portrait), "portrait");
                 }
                 Near(paint.Edge is { } edge ? [edge.Top * h, edge.Right * h, edge.Bottom * h, edge.Left * h] : null, "edge", 0.51);
+                // hug: ikiz özgün yazıyı her yanda en çok bu kadar satır aşar; yanına yazılan Türkçenin yeri özgünün satır
+                // yüksekliğinde ve genişliğinde, Türkçeler birbirine binmez (tuş çubuğu, beta.103).
+                if (frame.TryGetProperty("hug", out var hugValue))
+                {
+                    var target = boxes[k];
+                    var pad = hugValue.GetDouble() * frame.GetProperty("targets")[k].GetProperty("line").GetDouble();
+                    if (paint.Twin is { } twin)
+                        Assert.True((twin.Right - twin.Left) * w <= target[2] - target[0] + 2 * pad
+                                    && (twin.Bottom - twin.Top) * h <= target[3] - target[1] + 2 * pad, $"{name} dev ikiz");
+                    if (paint.Mode == PaintMode.Beside && paint.Spot is { } spot)
+                    {
+                        var cover = paint.Cover;
+                        Close((cover.Bottom - cover.Top) * h, (spot.Bottom - spot.Top) * h, 0.5, $"{name} satır yüksekliği");
+                        Assert.True((spot.Bottom - spot.Top) * h <= target[3] - target[1] + 2.0 * TextPainter.MarginMax, name);
+                        Close((cover.Right - cover.Left) * w, (spot.Right - spot.Left) * w, 0.5, $"{name} genişlik");
+                        for (var j = k + 1; j < paints.Count; j++)
+                        {
+                            if (paints[j].Mode != PaintMode.Beside || paints[j].Spot is not { } o) continue;
+                            Assert.False(Math.Min(o.Right, spot.Right) > Math.Max(o.Left, spot.Left)
+                                         && Math.Min(o.Bottom, spot.Bottom) > Math.Max(o.Top, spot.Top), $"{name} ile #{j} binişiyor");
+                        }
+                    }
+                }
                 // Örtmeyen kipte Türkçe özgün yazıya (ve kutunun ucundaki simgeye) binmez; ikiz özgün paneli örtmez.
                 if (paint.Mode != PaintMode.Cover && paint.SpotRoom is { } spotRoom)
                 {

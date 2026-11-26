@@ -264,6 +264,12 @@ public static class TextPainter
     public const double PanelMaxHeight = 0.35;
     /// <summary>Panel yazının her yanında en az bu kadar satır yüksekliği (en az 2 piksel) taşmalı; taşmıyorsa düz kutudur (örtülür).</summary>
     public const double PanelPadLines = 0.2;
+    /// <summary>Tek satırlık tek yazının kutusu (ikiz) yazıyı her yanda en çok bu kadar satır yüksekliği aşar (yanlarda
+    /// yazının genişliği kadar da olabilir); yalnız tuş istemlerinin kutusu her yanda en çok <see cref="PromptPadLines"/>.
+    /// Daha büyük düz alan (koyu oyun dünyası, ekranın altındaki karartı) kutu değildir: ikizi dev bir kutu olurdu
+    /// (beta.103, TCL Android TV; Mac TextPainter.labelPadLines, Android LABEL_PAD_LINES aynı).</summary>
+    public const double LabelPadLines = 3.0;
+    public const double PromptPadLines = 2.5;
     /// <summary>Köşe yuvarlak: panelin köşesinden köşegen boyunca en az bu kadar nokta zemin değil (aynı kenardaki iki köşede).</summary>
     public const int CornerMin = 2;
     /// <summary>Yanına yazmada bir sütunda/satırda yazı rengine (<see cref="BesideInk"/> kadar yakın) noktaların payı bundan azsa alan boştur.</summary>
@@ -939,6 +945,25 @@ public static class TextPainter
                 break;
             }
         }
+        // Tuş isteminin ve tek başına tek satırlık yazının kutusu yazıyı sarmalı: koyu oyun dünyası (gece, gölge, ekranın
+        // altındaki karartı) da düz zemin gibi büyüyüp panel sanılabiliyor; tuş çubuğundaki "◯ Back" bu alanın ikizine,
+        // ekranın altında dev siyah kutuya yazılıyordu (TCL Android TV, beta.103). Tek yazı her yanda en çok LabelPadLines
+        // satır aşabilir (yanlarda yazının genişliği kadar da: kısa yazılı geniş kart); yalnız tuş istemlerinin kutusu her
+        // yanda en çok PromptPadLines satır. Başka yazılı kutu (bildirim: ad, gövde, kişi resmi) bu sınırdan muaf.
+        // Sarmayan alan kutu değildir, satırlar yanına yazılır (Mac TextPainter, Android TextPaint.kt aynı).
+        bool Hugs(List<int> members, int l, int t, int r, int b)
+        {
+            var prompt = members.All(m => targets[m].Prompt);
+            if (!members.All(m => targets[m].Rows <= 1) || !(prompt || members.Count == 1)) return true;
+            int ul = members.Min(m => covers[m].L), ut = members.Min(m => covers[m].T);
+            int ur = members.Max(m => covers[m].R), ub = members.Max(m => covers[m].B);
+            var line = members.Max(m => lines[m]);
+            // Aynı satırdaki birden çok tuş istemi (tuş çubuğu "◯ Geri  ✕ Seç") tek kutu değil, ayrı küçük etiketlerdir.
+            if (members.Count >= 2 && prompt && members.Max(m => covers[m].T) < members.Min(m => covers[m].B)) return false;
+            var padY = (prompt ? PromptPadLines : LabelPadLines) * line;
+            var padX = prompt ? padY : Math.Max(padY, ur - ul);
+            return ut - t <= padY && b - ub <= padY && ul - l <= padX && r - ur <= padX;
+        }
         var keys = panels.Keys.ToList();
         var parent = keys.ToDictionary(i => i, i => i);
         int Root(int i) { while (parent[i] != i) i = parent[i]; return i; }
@@ -957,7 +982,7 @@ public static class TextPainter
                 return c.L - l >= pad && r - c.R >= pad && c.T - t >= pad && b - c.B >= pad;
             });
             var isBox = members.Count >= 2 || targets[members[0]].Rows > 1 || !listOf.ContainsKey(members[0]);
-            if (padded && isBox) boxes.Add((members, l, t, r, b));
+            if (padded && isBox && Hugs(members, l, t, r, b)) boxes.Add((members, l, t, r, b));
         }
         var boxed = boxes.SelectMany(box => box.Members).ToHashSet();
         var twins = new List<(int L, int T, int R, int B)>();

@@ -1100,6 +1100,28 @@ public sealed partial class RegionWatcher
             : [.. rows.OrderBy(row => row.Box!.Value.Top).ThenBy(row => row.Box!.Value.Left)];
     }
 
+    /// <summary>
+    /// Günlük için blokların çizim kipi ve boyu (kareye oranla yüzde, genişlik×yükseklik): "ikiz 43.8×33.9 (yazı 9.1×3.9)",
+    /// "yan 6.3×3.9", "örtü 6.3×3.9". Tuş istemi ekranın altında dev bir ikiz kutuda çiziliyordu (beta.103, TCL Android
+    /// TV); sonraki günlük kutunun boyunu gösterir. Mac paintSummary, Android paintSummary aynı.
+    /// </summary>
+    internal static string? PaintSummary(IEnumerable<Block> blocks)
+    {
+        static string Size(TextBox b) => string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.0}×{1:0.0}",
+            (b.Right - b.Left) * 100, (b.Bottom - b.Top) * 100);
+        var parts = blocks.Where(block => block.Paint is not null).Select(block =>
+        {
+            var paint = block.Paint!;
+            return paint.Mode switch
+            {
+                PaintMode.Twin => $"ikiz {(paint.Twin is { } twin ? Size(twin) : "?")} (yazı {Size(paint.Cover)})",
+                PaintMode.Beside => $"yan {(paint.Spot is { } spot ? Size(spot) : "?")}",
+                _ => $"örtü {Size(paint.Cover)}",
+            };
+        }).ToList();
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
     private static bool PieceOf(TextBox next, string text, TextLine row, double aspect)
     {
         var box = row.Box!.Value;
@@ -1107,6 +1129,8 @@ public sealed partial class RegionWatcher
         if (Math.Min(a, b) <= 0 || Math.Max(a, b) > 1.3 * Math.Min(a, b)) return false;
         if (Math.Min(next.Bottom, box.Bottom) - Math.Max(next.Top, box.Top) < 0.6 * Math.Min(a, b)) return false;
         if (!text.Any(char.IsLower) && !row.Text.Any(char.IsLower)) return false;
+        // Tuş çubuğu ("◯ Back  ✕ Select"): her parça kendi başına bir istemse ayrı kalır, ayrı küçük etiket olarak çizilir.
+        if (ButtonPrompts.IsBarPiece(text) && ButtonPrompts.IsBarPiece(row.Text)) return false;
         var gap = (next.Left - box.Right) * aspect;
         return gap >= -0.5 * Math.Max(a, b) && gap <= PieceGap * Math.Max(a, b);
     }
@@ -1569,6 +1593,7 @@ public sealed partial class RegionWatcher
         }
         var origin = cached || readyCount == candidate.Paragraphs.Count ? "hazır çeviri" : readyCount > 0 ? "hazır çeviri+motor" : "motor";
         Log?.Invoke($"ek alan {area.Name}: {SubtitleLog.Excerpt(IconText.Plain(string.Join(' ', candidate.Paragraphs)))} → {origin}");
+        if (candidate.Blocks is { } painted && PaintSummary(painted) is { } summary) Log?.Invoke($"ek alan {area.Name}: çizim {summary}");
         var (shown, icons) = IconText.Render(string.Join('\n', text), slots);
         var blocks = candidate.Blocks is { } layout ? RenderBlocks(candidate, layout, text, similar, slots, keepUnchanged) : null;
         var box = candidate.Box;

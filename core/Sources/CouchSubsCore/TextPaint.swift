@@ -244,6 +244,11 @@ public enum TextPainter {
     public static let panelMaxHeight = 0.35
     /// Panel yazının her yanında en az bu kadar satır yüksekliği (en az 2 piksel) taşmalı; taşmıyorsa düz kutudur (örtülür).
     public static let panelPadLines = 0.2
+    /// Tek satırlık yazıların kutusu (ikiz) yazıyı her yanda en çok bu kadar satır yüksekliği aşar (yanlarda yazının
+    /// genişliği kadar da olabilir); tuş isteminde (`Target.prompt`) her yanda en çok `promptPadLines`. Daha büyük düz alan
+    /// (koyu oyun dünyası, ekranın altındaki karartı) kutu değildir: ikizi dev bir kutu olurdu (beta.103, TCL Android TV).
+    public static let labelPadLines = 3.0
+    public static let promptPadLines = 2.5
     /// Köşe yuvarlak: panelin köşesinden köşegen boyunca en az bu kadar nokta zemin değil (aynı kenardaki iki köşede).
     public static let cornerMin = 2
     /// Yanına yazmada bir sütunda/satırda yazı rengine (`besideInk` kadar yakın) noktaların payı bundan azsa alan boştur.
@@ -675,6 +680,25 @@ public enum TextPainter {
                 panels[i] = inside
             }
         }
+        // Tuş isteminin ve tek başına tek satırlık yazının kutusu yazıyı sarmalı: koyu oyun dünyası (gece, gölge, ekranın
+        // altındaki karartı) da düz zemin gibi büyüyüp panel sanılabiliyor; tuş çubuğundaki "◯ Back" bu alanın ikizine,
+        // ekranın altında dev siyah kutuya yazılıyordu (TCL Android TV, beta.103). Tek yazı her yanda en çok `labelPadLines`
+        // satır aşabilir (yanlarda yazının genişliği kadar da: kısa yazılı geniş kart); yalnız tuş istemlerinin kutusu her
+        // yanda en çok `promptPadLines` satır. Başka yazılı kutu (bildirim: ad, gövde, kişi resmi) bu sınırdan muaf.
+        // Sarmayan alan kutu değildir, satırlar yanına yazılır (Windows TextPaint.cs, Android TextPaint.kt aynı).
+        func hugs(_ members: [Int], _ l: Int, _ t: Int, _ r: Int, _ b: Int) -> Bool {
+            let prompt = members.allSatisfy { targets[$0].prompt }
+            guard members.allSatisfy({ targets[$0].rows <= 1 }), prompt || members.count == 1 else { return true }
+            let ul = members.map { covers[$0].l }.min()!, ut = members.map { covers[$0].t }.min()!
+            let ur = members.map { covers[$0].r }.max()!, ub = members.map { covers[$0].b }.max()!
+            let line = members.map { lines[$0] }.max()!
+            // Aynı satırdaki birden çok tuş istemi (tuş çubuğu "◯ Geri  ✕ Seç") tek kutu değil, ayrı küçük etiketlerdir.
+            if members.count >= 2, prompt,
+               members.map({ covers[$0].t }).max()! < members.map({ covers[$0].b }).min()! { return false }
+            let padY = (prompt ? promptPadLines : labelPadLines) * line
+            let padX = prompt ? padY : max(padY, Double(ur - ul))
+            return Double(ut - t) <= padY && Double(b - ub) <= padY && Double(ul - l) <= padX && Double(r - ur) <= padX
+        }
         let keys = panels.keys.sorted()
         var parent = Dictionary(uniqueKeysWithValues: keys.map { ($0, $0) })
         func root(_ i: Int) -> Int { var i = i; while parent[i]! != i { i = parent[i]! }; return i }
@@ -690,7 +714,7 @@ public enum TextPainter {
                 return c.l - l >= pad && r - c.r >= pad && c.t - t >= pad && b - c.b >= pad
             }
             let box = members.count >= 2 || targets[members[0]].rows > 1 || listOf[members[0]] == nil
-            if padded && box { boxes.append((members, l, t, r, b)) }
+            if padded && box && hugs(members, l, t, r, b) { boxes.append((members, l, t, r, b)) }
         }
         let boxed = Set(boxes.flatMap(\.members))
         var twins: [(l: Int, t: Int, r: Int, b: Int)] = []

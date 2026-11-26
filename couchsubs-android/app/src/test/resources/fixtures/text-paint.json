@@ -2658,6 +2658,248 @@
           ]
         }
       ]
+    },
+    {
+      "id": "istem-cubugu-koyu-zeminde-ayri-etiketler",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#6A7480"
+      },
+      "hug": 2.5,
+      "rects": [
+        {
+          "box": [
+            40,
+            228,
+            320,
+            350
+          ],
+          "color": "#121416"
+        },
+        {
+          "box": [
+            60,
+            322,
+            74,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            80,
+            324,
+            118,
+            334
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            150,
+            322,
+            164,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            170,
+            324,
+            206,
+            334
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            236,
+            322,
+            250,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            256,
+            324,
+            300,
+            334
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            60,
+            322,
+            118,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        },
+        {
+          "box": [
+            150,
+            322,
+            206,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        },
+        {
+          "box": [
+            236,
+            322,
+            300,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "room": [
+            79,
+            139
+          ],
+          "spot": [
+            79,
+            344,
+            119,
+            360
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            169,
+            226
+          ],
+          "spot": [
+            169,
+            344,
+            207,
+            360
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            255,
+            324
+          ],
+          "spot": [
+            255,
+            344,
+            301,
+            360
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tek-istem-koyu-zeminde-dev-kutu-yok",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#6A7480"
+      },
+      "hug": 2.5,
+      "rects": [
+        {
+          "box": [
+            40,
+            228,
+            320,
+            350
+          ],
+          "color": "#121416"
+        },
+        {
+          "box": [
+            60,
+            322,
+            74,
+            336
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            80,
+            324,
+            118,
+            334
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            60,
+            322,
+            118,
+            336
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#121416",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "words": 1,
+          "kind": "help",
+          "prompt": true
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "room": [
+            126,
+            204
+          ],
+          "spot": [
+            126,
+            321,
+            166,
+            337
+          ]
+        }
+      ]
     }
   ]
 }

@@ -587,6 +587,29 @@ object ButtonPrompts {
 
     private fun isButton(token: String) = token.lowercase() in buttons
 
+    /**
+     * Tuş çubuğunun kendi başına tam bir istemi: tuş simgesiyle (kareden bulunmuş simge, tuş adı ya da işareti; "X"/"O"
+     * ardından büyük harfle başlayan eylem) başlayan ya da biten, büyük harfle başlayan, fiille başlamayan en çok üç
+     * sözcüklük parça ("◯ Back", "Select ✕", "O Back"). Aynı satırda yan yana iki böyle parça tek cümlenin parçaları
+     * değil, ayrı istemlerdir (beta.103: tuş çubuğu tek satıra birleşip tek kutuda çiziliyordu). Mac isBarPiece, Windows
+     * IsBarPiece aynı.
+     */
+    fun isBarPiece(text: String): Boolean {
+        val tokens = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.size < 2) return false
+        fun icon(token: String): Boolean {
+            if (token[0] == ButtonIcons.MARKER) return true
+            val bare = bracketIcons[token] ?: token.trim { c -> c in BRACKETS }
+            return bare.isNotEmpty() && isButton(bare)
+        }
+        val words = tokens.filter { !icon(it) && it.any { c -> c.isLetter() } }
+        // Eylem büyük harfle başlar, fiille başlamaz ("Press ✕" + "to jump" tek cümledir).
+        if (words.isEmpty() || words.size > 3 || !words[0][0].isUpperCase() || words[0].lowercase() in verbs ||
+            SubtitleStabilizer.endsSentence(text)) return false
+        if (icon(tokens[0]) || icon(tokens.last())) return true
+        return tokens[0] in lookalikes && tokens[1][0].isUpperCase()
+    }
+
     fun isPrompt(line: String): Boolean {
         val tokens = line.split(separators).map { bracketIcons[it] ?: it.trim { c -> c in BRACKETS } }.filter { it.isNotEmpty() }
         if (tokens.isEmpty()) return false

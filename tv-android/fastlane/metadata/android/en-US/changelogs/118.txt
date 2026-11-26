@@ -1,0 +1,1 @@
+0.9.115: Button prompt translations are drawn next to the prompt at its own size, not in a huge black box at the bottom of the screen.

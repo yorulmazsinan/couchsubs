@@ -861,6 +861,24 @@ class RegionWatcher(
             return if (rows.size == lines.size) lines else rows.sortedWith(compareBy({ it.box!!.top }, { it.box!!.left }))
         }
 
+        /**
+         * Günlük için blokların çizim kipi ve boyu (kareye oranla yüzde, genişlik×yükseklik): "ikiz 43.8×33.9 (yazı
+         * 9.1×3.9)", "yan 6.3×3.9", "örtü 6.3×3.9". Tuş istemi ekranın altında dev bir ikiz kutuda çiziliyordu (beta.103,
+         * TCL Android TV); sonraki günlük kutunun boyunu gösterir. Mac paintSummary, Windows PaintSummary aynı.
+         */
+        internal fun paintSummary(blocks: List<Block>): String? {
+            fun size(b: TextBox) = String.format(java.util.Locale.ROOT, "%.1f×%.1f", (b.right - b.left) * 100, (b.bottom - b.top) * 100)
+            val parts = blocks.mapNotNull { block ->
+                val paint = block.paint ?: return@mapNotNull null
+                when (paint.mode) {
+                    TextPaint.MODE_TWIN -> "ikiz ${paint.twin?.let { size(it) } ?: "?"} (yazı ${size(paint.cover)})"
+                    TextPaint.MODE_BESIDE -> "yan ${paint.spot?.let { size(it) } ?: "?"}"
+                    else -> "örtü ${size(paint.cover)}"
+                }
+            }
+            return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        }
+
         private fun pieceOf(next: TextBox, text: String, row: TextLine, aspect: Double): Boolean {
             val box = row.box!!
             val a = next.bottom - next.top
@@ -868,6 +886,8 @@ class RegionWatcher(
             if (minOf(a, b) <= 0 || maxOf(a, b) > 1.3 * minOf(a, b)) return false
             if (minOf(next.bottom, box.bottom) - maxOf(next.top, box.top) < 0.6 * minOf(a, b)) return false
             if (text.none { it.isLowerCase() } && row.text.none { it.isLowerCase() }) return false
+            // Tuş çubuğu ("◯ Back  ✕ Select"): her parça kendi başına bir istemse ayrı kalır, ayrı küçük etiket olarak çizilir.
+            if (ButtonPrompts.isBarPiece(text) && ButtonPrompts.isBarPiece(row.text)) return false
             val gap = (next.left - box.right) * aspect
             return gap >= -0.5 * maxOf(a, b) && gap <= PIECE_GAP * maxOf(a, b)
         }
@@ -1609,6 +1629,7 @@ class RegionWatcher(
             val rendered = IconText.render(text.joinToString("\n"), slots)
             val icons = rendered.icons.takeIf { it.isNotEmpty() }
             val blocks = candidate.blocks?.let { renderBlocks(candidate, it, text, similar, slots) }
+            candidate.blocks?.let { paintSummary(it) }?.let { onLog?.invoke("ek alan ${area.name}: çizim $it") }
             send { sender.sendRegion(area.id, rendered.text, candidate.box, candidate.lineHeight, icons, blocks?.map { it.second }) }
             state.renderedText = rendered.text
             state.renderedIcons = icons

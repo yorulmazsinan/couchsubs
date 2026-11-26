@@ -140,6 +140,14 @@ object TextPainter {
     const val PANEL_MAX_HEIGHT = 0.35
     /** Panel yazının her yanında en az bu kadar satır yüksekliği (en az 2 piksel) taşmalı; taşmıyorsa düz kutudur. */
     const val PANEL_PAD_LINES = 0.2
+    /**
+     * Tek satırlık tek yazının kutusu (ikiz) yazıyı her yanda en çok bu kadar satır yüksekliği aşar (yanlarda yazının
+     * genişliği kadar da olabilir); yalnız tuş istemlerinin kutusu her yanda en çok [PROMPT_PAD_LINES]. Daha büyük düz alan
+     * (koyu oyun dünyası, ekranın altındaki karartı) kutu değildir: ikizi dev bir kutu olurdu (beta.103, TCL Android TV;
+     * Mac TextPainter.labelPadLines, Windows LabelPadLines aynı).
+     */
+    const val LABEL_PAD_LINES = 3.0
+    const val PROMPT_PAD_LINES = 2.5
     /** Köşe yuvarlak: köşeden köşegen boyunca en az bu kadar nokta zemin değil (aynı kenardaki iki köşede). */
     const val CORNER_MIN = 2
     /** Yanına yazmada yazı rengine bu kadar yakın noktaların payı [BESIDE_SHARE]'den azsa alan boştur. */
@@ -886,6 +894,26 @@ object TextPainter {
                 (max(0, min(p.r, c.r) - max(p.l, c.l)) * max(0, min(p.b, c.b) - max(p.t, c.t))).toDouble() >= 0.8 * area
             }?.let { panels[i] = it }
         }
+        // Tuş isteminin ve tek başına tek satırlık yazının kutusu yazıyı sarmalı: koyu oyun dünyası (gece, gölge, ekranın
+        // altındaki karartı) da düz zemin gibi büyüyüp panel sanılabiliyor; tuş çubuğundaki "◯ Back" bu alanın ikizine,
+        // ekranın altında dev siyah kutuya yazılıyordu (TCL Android TV, beta.103). Tek yazı her yanda en çok
+        // [LABEL_PAD_LINES] satır aşabilir (yanlarda yazının genişliği kadar da: kısa yazılı geniş kart); yalnız tuş
+        // istemlerinin kutusu her yanda en çok [PROMPT_PAD_LINES] satır. Başka yazılı kutu (bildirim: ad, gövde, kişi resmi)
+        // bu sınırdan muaf. Sarmayan alan kutu değildir, satırlar yanına yazılır (Mac TextPainter, Windows TextPaint.cs aynı).
+        fun hugs(members: List<Int>, l: Int, t: Int, r: Int, b: Int): Boolean {
+            val prompt = members.all { targets[it].prompt }
+            if (!members.all { targets[it].rows <= 1 } || !(prompt || members.size == 1)) return true
+            val ul = members.minOf { covers[it].l }
+            val ut = members.minOf { covers[it].t }
+            val ur = members.maxOf { covers[it].r }
+            val ub = members.maxOf { covers[it].b }
+            val line = members.maxOf { lines[it] }
+            // Aynı satırdaki birden çok tuş istemi (tuş çubuğu "◯ Geri  ✕ Seç") tek kutu değil, ayrı küçük etiketlerdir.
+            if (members.size >= 2 && prompt && members.maxOf { covers[it].t } < members.minOf { covers[it].b }) return false
+            val padY = (if (prompt) PROMPT_PAD_LINES else LABEL_PAD_LINES) * line
+            val padX = if (prompt) padY else max(padY, (ur - ul).toDouble())
+            return ut - t <= padY && b - ub <= padY && ul - l <= padX && r - ur <= padX
+        }
         val keys = panels.keys.toList()
         val parent = keys.associateWith { it }.toMutableMap()
         fun root(start: Int): Int {
@@ -909,7 +937,7 @@ object TextPainter {
                 c.l - l >= pad && r - c.r >= pad && c.t - t >= pad && b - c.b >= pad
             }
             val box = members.size >= 2 || targets[members[0]].rows > 1 || listIndex[members[0]] == null
-            if (padded && box) boxes.add(Panel(members, Box(l, t, r, b)))
+            if (padded && box && hugs(members, l, t, r, b)) boxes.add(Panel(members, Box(l, t, r, b)))
         }
         val boxed = boxes.flatMap { it.members }.toSet()
         val twins = mutableListOf<Box>()
