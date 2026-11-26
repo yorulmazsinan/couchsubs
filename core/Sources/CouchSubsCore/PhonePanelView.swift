@@ -254,7 +254,10 @@ struct PhoneListCard: View {
             }
             VStack(alignment: .leading, spacing: line * 0.1) {
                 if !row.name.isEmpty {
-                    Text(verbatim: row.name).font(.system(size: font, weight: .bold)).lineLimit(1)
+                    // Avatarsız kart (sohbet dışı ekran: makale başlığı) başlığı satır kırar; kişi adı tek satır.
+                    Text(verbatim: row.name).font(.system(size: font, weight: .bold))
+                        .lineLimit(row.avatar == nil ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: row.avatar == nil)
                 }
                 if !row.preview.isEmpty {
                     Text(verbatim: row.preview).font(.system(size: font * 0.92, weight: .regular))

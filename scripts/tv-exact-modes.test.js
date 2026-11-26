@@ -64,7 +64,7 @@ const items = [
     align: 'right', group: 7, mode: 'beside', spot: px(1440, 660, 1600, 700), spotRoom: px(1300, 660, 1600, 700) }),
 ];
 
-function render() {
+function render(list) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-modes-'));
   try {
     const html = `<!doctype html><meta charset="utf-8"><style>${fs.readFileSync(path.join(root, 'style.css'), 'utf8')}</style>
@@ -80,7 +80,7 @@ function render() {
       ${slice('  function validBox(box)', '\n  //')}
       ${slice('  function fillText(el, text, icons)', '\n  //')}
       ${slice('  var screenTimer = null;', '\n  // --- Ek alanlar')}
-      showScreen(${JSON.stringify(items)}, 20000);
+      showScreen(${JSON.stringify(list || items)}, 20000);
       var out = Array.from($('screen').children).map(function (el) {
         var b = el.getBoundingClientRect(), cs = getComputedStyle(el);
         var lines = Array.from(el.querySelectorAll('.exact-line')).map(function (row) {
@@ -164,4 +164,20 @@ test('kipler: yanına yazma kutusuz ve özgünün solunda, liste aynı boyda, ik
     assert.match(el.bg, /^rgb\(/, el.text + ': opak örtü');
     assert.ok(Math.abs(el.left - 198) <= 1, el.text + ': örtünün yerinde');
   }
+});
+
+// Sinan Bey (beta.100, 3419): ekranın sağ kenarındaki bildirimin ikizi ("- HARİTA GÜNCELLENDİ!") ekrandan taşıyordu.
+// Türkçe sığmazsa ikiz panel yazısıyla birlikte sola kayar (TV 0.9.113); ekranın içinde kalır.
+test('ikiz bildirim ekranın sağ kenarından taşmaz, yazısıyla birlikte sola kayar', { skip: !browser && 'tarayıcı yok' }, () => {
+  const notice = { text: '- HARİTA GÜNCELLENDİ!', box: px(1752, 302, 1908, 338), line: 36 / H, lineH: 36 / H,
+    cover: px(1750, 300, 1910, 340), bg: '#101010', fg: '#FFFFFF', weight: 700, upper: true, align: 'left', mode: 'twin',
+    scale: 1, radius: 0, twinBox: px(1740, 350, 1916, 392), spot: px(1752, 352, 1908, 388), spotRoom: px(1752, 352, 1916, 388),
+    surface: { background: '#101010', foreground: '#FFFFFF', flat: true }, style: { align: 'left', bold: true, condensed: false, upper: true } };
+  const drawn = render([notice]);
+  const panel = drawn.find(el => / twin/.test(el.cls) && !el.lines.length);
+  const text = drawn.find(el => el.lines.length);
+  assert.ok(panel && text, 'ikiz çizildi');
+  assert.ok(panel.right <= W + 0.5 && panel.left >= 0, 'panel ekranın içinde: ' + panel.left + '-' + panel.right);
+  for (const line of text.lines) assert.ok(line.right <= W + 0.5 && line.left >= -0.5, 'yazı ekranın içinde: ' + JSON.stringify(line));
+  for (const line of text.lines) assert.ok(line.left >= panel.left - 0.5 && line.right <= panel.right + 0.5, 'yazı panelin içinde');
 });

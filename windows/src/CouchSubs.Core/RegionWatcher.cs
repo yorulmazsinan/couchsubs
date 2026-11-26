@@ -270,12 +270,19 @@ public sealed partial class RegionWatcher
         phoneTrace = new DropLog(now);
     }
 
+    /// <summary>Son <see cref="Offer"/>'da telefon paneli var mıydı (açılışında <see cref="ClearScreenText"/>).</summary>
+    private bool phoneOffered;
+
     /// <summary>Tur aralığının çarpanı (<see cref="ReadPressure.Slowdown"/>); verilmezse 1.</summary>
     public Func<int>? Slowdown { get; set; }
 
     /// <summary>Her karede çağrılır; tur zamanı geldiyse ve önceki tur bittiyse turu arka planda başlatır, hemen döner.</summary>
     public void Offer(Frame frame, IReadOnlyList<WatchedArea> areas)
     {
+        // Telefon paneli yeni açıldı: telefonun ekranına çizilmiş otomatik ekran yazısı kutuları beklemeden kalkar.
+        var phoneOpen = areas.Any(area => area.PanelLifetime.HasValue);
+        if (phoneOpen && !phoneOffered) ClearScreenText();
+        phoneOffered = phoneOpen;
         var time = now();
         bool confirmOnly, regularDue, phoneDue;
         int started;

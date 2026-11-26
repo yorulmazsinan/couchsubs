@@ -222,6 +222,9 @@ html, body {
   color: #17181B; padding: 0.47em 0.47em 0.47em 3.31em; text-align: left;
 }
 .phone-panel.aligned .panel-card.bare { padding-left: 0.6em; }
+/* Avatarsız kart (telefonun sohbet dışı ekranı, TV 0.9.113): avatar boyunda değil yazı boyunda; başlık satır kırar. */
+.phone-panel.aligned .panel-card.bare .panel-card-text { min-height: 0; }
+.phone-panel.aligned .panel-card.bare .panel-card-name { white-space: normal; overflow: visible; }
 .phone-panel.aligned .panel-card.badged { padding-right: 1.9em; }
 .phone-panel.aligned .panel-card .panel-avatar {
   position: absolute; left: 0.47em; top: 50%; width: 2.31em; height: 2.31em; margin-top: -1.155em; border-radius: 0.7em;

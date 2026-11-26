@@ -177,8 +177,9 @@ private fun PhoneListCard(item: ScreenTranslation.Item, row: ScreenPhoneCard.Lis
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy((line * 0.1f).dp)) {
             if (row.name.isNotEmpty()) {
+                // Avatarsız kart (sohbet dışı ekran: makale başlığı) başlığı satır kırar; kişi adı tek satır (Mac/iPhone ile aynı).
                 Text(row.name, style = TextStyle(fontSize = font.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp), color = ink,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    maxLines = if (row.avatar == null) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
             }
             if (row.preview.isNotEmpty()) {
                 Text(row.preview, style = TextStyle(fontSize = (font * 0.92f).sp, fontWeight = FontWeight.Normal, letterSpacing = 0.sp),

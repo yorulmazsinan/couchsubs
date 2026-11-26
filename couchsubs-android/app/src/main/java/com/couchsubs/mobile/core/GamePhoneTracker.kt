@@ -44,7 +44,10 @@ interface PhoneImage {
  * da altyazı karesinin telefon oturumu açmasını önler (Mac/iPhone GamePhoneTracker.swift, Windows GamePhoneTracker.cs
  * ile aynı kurallar).
  */
-class GamePhoneTracker(private val locate: (PhoneImage) -> GamePhoneGeometry.Pose? = GamePhoneGeometry::locate) {
+class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) {
+    constructor() : this({ image, near -> GamePhoneGeometry.locate(image, near) })
+    constructor(locate: (PhoneImage) -> GamePhoneGeometry.Pose?) : this({ image, _ -> locate(image) })
+
     class Sample(val sampled: Boolean, val pose: GamePhoneGeometry.Pose?)
 
     private var lastTime: Long? = null
@@ -66,7 +69,9 @@ class GamePhoneTracker(private val locate: (PhoneImage) -> GamePhoneGeometry.Pos
         val wasShown = shown != null
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (menüde ya da koyu ekranda yanlış
         // eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı.
-        var found = locate(image)
+        // Açık telefon yerinde ararken gevşek doğrulama da denenir ([GamePhoneGeometry.locate] near): beyaz ya da mavi
+        // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
+        var found = locateNear(image, shown)
         if (found != null && !plausible(found.bounds, image.width, image.height)) found = null
         val before = previous
         val current = shown
@@ -218,18 +223,79 @@ object GamePhoneGeometry {
         override fun rgb(x: Int, y: Int): Int = image.rgb(area.x + x, area.y + y)
     }
 
-    fun locate(image: PhoneImage): Pose? {
+    /**
+     * Karedeki telefon. [near]: açık telefonun son yeri; sıkı arama ıskalarsa o yerin hemen çevresinde gevşek doğrulama
+     * yapılır ([confirmPicture]): hoparlör yarığı ve kamera üstte, alt çentik altta aynı yerde duruyorsa telefon
+     * yerindedir. Sinan Bey (beta.100, 3418–3425): beyaz/mavi ekranlı uygulamalarda (haber, makale, hava, ayarlar,
+     * eklenti) telefonun yan kenarları elin ve gövdenin rengine karışıyor, sıkı arama telefonu kaybediyordu; telefon
+     * kaybolunca balonlar kalkıyor ("arada kaçıyor", 3417), telefonun yazıları altyazıya (3418, 3420, 3421) ve ekran
+     * yazısı kutularına (3420–3425) gidiyordu. Gevşek doğrulama yalnız açık telefonun yerinde yapılır: yeni telefon yine
+     * sıkı aramayla ve iki gözlemle açılır (Mac/iPhone ve Windows ile aynı).
+     */
+    fun locate(image: PhoneImage, near: Pose? = null): Pose? {
         if (image.width < 400 || image.height < 225) return null
-        if (widescreen(image.width, image.height)) return locatePicture(image)
+        if (widescreen(image.width, image.height)) return locatePicture(image, near)
         val area = picture(image.width, image.height) { x, y -> image.tone(x, y) shr 8 } ?: return null
-        val pose = locatePicture(Cropped(image, area)) ?: return null
-        fun x(value: Double) = (area.x + value * area.width) / image.width
-        fun y(value: Double) = (area.y + value * area.height) / image.height
+        val w = image.width.toDouble()
+        val h = image.height.toDouble()
+        // Açık telefonun yeri görüntünün içine taşınır.
+        val local = near?.let { pose ->
+            Pose((pose.topX * w - area.x) / area.width, (pose.topY * h - area.y) / area.height,
+                (pose.bottomX * w - area.x) / area.width, (pose.bottomY * h - area.y) / area.height)
+        }
+        val pose = locatePicture(Cropped(image, area), local) ?: return null
+        fun x(value: Double) = (area.x + value * area.width) / w
+        fun y(value: Double) = (area.y + value * area.height) / h
         return Pose(x(pose.topX), y(pose.topY), x(pose.bottomX), y(pose.bottomY))
     }
 
-    private fun locatePicture(image: PhoneImage): Pose? {
+    private fun locatePicture(image: PhoneImage, near: Pose? = null): Pose? {
         if (image.width < 400 || image.height < 225 || !widescreen(image.width, image.height)) return null
+        strictPicture(image)?.let { return it }
+        return near?.let { confirmPicture(image, it) }
+    }
+
+    /** Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir. */
+    const val CONFIRM_REACH = 4.0
+
+    /**
+     * Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
+     * [CONFIRM_REACH] kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin gücüne
+     * bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa null.
+     */
+    internal fun confirmPicture(image: PhoneImage, near: Pose): Pose? {
+        val grid = Grid(image)
+        val topX = near.topX * 400
+        val topY = near.topY * 225
+        val bottomX = near.bottomX * 400
+        val bottomY = near.bottomY * 225
+        val reach = CONFIRM_REACH.toInt()
+        val upperRows = maxOf(17, rounded(topY) - reach) until minOf(75, rounded(topY) + reach + 1)
+        val lowerRows = maxOf(145, rounded(bottomY) - reach) until minOf(217, rounded(bottomY) + reach + 1)
+        if (upperRows.isEmpty() || lowerRows.isEmpty()) return null
+        val upper = slots(grid, upperRows, 8..19, 12).filter { abs(it.x - topX) <= CONFIRM_REACH && hasCamera(grid, it) }
+        val lower = slots(grid, lowerRows, 5..14, 16).filter { abs(it.x - bottomX) <= CONFIRM_REACH }
+        var best = Double.POSITIVE_INFINITY
+        var pose: Pose? = null
+        for (top in upper) {
+            for (bottom in lower) {
+                val h = (bottom.y - top.y).toDouble()
+                val dx = bottom.x - top.x
+                if (!(h >= 115 && h <= 179 && abs(dx) <= h * 0.24 &&
+                        bottom.length >= top.length * 0.46 && bottom.length <= top.length &&
+                        h >= 7.9 * top.length && h <= 16.5 * top.length &&
+                        h >= 12 * bottom.length && h <= 30 * bottom.length)) continue
+                val distance = abs(top.x - topX) + abs(top.y - topY) + abs(bottom.x - bottomX) + abs(bottom.y - bottomY)
+                if (distance < best) {
+                    best = distance
+                    pose = Pose(top.x / 400, top.y / 225.0, bottom.x / 400, bottom.y / 225.0)
+                }
+            }
+        }
+        return pose
+    }
+
+    private fun strictPicture(image: PhoneImage): Pose? {
         val grid = Grid(image)
         // Olağan oyun görüntüsü burada biter. Gövdeye ancak üst bantta hem hoparlör hem kamera görülünce bakılır.
         val upper = slots(grid, 17 until 75, 8..19, 12).filter { hasCamera(grid, it) }

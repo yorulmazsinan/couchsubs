@@ -564,3 +564,43 @@ test('eski TV (0.9.105) liste kartını tanımaz; ad ve önizleme yine görünü
     assert.ok(r.text.indexOf(text) >= 0, 'eski TV yazıyı düşürdü: ' + text);
   }
 });
+
+// Telefonun sohbet dışı ekranı (TV uygulaması 0.9.113; Sinan Bey, beta.100 3416–3425): makale başlığı, gövde ve uygulama
+// satırları avatarsız kartlarda, telefon yazısıyla orantılı boyda (bilgisayar satırı en çok 0,03 gönderir; 3416'daki dev
+// balon olmaz), kart yazı boyunda (avatar boyunda değil), başlık satır kırar, kartlar ekranın içinde ve üst üste binmez.
+const bareCard = (name, preview, box) => Object.assign(part('row', [name, preview].filter(Boolean).join('\n'), box, rowCard),
+  { paragraphs: true, line: 0.03, row: { name, preview } });
+const appCards = () => [
+  Object.assign(part('card', ' ', [0.31, 0.2, 0.592, 0.85], cardStyle), { aligned: true, line: 0.03 }),
+  bareCard('Meclis sahil planını uzun tartışmalardan sonra onayladı', '', [0.323, 0.21, 0.579, 0.3]),
+  bareCard('', 'Meclis salı geç saatte uzun süredir bekleyen planı onayladı.', [0.323, 0.33, 0.579, 0.42]),
+  bareCard('Güç Seansı', 'Aşama 2/4', [0.323, 0.45, 0.579, 0.52]),
+  bareCard('', 'Arka Plan', [0.323, 0.55, 0.579, 0.59])];
+const appCardsScript = `
+  showRegion({ id: 'game-phone', text: 'x', box: { left: 0.31, top: 0.2, right: 0.79, bottom: 0.85 }, blocks: ${JSON.stringify(appCards())} });
+  var panel = document.querySelector('.phone-panel');
+  var cards = Array.prototype.map.call(panel.querySelectorAll('.panel-card'), function (card) {
+    var name = card.querySelector('.panel-card-name'), preview = card.querySelector('.panel-card-preview');
+    return { box: rect(card), cls: card.className, avatar: !!card.querySelector('.panel-avatar'),
+      name: name ? rect(name) : null, preview: preview ? rect(preview) : null,
+      font: parseFloat(getComputedStyle(panel).fontSize) };
+  });
+  $('result').textContent = JSON.stringify({ cards: cards, w: window.innerWidth, h: window.innerHeight });`;
+
+test('sohbet dışı ekran: avatarsız kartlar orantılı boyda, başlık satır kırar, ekranın içinde', { skip: !browser && 'Chromium/Chrome bulunamadı' }, () => {
+  const r = measure(appCardsScript);
+  assert.equal(r.cards.length, 4);
+  assert.ok(r.cards.every(c => !c.avatar && /bare/.test(c.cls)), 'avatarsız kart');
+  const font = r.cards[0].font;
+  assert.ok(font <= 0.03 * r.h * 0.95 + 0.5 && font >= 20, 'yazı orantılı: ' + font);
+  // Başlık satır kırar (tek satıra sıkışıp kesilmez) ve kartın içinde kalır.
+  const title = r.cards[0];
+  assert.ok(title.name.bottom - title.name.top > font * 1.6, 'başlık satır kırmadı');
+  assert.ok(title.name.right <= title.box.right + 1 && title.name.bottom <= title.box.bottom + 1, 'başlık kartın dışında');
+  // Tek satırlık kart avatar boyunda değil, yazı boyunda.
+  const single = r.cards[3];
+  assert.ok(single.box.bottom - single.box.top < font * 2.31, 'tek satırlık kart avatar boyunda: ' + (single.box.bottom - single.box.top));
+  for (const c of r.cards) assert.ok(c.box.left >= 0 && c.box.right <= r.w && c.box.top >= 0 && c.box.bottom <= r.h, 'kart ekran dışında');
+  for (let i = 0; i + 1 < r.cards.length; i++) assert.ok(r.cards[i].box.bottom <= r.cards[i + 1].box.top + 1, 'kartlar üst üste');
+  shoot(appCardsScript, 'tv-phone-app-cards.png');
+});

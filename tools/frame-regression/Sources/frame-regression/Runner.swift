@@ -336,6 +336,9 @@ final class Runner {
                 result.phoneDetected = "chat"
             } else if !roles.isDisjoint(with: ["contact", "preview"]) {
                 result.phoneDetected = "list"
+            } else if roles.contains("card") {
+                // Sohbet dışı uygulama ekranı (gönderi, haber, makale, ayarlar; `PhoneScreen`).
+                result.phoneDetected = "app"
             } else {
                 result.phoneDetected = "phone"
             }

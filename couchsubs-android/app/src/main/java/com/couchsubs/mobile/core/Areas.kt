@@ -1083,7 +1083,26 @@ class RegionWatcher(
         val read = readPhone ?: return
         synchronized(lock) {
             (phoneSession ?: PhoneRegionSession(read, translator, sender, { phonePanel() }, phoneMemory)
-                .also { it.onLog = { line -> onLog?.invoke(line) }; it.trace = phoneTrace; phoneSession = it }).observe(capture)
+                .also {
+                    it.onLog = { line -> onLog?.invoke(line) }
+                    it.trace = phoneTrace
+                    phoneSession = it
+                    clearScreenText()
+                }).observe(capture)
+        }
+    }
+
+    /**
+     * Telefon açıldı: otomatik ekran yazısının ve kenar bildirimlerinin gösterilen kutuları (görev satırı dışında) aynı
+     * karede kalkar. Önceden sonraki turu bekliyordu; telefonun ekranına çizilmiş eski kutu (Sinan Bey, beta.100 3422:
+     * önceki haberin "Vali karşılaştırıyor" kutusu hava uygulamasında) bir süre duruyordu. Telefon açıkken bu alanlar
+     * zaten önerilmez (Mac/iPhone ve Windows ile aynı).
+     */
+    fun clearScreenText(): Unit = synchronized(lock) {
+        for (id in states.keys.toList()) {
+            if (!id.startsWith("auto-") || id == MissionLine.AREA_ID) continue
+            if (states[id]!!.shown.isNotEmpty()) sender.sendRegion(id, "", null, null)
+            states.remove(id)
         }
     }
 

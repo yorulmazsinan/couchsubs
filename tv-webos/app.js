@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.112';
+  var APP_VERSION = '0.9.113';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -2106,12 +2106,24 @@
       // Yükseklik de içeriğe göre: Türkçe uzunsa (satır kırıldı) kutu aşağı uzar, alt iç boşluk özgündeki kadar kalır.
       var top = t.top * height, h = Math.max((t.bottom - t.top) * height, bottom + (t.bottom * height - spotBottom) - top);
       var radius = typeof item.radius === 'number' && item.radius > 0 ? item.radius * height : 0;
+      // Genişlik içeriğe göre, özgün kutudan dar değil (ikiz özgünün aynısı).
+      var panelWidth = Math.max(1, right + pad - left, (t.right - t.left) * width);
+      // Ekranın dışına taşan ikiz (TV 0.9.113; Sinan Bey, beta.100 3419: "- HARİTA GÜNCELLENDİ!" sağ kenardan kesikti)
+      // yazılarıyla birlikte sola kayar; ekrandan genişse sol kenardan başlar.
+      var shift = Math.max(0, Math.min(left, left + panelWidth - width));
+      if (shift > 0) {
+        left -= shift;
+        for (j = 0; j < items.length; j++) {
+          var moved = items[j].twinBox;
+          if (exactMode(items[j]) !== 'twin' || [moved.left, moved.top, moved.right, moved.bottom].join(',') !== key) continue;
+          placed[j].left -= shift;
+        }
+      }
       var panel = document.createElement('div');
       panel.className = 'item exact twin';
       panel.style.left = left + 'px';
       panel.style.top = top + 'px';
-      // Genişlik içeriğe göre, özgün kutudan dar değil (ikiz özgünün aynısı).
-      panel.style.width = Math.max(1, right + pad - left, (t.right - t.left) * width) + 'px';
+      panel.style.width = panelWidth + 'px';
       panel.style.height = h + 'px';
       panel.style.backgroundColor = item.bg;
       panel.style.borderRadius = radius + 'px';
@@ -2140,7 +2152,7 @@
         img.className = 'exact-portrait';
         img.src = icon.src;
         img.style.position = 'absolute';
-        img.style.left = (icon.box.left * width - left) + 'px';
+        img.style.left = (icon.box.left * width - shift - left) + 'px';
         img.style.top = (icon.box.top * height - top) + 'px';
         img.style.width = ((icon.box.right - icon.box.left) * width) + 'px';
         img.style.height = ((icon.box.bottom - icon.box.top) * height) + 'px';
@@ -2177,6 +2189,8 @@
     var drawn = exactTwins(host, items, placed, width, height);
     for (var n = 0; n < items.length; n++) {
       var source = items[n], place = placed[n], mode = exactMode(source);
+      // Yazı ekranın sağ kenarından taşmaz (TV 0.9.113): sığmayan kutu sola kayar.
+      place.left = Math.max(0, Math.min(place.left, width - place.width));
       var el = document.createElement('div');
       el.className = mode === 'cover' ? 'item exact' : 'item exact ' + mode;
       el.couchsubsBox = validBox(source.box);

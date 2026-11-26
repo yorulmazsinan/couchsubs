@@ -166,6 +166,9 @@ internal static class PhonePanelView
             grid.Children.Add(picture);
         }
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        // Avatarsız kart (sohbet dışı ekran: makale başlığı) başlığı satır kırar; kişi adı tek satır (Mac/iPhone ve Android
+        // ile aynı).
+        var wraps = row.Avatar is null;
         if (row.Name.Length > 0)
             texts.Children.Add(new TextBlock
             {
@@ -173,8 +176,8 @@ internal static class PhonePanelView
                 FontSize = fontSize,
                 FontWeight = FontWeights.Bold,
                 Foreground = ink,
-                TextWrapping = TextWrapping.NoWrap,
-                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = wraps ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                TextTrimming = wraps ? TextTrimming.None : TextTrimming.CharacterEllipsis,
             });
         if (row.Preview.Length > 0)
             texts.Children.Add(new TextBlock

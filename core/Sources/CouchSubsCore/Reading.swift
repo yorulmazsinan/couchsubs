@@ -55,6 +55,9 @@ public struct TextLine: Equatable, Sendable {
     /// Telefonun sohbet listesinde (`GamePhoneText.forTranslation`) satırın rolü: kişi adı, önizleme ya da bölüm başlığı.
     /// Liste değilse nil.
     var listRole: ScreenPhoneCard.Role?
+    /// Telefonun sohbet dışı ekranında (`PhoneScreen`) satırın kartı: kaçıncı kart, kartın başlık satırı mı, kart kalın
+    /// başlık mı. Kartsızsa nil.
+    var phoneCard: PhoneScreen.Mark?
 
     public init(_ text: String, box: TextBox? = nil, confidence: Double? = nil, words: [TextWord]? = nil, icons: [IconSlot]? = nil) {
         self.text = text

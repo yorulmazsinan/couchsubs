@@ -396,9 +396,12 @@ public sealed partial class RegionWatcher
                 }
                 // Listede "…" ile kesilmiş önizleme kesik çevrilir, yarım sözcük uydurulmaz (GamePhoneText.CutInput; Mac ile aynı).
                 // "…" koymadan satır sonunda kesilmiş önizleme de kesik çevrilir (GamePhoneText.ClippedInput); motora "..." ile
-                // gider, sonu tamamlanmaz (Sinan Bey, beta.100 3399).
-                bool InPreview(int i, bool clipped) => candidate.Blocks?.Any(block => block.Phone?.Role == ScreenPhoneCard.Role.Preview
-                    && (!clipped || block.Phone!.Spot.Right >= GamePhoneText.ClipEdge)
+                // gider, sonu tamamlanmaz (Sinan Bey, beta.100 3399). Sohbet dışı ekranın kartlarında da (gönderinin "…" ile
+                // kesilmiş açıklaması, haber başlığı) sonu tamamlanmaz (Sinan Bey, beta.100 3416: "Pour some goddamn sugar o…"
+                // tamamlanarak çevriliyordu; Mac/iPhone ve Android ile aynı).
+                bool InPreview(int i, bool clipped) => candidate.Blocks?.Any(block => block.Phone is { } placement
+                    && (clipped ? placement.Role == ScreenPhoneCard.Role.Preview && placement.Spot.Right >= GamePhoneText.ClipEdge
+                        : placement.Role is ScreenPhoneCard.Role.Preview or ScreenPhoneCard.Role.Card)
                     && i >= block.Start && i < block.Start + block.Count) == true;
                 var cuts = missing.Select(i => !InPreview(i, false) ? null
                     : GamePhoneText.CutInput(candidate.Paragraphs[i])
@@ -507,6 +510,25 @@ public sealed partial class RegionWatcher
         if (partialPhone) state.Shown = ""; // Sonraki tur, yeni okumanın yalnız eksik kalan balonlarını tamamlar.
         Publish(area, state, started, candidate, result, fromPack, prepared, partialPhone: partialPhone);
         state.RenderedPhoneParagraphs = partialPhone || string.IsNullOrEmpty(state.RenderedText) ? null : candidate.Paragraphs;
+    }
+
+    /// <summary>
+    /// Telefon açıldı: otomatik ekran yazısının ve kenar bildirimlerinin gösterilen kutuları (görev satırı dışında) aynı
+    /// karede kalkar. Önceden sonraki turu bekliyordu; telefonun ekranına çizilmiş eski kutu (Sinan Bey, beta.100 3422:
+    /// önceki haberin "Vali karşılaştırıyor" kutusu hava uygulamasında) bir süre duruyordu. Telefon açıkken bu alanlar
+    /// zaten önerilmez (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal void ClearScreenText()
+    {
+        var map = states;
+        List<string> shown;
+        lock (map)
+        {
+            var ids = map.Keys.Where(id => ScreenTextAreas.IsAuto(id) && id != MissionLine.AreaId).ToList();
+            shown = [.. ids.Where(id => map[id].Shown.Length > 0)];
+            foreach (var id in ids) map.Remove(id);
+        }
+        foreach (var id in shown) server.SendRegion(id, "", null);
     }
 
     /// <summary>Ömrü iptal edilen panelin eski okumasını ve yalnız o panelin kutusunu kaldırır.</summary>

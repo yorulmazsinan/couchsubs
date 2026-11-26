@@ -128,7 +128,36 @@ enum GamePhoneText {
     /// (ya da başlık okunamadıysa "…" ile kesilmiş en az iki önizleme) gerekir. Önceden iki başlığın ikisi de okunmalıydı:
     /// sallanan telefonda biri her okumada kaçıyor, liste bir sohbet balonları bir düz satırlar olarak gidip geliyordu
     /// (LG, beta.93). Kişi adları da atılıyordu; şimdi listede adıyla görünür (Windows ve Android ile aynı).
+    ///
+    /// Liste değilse ve ekran sohbet dışıysa (`PhoneScreen.kind`: gönderi, haber, makale, hava, fitness, ayarlar,
+    /// eklenti) satırlar kartlarına ayrılır (`TextLine.phoneCard`); çevrilmeyen satırlar (kullanıcı adı, saat, geri
+    /// düğmesi, konum, fotoğraf yazısı, kaynak adı) atılır. Ana ekran kendi kurallarında kalır (`PhoneChat.isHomeScreen`).
     static func forTranslation(_ reading: Reading) -> Reading {
+        let list = listed(reading)
+        if list.lines.contains(where: { $0.listRole != nil }) || PhoneChat.isHomeScreen(list.lines) { return list }
+        return screen(reading) ?? list
+    }
+
+    /// Sohbet dışı ekranın kartları (`PhoneScreen.cards`); ekran sohbetse ya da satırların düz yeri bilinmiyorsa nil.
+    static func screen(_ reading: Reading) -> Reading? {
+        let all = reading.lines.filter { $0.phoneBox != nil }
+        guard !all.isEmpty else { return nil }
+        let lines = all.map { PhoneScreen.Line(text: $0.text, spot: $0.phoneBox!) }
+        let kind = PhoneScreen.kind(lines)
+        guard kind != .chat else { return nil }
+        var result: [TextLine] = []
+        for (number, card) in PhoneScreen.cards(lines, kind: kind).enumerated() {
+            for (position, index) in card.lines.enumerated() {
+                var line = all[index]
+                line.listRole = .card
+                line.phoneCard = PhoneScreen.Mark(card: number, title: card.titled && position == 0, bold: card.bold)
+                result.append(line)
+            }
+        }
+        return Reading(lines: result)
+    }
+
+    private static func listed(_ reading: Reading) -> Reading {
         var lines = reading.lines.filter { line in
             let words = line.text.split(whereSeparator: \.isWhitespace)
             return !(words.contains(where: isTag) && words.allSatisfy { isTag($0) || !$0.contains(where: { $0.isLetter || $0.isNumber }) })
@@ -289,6 +318,7 @@ enum GamePhoneText {
     /// Telefon ekranının blokları, kendi yerlerinde. Ana ekranda uygulama adları (WhatUp, simge etiketleri) çevrilmez
     /// (`PhoneChat.withoutAppNames`); saat ve hava harfsiz satır olarak zaten atılır.
     static func groups(_ reading: Reading) -> [ScreenTranslation.Group] {
+        if reading.lines.contains(where: { $0.phoneCard != nil }) { return cardGroups(reading) }
         let home = PhoneChat.isHomeScreen(reading.lines)
         let reading = Reading(lines: PhoneChat.withoutAppNames(reading.lines))
         let flat = reading.lines.allSatisfy { $0.phoneBox != nil }
@@ -327,6 +357,41 @@ enum GamePhoneText {
         if listed, flat, !kept.isEmpty { return kept }
         let placed = roles(kept, home: home)
         return home ? widgets(placed) : placed
+    }
+
+    /// Sohbet dışı ekranın kartları (`forTranslation` işaretledi): her kart bir grup, telefondaki sırasıyla. Başlıklı
+    /// kartın başlığı ayrı paragraf (kalın çizilir), gövdesi tek paragraf; alt satıra sarılmış cümle birleşir (tireyle
+    /// bölünmüş sözcük boşluksuz). Grubun rolü `card`, düz ekrandaki yeri kartın satırlarının birleşimi.
+    static func cardGroups(_ reading: Reading) -> [ScreenTranslation.Group] {
+        let marked = reading.lines.filter { $0.phoneCard != nil && $0.box != nil && $0.phoneBox != nil }
+        let numbers = Array(Set(marked.map { $0.phoneCard!.card })).sorted()
+        var groups: [ScreenTranslation.Group] = []
+        for number in numbers {
+            let run = marked.filter { $0.phoneCard!.card == number }
+            let clean = Reading(lines: run).withoutOcrNoise(keepIdentifiers: true).lines
+                .filter { $0.box != nil && $0.phoneBox != nil && ScreenTranslation.isWords($0.text) }
+            guard !clean.isEmpty else { continue }
+            let mark = run[0].phoneCard!
+            let titled = clean.count >= 2 && clean[0].phoneCard?.title == true
+            func joined(_ lines: ArraySlice<TextLine>) -> String {
+                var text = ""
+                for line in lines {
+                    let part = line.text.trimmingCharacters(in: .whitespaces)
+                    if text.isEmpty { text = part } else if text.hasSuffix("-") { text += part } else { text += " " + part }
+                }
+                return text
+            }
+            let paragraphs = titled ? [clean[0].text.trimmingCharacters(in: .whitespaces), joined(clean.dropFirst())]
+                : [joined(clean[...])]
+            let boxes = clean.map { $0.box! }, spots = clean.map { $0.phoneBox! }
+            let heights = spots.map { $0.bottom - $0.top }.sorted()
+            var group = ScreenTranslation.Group(paragraphs: paragraphs, box: boxes.dropFirst().reduce(boxes[0]) { $0.union($1) },
+                                                lineHeight: heights[(heights.count - 1) / 2])
+            group.phone = ScreenPhoneCard.Placement(role: .card, spot: spots.dropFirst().reduce(spots[0]) { $0.union($1) },
+                                                    titled: titled, bold: mark.bold)
+            groups.append(group)
+        }
+        return Array(groups.prefix(ScreenTranslation.maxGroups))
     }
 
     /// Ana ekranda bileşen başlığı ve hemen altındaki sayaç ("Reminders" / "6 Notifications") tek grup olur: panelde tek
@@ -377,7 +442,7 @@ enum GamePhoneText {
     /// Sohbet panelinde her grubun rolü ("Ekranı çevir"in `PhoneChat` kuralları, düz ekrandaki yerinden): en üstteki
     /// kısa ad satırı kişinin adıdır (çevrilmez), ortalı kısa satır not, sağa yaslı balon oyuncunun, sola yaslı karşı
     /// tarafın mesajı; iki yanı da dar balonun tarafını panel rengiyle seçer. Sohbet listesinde ("Messages" bölümü)
-    /// önizlemeler, ana ekranda bütün yazılar kendi yerinde kalır (`home`). Düz yeri bilinmeyen gruplar rolsüz kalır.
+    /// önizlemeler, ana ekranda bütün yazılar `home` rolünde (panelde kart). Düz yeri bilinmeyen gruplar rolsüz kalır.
     static func roles(_ groups: [ScreenTranslation.Group], home: Bool) -> [ScreenTranslation.Group] {
         guard groups.allSatisfy({ $0.phone != nil }) else { return groups.map { var g = $0; g.phone = nil; return g } }
         let list = groups.contains { section($0.paragraphs.joined()) != nil }

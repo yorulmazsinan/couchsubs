@@ -6,7 +6,8 @@ import Foundation
 /// eğik telefonda da sol/sağ kenar ekranın kenarına göre ölçülür), sonra ekranın ne olduğu çıkarılır. Sohbet ekranında
 /// her balon bir parça olur (balonun satırları birleşir); balon telefonun hangi kenarına yaslıysa gelen ya da giden
 /// mesajdır. Sohbet listesinde kişi adları çevrilmez, son mesaj önizlemeleri çevrilir. Ana ekran (hava durumu, bildirim
-/// sayacı, simge ızgarası) sohbet değildir: yazıları yerinde çevrilir, uygulama adları çevrilmez. Windows (PhoneChat.cs) ve Android
+/// sayacı, simge ızgarası) sohbet değildir: yazıları panelde kart olur, uygulama adları çevrilmez; öbür sohbet dışı ekranlar
+/// (gönderi, haber, makale, fitness, ayarlar) `PhoneScreen` kartlarıdır. Windows (PhoneChat.cs) ve Android
 /// (PhoneChat.kt) aynı kuralları ve eşikleri uygular; ortak deneme dosyası Fixtures/phone-chat.json.
 enum PhoneChat {
     /// Satır, merkezi düz ekranda bu payla dışarıda kalsa da telefonundur (kutular kenarda biraz taşabilir).
@@ -75,7 +76,7 @@ enum PhoneChat {
         guard !rows.isEmpty else { return [] }
         let median = rows.map(\.height).sorted()[rows.count / 2]
         rows.removeAll { $0.spot.top < -edgeCut || $0.spot.bottom > 1 + edgeCut }
-        // Ana ekran (saat, hava, bileşenler, simge ızgarası) sohbet değildir: kart kurulmaz, yazılar yerinde çevrilir.
+        // Ana ekran (saat, hava, bileşenler, simge ızgarası) sohbet değildir: yazıları panelde kart olur.
         let home = joinedRows(single, join: homeJoin).filter { $0.spot.top >= -edgeCut && $0.spot.bottom <= 1 + edgeCut }
         if isHome(home, raw: raw) { return homeGroups(home, median: median, handset: handset) }
         var header: Row?
@@ -95,6 +96,9 @@ enum PhoneChat {
             for (index, row) in rows.enumerated() { result.append(group([row], role: list[index], handset: handset)) }
             return result
         }
+        // Sohbet dışı ekran (gönderi, haber, makale, hava, fitness, ayarlar, eklenti): kartlar (`PhoneScreen`; otomatik
+        // telefon okumasıyla aynı kural).
+        if let cards = screenGroups(raw.isEmpty ? lines : raw, handset: handset) { return cards }
         if let header { result.append(group([header], role: .header, handset: handset)) }
         var bubble: [Row] = []
         func finish() {
@@ -158,6 +162,15 @@ enum PhoneChat {
         return labels.contains { label in labels.filter { sameBand($0, label) }.count >= gridLabels }
     }
 
+    /// Uygulama başlatıcı (gerçek ana ekran): bildirim sayacı ya da simge ızgarası var. Yalnız hava satırı ("71°") olan
+    /// ekran hava uygulamasıdır: oradaki tek sözcüklük satırlar ("Now", "Sunset") uygulama adı değildir, çevrilir
+    /// (Sinan Bey, beta.100 3422).
+    static func isLauncher(_ rows: [Row]) -> Bool {
+        if rows.contains(where: { matches(counter, $0.text) }) { return true }
+        let labels = rows.filter { isAppLabel($0.text) && ($0.spot.top + $0.spot.bottom) / 2 >= headerBand }
+        return labels.contains { label in labels.filter { sameBand($0, label) }.count >= gridLabels }
+    }
+
     private static func matches(_ pattern: NSRegularExpression, _ text: String) -> Bool {
         pattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
@@ -207,18 +220,22 @@ enum PhoneChat {
     static func isAppName(_ block: [Row]) -> Bool { block.count == 1 && isAppLabel(block[0].text) }
 
     /// Otomatik telefon panelinin (`GamePhoneText.groups`) satırları ana ekransa uygulama adları atılmış hâli; saat ve hava
-    /// harfsiz satır olarak zaten çevrilmez, bileşen ve bildirim yazıları kendi yerinde kalır. Satırların yeri düz ekranda
+    /// ve harfsiz satırlar atılır, bileşen ve bildirim yazıları kalır (panelde kart). Satırların yeri düz ekranda
     /// (`phoneBox`) bilinmiyorsa ya da ekran ana ekran değilse satırlar olduğu gibi döner ("Ekranı çevir" ile aynı kural).
     static func withoutAppNames(_ lines: [TextLine]) -> [TextLine] {
         guard isHomeScreen(lines) else { return lines }
         let rows = homeRows(lines)
         let median = rows.map(\.height).sorted()[rows.count / 2]
-        let names = homeBlocks(rows, median: median).filter(isAppName).flatMap { $0[0].lines }
-        return lines.filter { line in !names.contains { $0.text == line.text && $0.phoneBox == line.phoneBox } }
+        let names = isLauncher(rows) ? homeBlocks(rows, median: median).filter(isAppName).flatMap { $0[0].lines } : []
+        // Saat ("7PM", "10 PM") çevrilmez (Sinan Bey, beta.100 3422: "10PM" "22:00" yazılıyordu).
+        return lines.filter { line in
+            line.text.filter(\.isLetter).count >= 2 && !PhoneScreen.isTime(line.text)
+                && !names.contains { $0.text == line.text && $0.phoneBox == line.phoneBox }
+        }
     }
 
     /// Satırlar (düz ekrandaki yerleri bilinen) telefonun ana ekranı mı (`isHome`); sohbet panelinde ana ekran yazıları
-    /// kendi yerinde kalır (`GamePhoneText.roles`).
+    /// `home` rolünde kalır (`GamePhoneText.roles`).
     static func isHomeScreen(_ lines: [TextLine]) -> Bool {
         guard !lines.isEmpty, lines.allSatisfy({ $0.phoneBox != nil }) else { return false }
         let rows = homeRows(lines)
@@ -233,12 +250,13 @@ enum PhoneChat {
 
     /// Ana ekranın yazıları: bir arada duran satırlar (bileşenin başlığı ve içeriği, bildirimin satırları) birer blok, her
     /// satır kendi yerinde ayrı çevrilir (alt satıra sarılmış cümle birleşir). Tek başına duran kısa ad (simge etiketi,
-    /// "WhatUp") uygulamanın adıdır, çevrilmez; saat ve hava zaten harfsiz satırlarla birlikte atılmıştır. Gruplar `home`
-    /// rolündedir: kart kurulmaz, özgün stilinde yerinde çizilir.
+    /// "WhatUp") gerçek ana ekranda (`isLauncher`) uygulamanın adıdır, çevrilmez; saat ("7PM") çevrilmez. Gruplar `home`
+    /// rolündedir: panelde kart olur (Sinan Bey, beta.100 3422: telefonun üstüne yazılmaz).
     static func homeGroups(_ rows: [Row], median: Double, handset: ScreenPhoneCard.Handset) -> [ScreenTranslation.Group] {
         var result: [ScreenTranslation.Group] = []
-        for block in homeBlocks(rows, median: median) {
-            if isAppName(block) { continue }
+        let launcher = isLauncher(rows)
+        for block in homeBlocks(rows.filter { !PhoneScreen.isTime($0.text) }, median: median) {
+            if launcher, isAppName(block) { continue }
             if isWidget(block) {
                 var widget = group([block[0]], role: .widget, handset: handset)
                 widget.paragraphs = [block[0].text, block[1].text]
@@ -257,6 +275,30 @@ enum PhoneChat {
                 piece.append(row)
             }
             if !piece.isEmpty { result.append(group(piece, role: .home, handset: handset)) }
+        }
+        return result
+    }
+
+    /// Sohbet dışı ekranın kartları (`PhoneScreen.kind`/`cards`, satırların düz ekrandaki yeriyle); ekran sohbetse nil.
+    /// Ekranın üst/alt kenarından taşan kesik satırlar kartlara girmez.
+    static func screenGroups(_ lines: [TextLine], handset: ScreenPhoneCard.Handset) -> [ScreenTranslation.Group]? {
+        let boxed = lines.filter { $0.box != nil }
+        let all = boxed.map { PhoneScreen.Line(text: clean($0.text), spot: handset.flat($0.box!)) }
+        let kind = PhoneScreen.kind(all)
+        guard kind != .chat else { return nil }
+        var result: [ScreenTranslation.Group] = []
+        for card in PhoneScreen.cards(all, kind: kind) {
+            let rows = card.lines.filter { all[$0].spot.top >= -edgeCut && all[$0].spot.bottom <= 1 + edgeCut }
+            guard !rows.isEmpty else { continue }
+            let titled = card.titled && rows.count >= 2 && rows[0] == card.lines[0]
+            let paragraphs = PhoneScreen.paragraphs(PhoneScreen.Card(lines: rows, titled: titled, bold: card.bold), all)
+            let boxes = rows.map { boxed[$0].box! }, spots = rows.map { all[$0].spot }
+            let heights = spots.map { $0.bottom - $0.top }.sorted()
+            var group = ScreenTranslation.Group(paragraphs: paragraphs, box: boxes.dropFirst().reduce(boxes[0]) { $0.union($1) },
+                                                lineHeight: heights[(heights.count - 1) / 2] * handset.screenHeight)
+            group.phone = ScreenPhoneCard.Placement(role: .card, spot: spots.dropFirst().reduce(spots[0]) { $0.union($1) },
+                                                    titled: titled, bold: card.bold)
+            result.append(group)
         }
         return result
     }

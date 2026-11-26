@@ -266,6 +266,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public event Action<bool>? PhoneLooked;
     private ScreenPhoneCard.Handset? phone;
     private long? phoneLookedAt;
+    /// <summary>
+    /// Açık telefonun art arda bulunamadığı arama sayısı: telefon <see cref="GamePhoneTracker.MissGrace"/> aramada
+    /// bulunamazsa kalkar. Sinan Bey (beta.100, 3418, 3420, 3421): telefon tek aramada ıskalanınca süzgeç o an kapanıyor,
+    /// gönderinin açıklaması hem balonda hem altyazıda, haber kaynağı ("Weazel News") ve makale satırı altyazıda
+    /// çıkıyordu. Açık telefon artık izleyicinin toleransıyla tutulur ve son yerinde gevşek doğrulanır
+    /// (<see cref="GamePhoneGeometry.TryLocate(Frame, GamePhoneGeometry.Pose?, out GamePhoneGeometry.Pose)"/>; Mac/iPhone ve
+    /// Android ile aynı).
+    /// </summary>
+    private int phoneMisses;
     /// <summary>Günlüğe yazılmış son telefon yazısı (her karede yeniden yazılmasın).</summary>
     private string? loggedPhone;
     /// <summary>Doğruysa bu karede okunan blok kaydedilmez (ekranda menü var, altyazı gönderilmiyor).</summary>
@@ -351,10 +360,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             if (looksForPhone)
             {
-                ScreenPhoneCard.Handset? found = null;
-                try { found = ScreenPhoneCard.Phone(frame); } catch { }
-                lock (gate) phone = found;
-                PhoneLooked?.Invoke(found is not null);
+                ScreenPhoneCard.Handset? near, found = null;
+                lock (gate) near = phone;
+                try { found = ScreenPhoneCard.Phone(frame, near); } catch { }
+                ScreenPhoneCard.Handset? next;
+                lock (gate) next = phone = HeldPhone(found, phone, ref phoneMisses);
+                PhoneLooked?.Invoke(next is not null);
             }
             byte[]? signature = null;
             Frame? cropped = null;
@@ -1402,10 +1413,31 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             loggedOwn = null;
             phone = null;
             phoneLookedAt = null;
+            phoneMisses = 0;
             loggedPhone = null;
             if (stabilizer.Reset() == StabilizerAction.Clear) ClearScreen();
             Own.Reset();
         }
+    }
+
+    /// <summary>
+    /// Aramanın sonucundan sonra süzgecin kullanacağı telefon: bulunduysa o; açık telefon bulunamadıysa
+    /// <see cref="GamePhoneTracker.MissGrace"/> arama boyunca son yeri kalır, sonra null (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static ScreenPhoneCard.Handset? HeldPhone(ScreenPhoneCard.Handset? found, ScreenPhoneCard.Handset? shown, ref int misses)
+    {
+        if (found is not null)
+        {
+            misses = 0;
+            return found;
+        }
+        if (shown is null || misses >= GamePhoneTracker.MissGrace)
+        {
+            misses = 0;
+            return null;
+        }
+        misses++;
+        return shown;
     }
 
     /// <summary>Çeviri ekrana gider; kendi altyazısı süzgeci onu hatırlar.</summary>

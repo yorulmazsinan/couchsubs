@@ -40,7 +40,9 @@ public sealed class GamePhoneTracker
         if (locateOverride is not null) candidate = locateOverride(frame);
         else
         {
-            pose = GamePhoneGeometry.TryLocate(frame, out var found) ? found : null;
+            // Açık telefon yerinde ararken gevşek doğrulama da denenir (GamePhoneGeometry.TryLocate, near): beyaz ya da mavi
+            // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
+            pose = GamePhoneGeometry.TryLocate(frame, shown is null ? null : shownPose, out var found) ? found : null;
             candidate = pose?.Bounds;
         }
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (ör. menüde ya da koyu ekranda
@@ -176,18 +178,35 @@ internal static class GamePhoneGeometry
         return (left, bottom - h, w, h);
     }
 
-    internal static bool TryLocate(Frame frame, out Pose pose)
+    internal static bool TryLocate(Frame frame, out Pose pose) => TryLocate(frame, null, out pose);
+
+    /// <summary>
+    /// Karedeki telefon. <paramref name="near"/>: açık telefonun son yeri; sıkı arama ıskalarsa o yerin hemen çevresinde
+    /// gevşek doğrulama yapılır (<see cref="Confirm"/>): hoparlör yarığı ve kamera üstte, alt çentik altta aynı yerde
+    /// duruyorsa telefon yerindedir. Sinan Bey (beta.100, 3418–3425): beyaz/mavi ekranlı uygulamalarda (haber, makale, hava,
+    /// ayarlar, eklenti) telefonun yan kenarları elin ve gövdenin rengine karışıyor, sıkı arama telefonu kaybediyordu;
+    /// telefon kaybolunca balonlar kalkıyor ("arada kaçıyor", 3417), telefonun yazıları altyazıya (3418, 3420, 3421) ve
+    /// ekran yazısı kutularına (3420–3425) gidiyordu. Gevşek doğrulama yalnız açık telefonun yerinde yapılır: yeni telefon
+    /// yine sıkı aramayla ve iki gözlemle açılır (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static bool TryLocate(Frame frame, Pose? near, out Pose pose)
     {
         pose = default;
         if (frame.Width < Width || frame.Height < Height) return false;
-        if (Widescreen(frame.Width, frame.Height)) return TryLocate(frame, (0, 0, frame.Width, frame.Height), out pose);
+        if (Widescreen(frame.Width, frame.Height)) return TryLocate(frame, (0, 0, frame.Width, frame.Height), near, out pose);
         if (!frame.IsConsistent) return false;
         int Tone(int x, int y)
         {
             var p = (y * frame.Stride) + (x * 4);
             return (frame.Pixels[p] * 29 + frame.Pixels[p + 1] * 150 + frame.Pixels[p + 2] * 77) >> 8;
         }
-        if (Picture(frame.Width, frame.Height, Tone) is not { } area || !TryLocate(frame, area, out var inside)) return false;
+        if (Picture(frame.Width, frame.Height, Tone) is not { } area) return false;
+        // Açık telefonun yeri görüntünün içine taşınır.
+        Pose? local = near is { } last
+            ? new Pose((last.TopX * frame.Width - area.X) / area.Width, (last.TopY * frame.Height - area.Y) / area.Height,
+                       (last.BottomX * frame.Width - area.X) / area.Width, (last.BottomY * frame.Height - area.Y) / area.Height)
+            : null;
+        if (!TryLocate(frame, area, local, out var inside)) return false;
         double X(double value) => (area.X + value * area.Width) / frame.Width;
         double Y(double value) => (area.Y + value * area.Height) / frame.Height;
         pose = new Pose(X(inside.TopX), Y(inside.TopY), X(inside.BottomX), Y(inside.BottomY));
@@ -195,12 +214,66 @@ internal static class GamePhoneGeometry
     }
 
     // Telefon karenin içindeki 16:9 görüntüde (area) aranır; yer görüntüye göre 0..1.
-    private static bool TryLocate(Frame frame, (int X, int Y, int Width, int Height) area, out Pose pose)
+    private static bool TryLocate(Frame frame, (int X, int Y, int Width, int Height) area, Pose? near, out Pose pose)
     {
         pose = default;
         if (area.Width < Width || area.Height < Height || !Widescreen(area.Width, area.Height)) return false;
         Span<int> columns = stackalloc int[Width * 2];
         var grid = new Samples(frame, columns, area);
+        if (Strict(grid, out pose)) return true;
+        return near is { } last && Confirm(grid, last, out pose);
+    }
+
+    /// <summary>Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir.</summary>
+    internal const double ConfirmReach = 4.0;
+
+    /// <summary>
+    /// Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
+    /// <see cref="ConfirmReach"/> kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
+    /// gücüne bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa false (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    private static bool Confirm(Samples grid, Pose near, out Pose pose)
+    {
+        pose = default;
+        double topX = near.TopX * Width, topY = near.TopY * Height, bottomX = near.BottomX * Width, bottomY = near.BottomY * Height;
+        var reach = (int)ConfirmReach;
+        int upperFrom = Math.Max(17, (int)Math.Round(topY, MidpointRounding.AwayFromZero) - reach);
+        int upperTo = Math.Min(75, (int)Math.Round(topY, MidpointRounding.AwayFromZero) + reach + 1);
+        int lowerFrom = Math.Max(145, (int)Math.Round(bottomY, MidpointRounding.AwayFromZero) - reach);
+        int lowerTo = Math.Min(217, (int)Math.Round(bottomY, MidpointRounding.AwayFromZero) + reach + 1);
+        if (upperFrom >= upperTo || lowerFrom >= lowerTo) return false;
+        Span<Slot> upper = stackalloc Slot[12], lower = stackalloc Slot[16];
+        int tops = FindSlots(grid, upperFrom, upperTo, 8, 19, upper);
+        if (tops < 1) return false;
+        int bottoms = FindSlots(grid, lowerFrom, lowerTo, 5, 14, lower);
+        if (bottoms < 1) return false;
+        double best = double.PositiveInfinity;
+        var found = false;
+        foreach (var top in upper[..tops])
+        {
+            if (Math.Abs(top.X - topX) > ConfirmReach || !HasCamera(grid, top)) continue;
+            foreach (var bottom in lower[..bottoms])
+            {
+                if (Math.Abs(bottom.X - bottomX) > ConfirmReach) continue;
+                int h = bottom.Y - top.Y;
+                double dx = bottom.X - top.X;
+                if (h is < 115 or > 179 || Math.Abs(dx) > h * .24 ||
+                    bottom.Length < top.Length * .46 || bottom.Length > top.Length ||
+                    h < 7.9 * top.Length || h > 16.5 * top.Length ||
+                    h < 12 * bottom.Length || h > 30 * bottom.Length) continue;
+                var distance = Math.Abs(top.X - topX) + Math.Abs(top.Y - topY) + Math.Abs(bottom.X - bottomX) + Math.Abs(bottom.Y - bottomY);
+                if (distance >= best) continue;
+                best = distance;
+                found = true;
+                pose = new Pose(top.X / Width, (double)top.Y / Height, bottom.X / Width, (double)bottom.Y / Height);
+            }
+        }
+        return found;
+    }
+
+    private static bool Strict(Samples grid, out Pose pose)
+    {
+        pose = default;
         Span<Slot> upper = stackalloc Slot[12], lower = stackalloc Slot[16];
         int tops = FindSlots(grid, 17, 75, 8, 19, upper);
         if (tops < 1) return false;

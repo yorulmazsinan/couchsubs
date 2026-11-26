@@ -134,8 +134,36 @@ object GamePhoneText {
      * "ad + önizleme" çifti ve bir bölüm başlığı (ya da başlık okunamadıysa "…" ile kesilmiş en az iki önizleme) gerekir.
      * Önceden iki başlığın ikisi de okunmalıydı: sallanan telefonda biri her okumada kaçıyor, liste bir sohbet balonları bir
      * düz satırlar olarak gidip geliyordu (LG, beta.93). Kişi adları da atılıyordu; şimdi listede adıyla görünür. iPhone ile aynı.
+     *
+     * Liste değilse ve ekran sohbet dışıysa ([PhoneScreen.kind]: gönderi, haber, makale, hava, fitness, ayarlar, eklenti)
+     * satırlar kartlarına ayrılır ([TextLine.phoneCard]); çevrilmeyen satırlar (kullanıcı adı, saat, geri düğmesi, konum,
+     * fotoğraf yazısı, kaynak adı) atılır. Ana ekran kendi kurallarında kalır ([PhoneChat.isHomeScreen]). Mac/iPhone ve
+     * Windows ile aynı.
      */
     fun forTranslation(reading: Reading): Reading {
+        val list = listed(reading)
+        if (list.lines.any { it.listRole != null } || PhoneChat.isHomeScreen(list.lines)) return list
+        return screen(reading) ?: list
+    }
+
+    /** Sohbet dışı ekranın kartları ([PhoneScreen.cards]); ekran sohbetse ya da satırların düz yeri bilinmiyorsa null. */
+    fun screen(reading: Reading): Reading? {
+        val all = reading.lines.filter { it.phoneBox != null }
+        if (all.isEmpty()) return null
+        val lines = all.map { PhoneScreen.Line(it.text, it.phoneBox!!) }
+        val kind = PhoneScreen.kind(lines)
+        if (kind == PhoneScreen.Kind.CHAT) return null
+        val result = mutableListOf<TextLine>()
+        PhoneScreen.cards(lines, kind).forEachIndexed { number, card ->
+            card.lines.forEachIndexed { position, index ->
+                result.add(all[index].copy(listRole = ScreenPhoneCard.Role.CARD,
+                    phoneCard = PhoneScreen.Mark(number, card.titled && position == 0, card.bold)))
+            }
+        }
+        return Reading(result)
+    }
+
+    private fun listed(reading: Reading): Reading {
         val lines = reading.lines.filter { line ->
             val words = line.text.split(Regex("\\s+")).filter { it.isNotEmpty() }
             !(words.any(::isTag) && words.all { word -> isTag(word) || word.none { it.isLetterOrDigit() } })
@@ -307,6 +335,7 @@ object GamePhoneText {
      * ([PhoneChat.withoutAppNames]); saat ve hava harfsiz satır olarak zaten atılır.
      */
     fun groups(source: Reading): List<ScreenTranslation.Group> {
+        if (source.lines.any { it.phoneCard != null }) return cardGroups(source)
         val home = PhoneChat.isHomeScreen(source.lines)
         val reading = Reading(PhoneChat.withoutAppNames(source.lines))
         val flat = reading.lines.all { it.phoneBox != null }
@@ -346,6 +375,42 @@ object GamePhoneText {
         if (listed && flat && kept.isNotEmpty()) return kept
         val placed = roles(kept, home)
         return if (home) widgets(placed) else placed
+    }
+
+    /**
+     * Sohbet dışı ekranın kartları ([forTranslation] işaretledi): her kart bir grup, telefondaki sırasıyla. Başlıklı
+     * kartın başlığı ayrı paragraf (kalın çizilir), gövdesi tek paragraf; alt satıra sarılmış cümle birleşir (tireyle
+     * bölünmüş sözcük boşluksuz). Grubun rolü [ScreenPhoneCard.Role.CARD], düz ekrandaki yeri kartın satırlarının birleşimi.
+     */
+    fun cardGroups(reading: Reading): List<ScreenTranslation.Group> {
+        val marked = reading.lines.filter { it.phoneCard != null && it.box != null && it.phoneBox != null }
+        val numbers = marked.map { it.phoneCard!!.card }.toSet().sorted()
+        val groups = mutableListOf<ScreenTranslation.Group>()
+        for (number in numbers) {
+            val run = marked.filter { it.phoneCard!!.card == number }
+            val clean = Reading(run).withoutOcrNoise(keepIdentifiers = true).lines
+                .filter { it.box != null && it.phoneBox != null && ScreenText.isWords(it.text) }
+            if (clean.isEmpty()) continue
+            val mark = run[0].phoneCard!!
+            val titled = clean.size >= 2 && clean[0].phoneCard?.title == true
+            fun joined(lines: List<TextLine>): String {
+                var text = ""
+                for (line in lines) {
+                    val part = line.text.trim()
+                    text = if (text.isEmpty()) part else if (text.endsWith("-")) text + part else "$text $part"
+                }
+                return text
+            }
+            val paragraphs = if (titled) listOf(clean[0].text.trim(), joined(clean.drop(1))) else listOf(joined(clean))
+            val boxes = clean.map { it.box!! }
+            val spots = clean.map { it.phoneBox!! }
+            val heights = spots.map { it.bottom - it.top }.sorted()
+            groups += ScreenTranslation.Group(paragraphs, boxes.drop(1).fold(boxes[0]) { total, box -> total.union(box) },
+                heights[(heights.size - 1) / 2],
+                phone = ScreenPhoneCard.Placement(ScreenPhoneCard.Role.CARD, spots.drop(1).fold(spots[0]) { total, spot -> total.union(spot) },
+                    titled = titled, bold = mark.bold))
+        }
+        return groups.take(ScreenTranslation.MAX_GROUPS)
     }
 
     /** "Reminders 10 Notifications": bir-üç sözcüklük harfli başlık ve ardından sayaç; değilse null. */

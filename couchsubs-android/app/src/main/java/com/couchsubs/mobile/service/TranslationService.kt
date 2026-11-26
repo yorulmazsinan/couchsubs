@@ -469,11 +469,21 @@ class TranslationService : Service() {
     /** Altyazı okumasının gördüğü telefon (ekranındaki satırlar altyazı sayılmaz) ve en son ne zaman arandığı. */
     @Volatile private var subtitlePhone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null
     private var subtitlePhoneAt = Long.MIN_VALUE / 2
+    /**
+     * Açık telefonun art arda bulunamadığı arama sayısı: telefon [com.couchsubs.mobile.core.GamePhoneTracker.MISS_GRACE]
+     * aramada bulunamazsa kalkar ([com.couchsubs.mobile.core.SubtitlePipeline.heldPhone]; Mac/iPhone ve Windows ile aynı).
+     */
+    private var subtitlePhoneMisses = 0
     @Volatile private var playsGta6 = false
     /** "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (oturumda bir kez; [com.couchsubs.mobile.core.GamePhoneHint]). */
     private val gamePhoneHint = com.couchsubs.mobile.core.GamePhoneHint()
     @Volatile private var phoneTracking = false
     @Volatile private var phoneOpen = false
+    /**
+     * Telefon ekranda görünüyor (telefon çevirisi kapalıyken de izlenir): açık telefonun ekranına otomatik ekran yazısı
+     * kutusu ve kenar bildirimi çizilmez (Sinan Bey, beta.100 3420–3425). [phoneOpen] telefonun okunmasıdır (ayara bağlı).
+     */
+    @Volatile private var phoneSeen = false
 
     /**
      * Ekranda beliren yazı kutularını bulan ("Ekran yazılarını otomatik çevir"); bulduğu geçici alanlar ek alanlarla
@@ -512,22 +522,37 @@ class TranslationService : Service() {
             phoneOpen)
     }
 
-    /** Oyun telefonu: izleyici saniyede üç kez bakar; telefon açıkken o kare kopyalanıp telefon oturumuna verilir. */
+    /**
+     * Oyun telefonu: izleyici saniyede üç kez bakar; telefon açıkken o kare kopyalanıp telefon oturumuna verilir. Telefon
+     * GTA 6'da her zaman izlenir (telefon çevirisi kapalıyken de): görünen telefonun ([phoneSeen]) ekranına otomatik ekran
+     * yazısı kutusu ve kenar bildirimi çizilmez (Sinan Bey, beta.100 3420–3425). Telefonun okunması ayara bağlıdır
+     * (telefonun kendi ayarı ya da otomatik ekran yazısında Telefon türü; Mac/iPhone ve Windows ile aynı).
+     */
     private fun offerGamePhone(frame: com.couchsubs.mobile.remoteplay.VideoFrame) {
         val watcher = regionWatcher ?: return
-        // Telefonun kendi ayarı ya da otomatik ekran yazısında Telefon türü (Mac/Windows readsGamePhone).
-        if (!playsGta6 || !settings.readsGamePhone) {
+        if (!playsGta6) {
             if (phoneTracking) resetGamePhone()
             return
         }
         phoneTracking = true
+        val reads = settings.readsGamePhone
+        var seen = false
         val capture = try {
             val sample = phoneTracker.sample(com.couchsubs.mobile.ocr.LivePhoneImage(frame), com.couchsubs.mobile.core.monotonicClock())
-            if (!sample.sampled) return
-            sample.pose?.let { com.couchsubs.mobile.ocr.PhoneFrames.copy(frame, it) }
+            if (!sample.sampled) {
+                // Ayar kapatıldıysa açık telefon oturumu sonraki örneği beklemeden kapanır.
+                if (!reads && phoneOpen) {
+                    watcher.closePhone()
+                    setPhoneOpen(false)
+                }
+                return
+            }
+            seen = sample.pose != null
+            if (reads) sample.pose?.let { com.couchsubs.mobile.ocr.PhoneFrames.copy(frame, it) } else null
         } catch (error: Exception) {
             null
         }
+        phoneSeen = seen
         if (capture != null) watcher.observePhone(capture) else watcher.closePhone()
         setPhoneOpen(capture != null)
     }
@@ -536,6 +561,7 @@ class TranslationService : Service() {
         phoneTracking = false
         phoneTracker.reset()
         regionWatcher?.closePhone()
+        phoneSeen = false
         setPhoneOpen(false)
     }
 
@@ -551,8 +577,9 @@ class TranslationService : Service() {
      */
     private fun offerScreenText(frame: com.couchsubs.mobile.remoteplay.VideoFrame) {
         if (regionWatcher == null) return
-        // Oyun telefonu açıkken ekranı telefon oturumu okur; otomatik ekran yazısı aynı yazıyı ikinci kez çevirmesin.
-        if (fullScreenArea || !settings.autoScreenText || phoneOpen) {
+        // Oyun telefonu açıkken ekranı telefon oturumu okur; otomatik ekran yazısı aynı yazıyı ikinci kez çevirmesin. Telefon
+        // çevirisi kapalıyken de görünen telefonun ekranına kutu çizilmez ([phoneSeen]).
+        if (fullScreenArea || !settings.autoScreenText || phoneOpen || phoneSeen) {
             if (autoAreas.isNotEmpty()) resetScreenText()
             return
         }
@@ -966,14 +993,21 @@ class TranslationService : Service() {
                 // (ya da karanlık sahnede) yanlış bulunan telefon alt şeritteki altyazıyı silmesin. Telefon ayarı kapalıyken de
                 // aranır (#1282; yalnız bulmak için, okunmaz, çevrilmez): telefonun mesaj listesi altyazı olarak çevrilip gidip
                 // geliyordu; bulunan telefonun satırları altyazı sayılmaz, telefon art arda bulunursa oturumda bir kez ipucu.
-                if (!playsGta6) subtitlePhone = null
-                else if (now - subtitlePhoneAt >=com.couchsubs.mobile.core.GamePhoneTracker.INTERVAL_MS || now < subtitlePhoneAt) {
+                // Açık telefon tek ıskada bırakılmaz ve son yerinde gevşek doğrulanır (SubtitlePipeline.heldPhone).
+                if (!playsGta6) {
+                    subtitlePhone = null
+                    subtitlePhoneMisses = 0
+                } else if (now - subtitlePhoneAt >= com.couchsubs.mobile.core.GamePhoneTracker.INTERVAL_MS || now < subtitlePhoneAt) {
                     subtitlePhoneAt = now
-                    subtitlePhone = try {
-                        com.couchsubs.mobile.core.ScreenPhoneCard.phone(com.couchsubs.mobile.ocr.LivePhoneImage(frame))
+                    val near = subtitlePhone
+                    val looked = try {
+                        com.couchsubs.mobile.core.ScreenPhoneCard.phone(com.couchsubs.mobile.ocr.LivePhoneImage(frame), near)
                     } catch (error: Exception) {
                         null
                     }
+                    val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked, near, subtitlePhoneMisses)
+                    subtitlePhone = next
+                    subtitlePhoneMisses = misses
                     val found = subtitlePhone != null
                     if (synchronized(gamePhoneHint) { gamePhoneHint.observePhone(found, settings.readsGamePhone, playedGame) }) {
                         Log.i(TAG, "telefon ipucu: telefon çevirisi kapalı, GTA 6 telefonu ekranda bulundu")
@@ -990,8 +1024,9 @@ class TranslationService : Service() {
             offerGamePhone(frame)
             offerScreenText(frame)
             // Ek alanlar saniyede bir, kendi iş parçacığında okunur; altyazı okumasını beklemez, onu bekletmez.
-            // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz.
-            val notices = if (phoneOpen) emptyList() else noticeAreas
+            // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz (telefon çevirisi
+            // kapalıyken de: görünen telefon, [phoneSeen]).
+            val notices = if (phoneOpen || phoneSeen) emptyList() else noticeAreas
             regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)

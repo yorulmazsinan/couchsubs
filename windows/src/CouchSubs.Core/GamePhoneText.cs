@@ -80,8 +80,43 @@ internal static partial class GamePhoneText
     /// başlığı (ya da başlık okunamadıysa "…" ile kesilmiş en az iki önizleme) gerekir. Önceden iki başlığın ikisi de
     /// okunmalıydı: sallanan telefonda biri her okumada kaçıyor, liste bir sohbet balonları bir düz satırlar olarak gidip
     /// geliyordu (LG, beta.93). Kişi adları da atılıyordu; şimdi listede adıyla görünür. Mac ile aynı.
+    ///
+    /// Liste değilse ve ekran sohbet dışıysa (<see cref="PhoneScreen.KindOf"/>: gönderi, haber, makale, hava, fitness,
+    /// ayarlar, eklenti) satırlar kartlarına ayrılır (<see cref="TextLine.PhoneCard"/>); çevrilmeyen satırlar (kullanıcı adı,
+    /// saat, geri düğmesi, konum, fotoğraf yazısı, kaynak adı) atılır. Ana ekran kendi kurallarında kalır
+    /// (<see cref="PhoneChat.IsHomeScreen"/>; Mac/iPhone ve Android ile aynı).
     /// </summary>
     internal static Reading ForTranslation(Reading reading)
+    {
+        var list = Listed(reading);
+        if (list.Lines.Any(line => line.ListRole.HasValue) || PhoneChat.IsHomeScreen(list.Lines)) return list;
+        return Screen(reading) ?? list;
+    }
+
+    /// <summary>Sohbet dışı ekranın kartları (<see cref="PhoneScreen.Cards"/>); ekran sohbetse ya da satırların düz yeri bilinmiyorsa null.</summary>
+    internal static Reading? Screen(Reading reading)
+    {
+        var all = reading.Lines.Where(line => line.PhoneBox.HasValue).ToList();
+        if (all.Count == 0) return null;
+        var lines = all.Select(line => new PhoneScreen.Line(line.Text, line.PhoneBox!.Value)).ToList();
+        var kind = PhoneScreen.KindOf(lines);
+        if (kind == PhoneScreen.Kind.Chat) return null;
+        var result = new List<TextLine>();
+        var cards = PhoneScreen.Cards(lines, kind);
+        for (var number = 0; number < cards.Count; number++)
+        {
+            var card = cards[number];
+            for (var position = 0; position < card.Lines.Count; position++)
+                result.Add(all[card.Lines[position]] with
+                {
+                    ListRole = ScreenPhoneCard.Role.Card,
+                    PhoneCard = new PhoneScreen.Mark(number, card.Titled && position == 0, card.Bold),
+                });
+        }
+        return new Reading(result);
+    }
+
+    private static Reading Listed(Reading reading)
     {
         var lines = new List<TextLine>();
         foreach (var line in reading.Lines)
@@ -326,6 +361,7 @@ internal static partial class GamePhoneText
     /// </summary>
     internal static IReadOnlyList<ScreenTranslation.Group> Groups(Reading reading)
     {
+        if (reading.Lines.Any(line => line.PhoneCard.HasValue)) return CardGroups(reading);
         var home = PhoneChat.IsHomeScreen(reading.Lines);
         reading = new Reading(PhoneChat.WithoutAppNames(reading.Lines));
         List<ScreenTranslation.Group> groups = [];
@@ -374,6 +410,50 @@ internal static partial class GamePhoneText
         if (listed && flat && kept.Count > 0) return kept;
         var placed = Roles(kept, home);
         return home ? Widgets(placed) : placed;
+    }
+
+    /// <summary>
+    /// Sohbet dışı ekranın kartları (<see cref="ForTranslation"/> işaretledi): her kart bir grup, telefondaki sırasıyla.
+    /// Başlıklı kartın başlığı ayrı paragraf (kalın çizilir), gövdesi tek paragraf; alt satıra sarılmış cümle birleşir
+    /// (tireyle bölünmüş sözcük boşluksuz). Grubun rolü <see cref="ScreenPhoneCard.Role.Card"/>, düz ekrandaki yeri kartın
+    /// satırlarının birleşimi (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static IReadOnlyList<ScreenTranslation.Group> CardGroups(Reading reading)
+    {
+        var marked = reading.Lines.Where(line => line.PhoneCard.HasValue && line.Box.HasValue && line.PhoneBox.HasValue).ToList();
+        var groups = new List<ScreenTranslation.Group>();
+        foreach (var number in marked.Select(line => line.PhoneCard!.Value.Card).Distinct().Order())
+        {
+            var run = marked.Where(line => line.PhoneCard!.Value.Card == number).ToList();
+            var clean = new Reading(run).WithoutOcrNoise(true).Lines
+                .Where(line => line.Box.HasValue && line.PhoneBox.HasValue && ScreenTranslation.IsWords(line.Text)).ToList();
+            if (clean.Count == 0) continue;
+            var mark = run[0].PhoneCard!.Value;
+            var titled = clean.Count >= 2 && clean[0].PhoneCard?.Title == true;
+            static string Joined(IEnumerable<TextLine> lines)
+            {
+                var text = "";
+                foreach (var line in lines)
+                {
+                    var part = line.Text.Trim(' ', '\t');
+                    if (text.Length == 0) text = part;
+                    else if (text.EndsWith('-')) text += part;
+                    else text += " " + part;
+                }
+                return text;
+            }
+            IReadOnlyList<string> paragraphs = titled ? [clean[0].Text.Trim(' ', '\t'), Joined(clean.Skip(1))] : [Joined(clean)];
+            var boxes = clean.Select(line => line.Box!.Value).ToList();
+            var spots = clean.Select(line => line.PhoneBox!.Value).ToList();
+            var heights = spots.Select(spot => spot.Bottom - spot.Top).Order().ToList();
+            groups.Add(new ScreenTranslation.Group(paragraphs, boxes.Skip(1).Aggregate(boxes[0], (a, b) => a.Union(b)),
+                heights[(heights.Count - 1) / 2])
+            {
+                Phone = new ScreenPhoneCard.Placement(ScreenPhoneCard.Role.Card, spots.Skip(1).Aggregate(spots[0], (a, b) => a.Union(b)),
+                    titled, mark.Bold),
+            });
+        }
+        return groups.Count <= ScreenTranslation.MaxGroups ? groups : groups.GetRange(0, ScreenTranslation.MaxGroups);
     }
 
     /// <summary>"Reminders 10 Notifications": bir-üç sözcüklük harfli başlık ve ardından sayaç; değilse null. Mac ile aynı.</summary>

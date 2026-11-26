@@ -102,6 +102,9 @@ object PhoneChat {
             rows.forEachIndexed { index, row -> result.add(group(listOf(row), list[index], handset)) }
             return result
         }
+        // Sohbet dışı ekran (gönderi, haber, makale, hava, fitness, ayarlar, eklenti): kartlar ([PhoneScreen]; otomatik
+        // telefon okumasıyla aynı kural).
+        screenGroups(if (raw.isEmpty()) lines else raw, handset)?.let { return it }
         header?.let { result.add(group(listOf(it), ScreenPhoneCard.Role.HEADER, handset)) }
         val bubble = mutableListOf<Row>()
         fun finish() {
@@ -165,6 +168,17 @@ object PhoneChat {
         return labels.any { label -> labels.count { sameBand(it, label) } >= GRID_LABELS }
     }
 
+    /**
+     * Uygulama başlatıcı (gerçek ana ekran): bildirim sayacı ya da simge ızgarası var. Yalnız hava satırı ("71°") olan
+     * ekran hava uygulamasıdır: oradaki tek sözcüklük satırlar ("Now", "Sunset") uygulama adı değildir, çevrilir
+     * (Sinan Bey, beta.100 3422). Mac/iPhone ve Windows ile aynı.
+     */
+    internal fun isLauncher(rows: List<Row>): Boolean {
+        if (rows.any { COUNTER.matches(it.text) }) return true
+        val labels = rows.filter { isAppLabel(it.text) && (it.spot.top + it.spot.bottom) / 2 >= HEADER_BAND }
+        return labels.any { label -> labels.count { sameBand(it, label) } >= GRID_LABELS }
+    }
+
     /** Uygulama adı gibi: bir-iki sözcük, hepsi harf ve büyük harfle başlıyor, rakam ve noktalama yok ("WhatUp", "Camera"). */
     fun isAppLabel(text: String): Boolean {
         val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -220,8 +234,12 @@ object PhoneChat {
         if (!isHomeScreen(lines)) return lines
         val rows = homeRows(lines)
         val median = rows.map { it.height }.sorted()[rows.size / 2]
-        val names = homeBlocks(rows, median).filter(::isAppName).flatMap { it[0].lines }
-        return lines.filter { line -> names.none { it.text == line.text && it.phoneBox == line.phoneBox } }
+        val names = if (isLauncher(rows)) homeBlocks(rows, median).filter(::isAppName).flatMap { it[0].lines } else emptyList()
+        // Saat ("7PM", "10 PM") çevrilmez (Sinan Bey, beta.100 3422: "10PM" "22:00" yazılıyordu).
+        return lines.filter { line ->
+            line.text.count { it.isLetter() } >= 2 && !PhoneScreen.isTime(line.text) &&
+                names.none { it.text == line.text && it.phoneBox == line.phoneBox }
+        }
     }
 
     /**
@@ -248,8 +266,9 @@ object PhoneChat {
      */
     internal fun homeGroups(rows: List<Row>, median: Double, handset: ScreenPhoneCard.Handset): List<ScreenTranslation.Group> {
         val result = mutableListOf<ScreenTranslation.Group>()
-        for (block in homeBlocks(rows, median)) {
-            if (isAppName(block)) continue
+        val launcher = isLauncher(rows)
+        for (block in homeBlocks(rows.filter { !PhoneScreen.isTime(it.text) }, median)) {
+            if (launcher && isAppName(block)) continue
             if (isWidget(block)) {
                 val boxes = block.flatMap { it.lines }.mapNotNull { it.box }
                 result.add(group(listOf(block[0]), ScreenPhoneCard.Role.WIDGET, handset).copy(
@@ -269,6 +288,32 @@ object PhoneChat {
                 piece.add(row)
             }
             if (piece.isNotEmpty()) result.add(group(piece.toList(), ScreenPhoneCard.Role.HOME, handset))
+        }
+        return result
+    }
+
+    /**
+     * Sohbet dışı ekranın kartları ([PhoneScreen.kind]/[PhoneScreen.cards], satırların düz ekrandaki yeriyle); ekran
+     * sohbetse null. Ekranın üst/alt kenarından taşan kesik satırlar kartlara girmez. Mac/iPhone ve Windows ile aynı.
+     */
+    internal fun screenGroups(lines: List<TextLine>, handset: ScreenPhoneCard.Handset): List<ScreenTranslation.Group>? {
+        val boxed = lines.filter { it.box != null }
+        val all = boxed.map { PhoneScreen.Line(clean(it.text), handset.flat(it.box!!)) }
+        val kind = PhoneScreen.kind(all)
+        if (kind == PhoneScreen.Kind.CHAT) return null
+        val result = mutableListOf<ScreenTranslation.Group>()
+        for (card in PhoneScreen.cards(all, kind)) {
+            val rows = card.lines.filter { all[it].spot.top >= -EDGE_CUT && all[it].spot.bottom <= 1 + EDGE_CUT }
+            if (rows.isEmpty()) continue
+            val titled = card.titled && rows.size >= 2 && rows[0] == card.lines[0]
+            val paragraphs = PhoneScreen.paragraphs(PhoneScreen.Card(rows, titled, card.bold), all)
+            val boxes = rows.map { boxed[it].box!! }
+            val spots = rows.map { all[it].spot }
+            val heights = spots.map { it.bottom - it.top }.sorted()
+            result.add(ScreenTranslation.Group(paragraphs, boxes.drop(1).fold(boxes[0]) { total, box -> total.union(box) },
+                heights[(heights.size - 1) / 2] * handset.screenHeight,
+                phone = ScreenPhoneCard.Placement(ScreenPhoneCard.Role.CARD, spots.drop(1).fold(spots[0]) { total, spot -> total.union(spot) },
+                    titled = titled, bold = card.bold)))
         }
         return result
     }

@@ -118,14 +118,13 @@ public class PhoneListCardTests
             new("Hey whats up man", "Naber adamım", groups[1].Box, 0.018) { Phone = groups[1].Phone },
         };
         var laid = ScreenPhoneCard.Layout(items, Handset(Upright));
-        var widget = Assert.Single(laid, item => item.Panel == ScreenPhoneCard.PanelPart.Row);
-        Assert.True(widget.ListRow!.Widget);
+        var widget = Assert.Single(laid, item => item.Panel == ScreenPhoneCard.PanelPart.Row && item.ListRow?.Widget == true);
         Assert.Equal("Hatırlatıcılar", widget.ListRow.Name);
         Assert.Equal("6 Bildirim", widget.ListRow.Preview);
         Assert.NotNull(widget.ListRow.PortraitSpot);
         Assert.Null(widget.ListRow.BadgeSpot);
-        // Bildirim yazısı kendi yerinde kalır.
-        Assert.Contains(laid, item => item.Translation == "Naber adamım" && item.Panel is null);
+        // Bildirim yazısı da telefonun üstüne yazılmaz: panelde avatarsız kart olur (Sinan Bey, beta.100 3422; Mac ile aynı).
+        Assert.Contains(laid, item => item.Panel == ScreenPhoneCard.PanelPart.Row && item.ListRow is { Widget: false, Preview: "Naber adamım" });
     }
 
     /// <summary>Satır sonunda "…" olmadan kesilmiş önizleme: motora "..." ile gider, "$" korunur, para simgesi simge sayılmaz.</summary>

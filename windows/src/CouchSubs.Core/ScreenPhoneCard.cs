@@ -101,6 +101,12 @@ public static class ScreenPhoneCard
     internal const double BubbleShare = 0.8, BubbleMin = 0.3;
     /// <summary>Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta).</summary>
     internal const double MinLine = 0.022;
+    /// <summary>
+    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100, 3416):
+    /// gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı (tabela)
+    /// da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır). Mac/iPhone ve Android ile aynı.
+    /// </summary>
+    internal const double MaxLine = 0.03;
     /// <summary>Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5).</summary>
     internal const double CharWidth = 0.5;
 
@@ -127,16 +133,27 @@ public static class ScreenPhoneCard
         Home,
         /// <summary>Ana ekran bileşeni (başlık + sayaç: "Reminders / 6 Notifications"): panelde tek kart (<see cref="ListRow.Widget"/>).</summary>
         Widget,
+        /// <summary>
+        /// Sohbet dışı ekranın satırı ya da bloğu (<see cref="PhoneScreen"/>: uygulama satırı, makale başlığı/gövdesi,
+        /// gönderinin açıklaması): panelde tek kart, mesaj listesi kartının görünüşünde (avatarsız).
+        /// </summary>
+        Card,
     }
 
     /// <summary>Çevirmene gitmez, aslıyla gösterilir (ad).</summary>
     internal static bool KeepsText(this Role role) => role is Role.Header or Role.Contact;
 
-    /// <summary>Kartta dizilir (ana ekranın yazıları yerinde kalır).</summary>
-    internal static bool InCard(this Role role) => role != Role.Home;
+    /// <summary>
+    /// Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun üstüne
+    /// çizilmez, panelde kart olur (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static bool InCard(this Role role) => true;
 
-    /// <summary>Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1).</summary>
-    public sealed record Placement(Role Role, TextBox Spot);
+    /// <summary>
+    /// Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1). Kartta (<see cref="Role.Card"/>): <paramref name="Titled"/>
+    /// ilk paragraf kalın başlık, <paramref name="Bold"/> kartın tamamı başlık (makale başlığı).
+    /// </summary>
+    public sealed record Placement(Role Role, TextBox Spot, bool Titled = false, bool Bold = false);
 
     /// <summary>
     /// Karedeki telefon: sınır kutusu ve ekranın ekseni (hoparlörden alt çentiğe). Eğik telefonun ekranındaki her nokta düz
@@ -164,6 +181,9 @@ public static class ScreenPhoneCard
 
         /// <summary>Karenin genişliği / yüksekliği.</summary>
         internal double Aspect => aspect;
+
+        /// <summary>Telefonun ekseni (gevşek doğrulama için; <see cref="GamePhoneGeometry.TryLocate(Frame, GamePhoneGeometry.Pose?, out GamePhoneGeometry.Pose)"/>).</summary>
+        internal GamePhoneGeometry.Pose Pose => new(topX, topY, bottomX, bottomY);
 
         /// <summary>Düz ekrandaki noktanın karedeki yeri (kenarlara oranla).</summary>
         internal (double X, double Y) Point(double u, double v)
@@ -241,10 +261,13 @@ public static class ScreenPhoneCard
     /// <summary>Öğe kartın zemini mi (masaüstü listesi ve düz metin bunu atlar).</summary>
     public static bool IsBackdrop(ScreenTranslation.Item item) => string.IsNullOrWhiteSpace(item.Translation);
 
-    /// <summary>Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır.</summary>
-    public static Handset? Phone(Frame frame)
+    /// <summary>
+    /// Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır. <paramref name="near"/>: açık
+    /// telefonun son yeri (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır.
+    /// </summary>
+    public static Handset? Phone(Frame frame, Handset? near = null)
     {
-        if (!GamePhoneGeometry.TryLocate(frame, out var pose) || !GamePhoneTracker.Plausible(pose.Bounds, frame)) return null;
+        if (!GamePhoneGeometry.TryLocate(frame, near?.Pose, out var pose) || !GamePhoneTracker.Plausible(pose.Bounds, frame)) return null;
         return new Handset(pose, frame.Width / (double)Math.Max(1, frame.Height));
     }
 
@@ -311,12 +334,17 @@ public static class ScreenPhoneCard
         var card = CardBox(handset.Bounds, [.. others.Where(item => !item.Unchanged).Select(item => item.Box)]);
         var cardWidth = card.Right - card.Left;
         var measured = lockedLine ?? MeasuredLine(onPhone) ?? 0;
-        var line = Math.Max(MinLine * Math.Min(MaxScale, Math.Max(MinScale, textScale)), measured);
+        var scale = Math.Min(MaxScale, Math.Max(MinScale, textScale));
+        var line = Math.Min(MaxLine * scale, Math.Max(MinLine * scale, measured));
         double pad = cardWidth * 0.05, padY = line * 0.4, spacing = line * BubbleSpacing;
         static TextLook Flat(string align, bool bold) => new(bold, false, align, false, true);
 
         // Sohbetin üstündeki kişi adı çizilmez (Sinan Bey, beta.100 3400/3402: "Cal" başlığı gereksiz); balonlar aynen kalır.
-        var body = onPhone.Where(item => item.Phone!.Role != Role.Header).ToList();
+        // Sohbet dışı ekranda çevrilmeyen kart (kişi adı "Jason", yer adı) çizilmez.
+        var body = onPhone.Where(item => item.Phone!.Role != Role.Header && !(IsCard(item.Phone.Role) && item.Unchanged)).ToList();
+        // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle ayrı
+        // renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
+        var cardStyle = CommonStyle([.. body.Where(item => IsCard(item.Phone!.Role)).Select(item => item.Style)]);
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur (ListRowItem; Mac ile aynı).
@@ -327,6 +355,12 @@ public static class ScreenPhoneCard
             var item = body[index];
             var role = item.Phone!.Role;
             index++;
+            if (IsCard(role))
+            {
+                if (CardRow(item, cardStyle, handset, line, cardWidth - 2 * pad) is { } made)
+                    rows.Add(new Row(made.Item, cardWidth - 2 * pad, made.Height, "left"));
+                continue;
+            }
             if (role is Role.Contact or Role.Preview or Role.Widget)
             {
                 ScreenTranslation.Item? name = null, preview = null;
@@ -433,6 +467,71 @@ public static class ScreenPhoneCard
             result.Add(row.Item with { Box = new TextBox(left, tops[i], left + row.Width, tops[i] + row.Height) });
         }
         return result;
+    }
+
+    /// <summary>Sohbet dışı ekranın kartı mı (ana ekranın yazısı da).</summary>
+    internal static bool IsCard(Role role) => role is Role.Card or Role.Home;
+
+    /// <summary>En çok görünen okunmuş renk (eşitlikte önce gelen); örnek yoksa null.</summary>
+    internal static PhoneTextStyle? CommonStyle(IReadOnlyList<PhoneTextStyle?> styles)
+    {
+        var known = styles.OfType<PhoneTextStyle>()
+            .Where(style => !string.Equals(style.Background, GamePhonePalette.Neutral.Background, StringComparison.OrdinalIgnoreCase)).ToList();
+        PhoneTextStyle? best = null;
+        var bestCount = 0;
+        foreach (var style in known)
+        {
+            var count = known.Count(other => other == style);
+            if (best is null || count > bestCount) (best, bestCount) = (style, count);
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Sohbet dışı ekranın kartı: mesaj listesi kartının görünüşünde, avatarsız. Kalın başlık ("Strength Workout") ve altında
+    /// yazı ("Level 3/4"), yalnız başlık (makale başlığı) ya da yalnız yazı (gönderinin açıklaması, ayar satırı). Kartın üstü
+    /// İngilizcesiyle aynı hizada, boyu Türkçenin satır sayısına ve telefondaki bloğun boyuna göre (Mac/iPhone ve Android ile
+    /// aynı).
+    /// </summary>
+    internal static (ScreenTranslation.Item Item, double Height)? CardRow(ScreenTranslation.Item item, PhoneTextStyle? style, Handset handset,
+                                                                       double line, double width)
+    {
+        var parts = item.Translation.Split('\n');
+        if (!parts.Any(part => part.Trim(' ', '\t').Length > 0)) return null;
+        var placement = item.Phone;
+        string title, below;
+        if (placement?.Bold == true)
+        {
+            title = string.Join(' ', parts);
+            below = "";
+        }
+        else if (placement?.Titled == true && parts.Length >= 2)
+        {
+            title = parts[0];
+            below = string.Join(' ', parts.Skip(1));
+        }
+        else
+        {
+            title = "";
+            below = string.Join(' ', parts);
+        }
+        var row = new ListRow(title, below) { Widget = false };
+        var inset = RowPadding * line / handset.Aspect;
+        var inner = width - 2 * inset;
+        var perLine = (int)(inner * handset.Aspect / (line * CharWidth));
+        var lines = (title.Length == 0 ? 0 : Wrap(title, perLine).Count) + (below.Length == 0 ? 0 : Wrap(below, perLine).Count);
+        var needed = Math.Max(1, lines) * line * LineSpacing + 2 * RowPadding * line;
+        var original = item.Box.Bottom - item.Box.Top + line * BubblePadding;
+        var placed = item with
+        {
+            Unchanged = false,
+            LineHeight = line,
+            Style = BubbleColor(style ?? item.Style, RowColor),
+            Look = new TextLook(false, false, "left", false, true),
+            Panel = PanelPart.Row,
+            ListRow = row,
+        };
+        return (placed, Math.Max(needed, original));
     }
 
     /// <summary>Liste kartının rengi okunamadıysa: GTA 6 telefonunun açık satır kartı.</summary>
@@ -562,11 +661,14 @@ public static class ScreenPhoneCard
     }
 
     /// <summary>Metni sözcük sözcük en çok <paramref name="perLine"/> harflik satırlara böler (çok uzun sözcük kendi satırında kalır).</summary>
-    /// <summary>Kartta dizilecek telefon yazılarının satır yüksekliklerinin ortancası (panelin yazı boyu); yoksa null.</summary>
+    /// <summary>
+    /// Kartta dizilecek telefon yazılarının satır yüksekliklerinin ortancası (panelin yazı boyu); yoksa null. Çift sayıda
+    /// ölçümde küçük ortanca alınır: iki öğeden biri fotoğrafın içindeki büyük yazıysa (3416) panel onun boyunda çiziliyordu.
+    /// </summary>
     public static double? MeasuredLine(IReadOnlyList<ScreenTranslation.Item> items)
     {
         var heights = items.Where(item => item.Phone?.Role.InCard() == true).Select(item => item.LineHeight).OrderBy(h => h).ToList();
-        return heights.Count == 0 ? null : heights[heights.Count / 2];
+        return heights.Count == 0 ? null : heights[(heights.Count - 1) / 2];
     }
 
     internal static List<string> Wrap(string text, int perLine)

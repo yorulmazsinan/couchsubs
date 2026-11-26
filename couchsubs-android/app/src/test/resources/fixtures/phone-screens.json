@@ -1,0 +1,153 @@
+{
+  "about": "GTA 6 telefonunun sohbet dışı ekranları (PhoneScreen.kind / cards / paragraphs). Satırlar düz ekranda (0-1, [sol, üst, sağ, alt]). Yazılar uydurmadır (oyun metni değil). Mac/iPhone (PhoneScreenTests.swift), Windows (PhoneScreenTests.cs) ve Android (PhoneScreenTest.kt) aynı dosyayı okur.",
+  "screens": [
+    {
+      "name": "gönderi: kullanıcı adı, iki satır açıklama, aynı satırın ikinci okunuşu, beğeni sayısı, konum, fotoğraf yazısı",
+      "kind": "post",
+      "lines": [
+        {"text": "BAIT SHOP", "box": [0.2, 0.12, 0.6, 0.17]},
+        {"text": "@harbor_bait_club", "box": [0.12, 0.56, 0.62, 0.585]},
+        {"text": "Sunrise run past the north jetty", "box": [0.06, 0.6, 0.92, 0.625]},
+        {"text": "Grab the spring issue at the dock t...", "box": [0.06, 0.63, 0.92, 0.655]},
+        {"text": "Grab the spring issue", "box": [0.3, 0.63, 0.7, 0.655]},
+        {"text": "12K 7", "box": [0.06, 0.67, 0.3, 0.69]},
+        {"text": "Marlin Point", "box": [0.1, 0.7, 0.4, 0.72]}
+      ],
+      "cards": [
+        {"paragraphs": ["Sunrise run past the north jetty Grab the spring issue at the dock t..."], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "haber listesi: kesik başlıklar, altlarında kaynak adı",
+      "kind": "app",
+      "lines": [
+        {"text": "Mayor promises a brand new", "box": [0.06, 0.05, 0.62, 0.075]},
+        {"text": "tram line for the harbor…", "box": [0.06, 0.08, 0.62, 0.105]},
+        {"text": "Coastline Herald", "box": [0.14, 0.112, 0.45, 0.132]},
+        {"text": "Local diner wins the chili", "box": [0.06, 0.2, 0.62, 0.225]},
+        {"text": "cook-off for a third time…", "box": [0.06, 0.23, 0.62, 0.255]},
+        {"text": "KBN", "box": [0.14, 0.262, 0.25, 0.282]},
+        {"text": "Storm season starts early", "box": [0.06, 0.35, 0.62, 0.375]},
+        {"text": "Bay Weekly", "box": [0.06, 0.382, 0.4, 0.402]}
+      ],
+      "cards": [
+        {"paragraphs": ["Mayor promises a brand new tram line for the harbor…"], "titled": false, "bold": false},
+        {"paragraphs": ["Local diner wins the chili cook-off for a third time…"], "titled": false, "bold": false},
+        {"paragraphs": ["Storm season starts early"], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "makale: geri düğmesi, büyük başlık, kaynak, imza, gövde",
+      "kind": "app",
+      "lines": [
+        {"text": "< Back", "box": [0.04, 0.02, 0.2, 0.045]},
+        {"text": "City council approves", "box": [0.06, 0.06, 0.9, 0.1]},
+        {"text": "the waterfront plan", "box": [0.06, 0.105, 0.9, 0.145]},
+        {"text": "Coastline Herald", "box": [0.12, 0.5, 0.45, 0.52]},
+        {"text": "By Dana Reyes", "box": [0.06, 0.55, 0.4, 0.57]},
+        {"text": "The council voted late on Tuesday to", "box": [0.06, 0.6, 0.94, 0.62]},
+        {"text": "approve the long delayed plan.", "box": [0.06, 0.625, 0.9, 0.645]}
+      ],
+      "cards": [
+        {"paragraphs": ["City council approves the waterfront plan"], "titled": false, "bold": true},
+        {"paragraphs": ["Coastline Herald"], "titled": false, "bold": false},
+        {"paragraphs": ["By Dana Reyes"], "titled": false, "bold": false},
+        {"paragraphs": ["The council voted late on Tuesday to approve the long delayed plan."], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "fitness: başlıklı kartlar (ad / seviye), iç kart, bölüm adları",
+      "kind": "app",
+      "lines": [
+        {"text": "Riley", "box": [0.06, 0.03, 0.3, 0.055]},
+        {"text": "Active", "box": [0.06, 0.058, 0.3, 0.08]},
+        {"text": "Training", "box": [0.06, 0.12, 0.3, 0.14]},
+        {"text": "Power Session", "box": [0.1, 0.17, 0.5, 0.19]},
+        {"text": "Stage 2/4", "box": [0.1, 0.195, 0.35, 0.215]},
+        {"text": "Session done. Take a break.", "box": [0.12, 0.25, 0.8, 0.27]},
+        {"text": "Endurance Run", "box": [0.1, 0.32, 0.5, 0.34]},
+        {"text": "Stage 1/4", "box": [0.1, 0.345, 0.35, 0.365]},
+        {"text": "Calm", "box": [0.1, 0.42, 0.3, 0.44]},
+        {"text": "Stage 1/4", "box": [0.1, 0.445, 0.35, 0.465]},
+        {"text": "Food & Sleep", "box": [0.06, 0.52, 0.4, 0.54]}
+      ],
+      "cards": [
+        {"paragraphs": ["Riley", "Active"], "titled": true, "bold": false},
+        {"paragraphs": ["Training"], "titled": false, "bold": false},
+        {"paragraphs": ["Power Session", "Stage 2/4"], "titled": true, "bold": false},
+        {"paragraphs": ["Session done. Take a break."], "titled": false, "bold": false},
+        {"paragraphs": ["Endurance Run", "Stage 1/4"], "titled": true, "bold": false},
+        {"paragraphs": ["Calm", "Stage 1/4"], "titled": true, "bold": false},
+        {"paragraphs": ["Food & Sleep"], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "ayarlar: ad bloğu, satırlar, bölüm adı, eklenti satırı",
+      "kind": "app",
+      "lines": [
+        {"text": "Riley", "box": [0.25, 0.03, 0.45, 0.055]},
+        {"text": "PhoneOS", "box": [0.25, 0.06, 0.45, 0.08]},
+        {"text": "Background", "box": [0.08, 0.13, 0.5, 0.155]},
+        {"text": "Alert Sound", "box": [0.08, 0.19, 0.5, 0.215]},
+        {"text": "Extra Apps", "box": [0.06, 0.25, 0.5, 0.27]},
+        {"text": "radio_tool_v2.0.1", "box": [0.08, 0.3, 0.6, 0.325]}
+      ],
+      "cards": [
+        {"paragraphs": ["Riley", "PhoneOS"], "titled": true, "bold": false},
+        {"paragraphs": ["Background"], "titled": false, "bold": false},
+        {"paragraphs": ["Alert Sound"], "titled": false, "bold": false},
+        {"paragraphs": ["Extra Apps"], "titled": false, "bold": false},
+        {"paragraphs": ["radio_tool_v2.0.1"], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "eklenti sayfası: başlık, sürüm, bölüm adı, açıklama",
+      "kind": "app",
+      "lines": [
+        {"text": "Add-on", "box": [0.4, 0.03, 0.6, 0.055]},
+        {"text": "radio_tool_v2.0.1", "box": [0.06, 0.1, 0.5, 0.12]},
+        {"text": "Version 2.0.1", "box": [0.3, 0.3, 0.7, 0.32]},
+        {"text": "Details", "box": [0.06, 0.38, 0.3, 0.4]},
+        {"text": "small tool that listens to", "box": [0.08, 0.44, 0.9, 0.46]},
+        {"text": "nearby channels", "box": [0.08, 0.463, 0.6, 0.483]}
+      ],
+      "cards": [
+        {"paragraphs": ["Add-on"], "titled": false, "bold": false},
+        {"paragraphs": ["radio_tool_v2.0.1"], "titled": false, "bold": false},
+        {"paragraphs": ["Version 2.0.1"], "titled": false, "bold": false},
+        {"paragraphs": ["Details"], "titled": false, "bold": false},
+        {"paragraphs": ["small tool that listens to nearby channels"], "titled": false, "bold": false}
+      ]
+    },
+    {
+      "name": "sohbet: ortalı ad, kısa yanıtlar ama oyuncunun sağa yaslı mesajı var",
+      "kind": "chat",
+      "lines": [
+        {"text": "Mia", "box": [0.4, 0.03, 0.6, 0.055]},
+        {"text": "Hey are you", "box": [0.06, 0.12, 0.5, 0.14]},
+        {"text": "around tonight?", "box": [0.06, 0.145, 0.45, 0.165]},
+        {"text": "Yes after work", "box": [0.5, 0.22, 0.94, 0.24]},
+        {"text": "Cool", "box": [0.06, 0.3, 0.2, 0.32]},
+        {"text": "Bring the keys", "box": [0.06, 0.38, 0.45, 0.4]}
+      ],
+      "cards": []
+    },
+    {
+      "name": "sohbet: alt satıra sarılmış mesajlar etiket sayılmaz",
+      "kind": "chat",
+      "lines": [
+        {"text": "Leo", "box": [0.4, 0.03, 0.6, 0.055]},
+        {"text": "Left the bags", "box": [0.06, 0.12, 0.5, 0.14]},
+        {"text": "by the gate", "box": [0.06, 0.145, 0.45, 0.165]},
+        {"text": "New message", "box": [0.06, 0.22, 0.45, 0.24]},
+        {"text": "Call me when you get", "box": [0.06, 0.3, 0.6, 0.32]},
+        {"text": "THE CAR BACK ok", "box": [0.06, 0.325, 0.6, 0.345]}
+      ],
+      "cards": []
+    }
+  ],
+  "times": {
+    "yes": ["7PM", "10 PM", "6:15PM", "11 pm"],
+    "no": ["Stage 1/4", "Now", "71", "Version 2.0.1"]
+  }
+}

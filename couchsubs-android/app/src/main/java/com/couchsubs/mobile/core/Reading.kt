@@ -47,6 +47,11 @@ data class TextLine(
      * Liste değilse null. iPhone ile aynı.
      */
     internal val listRole: ScreenPhoneCard.Role? = null,
+    /**
+     * Telefonun sohbet dışı ekranında ([PhoneScreen]) satırın kartı: kaçıncı kart, kartın başlık satırı mı, kart kalın
+     * başlık mı. Kartsızsa null.
+     */
+    internal val phoneCard: PhoneScreen.Mark? = null,
 )
 
 /** Yazı tanımanın bulduğu bir sözcük ve yeri (okunan alanın kenarlarına oranla). */

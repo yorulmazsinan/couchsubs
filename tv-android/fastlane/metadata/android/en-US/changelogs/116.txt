@@ -1,0 +1,1 @@
+0.9.113: The GTA 6 phone's non-chat screens (posts, news, weather, fitness, settings) are drawn as cards beside the phone; notices stay on screen.

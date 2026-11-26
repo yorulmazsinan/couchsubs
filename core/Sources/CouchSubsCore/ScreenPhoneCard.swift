@@ -105,6 +105,10 @@ public enum ScreenPhoneCard {
     static let bubbleShare = 0.8, bubbleMin = 0.3
     /// Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta).
     static let minLine = 0.022
+    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100,
+    /// 3416): gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı
+    /// (tabela) da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır).
+    static let maxLine = 0.03
     /// Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5).
     static let charWidth = 0.5
 
@@ -118,21 +122,28 @@ public enum ScreenPhoneCard {
         case note
         /// Sohbet listesi: kişi adı (çevrilmez), son mesaj önizlemesi, bölüm başlığı ("Messages").
         case contact, preview, heading
-        /// Ana ekranın yazısı (bildirim): sohbet değildir, karta girmez; kendi yerinde, özgün stilinde çizilir.
+        /// Ana ekranın ve hava uygulamasının yazısı (bildirim, hava): sohbet değildir; panelde kart (`card` gibi).
         case home
         /// Ana ekran bileşeni (başlık + sayaç: "Reminders / 6 Notifications"): panelde tek kart (`ListRow.widget`).
         case widget
+        /// Sohbet dışı ekranın satırı ya da bloğu (`PhoneScreen`: uygulama satırı, makale başlığı/gövdesi, gönderinin
+        /// açıklaması): panelde tek kart, mesaj listesi kartının görünüşünde (avatarsız).
+        case card
 
         /// Çevirmene gitmez, aslıyla gösterilir (ad).
         var keepsText: Bool { self == .header || self == .contact }
-        /// Kartta dizilir (ana ekranın yazıları yerinde kalır).
-        var inCard: Bool { self != .home }
+        /// Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun
+        /// üstüne çizilmez, panelde kart olur.
+        var inCard: Bool { true }
     }
 
-    /// Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1).
+    /// Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1). Kartta (`card`): `titled` ilk paragraf kalın başlık,
+    /// `bold` kartın tamamı başlık (makale başlığı).
     public struct Placement: Equatable, Sendable {
         public var role: Role
         public var spot: TextBox
+        public var titled = false
+        public var bold = false
     }
 
     /// Karedeki telefon: sınır kutusu ve ekranın ekseni (hoparlörden alt çentiğe). Eğik telefonun ekranındaki her nokta
@@ -157,6 +168,9 @@ public enum ScreenPhoneCard {
 
         /// Ekranın yüksekliği, kare yüksekliğine oranla.
         var screenHeight: Double { (bottomY - topY) * 0.915 }
+
+        /// Telefonun ekseni (gevşek doğrulama için; `GamePhoneGeometry.locate(near:)`).
+        public var pose: GamePhoneGeometry.Pose { .init(topX: topX, topY: topY, bottomX: bottomX, bottomY: bottomY) }
 
         /// Düz ekrandaki noktanın karedeki yeri (kenarlara oranla).
         func point(_ u: Double, _ v: Double) -> (x: Double, y: Double) {
@@ -229,8 +243,9 @@ public enum ScreenPhoneCard {
     }
 
     /// Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday (bkz. `GamePhoneTracker.plausible`) yok sayılır.
-    public static func phone(in frame: CGImage) -> Handset? {
-        guard let pose = GamePhoneGeometry.locate(frame),
+    /// `near`: açık telefonun son yeri (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır.
+    public static func phone(in frame: CGImage, near: Handset? = nil) -> Handset? {
+        guard let pose = GamePhoneGeometry.locate(frame, near: near?.pose),
               GamePhoneTracker.plausible(pose.bounds, width: frame.width, height: frame.height) else { return nil }
         return Handset(pose: pose, aspect: Double(frame.width) / Double(max(1, frame.height)))
     }
@@ -287,12 +302,17 @@ public enum ScreenPhoneCard {
         var card = cardBox(handset.bounds, avoiding: others.filter { !$0.unchanged }.map(\.box))
         let cardWidth = card.right - card.left
         let measured = locked ?? measuredLine(onPhone) ?? 0
-        let line = max(minLine * min(maxScale, max(minScale, textScale)), measured)
+        let scale = min(maxScale, max(minScale, textScale))
+        let line = min(maxLine * scale, max(minLine * scale, measured))
         let pad = cardWidth * 0.05, padY = line * 0.4, spacing = line * bubbleSpacing
         let flat = { (align: TextLook.Align, bold: Bool) in TextLook(bold: bold, condensed: false, align: align, upper: false, flat: true) }
 
         // Sohbetin üstündeki kişi adı çizilmez (Sinan Bey, beta.100 3400/3402: "Cal" başlığı gereksiz); balonlar aynen kalır.
-        let body = onPhone.filter { $0.phone?.role != .header }
+        // Sohbet dışı ekranda çevrilmeyen kart (kişi adı "Jason", yer adı) çizilmez.
+        let body = onPhone.filter { $0.phone?.role != .header && !(isCard($0.phone!.role) && $0.unchanged) }
+        // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle
+        // ayrı renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
+        let cardStyle = commonStyle(body.filter { isCard($0.phone!.role) }.map(\.style))
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur (`listRow`).
@@ -303,6 +323,12 @@ public enum ScreenPhoneCard {
             let item = body[index]
             let role = item.phone!.role
             index += 1
+            if isCard(role) {
+                if let made = cardRow(item, style: cardStyle, handset: handset, line: line, width: cardWidth - 2 * pad) {
+                    rows.append(Row(item: made.item, width: cardWidth - 2 * pad, height: made.height, side: .left))
+                }
+                continue
+            }
             if role == .contact || role == .preview || role == .widget {
                 var name: ScreenTranslation.Item?, preview: ScreenTranslation.Item?
                 if role == .contact {
@@ -403,6 +429,57 @@ public enum ScreenPhoneCard {
             result.append(placed)
         }
         return result
+    }
+
+    /// Sohbet dışı ekranın kartı mı (ana ekranın yazısı da).
+    static func isCard(_ role: Role) -> Bool { role == .card || role == .home }
+
+    /// En çok görünen okunmuş renk (eşitlikte önce gelen); örnek yoksa nil.
+    static func commonStyle(_ styles: [PhoneTextStyle?]) -> PhoneTextStyle? {
+        let known = styles.compactMap { $0 }.filter { $0.background.uppercased() != GamePhonePalette.neutral.background }
+        var best: (style: PhoneTextStyle, count: Int)?
+        for style in known {
+            let count = known.filter { $0 == style }.count
+            if best.map({ count > $0.count }) ?? true { best = (style, count) }
+        }
+        return best?.style
+    }
+
+    /// Sohbet dışı ekranın kartı: mesaj listesi kartının görünüşünde, avatarsız. Kalın başlık ("Strength Workout") ve
+    /// altında yazı ("Level 3/4"), yalnız başlık (makale başlığı) ya da yalnız yazı (gönderinin açıklaması, ayar satırı).
+    /// Kartın üstü İngilizcesiyle aynı hizada, boyu Türkçenin satır sayısına ve telefondaki bloğun boyuna göre.
+    static func cardRow(_ item: ScreenTranslation.Item, style: PhoneTextStyle?, handset: Handset, line: Double,
+                        width: Double) -> (item: ScreenTranslation.Item, height: Double)? {
+        let parts = item.translation.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard parts.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return nil }
+        let placement = item.phone
+        let title: String, below: String
+        if placement?.bold == true {
+            title = parts.joined(separator: " ")
+            below = ""
+        } else if placement?.titled == true, parts.count >= 2 {
+            title = parts[0]
+            below = parts.dropFirst().joined(separator: " ")
+        } else {
+            title = ""
+            below = parts.joined(separator: " ")
+        }
+        var row = ListRow(name: title, preview: below)
+        row.widget = false
+        let inset = rowPadding * line / handset.aspect
+        let inner = width - 2 * inset
+        let perLine = Int(inner * handset.aspect / (line * charWidth))
+        let lines = (title.isEmpty ? 0 : wrap(title, perLine: perLine).count) + (below.isEmpty ? 0 : wrap(below, perLine: perLine).count)
+        let needed = Double(max(1, lines)) * line * lineSpacing + 2 * rowPadding * line
+        let original = item.box.bottom - item.box.top + line * bubblePadding
+        var placed = item
+        placed.unchanged = false
+        placed.lineHeight = line
+        placed.style = bubbleColor(style ?? item.style, fallback: rowColor)
+        placed.look = TextLook(bold: false, condensed: false, align: .left, upper: false, flat: true)
+        placed.panel = .row
+        placed.listRow = row
+        return (placed, max(needed, original))
     }
 
     /// Liste kartının rengi okunamadıysa: GTA 6 telefonunun açık satır kartı.
@@ -513,9 +590,11 @@ public enum ScreenPhoneCard {
     }
 
     /// Kartta dizilecek telefon yazılarının satır yüksekliklerinin ortancası (panelin yazı boyu bundan gelir); yoksa nil.
+    /// Çift sayıda ölçümde küçük ortanca alınır: iki öğeden biri fotoğrafın içindeki büyük yazıysa (3416) panel onun
+    /// boyunda çiziliyordu.
     public static func measuredLine(_ items: [ScreenTranslation.Item]) -> Double? {
         let heights = items.filter { $0.phone?.role.inCard == true }.map(\.lineHeight).sorted()
-        return heights.isEmpty ? nil : heights[heights.count / 2]
+        return heights.isEmpty ? nil : heights[(heights.count - 1) / 2]
     }
 
     /// Metni sözcük sözcük en çok `perLine` harflik satırlara böler (çok uzun sözcük kendi satırında kalır).

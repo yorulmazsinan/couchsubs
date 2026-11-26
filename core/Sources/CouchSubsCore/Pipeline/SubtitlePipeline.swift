@@ -173,6 +173,12 @@ public final class SubtitlePipeline {
     public var onPhoneLooked: ((Bool) -> Void)?
     private var phone: ScreenPhoneCard.Handset?
     private var phoneLookedAt: Int?
+    /// Açık telefonun art arda bulunamadığı arama sayısı: telefon `GamePhoneTracker.missGrace` aramada bulunamazsa kalkar.
+    /// Sinan Bey (beta.100, 3418, 3420, 3421): telefon tek aramada ıskalanınca süzgeç o an kapanıyor, gönderinin açıklaması
+    /// hem balonda hem altyazıda, haber kaynağı ("Weazel News") ve makale satırı altyazıda çıkıyordu. Açık telefon artık
+    /// izleyicinin toleransıyla tutulur ve son yerinde gevşek doğrulanır (`GamePhoneGeometry.locate(near:)`; Windows ve
+    /// Android ile aynı).
+    private var phoneMisses = 0
     /// Son yazı tanımanın süresi (ms); kare değişmeyip okuma yeniden kullanılınca da o okumanın süresi geçerlidir.
     private var lastReadMs: Int?
     /// Son yazı tanımanın süresi (ms): kare sıklığı okuma yavaşsa seyrekleşir (`FrameCadence`).
@@ -293,17 +299,19 @@ public final class SubtitlePipeline {
         // (`GamePhoneTracker.intervalMs`), bulunan yer sonraki karelere de geçerlidir.
         let looks = findsPhone && phoneLookedAt.map { captured < $0 || captured - $0 >= GamePhoneTracker.intervalMs } ?? findsPhone
         if looks { phoneLookedAt = captured }
+        let near = phone
         let (area, signature, found) = await Task.detached(priority: .userInitiated) {
             let area = RegionCropper.crop(frame, to: region)
-            return (area, RegionCropper.signature(of: area), looks ? ScreenPhoneCard.phone(in: frame) : nil)
+            return (area, RegionCropper.signature(of: area), looks ? ScreenPhoneCard.phone(in: frame, near: near) : nil)
         }.value
         if looks {
+            let next = Self.heldPhone(found, shown: phone, misses: &phoneMisses)
             // Telefonun bulunması/kalkması günlüğe yazılır: yanlış bulunan telefon altyazı satırlarını atarsa görünsün.
-            if (found == nil) != (phone == nil) {
-                log(found == nil ? "telefon kalktı" : "telefon bulundu: ekranındaki satırlar altyazı sayılmayacak")
+            if (next == nil) != (phone == nil) {
+                log(next == nil ? "telefon kalktı" : "telefon bulundu: ekranındaki satırlar altyazı sayılmayacak")
             }
-            phone = found
-            onPhoneLooked?(found != nil)
+            phone = next
+            onPhoneLooked?(next != nil)
         }
         let handset = findsPhone ? phone : nil
         guard session == startedSession else { return }
@@ -1036,6 +1044,21 @@ public final class SubtitlePipeline {
         quiet = QuietReads(since: time)
     }
 
+    /// Aramanın sonucundan sonra süzgecin kullanacağı telefon: bulunduysa o; açık telefon bulunamadıysa
+    /// `GamePhoneTracker.missGrace` arama boyunca son yeri kalır, sonra nil.
+    static func heldPhone(_ found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?, misses: inout Int) -> ScreenPhoneCard.Handset? {
+        if let found {
+            misses = 0
+            return found
+        }
+        guard let shown, misses < GamePhoneTracker.missGrace else {
+            misses = 0
+            return nil
+        }
+        misses += 1
+        return shown
+    }
+
     /// Okuma durunca TV'deki son altyazıyı kaldırır.
     public func reset() {
         log("hat sıfırlandı (paketten \(packHits) satır)")
@@ -1046,6 +1069,7 @@ public final class SubtitlePipeline {
         lastNote = nil
         phone = nil
         phoneLookedAt = nil
+        phoneMisses = 0
         loggedLeftOut = ""
         loggedStale = ""
         loggedPhone = nil

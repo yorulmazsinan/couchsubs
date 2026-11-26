@@ -325,7 +325,10 @@ internal class PhoneRegionSession(
         // Listede "…" ile kesilmiş önizleme kesik çevrilir, yarım sözcük uydurulmaz ([GamePhoneText.cutInput]).
         // "…" koymadan satır sonunda kesilmiş önizleme de kesik çevrilir ([GamePhoneText.clippedInput]); motora "..." ile
         // gider, sonu tamamlanmaz (Sinan Bey, beta.100 3399).
-        val previews = groups.filter { it.phone?.role == ScreenPhoneCard.Role.PREVIEW }.flatMap { it.paragraphs }.toSet()
+        // Sohbet dışı ekranın kartlarında da (gönderinin "…" ile kesilmiş açıklaması, haber başlığı) sonu tamamlanmaz
+        // (Sinan Bey, beta.100 3416: "Pour some goddamn sugar o…" tamamlanarak çevriliyordu).
+        val previews = groups.filter { it.phone?.role == ScreenPhoneCard.Role.PREVIEW || it.phone?.role == ScreenPhoneCard.Role.CARD }
+            .flatMap { it.paragraphs }.toSet()
         val clipped = groups.filter { it.phone?.role == ScreenPhoneCard.Role.PREVIEW && (it.phone?.spot?.right ?: 0.0) >= GamePhoneText.CLIP_EDGE }
             .flatMap { it.paragraphs }.toSet()
         val cuts = missing.map { source ->

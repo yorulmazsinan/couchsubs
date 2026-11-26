@@ -257,6 +257,17 @@ public final class RegionWatcher {
     /// Bir tur sürüyor mu.
     public var isBusy: Bool { running != nil }
 
+    /// Telefon açıldı: otomatik ekran yazısının ve kenar bildirimlerinin gösterilen kutuları (görev satırı dışında) aynı
+    /// karede kalkar. Önceden sonraki turu bekliyordu; telefonun ekranına çizilmiş eski kutu (Sinan Bey, beta.100 3422:
+    /// önceki haberin "Vali karşılaştırıyor" kutusu hava uygulamasında) bir süre duruyordu. Telefon açıkken bu alanlar
+    /// zaten önerilmez (Windows ve Android ile aynı).
+    func clearScreenText() {
+        for (id, state) in states where id.hasPrefix("auto-") && id != MissionLine.areaId {
+            if !state.shown.isEmpty { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
+            states[id] = nil
+        }
+    }
+
     /// Her karede çağrılır; tur zamanı geldiyse ve önceki tur bittiyse turu arka planda başlatır, hemen döner.
     public func offer(_ frame: CGImage, areas: [ExtraArea], phone pose: GamePhoneGeometry.Pose? = nil, capturedAt: Int? = nil) {
         if let pose {
@@ -268,6 +279,7 @@ public final class RegionWatcher {
                 session.anchor = phoneAnchor
                 session.memory = phoneMemory
                 phoneSession = session
+                clearScreenText()
             }
             phoneSession?.observe(frame, pose: pose, at: capturedAt ?? now())
         } else if phoneSession != nil {

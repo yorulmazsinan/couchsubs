@@ -5,7 +5,7 @@ import CoreGraphics
 /// The two aligned observations keep a single menu or subtitle frame from opening a phone session.
 public final class GamePhoneTracker {
     public static let intervalMs = 330
-    private let locate: (CGImage) -> GamePhoneGeometry.Pose?
+    private let locate: (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?
     private var lastTime: Int?
     private var previous: GamePhoneGeometry.Pose?
     private var shown: GamePhoneGeometry.Pose?
@@ -16,8 +16,9 @@ public final class GamePhoneTracker {
     /// günlüğü (Windows ve Android ile aynı satırlar).
     public var onLog: ((String) -> Void)?
 
-    public init() { locate = GamePhoneGeometry.locate }
-    init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { self.locate = locate }
+    public init() { locate = { GamePhoneGeometry.locate($0, near: $1) } }
+    init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { self.locate = { image, _ in locate(image) } }
+    init(locate: @escaping (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) { self.locate = locate }
 
     private func note(_ reason: String) { trace.note(PhoneTrace.component, reason, "", log: onLog) }
 
@@ -28,7 +29,9 @@ public final class GamePhoneTracker {
         let wasShown = shown != nil
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (menüde ya da koyu ekranda yanlış
         // eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı (Windows ile aynı).
-        var found = locate(image)
+        // Açık telefon yerinde ararken gevşek doğrulama da denenir (`GamePhoneGeometry.locate(near:)`): beyaz ya da mavi
+        // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
+        var found = locate(image, shown)
         if let pose = found, !Self.plausible(pose.bounds, width: image.width, height: image.height) { found = nil }
         if let found, let previous, found.bounds.isClose(to: previous.bounds, tolerance: 0.035) {
             shown = found
@@ -172,9 +175,16 @@ public enum GamePhoneGeometry {
     /// Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255).
     static let darkTone = 24
 
-    public static func locate(_ image: CGImage) -> Pose? {
+    /// Karedeki telefon. `near`: açık telefonun son yeri; sıkı arama ıskalarsa o yerin hemen çevresinde gevşek doğrulama
+    /// yapılır (`confirmPicture`): hoparlör yarığı ve kamera üstte, alt çentik altta aynı yerde duruyorsa telefon
+    /// yerindedir. Sinan Bey (beta.100, 3418–3425): beyaz/mavi ekranlı uygulamalarda (haber, makale, hava, ayarlar,
+    /// eklenti) telefonun yan kenarları elin ve gövdenin rengine karışıyor, sıkı arama telefonu kaybediyordu; telefon
+    /// kaybolunca balonlar kalkıyor ("arada kaçıyor", 3417), telefonun yazıları altyazıya (3418, 3420, 3421) ve ekran
+    /// yazısı kutularına (3420–3425) gidiyordu. Gevşek doğrulama yalnız açık telefonun yerinde yapılır: yeni telefon yine
+    /// sıkı aramayla ve iki gözlemle açılır (Windows ve Android ile aynı).
+    public static func locate(_ image: CGImage, near: Pose? = nil) -> Pose? {
         guard image.width >= 400, image.height >= 225 else { return nil }
-        if abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 { return locatePicture(image) }
+        if abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 { return locatePicture(image, near: near) }
         // Kare küçültülerek okunur (en çok 960 piksel genişlik); şeritlerin yeri piksel piksel gerekmez.
         let scale = min(1, 960 / Double(image.width))
         let sw = max(1, Int((Double(image.width) * scale).rounded())), sh = max(1, Int((Double(image.height) * scale).rounded()))
@@ -183,18 +193,64 @@ public enum GamePhoneGeometry {
                   let p = (min(sh - 1, Int(Double(y) * scale)) * sw + min(sw - 1, Int(Double(x) * scale))) * 4
                   return (77 * Int(small.bytes[p]) + 150 * Int(small.bytes[p + 1]) + 29 * Int(small.bytes[p + 2])) >> 8
               }),
-              let cropped = image.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)),
-              let pose = locatePicture(cropped) else { return nil }
+              let cropped = image.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)) else { return nil }
         let w = Double(image.width), h = Double(image.height)
+        // Açık telefonun yeri görüntünün içine taşınır.
+        let local = near.map { pose in
+            Pose(topX: (pose.topX * w - Double(area.x)) / Double(area.width), topY: (pose.topY * h - Double(area.y)) / Double(area.height),
+                 bottomX: (pose.bottomX * w - Double(area.x)) / Double(area.width),
+                 bottomY: (pose.bottomY * h - Double(area.y)) / Double(area.height))
+        }
+        guard let pose = locatePicture(cropped, near: local) else { return nil }
         func x(_ value: Double) -> Double { (Double(area.x) + value * Double(area.width)) / w }
         func y(_ value: Double) -> Double { (Double(area.y) + value * Double(area.height)) / h }
         return Pose(topX: x(pose.topX), topY: y(pose.topY), bottomX: x(pose.bottomX), bottomY: y(pose.bottomY))
     }
 
-    private static func locatePicture(_ image: CGImage) -> Pose? {
+    private static func locatePicture(_ image: CGImage, near: Pose? = nil) -> Pose? {
         guard image.width >= 400, image.height >= 225,
-              abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04,
-              let topBand = Grid(image, columns: 80..<320, height: 90) else { return nil }
+              abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 else { return nil }
+        if let pose = strictPicture(image) { return pose }
+        guard let near else { return nil }
+        return confirmPicture(image, near: near)
+    }
+
+    /// Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir.
+    static let confirmReach = 4.0
+
+    /// Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
+    /// `confirmReach` kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
+    /// gücüne bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa nil.
+    static func confirmPicture(_ image: CGImage, near: Pose) -> Pose? {
+        guard let grid = Grid(image, columns: 40..<360, height: 225) else { return nil }
+        let topX = near.topX * 400, topY = near.topY * 225, bottomX = near.bottomX * 400, bottomY = near.bottomY * 225
+        let reach = Int(confirmReach)
+        let upperRows = max(17, Int(topY.rounded()) - reach)..<min(75, Int(topY.rounded()) + reach + 1)
+        let lowerRows = max(145, Int(bottomY.rounded()) - reach)..<min(217, Int(bottomY.rounded()) + reach + 1)
+        guard !upperRows.isEmpty, !lowerRows.isEmpty else { return nil }
+        let upper = slots(grid, rows: upperRows, lengths: 8...19, maximum: 12)
+            .filter { abs($0.x - topX) <= confirmReach && hasCamera(grid, $0) }
+        let lower = slots(grid, rows: lowerRows, lengths: 5...14, maximum: 16).filter { abs($0.x - bottomX) <= confirmReach }
+        var best = Double.infinity, pose: Pose?
+        for top in upper {
+            for bottom in lower {
+                let h = Double(bottom.y - top.y), dx = bottom.x - top.x
+                guard (115...179).contains(h), abs(dx) <= h * 0.24,
+                      Double(bottom.length) >= Double(top.length) * 0.46, bottom.length <= top.length,
+                      h >= 7.9 * Double(top.length), h <= 16.5 * Double(top.length),
+                      h >= 12 * Double(bottom.length), h <= 30 * Double(bottom.length) else { continue }
+                let distance = abs(top.x - topX) + abs(Double(top.y) - topY) + abs(bottom.x - bottomX) + abs(Double(bottom.y) - bottomY)
+                if distance < best {
+                    best = distance
+                    pose = Pose(topX: top.x / 400, topY: Double(top.y) / 225, bottomX: bottom.x / 400, bottomY: Double(bottom.y) / 225)
+                }
+            }
+        }
+        return pose
+    }
+
+    private static func strictPicture(_ image: CGImage) -> Pose? {
+        guard let topBand = Grid(image, columns: 80..<320, height: 90) else { return nil }
         // Normal gameplay ends here. Only sample the body after seeing both a speaker and a camera in the upper band.
         let upper = slots(topBand, rows: 17..<75, lengths: 8...19, maximum: 12).filter { hasCamera(topBand, $0) }
         guard !upper.isEmpty, let grid = Grid(image, columns: 40..<360, height: 225) else { return nil }

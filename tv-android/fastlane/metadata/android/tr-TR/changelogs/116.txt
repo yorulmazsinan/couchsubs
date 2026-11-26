@@ -1,0 +1,1 @@
+0.9.113: GTA 6 telefonunun sohbet dışı ekranları (gönderi, haber, hava, fitness, ayarlar) telefonun yanında kartlarla çiziliyor; bildirimler ekrandan taşmıyor.

@@ -3268,14 +3268,16 @@ final class AppModel: ObservableObject {
 
     private func configureGamePhone() {
         regionWatcher?.closePhone()
-        if pipeline != nil, settings.readsGamePhone, let name = gameChoice.game?.name, GameName.key(name) == "gta 6" {
+        // Telefon GTA 6'da her zaman izlenir (telefon çevirisi kapalıyken de): açık telefonun ekranına otomatik ekran yazısı
+        // kutusu ve kenar bildirimi çizilmez (Sinan Bey, beta.100 3420–3425). Telefonun okunması ayara bağlıdır.
+        if Self.findsGamePhone(running: pipeline != nil, game: gameChoice.game?.name) {
             gamePhoneTracker = GamePhoneTracker()
         } else {
             gamePhoneTracker = nil
         }
         // Telefona yapışık çeviri: yalnız oyun görüntüsü bu Mac'teki bir pencereden okunurken (çeviri oyunun üstünde,
         // kendi yerinde çizilebilir). PS5'ten doğrudan okurken eski davranış (Sinan Bey kararı, 24 Kas: önce Mac).
-        setPhoneAnchor(gamePhoneTracker != nil && settings.drawScreenInPlace && capturedWindow != nil
+        setPhoneAnchor(gamePhoneTracker != nil && settings.readsGamePhone && settings.drawScreenInPlace && capturedWindow != nil
                        ? PhoneAnchorSession() : nil)
         // Altyazı hattı telefonu yalnız GTA 6'da arar: başka oyunda ya da karanlık sahnede yanlış bulunan telefon alt şeritteki
         // altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak çevrilip
@@ -3882,14 +3884,16 @@ final class AppModel: ObservableObject {
         guard pipeline != nil, !subtitlesPaused else { return }
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
-        let pose = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        // Telefon görünüyorsa (`seen`) ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun okunması ayarla (`pose`).
+        let seen = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        let pose = settings.readsGamePhone ? seen : nil
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
         if settings.autoScreenText, let missionRegion {
             areas.append(ExtraArea(id: MissionLine.areaId, name: "Mission", region: missionRegion, auto: true))
         }
         // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz.
-        if pose == nil { areas += noticeAreas }
-        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: pose != nil)
+        if seen == nil { areas += noticeAreas }
+        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: seen != nil)
         if regionWatcher == nil, !areas.isEmpty || pose != nil, let pipeline {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
         }

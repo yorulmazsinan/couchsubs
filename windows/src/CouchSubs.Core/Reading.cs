@@ -46,6 +46,11 @@ public sealed record TextLine(string Text, TextBox? Box = null, double? Confiden
     /// başlığı. Liste değilse null. Mac ile aynı.
     /// </summary>
     internal ScreenPhoneCard.Role? ListRole { get; init; }
+    /// <summary>
+    /// Telefonun sohbet dışı ekranında (<see cref="PhoneScreen"/>) satırın kartı: kaçıncı kart, kartın başlık satırı mı, kart
+    /// kalın başlık mı. Kartsızsa null (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal PhoneScreen.Mark? PhoneCard { get; init; }
 }
 
 /// <summary>Yazı tanımanın bulduğu bir sözcük ve yeri (okunan alanın kenarlarına oranla).</summary>

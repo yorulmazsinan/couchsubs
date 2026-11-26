@@ -86,7 +86,7 @@ public enum ScreenTranslation {
                                  frame: CGImage? = nil, memory: PhoneChatMemory? = nil, handset: ScreenPhoneCard.Handset? = nil,
                                  phoneCard: Bool = true, panelScale: Double = 1,
                                  progress: ([Item]) -> Void = { _ in }) async throws -> [Item] {
-        let phone = handset ?? frame.flatMap(ScreenPhoneCard.phone(in:))
+        let phone = handset ?? frame.flatMap { ScreenPhoneCard.phone(in: $0) }
         let all = withImages(groups(reading, frame: frame, wholeScreen: true, handset: phone), from: frame)
         let chat = chatTitle(all)
         var made: [Int: Item] = [:]
@@ -143,7 +143,7 @@ public enum ScreenTranslation {
             return try await translate(reading, using: { try await translator.translate($0) }, frame: frame, memory: memory,
                                        handset: handset, phoneCard: phoneCard, panelScale: panelScale, progress: progress)
         }
-        let phone = handset ?? frame.flatMap(ScreenPhoneCard.phone(in:))
+        let phone = handset ?? frame.flatMap { ScreenPhoneCard.phone(in: $0) }
         let groups = withImages(groups(reading, frame: frame, wholeScreen: true, handset: phone), from: frame)
         let prepared = groups.map { group in group.paragraphs.map(IconText.protect) }
         let chat = chatTitle(groups)

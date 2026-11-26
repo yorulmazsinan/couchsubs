@@ -57,6 +57,21 @@ class SubtitlePipeline(
 ) {
     companion object {
         /**
+         * Aramanın sonucundan sonra süzgecin kullanacağı telefon ve yeni ıska sayısı: bulunduysa o (sayaç sıfırlanır);
+         * açık telefon ([shown]) bulunamadıysa [GamePhoneTracker.MISS_GRACE] arama boyunca son yeri kalır, sonra null.
+         * Sinan Bey (beta.100, 3418, 3420, 3421): telefon tek aramada ıskalanınca süzgeç o an kapanıyor, gönderinin
+         * açıklaması hem balonda hem altyazıda, haber kaynağı ("Weazel News") ve makale satırı altyazıda çıkıyordu. Açık
+         * telefon artık izleyicinin toleransıyla tutulur ve son yerinde gevşek doğrulanır ([GamePhoneGeometry.locate] near;
+         * Mac/iPhone ve Windows ile aynı).
+         */
+        fun heldPhone(found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?,
+                      misses: Int): Pair<ScreenPhoneCard.Handset?, Int> {
+            if (found != null) return found to 0
+            if (shown == null || misses >= GamePhoneTracker.MISS_GRACE) return null to 0
+            return shown to misses + 1
+        }
+
+        /**
          * Satır ekrandan bundan uzun süre önce kalktıysa geç gelen çevirisi gösterilmez (sonraki sahnenin üstüne düşmesin).
          * Yavaş çeviride (ücretsiz motor, zayıf işlemci) art arda gelen satırların çevirisi satır kalktıktan bir iki saniye
          * sonra gelir; sınır 1 sn iken üç satırlık konuşmanın yalnız ilki görünüyordu. Süre satırın kalktığı andan, satır

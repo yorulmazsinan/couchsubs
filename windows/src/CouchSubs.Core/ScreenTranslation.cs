@@ -282,7 +282,7 @@ public static class ScreenTranslation
     internal static IReadOnlyList<Item> Present(IReadOnlyList<Item> items, ScreenPhoneCard.Handset? phone, bool card = true,
                                                 double textScale = 1) =>
         WithoutDuplicates([.. (phone is not null && card ? ScreenPhoneCard.Layout(items, phone, textScale)
-            : items.Select(item => item with { Bubble = item.Phone?.Role is { } role && role != ScreenPhoneCard.Role.Home }))
+            : items.Select(item => item with { Bubble = item.Phone?.Role.InCard() == true }))
             .Where(item => !item.Unchanged)]);
 
     // --- Aynı yerde tek çizim (#827) ---

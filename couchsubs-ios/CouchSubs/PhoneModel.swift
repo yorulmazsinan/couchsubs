@@ -1508,7 +1508,9 @@ final class PhoneModel: ObservableObject {
     /// Oyun telefonu yalnız ayar açıkken ve oynanan oyun GTA 6 iken izlenir (Mac'teki `configureGamePhone` ile aynı).
     private func configureGamePhone() {
         regionWatcher?.closePhone()
-        gamePhoneTracker = Self.tracksGamePhone(running: pipeline != nil, enabled: settings.readsGamePhone,
+        // Telefon GTA 6'da her zaman izlenir (telefon çevirisi kapalıyken de): açık telefonun ekranına otomatik ekran yazısı
+        // kutusu ve kenar bildirimi çizilmez (Sinan Bey, beta.100 3420–3425). Telefonun okunması ayara bağlıdır.
+        gamePhoneTracker = Self.tracksGamePhone(running: pipeline != nil, enabled: true,
                                                 game: gameChoice.game?.name) ? GamePhoneTracker() : nil
         // Altyazı hattı telefonu yalnız GTA 6'da arar: başka oyunda ya da karanlık sahnede yanlış bulunan telefon alt şeritteki
         // altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak çevrilip
@@ -1583,14 +1585,16 @@ final class PhoneModel: ObservableObject {
         // Ek alanlar altyazıyla aynı OCR kuyruğunu kullanır; saniyede bir tur yeterlidir.
         // Kullanıcının ek alanı yoksa bilinen oyunun hazır alanları (GameAreaPresets; ör. GTA 6 yardım kutusu ve mesajlar).
         // Oyun telefonu açıkken ekranı ayrıca okunur; hazır alanlardaki telefon mesajı ve otomatik ekran yazısı o sırada okunmaz.
-        let pose = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        // Telefon görünüyorsa (`seen`) ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun okunması ayarla (`pose`).
+        let seen = gamePhoneTracker?.sample(frame, now: capturedAt).pose
+        let pose = settings.readsGamePhone ? seen : nil
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
         if settings.autoScreenText, let missionRegion {
             areas.append(ExtraArea(id: MissionLine.areaId, name: "Mission", region: missionRegion, auto: true))
         }
         // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz.
-        if pose == nil { areas += noticeAreas }
-        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: pose != nil)
+        if seen == nil { areas += noticeAreas }
+        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: seen != nil)
         if regionWatcher == nil, !areas.isEmpty || pose != nil { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
         regionWatcher?.offer(frame, areas: areas, phone: pose)
         // Ekranda menü açık (otomatik ekran yazısı menü durumunda): altyazı okunur ama gönderilmez, bekletilir; menü

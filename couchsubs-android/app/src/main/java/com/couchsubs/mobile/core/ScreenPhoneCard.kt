@@ -116,6 +116,12 @@ object ScreenPhoneCard {
     const val BUBBLE_MIN = 0.3
     /** Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta). */
     const val MIN_LINE = 0.022
+    /**
+     * Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100,
+     * 3416): gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı
+     * (tabela) da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır).
+     */
+    const val MAX_LINE = 0.03
     /** Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5). */
     const val CHAR_WIDTH = 0.5
 
@@ -132,16 +138,27 @@ object ScreenPhoneCard {
         /** Ana ekranın yazısı (bildirim): sohbet değildir, karta girmez; kendi yerinde, özgün stilinde çizilir. */
         HOME("home"),
         /** Ana ekran bileşeni (başlık + sayaç: "Reminders / 6 Notifications"): panelde tek kart ([ListRow.widget]). */
-        WIDGET("widget");
+        WIDGET("widget"),
+        /**
+         * Sohbet dışı ekranın satırı ya da bloğu ([PhoneScreen]: uygulama satırı, makale başlığı/gövdesi, gönderinin
+         * açıklaması): panelde tek kart, mesaj listesi kartının görünüşünde (avatarsız).
+         */
+        CARD("card");
 
         /** Çevirmene gitmez, aslıyla gösterilir (ad). */
         val keepsText: Boolean get() = this == HEADER || this == CONTACT
-        /** Kartta dizilir (ana ekranın yazıları yerinde kalır). */
-        val inCard: Boolean get() = this != HOME
+        /**
+         * Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun
+         * üstüne çizilmez, panelde kart olur.
+         */
+        val inCard: Boolean get() = true
     }
 
-    /** Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1). */
-    data class Placement(val role: Role, val spot: TextBox)
+    /**
+     * Telefondaki bir grubun rolü ve düz ekrandaki yeri (0–1). Kartta ([Role.CARD]): [titled] ilk paragraf kalın başlık,
+     * [bold] kartın tamamı başlık (makale başlığı).
+     */
+    data class Placement(val role: Role, val spot: TextBox, val titled: Boolean = false, val bold: Boolean = false)
 
     /**
      * Karedeki telefon: sınır kutusu ve ekranın ekseni (hoparlörden alt çentiğe). Eğik telefonun ekranındaki her nokta
@@ -239,9 +256,12 @@ object ScreenPhoneCard {
     /** Öğe kartın zemini mi (düz metin bunu atlar). */
     fun isBackdrop(item: ScreenTranslation.Item): Boolean = item.translation.isBlank()
 
-    /** Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır. */
-    fun phone(image: PhoneImage): Handset? {
-        val pose = GamePhoneGeometry.locate(image) ?: return null
+    /**
+     * Okunan karede telefon varsa yeri ve eğikliği; akla yatkın olmayan aday yok sayılır. [near]: açık telefonun son yeri
+     * (bulunmuşsa); sıkı arama ıskalarsa orada gevşek doğrulama yapılır ([GamePhoneGeometry.locate]).
+     */
+    fun phone(image: PhoneImage, near: Handset? = null): Handset? {
+        val pose = GamePhoneGeometry.locate(image, near?.pose) ?: return null
         if (!GamePhoneTracker.plausible(pose.bounds, image.width, image.height)) return null
         return Handset(pose, image.width.toDouble() / maxOf(1, image.height))
     }
@@ -302,14 +322,19 @@ object ScreenPhoneCard {
         val start = cardBox(handset.bounds, others.filter { !it.unchanged }.map { it.box })
         val cardWidth = start.right - start.left
         val measured = lockedLine ?: measuredLine(onPhone) ?: 0.0
-        val line = maxOf(MIN_LINE * minOf(MAX_SCALE, maxOf(MIN_SCALE, textScale)), measured)
+        val scale = minOf(MAX_SCALE, maxOf(MIN_SCALE, textScale))
+        val line = minOf(MAX_LINE * scale, maxOf(MIN_LINE * scale, measured))
         val pad = cardWidth * 0.05
         val padY = line * 0.4
         val spacing = line * BUBBLE_SPACING
         fun flat(align: String, bold: Boolean) = TextLook(bold, false, align, false)
 
         // Sohbetin üstündeki kişi adı çizilmez (Sinan Bey, beta.100 3400/3402: "Cal" başlığı gereksiz); balonlar aynen kalır.
-        val body = onPhone.filter { it.phone?.role != Role.HEADER }
+        // Sohbet dışı ekranda çevrilmeyen kart (kişi adı "Jason", yer adı) çizilmez.
+        val body = onPhone.filter { it.phone?.role != Role.HEADER && !(isCard(it.phone!!.role) && it.unchanged) }
+        // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle
+        // ayrı renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
+        val cardStyle = commonStyle(body.filter { isCard(it.phone!!.role) }.map { it.surface })
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur ([listRow]).
@@ -319,6 +344,12 @@ object ScreenPhoneCard {
             val item = body[index]
             val role = item.phone!!.role
             index += 1
+            if (isCard(role)) {
+                cardRow(item, cardStyle, handset, line, cardWidth - 2 * pad)?.let { (made, height) ->
+                    rows.add(Row(made, cardWidth - 2 * pad, height, "left"))
+                }
+                continue
+            }
             if (role == Role.CONTACT || role == Role.PREVIEW || role == Role.WIDGET) {
                 var name: ScreenTranslation.Item? = null
                 var preview: ScreenTranslation.Item? = null
@@ -413,6 +444,59 @@ object ScreenPhoneCard {
             result.add(row.item.copy(box = TextBox(left, tops[index], left + row.width, tops[index] + row.height)))
         }
         return result
+    }
+
+    /** Sohbet dışı ekranın kartı mı (ana ekranın yazısı da). */
+    internal fun isCard(role: Role): Boolean = role == Role.CARD || role == Role.HOME
+
+    /** En çok görünen okunmuş renk (eşitlikte önce gelen); örnek yoksa null. */
+    internal fun commonStyle(styles: List<TextSurface?>): TextSurface? {
+        val known = styles.filterNotNull().filter { it.background.uppercase() != GamePhonePalette.neutral.background }
+        var best: TextSurface? = null
+        var bestCount = 0
+        for (style in known) {
+            val count = known.count { it == style }
+            if (best == null || count > bestCount) {
+                best = style
+                bestCount = count
+            }
+        }
+        return best
+    }
+
+    /**
+     * Sohbet dışı ekranın kartı: mesaj listesi kartının görünüşünde, avatarsız. Kalın başlık ("Strength Workout") ve
+     * altında yazı ("Level 3/4"), yalnız başlık (makale başlığı) ya da yalnız yazı (gönderinin açıklaması, ayar satırı).
+     * Kartın üstü İngilizcesiyle aynı hizada, boyu Türkçenin satır sayısına ve telefondaki bloğun boyuna göre (Mac/iPhone
+     * ve Windows ile aynı).
+     */
+    internal fun cardRow(item: ScreenTranslation.Item, style: TextSurface?, handset: Handset, line: Double,
+                         width: Double): Pair<ScreenTranslation.Item, Double>? {
+        val parts = item.translation.split('\n')
+        if (parts.none { it.isNotBlank() }) return null
+        val placement = item.phone
+        val title: String
+        val below: String
+        if (placement?.bold == true) {
+            title = parts.joinToString(" ")
+            below = ""
+        } else if (placement?.titled == true && parts.size >= 2) {
+            title = parts[0]
+            below = parts.drop(1).joinToString(" ")
+        } else {
+            title = ""
+            below = parts.joinToString(" ")
+        }
+        val row = ListRow(title, below, widget = false)
+        val inset = ROW_PADDING * line / handset.aspect
+        val inner = width - 2 * inset
+        val perLine = (inner * handset.aspect / (line * CHAR_WIDTH)).toInt()
+        val lines = (if (title.isEmpty()) 0 else wrap(title, perLine).size) + (if (below.isEmpty()) 0 else wrap(below, perLine).size)
+        val needed = maxOf(1, lines) * line * LINE_SPACING + 2 * ROW_PADDING * line
+        val original = item.box.bottom - item.box.top + line * BUBBLE_PADDING
+        val placed = item.copy(unchanged = false, lineHeight = line, surface = bubbleColor(style ?: item.surface, ROW_COLOR),
+            look = TextLook(false, false, "left", false), panel = PanelPart.ROW, listRow = row)
+        return placed to maxOf(needed, original)
     }
 
     /** Liste kartının rengi okunamadıysa: GTA 6 telefonunun açık satır kartı. */
@@ -530,10 +614,13 @@ object ScreenPhoneCard {
         return (maxOf(x, y) + 0.05) / (minOf(x, y) + 0.05)
     }
 
-    /** Kartta dizilecek telefon yazılarının satır yüksekliklerinin ortancası (panelin yazı boyu); yoksa null. */
+    /**
+     * Kartta dizilecek telefon yazılarının satır yüksekliklerinin ortancası (panelin yazı boyu); yoksa null. Çift sayıda
+     * ölçümde küçük ortanca alınır: iki öğeden biri fotoğrafın içindeki büyük yazıysa (3416) panel onun boyunda çiziliyordu.
+     */
     fun measuredLine(items: List<ScreenTranslation.Item>): Double? {
         val heights = items.filter { it.phone?.role?.inCard == true }.map { it.lineHeight }.sorted()
-        return if (heights.isEmpty()) null else heights[heights.size / 2]
+        return if (heights.isEmpty()) null else heights[(heights.size - 1) / 2]
     }
 
     /** Metni sözcük sözcük en çok [perLine] harflik satırlara böler (çok uzun sözcük kendi satırında kalır). */

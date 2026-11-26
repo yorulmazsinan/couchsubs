@@ -113,6 +113,9 @@ internal static class PhoneChat
             for (var i = 0; i < rows.Count; i++) result.Add(Group([rows[i]], list[i], handset));
             return result;
         }
+        // Sohbet dışı ekran (gönderi, haber, makale, hava, fitness, ayarlar, eklenti): kartlar (PhoneScreen; otomatik telefon
+        // okumasıyla aynı kural).
+        if (ScreenGroups(raw is { Count: > 0 } ? raw : lines, handset) is { } cards) return cards;
         if (header is not null) result.Add(Group([header], ScreenPhoneCard.Role.Header, handset));
         var bubble = new List<Row>();
         void Finish()
@@ -187,6 +190,18 @@ internal static class PhoneChat
         return labels.Any(label => labels.Count(other => SameBand(other, label)) >= GridLabels);
     }
 
+    /// <summary>
+    /// Uygulama başlatıcı (gerçek ana ekran): bildirim sayacı ya da simge ızgarası var. Yalnız hava satırı ("71°") olan ekran
+    /// hava uygulamasıdır: oradaki tek sözcüklük satırlar ("Now", "Sunset") uygulama adı değildir, çevrilir (Sinan Bey,
+    /// beta.100 3422; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static bool IsLauncher(IReadOnlyList<Row> rows)
+    {
+        if (rows.Any(row => Counter.IsMatch(row.Text))) return true;
+        var labels = rows.Where(row => IsAppLabel(row.Text) && (row.Spot.Top + row.Spot.Bottom) / 2 >= HeaderBand).ToList();
+        return labels.Any(label => labels.Count(other => SameBand(other, label)) >= GridLabels);
+    }
+
     /// <summary>Uygulama adı gibi: bir-iki sözcük, hepsi harf ve büyük harfle başlıyor, rakam ve noktalama yok ("WhatUp", "Camera").</summary>
     internal static bool IsAppLabel(string text)
     {
@@ -245,8 +260,10 @@ internal static class PhoneChat
         if (!IsHomeScreen(lines)) return lines;
         var rows = HomeRows(lines);
         var median = rows.Select(row => row.Height).OrderBy(h => h).ElementAt(rows.Count / 2);
-        var names = HomeBlocks(rows, median).Where(IsAppName).SelectMany(block => block[0].Lines).ToList();
-        return [.. lines.Where(line => !names.Any(name => name.Text == line.Text && name.PhoneBox == line.PhoneBox))];
+        var names = IsLauncher(rows) ? HomeBlocks(rows, median).Where(IsAppName).SelectMany(block => block[0].Lines).ToList() : [];
+        // Saat ("7PM", "10 PM") çevrilmez (Sinan Bey, beta.100 3422: "10PM" "22:00" yazılıyordu).
+        return [.. lines.Where(line => line.Text.Count(char.IsLetter) >= 2 && !PhoneScreen.IsTime(line.Text)
+                                       && !names.Any(name => name.Text == line.Text && name.PhoneBox == line.PhoneBox))];
     }
 
     /// <summary>
@@ -276,9 +293,10 @@ internal static class PhoneChat
     internal static IReadOnlyList<ScreenTranslation.Group> HomeGroups(IReadOnlyList<Row> rows, double median, ScreenPhoneCard.Handset handset)
     {
         var result = new List<ScreenTranslation.Group>();
-        foreach (var block in HomeBlocks(rows, median))
+        var launcher = IsLauncher(rows);
+        foreach (var block in HomeBlocks([.. rows.Where(row => !PhoneScreen.IsTime(row.Text))], median))
         {
-            if (IsAppName(block)) continue;
+            if (launcher && IsAppName(block)) continue;
             if (IsWidget(block))
             {
                 var boxes = block.SelectMany(row => row.Lines).Where(line => line.Box is not null).Select(line => line.Box!.Value).ToList();
@@ -304,6 +322,37 @@ internal static class PhoneChat
                 piece.Add(row);
             }
             if (piece.Count > 0) result.Add(Group(piece, ScreenPhoneCard.Role.Home, handset));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Sohbet dışı ekranın kartları (<see cref="PhoneScreen.KindOf"/>/<see cref="PhoneScreen.Cards"/>, satırların düz ekrandaki
+    /// yeriyle); ekran sohbetse null. Ekranın üst/alt kenarından taşan kesik satırlar kartlara girmez (Mac/iPhone ve Android
+    /// ile aynı).
+    /// </summary>
+    internal static IReadOnlyList<ScreenTranslation.Group>? ScreenGroups(IReadOnlyList<TextLine> lines, ScreenPhoneCard.Handset handset)
+    {
+        var boxed = lines.Where(line => line.Box is not null).ToList();
+        var all = boxed.Select(line => new PhoneScreen.Line(Clean(line.Text), handset.Flat(line.Box!.Value))).ToList();
+        var kind = PhoneScreen.KindOf(all);
+        if (kind == PhoneScreen.Kind.Chat) return null;
+        var result = new List<ScreenTranslation.Group>();
+        foreach (var card in PhoneScreen.Cards(all, kind))
+        {
+            var rows = card.Lines.Where(i => all[i].Spot.Top >= -EdgeCut && all[i].Spot.Bottom <= 1 + EdgeCut).ToList();
+            if (rows.Count == 0) continue;
+            var titled = card.Titled && rows.Count >= 2 && rows[0] == card.Lines[0];
+            var paragraphs = PhoneScreen.Paragraphs(new PhoneScreen.Card(rows, titled, card.Bold), all);
+            var boxes = rows.Select(i => boxed[i].Box!.Value).ToList();
+            var spots = rows.Select(i => all[i].Spot).ToList();
+            var heights = spots.Select(spot => spot.Bottom - spot.Top).Order().ToList();
+            result.Add(new ScreenTranslation.Group(paragraphs, boxes.Skip(1).Aggregate(boxes[0], (a, b) => a.Union(b)),
+                heights[(heights.Count - 1) / 2] * handset.ScreenHeight)
+            {
+                Phone = new ScreenPhoneCard.Placement(ScreenPhoneCard.Role.Card, spots.Skip(1).Aggregate(spots[0], (a, b) => a.Union(b)),
+                    titled, card.Bold),
+            });
         }
         return result;
     }
