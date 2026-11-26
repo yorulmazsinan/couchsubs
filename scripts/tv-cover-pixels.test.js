@@ -339,6 +339,40 @@ test('TV: "Zeminsiz"de "Örtsün" kutu çizmez, yazı konturlu', { skip }, (t) =
   }
 });
 
+// X (beta.105, @2zzvlrr): "Örtsün" kullanmayan, zemini "Zeminsiz" olan kullanıcı TV'de altyazının arkasında koyu zemin görüyordu.
+// "Altında", "Üstünde", "Sabit" ve bantta koyuluk 0 ile hiçbir altyazı kutusu (güncel ve önceki satırlar) zemin çizmez.
+test('TV: "Zeminsiz"de her yerleşimde altyazı kutuları saydam', { skip }, () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-clear-all-'));
+  try {
+    const ids = ['subtitle', 'subtitle-text', 'subtitle-prev', 'subtitle-prev-text', 'subtitle-prev2', 'subtitle-prev2-text'];
+    const scenes = [];
+    for (const placement of ['below', 'above', 'fixed', 'cover']) {
+      for (const shape of ['box', 'band']) {
+        scenes.push({ name: placement + '-' + shape, style: Object.assign(tvStyle(placement, 46, 0),
+          { backgroundShape: shape, backgroundColor: '#2B2D33', stackPrevious: true }) });
+      }
+    }
+    const events = `var out = {};
+      function bgs() { var r = {}; ${JSON.stringify(ids)}.forEach(function (id) {
+        var el = document.getElementById(id); if (el) r[id] = getComputedStyle(el).backgroundColor; }); return r; }
+      ${scenes.map((scene) => `__send('style', ${JSON.stringify(scene.style)});
+      __send('subtitle', ${JSON.stringify({ text: 'Lucia: ' + SHORT, duration: 8000, box: ENGLISH })});
+      __send('subtitle', ${JSON.stringify({ text: 'Jason: ' + MEDIUM, duration: 8000, box: ENGLISH })});
+      __send('subtitle', ${JSON.stringify({ text: SHORT, duration: 8000 })});
+      out[${JSON.stringify(scene.name)}] = bgs();`).join('\n')}
+      var pre = document.createElement('pre'); pre.id = 'result';
+      pre.textContent = btoa(JSON.stringify(out)); document.body.appendChild(pre);`;
+    const m = result(run(['--virtual-time-budget=31000', '--dump-dom', tvPage(temp, events)], temp));
+    for (const [name, colors] of Object.entries(m)) {
+      for (const [id, color] of Object.entries(colors)) {
+        assert.ok(/rgba\(\d+, \d+, \d+, 0\)|transparent/.test(color), name + ' ' + id + ': ' + color + ' ' + JSON.stringify(m));
+      }
+    }
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test('TV: örtüde yazı boyu sabit, uzun satırda da küçülmez', { skip }, () => {
   const fonts = tvFonts();
   // Seçilen boy 46: 3 satıra sığmayan satır da 46 (daha çok satıra bölünür); boy ayarı değişince yeni boy.
