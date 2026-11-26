@@ -172,6 +172,14 @@
       return (text ? text + ' · ' : '') + 'WebView ' + (chrome ? chrome[1] : '?');
     },
 
+    // TV olay günlüğünün uygulama tarafı (MainActivity: HDMI girişinin açılması/bırakılması, ekranın kurulması/geri
+    // alınması, kapanma isteği; bkz. TvEvents.java): bekleyen satırlar, app.js bilgisayara/telefona gönderir (0.9.116).
+    takeEvents: function () {
+      var raw = '';
+      try { raw = bridge.takeEvents ? String(bridge.takeEvents() || '') : ''; } catch (e) { raw = ''; }
+      return raw ? raw.split('\n') : [];
+    },
+
     exit: function () { bridge.exit(); }
   };
 })();

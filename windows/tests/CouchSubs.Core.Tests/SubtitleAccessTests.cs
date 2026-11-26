@@ -27,6 +27,27 @@ public class SubtitleAccessTests
             Assert.Equal(peer.Value.GetBoolean(), SubtitleAccess.IsLocalPeer(IPAddress.Parse(peer.Name)));
     }
 
+    /// <summary>
+    /// TV olay satırı (/tvlog, TV 0.9.116): nedeniyle günlüğe; eski satıra yaşı eklenir, denetim karakteri ve uzun satır
+    /// kırpılır, 10 dakikada en çok 30 satır (Mac/iPhone ve Android'de aynı).
+    /// </summary>
+    [Fact]
+    public void TvEventLineIsCleanedAndRateLimited()
+    {
+        var log = new SubtitleAccess.TvEventLog();
+        var t0 = new DateTime(2026, 11, 26, 12, 0, 0, DateTimeKind.Utc);
+        Assert.Equal("TV uygulaması olayı: hdmi rebuild (ev stalled blind 61s #1)", log.Line("hdmi rebuild (ev stalled blind 61s #1)", "0", t0));
+        Assert.Equal("TV uygulaması olayı: exit intent (keeper, running) (42 sn önce)", log.Line("exit intent (keeper, running)", "42", t0));
+        Assert.Equal("TV uygulaması olayı: a b c", log.Line("a\nb\u0000c\u0085", "-3", t0));
+        Assert.Null(log.Line("   ", "0", t0));
+        Assert.Null(log.Line(null, null, t0));
+        Assert.Equal("TV uygulaması olayı: ".Length + 200, log.Line(new string('x', 400), "x", t0)!.Length);
+        var limited = new SubtitleAccess.TvEventLog();
+        for (var i = 0; i < 35; i++) Assert.Equal(i < 30, limited.Line("hdmi tune (loop " + i + ")", "0", t0) is not null);
+        Assert.Equal("TV uygulaması olayı: page reload (stale 0.9.116>0.9.115) (sınır yüzünden 5 satır yazılmadı)",
+            limited.Line("page reload (stale 0.9.116>0.9.115)", "0", t0 + SubtitleAccess.TvEventLog.Window));
+    }
+
     /// <summary>Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Mac/iPhone ve Android'de aynı).</summary>
     [Fact]
     public void RejectedOriginIsLoggedOnce()

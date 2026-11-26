@@ -99,6 +99,51 @@ object SubtitleAccess {
             return if (fresh) rejectedOriginLine(request) else null
         }
     }
+    /**
+     * TV uygulamasının olay satırı (`GET /tvlog?m=<satır>&a=<kaç sn önce>`, TV 0.9.116): görüntüyü karartabilen her olay
+     * (HDMI'nin yeniden kurulması/açılması, sayfanın yenilenmesi, uygulamanın yeniden açılması, Android TV'de kapanma
+     * isteği) nedeniyle günlüğe yazılır. "Son TV güncellemesinden sonra ekran sürekli göz kırpıyor" (beta.102-104)
+     * bildirimlerinde neden yalnız panelin fotoğrafından okunabiliyordu. TV satırları zaten seyreltir; burada da
+     * [WINDOW_MAX] satır / [WINDOW_MS] sınırı var, denetim karakterleri atılır, en çok [TEXT_MAX] karakter. Windows ve
+     * Mac/iPhone'daki `TvEventLog` ile aynı.
+     */
+    class TvEventLog {
+        private val times = ArrayDeque<Long>()
+        private var dropped = 0
+
+        /** Yazılacak satır; boşsa ya da sınır dolduysa null. now: ms. */
+        fun line(message: String?, age: String?, now: Long): String? {
+            val text = clean(message)
+            if (text.isEmpty()) return null
+            synchronized(times) {
+                while (times.isNotEmpty() && now - times.first() >= WINDOW_MS) times.removeFirst()
+                if (times.size >= WINDOW_MAX) {
+                    dropped++
+                    return null
+                }
+                times.addLast(now)
+                val note = if (dropped > 0) " (sınır yüzünden $dropped satır yazılmadı)" else ""
+                dropped = 0
+                val seconds = age?.takeIf { it.isNotEmpty() && it.all { c -> c in '0'..'9' } }?.toIntOrNull()
+                val ago = if (seconds != null && seconds >= 5) " ($seconds sn önce)" else ""
+                return "TV uygulaması olayı: $text$ago$note"
+            }
+        }
+
+        companion object {
+            const val WINDOW_MAX = 30
+            const val WINDOW_MS = 10 * 60_000L
+            const val TEXT_MAX = 200
+
+            /** Denetim karakterleri boşluk olur, baştaki/sondaki boşluk atılır, en çok [TEXT_MAX] karakter. */
+            fun clean(message: String?): String {
+                if (message.isNullOrEmpty()) return ""
+                val text = message.map { if (Character.isISOControl(it)) ' ' else it }.joinToString("").trim(' ')
+                return if (text.length > TEXT_MAX) text.substring(0, TEXT_MAX) else text
+            }
+        }
+    }
+
     fun originAllowed(request: Request): Boolean {
         val value = request.origin ?: return true
         if (packagedOrigin(value)) return true

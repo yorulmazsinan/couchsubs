@@ -178,7 +178,9 @@ function startPage(options) {
     isOverlay: () => false,
     setDisplayMode() {},
     diagnostics: () => 'mode inApp · tv available · Philips 55PUS7303 · Android 8.0.0 (26)',
-    appVersion: () => ''
+    appVersion: () => '',
+    // options.events: uygulama tarafının (MainActivity, TvEvents) bekleyen olay satırları; sayfa alınca boşalır.
+    takeEvents: () => (options.events ? options.events.splice(0).join('\n') : '')
   };
   const document = {
     hidden: false,
@@ -253,6 +255,8 @@ function startPage(options) {
     stored: (key) => storage.get('couchsubs.' + key),
     // Bilgisayar/telefon çalışan uygulamaya adresini bildirdi (am start'ın onNewIntent'i ya da AddressReceiver yayını).
     relaunch: (params) => context.window.__onRelaunch(JSON.stringify(params)),
+    // Sayfanın TV olay günlüğüne satır yazar (platform.js'lerin yaptığı gibi).
+    tvLog: (text) => context.window.COUCHSUBS_TVLOG(text),
     close() {
       for (const id of timers) { clearTimeout(id); clearInterval(id); }
       for (const source of sources) source.close();

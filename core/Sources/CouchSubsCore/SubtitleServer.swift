@@ -220,6 +220,7 @@ public final class SubtitleServer: @unchecked Sendable {
     public let pairing: SubtitlePairing
     /// 403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132).
     private let rejectedOrigins = SubtitleAccess.RejectedOrigins()
+    private let tvEvents = SubtitleAccess.TvEventLog()
     public var onPairingRequest: (@Sendable (SubtitlePairing.Ticket) -> Void)?
     private var legacySeen = false
     public var onLegacyClient: (@Sendable () -> Void)?
@@ -1064,6 +1065,11 @@ public final class SubtitleServer: @unchecked Sendable {
             } else {
                 respondAndClose(connection, status: "404 Not Found", cors: cors)
             }
+        } else if method == "GET" && path == "/tvlog" {
+            // TV uygulamasının olay satırı (TV 0.9.116; bkz. SubtitleAccess.TvEventLog): HDMI'nin yeniden kurulması,
+            // sayfanın yenilenmesi, uygulamanın yeniden açılması nedeniyle günlüğe.
+            if let line = tvEvents.line(message: request.parameter("m"), age: request.parameter("a"), now: Date()) { SubtitleLog.write(line) }
+            respondAndClose(connection, status: "204 No Content", data: Data(), type: nil, cors: cors)
         } else if method == "GET" && path == "/obs" {
             respondAndClose(connection, status: "200 OK", data: Self.obsOverlay, type: "text/html; charset=utf-8", cors: cors)
         } else if method == "GET" && path == SecondScreen.path {

@@ -138,6 +138,7 @@ class SubtitleServer(
     var onLegacyClient: (() -> Unit)? = null
     /** 403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132; uygulamanın günlüğü, [DropLog.sink]). */
     private val rejectedOrigins = SubtitleAccess.RejectedOrigins()
+    private val tvEvents = SubtitleAccess.TvEventLog()
     fun rotateKey(key: String) {
         val closing = synchronized(lock) {
             accessKey = key
@@ -897,6 +898,12 @@ class SubtitleServer(
                         synchronized(lock) { client.ackMisses = 0 }
                         respondAndClose(socket, "204 No Content", cors = cors)
                     } else respondAndClose(socket, "404 Not Found", cors = cors)
+                }
+                // TV uygulamasının olay satırı (TV 0.9.116; bkz. SubtitleAccess.TvEventLog): HDMI'nin yeniden kurulması,
+                // sayfanın yenilenmesi, uygulamanın yeniden açılması nedeniyle günlüğe.
+                method == "GET" && path == "/tvlog" -> {
+                    tvEvents.line(request.parameter("m"), request.parameter("a"), System.currentTimeMillis())?.let { line -> DropLog.sink?.invoke(line) }
+                    respondAndClose(socket, "204 No Content", cors = cors)
                 }
                 method == "GET" && path == "/hello" -> respondAndClose(socket, "200 OK", helloBody(instanceId, connectedClients, sendsToTv && pairing.inSession), cors)
                 else -> respondAndClose(socket, "404 Not Found", cors = cors)

@@ -151,11 +151,17 @@ public class MainActivity extends Activity implements TvPage.Host {
         Intent intent = getIntent();
         if (intent != null && intent.getBooleanExtra(EXTRA_EXIT, false)) {
             // Kapanma isteği uygulama kapalıyken geldi (ya da yalnız katman çalışıyordu): hiçbir giriş açılmaz, katman da kapanır.
+            event("exit intent (keeper, " + (OverlayService.running ? "overlay running" : "not running") + ")");
             if (OverlayService.running) OverlayService.stop(this);
             finishAndRemoveTask();
             return;
         }
         launchParams = paramsOf(intent);
+        // Ekranın her kuruluşu nedeniyle yazılır (0.9.116): ekranın kapanıp yeniden açılması TV'de göz kırpma gibi görünür.
+        event("activity start (" + (savedInstanceState != null ? "recreated"
+                : intent.getBooleanExtra(EXTRA_RECLAIM, false) ? "reclaim"
+                : intent.getBooleanExtra(EXTRA_FROM_OVERLAY, false) ? "from overlay"
+                : launchParams.isEmpty() ? "launch" : "launch with address") + ")");
         TvPage.storeDisplayMode(this, intent.getStringExtra(EXTRA_DISPLAY_MODE));
         // Ekran sistemce yeniden kurulduysa (ayar değişikliği) kullanıcının katmandan çıktığı unutulmaz: yoksa kayıtlı
         // katman tercihiyle ekran kapanıp katmana geçilirdi.
@@ -396,7 +402,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         boolean source = HdmiInputs.hasSource(this, id);
         if (id != null && outage.shouldRetune(now, source)) {
             resetQuietly(tvView);
-            tune(id);
+            tune(id, "outage");
         } else if (outage.shouldTell(now, source) && !pickerShown && !pickerClosed) {
             showPicker(true);
         }
@@ -422,6 +428,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         TvView view = tvView;
         if (view == null) return;
         tvState = "released (" + why + ")";
+        event("hdmi release (" + why + ")");
         keepScreenOn(false);
         resetQuietly(view);
         if (removeView) {
@@ -487,9 +494,10 @@ public class MainActivity extends Activity implements TvPage.Host {
         String previous = session.input();
         releaseHdmi(false, "overlay");
         session.clear();
+        event("overlay switch (" + getResources().getResourceEntryName(message) + ")");
         if (!startOverlay()) {
             // Katman açılamadı: uygulama kapanmaz, nedeni söylenir, bırakılan giriş yeniden açılır.
-            if (previous != null && tvView != null) tune(previous);
+            if (previous != null && tvView != null) tune(previous, "overlay failed");
             showOverlayFailed();
             return;
         }
@@ -558,7 +566,7 @@ public class MainActivity extends Activity implements TvPage.Host {
             inAppRetuned = true;
             watch.pause();
             resetQuietly(tvView);
-            tune(id);
+            tune(id, "no picture");
             return;
         }
         // Katmana geçilemiyor (Play paketi, izin yok ya da girişte cihaz görünmüyor): ekran siyah kalmasın, giriş seçici ve
@@ -772,7 +780,7 @@ public class MainActivity extends Activity implements TvPage.Host {
             return;
         }
         retuneAttempts = 0;
-        tune(id);
+        tune(id, "port " + port);
     }
 
     /**
@@ -795,6 +803,7 @@ public class MainActivity extends Activity implements TvPage.Host {
     }
 
     private void exit(String why) {
+        event("exit (" + why + ")");
         stopWatching();
         stopOutageWatch();
         handler.removeCallbacksAndMessages(null);
@@ -870,6 +879,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         super.onNewIntent(intent);
         if (intent.getBooleanExtra(EXTRA_EXIT, false)) {
             // #1221: bilgisayar/telefon kapatıp yeniden açacak; HDMI girişi işlem öldürülmeden önce bırakılır.
+            event("exit intent (keeper, running)");
             if (OverlayService.running) OverlayService.stop(this);
             exit("exit (keeper)");
             return;
@@ -939,7 +949,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         boolean held = session.held() && !lostWhilePaused;
         lostWhilePaused = false;
         String id = session.toForeground();
-        if (tvView != null && id != null && !held) tune(id);
+        if (tvView != null && id != null && !held) tune(id, "resume");
         if (keptInAppNotice != 0) {
             showOverlayFailed(keptInAppNotice);
             keptInAppNotice = 0;
@@ -1023,6 +1033,7 @@ public class MainActivity extends Activity implements TvPage.Host {
      */
     private void reclaimScreen() {
         if (resumed || isFinishing() || isDestroyed()) return;
+        event("activity reclaim (taken over)");
         try {
             startActivity(new Intent(this, MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -1078,14 +1089,18 @@ public class MainActivity extends Activity implements TvPage.Host {
         if (tvView == null || !resumed || !session.canRetune(id) || retuneAttempts >= 5) return;
         retuneAttempts++;
         // Arka plana düşüldüyse yeniden denenmez: giriş TV'nin kendi ekranındadır.
-        handler.postDelayed(() -> { if (resumed && session.canRetune(id)) tune(id); }, 1500L * retuneAttempts);
+        int attempt = retuneAttempts;
+        handler.postDelayed(() -> { if (resumed && session.canRetune(id)) tune(id, "retry " + attempt + ", " + tvState); },
+                1500L * retuneAttempts);
     }
 
-    private void tune(String id) {
+    /** why: tanı için neden (TV olay günlüğü). */
+    private void tune(String id, String why) {
         // Kapanıyor (çıkış isteği): giriş yeniden açılmaz, bırakılan HDMI bırakılmış kalır (#1221).
         if (isFinishing() || tvView == null) return;
         // Ekran arka plandaysa giriş açılmaz, yalnız hatırlanır; öne gelince açılır (onResume).
         if (!session.want(id)) return;
+        event("hdmi tune (" + why + ")");
         // Bekleyen gecikmeli bırakma bu yeni oturumu kapatmasın.
         releaseGeneration++;
         tvState = "tuning";
@@ -1117,6 +1132,7 @@ public class MainActivity extends Activity implements TvPage.Host {
         if (parent != null) parent.removeView(page.webView);
         page.destroy();
         page = null;
+        event("page restart (renderer " + (crashed ? "crashed" : "killed") + ")");
         if (parent == null || isFinishing() || !pageRestarts.allow(SystemClock.elapsedRealtime())) {
             showOverlayFailed(R.string.page_renderer_failed);
             return;
@@ -1142,5 +1158,10 @@ public class MainActivity extends Activity implements TvPage.Host {
 
     private void status(String kind) {
         if (page != null) page.status(kind);
+    }
+
+    /** TV olay günlüğüne yazar (bkz. TvEvents; sayfa bilgisayara/telefona gönderir). */
+    private void event(String line) {
+        TvEvents.of(this).add(line, System.currentTimeMillis());
     }
 }

@@ -164,6 +164,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     public bool HasLegacyClient => Volatile.Read(ref legacySeen) != 0;
     /// <summary>403 alan Origin değerleri günlüğe bir kez yazılır (GitHub #1132).</summary>
     private readonly SubtitleAccess.RejectedOrigins rejectedOrigins = new();
+    private readonly SubtitleAccess.TvEventLog tvEvents = new();
 
     /// <summary>Anahtar değişince mevcut akışlar da kapanır; eski anahtar yeniden bağlanamaz.</summary>
     public void RotateKey(string key)
@@ -1016,6 +1017,13 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                     known = client is not null;
                 }
                 await RespondAndClose(tcp, known ? "204 No Content" : "404 Not Found", cors: cors);
+            }
+            else if (method == "GET" && path == "/tvlog")
+            {
+                // TV uygulamasının olay satırı (TV 0.9.116; bkz. SubtitleAccess.TvEventLog): HDMI'nin yeniden kurulması,
+                // sayfanın yenilenmesi, uygulamanın yeniden açılması nedeniyle günlüğe.
+                if (tvEvents.Line(request.Parameter("m"), request.Parameter("a"), DateTime.UtcNow) is { } line) SubtitleLog.Write(line);
+                await RespondAndClose(tcp, "204 No Content", cors: cors);
             }
             else if (method == "GET" && path == "/obs") await RespondAndClose(tcp, ObsOverlay, "text/html; charset=utf-8", cors);
             // Anahtar Authorize'da denetlendi (anahtarsız istek 401 aldı).

@@ -118,6 +118,55 @@ public static class SubtitleAccess
         }
     }
 
+    /// <summary>
+    /// TV uygulamasının olay satırı (<c>GET /tvlog?m=&lt;satır&gt;&amp;a=&lt;kaç sn önce&gt;</c>, TV 0.9.116): görüntüyü
+    /// karartabilen her olay (HDMI'nin yeniden kurulması/açılması, sayfanın yenilenmesi, uygulamanın yeniden açılması,
+    /// Android TV'de kapanma isteği) nedeniyle günlüğe yazılır. "Son TV güncellemesinden sonra ekran sürekli göz kırpıyor"
+    /// (beta.102-104) bildirimlerinde neden yalnız panelin fotoğrafından okunabiliyordu. TV satırları zaten seyreltir; burada
+    /// da <see cref="WindowMax"/> satır / <see cref="Window"/> sınırı var, denetim karakterleri atılır, en çok
+    /// <see cref="TextMax"/> karakter. Mac/iPhone ve Android'deki <c>TvEventLog</c> ile aynı.
+    /// </summary>
+    public sealed class TvEventLog
+    {
+        public const int WindowMax = 30;
+        public static readonly TimeSpan Window = TimeSpan.FromMinutes(10);
+        public const int TextMax = 200;
+        private readonly Queue<DateTime> times = new();
+        private int dropped;
+
+        /// <summary>Yazılacak satır; boşsa ya da sınır dolduysa null.</summary>
+        public string? Line(string? message, string? age, DateTime now)
+        {
+            var text = Clean(message);
+            if (text.Length == 0) return null;
+            lock (times)
+            {
+                while (times.Count > 0 && now - times.Peek() >= Window) times.Dequeue();
+                if (times.Count >= WindowMax)
+                {
+                    dropped++;
+                    return null;
+                }
+                times.Enqueue(now);
+                var note = dropped > 0 ? $" (sınır yüzünden {dropped} satır yazılmadı)" : "";
+                dropped = 0;
+                var ago = int.TryParse(age, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+                    && seconds >= 5 ? $" ({seconds} sn önce)" : "";
+                return $"TV uygulaması olayı: {text}{ago}{note}";
+            }
+        }
+
+        /// <summary>Denetim karakterleri boşluk olur, baştaki/sondaki boşluk atılır, en çok <see cref="TextMax"/> karakter.</summary>
+        public static string Clean(string? message)
+        {
+            if (string.IsNullOrEmpty(message)) return "";
+            var builder = new StringBuilder(message.Length);
+            foreach (var c in message) builder.Append(char.IsControl(c) ? ' ' : c);
+            var text = builder.ToString().Trim(' ');
+            return text.Length > TextMax ? text[..TextMax] : text;
+        }
+    }
+
     public static bool OriginAllowed(Request request)
     {
         if (request.Origin is null || PackagedOrigin(request.Origin)) return true;

@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.115';
+  var APP_VERSION = '0.9.116';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -107,6 +107,7 @@
     el.textContent = (outdated ? outdated + ' · ' : '') + 'sub ' + diag.subtitles + ' · clear ' + diag.clears + ' · drop ' + diag.drops +
       ' · bg ' + diag.backgrounded + (diag.revived ? ' · revived ' + diag.revived : '') + ' · hide ' + diag.lastHide + ' · ' + diag.place +
       (window.__screenSaverStatus ? ' · saver ' + window.__screenSaverStatus : '') +
+      (tvlogLast ? ' · tv ' + tvlogLast : '') +
       (diag.error ? ' · err ' + diag.error : '');
     renderPlatformDiag();
   }
@@ -225,6 +226,104 @@
     var key = serverKey(address);
     return address + path + (key ? (path.indexOf('?') < 0 ? '?' : '&') + 'k=' + encodeURIComponent(key) : '');
   }
+
+  // --- TV olay günlüğü (0.9.116) ---
+  // "Ekran sürekli göz kırpıyor, gidip geliyor" bildirimlerinde (beta.102-104) nedeni yalnız panelin fotoğrafından okuyorduk.
+  // Artık görüntüyü karartabilen her olay (HDMI'nin yeniden kurulması/açılması, sayfanın yenilenmesi, uygulamanın yeniden
+  // açılması ya da ekranın yeniden kurulması, Android TV'de kapanma isteği) nedeniyle birlikte bilgisayarın/telefonun
+  // günlüğüne gider: `GET /tvlog?m=<satır>&a=<kaç sn önce>`. Aynı türden satır TVLOG_GAP_MS'de bir (arada atlananlar
+  // "+n" olarak sayılır), TVLOG_WINDOW_MS'de en çok TVLOG_WINDOW_MAX satır. Gönderilemeyenler localStorage'da bekler
+  // (sayfa yenilense de kaybolmaz), en çok TVLOG_PENDING_MAX. Eski bilgisayar/telefon /tvlog'u tanımaz (404): satır atılır.
+  // Platformun kendi olayları (Android TV: MainActivity) platform.takeEvents ile alınır.
+  var TVLOG_KEY = 'tvlog';
+  var TVLOG_GAP_MS = 15000;
+  var TVLOG_WINDOW_MS = 10 * 60000;
+  var TVLOG_WINDOW_MAX = 20;
+  var TVLOG_PENDING_MAX = 20;
+  var TVLOG_TEXT_MAX = 160;
+  var tvlogKinds = {};
+  var tvlogTimes = [];
+  var tvlogBusy = false;
+  var tvlogLast = '';
+
+  function tvlogPending() {
+    try {
+      var list = JSON.parse(load(TVLOG_KEY) || '[]');
+      return Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function tvLog(text) {
+    var line = String(text == null ? '' : text).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/^\s+|\s+$/g, '');
+    if (!line) return;
+    if (line.length > TVLOG_TEXT_MAX) line = line.slice(0, TVLOG_TEXT_MAX);
+    var now = Date.now();
+    // Tür: parantezden önceki kısım ("hdmi rebuild (ev stalled)" → "hdmi rebuild").
+    var kind = line.replace(/\s*\(.*$/, '');
+    var slot = tvlogKinds[kind] || (tvlogKinds[kind] = { at: 0, skipped: 0 });
+    if (slot.at && now - slot.at < TVLOG_GAP_MS) {
+      slot.skipped++;
+      return;
+    }
+    while (tvlogTimes.length && now - tvlogTimes[0] >= TVLOG_WINDOW_MS) tvlogTimes.shift();
+    if (tvlogTimes.length >= TVLOG_WINDOW_MAX) {
+      slot.skipped++;
+      return;
+    }
+    tvlogTimes.push(now);
+    if (slot.skipped) line += ' +' + slot.skipped;
+    slot.at = now;
+    slot.skipped = 0;
+    tvlogLast = line;
+    var pending = tvlogPending();
+    pending.push({ t: now, m: line });
+    while (pending.length > TVLOG_PENDING_MAX) pending.shift();
+    save(TVLOG_KEY, JSON.stringify(pending));
+    renderDiag();
+    flushTvLog();
+  }
+  window.COUCHSUBS_TVLOG = tvLog;
+
+  // Bekleyen satırları sırayla gönderir (yalnız akış açıkken). Ağ hatasında durur, sonra yeniden dener.
+  function flushTvLog() {
+    if (typeof platform.takeEvents === 'function') {
+      var events = [];
+      try { events = platform.takeEvents() || []; } catch (e) { events = []; }
+      for (var i = 0; i < events.length; i++) tvLog(events[i]);
+    }
+    if (tvlogBusy || !server || !eventSource || eventSource.readyState !== 1 || !window.XMLHttpRequest) return;
+    var pending = tvlogPending();
+    if (!pending.length) return;
+    var item = pending[0] || {};
+    var age = Math.max(0, Math.round((Date.now() - (Number(item.t) || Date.now())) / 1000));
+    var xhr = new XMLHttpRequest();
+    var settled = false;
+    tvlogBusy = true;
+    function done(sent) {
+      if (settled) return;
+      settled = true;
+      tvlogBusy = false;
+      if (!sent) return;
+      var rest = tvlogPending();
+      if (rest.length && rest[0].t === item.t && rest[0].m === item.m) rest.shift();
+      save(TVLOG_KEY, JSON.stringify(rest));
+      if (rest.length) setTimeout(flushTvLog, 0);
+    }
+    // Yanıt geldiyse (204 ya da eski sunucunun 404'ü) satır gitmiş sayılır; ağ hatasında bekler.
+    xhr.onload = function () { done(true); };
+    xhr.onerror = function () { done(false); };
+    xhr.ontimeout = function () { done(false); };
+    try {
+      xhr.open('GET', authenticatedUrl(server, '/tvlog?m=' + encodeURIComponent(String(item.m || '')) + '&a=' + age));
+      xhr.timeout = 4000;
+      xhr.send();
+    } catch (e) {
+      done(false);
+    }
+  }
+  setInterval(flushTvLog, 10000);
 
   function setStatus(id, text, cls) {
     var el = $(id);
@@ -3183,6 +3282,7 @@
       setStatus('st-conn', t('connected'), 'ok');
       learnServer(address);
       restoreLastLine();
+      flushTvLog();
     };
     eventSource.onerror = function () {
       var failedGeneration = connectionGeneration;

@@ -119,6 +119,53 @@ public enum SubtitleAccess {
             return fresh ? SubtitleAccess.rejectedOriginLine(request) : nil
         }
     }
+    /// TV uygulamasının olay satırı (`GET /tvlog?m=<satır>&a=<kaç sn önce>`, TV 0.9.116): görüntüyü karartabilen her olay
+    /// (HDMI'nin yeniden kurulması/açılması, sayfanın yenilenmesi, uygulamanın yeniden açılması, Android TV'de kapanma
+    /// isteği) nedeniyle günlüğe yazılır. "Son TV güncellemesinden sonra ekran sürekli göz kırpıyor" (beta.102-104)
+    /// bildirimlerinde neden yalnız panelin fotoğrafından okunabiliyordu. TV satırları zaten seyreltir; burada da
+    /// `windowMax` satır / `window` sınırı var, denetim karakterleri atılır, en çok `textMax` karakter. Windows ve
+    /// Android'deki `TvEventLog` ile aynı.
+    public final class TvEventLog: @unchecked Sendable {
+        public static let windowMax = 30
+        public static let window: TimeInterval = 10 * 60
+        public static let textMax = 200
+        private let lock = NSLock()
+        private var times: [Date] = []
+        private var dropped = 0
+        public init() {}
+
+        /// Yazılacak satır; boşsa ya da sınır dolduysa nil.
+        public func line(message: String?, age: String?, now: Date) -> String? {
+            let text = Self.clean(message)
+            guard !text.isEmpty else { return nil }
+            return lock.withLock { () -> String? in
+                times.removeAll { now.timeIntervalSince($0) >= Self.window }
+                guard times.count < Self.windowMax else {
+                    dropped += 1
+                    return nil
+                }
+                times.append(now)
+                let note = dropped > 0 ? " (sınır yüzünden \(dropped) satır yazılmadı)" : ""
+                dropped = 0
+                var ago = ""
+                if let age, !age.isEmpty, age.allSatisfy({ $0.isASCII && $0.isNumber }), let seconds = Int(age), seconds >= 5 {
+                    ago = " (\(seconds) sn önce)"
+                }
+                return "TV uygulaması olayı: \(text)\(ago)\(note)"
+            }
+        }
+
+        /// Denetim karakterleri boşluk olur, baştaki/sondaki boşluk atılır, en çok `textMax` karakter (UTF-16 birimi).
+        public static func clean(_ message: String?) -> String {
+            guard let message, !message.isEmpty else { return "" }
+            var units: [UInt16] = []
+            for unit in message.utf16 { units.append(unit < 0x20 || (unit >= 0x7f && unit < 0xa0) ? 0x20 : unit) }
+            let text = String(decoding: units, as: UTF16.self).trimmingCharacters(in: CharacterSet(charactersIn: " "))
+            let limited = Array(text.utf16)
+            return limited.count > textMax ? String(decoding: limited.prefix(textMax), as: UTF16.self) : text
+        }
+    }
+
     public static func originAllowed(_ request: Request) -> Bool {
         guard let value = request.origin else { return true }
         if packagedOrigin(value) { return true }

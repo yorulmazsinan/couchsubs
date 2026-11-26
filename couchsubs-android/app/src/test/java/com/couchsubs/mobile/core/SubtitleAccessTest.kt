@@ -28,6 +28,25 @@ class SubtitleAccessTest {
         val peers = vectors.getJSONObject("peers")
         for (address in peers.keys()) assertEquals(address, peers.getBoolean(address), SubtitleAccess.isLocalPeer(InetAddress.getByName(address)))
     }
+    /**
+     * TV olay satırı (/tvlog, TV 0.9.116): nedeniyle günlüğe; eski satıra yaşı eklenir, denetim karakteri ve uzun satır
+     * kırpılır, 10 dakikada en çok 30 satır (Mac/iPhone ve Windows'ta aynı).
+     */
+    @Test fun tvEventLineIsCleanedAndRateLimited() {
+        val log = SubtitleAccess.TvEventLog()
+        val t0 = 1_790_000_000_000L
+        assertEquals("TV uygulaması olayı: hdmi rebuild (ev stalled blind 61s #1)", log.line("hdmi rebuild (ev stalled blind 61s #1)", "0", t0))
+        assertEquals("TV uygulaması olayı: exit intent (keeper, running) (42 sn önce)", log.line("exit intent (keeper, running)", "42", t0))
+        assertEquals("TV uygulaması olayı: a b c", log.line("a\nb\u0000c\u0085", "-3", t0))
+        assertNull(log.line("   ", "0", t0))
+        assertNull(log.line(null, null, t0))
+        assertEquals("TV uygulaması olayı: ".length + 200, log.line("x".repeat(400), "x", t0)!!.length)
+        val limited = SubtitleAccess.TvEventLog()
+        for (index in 0 until 35) assertEquals(index < 30, limited.line("hdmi tune (loop $index)", "0", t0) != null)
+        assertEquals("TV uygulaması olayı: page reload (stale 0.9.116>0.9.115) (sınır yüzünden 5 satır yazılmadı)",
+            limited.line("page reload (stale 0.9.116>0.9.115)", "0", t0 + SubtitleAccess.TvEventLog.WINDOW_MS))
+    }
+
     /** Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Mac/iPhone ve Windows'ta aynı). */
     @Test fun rejectedOriginIsLoggedOnce() {
         val log = SubtitleAccess.RejectedOrigins()

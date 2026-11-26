@@ -280,6 +280,16 @@ final class TvPage {
         @JavascriptInterface
         public void exit() { ui.post(host::exit); }
 
+        /** Bekleyen TV olay satırları (TvEvents), satır satır; sayfa bilgisayara/telefona gönderir (app.js tvLog). */
+        @JavascriptInterface
+        public String takeEvents() {
+            StringBuilder out = new StringBuilder();
+            for (String line : TvEvents.of(context).take(System.currentTimeMillis())) {
+                out.append(out.length() == 0 ? "" : "\n").append(line);
+            }
+            return out.toString();
+        }
+
         /** Sayfa katman penceresinde mi çalışıyor (kumanda yok, bekleme kutusu gizlenir). */
         @JavascriptInterface
         public boolean isOverlay() { return overlay; }

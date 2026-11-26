@@ -40,6 +40,23 @@ final class SubtitleAccessTests: XCTestCase {
         XCTAssertEqual(SubtitleAccess.authorize(same, key: "anahtar", allowLegacy: true).status, 200)
     }
 
+    /// TV olay satırı (/tvlog, TV 0.9.116): nedeniyle günlüğe; eski satıra yaşı eklenir, denetim karakteri ve uzun satır
+    /// kırpılır, 10 dakikada en çok 30 satır (Windows ve Android'de aynı).
+    func testTVEventLineIsCleanedAndRateLimited() throws {
+        let log = SubtitleAccess.TvEventLog()
+        let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+        XCTAssertEqual(log.line(message: "hdmi rebuild (ev stalled blind 61s #1)", age: "0", now: t0), "TV uygulaması olayı: hdmi rebuild (ev stalled blind 61s #1)")
+        XCTAssertEqual(log.line(message: "exit intent (keeper, running)", age: "42", now: t0), "TV uygulaması olayı: exit intent (keeper, running) (42 sn önce)")
+        XCTAssertEqual(log.line(message: "a\nb\u{0}c\u{85}", age: "-3", now: t0), "TV uygulaması olayı: a b c")
+        XCTAssertNil(log.line(message: "   ", age: "0", now: t0))
+        XCTAssertNil(log.line(message: nil, age: nil, now: t0))
+        XCTAssertEqual(try XCTUnwrap(log.line(message: String(repeating: "x", count: 400), age: "x", now: t0)).count, "TV uygulaması olayı: ".count + 200)
+        let limited = SubtitleAccess.TvEventLog()
+        for index in 0..<35 { XCTAssertEqual(limited.line(message: "hdmi tune (loop \(index))", age: "0", now: t0) != nil, index < 30) }
+        XCTAssertEqual(limited.line(message: "page reload (stale 0.9.116>0.9.115)", age: "0", now: t0.addingTimeInterval(SubtitleAccess.TvEventLog.window)),
+                       "TV uygulaması olayı: page reload (stale 0.9.116>0.9.115) (sınır yüzünden 5 satır yazılmadı)")
+    }
+
     /// Reddedilen Origin günlüğe değeriyle bir kez yazılır; en çok 16 farklı değer (Windows ve Android'de aynı).
     func testRejectedOriginIsLoggedOnce() throws {
         let log = SubtitleAccess.RejectedOrigins()

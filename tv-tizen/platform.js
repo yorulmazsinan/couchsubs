@@ -499,9 +499,15 @@
     }
   }
 
+  // TV olay günlüğü (app.js tvLog, 0.9.116; yoksa sessiz): görüntüyü yeniden çizdiren her şey nedeniyle yazılır.
+  function tvLog(text) {
+    try { if (typeof window.COUCHSUBS_TVLOG === 'function') window.COUCHSUBS_TVLOG(text); } catch (e) {}
+  }
+
   // HDMI açıkken pencere yeniden istenir (sinyal değişti ya da Samsung ölçüyü bozdu).
   function rewindow(why) {
     if (shownPort === null || !customWindow()) return;
+    tvLog('hdmi rewindow (' + why + ')');
     try {
       showWindow(function () {}, function () {}, why);
     } catch (e) {}
@@ -788,6 +794,7 @@
     // (#1248). Artık her yeniden açılış bildirilir (parametre yoksa null).
     onRelaunch: function (callback) {
       window.addEventListener('appcontrol', function () {
+        tvLog('relaunch (appcontrol)');
         callback(requestedParams());
       });
     },
@@ -806,6 +813,7 @@
         // Pencere yöntemi panelin gerçek ölçüsüne göre seçilir; okunmadıysa önce okunur.
         readPanel(function () {
           try {
+            tvLog('hdmi open ' + port + (shownPort === null ? ' (start)' : shownPort === port ? ' (same input reselected)' : ' (input changed)'));
             tizen.tvwindow.setSource(source, function () {
               shownPort = port;
               resetTimes = [];

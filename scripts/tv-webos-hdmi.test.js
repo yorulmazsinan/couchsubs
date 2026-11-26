@@ -962,17 +962,95 @@ test('webOS HDMI #1323: olay akışı (stalled) taze görüntüde ve öne geliş
   tv.video.fire('stalled');
   tv.advance(60000);
   assert.strictEqual(tv.videos.length, 2, 'yeni görüntünün taze stalled\'ı kurdurmadı');
-  // 10 dakikada en çok iki kez.
+  // 0.9.116: öğrenilmemiş TV'de oturum başına bir kez; oturmuş görüntünün ikinci 'stalled'ı dokunulmaz.
   tv.video.fire('stalled');
   tv.advance(5000);
-  assert.strictEqual(tv.videos.length, 3);
+  assert.strictEqual(tv.videos.length, 2, 'aynı oturumda ikinci kez kurulmadı');
+  assert.match(tv.platform.diagnostics(), /stall \d+ blind \d+s/);
+  // Görüntü gerçekten siyahtı: kullanıcı girişi yeniden seçer (TV öğrenilir, yeni oturum).
+  tv.advance(30000);
+  tv.show(2);
+  tv.advance(2000);
+  assert.strictEqual(tv.videos.length, 3, 'girişi yeniden seçmek kurdu');
   tv.video.webkitDecodedFrameCount = 0;
   tv.video.start();
+  // Öğrenilmiş TV'de oturmuş görüntüde 10 dakikada en çok iki kez.
+  for (let i = 0; i < 3; i++) {
+    tv.advance(60000);
+    tv.video.fire('stalled');
+    tv.advance(5000);
+    if (tv.video.readyState === 0) {
+      tv.video.webkitDecodedFrameCount = 0;
+      tv.video.start();
+    }
+  }
+  assert.strictEqual(tv.videos.length, 4, 'öğrenilmiş TV: 10 dakikada iki (öncekiyle birlikte)');
+  assert.match(tv.platform.diagnostics(), /blk/);
+});
+
+// 0.9.116 (beta.102-104): "son TV güncellemesinden sonra ekran sürekli göz kırpıyor, gidip geliyor". 0.9.111'de sağlam
+// görüntüde de 'stalled' gönderen akışı görünmeyen TV, oyun boyunca her 10 dakikada iki kez yeniden kuruluyordu.
+test('webOS HDMI 0.9.116: sağlam görüntüde düzenli stalled gönderen TV oyun boyunca göz kırpmaz (oturumda en çok bir kurma)', () => {
+  const storage = {};
+  const lines = [];
+  const tv = blindTv({ storage });
+  tv.window.COUCHSUBS_TVLOG = (text) => lines.push(text);
+  // İki saat, her 2 dakikada bir 'stalled' (görüntü sağlam; kullanıcı hiçbir şey yapmıyor).
+  for (let minute = 0; minute < 120; minute += 2) {
+    tv.advance(2 * 60000);
+    tv.video.fire('stalled');
+    tv.advance(5000);
+    if (tv.video.readyState === 0) {
+      tv.video.webkitDecodedFrameCount = 0;
+      tv.video.start();
+    }
+  }
   tv.advance(60000);
-  tv.video.fire('stalled');
+  // 0.9.111-0.9.115: 10 dakikada iki, iki saatte 24 kurma.
+  assert.strictEqual(tv.videos.length, 2, 'iki saatte yalnız bir kez yeniden kuruldu');
+  assert.strictEqual(storage[BLACK_KEY], undefined, 'TV öğrenilmedi');
+  // Her kurma nedeniyle günlüğe yazılır.
+  const rebuilds = lines.filter((l) => /^hdmi rebuild/.test(l));
+  assert.strictEqual(rebuilds.length, 1);
+  assert.match(rebuilds[0], /^hdmi rebuild \(ev stalled blind \d+s #1\)$/);
+  // Girişin yeniden seçilmesi (yeniden açma) de yazılır.
+  tv.show(2);
+  assert.strictEqual(lines[lines.length - 1], 'hdmi open 2 (same input reselected)');
+});
+
+test('webOS HDMI 0.9.116: öğrenilmiş TV\'de öne geliş döngüsü (PS/CEC, bekçi) görüntüyü durmadan yeniden kurmaz', () => {
+  const storage = { [BLACK_KEY]: '1' };
+  const lines = [];
+  const tv = blindTv({ storage });
+  tv.window.COUCHSUBS_TVLOG = (text) => lines.push(text);
   tv.advance(60000);
-  assert.strictEqual(tv.videos.length, 3, 'sınır doldu');
-  assert.match(tv.platform.diagnostics(), /stall \d+ blind \d+s/);
+  // Konsol TV'yi her 20 sn'de kendi girişine geçiriyor, bekçi uygulamayı geri getiriyor (10 dakika).
+  for (let i = 0; i < 30; i++) {
+    tv.hide();
+    tv.advance(3000);
+    tv.unhide();
+    tv.document.fire('webOSRelaunch');
+    tv.advance(4000);
+    if (tv.video.readyState === 0) {
+      tv.video.webkitDecodedFrameCount = 0;
+      tv.video.start();
+    }
+    tv.advance(13000);
+  }
+  const resumes = lines.filter((l) => /^hdmi rebuild \(resume/.test(l)).length;
+  // 5 dakikada en çok üç: 10 dakikada en çok altı (eskiden her öne gelişte, 30).
+  assert.ok(resumes >= 1 && resumes <= 6, 'öne gelişte kurma sınırlı: ' + resumes);
+  assert.match(tv.platform.diagnostics(), /blind loop \d+/);
+  assert.ok(lines.some((l) => /^hdmi resume skipped \(blind loop \d+\)$/.test(l)));
+  assert.ok(lines.some((l) => /^relaunch \(webOS, rl \d+\)$/.test(l)));
+  // Tek öne geliş (seyrek PS tuşu) eskisi gibi kurulur.
+  tv.advance(10 * 60000);
+  const before = tv.videos.length;
+  tv.hide();
+  tv.advance(3000);
+  tv.unhide();
+  tv.advance(5000);
+  assert.strictEqual(tv.videos.length, before + 1, 'seyrek öne gelişte kuruldu');
 });
 
 test('webOS HDMI #1323: öne gelişte kararan TV kullanıcı girişi yeniden seçince öğrenilir; sonra öne gelişte kurulur', () => {

@@ -368,11 +368,37 @@
   //   'stalled'da 0.9.94 öncesi gibi kurulur; taze 'stalled' yine dokunulmaz.
   // - Tanıda 'stalled'ın ilk kareden kaç sn sonra geldiği ("stall 1 blind 42s"), öne gelişte dokunulmayan görüntü
   //   ("blind resume <n>") ve öğrenilmiş TV ("blk") yazar.
+  //
+  // 0.9.116 (beta.102-104, iki kullanıcı: "son TV güncellemesinden sonra ekran sürekli göz kırpıyor, gidip geliyor"):
+  // 0.9.111'in kuralı akışı görünmeyen TV'de oturmuş görüntünün her 'stalled'ını görüntünün düşmesi sayıyordu. Bu TV'lerin
+  // bir kısmı (#1055: 65UR91006LA, OLED65C46LA) 'stalled'ı sağlam görüntüde de gönderiyor; sayfa ikisini ayıramaz. Sınır
+  // 10 dakikada iki kurmaydı ve pencere kaydıkça baştan doluyordu: sağlam görüntü oyun boyunca 10 dakikada iki kez
+  // kararıp HDR rozetiyle geri geliyordu (kod yolu; gerçek TV günlüğüyle doğrulanmadı, "TV olayları" satırları doğrular).
+  // Öğrenilmiş TV'de (BLACK_KEY) ise her öne geliş (PS tuşu, bekçinin yeniden açması) <video>'yu kuruyordu; yeniden
+  // kurulan HDMI el sıkışması konsolun CEC ile TV'yi yine kendi girişine geçirmesine, bekçinin uygulamayı yine öne
+  // getirmesine yol açabilir (döngü). Artık:
+  // - Öğrenilmemiş TV'de oturmuş görüntünün 'stalled'ı bir HDMI oturumunda (giriş açılışından ya da kullanıcının girişi
+  //   yeniden seçmesinden beri) en çok BLIND_SESSION_MAX kez kurdurur (#1323'ün ilk kararması yine düzelir). Sonrakiler
+  //   dokunulmaz ("blind"); ardından kullanıcı girişi yeniden seçerse (ekran siyahtı) TV öğrenilir ve sınır öğrenilmiş
+  //   TV'ninkine çıkar.
+  // - Öğrenilmiş TV'de öne gelişteki kurma BLIND_RESUME_WINDOW_MS içinde en çok BLIND_RESUME_MAX kez; fazlası döngüdür,
+  //   dokunulmaz ("blind loop <n>").
+  // - Her yeniden kurma, giriş açılışı, sayfa yenilemesi ve uygulamanın yeniden açılması nedeniyle birlikte TV olay
+  //   günlüğüne yazılır (app.js tvLog; bilgisayarın/telefonun günlüğüne gider).
   var BLIND_RETURN_MS = 30000;
   var BLIND_STALL_MAX = 2;
+  var BLIND_SESSION_MAX = 1;
+  var BLIND_RESUME_MAX = 3;
+  var BLIND_RESUME_WINDOW_MS = 5 * 60000;
   var BLIND_DOUBT_MS = 3 * 60000;
   var BLACK_KEY = 'couchsubs.hdmiBlindBlack';
-  var black = { known: readFlag(BLACK_KEY), skippedAt: 0, resumeSkips: 0, returnedAt: 0, rebuilds: [] };
+  var black = { known: readFlag(BLACK_KEY), skippedAt: 0, resumeSkips: 0, returnedAt: 0, rebuilds: [],
+    sessionRebuilds: 0, resumes: [], loopSkips: 0 };
+
+  // TV olay günlüğü (app.js; yoksa sessiz).
+  function tvLog(text) {
+    try { if (typeof window.COUCHSUBS_TVLOG === 'function') window.COUCHSUBS_TVLOG(text); } catch (e) {}
+  }
 
   // Akışı görünmeyen TV'de dokunulmayan görüntü: kullanıcı kısa süre içinde girişi yeniden seçerse siyahtı.
   function noteBlindSkip(now) {
@@ -386,14 +412,25 @@
     if (black.known) return;
     black.known = true;
     writeFlag(BLACK_KEY, true);
+    tvLog('hdmi blind black learned (same input reselected)');
   }
 
   // Akışı görünmeyen TV'de bu 'stalled' görüntüyü yeniden kurdurur mu (oturmuş görüntü, öne gelişin hemen ardı değil).
   function blindStallActs(now) {
     if (freshPicture(now)) return false;
-    if (!black.known && black.returnedAt && now - black.returnedAt < BLIND_RETURN_MS) return false;
+    if (!black.known) {
+      if (black.returnedAt && now - black.returnedAt < BLIND_RETURN_MS) return false;
+      // 0.9.116: öğrenilmemiş TV'de oturum başına bir kez (sağlam görüntüde de 'stalled' gönderen TV göz kırpmasın).
+      if (black.sessionRebuilds >= BLIND_SESSION_MAX) return false;
+    }
     while (black.rebuilds.length && now - black.rebuilds[0] >= STALL_REBUILD_WINDOW_MS) black.rebuilds.shift();
     return black.rebuilds.length < BLIND_STALL_MAX;
+  }
+
+  // Öğrenilmiş TV'de öne gelişte görüntü yeniden kurulsun mu (0.9.116): kısa sürede çok öne geliş döngüdür.
+  function blindResumeActs(now) {
+    while (black.resumes.length && now - black.resumes[0] >= BLIND_RESUME_WINDOW_MS) black.resumes.shift();
+    return black.resumes.length < BLIND_RESUME_MAX;
   }
 
   // Görüntünün ilk karesinden bu yana STALL_FRESH_MS geçmedi.
@@ -827,9 +864,15 @@
       hdmi.stallRebuilds.push(hdmi.stallRebuiltAt);
       hdmi.stallNote = 'rebuilt';
       // Akışı görünmeyen TV'de oturmuş görüntünün 'stalled'ı yüzünden kuruldu (#1323): ayrı sınır.
-      if (hdmi.stallBlind) black.rebuilds.push(hdmi.stallRebuiltAt);
-      hdmi.stallBlind = false;
+      if (hdmi.stallBlind) {
+        black.rebuilds.push(hdmi.stallRebuiltAt);
+        black.sessionRebuilds++;
+      }
     }
+    tvLog('hdmi rebuild (' + reason + (reason === 'ev stalled' && hdmi.stallBlind ? ' blind' : '') +
+      (hdmi.stallAge >= 0 && reason === 'ev stalled' ? ' ' + hdmi.stallAge + 's' : '') + (black.known ? ' blk' : '') +
+      ' #' + hdmi.rebuilds + ')');
+    hdmi.stallBlind = false;
     clearTimeout(hdmi.stallTimer);
     hdmi.stallTimer = null;
     var old = hdmi.video;
@@ -917,10 +960,22 @@
         hdmi.soonStrict = false;
         if (pageHidden() || hdmi.video !== video || hdmi.pending !== null || hdmi.building !== null) return;
         if (progressedSince(video, before)) return;
-        // Akışı görünmeyen TV'de oynayan görüntüye dokunulmaz (0.9.94); öne gelişte kararan TV öğrenildiyse kurulur (#1323).
-        if (flowBlind(video) && !black.known) {
-          black.resumeSkips++;
-          noteBlindSkip(nowMs());
+        // Akışı görünmeyen TV'de oynayan görüntüye dokunulmaz (0.9.94); öne gelişte kararan TV öğrenildiyse kurulur (#1323),
+        // kısa sürede çok öne gelişte değil (0.9.116, döngü).
+        if (flowBlind(video)) {
+          var at = nowMs();
+          if (!black.known) {
+            black.resumeSkips++;
+            noteBlindSkip(at);
+            return;
+          }
+          if (!blindResumeActs(at)) {
+            black.loopSkips++;
+            noteBlindSkip(at);
+            tvLog('hdmi resume skipped (blind loop ' + black.loopSkips + ')');
+            return;
+          }
+          if (schedule('resume', true)) black.resumes.push(at);
           return;
         }
         schedule('resume', true);
@@ -942,7 +997,11 @@
   if (document.addEventListener) {
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('webkitvisibilitychange', onVisibility);
-    document.addEventListener('webOSRelaunch', function () { relaunches++; checkSoon(1500, false); });
+    document.addEventListener('webOSRelaunch', function () {
+      relaunches++;
+      tvLog('relaunch (webOS, rl ' + relaunches + ')');
+      checkSoon(1500, false);
+    });
   }
   if (window.addEventListener) window.addEventListener('focus', function () { checkSoon(1500, false); });
 
@@ -982,6 +1041,7 @@
         (hdmi.stallAge >= 0 ? ' ' + hdmi.stallAge + 's' : '');
     }
     if (black.resumeSkips) text += ' · blind resume ' + black.resumeSkips;
+    if (black.loopSkips) text += ' · blind loop ' + black.loopSkips;
     if (black.known) text += ' · blk';
     if (relaunches) text += ' · rl ' + relaunches;
     if (video) text += ' · ' + audioText(video);
@@ -1048,6 +1108,7 @@
           // Kayıt tutulamıyorsa yeniden yüklenmez: döngüye girebilirdi.
           return;
         }
+        tvLog('page reload (stale ' + pair + ')');
         window.location.reload(true);
       });
     },
@@ -1183,7 +1244,12 @@
       // Dokunulmayan taze 'stalled'dan hemen sonra giriş yeniden seçildiyse ekran siyahtı: TV "gürültülü" sayılmaz.
       if (hdmi.host) noteReselect(nowMs());
       // Akışı görünmeyen TV'de dokunulmayan görüntüden hemen sonra aynı giriş yeniden seçildiyse ekran siyahtı (#1323).
-      if (hdmi.host && hdmi.video && port === hdmi.port && host === hdmi.host) noteBlindReselect(nowMs());
+      var reselect = !!(hdmi.host && hdmi.video && port === hdmi.port && host === hdmi.host);
+      if (reselect) noteBlindReselect(nowMs());
+      tvLog('hdmi open ' + port + (reselect ? ' (same input reselected)' : hdmi.host ? ' (input changed)' : ' (start)'));
+      // Yeni HDMI oturumu: öğrenilmemiş TV'nin oturum başına kurma hakkı ve öne geliş döngüsü baştan (0.9.116).
+      black.sessionRebuilds = 0;
+      black.resumes = [];
       clearTimeout(hdmi.pending);
       clearTimeout(hdmi.building);
       clearTimeout(hdmi.soonTimer);

@@ -1,0 +1,1 @@
+0.9.116: LG'de oyun sırasında görüntü arada bir kararıp geri gelmiyor (göz kırpma); görüntüyü yeniden açan her olay nedeniyle bilgisayarın ve telefonun günlüğüne yazılıyor.

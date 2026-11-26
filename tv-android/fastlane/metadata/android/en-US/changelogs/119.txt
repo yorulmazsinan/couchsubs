@@ -1,0 +1,1 @@
+0.9.116: On LG the picture no longer goes dark and comes back now and then during play (blinking); every event that reopens the picture is written to the computer's and phone's log with its reason.
