@@ -233,6 +233,11 @@ function startTv({ saved, alive, localIp, localMask, hasLocalAddress, consolePor
     requests,
     storage,
     failStream: () => streams[streams.length - 1].onerror({}),
+    // Simulate an in-flight callback queued before an old EventSource was closed.
+    failOldStream: (index) => streams[index].onerror({}),
+    emitOldStream: (index, name, data) => {
+      for (const fn of streams[index].listeners[name] || []) fn({ data: JSON.stringify(data) });
+    },
     lastOpened: () => opened[opened.length - 1],
     // Son açılan akışın bildirdiği HDMI girişi (yoksa null).
     lastHdmi: () => streams[streams.length - 1].hdmi,
@@ -1193,6 +1198,27 @@ test('LG: arka planda kopan bağlantı uygulama öne gelince beklemeden kurulur,
   assert.strictEqual(tv.lastHdmi(), '2');
   assert.strictEqual(tv.element('subtitle').className, '');
   assert.strictEqual(tv.element('subtitle-text').textContent, 'Seni bekliyordum.');
+});
+
+test('closed old SSE callbacks must not replace the new source or overwrite its subtitles', () => {
+  const old = 'http://192.168.1.110:8787';
+  const active = 'http://192.168.1.111:8787';
+  const tv = startTv({ saved: old, alive: new Set([old, active]), hasLocalAddress: false });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), old + '/events');
+  tv.relaunch({ server: active });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), active + '/events');
+  tv.emit('subtitle', { text: 'Current source subtitle', duration: 15000 });
+  assert.strictEqual(tv.element('subtitle-text').textContent, 'Current source subtitle');
+
+  // A queued error and subtitle event from the source we closed must be ignored.
+  tv.failOldStream(0);
+  tv.emitOldStream(0, 'subtitle', { text: 'Obsolete subtitle', duration: 15000 });
+  assert.strictEqual(tv.element('subtitle-text').textContent, 'Current source subtitle');
+  tv.clock.advance(6000);
+  assert.strictEqual(tv.lastOpened(), active + '/events', 'old connection unexpectedly reclaimed the TV');
+  assert.strictEqual(tv.server(), active);
 });
 
 test('LG: bekçi uygulamayı yeniden açınca kapanmış bağlantı hemen kurulur; açık bağlantıya dokunulmaz', () => {
