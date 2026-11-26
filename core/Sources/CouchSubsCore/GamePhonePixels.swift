@@ -6,12 +6,12 @@ import Foundation
 /// Consistent, top-origin RGBA samples for Core Graphics images, including VideoToolbox frames.
 /// Crop before drawing: a message bubble must not require a full-screen conversion.
 ///
-/// Baytlar hep 8 bit, R G B A sırasında ve opaktır (alfa 255; yarı saydam nokta siyah zeminde görünür); karenin kanal
+/// Baytlar hep 8 bit, R G B A sırasında ve önceden çarpılmış alfalıdır (yarı saydam nokta siyah zemindeki rengiyle; çeviri katmanı gibi saydam resimde alfa korunur); karenin kanal
 /// düzeni (BGRA/RGBA), alfası (önceden çarpılmış, başta/sonda), derinliği (16 bit, yarım kayan nokta) ne olursa olsun.
 /// Renk uzayı `FrameColor.target`: sRGB ya da sRGB sayılan video/aygıt uzayı. Kullanıcı bildirimi (X, Mac mini,
 /// beta-101): aynı kare dosyadan verilince telefon bulunuyor, canlıda bulunmuyordu; kare RGB'ye çevrilince canlıda da
 /// bulunuyordu. Canlı kare (ScreenCaptureKit) ekranın renk uzayında gelir ve önceden o uzayda çizilip olduğu gibi
-/// okunuyordu; dosyadaki kare sRGB'dir. Windows (BGRA, sRGB) ve Android (YUV; tam aralık `PhoneFrames`'te sınırlıya
+/// okunuyordu; dosyadaki kare sRGB'dir. Windows (BGRA, sRGB) ve Android (YUV; tam aralık çözücüde, video-decoder.c, sınırlıya
 /// çevrilir) aynı değerleri görür.
 struct GamePhonePixels {
     let width: Int
@@ -53,8 +53,6 @@ struct GamePhonePixels {
             return true
         }
         guard drawn else { return nil }
-        // Yarı saydam nokta siyah zeminde görünür (önceden çarpılmış değer kalır); örnekler hep opak.
-        for i in stride(from: 3, to: storage.count, by: 4) where storage[i] != 255 { storage[i] = 255 }
         width = w
         height = h
         bytes = storage

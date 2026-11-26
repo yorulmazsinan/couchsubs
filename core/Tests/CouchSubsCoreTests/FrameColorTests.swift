@@ -66,7 +66,7 @@ final class FrameColorTests: XCTestCase {
             var worst = 0
             for i in 0..<pixels.bytes.count { worst = max(worst, abs(Int(pixels.bytes[i]) - Int(expected.bytes[i]))) }
             XCTAssertLessThanOrEqual(worst, format.tolerance, format.name)
-            XCTAssertTrue(stride(from: 3, to: pixels.bytes.count, by: 4).allSatisfy { pixels.bytes[$0] == 255 }, format.name)
+            XCTAssertTrue(stride(from: 3, to: pixels.bytes.count, by: 4).allSatisfy { pixels.bytes[$0] == 255 }, format.name) // opak kare opak kalır
         }
     }
 
