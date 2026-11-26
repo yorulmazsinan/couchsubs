@@ -145,20 +145,21 @@ enum GamePhoneReader {
 
     /// Düzeltilmiş ekranın (RGBA) koyu ekran hazırlığı (`PhoneDarkScreen`); gerekmiyorsa olduğu gibi.
     static func darkScreenPrepared(_ rgba: Data) -> Data {
-        let tones = rgba.withUnsafeBytes { raw -> [UInt8] in
-            let p = raw.bindMemory(to: UInt8.self)
-            return (0..<(p.count / 4)).map { i in UInt8((77 * Int(p[4*i]) + 150 * Int(p[4*i+1]) + 29 * Int(p[4*i+2])) >> 8) }
+        let bytes = [UInt8](rgba)
+        var tones = [UInt8](repeating: 0, count: bytes.count / 4)
+        for i in tones.indices {
+            let r = 77 * Int(bytes[4 * i]), g = 150 * Int(bytes[4 * i + 1]), b = 29 * Int(bytes[4 * i + 2])
+            tones[i] = UInt8((r + g + b) >> 8)
         }
         guard let map = PhoneDarkScreen.mapping(tones) else { return rgba }
-        var out = Data(count: rgba.count)
-        out.withUnsafeMutableBytes { raw in
-            let p = raw.bindMemory(to: UInt8.self)
-            for (i, tone) in tones.enumerated() {
-                let value = map[Int(tone)]
-                p[4*i] = value; p[4*i+1] = value; p[4*i+2] = value; p[4*i+3] = 255
-            }
+        var out = [UInt8](repeating: 255, count: bytes.count)
+        for (i, tone) in tones.enumerated() {
+            let value = map[Int(tone)]
+            out[4 * i] = value
+            out[4 * i + 1] = value
+            out[4 * i + 2] = value
         }
-        return out
+        return Data(out)
     }
 
     private static func sameRow(_ a: TextBox, _ b: TextBox) -> Bool {
