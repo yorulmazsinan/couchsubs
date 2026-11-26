@@ -41,8 +41,24 @@ final class H264FrameDecoder {
     /// gelmeyince yalnız "görüntü gelmiyor" görünüyordu; iPhone arka plandayken donanım çözücüsü reddedebilir.
     private var loggedFailure = false
 
+    /// Çözücü servisi koptuğu için oturumun kaç kez yeniden kurulduğu (günlüğe ilk birkaçı yazılır).
+    private var rebuilds = 0
+
     deinit {
-        if let session { VTDecompressionSessionInvalidate(session) }
+        if let session { Self.close(session) }
+    }
+
+    /// Bu hatadan sonra oturum yeniden kurulup kare bir kez daha denenir. Geçersiz oturum: uykudan sonra. Arıza ve
+    /// şimdilik yok: çözücü servisi (VTDecoderXPCService) çöktü ya da bellek sıkışmasında sistemce kapatıldı (#1390);
+    /// eskiden ölü oturuma her kare yeniden veriliyor, görüntü bir daha gelmiyordu.
+    static func rebuildsSession(after status: OSStatus) -> Bool {
+        status == kVTInvalidSessionErr || status == kVTVideoDecoderMalfunctionErr || status == kVTVideoDecoderNotAvailableNowErr
+    }
+
+    /// Oturumu kapatır: önce süren çözme bitirilir, sonra geçersiz kılınır (kapanmış oturuma geç gelen kare bırakılmasın).
+    private static func close(_ session: VTDecompressionSession) {
+        VTDecompressionSessionWaitForAsynchronousFrames(session)
+        VTDecompressionSessionInvalidate(session)
     }
 
     func decode(annexB: Data, makeImage: Bool = true) -> CGImage? {
@@ -72,8 +88,12 @@ final class H264FrameDecoder {
             avcc.append(slice)
         }
         var (status, output) = decodeFrame(avcc)
-        if status == kVTInvalidSessionErr {
-            // Uykudan sonra oturum geçersizleşebilir; aynı parametrelerle yeniden kurup bir kez daha dene.
+        if Self.rebuildsSession(after: status) {
+            // Aynı parametrelerle yeniden kurup bir kez daha dene.
+            rebuilds += 1
+            if status != kVTInvalidSessionErr, rebuilds <= 3 {
+                RemotePlayLog.write("Görüntü çözücü: oturum yeniden kuruluyor (OSStatus \(status), \(rebuilds). kez)")
+            }
             makeSession()
             (status, output) = decodeFrame(avcc)
         }
@@ -98,7 +118,7 @@ final class H264FrameDecoder {
     }
 
     private func makeSession() {
-        if let session { VTDecompressionSessionInvalidate(session) }
+        if let session { Self.close(session) }
         session = nil
         format = nil
         guard let sps, let pps else { return }

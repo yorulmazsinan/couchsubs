@@ -84,7 +84,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     /// bırakıp döner; kareyi resme çevirme ve okuma hattına verme ayrı bir sırada, yalnız en son kareyle yapılır.
     /// Eskiden çevirme ve `onFrame` alıcıda çalışıyordu; alıcı yavaşlayınca WebRTC'nin kare kuyruğu büyüyordu.
     private let frameBox = FrameMailbox<RTCVideoFrameBuffer>()
-    private let frameQueue = DispatchQueue(label: "CouchSubs Xbox kare", qos: .userInitiated)
+    private let frameQueue = DispatchQueue(label: "CouchSubs Xbox kare", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private var pipeStats = XboxFramePipeStats()
     private var pipeTask: Task<Void, Never>?
     /// Son karenin ve son kare onayı paketinin anı (ms; kapanma satırı için).
@@ -749,14 +749,17 @@ extension XboxStreamSession: RTCVideoRenderer {
         frameQueue.async { [weak self] in self?.drainFrames() }
     }
 
-    /// `frameQueue`'da: kutudaki en son kare resme çevrilip okuma hattına verilir; kutu boşalınca biter.
+    /// `frameQueue`'da: kutudaki en son kare resme çevrilip okuma hattına verilir; kutu boşalınca biter. Kareler
+    /// akarken kutu hiç boşalmayabilir, döngü tek iş içinde sürer: her kare kendi autorelease havuzunda (#1390).
     private func drainFrames() {
         while let buffer = frameBox.take() {
             guard !stopped else { continue }
-            let started = DispatchTime.now().uptimeNanoseconds
-            if let image = Self.image(from: buffer) { onFrame?(image) }
-            let spent = DispatchTime.now().uptimeNanoseconds &- started
-            locked { pipeStats.processed(nanos: spent) }
+            autoreleasepool {
+                let started = DispatchTime.now().uptimeNanoseconds
+                if let image = Self.image(from: buffer) { onFrame?(image) }
+                let spent = DispatchTime.now().uptimeNanoseconds &- started
+                locked { pipeStats.processed(nanos: spent) }
+            }
         }
     }
 

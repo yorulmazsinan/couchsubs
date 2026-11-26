@@ -2,6 +2,7 @@
 
 import XCTest
 @testable import RemotePlay
+import VideoToolbox
 
 final class H264FrameDecoderTests: XCTestCase {
     /// Fixture'ı (ffmpeg testsrc2, 6 kare, Annex-B) PS5'in gönderdiği gibi kare kare böler.
@@ -49,6 +50,15 @@ final class H264FrameDecoderTests: XCTestCase {
         XCTAssertNotNil(decoder.decode(annexB: keyframe))
         decoder.invalidateSessionForTesting()
         XCTAssertNotNil(decoder.decode(annexB: keyframe))
+    }
+
+    /// Çözücü servisi koptuğunda (arıza, şimdilik yok) oturum da yeniden kurulur; bozuk veri gibi kare hataları kurmaz (#1390).
+    func testServiceFailuresRebuildSession() {
+        XCTAssertTrue(H264FrameDecoder.rebuildsSession(after: kVTInvalidSessionErr))
+        XCTAssertTrue(H264FrameDecoder.rebuildsSession(after: kVTVideoDecoderMalfunctionErr))
+        XCTAssertTrue(H264FrameDecoder.rebuildsSession(after: kVTVideoDecoderNotAvailableNowErr))
+        XCTAssertFalse(H264FrameDecoder.rebuildsSession(after: kVTVideoDecoderBadDataErr))
+        XCTAssertFalse(H264FrameDecoder.rebuildsSession(after: noErr))
     }
 
     func testGarbageDoesNotCrash() {

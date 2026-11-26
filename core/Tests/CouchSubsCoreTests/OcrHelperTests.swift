@@ -67,6 +67,120 @@ final class OcrHelperTests: XCTestCase {
         wait(for: [served], timeout: 5)
     }
 
+    // MARK: - #1390: yardımcının belleği okumalarla büyümemeli
+
+    /// Okuyucunun autorelease ettiği nesne (Vision'ın isteği, sonuçları, IOSurface tamponları gibi); bırakılınca sayılır.
+    private final class Leftover: NSObject {
+        static let lock = NSLock()
+        nonisolated(unsafe) static var released = 0
+        let payload: UnsafeMutableRawPointer?
+        init(bytes: Int) {
+            // Sayfalar yazılır: ayrılıp dokunulmayan bellek footprint'e girmez.
+            payload = bytes > 0 ? malloc(bytes) : nil
+            if let payload { memset(payload, 1, bytes) }
+        }
+        deinit {
+            free(payload)
+            Leftover.lock.withLock { Leftover.released += 1 }
+        }
+        static var count: Int { lock.withLock { released } }
+    }
+
+    /// Sahte okuyucu: Vision gibi her okumada bir nesneyi autorelease eder; nesne ancak havuz boşalınca bırakılır.
+    private func leakyReader(bytes: Int, onCall: @escaping () -> Void = {}) -> (CGImage, String, Bool) throws -> Reading {
+        { image, _, _ in
+            onCall()
+            _ = Unmanaged.passRetained(Leftover(bytes: bytes)).autorelease()
+            return Reading(text: "\(image.width)x\(image.height)")
+        }
+    }
+
+    /// `serve`'ü ayrı iş parçacığında (uygulamadaki gibi run loop'suz) çalıştırır, `rounds` kare yollar.
+    private func drive(rounds: Int, reader: @escaping (CGImage, String, Bool) throws -> Reading,
+                       afterEach: (Int) -> Void = { _ in }) throws {
+        let toHelper = Pipe(), fromHelper = Pipe()
+        let served = expectation(description: "yardımcı döngüsü bitti")
+        Thread.detachNewThread {
+            OcrHelper.serve(input: toHelper.fileHandleForReading.fileDescriptor,
+                            output: fromHelper.fileHandleForWriting.fileDescriptor, recognize: reader)
+            served.fulfill()
+        }
+        let frame = image("x", width: 64, height: 32)
+        let head = try JSONEncoder().encode(OcrHelper.Header(width: 64, height: 32, language: "en", fast: true))
+        let pixels = try XCTUnwrap(OcrHelper.pixels(of: frame))
+        for round in 0..<rounds {
+            XCTAssertTrue(OcrHelper.write(head, to: toHelper.fileHandleForWriting.fileDescriptor))
+            XCTAssertTrue(OcrHelper.write(pixels, to: toHelper.fileHandleForWriting.fileDescriptor))
+            let data = try XCTUnwrap(OcrHelper.read(from: fromHelper.fileHandleForReading.fileDescriptor))
+            XCTAssertEqual(try JSONDecoder().decode(OcrHelper.Reply.self, from: data).lines?.first?.t, "64x32")
+            afterEach(round)
+        }
+        try toHelper.fileHandleForWriting.close()
+        wait(for: [served], timeout: 10)
+    }
+
+    /// Her okumanın autorelease ettiği nesneler sonraki okuma başlamadan bırakılır. Eskiden havuz hiç boşalmıyor,
+    /// yardımcı her okumada ~2,5 MB büyüyüp onlarca GB'a çıkıyordu (#1390).
+    func testServeReleasesEachReadingsObjects() throws {
+        let before = Leftover.count
+        var released: [Int] = []
+        try drive(rounds: 50, reader: leakyReader(bytes: 0) { released.append(Leftover.count - before) })
+        XCTAssertEqual(released, Array(0..<50), "n. okuma başlarken önceki n okumanın nesneleri bırakılmış olmalı")
+    }
+
+    /// Aynısı bellekle: 200 okuma × 4 MB autorelease edilen tampon; sürecin belleği (phys_footprint) büyümemeli.
+    func testServeFootprintStaysFlat() throws {
+        let start = try XCTUnwrap(ReadQueue.memoryMB())
+        var peak = start
+        try drive(rounds: 200, reader: leakyReader(bytes: 4 << 20)) { round in
+            if round % 20 == 19 { peak = max(peak, ReadQueue.memoryMB() ?? 0) }
+        }
+        XCTAssertLessThan(peak - start, 100, "yardımcının belleği okumalarla büyüyor: \(start) MB → \(peak) MB")
+    }
+
+    private final class Lines: @unchecked Sendable {
+        private let lock = NSLock()
+        private var items: [String] = []
+        func add(_ line: String) { lock.withLock { items.append(line) } }
+        var all: [String] { lock.withLock { items } }
+        func count(_ part: String) -> Int { all.filter { $0.contains(part) }.count }
+    }
+
+    /// Vision'sız yardımcı: `/bin/cat` başlığı geri yollar, o da boş yanıt olarak çözülür. Kare küçük tutulur (cat'in
+    /// geri yolladığı pikseller okunmaz; boru dolmasın), yardımcı her okumadan sonra değiştirilir.
+    private let echo = URL(fileURLWithPath: "/bin/cat")
+
+    /// Yardımcının belleği sınırı aşınca yardımcı kapatılır, sonraki okuma yeni süreçte yapılır; günlükte belleği yazar.
+    func testHelperOverMemoryCapIsReplaced() throws {
+        let lines = Lines()
+        let rescuer = OcrHelperRescuer(executable: echo, arguments: [], memoryCapBytes: 1536 << 20) { _ in
+            OcrHelper.Memory(resident: 900 << 20, footprint: 2048 << 20)
+        }
+        rescuer.onLog = { lines.add($0) }
+        defer { rescuer.standDown() }
+        for _ in 0..<3 { XCTAssertEqual(try rescuer.recognize(image("x", width: 8, height: 8), language: "en"), Reading(lines: [])) }
+        XCTAssertEqual(lines.count("yedek okuyucu açıldı"), 3, lines.all.joined(separator: "\n"))
+        XCTAssertEqual(lines.count("bellek sınırını aştı: 2048 MB (yerleşik 900 MB), sınır 1536 MB"), 3, lines.all.joined(separator: "\n"))
+    }
+
+    /// Sınırın altındaki yardımcı sürer; belleği ilk okumada ve sonra dakikada bir günlüğe yazılır.
+    func testHelperMemoryIsLoggedPeriodically() throws {
+        let lines = Lines()
+        let rescuer = OcrHelperRescuer(executable: echo, arguments: []) { _ in OcrHelper.Memory(resident: 80 << 20, footprint: 120 << 20) }
+        rescuer.onLog = { lines.add($0) }
+        defer { rescuer.standDown() }
+        _ = try rescuer.recognize(image("x", width: 8, height: 8), language: "en")
+        XCTAssertEqual(lines.count("yedek okuyucunun belleği: 120 MB (yerleşik 80 MB), hızlı düzey"), 1, lines.all.joined(separator: "\n"))
+        XCTAssertEqual(lines.count("bellek sınırını aştı"), 0)
+    }
+
+    /// Gerçek ölçüm: kendi sürecimizin belleği okunabiliyor.
+    func testMemoryOfOwnProcess() throws {
+        let memory = try XCTUnwrap(OcrHelper.memory(of: getpid()))
+        XCTAssertGreaterThan(memory.resident, 1 << 20)
+        XCTAssertGreaterThan(memory.footprint, 1 << 20)
+    }
+
     /// Gerçek yardımcı süreç gerçek Vision ile okur (hızlı düzey: model derlemesi beklemez).
     func testHelperProcessReadsText() throws {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: helper.path), "ocr-helper derlenmemiş")

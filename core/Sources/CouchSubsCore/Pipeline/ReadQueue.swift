@@ -602,7 +602,10 @@ public final class ReadQueue: @unchecked Sendable {
             let thread = Thread.current.threadDictionary
             if let rescuer = next.rescuer { thread[Self.rescuerKey] = RescuerBox(rescuer) }
             thread[Self.cancellationKey] = item.cancellation
-            item.work()
+            // Her okuma kendi autorelease havuzunda (#1390): Vision'ın autorelease ettiği nesneler (istek, sonuçlar,
+            // IOSurface tamponları) okuma bitince bırakılır. Kuyruğun iş parçacığı okumalarla hiç boşalmadan dönerse
+            // GCD'nin havuzu boşaltmasına bırakılmaz (yardımcı süreçte bu yüzden okuma başına ~2,5 MB birikiyordu).
+            autoreleasepool { item.work() }
             thread.removeObject(forKey: Self.rescuerKey)
             thread.removeObject(forKey: Self.cancellationKey)
             finished(item, on: lane)

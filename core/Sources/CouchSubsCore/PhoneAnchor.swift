@@ -120,7 +120,8 @@ public final class PhoneAnchorSession: @unchecked Sendable {
     static let summaryMs = 10_000
     static let eventLinesPerMinute = 12
 
-    private let queue = DispatchQueue(label: "couchsubs.phone-anchor", qos: .userInitiated)
+    /// Her kare işi kendi autorelease havuzunda (#1390).
+    private let queue = DispatchQueue(label: "couchsubs.phone-anchor", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private let lock = NSLock()
     private let clock: () -> Int
     // Aşağıdakiler `lock` altında.

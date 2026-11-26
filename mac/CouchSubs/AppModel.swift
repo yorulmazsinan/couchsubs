@@ -2591,12 +2591,21 @@ final class AppModel: ObservableObject {
             }
         }
         session.onConsoleMoved = { [weak self] moved in Task { @MainActor in self?.consoleMoved(moved) } }
+        // Kareler ana iş parçacığına tek gözlü kutudan gider (iPhone ile aynı, bkz. FrameMailbox): eskiden her kare
+        // (saniyede 20–60) ayrı bir ana iş parçacığı işi kuruyordu; ana iş parçacığı bir an yavaşlayınca işler 8 MB'lık
+        // kareleriyle birikiyordu (#1390 incelemesi). Yetişilemeyen kare atlanır.
+        let mailbox = FrameMailbox<(frame: CGImage, capturedAt: Int)>()
         session.onFrame = { [weak self, weak session] frame in
             // Karenin geldiği an: canlı altyazı alanındaki gecikme buradan TV'ye gidene kadar ölçülür.
-            let capturedAt = SubtitleStabilizer.uptimeMs()
+            guard mailbox.put((frame, SubtitleStabilizer.uptimeMs())) else { return }
             Task { @MainActor in
-                guard let self, let session, self.session === session else { return }
-                await self.handle(frame, capturedAt: capturedAt)
+                while let next = mailbox.take() {
+                    guard let self, let session, self.session === session else { continue }
+                    // `handle` okuma bitene dek bekler (önizleme ve telefon izleme o arada sonraki karelerle sürer);
+                    // kutuyu bekletmesin diye kendi işinde başlar, kutu bir sonraki turda boşaltılır.
+                    Task { @MainActor in await self.handle(next.frame, capturedAt: next.capturedAt) }
+                    await Task.yield()
+                }
             }
         }
         session.useCadence(frameCadence)

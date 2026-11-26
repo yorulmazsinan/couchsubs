@@ -51,7 +51,8 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
     var onConsoleMoved: ((RegisteredConsole) -> Void)?
 
     /// Yakalama kuyruğu düşük öncelikte: kare kopyası oyunun (Remote Play) önüne geçmez (Windows'ta süreç "normalin altı").
-    private let queue = DispatchQueue(label: "com.couchsubs.remoteplay-window", qos: .utility)
+    /// Her kare işi kendi autorelease havuzunda (#1390): ScreenCaptureKit ve VideoToolbox kare başına nesne autorelease eder.
+    private let queue = DispatchQueue(label: "com.couchsubs.remoteplay-window", qos: .utility, autoreleaseFrequency: .workItem)
     /// Karelerin kopyalanma sıklığı; okuma hattı kendi örneğini verir (`useCadence`).
     private var cadence = FrameCadence()
     private let cpu = SystemCpuLoad()

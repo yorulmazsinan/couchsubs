@@ -145,16 +145,54 @@ public enum OcrHelper {
     /// kapanırsa stdin okunamaz; bu yüzden ayrıca üst süreç izlenir.
     public static func serve(input: Int32 = STDIN_FILENO, output: Int32 = STDOUT_FILENO,
                              recognize: (CGImage, String, Bool) throws -> Reading = { try VisionReader.recognize($0, language: $1, fast: $2) }) {
-        while let head = read(from: input, limit: 64 * 1024) {
-            guard let header = try? JSONDecoder().decode(Header.self, from: head), let body = read(from: input) else { return }
-            var reply = Reply()
-            if let image = image(from: body, width: header.width, height: header.height) {
-                do { reply.lines = encode(try recognize(image, header.language, header.fast)) } catch { reply.error = "\(error)" }
-            } else {
-                reply.error = "kare çözülemedi"
-            }
-            guard let data = try? JSONEncoder().encode(reply), write(data, to: output) else { return }
+        // Her istek kendi autorelease havuzunda (#1390). Bu döngü run loop'suz ana iş parçacığında döner; havuz hiç
+        // boşalmadığından Vision'ın autorelease ettiği nesneler (istek, sonuçlar, IOSurface tamponları) ve karenin
+        // CGImage'ı süreç kapanana dek kalıyordu: yardımcı her okumada ~2,5 MB büyüyüp onlarca GB'a çıkıyor, Mac takas
+        // alanını doldurup kilitleniyordu.
+        while autoreleasepool(invoking: { answerOne(input: input, output: output, recognize: recognize) }) {}
+    }
+
+    /// Bir isteği okur (başlık, kare), yanıtını yazar. Giriş kapandıysa ya da yanıt yazılamadıysa false.
+    static func answerOne(input: Int32, output: Int32, recognize: (CGImage, String, Bool) throws -> Reading) -> Bool {
+        guard let head = read(from: input, limit: 64 * 1024),
+              let header = try? JSONDecoder().decode(Header.self, from: head),
+              let body = read(from: input) else { return false }
+        let reply = answer(header, body, recognize: recognize)
+        guard let data = try? JSONEncoder().encode(reply) else { return false }
+        return write(data, to: output)
+    }
+
+    static func answer(_ header: Header, _ body: Data, recognize: (CGImage, String, Bool) throws -> Reading) -> Reply {
+        guard let frame = image(from: body, width: header.width, height: header.height) else { return Reply(error: "kare çözülemedi") }
+        do {
+            return Reply(lines: encode(try recognize(frame, header.language, header.fast)))
+        } catch {
+            return Reply(error: "\(error)")
         }
+    }
+
+    /// Bir sürecin belleği: yerleşik (RSS) ve footprint (sıkıştırılmış ve takastaki kirli bellek dahil; Etkinlik
+    /// Monitörü'nün "Bellek"i).
+    public struct Memory: Equatable, Sendable {
+        public var resident: UInt64
+        public var footprint: UInt64
+        public init(resident: UInt64, footprint: UInt64) {
+            self.resident = resident
+            self.footprint = footprint
+        }
+        /// Sınırla karşılaştırılan değer: takasa itilen bellek RSS'te görünmez, footprint'te görünür.
+        public var used: UInt64 { max(resident, footprint) }
+        public var text: String { "\(footprint / 1_048_576) MB (yerleşik \(resident / 1_048_576) MB)" }
+    }
+
+    /// Sürecin belleği; ölçülemezse nil.
+    public static func memory(of pid: pid_t) -> Memory? {
+        var info = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
+        }
+        guard result == 0 else { return nil }
+        return Memory(resident: info.ri_resident_size, footprint: info.ri_phys_footprint)
     }
 
     /// Uygulamanın `main`'inden çağrılır; dönmez.
@@ -200,6 +238,8 @@ final class OcrHelperProcess: @unchecked Sendable {
         return OcrHelper.decode(reply.lines ?? [])
     }
 
+    var pid: pid_t { process.processIdentifier }
+
     /// Süreci öldürür; süren `recognize` `closed` ile döner.
     func kill() {
         if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
@@ -239,10 +279,25 @@ public final class OcrHelperRescuer: ReadRescuer, @unchecked Sendable {
     /// Günlük için: yardımcı açıldı, isabetli düzeye geçildi, kapandı.
     public var onLog: (@Sendable (String) -> Void)?
 
-    public init(executable: URL, arguments: [String] = [OcrHelper.argument], accurateAfterMs: Int = OcrHelperRescuer.defaultAccurateAfterMs) {
+    /// Yardımcının belleği bunu aşarsa (okuma bitince bakılır) yardımcı kapatılır, sonraki okuma yenisini açar (#1390).
+    /// Sağlıklı yardımcı isabetli düzeyin modeliyle birlikte birkaç yüz MB'tır; bir sızıntı Mac'i takasa boğmadan durdurulur.
+    public static let defaultMemoryCapBytes: UInt64 = 1536 << 20
+    /// Okumalar sürdükçe yardımcının belleği en çok bu aralıkla günlüğe yazılır.
+    public static let memoryLogIntervalMs = 60_000
+
+    private let memoryCapBytes: UInt64
+    private let memoryOf: @Sendable (pid_t) -> OcrHelper.Memory?
+    private var lastMemoryLog: Int?
+    private var memoryUnreadableNoted = false
+
+    public init(executable: URL, arguments: [String] = [OcrHelper.argument], accurateAfterMs: Int = OcrHelperRescuer.defaultAccurateAfterMs,
+                memoryCapBytes: UInt64 = OcrHelperRescuer.defaultMemoryCapBytes,
+                memoryOf: @escaping @Sendable (pid_t) -> OcrHelper.Memory? = { OcrHelper.memory(of: $0) }) {
         self.executable = executable
         self.arguments = arguments
         self.accurateAfterMs = accurateAfterMs
+        self.memoryCapBytes = memoryCapBytes
+        self.memoryOf = memoryOf
     }
 
     /// Okumalar isabetli düzeydeki yardımcıdan mı geliyor.
@@ -302,6 +357,7 @@ public final class OcrHelperRescuer: ReadRescuer, @unchecked Sendable {
         do {
             let reading = try helper.recognize(image, language: language, fast: isFast)
             lock.withLock { launchFailures = 0 }
+            watchMemory(of: helper, isFast: isFast)
             return reading
         } catch OcrHelper.Failure.closed {
             lock.withLock {
@@ -312,6 +368,43 @@ public final class OcrHelperRescuer: ReadRescuer, @unchecked Sendable {
             helper.kill()
             throw OcrHelper.Failure.closed
         }
+    }
+
+    /// Okuma bitince yardımcının belleğine bakılır: dakikada bir günlüğe yazılır; sınırı aştıysa yardımcı kapatılır ve
+    /// sonraki okuma yenisini açar (isabetli yardımcıysa isabetli düzey hemen yeniden denenir; model derlenmiş olduğundan
+    /// hızlı döner). Kilit dışında çağrılır.
+    private func watchMemory(of helper: OcrHelperProcess, isFast: Bool) {
+        let level = isFast ? "hızlı" : "isabetli"
+        guard let memory = memoryOf(helper.pid) else {
+            let first: Bool = lock.withLock {
+                defer { memoryUnreadableNoted = true }
+                return !memoryUnreadableNoted
+            }
+            if first { onLog?("yedek okuyucunun belleği ölçülemedi (\(level) düzey)") }
+            return
+        }
+        let now = ReadQueue.uptimeMs()
+        if memory.used > memoryCapBytes {
+            lock.withLock {
+                lastMemoryLog = now
+                if fast === helper { fast = nil }
+                if accurate === helper {
+                    accurate = nil
+                    probed = false
+                    since = now - accurateAfterMs
+                }
+            }
+            helper.kill()
+            onLog?("yedek okuyucu bellek sınırını aştı: \(memory.text), sınır \(memoryCapBytes / 1_048_576) MB; "
+                   + "\(level) düzeydeki yardımcı kapatıldı, sonraki okumada yenisi açılacak")
+            return
+        }
+        let due: Bool = lock.withLock {
+            guard lastMemoryLog.map({ now - $0 >= Self.memoryLogIntervalMs }) ?? true else { return false }
+            lastMemoryLog = now
+            return true
+        }
+        if due { onLog?("yedek okuyucunun belleği: \(memory.text), \(level) düzey") }
     }
 
     /// Asıl okuyucu kilitli kaldı (#1333): yedek kalıcı okuyucudur, isabetli düzey bir sonraki okumada hemen denenir

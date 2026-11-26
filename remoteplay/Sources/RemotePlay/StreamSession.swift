@@ -623,7 +623,9 @@ public final class StreamSession: @unchecked Sendable {
     /// PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa).
     private let loginPasscode: String?
     private let queue = DispatchQueue(label: "couchsubs.stream-session")
-    private let decodeQueue = DispatchQueue(label: "couchsubs.decode")
+    /// Her kare (saniyede 60) ayrı bir iş; her biri kendi autorelease havuzunda (#1390): VideoToolbox kare başına nesne
+    /// autorelease eder, kuyruk hiç boşalmadan döndüğünde havuz boşaltılmayabiliyordu.
+    private let decodeQueue = DispatchQueue(label: "couchsubs.decode", autoreleaseFrequency: .workItem)
     private var decoder = H264FrameDecoder()
     private var throttle = FrameThrottle(minInterval: 1.0 / 20)
     private var policy = ReconnectPolicy()
