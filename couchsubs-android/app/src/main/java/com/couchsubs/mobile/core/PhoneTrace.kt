@@ -120,3 +120,34 @@ internal class PhoneMissLog {
         counts.clear()
     }
 }
+
+/**
+ * Okunan telefon satırlarının günlük özeti (X, 26 Kas, beta.104: en üstteki uzun mesaj çevrilmiyor, cevap seçenekleri karışık
+ * görünüyordu; hangi satırın okunup hangi rolle panele girdiği günlükte yoktu). Her grubun türü (header, bubble, option, note,
+ * list, card) ve ilk sözcükleri ([PhoneChat.rowSummary]); özet değişince yazılır, en çok [INTERVAL_MS]'de bir, aynı özet
+ * yinelenmez. iPhone (PhoneRowsLog, PhoneTrace.swift) ve Windows (PhoneRowsLog, PhoneTrace.cs) aynı.
+ */
+class PhoneRowsLog {
+    private var last: String? = null
+    private var at: Long? = null
+
+    /** Yazılacak satır; okuma boşsa, özet aynıysa ya da son satırdan bu yana [INTERVAL_MS] geçmediyse null. */
+    @Synchronized
+    fun line(groups: List<ScreenTranslation.Group>, now: Long): String? {
+        if (groups.isEmpty()) return null
+        val summary = PhoneChat.rowSummary(groups)
+        if (summary == last) return null
+        val previous = at
+        if (previous != null && now >= previous && now - previous < INTERVAL_MS) return null
+        last = summary
+        at = now
+        val shown = if (summary.length > MAX_LENGTH) summary.take(MAX_LENGTH) + "…" else summary
+        return "telefon satırları: $shown"
+    }
+
+    companion object {
+        const val INTERVAL_MS = 5_000L
+        /** Özetin en uzun hâli (karakter). */
+        const val MAX_LENGTH = 400
+    }
+}

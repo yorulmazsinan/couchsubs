@@ -108,6 +108,8 @@ final class PhoneRegionSession {
     /// Altyazı günlüğü: mesaj çevrilmediğinde ya da bekletildiğinde nedeni (`DropLog`; Windows ve Android ile aynı).
     var onLog: ((String) -> Void)?
     private let drops = DropLog()
+    /// Okunan telefon satırlarının özeti (`PhoneRowsLog`).
+    private let rowsLog = PhoneRowsLog()
     /// Telefonun sessiz yolları (`PhoneTrace`); izleyici verir ki telefon her açılışta sınır baştan başlamasın.
     var trace = DropLog()
 
@@ -212,6 +214,10 @@ final class PhoneRegionSession {
                         anchor: placement, layout: placement?.toReference(region), flatEmpty: raw.lines.isEmpty)
         }
         if page.flatEmpty { trace.note(PhoneTrace.component, PhoneTrace.emptyFlat, "Phone", log: onLog) }
+        // Okunan satırların türü ve ilk sözcükleri (`PhoneRowsLog`: özet değişince, en çok 5 sn'de bir).
+        if let line = rowsLog.line(page.bubbles.map(\.group), now: SubtitleStabilizer.uptimeMs()) {
+            (onLog ?? { SubtitleLog.write($0) })(line)
+        }
         return page
     }
 

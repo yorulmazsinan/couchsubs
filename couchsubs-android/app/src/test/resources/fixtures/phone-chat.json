@@ -949,6 +949,179 @@
      "On my way"
     ]
    ]
+  },
+  {
+   "name": "sohbet: üstte uzun mesaj, altta iki cevap seçeneği (X, 26 Kas)",
+   "pose": [
+    0.6087,
+    0.1026,
+    0.5528,
+    0.8395
+   ],
+   "aspect": 1.777778,
+   "lines": [
+    {
+     "text": "Linda",
+     "box": [
+      0.587,
+      0.1427,
+      0.6152,
+      0.1623
+     ]
+    },
+    {
+     "text": "New messages",
+     "box": [
+      0.5552,
+      0.275,
+      0.6297,
+      0.3015
+     ]
+    },
+    {
+     "text": "I saw you with our guest from",
+     "box": [
+      0.5047,
+      0.3314,
+      0.6516,
+      0.3691
+     ]
+    },
+    {
+     "text": "room 10. Just so you",
+     "box": [
+      0.5029,
+      0.3541,
+      0.6066,
+      0.3856
+     ]
+    },
+    {
+     "text": "understand, she has been",
+     "box": [
+      0.501,
+      0.3768,
+      0.6281,
+      0.4122
+     ]
+    },
+    {
+     "text": "cautioned multiple times for",
+     "box": [
+      0.4986,
+      0.3994,
+      0.6373,
+      0.4369
+     ]
+    },
+    {
+     "text": "breaking guest policy rules. I",
+     "box": [
+      0.4969,
+      0.4221,
+      0.6501,
+      0.4623
+     ]
+    },
+    {
+     "text": "would hate for you to find",
+     "box": [
+      0.4949,
+      0.4448,
+      0.6222,
+      0.4811
+     ]
+    },
+    {
+     "text": "yourself in more trouble",
+     "box": [
+      0.4927,
+      0.4674,
+      0.6106,
+      0.5025
+     ]
+    },
+    {
+     "text": "because of her. L.",
+     "box": [
+      0.4906,
+      0.4901,
+      0.5683,
+      0.5188
+     ]
+    },
+    {
+     "text": "MORE was a typo. I of course",
+     "box": [
+      0.4856,
+      0.5603,
+      0.6323,
+      0.6016
+     ]
+    },
+    {
+     "text": "meant ANY trouble. L.",
+     "box": [
+      0.4835,
+      0.5829,
+      0.586,
+      0.6168
+     ]
+    },
+    {
+     "text": "Thanks for the heads up.",
+     "box": [
+      0.5006,
+      0.6558,
+      0.6245,
+      0.6944
+     ]
+    },
+    {
+     "text": "Yeah I don't need your",
+     "box": [
+      0.5231,
+      0.7137,
+      0.6375,
+      0.7512
+     ]
+    },
+    {
+     "text": "opinion thanks.",
+     "box": [
+      0.5205,
+      0.7363,
+      0.5982,
+      0.7671
+     ]
+    }
+   ],
+   "groups": [
+    [
+     "header",
+     "Linda"
+    ],
+    [
+     "note",
+     "New messages"
+    ],
+    [
+     "incoming",
+     "I saw you with our guest from room 10. Just so you understand, she has been cautioned multiple times for breaking guest policy rules. I would hate for you to find yourself in more trouble because of her. L."
+    ],
+    [
+     "incoming",
+     "MORE was a typo. I of course meant ANY trouble. L."
+    ],
+    [
+     "option",
+     "Thanks for the heads up."
+    ],
+    [
+     "option",
+     "Yeah I don't need your opinion thanks."
+    ]
+   ]
   }
  ],
  "outside": {
@@ -2434,6 +2607,406 @@
      ],
      "expect": "refresh"
     }
+   ]
+  }
+ ],
+ "roles": [
+  {
+   "name": "uzun ilk mesaj ve iki cevap seçeneği",
+   "lines": [
+    {
+     "text": "Linda",
+     "box": [
+      0.42,
+      0.019,
+      0.545,
+      0.043
+     ]
+    },
+    {
+     "text": "New messages",
+     "box": [
+      0.32,
+      0.22,
+      0.66,
+      0.244
+     ]
+    },
+    {
+     "text": "I saw you with our guest from",
+     "box": [
+      0.108,
+      0.314,
+      0.784,
+      0.338
+     ]
+    },
+    {
+     "text": "room 10. Just so you",
+     "box": [
+      0.108,
+      0.348,
+      0.583,
+      0.372
+     ]
+    },
+    {
+     "text": "understand, she has been",
+     "box": [
+      0.107,
+      0.382,
+      0.691,
+      0.406
+     ]
+    },
+    {
+     "text": "cautioned multiple times for",
+     "box": [
+      0.104,
+      0.416,
+      0.742,
+      0.44
+     ]
+    },
+    {
+     "text": "breaking guest policy rules. I",
+     "box": [
+      0.104,
+      0.45,
+      0.809,
+      0.474
+     ]
+    },
+    {
+     "text": "would hate for you to find",
+     "box": [
+      0.103,
+      0.484,
+      0.688,
+      0.508
+     ]
+    },
+    {
+     "text": "yourself in more trouble",
+     "box": [
+      0.101,
+      0.518,
+      0.642,
+      0.542
+     ]
+    },
+    {
+     "text": "because of her. L.",
+     "box": [
+      0.099,
+      0.552,
+      0.454,
+      0.576
+     ]
+    },
+    {
+     "text": "MORE was a typo. I of course",
+     "box": [
+      0.101,
+      0.657,
+      0.776,
+      0.681
+     ]
+    },
+    {
+     "text": "meant ANY trouble. L.",
+     "box": [
+      0.099,
+      0.691,
+      0.569,
+      0.715
+     ]
+    },
+    {
+     "text": "Thanks for the heads up.",
+     "box": [
+      0.203,
+      0.794,
+      0.772,
+      0.818
+     ]
+    },
+    {
+     "text": "Yeah I don't need your",
+     "box": [
+      0.326,
+      0.873,
+      0.851,
+      0.897
+     ]
+    },
+    {
+     "text": "opinion thanks.",
+     "box": [
+      0.322,
+      0.907,
+      0.677,
+      0.931
+     ]
+    }
+   ],
+   "groups": [
+    [
+     "header",
+     "Linda"
+    ],
+    [
+     "note",
+     "New messages"
+    ],
+    [
+     "incoming",
+     "I saw you with our guest from room 10. Just so you understand, she has been cautioned multiple times for breaking guest policy rules. I would hate for you to find yourself in more trouble because of her. L."
+    ],
+    [
+     "incoming",
+     "MORE was a typo. I of course meant ANY trouble. L."
+    ],
+    [
+     "option",
+     "Thanks for the heads up."
+    ],
+    [
+     "option",
+     "Yeah I don't need your opinion thanks."
+    ]
+   ]
+  },
+  {
+   "name": "başlık okunmadı: en üstteki uzun mesaj yine balon",
+   "lines": [
+    {
+     "text": "I saw you with our guest from",
+     "box": [
+      0.108,
+      0.314,
+      0.784,
+      0.338
+     ]
+    },
+    {
+     "text": "room 10. Just so you",
+     "box": [
+      0.108,
+      0.348,
+      0.583,
+      0.372
+     ]
+    },
+    {
+     "text": "understand, she has been",
+     "box": [
+      0.107,
+      0.382,
+      0.691,
+      0.406
+     ]
+    },
+    {
+     "text": "cautioned multiple times for",
+     "box": [
+      0.104,
+      0.416,
+      0.742,
+      0.44
+     ]
+    },
+    {
+     "text": "breaking guest policy rules. I",
+     "box": [
+      0.104,
+      0.45,
+      0.809,
+      0.474
+     ]
+    },
+    {
+     "text": "would hate for you to find",
+     "box": [
+      0.103,
+      0.484,
+      0.688,
+      0.508
+     ]
+    },
+    {
+     "text": "yourself in more trouble",
+     "box": [
+      0.101,
+      0.518,
+      0.642,
+      0.542
+     ]
+    },
+    {
+     "text": "because of her. L.",
+     "box": [
+      0.099,
+      0.552,
+      0.454,
+      0.576
+     ]
+    },
+    {
+     "text": "MORE was a typo. I of course",
+     "box": [
+      0.101,
+      0.657,
+      0.776,
+      0.681
+     ]
+    },
+    {
+     "text": "meant ANY trouble. L.",
+     "box": [
+      0.099,
+      0.691,
+      0.569,
+      0.715
+     ]
+    },
+    {
+     "text": "Thanks for the heads up.",
+     "box": [
+      0.203,
+      0.794,
+      0.772,
+      0.818
+     ]
+    },
+    {
+     "text": "Yeah I don't need your",
+     "box": [
+      0.326,
+      0.873,
+      0.851,
+      0.897
+     ]
+    },
+    {
+     "text": "opinion thanks.",
+     "box": [
+      0.322,
+      0.907,
+      0.677,
+      0.931
+     ]
+    }
+   ],
+   "groups": [
+    [
+     "incoming",
+     "I saw you with our guest from room 10. Just so you understand, she has been cautioned multiple times for breaking guest policy rules. I would hate for you to find yourself in more trouble because of her. L."
+    ],
+    [
+     "incoming",
+     "MORE was a typo. I of course meant ANY trouble. L."
+    ],
+    [
+     "option",
+     "Thanks for the heads up."
+    ],
+    [
+     "option",
+     "Yeah I don't need your opinion thanks."
+    ]
+   ]
+  },
+  {
+   "name": "seçenekler: sağa yaslı giden balonun altında ortalı seçenek; giden balon da seçenek",
+   "lines": [
+    {
+     "text": "Where are you?",
+     "box": [
+      0.1,
+      0.3,
+      0.4,
+      0.324
+     ]
+    },
+    {
+     "text": "On my way, almost there.",
+     "box": [
+      0.45,
+      0.4,
+      0.92,
+      0.424
+     ]
+    },
+    {
+     "text": "Sounds good, see you soon.",
+     "box": [
+      0.22,
+      0.55,
+      0.78,
+      0.574
+     ]
+    }
+   ],
+   "groups": [
+    [
+     "incoming",
+     "Where are you?"
+    ],
+    [
+     "option",
+     "On my way, almost there."
+    ],
+    [
+     "option",
+     "Sounds good, see you soon."
+    ]
+   ]
+  },
+  {
+   "name": "seçenek yoksa giden balon ve not aynen",
+   "lines": [
+    {
+     "text": "Where are you?",
+     "box": [
+      0.1,
+      0.3,
+      0.4,
+      0.324
+     ]
+    },
+    {
+     "text": "On my way, almost there.",
+     "box": [
+      0.45,
+      0.4,
+      0.92,
+      0.424
+     ]
+    },
+    {
+     "text": "Delivered",
+     "box": [
+      0.42,
+      0.46,
+      0.58,
+      0.48
+     ]
+    }
+   ],
+   "groups": [
+    [
+     "incoming",
+     "Where are you?"
+    ],
+    [
+     "outgoing",
+     "On my way, almost there."
+    ],
+    [
+     "note",
+     "Delivered"
+    ]
    ]
   }
  ]

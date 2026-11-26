@@ -447,7 +447,7 @@ enum GamePhoneText {
         guard groups.allSatisfy({ $0.phone != nil }) else { return groups.map { var g = $0; g.phone = nil; return g } }
         let list = groups.contains { section($0.paragraphs.joined()) != nil }
         let first = groups.indices.min { groups[$0].phone!.spot.top < groups[$1].phone!.spot.top }
-        return groups.indices.map { index in
+        let placed = groups.indices.map { index in
             var group = groups[index]
             let text = group.paragraphs.joined(separator: " ")
             let spot = group.phone!.spot
@@ -460,6 +460,13 @@ enum GamePhoneText {
             group.phone = ScreenPhoneCard.Placement(role: role, spot: spot)
             return group
         }
+        // Sohbetin altındaki cevap seçenekleri (`PhoneChat.withOptions`); gruplar yukarıdan aşağı sıralı.
+        guard !home, !list else { return placed }
+        let order = placed.indices.sorted { placed[$0].phone!.spot.top < placed[$1].phone!.spot.top }
+        let roles = PhoneChat.withOptions(order.map { placed[$0].phone!.role })
+        var result = placed
+        for (position, index) in order.enumerated() { result[index].phone?.role = roles[position] }
+        return result
     }
 
     /// Art arda iki kez yazılmış metin ("A. B. A. B.") bir kez: OCR aynı satırı iki kutuda okuyunca ya da motor çeviriyi

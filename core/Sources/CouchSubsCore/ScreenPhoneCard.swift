@@ -118,6 +118,9 @@ public enum ScreenPhoneCard {
         case header
         /// Gelen mesaj (sola yaslı balon), giden mesaj (sağa yaslı), tarafı belirsiz mesaj (rengine bakılır).
         case incoming, outgoing, message
+        /// Sohbetin altındaki cevap seçeneği (oyuncunun seçeceği yanıt; `PhoneChat.withOptions`): her biri ayrı balon,
+        /// oyuncunun tarafında, seçeneklerin hepsi aynı renkte.
+        case option
         /// Ortalı kısa satır: saat, "Today", "Delivered".
         case note
         /// Sohbet listesi: kişi adı (çevrilmez), son mesaj önizlemesi, bölüm başlığı ("Messages").
@@ -336,6 +339,9 @@ public enum ScreenPhoneCard {
         // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle
         // ayrı renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
         let cardStyle = commonStyle(body.filter { isCard($0.phone!.role) }.map(\.style))
+        // Cevap seçenekleri tek renkte (okunabilen örneklerin en çok görüneni): seçili seçeneğin çerçevesi ya da renk
+        // geçişi örneği bozunca biri telefonun renginde, öbürü yedek renkte çiziliyordu (X, 26 Kas).
+        let optionStyle = commonStyle(body.filter { $0.phone!.role == .option }.map(\.style))
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur (`listRow`).
@@ -371,7 +377,7 @@ public enum ScreenPhoneCard {
                 }
                 continue
             }
-            let kind: Role = role == .message ? (isOutgoing(item.style) ? .outgoing : .incoming) : role
+            let kind: Role = role == .message ? (isOutgoing(item.style) ? .outgoing : .incoming) : role == .option ? .outgoing : role
             let bubble = kind == .incoming || kind == .outgoing
             let widest = (bubble ? bubbleShare : 1) * cardWidth - (bubble ? 0 : 2 * pad)
             let inner = widest - 2 * pad
@@ -383,7 +389,7 @@ public enum ScreenPhoneCard {
             placed.lineHeight = line
             switch kind {
             case .outgoing:
-                placed.style = bubbleColor(item.style, fallback: outgoingColor)
+                placed.style = bubbleColor(role == .option ? optionStyle : item.style, fallback: outgoingColor)
                 placed.panel = .mine
             case .incoming:
                 placed.style = bubbleColor(item.style, fallback: incomingColor)
@@ -663,16 +669,36 @@ public enum ScreenPhoneCard {
     /// panelle aynıdır (koyu kart ve simge yok; her balon ayrı, telefonun balon renginde, `bubbleColor`): balonlar alanın
     /// telefon tarafındaki kenarında (telefon sağdaysa sağda) üstten alta, telefondaki sırasıyla ve aralarındaki boşlukla
     /// (en çok `stackedGapMax` satır) dizilir; gelen sola, giden sağa yaslı, kişi adı üstte küçük başlık. Yazı boyu `font`
-    /// (piksel, en az `stackedMinFont`); yazı küçülmez, alana sığmazsa en eski mesajlar düşer. `width`×`height`: alanın
+    /// (piksel, en az `stackedMinFont`). Mesajların hepsi alana sığmazsa önce sütun genişler (alanın en çok
+    /// `stackedWideShare`'i), yine sığmazsa yazı `stackedMinFont`'a dek küçülür; yalnız hiçbiri yetmezse yazı verilen boyda
+    /// kalır ve en eski mesajlar düşer. X (26 Kas, beta.104, Windows): saydam pencerede uzun ilk mesaj (dar sütunda 10+
+    /// satır) sığmadığı için hiç çizilmiyordu, "en üstteki mesaj çevrilmiyor" sanılıyordu. `width`×`height`: alanın
     /// boyu (piksel); dönen kutular alana oranla (0–1) ve çiziciler hizalı paneli çizer gibi çizer (`PhonePanelAligned`,
     /// Windows `PhonePanelView.Aligned`). Aynı girdi her zaman birebir aynı çıktı (#1279). Windows: `Stacked`, Android: `stacked`.
     public static func stacked(_ panel: Panel, width: Double, height: Double, font: Double) -> Panel {
         guard width > 0, height > 0 else { return panel }
-        let font = max(stackedMinFont, font)
+        let given = max(stackedMinFont, font)
+        let narrow = min(width * stackedShare, given * stackedChars) / width
+        let wide = max(narrow, stackedWideShare)
+        // Sığan ilk düzen: verilen boy dar sütunda, geniş sütunda, sonra küçülen yazıyla; hiçbiri sığmazsa ilk düzen.
+        var tries: [(column: Double, font: Double)] = [(narrow, given)]
+        if wide > narrow + 1e-9 { tries.append((wide, given)) }
+        var smaller = given
+        while smaller > stackedMinFont + 1e-9 {
+            smaller = max(stackedMinFont, smaller * 0.9)
+            tries.append((wide, smaller))
+        }
+        for attempt in tries {
+            let result = stackedPanel(panel, width: width, height: height, font: attempt.font, column: attempt.column)
+            if result.messages.count == panel.messages.count { return result }
+        }
+        return stackedPanel(panel, width: width, height: height, font: given, column: narrow)
+    }
+
+    private static func stackedPanel(_ panel: Panel, width: Double, height: Double, font: Double, column: Double) -> Panel {
         // Çiziciler yazı boyunu satır yüksekliğinin 0,85'i alır (`PhonePanelAligned`).
         let line = font / 0.85 / height
         let aspect = width / height
-        let column = min(width * stackedShare, font * stackedChars) / width
         let right = (panel.card.box.left + panel.card.box.right) / 2 > 0.5
         let left = right ? 1 - column : 0
         // Balonun yan dolgusu (çizicilerde yazı boyunun 0,6'sı), alana oranla.
@@ -733,9 +759,10 @@ public enum ScreenPhoneCard {
     }
 
     /// Saydam pencerede panelin yazısı en az bu boyda (piksel); sütunun eni alanın en çok `stackedShare`'i ve yazı boyunun
-    /// `stackedChars` katı; balonlar arası boşluk en çok `stackedGapMax` satır.
+    /// `stackedChars` katı; balonlar arası boşluk en çok `stackedGapMax` satır. Mesajlar sığmazsa sütun alanın en çok
+    /// `stackedWideShare`'ine genişler.
     public static let stackedMinFont = 13.0
-    static let stackedShare = 0.45, stackedChars = 20.0, stackedGapMax = 1.2
+    static let stackedShare = 0.45, stackedChars = 20.0, stackedGapMax = 1.2, stackedWideShare = 0.9
 
     /// Panelin köşe yarıçapı ve zemin örtüsü (1080 satırlık ekranda piksel; çiziciler ekran boyuna ölçekler).
     public static let panelRadius = 18.0, panelOpacity = 0.88

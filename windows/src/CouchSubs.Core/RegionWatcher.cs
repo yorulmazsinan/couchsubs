@@ -95,6 +95,8 @@ public sealed partial class RegionWatcher
         public CropRegion? ReadRegion;
         public GamePhonePage? ReadPhonePage;
         public GamePhoneReader? PhoneReader;
+        /// <summary>Okunan telefon satırlarının özeti (<see cref="CouchSubs.Core.PhoneRowsLog"/>).</summary>
+        public PhoneRowsLog? PhoneRowsLog;
         public IReadOnlyList<ScreenTranslation.Item>? SentPhoneBlocks;
         /// <summary>Son gönderilen düzen, ayarı ve Yanda Panel'in dayandığı telefon yeri (<see cref="PhoneSteady.SteadyPose"/>).</summary>
         public IReadOnlyList<ScreenTranslation.Item>? SentPhoneShown;

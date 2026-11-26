@@ -522,7 +522,7 @@ internal static partial class GamePhoneText
         var first = -1;
         for (var i = 0; i < groups.Count; i++)
             if (first < 0 || groups[i].Phone!.Spot.Top < groups[first].Phone!.Spot.Top) first = i;
-        return [.. groups.Select((group, index) =>
+        var placed = groups.Select((group, index) =>
         {
             var text = string.Join(' ', group.Paragraphs);
             var spot = group.Phone!.Spot;
@@ -532,7 +532,14 @@ internal static partial class GamePhoneText
                 : list ? (SectionLabel(text) is not null ? ScreenPhoneCard.Role.Heading : ScreenPhoneCard.Role.Preview)
                 : PhoneChat.RoleOf([row]);
             return group with { Phone = new ScreenPhoneCard.Placement(role, spot) };
-        })];
+        }).ToList();
+        // Sohbetin altındaki cevap seçenekleri (PhoneChat.WithOptions); gruplar yukarıdan aşağı (Mac ile aynı).
+        if (home || list) return placed;
+        var order = Enumerable.Range(0, placed.Count).OrderBy(i => placed[i].Phone!.Spot.Top).ToList();
+        var roles = PhoneChat.WithOptions([.. order.Select(i => placed[i].Phone!.Role)]);
+        for (var position = 0; position < order.Count; position++)
+            placed[order[position]] = placed[order[position]] with { Phone = placed[order[position]].Phone! with { Role = roles[position] } };
+        return placed;
     }
 
     private static bool EndsSentence(string text) => text.TrimEnd().LastOrDefault() is '.' or '!' or '?';

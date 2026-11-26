@@ -139,6 +139,8 @@ internal class PhoneRegionSession(
     /** Altyazı günlüğü: mesaj çevrilmediğinde ya da bekletildiğinde nedeni ([DropLog]; Mac/iPhone ve Windows ile aynı). */
     @Volatile var onLog: ((String) -> Unit)? = null
     private val drops = DropLog()
+    /** Okunan telefon satırlarının özeti ([PhoneRowsLog]). */
+    private val rowsLog = PhoneRowsLog()
     /** Telefonun sessiz yolları ([PhoneTrace]); izleyici verir ki telefon her açılışta sınır baştan başlamasın. */
     @Volatile var trace = DropLog()
 
@@ -193,6 +195,8 @@ internal class PhoneRegionSession(
         val reading = GamePhoneText.forTranslation(raw)
         val place = region.box
         val groups = GamePhoneText.groups(reading)
+        // Okunan satırların türü ve ilk sözcükleri ([PhoneRowsLog]: özet değişince, en çok 5 sn'de bir; iPhone ve Windows ile aynı).
+        rowsLog.line(groups, monotonicClock())?.let { line -> (onLog ?: DropLog.sink)?.invoke(line) }
         val icons = if (groups.any { it.icons != null }) capture.image.gray(region) else null
         val bubbles = ScreenTranslation.withImages(groups, icons).map { group ->
             val box = group.box.placedIn(place)

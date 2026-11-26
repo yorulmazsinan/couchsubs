@@ -131,6 +131,11 @@ object ScreenPhoneCard {
         HEADER("header"),
         /** Gelen mesaj (sola yaslı balon), giden mesaj (sağa yaslı), tarafı belirsiz mesaj (rengine bakılır). */
         INCOMING("incoming"), OUTGOING("outgoing"), MESSAGE("message"),
+        /**
+         * Sohbetin altındaki cevap seçeneği (oyuncunun seçeceği yanıt; [PhoneChat.withOptions]): her biri ayrı balon,
+         * oyuncunun tarafında, seçeneklerin hepsi aynı renkte (iPhone ve Windows ile aynı).
+         */
+        OPTION("option"),
         /** Ortalı kısa satır: saat, "Today", "Delivered". */
         NOTE("note"),
         /** Sohbet listesi: kişi adı (çevrilmez), son mesaj önizlemesi, bölüm başlığı ("Messages"). */
@@ -364,6 +369,9 @@ object ScreenPhoneCard {
         // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle
         // ayrı renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
         val cardStyle = commonStyle(body.filter { isCard(it.phone!!.role) }.map { it.surface })
+        // Cevap seçenekleri tek renkte (okunabilen örneklerin en çok görüneni): seçili seçeneğin çerçevesi ya da renk geçişi
+        // örneği bozunca biri telefonun renginde, öbürü yedek renkte çiziliyordu (X, 26 Kas; iPhone ile aynı).
+        val optionStyle = commonStyle(body.filter { it.phone!!.role == Role.OPTION }.map { it.surface })
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur ([listRow]).
@@ -398,7 +406,8 @@ object ScreenPhoneCard {
                 }
                 continue
             }
-            val kind = if (role == Role.MESSAGE) (if (isOutgoing(item.surface)) Role.OUTGOING else Role.INCOMING) else role
+            val kind = if (role == Role.MESSAGE) (if (isOutgoing(item.surface)) Role.OUTGOING else Role.INCOMING)
+                else if (role == Role.OPTION) Role.OUTGOING else role
             val bubble = kind == Role.INCOMING || kind == Role.OUTGOING
             val widest = (if (bubble) BUBBLE_SHARE else 1.0) * cardWidth - (if (bubble) 0.0 else 2 * pad)
             val inner = widest - 2 * pad
@@ -406,7 +415,7 @@ object ScreenPhoneCard {
             val longest = (lines.maxOfOrNull { it.length } ?: 0) * line * CHAR_WIDTH / handset.aspect + 2 * pad
             val width = if (bubble) minOf(widest, maxOf(cardWidth * BUBBLE_MIN, longest)) else widest
             val surface = when (kind) {
-                Role.OUTGOING -> bubbleColor(item.surface, OUTGOING)
+                Role.OUTGOING -> bubbleColor(if (role == Role.OPTION) optionStyle else item.surface, OUTGOING)
                 Role.INCOMING -> bubbleColor(item.surface, INCOMING)
                 // Bölüm başlığı ("Önerilen", "Mesajlar") soluk ve kalın küçük başlık, sola yaslı; not ortalı (iPhone ile aynı).
                 else -> NOTE
@@ -696,17 +705,37 @@ object ScreenPhoneCard {
      * balonlarına hizalanamaz. Görünüm hizalı panelle aynıdır (koyu kart ve simge yok; her balon ayrı, telefonun balon
      * renginde, [bubbleColor]): balonlar alanın telefon tarafındaki kenarında üstten alta, telefondaki sırasıyla ve
      * aralarındaki boşlukla (en çok [STACKED_GAP_MAX] satır) dizilir; gelen sola, giden sağa yaslı, kişi adı üstte küçük
-     * başlık. Yazı boyu [font] (piksel, en az [STACKED_MIN_FONT]); yazı küçülmez, sığmazsa en eski mesajlar düşer. Kutular
+     * başlık. Yazı boyu [font] (piksel, en az [STACKED_MIN_FONT]). Mesajların hepsi alana sığmazsa önce sütun genişler (alanın
+     * en çok [STACKED_WIDE_SHARE]'i), yine sığmazsa yazı [STACKED_MIN_FONT]'a dek küçülür; yalnız hiçbiri yetmezse yazı
+     * verilen boyda kalır ve en eski mesajlar düşer. X (26 Kas, beta.104): saydam pencerede uzun ilk mesaj (dar sütunda 10+
+     * satır) sığmadığı için hiç çizilmiyordu, "en üstteki mesaj çevrilmiyor" sanılıyordu. Kutular
      * alana oranla (0–1); [com.couchsubs.mobile.ui.PhonePanelAligned] hizalı paneli çizer gibi çizer. Aynı girdi her zaman
      * birebir aynı çıktı (#1279). Mac: ScreenPhoneCard.stacked, Windows: ScreenPhoneCard.Stacked.
      */
     fun stacked(panel: Panel, width: Double, height: Double, font: Double): Panel {
         if (width <= 0 || height <= 0) return panel
-        val size = maxOf(STACKED_MIN_FONT, font)
+        val given = maxOf(STACKED_MIN_FONT, font)
+        val narrow = minOf(width * STACKED_SHARE, given * STACKED_CHARS) / width
+        val wide = maxOf(narrow, STACKED_WIDE_SHARE)
+        // Sığan ilk düzen: verilen boy dar sütunda, geniş sütunda, sonra küçülen yazıyla; hiçbiri sığmazsa ilk düzen.
+        val tries = mutableListOf(narrow to given)
+        if (wide > narrow + 1e-9) tries += wide to given
+        var smaller = given
+        while (smaller > STACKED_MIN_FONT + 1e-9) {
+            smaller = maxOf(STACKED_MIN_FONT, smaller * 0.9)
+            tries += wide to smaller
+        }
+        for ((column, size) in tries) {
+            val result = stackedPanel(panel, width, height, size, column)
+            if (result.messages.size == panel.messages.size) return result
+        }
+        return stackedPanel(panel, width, height, given, narrow)
+    }
+
+    private fun stackedPanel(panel: Panel, width: Double, height: Double, size: Double, column: Double): Panel {
         // Çiziciler yazı boyunu satır yüksekliğinin 0,85'i alır (PhonePanelAligned).
         val line = size / 0.85 / height
         val aspect = width / height
-        val column = minOf(width * STACKED_SHARE, size * STACKED_CHARS) / width
         val right = (panel.card.box.left + panel.card.box.right) / 2 > 0.5
         val left = if (right) 1 - column else 0.0
         // Balonun yan dolgusu (çizicilerde yazı boyunun 0,6'sı), alana oranla.
@@ -766,6 +795,8 @@ object ScreenPhoneCard {
     const val STACKED_SHARE = 0.45
     const val STACKED_CHARS = 20.0
     const val STACKED_GAP_MAX = 1.2
+    /** Mesajlar sığmazsa sütun alanın en çok bu payına genişler. */
+    const val STACKED_WIDE_SHARE = 0.9
 
     /** Altyazı boyutu ayarının (TV pikseli, 1080p) panel yazısına çarpanı: varsayılan boyda 1. */
     fun textScale(fontSize: Int): Double = minOf(MAX_SCALE, maxOf(MIN_SCALE, fontSize / DEFAULT_FONT_SIZE.toDouble()))

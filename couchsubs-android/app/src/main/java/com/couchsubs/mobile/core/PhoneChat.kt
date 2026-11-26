@@ -117,6 +117,8 @@ object PhoneChat {
             bubble.add(row)
         }
         finish()
+        val roles = withOptions(result.map { it.phone!!.role })
+        for (i in result.indices) result[i] = result[i].copy(phone = result[i].phone!!.copy(role = roles[i]))
         return result
     }
 
@@ -369,19 +371,63 @@ object PhoneChat {
     }
 
     /**
-     * Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa satır not; iki yanı da dar
-     * (ekranı dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir.
+     * Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa etiket not; iki yanı da dar
+     * (ekranı dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir. Ortalı ama etiket olmayan balon (cümle ya
+     * da birden çok satır) sohbetin altındaki cevap seçeneğidir: X (26 Kas, beta.104) "Thanks for the heads up." ortalı tek
+     * satır olduğu için not sayılıp soluk ortalı yazıyla, öbür seçenek sarı giden balonla çiziliyordu (iPhone ile aynı).
      */
     internal fun role(bubble: List<Row>): ScreenPhoneCard.Role {
         val spot = bubble.drop(1).fold(bubble[0].spot) { total, row -> total.union(row.spot) }
         val left = maxOf(0.0, spot.left)
         val right = maxOf(0.0, 1 - spot.right)
-        if (bubble.size == 1 && abs((spot.left + spot.right) / 2 - 0.5) <= NOTE_CENTER && left >= NOTE_MARGIN && right >= NOTE_MARGIN)
-            return ScreenPhoneCard.Role.NOTE
+        if (abs((spot.left + spot.right) / 2 - 0.5) <= NOTE_CENTER && left >= NOTE_MARGIN && right >= NOTE_MARGIN)
+            return if (bubble.size == 1 && isNoteLabel(bubble.joinToString(" ") { it.text })) ScreenPhoneCard.Role.NOTE
+                else ScreenPhoneCard.Role.OPTION
         if (left < WIDE_MARGIN && right < WIDE_MARGIN) return ScreenPhoneCard.Role.MESSAGE
         if (right < left * SIDE_RATIO) return ScreenPhoneCard.Role.OUTGOING
         if (left < right * SIDE_RATIO) return ScreenPhoneCard.Role.INCOMING
         return ScreenPhoneCard.Role.MESSAGE
+    }
+
+    /** Not satırı en çok bu kadar sözcük ("Today 9:41 PM", "New messages", "Delivered"). */
+    const val NOTE_WORDS = 4
+
+    /** Ortalı not gibi kısa etiket: en çok [NOTE_WORDS] sözcük ve cümle sonu yok. */
+    fun isNoteLabel(text: String): Boolean {
+        val words = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+        return words in 1..NOTE_WORDS && !endsSentence(text)
+    }
+
+    /**
+     * Cevap seçenekleri sohbetin en altında art arda durur: en alttaki oyuncu tarafı balonlar (giden, seçenek) arasında en az
+     * bir seçenek varsa hepsi seçenektir; her biri ayrı satır, aynı görünüşte çizilir. Roller yukarıdan aşağı (iPhone ile aynı).
+     */
+    fun withOptions(roles: List<ScreenPhoneCard.Role>): List<ScreenPhoneCard.Role> {
+        var start = roles.size
+        while (start > 0 && (roles[start - 1] == ScreenPhoneCard.Role.OPTION || roles[start - 1] == ScreenPhoneCard.Role.OUTGOING)) start--
+        if (ScreenPhoneCard.Role.OPTION !in roles.subList(start, roles.size)) return roles
+        return roles.mapIndexed { index, role -> if (index >= start) ScreenPhoneCard.Role.OPTION else role }
+    }
+
+    /** Özette her grubun ilk bu kadar sözcüğü. */
+    const val ROW_SUMMARY_WORDS = 4
+
+    /**
+     * Okunan telefon satırlarının günlük özeti: her grubun türü (başlık, balon, seçenek, not, liste, kart) ve ilk sözcükleri
+     * (X, 26 Kas: en üstteki mesaj çevrilmiyordu; iPhone PhoneChat.rowSummary ve Windows ile aynı biçim).
+     */
+    fun rowSummary(groups: List<ScreenTranslation.Group>): String = groups.joinToString(" | ") { group ->
+        val kind = when (group.phone?.role) {
+            ScreenPhoneCard.Role.HEADER -> "header"
+            ScreenPhoneCard.Role.INCOMING, ScreenPhoneCard.Role.OUTGOING, ScreenPhoneCard.Role.MESSAGE -> "bubble"
+            ScreenPhoneCard.Role.OPTION -> "option"
+            ScreenPhoneCard.Role.NOTE -> "note"
+            ScreenPhoneCard.Role.CONTACT, ScreenPhoneCard.Role.PREVIEW, ScreenPhoneCard.Role.HEADING -> "list"
+            null -> "row"
+            else -> "card"
+        }
+        val words = group.paragraphs.joinToString(" ").split(Regex("\\s+")).filter { it.isNotEmpty() }
+        "$kind: ${words.take(ROW_SUMMARY_WORDS).joinToString(" ")}${if (words.size > ROW_SUMMARY_WORDS) "…" else ""}"
     }
 
     /** Satırlar tek parça olur: satır sonunda tireyle bölünmüş sözcük boşluksuz birleşir. */

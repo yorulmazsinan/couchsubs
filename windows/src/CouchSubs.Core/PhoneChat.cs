@@ -130,6 +130,8 @@ internal static class PhoneChat
             bubble.Add(row);
         }
         Finish();
+        var roles = WithOptions([.. result.Select(group => group.Phone!.Role)]);
+        for (var i = 0; i < result.Count; i++) result[i] = result[i] with { Phone = result[i].Phone! with { Role = roles[i] } };
         return result;
     }
 
@@ -419,20 +421,70 @@ internal static class PhoneChat
     }
 
     /// <summary>
-    /// Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa satır not; iki yanı da dar (ekranı
-    /// dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir.
+    /// Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa etiket not; iki yanı da dar (ekranı
+    /// dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir. Ortalı ama etiket olmayan balon (cümle ya da birden
+    /// çok satır) sohbetin altındaki cevap seçeneğidir: X (26 Kas, beta.104) "Thanks for the heads up." ortalı tek satır
+    /// olduğu için not sayılıp soluk ortalı yazıyla, öbür seçenek sarı giden balonla çiziliyordu (Mac ile aynı).
     /// </summary>
     internal static ScreenPhoneCard.Role RoleOf(IReadOnlyList<Row> bubble)
     {
         var spot = bubble.Skip(1).Aggregate(bubble[0].Spot, (a, b) => a.Union(b.Spot));
         double left = Math.Max(0, spot.Left), right = Math.Max(0, 1 - spot.Right);
-        if (bubble.Count == 1 && Math.Abs((spot.Left + spot.Right) / 2 - 0.5) <= NoteCenter && left >= NoteMargin && right >= NoteMargin)
-            return ScreenPhoneCard.Role.Note;
+        if (Math.Abs((spot.Left + spot.Right) / 2 - 0.5) <= NoteCenter && left >= NoteMargin && right >= NoteMargin)
+            return bubble.Count == 1 && IsNoteLabel(string.Join(' ', bubble.Select(row => row.Text)))
+                ? ScreenPhoneCard.Role.Note : ScreenPhoneCard.Role.Option;
         if (left < WideMargin && right < WideMargin) return ScreenPhoneCard.Role.Message;
         if (right < left * SideRatio) return ScreenPhoneCard.Role.Outgoing;
         if (left < right * SideRatio) return ScreenPhoneCard.Role.Incoming;
         return ScreenPhoneCard.Role.Message;
     }
+
+    /// <summary>Not satırı en çok bu kadar sözcük ("Today 9:41 PM", "New messages", "Delivered").</summary>
+    internal const int NoteWords = 4;
+
+    /// <summary>Ortalı not gibi kısa etiket: en çok <see cref="NoteWords"/> sözcük ve cümle sonu yok.</summary>
+    internal static bool IsNoteLabel(string text)
+    {
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        return words is >= 1 and <= NoteWords && !EndsSentence(text);
+    }
+
+    /// <summary>
+    /// Cevap seçenekleri sohbetin en altında art arda durur: en alttaki oyuncu tarafı balonlar (giden, seçenek) arasında en az
+    /// bir seçenek varsa hepsi seçenektir; her biri ayrı satır, aynı görünüşte çizilir. Roller yukarıdan aşağı (Mac ile aynı).
+    /// </summary>
+    internal static IReadOnlyList<ScreenPhoneCard.Role> WithOptions(IReadOnlyList<ScreenPhoneCard.Role> roles)
+    {
+        var start = roles.Count;
+        while (start > 0 && roles[start - 1] is ScreenPhoneCard.Role.Option or ScreenPhoneCard.Role.Outgoing) start--;
+        var result = roles.ToArray();
+        if (!roles.Skip(start).Contains(ScreenPhoneCard.Role.Option)) return result;
+        for (var i = start; i < result.Length; i++) result[i] = ScreenPhoneCard.Role.Option;
+        return result;
+    }
+
+    /// <summary>Özette her grubun ilk bu kadar sözcüğü.</summary>
+    internal const int RowSummaryWords = 4;
+
+    /// <summary>
+    /// Okunan telefon satırlarının günlük özeti: her grubun türü (başlık, balon, seçenek, not, liste, kart) ve ilk sözcükleri
+    /// (X, 26 Kas: en üstteki mesaj çevrilmiyordu; Mac PhoneChat.rowSummary ve Android ile aynı biçim).
+    /// </summary>
+    internal static string RowSummary(IEnumerable<ScreenTranslation.Group> groups) => string.Join(" | ", groups.Select(group =>
+    {
+        var kind = group.Phone?.Role switch
+        {
+            ScreenPhoneCard.Role.Header => "header",
+            ScreenPhoneCard.Role.Incoming or ScreenPhoneCard.Role.Outgoing or ScreenPhoneCard.Role.Message => "bubble",
+            ScreenPhoneCard.Role.Option => "option",
+            ScreenPhoneCard.Role.Note => "note",
+            ScreenPhoneCard.Role.Contact or ScreenPhoneCard.Role.Preview or ScreenPhoneCard.Role.Heading => "list",
+            null => "row",
+            _ => "card",
+        };
+        var words = string.Join(' ', group.Paragraphs).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return $"{kind}: {string.Join(' ', words.Take(RowSummaryWords))}{(words.Length > RowSummaryWords ? "…" : "")}";
+    }));
 
     /// <summary>Satırlar tek parça olur: satır sonunda tireyle bölünmüş sözcük boşluksuz birleşir.</summary>
     private static ScreenTranslation.Group Group(IReadOnlyList<Row> rows, ScreenPhoneCard.Role role, ScreenPhoneCard.Handset handset)

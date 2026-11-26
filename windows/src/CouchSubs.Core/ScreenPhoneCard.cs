@@ -121,6 +121,11 @@ public static class ScreenPhoneCard
         Outgoing,
         /// <summary>Tarafı belirsiz mesaj (rengine bakılır).</summary>
         Message,
+        /// <summary>
+        /// Sohbetin altındaki cevap seçeneği (oyuncunun seçeceği yanıt; <see cref="PhoneChat.WithOptions"/>): her biri ayrı
+        /// balon, oyuncunun tarafında, seçeneklerin hepsi aynı renkte (Mac/iPhone ve Android ile aynı).
+        /// </summary>
+        Option,
         /// <summary>Ortalı kısa satır: saat, "Today", "Delivered".</summary>
         Note,
         /// <summary>Sohbet listesinde kişi adı (çevrilmez).</summary>
@@ -370,6 +375,9 @@ public static class ScreenPhoneCard
         // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle ayrı
         // renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
         var cardStyle = CommonStyle([.. body.Where(item => IsCard(item.Phone!.Role)).Select(item => item.Style)]);
+        // Cevap seçenekleri tek renkte (okunabilen örneklerin en çok görüneni): seçili seçeneğin çerçevesi ya da renk geçişi
+        // örneği bozunca biri telefonun renginde, öbürü yedek renkte çiziliyordu (X, 26 Kas; Mac ile aynı).
+        var optionStyle = CommonStyle([.. body.Where(item => item.Phone!.Role == Role.Option).Select(item => item.Style)]);
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
         // Sohbet listesinin satırı (ad + altındaki önizleme) ve ana ekran bileşeni tek kart olur (ListRowItem; Mac ile aynı).
@@ -410,7 +418,8 @@ public static class ScreenPhoneCard
                     rows.Add(new Row(made.Item, cardWidth - 2 * pad, made.Height, "left"));
                 continue;
             }
-            var kind = role == Role.Message ? (IsOutgoing(item.Style) ? Role.Outgoing : Role.Incoming) : role;
+            var kind = role == Role.Message ? (IsOutgoing(item.Style) ? Role.Outgoing : Role.Incoming)
+                : role == Role.Option ? Role.Outgoing : role;
             var bubble = kind is Role.Incoming or Role.Outgoing;
             var widest = (bubble ? BubbleShare : 1) * cardWidth - (bubble ? 0 : 2 * pad);
             var inner = widest - 2 * pad;
@@ -424,7 +433,8 @@ public static class ScreenPhoneCard
                 Style = kind switch
                 {
                     // Bölüm başlığı ("Önerilen", "Mesajlar") soluk ve kalın küçük başlık, sola yaslı; not ortalı (Mac ile aynı).
-                    Role.Outgoing => BubbleColor(item.Style, OutgoingColor), Role.Incoming => BubbleColor(item.Style, IncomingColor),
+                    Role.Outgoing => BubbleColor(role == Role.Option ? optionStyle : item.Style, OutgoingColor),
+                    Role.Incoming => BubbleColor(item.Style, IncomingColor),
                     _ => NoteColor,
                 },
                 Panel = kind switch { Role.Outgoing => PanelPart.Mine, Role.Incoming => PanelPart.Theirs, _ => PanelPart.Note },
@@ -743,18 +753,41 @@ public static class ScreenPhoneCard
     /// aynıdır (koyu kart ve simge yok; her balon ayrı, telefonun balon renginde, <see cref="BubbleColor"/>): balonlar alanın
     /// telefon tarafındaki kenarında üstten alta, telefondaki sırasıyla ve aralarındaki boşlukla (en çok
     /// <see cref="StackedGapMax"/> satır) dizilir; gelen sola, giden sağa yaslı, kişi adı üstte küçük başlık. Yazı boyu
-    /// <paramref name="font"/> (piksel, en az <see cref="StackedMinFont"/>); yazı küçülmez, sığmazsa en eski mesajlar düşer.
-    /// Kutular alana oranla (0–1); <see cref="PhonePanelView"/> hizalı paneli çizer gibi çizer. Aynı girdi her zaman birebir
-    /// aynı çıktı (#1279). Mac: ScreenPhoneCard.stacked, Android: ScreenPhoneCard.stacked.
+    /// <paramref name="font"/> (piksel, en az <see cref="StackedMinFont"/>). Mesajların hepsi alana sığmazsa önce sütun
+    /// genişler (alanın en çok <see cref="StackedWideShare"/>'i), yine sığmazsa yazı <see cref="StackedMinFont"/>'a dek
+    /// küçülür; yalnız hiçbiri yetmezse yazı verilen boyda kalır ve en eski mesajlar düşer. X (26 Kas, beta.104): saydam
+    /// pencerede uzun ilk mesaj (dar sütunda 10+ satır) sığmadığı için hiç çizilmiyordu, "en üstteki mesaj çevrilmiyor"
+    /// sanılıyordu. Kutular alana oranla (0–1); <see cref="PhonePanelView"/> hizalı paneli çizer gibi çizer. Aynı girdi her
+    /// zaman birebir aynı çıktı (#1279). Mac: ScreenPhoneCard.stacked, Android: ScreenPhoneCard.stacked.
     /// </summary>
     public static ChatPanel Stacked(ChatPanel panel, double width, double height, double font)
     {
         if (width <= 0 || height <= 0) return panel;
-        font = Math.Max(StackedMinFont, font);
+        var given = Math.Max(StackedMinFont, font);
+        var narrow = Math.Min(width * StackedShare, given * StackedChars) / width;
+        var wide = Math.Max(narrow, StackedWideShare);
+        // Sığan ilk düzen: verilen boy dar sütunda, geniş sütunda, sonra küçülen yazıyla; hiçbiri sığmazsa ilk düzen.
+        var tries = new List<(double Column, double Font)> { (narrow, given) };
+        if (wide > narrow + 1e-9) tries.Add((wide, given));
+        var smaller = given;
+        while (smaller > StackedMinFont + 1e-9)
+        {
+            smaller = Math.Max(StackedMinFont, smaller * 0.9);
+            tries.Add((wide, smaller));
+        }
+        foreach (var attempt in tries)
+        {
+            var result = StackedPanel(panel, width, height, attempt.Font, attempt.Column);
+            if (result.Messages.Count == panel.Messages.Count) return result;
+        }
+        return StackedPanel(panel, width, height, given, narrow);
+    }
+
+    private static ChatPanel StackedPanel(ChatPanel panel, double width, double height, double font, double column)
+    {
         // Çiziciler yazı boyunu satır yüksekliğinin 0,85'i alır (PhonePanelView.Aligned).
         var line = font / 0.85 / height;
         var aspect = width / height;
-        var column = Math.Min(width * StackedShare, font * StackedChars) / width;
         var right = (panel.Card.Box.Left + panel.Card.Box.Right) / 2 > 0.5;
         var left = right ? 1 - column : 0;
         // Balonun yan dolgusu (çizicilerde yazı boyunun 0,6'sı), alana oranla.
@@ -817,10 +850,11 @@ public static class ScreenPhoneCard
 
     /// <summary>
     /// Saydam pencerede panelin yazısı en az bu boyda (piksel); sütunun eni alanın en çok <see cref="StackedShare"/>'i ve
-    /// yazı boyunun <see cref="StackedChars"/> katı; balonlar arası boşluk en çok <see cref="StackedGapMax"/> satır.
+    /// yazı boyunun <see cref="StackedChars"/> katı; balonlar arası boşluk en çok <see cref="StackedGapMax"/> satır. Mesajlar
+    /// sığmazsa sütun alanın en çok <see cref="StackedWideShare"/>'ine genişler.
     /// </summary>
     public const double StackedMinFont = 13;
-    internal const double StackedShare = 0.45, StackedChars = 20, StackedGapMax = 1.2;
+    internal const double StackedShare = 0.45, StackedChars = 20, StackedGapMax = 1.2, StackedWideShare = 0.9;
 
     /// <summary>Altyazı boyutu ayarının (TV pikseli, 1080p) panel yazısına çarpanı: varsayılan boyda 1.</summary>
     public static double TextScale(int fontSize) => Math.Min(MaxScale, Math.Max(MinScale, fontSize / (double)DefaultFontSize));

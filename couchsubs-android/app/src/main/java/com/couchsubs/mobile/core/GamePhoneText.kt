@@ -467,7 +467,7 @@ object GamePhoneText {
         if (groups.any { it.phone == null }) return groups.map { it.copy(phone = null) }
         val list = groups.any { section(it.paragraphs.joinToString("")) != null }
         val first = groups.indices.minByOrNull { groups[it].phone!!.spot.top }
-        return groups.mapIndexed { index, group ->
+        val placed = groups.mapIndexed { index, group ->
             val text = group.paragraphs.joinToString(" ")
             val spot = group.phone!!.spot
             val row = PhoneChat.Row(emptyList(), spot, text)
@@ -478,7 +478,15 @@ object GamePhoneText {
                 else -> PhoneChat.role(listOf(row))
             }
             group.copy(phone = ScreenPhoneCard.Placement(role, spot))
+        }.toMutableList()
+        // Sohbetin altındaki cevap seçenekleri (PhoneChat.withOptions); gruplar yukarıdan aşağı (iPhone ile aynı).
+        if (home || list) return placed
+        val order = placed.indices.sortedBy { placed[it].phone!!.spot.top }
+        val roles = PhoneChat.withOptions(order.map { placed[it].phone!!.role })
+        order.forEachIndexed { position, index ->
+            placed[index] = placed[index].copy(phone = placed[index].phone!!.copy(role = roles[position]))
         }
+        return placed
     }
 
     private fun endsSentence(text: String): Boolean = text.trimEnd().lastOrNull()?.let { it in ".!?" } ?: false

@@ -118,3 +118,31 @@ internal sealed class PhoneMissLog
         counts.Clear();
     }
 }
+
+/// <summary>
+/// Okunan telefon satırlarının günlük özeti (X, 26 Kas, beta.104: en üstteki uzun mesaj çevrilmiyor, cevap seçenekleri karışık
+/// görünüyordu; hangi satırın okunup hangi rolle panele girdiği günlükte yoktu). Her grubun türü (header, bubble, option, note,
+/// list, card) ve ilk sözcükleri (<see cref="PhoneChat.RowSummary"/>); özet değişince yazılır, en çok <see cref="IntervalMs"/>'de
+/// bir, aynı özet yinelenmez. Mac (PhoneRowsLog, PhoneTrace.swift) ve Android (PhoneRowsLog, PhoneTrace.kt) aynı.
+/// </summary>
+internal sealed class PhoneRowsLog
+{
+    internal const long IntervalMs = 5_000;
+    /// <summary>Özetin en uzun hâli (karakter).</summary>
+    internal const int MaxLength = 400;
+    private string? last;
+    private long? at;
+
+    /// <summary>Yazılacak satır; okuma boşsa, özet aynıysa ya da son satırdan bu yana <see cref="IntervalMs"/> geçmediyse null.</summary>
+    internal string? Line(IReadOnlyCollection<ScreenTranslation.Group> groups, long now)
+    {
+        if (groups.Count == 0) return null;
+        var summary = PhoneChat.RowSummary(groups);
+        if (summary == last) return null;
+        if (at is { } previous && now >= previous && now - previous < IntervalMs) return null;
+        last = summary;
+        at = now;
+        var shown = summary.Length > MaxLength ? summary[..MaxLength] + "…" : summary;
+        return $"telefon satırları: {shown}";
+    }
+}

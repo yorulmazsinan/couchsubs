@@ -173,6 +173,9 @@ public sealed partial class RegionWatcher
         Interlocked.Increment(ref reads);
         ReadMeasured?.Invoke(now() - clock);
         reading = GamePhoneText.ForTranslation(reading);
+        // Okunan satırların türü ve ilk sözcükleri (PhoneRowsLog: özet değişince, en çok 5 sn'de bir; Mac ve Android ile aynı).
+        if (area.PhonePose.HasValue
+            && (state.PhoneRowsLog ??= new()).Line(GamePhoneText.Groups(reading), now()) is { } rows) Log?.Invoke(rows);
         var candidate = MakeCandidate(reading, area.Region, crop, phone: true);
         return candidate.Key.Length > 0
             ? candidate with { PhonePage = new GamePhonePage(frame, area.Region, reading) }

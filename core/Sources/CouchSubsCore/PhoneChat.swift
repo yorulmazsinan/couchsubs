@@ -111,6 +111,8 @@ enum PhoneChat {
             bubble.append(row)
         }
         finish()
+        let roles = withOptions(result.map { $0.phone!.role })
+        for index in result.indices { result[index].phone?.role = roles[index] }
         return result
     }
 
@@ -351,19 +353,67 @@ enum PhoneChat {
         return min(row.spot.left, first.spot.left) > 0.2 && abs(row.spot.right - last.spot.right) <= rightAlign
     }
 
-    /// Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa satır not; iki yanı da dar
-    /// (ekranı dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir.
+    /// Balonun rolü yaslı olduğu kenardan: sağa yaslı giden, sola yaslı gelen; ortalı kısa etiket not; iki yanı da dar
+    /// (ekranı dolduran) balon belirsiz, tarafı kartta balonun renginden seçilir. Ortalı ama etiket olmayan balon (cümle,
+    /// ya da birden çok satır) sohbetin altındaki cevap seçeneğidir (`option`): X (26 Kas, beta.104) "Thanks for the heads
+    /// up." ortalı tek satır olduğu için not sayılıp soluk ortalı yazıyla, öbür seçenek sarı giden balonla çiziliyordu.
     static func role(of bubble: [Row]) -> ScreenPhoneCard.Role {
         let spot = bubble.dropFirst().reduce(bubble[0].spot) { $0.union($1.spot) }
         let left = max(0, spot.left), right = max(0, 1 - spot.right)
-        if bubble.count == 1, abs((spot.left + spot.right) / 2 - 0.5) <= noteCenter, left >= noteMargin, right >= noteMargin {
-            return .note
+        if abs((spot.left + spot.right) / 2 - 0.5) <= noteCenter, left >= noteMargin, right >= noteMargin {
+            let text = bubble.map(\.text).joined(separator: " ")
+            return bubble.count == 1 && isNoteLabel(text) ? .note : .option
         }
         if left < wideMargin && right < wideMargin { return .message }
         if right < left * sideRatio { return .outgoing }
         if left < right * sideRatio { return .incoming }
         return .message
     }
+
+    /// Not satırı en çok bu kadar sözcük ("Today 9:41 PM", "New messages", "Delivered").
+    static let noteWords = 4
+
+    /// Ortalı not gibi kısa etiket: en çok `noteWords` sözcük ve cümle sonu yok.
+    static func isNoteLabel(_ text: String) -> Bool {
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        return words >= 1 && words <= noteWords && !endsSentence(text)
+    }
+
+    /// Cevap seçenekleri sohbetin en altında art arda durur: en alttaki oyuncu tarafı balonlar (giden, seçenek) arasında
+    /// en az bir seçenek varsa hepsi seçenektir; her biri ayrı satır, aynı görünüşte çizilir. Roller yukarıdan aşağı.
+    /// Windows (PhoneChat.WithOptions) ve Android (PhoneChat.withOptions) aynı.
+    static func withOptions(_ roles: [ScreenPhoneCard.Role]) -> [ScreenPhoneCard.Role] {
+        var start = roles.count
+        while start > 0, roles[start - 1] == .option || roles[start - 1] == .outgoing { start -= 1 }
+        guard roles[start...].contains(.option) else { return roles }
+        var result = roles
+        for index in start..<roles.count { result[index] = .option }
+        return result
+    }
+
+    /// Okunan telefon satırlarının günlük özeti: her grubun türü (başlık, balon, seçenek, not, liste, kart) ve ilk
+    /// sözcükleri. Telefonun hangi satırının okunup hangi rolle panele girdiği kullanıcı günlüğünden görülsün diye
+    /// (X, 26 Kas: en üstteki mesaj çevrilmiyordu). Windows (PhoneChat.RowSummary) ve Android (PhoneChat.rowSummary) aynı.
+    static func rowSummary(_ groups: [ScreenTranslation.Group]) -> String {
+        groups.map { group in
+            let kind: String
+            switch group.phone?.role {
+            case .header?: kind = "header"
+            case .incoming?, .outgoing?, .message?: kind = "bubble"
+            case .option?: kind = "option"
+            case .note?: kind = "note"
+            case .contact?, .preview?, .heading?: kind = "list"
+            case nil: kind = "row"
+            default: kind = "card"
+            }
+            let words = group.paragraphs.joined(separator: " ").split(whereSeparator: \.isWhitespace)
+            let head = words.prefix(rowSummaryWords).joined(separator: " ")
+            return "\(kind): \(head)\(words.count > rowSummaryWords ? "…" : "")"
+        }.joined(separator: " | ")
+    }
+
+    /// Özette her grubun ilk bu kadar sözcüğü.
+    static let rowSummaryWords = 4
 
     /// Satırlar tek parça olur: satır sonunda tireyle bölünmüş sözcük boşluksuz birleşir.
     private static func group(_ rows: [Row], role: ScreenPhoneCard.Role, handset: ScreenPhoneCard.Handset) -> ScreenTranslation.Group {
