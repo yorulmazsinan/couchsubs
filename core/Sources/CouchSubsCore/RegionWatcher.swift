@@ -274,6 +274,8 @@ public final class RegionWatcher {
     }
     /// Düşürülen ya da bekletilen okumanın nedeni, sınırlı ve tekrarsız (`DropLog`).
     private let drops: DropLog
+    /// Bozuk okunduğu için çeviriye gönderilmeyen parçaların günlüğü, seyreltilmiş (`ReadPlausibility`; GitHub #1293).
+    private let implausibleLog: ReadPlausibility.Log
     /// Telefonun sessiz yolları (`PhoneTrace`): ayrı sınır, telefon her açılışta yeniden başlamaz.
     private let phoneTrace: DropLog
     /// Bu tür ekran yazısı çevrilir mi (Ayarlar'daki türler, `UserSettings.screenTextAllows`); varsayılan hepsi.
@@ -302,6 +304,7 @@ public final class RegionWatcher {
         self.intervalMs = intervalMs
         self.now = clock
         self.drops = DropLog(clock: clock)
+        self.implausibleLog = ReadPlausibility.Log(clock: clock)
         self.phoneTrace = DropLog(clock: clock)
     }
 
@@ -1512,6 +1515,10 @@ public final class RegionWatcher {
         for index in result.indices where result[index] == nil && skipsTurkish && TurkishText.isSure(paragraphs[index]) {
             result[index] = paragraphs[index]
         }
+        // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (gösterilmez), sonraki okuma yeniden denenir (#1293).
+        for index in result.indices where result[index] == nil && implausible(IconText.plain(paragraphs[index])) {
+            result[index] = paragraphs[index]
+        }
         let missing = result.indices.filter { result[$0] == nil }
         if !missing.isEmpty {
             let texts = missing.map { prepared[$0].text }
@@ -1636,6 +1643,9 @@ public final class RegionWatcher {
             } else if let found = (translatesUiCommands ? UiCommands.translateLabelLoosely(core) : nil) ?? terms[core]
                 ?? packLookup?(IconText.plain(core))?.text ?? (skipsTurkish && TurkishText.isSure(core) ? core : nil) {
                 known[core] = found
+            } else if implausible(IconText.plain(core)) {
+                // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (#1293).
+                known[core] = core
             } else {
                 pending.append(core)
             }
@@ -1671,6 +1681,13 @@ public final class RegionWatcher {
         }
         let readyCount = parts.filter { list in list.allSatisfy { !pending.contains($0.core.trimmingCharacters(in: .whitespaces)) } }.count
         return Translation(result: result, readyCount: readyCount)
+    }
+
+    /// Parça yazı tanımada bozulmuş mu (`ReadPlausibility`); öyleyse günlüğe seyreltilmiş tek satır yazılır.
+    private func implausible(_ text: String) -> Bool {
+        guard let reason = ReadPlausibility.reason(text) else { return false }
+        if let line = implausibleLog.line(text, reason: reason) { onLog?("ek alan: " + line) }
+        return true
     }
 
     private func sequential(_ texts: [String]) async throws -> [String] {

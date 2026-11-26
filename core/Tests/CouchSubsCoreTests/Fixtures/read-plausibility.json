@@ -1,0 +1,42 @@
+{
+  "about": "Yazı tanımanın bozduğu satır çeviri motoruna gitmez (GitHub #1293; Windows + Xbox, Windows'un yazı tanıması güven değeri vermiyor). garbled: ReadPlausibility.reason nil olmamalı; kept: nil olmalı (gerçek konuşma: kısa satır, ad, argo, bağırma, ünlem, küfür, sayı, sohbet kısaltması). Ayrıca scene-text.json, growing-lines.json, settled-text.json ve phone-chat.json'daki 'text' satırları da bozuk sayılmamalı (testler o dosyaları da okur). Mac/iPhone ReadPlausibilityTests.swift, Windows ReadPlausibilityTests.cs ve Android ReadPlausibilityTest.kt bu dosyayı okur.",
+  "garbled": [
+    "es aepressea arter Donnıas aeatIT",
+    "pop ılırıe man -ın DööStet Seat",
+    "Gtt rnnk flvd brrt skrt",
+    "LAMAR: es aepressea arter Donnıas aeatIT",
+    "ti waslheNdOne trcm the bhrnk",
+    "h3p b1r wnt stvff arnd th3re"
+  ],
+  "kept": [
+    "Yeah.",
+    "What?",
+    "No way.",
+    "Get to the PlayStation, Lamar!",
+    "WHAT THE HELL?!",
+    "Hmmm, brrr, shhh.",
+    "Hnnng! Nnngh! Aaargh!",
+    "Pfft. Nah, bro.",
+    "Sh-sh-shut up!",
+    "Mmm-hmm. Psst! Over here, McReary",
+    "McDonald and MacArthur on YouTube",
+    "Grab the M4A1 and the AK47, CJ!",
+    "Plan B, Mr. T, section C",
+    "Shhh... Mmmm... Hrrrm... Pssst...",
+    "omg brb ttyl",
+    "Thx amigo! U find it?",
+    "Fuck you, motherfucker! Get the fuck outta here!",
+    "Yo, wassup homie, you good?",
+    "It's 2:30, meet me at Pier 39 with $500.",
+    "JASON: We got 3 minutes. Move!",
+    "LUCIA: Ay, Dios mío, Jason. ¿Qué haces?",
+    "Müller und Søren sind hier, Señor García.",
+    "Brian's iPhone and his eBay account.",
+    "Ｆｕｌｌ　ｗｉｄｔｈ ｌｉｎｅ ５０ ｃｈａｒｓ",
+    "Bunu yaptığına inanamıyorum, şimdi hepimiz büyük bir belanın içindeyiz.",
+    "Annen nerede? Sen değil.",
+    "Ugh, CJ, you idiot. Grove Street, home.",
+    "S.O.S. U.S.A. L.A.",
+    "Vice City Beach"
+  ]
+}

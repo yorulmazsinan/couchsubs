@@ -187,6 +187,12 @@ public final class SubtitlePipeline {
     private var sentClearance: TextBox?
     /// Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (`DropLog`).
     private let drops: DropLog
+    /// Bozuk okunduğu için çeviriye gönderilmeyen satırların günlüğü, seyreltilmiş (`ReadPlausibility.Log`; GitHub #1293).
+    private let implausibleLog: ReadPlausibility.Log
+    /// Kararlayıcının son "çevir" dediği satır: bozuk okuma reddedilince kararlayıcı onu gönderilmemiş sayar, satır yeniden okunur.
+    private var stabilizerSource = ""
+    /// Son reddedilen bozuk okuma (ekranda kaldıkça her karede yeniden pakette aranmasın).
+    private var lastImplausible = ""
     /// Altyazı sayılmayan satırların neden başına sayacı (`RejectTally`; beta.103 kaçan altyazı).
     private let rejects = RejectTally()
     /// Görev satırının bölgesi değişti (nil: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
@@ -319,6 +325,7 @@ public final class SubtitlePipeline {
         self.stabilizer = SubtitleStabilizer(clock: clock)
         self.own = OwnSubtitles(clock: clock)
         self.drops = DropLog(clock: clock)
+        self.implausibleLog = ReadPlausibility.Log(clock: clock)
         sessionStart = clock()
         quiet = QuietReads(since: sessionStart)
     }
@@ -531,7 +538,10 @@ public final class SubtitlePipeline {
             stabilizerSince = stabilizer.candidateStartedAt
             candidateSeenAt = captured
         }
-        if case .translate = action { currentRead.firstSeenAt = candidateSeenAt }
+        if case .translate(let text) = action {
+            currentRead.firstSeenAt = candidateSeenAt
+            stabilizerSource = text
+        }
         // Değişmeyen ekranda kare gelmez; uzun boşluklar kare aralığı sayılmaz.
         if let previous = lastCapturedAt, captured > previous, captured - previous <= 2000 { stage(Self.stageFrameGap, captured - previous) }
         lastCapturedAt = captured
@@ -737,6 +747,8 @@ public final class SubtitlePipeline {
         if quietDrop(source, box: box) { return }
         if restoreQueued(source) { return }
         if nameRead(source) { return }
+        // Bozuk okuma beklemeye de alınmaz: önceki altyazı kalır, satır yeniden okunur.
+        if rejectsImplausible(source) { return }
         if !holdReadings { lineLeft(); return enqueue(source, box: box) }
         let packed = findPack(source) != nil
         let time = now()
@@ -860,8 +872,25 @@ public final class SubtitlePipeline {
         return true
     }
 
+    /// Pakette olmayan, yazı tanımanın bozduğu satır (`ReadPlausibility`) çeviri motoruna gitmez (GitHub #1293): Windows'un
+    /// yazı tanıması güven değeri vermediği için düşük güven süzgeci orada çalışmıyor, bozuk okumalar Gemini'ye gidip TV'de
+    /// anlamsız çeviriler beliriyordu. Önceki altyazı ekranda kalır; kararlayıcı satırı gönderilmemiş sayar, sonraki
+    /// karelerde yeniden okunur (düzgün okunursa çevrilir). Günlüğe seyreltilmiş tek satır yazılır. Türkçe satır ve
+    /// pakette bulunan satır dokunulmaz. Windows (RejectsImplausible) ve Android (rejectsImplausible) aynı.
+    private func rejectsImplausible(_ source: String) -> Bool {
+        if skipsTurkish && TurkishText.looksTurkish(source) { return false }
+        guard source == lastImplausible || ReadPlausibility.reason(source) != nil else { return false }
+        if source != lastImplausible, let packLookup,
+           packLookup(source) != nil || SpeakerPrefix.split(source).flatMap({ packLookup($0.body) }) != nil { return false }
+        lastImplausible = source
+        if source == stabilizerSource { stabilizer.withdrawSent() }
+        if let line = implausibleLog.line(source, reason: ReadPlausibility.reason(source) ?? "") { log(line) }
+        return true
+    }
+
     private func enqueue(_ source: String, box: TextBox?, read: ReadInfo? = nil) {
         if keepsJittered(source, box: box) { return }
+        if rejectsImplausible(source) { return }
         lastRequested += 1
         let request = Request(number: lastRequested, source: source, box: box, session: session, read: read ?? currentRead,
                               enqueuedAt: now())
@@ -1225,6 +1254,8 @@ public final class SubtitlePipeline {
         sawFrame = false
         sawText = false
         lastNote = nil
+        stabilizerSource = ""
+        lastImplausible = ""
         phone = nil
         phoneLookedAt = nil
         phoneMisses = 0

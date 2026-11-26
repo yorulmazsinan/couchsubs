@@ -268,6 +268,12 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private TextBox? sentClearance;
     /// <summary>Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (<see cref="DropLog"/>).</summary>
     private readonly DropLog drops = new(clock ?? DefaultClock);
+    /// <summary>Bozuk okunduğu için çeviriye gönderilmeyen satırların günlüğü, seyreltilmiş (<see cref="ReadPlausibility.Log"/>; GitHub #1293).</summary>
+    private readonly ReadPlausibility.Log implausibleLog = new(clock ?? DefaultClock);
+    /// <summary>Kararlayıcının son "çevir" dediği satır: bozuk okuma reddedilince kararlayıcı onu gönderilmemiş sayar, satır yeniden okunur.</summary>
+    private string stabilizerSource = "";
+    /// <summary>Son reddedilen bozuk okuma (ekranda kaldıkça her karede yeniden pakette aranmasın).</summary>
+    private string lastImplausible = "";
     /// <summary>
     /// Ekranın kenarındaki bildirim kartlarının alanları değişti (boş: hiç yok). Bildirim altyazıya girmez; alanları
     /// "auto-notice-&lt;n&gt;" ek alanı olarak kendi yerinde ve özgün stilinde gösterilir (bkz. <see cref="ScreenNotices"/>).
@@ -685,7 +691,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 stabilizerSince = stabilizer.CandidateSince;
                 candidateSeenAt = captured;
             }
-            if (action.Kind == StabilizerKind.Translate) currentRead = currentRead.Value with { FirstSeenAt = candidateSeenAt };
+            if (action.Kind == StabilizerKind.Translate)
+            {
+                currentRead = currentRead.Value with { FirstSeenAt = candidateSeenAt };
+                stabilizerSource = action.Text!;
+            }
             // Değişmeyen ekranda kare gelmez; uzun boşluklar kare aralığı sayılmaz.
             if (lastCapturedAt is { } previousFrame && captured > previousFrame && captured - previousFrame <= 2000)
                 Stage(StageFrameGap, captured - previousFrame);
@@ -701,7 +711,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             var box = reading.Box?.PlacedIn(area).CenteredOnScreen();
             // Satır henüz doğrulanmadı: çevirisi şimdiden başlasın, doğrulanınca beklemeden gösterilsin.
             if (action.Kind == StabilizerKind.None && translator.Prefetches && reading.Text.Trim() is { Length: >= 6 } early && early != lastPrefetched
-                && !(SkipsTurkish && TurkishText.LooksTurkish(early)) && !OcrNoise.LooksBracketGarbled(early) && !settled.IsSettled(early))
+                && !(SkipsTurkish && TurkishText.LooksTurkish(early)) && !OcrNoise.LooksBracketGarbled(early) && !settled.IsSettled(early)
+                && ReadPlausibility.Reason(early) is null)
             {
                 lastPrefetched = early;
                 var earlyPrefix = SpeakerPrefix.Parse(early);
@@ -927,6 +938,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         if (QuietDrop(source, box)) return null;
         if (RestoreQueued(source)) return null;
         if (NameRead(source, out var named)) return named;
+        // Bozuk okuma beklemeye de alınmaz: önceki altyazı kalır, satır yeniden okunur.
+        if (RejectsImplausible(source)) return null;
         // Yeniden okuma denetimi gecikme eklemez; bekleme süreleri 0 olsa da çalışır.
         var enabled = PackLookup is not null || HoldWithoutPacks;
         if (!enabled) { LineLeft(); return Enqueue(source, box); }
@@ -1179,9 +1192,33 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     }
 
     /// <returns>Kilit bırakıldıktan sonra çağrılacak olaylar (paketten gelen satır).</returns>
+    /// <summary>
+    /// Pakette olmayan, yazı tanımanın bozduğu satır (<see cref="ReadPlausibility"/>) çeviri motoruna gitmez (GitHub #1293):
+    /// Windows'un yazı tanıması güven değeri vermediği için düşük güven süzgeci burada çalışmıyor, bozuk okumalar Gemini'ye
+    /// gidip TV'de anlamsız çeviriler beliriyordu. Önceki altyazı ekranda kalır; kararlayıcı satırı gönderilmemiş sayar,
+    /// sonraki karelerde yeniden okunur (düzgün okunursa çevrilir). Günlüğe seyreltilmiş tek satır yazılır. Türkçe satır,
+    /// pakette (ya da bir kısmı pakette) bulunan satır dokunulmaz. Mac/iPhone (rejectsImplausible) ve Android aynı.
+    /// </summary>
+    private bool RejectsImplausible(string source)
+    {
+        if (SkipsTurkish && TurkishText.LooksTurkish(source)) return false;
+        if (source != lastImplausible)
+        {
+            if (ReadPlausibility.Reason(source) is null) return false;
+            if (PackLookup is { } lookup && (lookup(source) is not null
+                || SpeakerPrefix.Parse(source) is { } prefix && lookup(prefix.Body) is not null
+                || PartialPackLookup?.Invoke(source) is not null)) return false;
+        }
+        lastImplausible = source;
+        if (source == stabilizerSource) stabilizer.WithdrawSent();
+        if (implausibleLog.Line(source, ReadPlausibility.Reason(source) ?? "") is { } line) Write(line);
+        return true;
+    }
+
     private Action? Enqueue(string source, TextBox? box, ReadInfo? read = null)
     {
         if (KeepsJittered(source, box)) return null;
+        if (RejectsImplausible(source)) return null;
         var request = new Request(++lastRequested, source, box, session)
             { Read = read ?? currentRead ?? new ReadInfo(now(), null, null), EnqueuedAt = now() };
         lineOnScreen = request.Number;
@@ -1549,6 +1586,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         lock (gate)
         {
             Write($"hat sıfırlandı (paketten {PackHits} satır)");
+            stabilizerSource = "";
+            lastImplausible = "";
             sessionStart = now();
             sawFrame = false;
             sawText = false;

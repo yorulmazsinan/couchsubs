@@ -212,6 +212,8 @@ public sealed partial class RegionWatcher
     private readonly Func<long> now;
     /// <summary>Düşürülen ya da bekletilen okumanın nedeni, sınırlı ve tekrarsız (<see cref="DropLog"/>).</summary>
     private readonly DropLog drops;
+    /// <summary>Bozuk okunduğu için çeviriye gönderilmeyen parçaların günlüğü, seyreltilmiş (<see cref="ReadPlausibility"/>; GitHub #1293).</summary>
+    private readonly ReadPlausibility.Log implausibleLog;
     /// <summary>Telefonun sessiz yolları (<see cref="PhoneTrace"/>): ayrı sınır, öbür düşen satırları bastırmasın.</summary>
     private readonly DropLog phoneTrace;
     /// <summary>Telefonun açılışları arasında kalan çeviriler ve panelin yazı boyu (<see cref="PhoneMemory"/>); <see cref="Reset"/> unutturur.</summary>
@@ -286,6 +288,7 @@ public sealed partial class RegionWatcher
         this.intervalMs = intervalMs;
         now = clock ?? (() => Environment.TickCount64);
         drops = new DropLog(now);
+        implausibleLog = new ReadPlausibility.Log(now);
         phoneTrace = new DropLog(now);
     }
 
@@ -1969,6 +1972,9 @@ public sealed partial class RegionWatcher
         // Zaten Türkçe olan parça çevrilmez: aslı kalır, tümü öyleyse kutu gösterilmez.
         for (var i = 0; i < result.Length; i++)
             if (result[i] is null && SkipsTurkish && TurkishText.IsSure(paragraphs[i])) result[i] = paragraphs[i];
+        // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (gösterilmez), sonraki okuma yeniden denenir (#1293).
+        for (var i = 0; i < result.Length; i++)
+            if (result[i] is null && Implausible(IconText.Plain(paragraphs[i]))) result[i] = paragraphs[i];
         var missing = Enumerable.Range(0, result.Length).Where(i => result[i] is null).ToList();
         if (missing.Count > 0)
         {
@@ -2067,6 +2073,14 @@ public sealed partial class RegionWatcher
     /// olduğu gibi kalır. Parçalar önce oturum terim sözlüğünden, arayüz sözlüğünden ve paketten; kalanların hepsi tek
     /// toplu istekte motordan çevrilir ve terim sözlüğüne yazılır (aynı ekrana dönüşte anında, aynı etiket hep aynı).
     /// </summary>
+    /// <summary>Parça yazı tanımada bozulmuş mu (<see cref="ReadPlausibility"/>); öyleyse günlüğe seyreltilmiş tek satır yazılır.</summary>
+    private bool Implausible(string text)
+    {
+        if (ReadPlausibility.Reason(text) is not { } reason) return false;
+        if (implausibleLog.Line(text, reason) is { } line) Log?.Invoke("ek alan: " + line);
+        return true;
+    }
+
     private async Task<Translation> TranslateLabelsAsync(IReadOnlyList<string> paragraphs, CancellationToken cancellationToken = default)
     {
         var parts = paragraphs.Select(paragraph => SplitLabel(paragraph).Select(part => new LabelPart(part.Prefix, part.Core, part.Suffix)).ToList()).ToList();
@@ -2085,6 +2099,8 @@ public sealed partial class RegionWatcher
             if (known is not null) part.Translation = known;
             // Yazı tanımanın bozuk okuması (sözlükte ve pakette yok, harflerinin çoğu tuhaf): çevrilmez, aslı kalır.
             else if (ScreenTextNoise.IsGarbled(core)) part.Translation = part.Core;
+            // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (#1293).
+            else if (Implausible(IconText.Plain(core))) part.Translation = part.Core;
             else pending.Add(part);
         }
         var unique = pending.Select(part => part.Core.Trim()).Distinct().ToList();

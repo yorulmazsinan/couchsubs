@@ -311,6 +311,12 @@ class SubtitlePipeline(
     private var sentClearance: TextBox? = null
     /** Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız ([DropLog]). */
     private val drops = DropLog(now)
+    /** Bozuk okunduğu için çeviriye gönderilmeyen satırların günlüğü, seyreltilmiş ([ReadPlausibility.Log]; GitHub #1293). */
+    private val implausibleLog = ReadPlausibility.Log(now)
+    /** Kararlayıcının son "çevir" dediği satır: bozuk okuma reddedilince kararlayıcı onu gönderilmemiş sayar, satır yeniden okunur. */
+    private var stabilizerSource = ""
+    /** Son reddedilen bozuk okuma (ekranda kaldıkça her karede yeniden pakette aranmasın). */
+    private var lastImplausible = ""
 
     /**
      * Görev satırının bölgesi değişti (null: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
@@ -577,6 +583,7 @@ class SubtitlePipeline(
                 candidateSeenAt = frameAt ?: now()
             }
             frameFirstSeen = if (action.kind == StabilizerKind.TRANSLATE) candidateSeenAt else null
+            if (action.kind == StabilizerKind.TRANSLATE) stabilizerSource = action.text!!
             val box = reading.box?.placedIn(area)?.centeredOnScreen()
             var fromHold: (() -> Unit)? = null
             held?.let { waiting ->
@@ -729,6 +736,8 @@ class SubtitlePipeline(
         if (quietDrop(source, box)) return null
         if (restoreQueued(source)) return null
         nameRead(source)?.let { return it }
+        // Bozuk okuma beklemeye de alınmaz: önceki altyazı kalır, satır yeniden okunur.
+        if (rejectsImplausible(source)) return null
         if (!holdReadings) { lineLeft(); return enqueue(source, box) }
         val packed = findPack(source) != null
         // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
@@ -895,9 +904,30 @@ class SubtitlePipeline(
 
     private fun excerpt(text: String) = text.replace('\n', ' ').let { if (it.length > 120) it.take(120) + "…" else it }
 
+    /**
+     * lock tutulurken çağrılır. Pakette olmayan, yazı tanımanın bozduğu satır ([ReadPlausibility]) çeviri motoruna gitmez
+     * (GitHub #1293): Windows'un yazı tanıması güven değeri vermediği için düşük güven süzgeci orada çalışmıyor, bozuk
+     * okumalar Gemini'ye gidip TV'de anlamsız çeviriler beliriyordu. Önceki altyazı ekranda kalır; kararlayıcı satırı
+     * gönderilmemiş sayar, sonraki karelerde yeniden okunur (düzgün okunursa çevrilir). Günlüğe seyreltilmiş tek satır
+     * yazılır. Türkçe satır ve pakette bulunan satır dokunulmaz. Mac/iPhone ve Windows (RejectsImplausible) aynı.
+     */
+    private fun rejectsImplausible(source: String): Boolean {
+        if (skipsTurkish && TurkishText.looksTurkish(source)) return false
+        if (source != lastImplausible) {
+            if (ReadPlausibility.reason(source) == null) return false
+            val lookup = packLookup
+            if (lookup != null && (lookup(source) != null || SpeakerPrefix.split(source)?.let { lookup(it.body) } != null)) return false
+        }
+        lastImplausible = source
+        if (source == stabilizerSource) stabilizer.withdrawSent()
+        implausibleLog.line(source, ReadPlausibility.reason(source) ?: "")?.let { onLog?.invoke(it) }
+        return true
+    }
+
     private fun enqueue(source: String, box: TextBox?, capturedAt: Long? = frameAt, ocrMs: Int? = frameOcrMs,
                         firstSeenAt: Long? = frameFirstSeen): (() -> Unit)? {
         if (keepsJittered(source, box)) return null
+        if (rejectsImplausible(source)) return null
         val request = Request(source, ++lastRequested, box, session, capturedAt, ocrMs, firstSeenAt, now())
         lineOnScreen = request.number
         lastSent = Sent(source, Rereads.score(source), now())
@@ -1087,6 +1117,8 @@ class SubtitlePipeline(
 
     /** Okuma durunca TV'deki son altyazıyı kaldırır. */
     fun reset() = synchronized(lock) {
+        stabilizerSource = ""
+        lastImplausible = ""
         quiet = QuietReads(now())
         silence = SilenceWatch()
         session++

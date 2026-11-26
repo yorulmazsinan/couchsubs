@@ -1254,6 +1254,8 @@ class RegionWatcher(
     @Volatile var onLog: ((String) -> Unit)? = null
     /** Düşürülen ya da bekletilen okumanın nedeni, sınırlı ve tekrarsız ([DropLog]). */
     private val drops = DropLog(clock)
+    /** Bozuk okunduğu için çeviriye gönderilmeyen parçaların günlüğü, seyreltilmiş ([ReadPlausibility]; GitHub #1293). */
+    private val implausibleLog = ReadPlausibility.Log(clock)
     /** Telefonun sessiz yolları ([PhoneTrace]): ayrı sınır, telefon her açılışta yeniden başlamaz. */
     private val phoneTrace = DropLog(clock)
 
@@ -1974,8 +1976,18 @@ class RegionWatcher(
             // Yalnız özel adlardan oluşan yazı ("JASON & LUCIA") çevrilmez (#859).
             if (ScreenTranslation.keepsNames(paragraph)) paragraph
             else packLookup?.invoke(IconText.plain(paragraph))?.text
-                ?: if (skipsTurkish && TurkishText.isSure(paragraph)) paragraph else engine.translate(prepared[i].text)
+                ?: if (skipsTurkish && TurkishText.isSure(paragraph)) paragraph
+                // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (gösterilmez), sonraki okuma yeniden denenir (#1293).
+                else if (implausible(IconText.plain(paragraph))) paragraph
+                else engine.translate(prepared[i].text)
         }
+    }
+
+    /** Parça yazı tanımada bozulmuş mu ([ReadPlausibility]); öyleyse günlüğe seyreltilmiş tek satır yazılır. */
+    private fun implausible(text: String): Boolean {
+        val reason = ReadPlausibility.reason(text) ?: return false
+        implausibleLog.line(text, reason)?.let { onLog?.invoke("ek alan: $it") }
+        return true
     }
 
     /**
@@ -2022,7 +2034,10 @@ class RegionWatcher(
                     buildString { for (c in ui) if (c == ButtonIcons.MARKER && k < piece.names.size) append(piece.names[k++]) else append(c) }
                 } ?: synchronized(sessionTerms) { sessionTerms[piece.text] }
                     ?: packLookup?.invoke(plain)?.text
-                    ?: if (skipsTurkish && TurkishText.isSure(plain)) piece.text else null
+                    ?: if (skipsTurkish && TurkishText.isSure(plain)) piece.text
+                    // Yazı tanımanın bozduğu parça motora gitmez; aslı kalır (#1293).
+                    else if (implausible(plain)) piece.text
+                    else null
             }
             if (piece.result == null) missing.add(piece)
         }
