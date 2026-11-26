@@ -230,6 +230,18 @@ async function handle(command, args = {}) {
       }
       return { closed: true };
     }
+    case 'shutdown': {
+      // The app is quitting: close the current session and any session that could not be closed before, so the Xbox
+      // does not keep a stale session (the next connection was refused until the console was restarted).
+      const ids = [sessionId, staleSessionId].filter(Boolean);
+      sessionId = undefined;
+      staleSessionId = undefined;
+      let closed = 0;
+      for (const id of ids) {
+        try { await closeSession(id); closed++; } catch { /* The app logs how many were closed. */ }
+      }
+      return { sessions: ids.length, closed };
+    }
     default:
       throw new Error(`Unknown Xbox bridge command: ${command}`);
   }

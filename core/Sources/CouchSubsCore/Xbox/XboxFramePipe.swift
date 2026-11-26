@@ -17,6 +17,14 @@ public struct XboxFramePipeStats: Sendable {
     private var processed = 0
     private var processNanos: UInt64 = 0
     private var processMaxNanos: UInt64 = 0
+    /// Kare onayı döngüsünün turları arasındaki süre: döngü takılırsa (iş parçacığı meşgul) Xbox onay alamayıp görüntü
+    /// kanalını kapatır. Windows'taki oynatıcının "onay en uzun aralık" alanıyla aynı.
+    private var ackTicks = 0
+    private var ackMaxGapNanos: UInt64 = 0
+    private var ackLate = 0
+
+    /// Bu süreyi aşan onay aralığı "geç" sayılır (Windows oynatıcısındaki 250 ms).
+    public static let lateAckNanos: UInt64 = 250_000_000
 
     public init() {}
 
@@ -38,6 +46,13 @@ public struct XboxFramePipeStats: Sendable {
         processMaxNanos = max(processMaxNanos, nanos)
     }
 
+    /// Kare onayı döngüsünün bir turu; [gapNanos] önceki turdan bu yana geçen süre.
+    public mutating func ackTick(gapNanos: UInt64) {
+        ackTicks += 1
+        ackMaxGapNanos = max(ackMaxGapNanos, gapNanos)
+        if gapNanos > Self.lateAckNanos { ackLate += 1 }
+    }
+
     /// Pencerenin satırı ("kare hattı (10 sn): ..."); sayaçlar sıfırlanır. Hiç kare gelmediyse nil.
     public mutating func take(windowMs: Int, memory: String) -> String? {
         defer { self = XboxFramePipeStats() }
@@ -45,8 +60,9 @@ public struct XboxFramePipeStats: Sendable {
         func ms(_ nanos: UInt64) -> String { String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), Double(nanos) / 1_000_000) }
         let sinkAvg = sinkNanos / UInt64(arrived)
         let processAvg = processed > 0 ? processNanos / UInt64(processed) : 0
+        let acks = ackTicks > 0 ? "onay aralığı en çok \(ms(ackMaxGapNanos)) ms, 250 ms üstü \(ackLate); " : ""
         return "kare hattı (\(windowMs / 1000) sn): gelen \(arrived), aktarılan \(handed), işlenen \(processed), atlanan \(dropped); "
-            + "alıcı ort \(ms(sinkAvg)) ms, en çok \(ms(sinkMaxNanos)) ms; işleme ort \(ms(processAvg)) ms, en çok \(ms(processMaxNanos)) ms; \(memory)"
+            + "alıcı ort \(ms(sinkAvg)) ms, en çok \(ms(sinkMaxNanos)) ms; işleme ort \(ms(processAvg)) ms, en çok \(ms(processMaxNanos)) ms; \(acks)\(memory)"
     }
 }
 

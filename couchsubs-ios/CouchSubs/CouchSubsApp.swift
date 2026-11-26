@@ -135,6 +135,10 @@ struct CouchSubsApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                     model.receivedMemoryWarning()
                 }
+                // Uygulama kapatılırken (iOS bildirirse) Xbox oturumu kapatılır; Mac'teki gibi en çok iki saniye beklenir.
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+                    model.closeXboxOnQuit()
+                }
                 // Soğuk açılışta promo.json'a arka planda bakılır (ön plana dönüşler aşağıda).
                 .task { await promo.refresh(setupDone: promoSetupDone) }
         }

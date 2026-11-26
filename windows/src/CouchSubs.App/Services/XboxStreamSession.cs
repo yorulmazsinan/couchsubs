@@ -76,8 +76,17 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
 
     private async Task RunAfterAsync(Task previous)
     {
-        // Eski döngü köprüden yanıt beklerken takılırsa yeni oturum sonsuza dek beklemez.
-        try { await previous.WaitAsync(TimeSpan.FromSeconds(10)); } catch { /* Eski oturumun hatası ya da gecikmesi yenisini durdurmaz. */ }
+        // Eski döngü köprüden yanıt beklerken takılırsa yeni oturum sonsuza dek beklemez. Beklenen kapanış günlüğe girer
+        // (Android ve iPhone/Mac'teki "önceki oturumun kapanması" satırı).
+        if (!previous.IsCompleted)
+        {
+            var waiting = System.Diagnostics.Stopwatch.StartNew();
+            var timedOut = false;
+            try { await previous.WaitAsync(XboxCloseWait.WaitLimit); }
+            catch (TimeoutException) { timedOut = true; }
+            catch { /* Eski oturumun hatası yenisini durdurmaz. */ }
+            Log(XboxCloseWait.Line(1, waiting.Elapsed, timedOut));
+        }
         if (cancel.IsCancellationRequested) return;
         await RunAsync();
     }
@@ -181,6 +190,13 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     if (noFirstFrame) cause = XboxEndCause.Timeout;
                     Log(XboxStop.Summary(cancel.IsCancellationRequested ? null : reason ?? endReason, Interlocked.Exchange(ref connectionFrames, 0),
                         first == 0 ? null : TimeSpan.FromMilliseconds(Environment.TickCount64 - first), cancel.IsCancellationRequested ? null : cause));
+                }
+                if (browser is not null)
+                {
+                    // Oynatıcı WebRTC bağlantısını ve veri kanallarını kendisi kapatsın (Xbox kapanışı hemen görür);
+                    // eskiden sayfa kapatılmadan WebView2 atılıyordu, bağlantı Xbox'ta zaman aşımına kadar açık kalıyordu.
+                    PostPlayerStop();
+                    await Task.Delay(PlayerCloseGraceMs);
                 }
                 ClosePlayer();
                 await StopRemoteAsync();
@@ -294,6 +310,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             Title = "CouchSubs Xbox reader",
         };
         browserEnded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        playerStopping = false;
         window.Closed += (_, _) => browserEnded?.TrySetResult(true);
         window.Show();
         var profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CouchSubs", "xbox-webview");
@@ -394,7 +411,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     var peer = message.GetProperty("state").GetString();
                     Log($"bağlantı: {peer}");
                     if (peer == "failed") End("Xbox WebRTC bağlantısı kesildi (ICE failed)", XboxEndCause.Network);
-                    else if (peer == "closed") End("Xbox WebRTC bağlantısını kapattı", XboxEndCause.Server);
+                    else if (peer == "closed" && !playerStopping) End("Xbox WebRTC bağlantısını kapattı", XboxEndCause.Server);
                     break;
                 case "negotiated":
                     StartConnectWatch();
@@ -421,6 +438,11 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     {
                         // Geçici olabilir (Wi-Fi takılması): oturum bitmez; oynatıcı o anki ağ tanısını da gönderir.
                         Log("WebRTC disconnected: bağlantı takıldı, toparlanması bekleniyor");
+                    }
+                    else if (state == "closed" && playerStopping)
+                    {
+                        // Bağlantıyı uygulama kapattı (PostPlayerStop): Xbox'ın kapatması sayılmaz.
+                        Log("WebRTC kapatıldı (oturum kapatılıyor)");
                     }
                     else if (state == "closed")
                     {
@@ -739,11 +761,39 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         frameBuffer = null;
     }
 
+    /// <summary>Oynatıcıya "stop" gönderildi: ardından gelen "closed" bildirimleri Xbox'ın kapatması sayılmaz.</summary>
+    private volatile bool playerStopping;
+
+    /// <summary>Oynatıcı sayfasının WebRTC bağlantısını kapatması için tanınan süre (sonra WebView2 atılır).</summary>
+    private const int PlayerCloseGraceMs = 300;
+
+    /// <summary>Oynatıcı sayfasına "stop": xCloudPlayer bağlantıyı ve veri kanallarını kapatır, Worker ve zamanlayıcılar durur.</summary>
+    private void PostPlayerStop()
+    {
+        var view = browser;
+        if (view is null) return;
+        playerStopping = true;
+        void post()
+        {
+            try { view.CoreWebView2?.PostWebMessageAsJson("{\"kind\":\"stop\"}"); }
+            catch { /* Oynatıcı bu arada kapandı. */ }
+        }
+        if (view.Dispatcher.CheckAccess()) post();
+        else _ = view.Dispatcher.InvokeAsync(post);
+    }
+
+    /// <summary>
+    /// Oturum durur. Oynatıcıya önce "stop" gider (WebRTC bağlantısı düzgün kapanır); oynatıcının atılması ve Xbox
+    /// hizmetinde oturumun kapatılması (köprüye "stop", DELETE) döngünün kapanışında yapılır. Hemen ardından açılan yeni
+    /// oturum bunun bitmesini bekler (<see cref="RunAfterAsync"/>); uygulama kapanırken köprü açık oturumu kapatır
+    /// (XboxBridge.Dispose).
+    /// </summary>
     public void Stop()
     {
         if (cancel.IsCancellationRequested) return;
+        Log("oturum durduruluyor: bağlantı ve Xbox oturumu kapatılıyor");
+        PostPlayerStop();
         cancel.Cancel();
-        ClosePlayer();
         StateChanged?.Invoke(SessionState.Disconnected(DisconnectKind.Stopped));
     }
 

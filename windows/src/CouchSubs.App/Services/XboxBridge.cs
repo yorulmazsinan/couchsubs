@@ -141,8 +141,37 @@ internal sealed class XboxBridge : IDisposable
 
     public void Dispose()
     {
+        CloseSessionsOnExit();
         Clear();
         writes.Dispose();
+    }
+
+    /// <summary>
+    /// Uygulama kapanıyor: köprü öldürülmeden önce açık Xbox oturumu (ve kapatılamamış eski oturum) Xbox hizmetinde
+    /// kapatılır; en çok <see cref="XboxCloseWait.ExitLimit"/> beklenir. Eskiden köprü hemen öldürülüyordu: oturum Xbox'ta
+    /// açık kalıyor, sonraki bağlantı reddediliyor ve Xbox'ı yeniden başlatmak gerekiyordu.
+    /// </summary>
+    private void CloseSessionsOnExit()
+    {
+        if (process is not { HasExited: false }) return;
+        try
+        {
+            // Arayüz iş parçacığı beklerken yanıt oraya dönmesin diye iş havuzunda.
+            var closing = Task.Run(() => CallAsync("shutdown"));
+            if (!closing.Wait(XboxCloseWait.ExitLimit))
+            {
+                SubtitleLog.Write("[Xbox] uygulama kapanıyor: oturum kapatma yanıtı gelmedi");
+                return;
+            }
+            var result = closing.Result;
+            if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("sessions", out var sessions) && sessions.GetInt32() > 0)
+                SubtitleLog.Write("[Xbox] uygulama kapanıyor: " + XboxCloseWait.ExitLine(sessions.GetInt32(),
+                    result.TryGetProperty("closed", out var closed) ? closed.GetInt32() : 0));
+        }
+        catch (Exception error)
+        {
+            SubtitleLog.Write($"[Xbox] uygulama kapanıyor: oturum kapatılamadı: {XboxStop.Shorten(error.GetBaseException().Message)}");
+        }
     }
 
     public void Clear()

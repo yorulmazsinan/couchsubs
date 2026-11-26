@@ -1404,6 +1404,23 @@ final class AppModel: ObservableObject {
         }
         terminateObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                                    queue: nil) { [weak self] _ in
+            // Uygulama kapanırken Xbox oturumu kapatılır (bağlantı ve Xbox hizmetindeki oturum, DELETE); en çok iki saniye
+            // beklenir. Eskiden kapatılmıyordu: Xbox oturumu açık sayıp sonraki açılışta bağlantıyı reddediyor, Xbox'ı
+            // yeniden başlatmak gerekiyordu.
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    guard let self, self.session is XboxStreamSession else { return }
+                    RemotePlayLog.write("Xbox: uygulama kapanıyor; oturum kapatılıyor")
+                    self.session?.stop()
+                    self.session = nil
+                    let closed = DispatchSemaphore(value: 0)
+                    Task.detached {
+                        _ = await XboxCloseGate.shared.waitForPending(limitMs: 2000)
+                        closed.signal()
+                    }
+                    _ = closed.wait(timeout: .now() + 2.5)
+                }
+            }
             // Çeviri sürüyorsa TV uygulaması kapanır; mesaj sunucu kapanmadan yazılsın diye en çok bir saniye beklenir.
             if Thread.isMainThread {
                 MainActor.assumeIsolated {

@@ -95,6 +95,14 @@ class XboxStreamSession(
     private var frameSession: XboxFrameCounter.Session? = null
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs Xbox").apply { isDaemon = true } }
     private val timers = Executors.newSingleThreadScheduledExecutor { Thread(it, "CouchSubs Xbox timers").apply { isDaemon = true } }
+    /**
+     * Canlı tutma isteği (HTTPS, jeton yenilemesiyle birkaç saniye ve en çok 45 sn sürebilir) kendi iş parçacığında. Eskiden
+     * 16 ms'lik kare onayıyla aynı tek iş parçacığındaydı: istek yavaşlayınca onaylar o süre boyunca gitmiyor, Xbox onay
+     * alamayınca görüntü kanalını kapatıp "uzaktan yürütme durduruldu" diyordu.
+     */
+    private val network = Executors.newSingleThreadScheduledExecutor { Thread(it, "CouchSubs Xbox canlı tutma").apply { isDaemon = true } }
+    /** Süreç genelinde kapanış sırası ve kapatılamayan oturumlar (bkz. XboxCloseGate.kt). */
+    private val closeGate = XboxCloseGate.shared
     private val stopped = AtomicBoolean(false)
     private val started = AtomicBoolean(false)
     @Volatile private var sessionId: String? = null
@@ -104,11 +112,6 @@ class XboxStreamSession(
     @Volatile private var endReason: String? = null
     /** Bağlantıyı bitiren olayın türü ([endReason] ile birlikte yazılır): kapanma nedenini ve ekrandaki metni seçer. */
     @Volatile private var endKind: XboxError? = null
-    /**
-     * Kapatılamayan (DELETE başarısız) oturum: bir sonraki `play`dan önce yeniden kapatılır. Kapatılmadan yenisi
-     * açılınca Xbox eski oturumu açık sayıp yeni oturumu reddediyordu.
-     */
-    @Volatile private var staleSessionId: String? = null
     @Volatile private var lastKind: XboxError? = null
     @Volatile private var keepalive: ScheduledFuture<*>? = null
     @Volatile private var lastConverted = 0L
@@ -160,17 +163,33 @@ class XboxStreamSession(
         worker.execute(::run)
     }
 
+    /**
+     * Oturum durur: bağlantı kapatılır ve oturum Xbox hizmetinde kapatılır (DELETE). Kapanış [XboxCloseGate]'e kaydedilir;
+     * hemen ardından açılan yeni oturum ("Yeniden bağlan") `play`dan önce bunun bitmesini bekler. Kapanış işi süren
+     * döngüden sonra çalışır (tek iş parçacığı): döngünün o sırada açtığı oturum da kapanmış olur.
+     */
     override fun dispose() {
         if (!stopped.compareAndSet(false, true)) return
         machine.stop()
         ended?.countDown()
-        worker.execute {
-            closePeer()
-            stopRemote()
-            onState(SessionState.Disconnected(DisconnectKind.STOPPED))
+        log("oturum durduruluyor: bağlantı ve Xbox oturumu kapatılıyor")
+        val closing = closeGate.begin()
+        try {
+            worker.execute {
+                try {
+                    closePeer()
+                    stopRemote()
+                } finally {
+                    closing.done()
+                }
+                onState(SessionState.Disconnected(DisconnectKind.STOPPED))
+            }
+        } catch (error: java.util.concurrent.RejectedExecutionException) {
+            closing.done()
         }
         worker.shutdown()
         timers.shutdown()
+        network.shutdown()
         handoff.close()
         frameWorker.shutdown()
     }
@@ -188,11 +207,13 @@ class XboxStreamSession(
             var decided: XboxSessionMachine.Action? = null
             onState(SessionState.Connecting)
             try {
-                staleSessionId?.let { stale ->
-                    staleSessionId = null
-                    log("önceki oturum Xbox'ta açık kalmış olabilir: yeni oturumdan önce kapatılıyor")
+                // Önceki oturum (eski nesne, "Yeniden bağlan") kapanırken yenisi açılmaz: Xbox eskisini açık sayıyordu.
+                closeGate.waitForPending()?.let { log(it.line) }
+                for (stale in closeGate.takeStale()) {
+                    log("önceki oturum Xbox'ta açık kalmış olabilir: yeni oturumdan önce kapatılıyor (${stale.take(8)}…)")
                     closeRemote(stale)
                 }
+                if (stopped.get()) break
                 log("oturum açılıyor: ${console.name}")
                 sessionId = home.play(console.id)
                 log("play yanıtı: oturum ${sessionId?.take(8)}…")
@@ -333,7 +354,7 @@ class XboxStreamSession(
             log("oturum kapatıldı: ${id.take(8)}…")
             return
         }
-        staleSessionId = id
+        closeGate.addStale(id)
         log("oturum kapatılamadı (${XboxHome.CLOSE_DELAYS_MS.size} deneme): ${XboxSessionMachine.shortReason(error, "?")}; yeni oturumdan önce yeniden denenecek")
     }
 
@@ -617,7 +638,12 @@ class XboxStreamSession(
         ackTask?.cancel(false)
         acks.clear()
         acking = true
+        var previous = System.nanoTime()
         ackTask = timers.scheduleWithFixedDelay({
+            // Döngünün turları arası (kare hattı satırında "onay aralığı"): iş parçacığı takılırsa Xbox onay alamaz.
+            val tick = System.nanoTime()
+            pipeStats.ackTick(tick - previous)
+            previous = tick
             try {
                 val frames = acks.drain()
                 if (frames.isEmpty()) return@scheduleWithFixedDelay
@@ -695,7 +721,7 @@ class XboxStreamSession(
         keepalive?.cancel(false)
         val counter = XboxKeepalive()
         val latch = ended
-        keepalive = timers.scheduleWithFixedDelay({
+        keepalive = network.scheduleWithFixedDelay({
             val id = sessionId ?: return@scheduleWithFixedDelay
             try {
                 home.keepalive(id)

@@ -158,6 +158,13 @@ class XboxFramePipeStats {
     private var processed = 0L
     private var processNanos = 0L
     private var processMaxNanos = 0L
+    /**
+     * Kare onayı döngüsünün turları arasındaki süre: döngü takılırsa Xbox onay alamayıp görüntü kanalını kapatır.
+     * Windows'taki oynatıcının "onay en uzun aralık" alanıyla aynı.
+     */
+    private var ackTicks = 0L
+    private var ackMaxGapNanos = 0L
+    private var ackLate = 0L
 
     /** Alıcıya gelen her kare (aralık dolmadığı için atlananlar da) ve alıcıda geçen süre. */
     @Synchronized fun sink(nanos: Long) {
@@ -177,10 +184,18 @@ class XboxFramePipeStats {
         if (nanos > processMaxNanos) processMaxNanos = nanos
     }
 
+    /** Kare onayı döngüsünün bir turu; [gapNanos] önceki turdan bu yana geçen süre. */
+    @Synchronized fun ackTick(gapNanos: Long) {
+        ackTicks++
+        if (gapNanos > ackMaxGapNanos) ackMaxGapNanos = gapNanos
+        if (gapNanos > LATE_ACK_NANOS) ackLate++
+    }
+
     /** Pencerenin satırı ("kare hattı (10 sn): ..."); sayaçlar sıfırlanır. Hiç kare gelmediyse null. */
     @Synchronized fun take(windowMs: Long, memory: String): String? {
         val line = if (arrived == 0L) null else line(windowMs, memory)
         arrived = 0; sinkNanos = 0; sinkMaxNanos = 0; handed = 0; dropped = 0; processed = 0; processNanos = 0; processMaxNanos = 0
+        ackTicks = 0; ackMaxGapNanos = 0; ackLate = 0
         return line
     }
 
@@ -188,12 +203,15 @@ class XboxFramePipeStats {
         fun ms(nanos: Long) = String.format(Locale.ROOT, "%.1f", nanos / 1_000_000.0)
         val sinkAvg = if (arrived > 0) sinkNanos / arrived else 0
         val processAvg = if (processed > 0) processNanos / processed else 0
+        val acks = if (ackTicks > 0) "onay aralığı en çok ${ms(ackMaxGapNanos)} ms, 250 ms üstü $ackLate; " else ""
         return "kare hattı (${windowMs / 1000} sn): gelen $arrived, aktarılan $handed, işlenen $processed, atlanan $dropped; " +
-            "alıcı ort ${ms(sinkAvg)} ms, en çok ${ms(sinkMaxNanos)} ms; işleme ort ${ms(processAvg)} ms, en çok ${ms(processMaxNanos)} ms; $memory"
+            "alıcı ort ${ms(sinkAvg)} ms, en çok ${ms(sinkMaxNanos)} ms; işleme ort ${ms(processAvg)} ms, en çok ${ms(processMaxNanos)} ms; $acks$memory"
     }
 
     companion object {
         const val WINDOW_MS = 10_000L
+        /** Bu süreyi aşan onay aralığı "geç" sayılır (Windows oynatıcısındaki 250 ms). */
+        const val LATE_ACK_NANOS = 250_000_000L
     }
 }
 

@@ -55,9 +55,10 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     /// Bağlantıyı bitiren olayın türü (`endReason` ile birlikte yazılır): kapanma nedenini ve ekrandaki metni seçer.
     private var endKind: XboxErrorKind?
     private var sessionId: String?
-    /// Kapatılamayan (DELETE başarısız) oturum: bir sonraki `play`dan önce yeniden kapatılır. Kapatılmadan yenisi
+    /// Kapatılamayan (DELETE başarısız) oturumlar ve süren kapanışlar süreç genelinde `XboxCloseGate`'te: yeni oturum
+    /// (bu nesneninki ya da "Yeniden bağlan"la açılan yeni nesneninki) önce onları bekler ve kapatır. Kapatılmadan yenisi
     /// açılınca Xbox eski oturumu açık sayıp yeni oturumu reddediyordu.
-    private var staleSessionId: String?
+    private let closeGate = XboxCloseGate.shared
     private var lastConverted: TimeInterval = 0
     public private(set) var framesReceived = 0
     /// Kare onayı (Windows'taki xbox-xcloud-player her gösterilen karede yapar): Xbox onay gelmeyen yayını kısa sürede
@@ -165,12 +166,19 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         task = Task.detached(priority: .userInitiated) { [weak self] in await self?.run() }
     }
 
+    /// Oturum durur: bağlantı kapatılır ve oturum Xbox hizmetinde kapatılır (DELETE). Kapanış `XboxCloseGate`'e kaydedilir;
+    /// hemen ardından açılan yeni oturum (Yeniden bağlan, öne dönüş) `play`dan önce bunun bitmesini bekler. Kapanış oturuma
+    /// güçlü başvuru tutar: uygulama oturumu bıraksa da DELETE gider (eskiden zayıf başvuruydu, nesne gidince kapanış
+    /// atlanabiliyordu). Süren döngü de beklenir: iptal edilen döngü o sırada açtığı oturumu kendisi kapatır.
     public func stop() {
         locked { machine.stop() }
-        task?.cancel()
+        let running = task
+        running?.cancel()
         task = nil
-        Task.detached { [weak self] in
-            await self?.teardown()
+        log("oturum durduruluyor: bağlantı ve Xbox oturumu kapatılıyor")
+        closeGate.track { [self] in
+            await teardown()
+            await running?.value
         }
         onState?(.disconnected(.stopped))
     }
@@ -199,10 +207,13 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             var decided: XboxSessionMachine.Action?
             onState?(.connecting)
             do {
-                if let stale = locked({ () -> String? in defer { staleSessionId = nil }; return staleSessionId }) {
-                    log("önceki oturum Xbox'ta açık kalmış olabilir: yeni oturumdan önce kapatılıyor")
+                // Önceki oturum (eski nesne, "Yeniden bağlan") kapanırken yenisi açılmaz: Xbox eskisini açık sayıyordu.
+                if let waited = await closeGate.waitForPending() { log(waited.line) }
+                for stale in closeGate.takeStale() {
+                    log("önceki oturum Xbox'ta açık kalmış olabilir: yeni oturumdan önce kapatılıyor (\(stale.prefix(8))…)")
                     await closeRemote(stale)
                 }
+                try Task.checkCancellation()
                 log("oturum açılıyor: \(console.name)")
                 let id = try await home.play(consoleId: console.id)
                 log("play yanıtı: oturum \(id.prefix(8))…")
@@ -330,7 +341,11 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         channels.forEach { $0.delegate = nil; $0.close() }
         peer?.close()
         Self.setAudio(false)
-        if let id { await closeRemote(id) }
+        if let id {
+            // İptal edilmiş döngüden (stop, Yeniden bağlan) çağrılsa da DELETE gitsin: URLSession iptal edilmiş görevde
+            // isteği hiç göndermeden hata veriyordu, oturum Xbox'ta açık kalıyordu.
+            await Task.detached { [self] in await closeRemote(id) }.value
+        }
     }
 
     /// Oturumu Xbox hizmetinde kapatır (birkaç deneme). Kapanmazsa bir sonraki `play`dan önce yeniden denenir; sonuç
@@ -341,7 +356,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             log("oturum kapatıldı: \(id.prefix(8))…")
             return
         }
-        locked { staleSessionId = id }
+        closeGate.addStale(id)
         log("oturum kapatılamadı (\(XboxSessionClose.delaysMs.count) deneme): \(XboxStop.shorten(result.error)); yeni oturumdan önce yeniden denenecek")
     }
 
@@ -573,9 +588,15 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             acking = true
         }
         ackTask = Task.detached { [weak self] in
+            var previous = DispatchTime.now().uptimeNanoseconds
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: Self.ackIntervalNs)
                 guard let self, !Task.isCancelled else { return }
+                // Döngünün turları arası (kare hattı satırında "onay aralığı"): takılırsa Xbox onay alamaz.
+                let now = DispatchTime.now().uptimeNanoseconds
+                let gap = now &- previous
+                previous = now
+                self.locked { self.pipeStats.ackTick(gapNanos: gap) }
                 let batch = self.locked { () -> (frames: [XboxFrameAck], sequence: UInt32)? in
                     guard self.acking, !self.pendingAcks.isEmpty else { return nil }
                     let frames = Array(self.pendingAcks.prefix(XboxChannels.maxFrameAcks))

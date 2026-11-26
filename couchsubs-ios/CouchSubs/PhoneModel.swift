@@ -1052,6 +1052,21 @@ final class PhoneModel: ObservableObject {
         SessionHealth.saveMark(mark, defaults)
     }
 
+    /// Uygulama kapanıyor (UIApplication.willTerminateNotification): Xbox oturumu kapatılır (bağlantı ve Xbox hizmetindeki
+    /// oturum, DELETE), en çok iki saniye beklenir. Kapatılmayan oturumu Xbox açık sayıp sonraki bağlantıyı reddediyordu.
+    func closeXboxOnQuit() {
+        guard session is XboxStreamSession else { return }
+        RemotePlayLog.write("Xbox: uygulama kapanıyor; oturum kapatılıyor")
+        session?.stop()
+        session = nil
+        let closed = DispatchSemaphore(value: 0)
+        Task.detached {
+            _ = await XboxCloseGate.shared.waitForPending(limitMs: 2000)
+            closed.signal()
+        }
+        _ = closed.wait(timeout: .now() + 2.5)
+    }
+
     /// iOS bellek uyarısı gönderdi (UIApplication.didReceiveMemoryWarningNotification): çeviri sürüyorsa hemen yazılır.
     func receivedMemoryWarning() {
         guard isRunning else { return }

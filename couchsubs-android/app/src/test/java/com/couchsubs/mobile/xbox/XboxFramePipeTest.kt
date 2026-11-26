@@ -121,6 +121,19 @@ class XboxFramePipeTest {
         assertNull(stats.take(10_000, "bellek"))
     }
 
+    /** Kare onayı döngüsü takılırsa (Xbox onay alamayıp görüntü kanalını kapatır) satırda en uzun aralık ve geç tur sayısı. */
+    @Test fun ackGapsAreReported() {
+        val stats = XboxFramePipeStats()
+        stats.sink(1_000_000)
+        stats.ackTick(16_000_000)
+        stats.ackTick(1_200_000_000)
+        stats.ackTick(300_000_000)
+        assertEquals("kare hattı (10 sn): gelen 1, aktarılan 0, işlenen 0, atlanan 0; alıcı ort 1.0 ms, en çok 1.0 ms; " +
+            "işleme ort 0.0 ms, en çok 0.0 ms; onay aralığı en çok 1200.0 ms, 250 ms üstü 2; bellek 1 MB", stats.take(10_000, "bellek 1 MB"))
+        stats.sink(1_000_000)
+        assertFalse("sayaçlar sıfırlanır", stats.take(10_000, "")!!.contains("onay aralığı"))
+    }
+
     @Test fun closeContextNamesLastFrameAndAck() {
         assertEquals("son kare 0.2 sn önce, son onay 3.5 sn önce, onay 1200", XboxCloseContext.describe(10_000, 9_800, 6_500, 1200))
         assertEquals("kare gelmedi, onay gönderilmedi", XboxCloseContext.describe(10_000, 0, 0, 0))

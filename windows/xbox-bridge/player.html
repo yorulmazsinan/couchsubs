@@ -334,12 +334,17 @@
       send({ kind: 'negotiated' });
     } catch (error) { fail(error); }
   }
+  // Uygulama oturumu kapatıyor: WebRTC bağlantısı ve veri kanalları düzgün kapatılır (Xbox kapanışı hemen görür),
+  // kare kodlayıcı Worker'ı ve paylaşılan arabellek bırakılır. Uygulama WebView2'yi bundan kısa süre sonra atar.
   function stop() {
+    if (player) log('oynatıcı kapatılıyor: WebRTC bağlantısı kapatılıyor');
     clearInterval(frameTimer);
     clearInterval(pictureTimer);
     clearInterval(pipeTimer);
     encoder?.terminate();
     encoder = null;
+    frameBuffer = null;
+    frameWaiting = false;
     audioObserver?.disconnect();
     audioObserver = undefined;
     for (const item of pending.values()) item.reject(new Error('Xbox stream stopped'));
