@@ -33,6 +33,19 @@ public class OverlayPlacementTests
         Assert.Equal(302.0, large.Value.Height);
     }
 
+    /// <summary>"Örtsün"ün güncel satırı her koyulukta tam opak (X, MertTurna19); öbür yerleşimlerde ve önceki satırda koyuluk geçerli.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(30)]
+    [InlineData(72)]
+    [InlineData(100)]
+    public void CoverBoxIsOpaqueAtEveryDarkness(int background)
+    {
+        Assert.Equal(1.0, OverlayPlacement.BoxOpacity(background, covering: true, current: true));
+        Assert.Equal(background / 100.0, OverlayPlacement.BoxOpacity(background, covering: false, current: true), 9);
+        Assert.Equal(background / 100.0 * 0.83, OverlayPlacement.BoxOpacity(background, covering: true, current: false), 9);
+    }
+
     /// <summary>Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.</summary>
     [Theory]
     [InlineData(0.4, 0.8, 0.4, 0.9)]

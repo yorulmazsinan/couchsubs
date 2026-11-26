@@ -434,7 +434,9 @@ struct SubtitleOverlayView: View {
         // yazı seçilen boyda kalır, hiç küçülmez; sığmazsa daha çok satıra bölünür (CoverFontScale).
         let wrapped = coverLine.map { SubtitleWrap.fit(line.text, scale: $0.scale) } ?? line.wrapped
         let size = CGFloat(style.fontSize) * scale * (current ? 1 : 0.8) * CGFloat(wrapped.scale)
-        let alpha = Double(max(0, min(100, style.background))) / 100 * (current ? 1 : 0.83)
+        // "Örtsün"de güncel satırın zemini tam opak (OverlayCover.boxOpacity).
+        let alpha = OverlayCover.boxOpacity(background: style.background, covering: style.placement == .cover && !line.paragraphs,
+                                            current: current)
         let opacity: Double = switch line.role {
         case .current: 1
         case .previous: 0.6

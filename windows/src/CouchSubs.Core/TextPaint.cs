@@ -237,6 +237,27 @@ public static class TextPainter
     public const double InkShare = 0.03;
     /// <summary>Kutu yazı tanıma kutusunun dışına en çok bu kadar satır yüksekliği uzar (taşan harf ucu).</summary>
     public const double ReachLines = 0.5;
+    /// <summary>Çok satırlı yazıda tanıma kutusunun kaçırdığı satır ucu: örtü en çok bu kadar satır yüksekliği daha uzar ...</summary>
+    public const double SpillLines = 8.0;
+    /// <summary>... harf ve sözcük arasındaki boşluk en çok bu kadar satır yüksekliğiyse (sözcük arası ~0,25; sütun arası çok daha geniş).</summary>
+    public const double BridgeLines = 0.45;
+
+    /// <summary><paramref name="start"/>'tan <paramref name="step"/> yönünde harf sütunu aranır: boşluk <see cref="BridgeLines"/>
+    /// satırı aşınca, engel (başka hedef, simge) gelince ya da <see cref="SpillLines"/> satır gidilince durur. Dönen: bulunan son
+    /// harf sütunu (yoksa null). Mac/iPhone TextPainter.spill, Android TextPainter.spill ile aynı.</summary>
+    internal static int? Spill(int start, int step, double line, Func<int, bool> ink, Func<int, bool> blocked)
+    {
+        int bridge = Math.Max(1, RoundHalfUp(BridgeLines * line)), most = Math.Max(1, RoundHalfUp(SpillLines * line));
+        int? last = null;
+        int blank = 0, x = start;
+        while (Math.Abs(x - start) < most && !blocked(x))
+        {
+            if (ink(x)) { last = x; blank = 0; }
+            else if (++blank > bridge) break;
+            x += step;
+        }
+        return last;
+    }
     /// <summary>Kenar payı: satır yüksekliğinin bu kadarı, en az 1, en çok <see cref="MarginMax"/> piksel.</summary>
     public const double MarginLines = 0.08;
     public const int MarginMax = 3;
@@ -760,6 +781,23 @@ public static class TextPainter
             xx0 = l - 1;
             while (xx0 >= Math.Max(0, textLeft - reach) && InkColumn(xx0, t, b)) xx0--;
             l = xx0 + 1;
+            // 1b) Çok satırlı yazıda (görev/hedef cümlesi, harita kartı) tanıma kutusu satırın ucunu kaçırabiliyor: örtü
+            // İngilizcenin yalnız bir kısmını kapatıyor, yanında "…çal om the", "…p rking lot." artığı kalıyordu (X, Myres88,
+            // GTA 6 haritası). Kutunun dışında harf sürüyorsa (harf/sözcük arası en çok BridgeLines) örtü yazının sonuna
+            // kadar uzar; başka hedefe ya da simgeye değmez. Tek satırlık etikette simge ayrımı bozulmasın diye yapılmaz.
+            if (target.Rows > 1)
+            {
+                int top = t, bottom = b;
+                bool SpillInk(int x) => InkColumn(x, top, bottom);
+                bool SpillBlocked(int x)
+                {
+                    if (x < 0 || x >= width) return true;
+                    for (var y = top; y < bottom; y++) if (Others(x, y)) return true;
+                    return false;
+                }
+                if (Spill(r, 1, line, SpillInk, SpillBlocked) is { } right) r = right + 1;
+                if (Spill(l - 1, -1, line, SpillInk, SpillBlocked) is { } left) l = left;
+            }
             // Kenar payı: yazının yanındaki boş noktalar; ötesinde başka yazı/simge varsa pay ona değmez.
             var margin = Math.Max(1, Math.Min(MarginMax, RoundHalfUp(MarginLines * line)));
             int Pad(Func<int, bool> blank)

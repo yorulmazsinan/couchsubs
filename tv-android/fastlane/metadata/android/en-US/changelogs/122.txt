@@ -1,0 +1,1 @@
+0.9.119: In "Cover the subtitle" mode the box is always fully opaque in the chosen background colour, so the game's English line no longer shows through; earlier lines of several speakers stay above the cover instead of overlapping it.

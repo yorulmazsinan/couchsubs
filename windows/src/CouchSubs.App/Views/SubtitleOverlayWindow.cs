@@ -318,7 +318,8 @@ public sealed partial class SubtitleOverlayWindow : Window
         // seçilen boyda kalır, hiç küçülmez; sığmazsa daha çok satıra bölünür (CoverFontScale).
         var wrapped = coverLine is { } fixedSize ? SubtitleWrap.Fit(line.Text, fixedSize.Scale) : line.Wrapped;
         var size = Math.Max(1, OverlayPlacement.FontSize(style.FontSize) * scale * (current ? 1 : 0.8) * wrapped.Scale);
-        var alpha = Math.Clamp(style.Background, 0, 100) / 100.0 * (current ? 1 : 0.83);
+        // "Örtsün"de güncel satırın zemini tam opak (OverlayPlacement.BoxOpacity).
+        var alpha = OverlayPlacement.BoxOpacity(style.Background, style.Placement == SubtitlePlacement.Cover && !line.Paragraphs, current);
         var text = new TextBlock
         {
             FontSize = size,

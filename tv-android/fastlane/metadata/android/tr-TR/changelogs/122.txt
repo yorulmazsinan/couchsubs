@@ -1,0 +1,1 @@
+0.9.119: "Altyazının üstünü örtsün"de kutu seçilen zemin renginde hep tam opak, oyunun İngilizce satırı altından görünmüyor; birkaç kişi konuşurken önceki satırlar örtünün üstünde duruyor, üst üste binmiyor.

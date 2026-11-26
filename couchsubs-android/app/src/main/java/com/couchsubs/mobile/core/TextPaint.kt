@@ -527,6 +527,30 @@ object TextPainter {
     const val INK_SHARE = 0.03
     /** Kutu yazı tanıma kutusunun dışına en çok bu kadar satır yüksekliği uzar (taşan harf ucu). */
     const val REACH_LINES = 0.5
+    /** Çok satırlı yazıda tanıma kutusunun kaçırdığı satır ucu: örtü en çok bu kadar satır yüksekliği daha uzar ... */
+    const val SPILL_LINES = 8.0
+    /** ... harf ve sözcük arasındaki boşluk en çok bu kadar satır yüksekliğiyse (sözcük arası ~0,25; sütun arası çok daha geniş). */
+    const val BRIDGE_LINES = 0.45
+
+    /**
+     * [start]'tan [step] yönünde harf sütunu aranır: boşluk [BRIDGE_LINES] satırı aşınca, engel (başka hedef, simge) gelince
+     * ya da [SPILL_LINES] satır gidilince durur. Dönen: bulunan son harf sütunu (yoksa null). Mac/iPhone ve Windows aynı.
+     */
+    fun spill(start: Int, step: Int, line: Double, ink: (Int) -> Boolean, blocked: (Int) -> Boolean): Int? {
+        val bridge = max(1, round(BRIDGE_LINES * line))
+        val most = max(1, round(SPILL_LINES * line))
+        var last: Int? = null
+        var blank = 0
+        var x = start
+        while (abs(x - start) < most && !blocked(x)) {
+            if (ink(x)) {
+                last = x
+                blank = 0
+            } else if (++blank > bridge) break
+            x += step
+        }
+        return last
+    }
     /** Kenar payı: satır yüksekliğinin bu kadarı, en az 1, en çok [MARGIN_MAX] piksel. */
     const val MARGIN_LINES = 0.08
     const val MARGIN_MAX = 3
@@ -726,6 +750,18 @@ object TextPainter {
             x = l - 1
             while (x >= max(0, textLeft - reach) && inkColumn(x, t, b)) x--
             l = x + 1
+            // 1b) Çok satırlı yazıda (görev/hedef cümlesi, harita kartı) tanıma kutusu satırın ucunu kaçırabiliyor: örtü
+            // İngilizcenin yalnız bir kısmını kapatıyor, yanında "…çal om the", "…p rking lot." artığı kalıyordu (X, Myres88,
+            // GTA 6 haritası). Kutunun dışında harf sürüyorsa (harf/sözcük arası en çok BRIDGE_LINES) örtü yazının sonuna
+            // kadar uzar; başka hedefe ya da simgeye değmez. Tek satırlık etikette simge ayrımı bozulmasın diye yapılmaz.
+            if (target.rows > 1) {
+                val top = t
+                val bottom = b
+                val ink = { at: Int -> inkColumn(at, top, bottom) }
+                val blocked = { at: Int -> at < 0 || at >= width || (top until bottom).any { others(at, it) } }
+                spill(r, 1, line, ink, blocked)?.let { r = it + 1 }
+                spill(l - 1, -1, line, ink, blocked)?.let { l = it }
+            }
             // Kenar payı: yazının yanındaki boş noktalar; ötesinde başka yazı/simge varsa pay ona değmez.
             val margin = max(1, min(MARGIN_MAX, round(MARGIN_LINES * line)))
             fun pad(blank: (Int) -> Boolean): Int {

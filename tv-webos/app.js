@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.118';
+  var APP_VERSION = '0.9.119';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -1160,7 +1160,10 @@
     var rect = pageRect(el.getBoundingClientRect());
     var height = pageSize().height;
     diag.place = 'y ' + Math.round(rect.top) + '-' + Math.round(rect.bottom) + '/' + Math.round(height) + ' ' +
-      window.getComputedStyle($('subtitle')).visibility + ' f' + window.getComputedStyle(el).fontSize;
+      window.getComputedStyle($('subtitle')).visibility + ' f' + window.getComputedStyle(el).fontSize +
+      // "Örtsün": örtünün zemini ve önceki satırların örtü yüzünden kaydığı pay (TV kullanıcı günlüğünde doğrulansın diye).
+      (placement === 'cover' ? ' cov ' + ($('subtitle-cover').className === 'hidden' ? 'none' : 'on') +
+        (parseFloat(el.style.marginTop) > 0 ? ' lift ' + Math.round(parseFloat(el.style.marginTop)) : '') : '');
     renderDiag();
   }
 
@@ -2861,7 +2864,8 @@
     el.style.top = 'auto';
     el.style.bottom = bottomPercent + '%';
     cover.className = 'hidden';
-    $('subtitle-text').style.background = textBackground;
+    $('subtitle-text').style.background = ownBackground();
+    $('subtitle-text').style.marginTop = '';
     // Altyazı yokken (ör. ayar değişince yeniden yerleşirken) örtü tek başına boş siyah kutu olarak kalmasın.
     if (!box || el.className === 'hidden') return avoidRegions();
 
@@ -2885,9 +2889,11 @@
       // İngilizce yazı koyu bir zeminle örtülür, çeviri onun ortasına gelir.
       var middle = (1 - (box.top + box.bottom) / 2) * height;
       el.style.bottom = Math.max(0, Math.round(middle - $('subtitle-text').offsetHeight / 2)) + 'px';
-      placeCover(cover, box, pageRect($('subtitle-text').getBoundingClientRect()));
+      var textRect = pageRect($('subtitle-text').getBoundingClientRect());
+      placeCover(cover, box, textRect);
       // Zemini örtü verir; çevirinin kendi yarı saydam zemini örtünün üstünde ikinci bir kutu gibi görünmesin.
       $('subtitle-text').style.background = 'transparent';
+      liftPrevious(cover, textRect);
     } else if (mode === 'above') {
       // Katmanda TV resmi büyütüp büyütmediği bilinmez (OVERLAY_ZOOM): iki yerin de üstünde kalınır, çakışma olmaz.
       el.style.bottom = Math.round((1 - Math.min(box.top, currentBox.top)) * height + gap) + 'px';
@@ -2951,8 +2957,7 @@
     cover.style.bottom = Math.round(height - bottom) + 'px';
     cover.style.width = Math.round(right - left) + 'px';
     cover.style.height = Math.round(bottom - top) + 'px';
-    // Örtü telefondaki "Arka plan koyuluğu"na uyar: eskiden hep %97'ydi, kaydırıcı %0'da da kutu opak kalıyordu.
-    // %100 tamamen opaktır; koyuluğu göndermeyen eski sürümlerde style.css'teki %97 geçerlidir.
+    // Örtü her koyulukta tam opaktır (ownBackground); koyuluğu göndermeyen eski sürümlerde style.css'teki opak siyah.
     cover.style.background = coverBackground;
     cover.className = '';
   }
@@ -2970,14 +2975,34 @@
     el.style.top = 'auto';
     el.style.bottom = bottomPercent + '%';
     cover.className = 'hidden';
-    $('subtitle-text').style.background = textBackground;
+    $('subtitle-text').style.background = ownBackground();
+    $('subtitle-text').style.marginTop = '';
+  }
+
+  // "Örtsün"de önceki satırlar örtünün üstünde durur. Örtü İngilizce altyazının kutusu kadardır; aynı anda konuşan iki üç
+  // kişinin İngilizcesi (çok satırlı altyazı) Türkçeden yüksekse örtü Türkçenin üstüne taşar, üste yığılan önceki satırlar
+  // örtünün içine biniyordu (X, burakgr0, beta.102 sonrası: "hala ufaktan birbirine karışıyor"). Son satırın üst payı
+  // örtünün taşan kısmı kadar büyür: yığın yukarı kayar, son satırın kendi yeri değişmez (yığın alttan konumlanır).
+  function liftPrevious(cover, textRect) {
+    var coverRect = pageRect(cover.getBoundingClientRect());
+    if (!textRect || !coverRect || !(coverRect.height > 0)) return;
+    var lift = Math.ceil(textRect.top - coverRect.top);
+    $('subtitle-text').style.marginTop = lift > 0 ? lift + 'px' : '';
+  }
+
+  // Çevirinin kendi zemini. "Örtsün"de (örtü çizilemeyen, yeri gelmeyen satırda da) zemin hep tam opaktır: oyundaki
+  // altyazıyı kapatmak bu yerleşimin işi. Eskiden örtü ve bu zemin "Zemin koyuluğu"nu izliyordu (#225); varsayılan %72'de
+  // ve kaydırıcı düşükken İngilizce satır Türkçenin altından görünüyor, test yazısı zeminsiz kalıyordu (X, MertTurna19, TV).
+  // Saydam zemin isteyen "Üstünde"/"Altında"/"Sabit"i seçer; orada koyuluk aynen geçerlidir.
+  function ownBackground() {
+    return placement === 'cover' && !SUBTITLE_BAND ? coverBackground || 'rgb(0, 0, 0)' : textBackground;
   }
 
   // Çevirinin zemini (bilgisayardaki "Zemin koyuluğu"); boşsa style.css'teki varsayılan. Örtü varken saydam olur.
   var textBackground = '';
 
-  // Örtünün zemini (koyuluğa göre, %100'de tamamen opak; boşsa style.css'teki %97) ve tam genişlik bant mı; eski
-  // bilgisayar uygulamaları alanı göndermez, yazı kadar kalır.
+  // Örtünün zemini: seçilen zemin renginde, koyuluktan bağımsız tam opak (boşsa style.css'teki opak siyah) ve tam genişlik
+  // bant mı; eski bilgisayar uygulamaları alanı göndermez, yazı kadar kalır.
   var coverBackground = '';
   var bandShape = false;
 
@@ -3058,7 +3083,7 @@
     if (typeof style.background === 'number') {
       var alpha = Math.max(0, Math.min(100, style.background)) / 100;
       // Zemin saydamsa yazıya sert kontur eklenir (style.css, body.thin-bg).
-      setBodyClass('thin-bg', alpha < 0.5);
+      setBodyClass('thin-bg', alpha < 0.5 && placement !== 'cover');
       // Yeni arayüz zemin rengini gönderir (style.backgroundColor, "#RRGGBB"); göndermeyen bilgisayarda siyah.
       // Siyah seçeneği saf siyah çizilir (tvBackgroundRgb).
       var rgb = tvBackgroundRgb(hexRgb(style.backgroundColor) || [0, 0, 0]);
@@ -3068,9 +3093,9 @@
       solidBackground = style.background >= 100;
       setBodyClass('solid-bg', solidBackground);
       textBackground = solidBackground ? 'rgb(' + base + ')' : 'rgba(' + base + ', ' + alpha + ')';
-      coverBackground = textBackground;
+      coverBackground = 'rgb(' + base + ')';
       var previousBackground = solidBackground ? textBackground : 'rgba(' + base + ', ' + (alpha * 0.83).toFixed(2) + ')';
-      $('subtitle-text').style.background = textBackground;
+      $('subtitle-text').style.background = ownBackground();
       $('subtitle-prev-text').style.background = previousBackground;
       $('subtitle-prev2-text').style.background = previousBackground;
     }

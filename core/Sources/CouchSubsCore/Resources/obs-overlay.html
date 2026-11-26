@@ -258,6 +258,13 @@
     return 'rgba(' + boxRgb + ', ' + alpha + ')';
   }
 
+  /// "Örtsün"ün zemini seçilen zemin renginde ve "Zemin koyuluğu"ndan bağımsız tam opaktır: oyundaki altyazıyı kapatmak bu
+  /// yerleşimin işi (TV app.js ownBackground ile aynı). Eskiden koyuluğu izliyordu (#225): varsayılan %72'de ve kaydırıcı
+  /// düşükken İngilizce satır Türkçenin altından görünüyordu (X, MertTurna19). Renkli sayfada (chroma key) siyah.
+  function coverColor() {
+    return pageColor ? '#000' : 'rgb(' + boxRgb + ')';
+  }
+
   function apply(style) {
     style = style || {};
     lastStyle = style;
@@ -996,11 +1003,7 @@
       line.style.paddingTop = '';
       line.style.paddingBottom = '';
       var coverHeight = (box.bottom - box.top) * viewHeight + 2 * margin;
-      // Örtü de "Arka plan koyuluğu"na uyar (eskiden hep %97'ydi, kaydırıcı örtüde işe yaramıyordu); %100 tamamen
-      // opaktır. Koyuluğu göndermeyen eski sürümlerde örtü %97 kalır.
-      var bg = fixed.bg !== null ? Number(fixed.bg) : (lastStyle && lastStyle.background);
-      line.style.background = typeof bg === 'number' && !isNaN(bg) ? (bg >= 100 ? '#000' : boxColor(bg)) : 'rgba(0, 0, 0, 0.97)';
-      if (pageColor) line.style.background = '#000';
+      line.style.background = coverColor();
       line.className = 'on cover';
       var natural = line.offsetHeight;
       if (natural > 0 && natural < coverHeight) {
@@ -1024,6 +1027,8 @@
       line.style.paddingBottom = '';
       line.className = 'on';
       apply(lastStyle);
+      // "Örtsün" seçili ama satırın yeri hiç bilinmiyor (test yazısı): zemin yine tam opak (TV ile aynı).
+      if (placement === 'cover' && !fixed.bottom && !(lastStyle && lastStyle.backgroundShape === 'band')) line.style.background = coverColor();
       // apply() may restore a fixed bottom from the previous subtitle. Pick the new mode first,
       // then position the wrapper without carrying stale vertical coordinates forward.
       wrap.style.top = '';

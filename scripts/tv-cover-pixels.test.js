@@ -137,8 +137,9 @@ window.__send = function (name, data) {
 };
 `;
 
-function tvStyle(placement, fontSize) {
-  return { fontSize: fontSize || 46, placement, background: 100, backgroundShape: 'box', stackPrevious: false };
+function tvStyle(placement, fontSize, background) {
+  return { fontSize: fontSize || 46, placement, background: background === undefined ? 100 : background, backgroundShape: 'box',
+    stackPrevious: false };
 }
 
 // Olaylar bilgi paneli ve ipuçları kapandıktan sonra (30. sn) gelir; ekran görüntüsü 31. sn'de alınır.
@@ -240,7 +241,8 @@ function obsRun(events, mode) {
   }
 }
 
-const obsStyle = (placement, fontSize) => ({ fontSize: fontSize || 48, placement, background: 100, backgroundShape: 'box' });
+const obsStyle = (placement, fontSize, background) => ({ fontSize: fontSize || 48, placement,
+  background: background === undefined ? 100 : background, backgroundShape: 'box' });
 const obsSend = (text, box) => `fire('subtitle', ${JSON.stringify({ text, duration: 60000, box })}); fonts.push(font());`;
 
 if (process.env.CI) assert.ok(browser, 'CI: gerçek yerleşim testi için Chrome/Edge gerekli');
@@ -266,6 +268,46 @@ test('TV: kısa çeviri iki satırlık İngilizce altyazıyı tamamen örter (ek
   assert.equal(red.noBox, 0, JSON.stringify(red));
 });
 
+// X'te bildirildi (MertTurna19, TV): "Altyazının üstünü örtsün"de Türkçe zeminsiz/ince çiziliyor, İngilizce satır altından
+// görünüyordu. Örtü "Zemin koyuluğu"nu izliyordu (#225); varsayılan %72'de ve kaydırıcı düşükken yarı saydamdı. Örtü her
+// koyulukta (ve lacivert gibi renkli zeminde) tam opak olmalı; "Altında" (denetim) koyuluğu aynen kullanır.
+test('TV: örtü her zemin koyuluğunda tam opak, İngilizce altyazı hiç görünmez (MertTurna19)', { skip }, (t) => {
+  const subtitle = (text, box) => `__send('subtitle', ${JSON.stringify({ text, duration: 8000, box })});`;
+  const red = {};
+  for (const background of [0, 30, 72]) {
+    const style = Object.assign(tvStyle('cover', 46, background), { backgroundColor: '#0E1A30' });
+    red['cover' + background] = tvShot(`__send('style', ${JSON.stringify(style)});` + subtitle(SHORT, ENGLISH));
+    red['medium' + background] = tvShot(`__send('style', ${JSON.stringify(style)});` + subtitle(MEDIUM, ENGLISH));
+  }
+  red.below = tvShot(`__send('style', ${JSON.stringify(tvStyle('below', 46, 30))});` + subtitle(SHORT, ENGLISH));
+  t.diagnostic(JSON.stringify(red));
+  assert.ok(red.below > 10000, 'denetim sahnesinde İngilizce altyazı görünmeli: ' + JSON.stringify(red));
+  for (const [name, count] of Object.entries(red)) if (name !== 'below') assert.equal(count, 0, name + ': ' + JSON.stringify(red));
+});
+
+// Yeri hiç gelmeyen satır (telefondaki "Test" yazısı, PS5 ana ekranı): "Örtsün"de yazının kendi zemini de tam opak;
+// başka yerleşimde koyuluk aynen geçerli.
+test('TV: "Örtsün"de yeri bilinmeyen test yazısının zemini tam opak, başka yerleşimde koyuluk geçerli', { skip }, () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-cover-test-text-'));
+  try {
+    const events = `var out = {};
+      function bg() { return getComputedStyle(document.getElementById('subtitle-text')).backgroundColor; }
+      __send('style', ${JSON.stringify(tvStyle('cover', 46, 30))});
+      __send('subtitle', ${JSON.stringify({ text: SHORT, duration: 8000 })}); out.cover = bg();
+      out.thin = document.body.className.indexOf('thin-bg') >= 0;
+      __send('style', ${JSON.stringify(tvStyle('fixed', 46, 30))});
+      __send('subtitle', ${JSON.stringify({ text: MEDIUM, duration: 8000 })}); out.fixed = bg();
+      var pre = document.createElement('pre'); pre.id = 'result';
+      pre.textContent = btoa(JSON.stringify(out)); document.body.appendChild(pre);`;
+    const m = result(run(['--virtual-time-budget=31000', '--dump-dom', tvPage(temp, events)], temp));
+    assert.equal(m.cover, 'rgb(0, 0, 0)', JSON.stringify(m));
+    assert.equal(m.thin, false, JSON.stringify(m));
+    assert.equal(m.fixed, 'rgba(0, 0, 0, 0.3)', JSON.stringify(m));
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test('TV: örtüde yazı boyu sabit, uzun satırda da küçülmez', { skip }, () => {
   const fonts = tvFonts();
   // Seçilen boy 46: 3 satıra sığmayan satır da 46 (daha çok satıra bölünür); boy ayarı değişince yeni boy.
@@ -285,6 +327,18 @@ test('OBS: kısa çeviri iki satırlık İngilizce altyazıyı tamamen örter (e
   assert.equal(red.short, 0, JSON.stringify(red));
   assert.equal(red.medium, 0, JSON.stringify(red));
   assert.equal(red.noBox, 0, JSON.stringify(red));
+});
+
+test('OBS: örtü her zemin koyuluğunda tam opak, İngilizce altyazı hiç görünmez (MertTurna19)', { skip }, (t) => {
+  const red = {};
+  for (const background of [0, 30, 72]) {
+    const style = `fire('style', ${JSON.stringify(Object.assign(obsStyle('cover', 48, background), { backgroundColor: '#0E1A30' }))});`;
+    red['cover' + background] = obsRun(style + obsSend(SHORT, ENGLISH), 'shot');
+  }
+  red.below = obsRun(`fire('style', ${JSON.stringify(obsStyle('below', 48, 30))});` + obsSend(SHORT, ENGLISH), 'shot');
+  t.diagnostic(JSON.stringify(red));
+  assert.ok(red.below > 10000, 'denetim sahnesinde İngilizce altyazı görünmeli: ' + JSON.stringify(red));
+  for (const [name, count] of Object.entries(red)) if (name !== 'below') assert.equal(count, 0, name + ': ' + JSON.stringify(red));
 });
 
 test('OBS: örtüde yazı boyu sabit, uzun satırda da küçülmez', { skip }, () => {

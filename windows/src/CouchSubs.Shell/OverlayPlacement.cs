@@ -66,6 +66,18 @@ public static class OverlayPlacement
     }
 
     /// <summary>
+    /// Altyazı kutusunun zemin opaklığı (0-1). "Örtsün"ün güncel satırı "Zemin koyuluğu"ndan bağımsız tam opaktır: oyundaki
+    /// altyazıyı kapatmak bu yerleşimin işi. Eskiden koyuluğu izliyordu; varsayılan %72'de ve kaydırıcı düşükken İngilizce satır
+    /// Türkçenin altından görünüyordu (X, MertTurna19). Öbür yerleşimlerde ve önceki satırlarda koyuluk aynen geçerli (önceki
+    /// satır %83'ü). Mac/iPhone OverlayCover.boxOpacity, TV app.js ownBackground ve OBS katmanı aynı kural.
+    /// </summary>
+    public static double BoxOpacity(int background, bool covering, bool current)
+    {
+        if (covering && current) return 1;
+        return Math.Clamp(background, 0, 100) / 100.0 * (current ? 1 : 0.83);
+    }
+
+    /// <summary>
     /// Kayıtlı yer ya da çalışma alanının altında ortada, %70 genişlikte. Kayıt bir ekranın adını taşıyorsa ve o ekran
     /// bağlıysa yer o ekrana göre hesaplanır (ekranların dizilişi değişse de pencere aynı ekranda kalır); ekran artık
     /// yoksa ya da eski kayıtsa tüm ekranlardaki yeri, o da görünmüyorsa varsayılan yer. <paramref name="height"/> yazı

@@ -14,6 +14,16 @@ final class OverlayCoverTests: XCTestCase {
     }
 
     /// Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.
+    /// "Örtsün"ün güncel satırı her koyulukta tam opak (X, MertTurna19); öbür yerleşimlerde ve önceki satırda koyuluk geçerli.
+    func testCoverBoxIsOpaqueAtEveryDarkness() {
+        for background in [0, 30, 72, 100] {
+            XCTAssertEqual(OverlayCover.boxOpacity(background: background, covering: true, current: true), 1)
+        }
+        XCTAssertEqual(OverlayCover.boxOpacity(background: 30, covering: false, current: true), 0.3, accuracy: 1e-9)
+        XCTAssertEqual(OverlayCover.boxOpacity(background: 100, covering: true, current: false), 0.83, accuracy: 1e-9)
+        XCTAssertEqual(OverlayCover.boxOpacity(background: 150, covering: false, current: true), 1)
+    }
+
     func testBoxesThatAreNotASubtitleKeepTheTextSizedBox() {
         let screen = CGSize(width: 1920, height: 1080)
         XCTAssertNil(OverlayCover.size(of: nil, screen: screen, scale: 1))

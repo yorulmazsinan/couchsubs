@@ -19,6 +19,15 @@ public enum OverlayCover {
         let pad = 2 * margin * scale
         return CGSize(width: width + pad, height: height + pad)
     }
+
+    /// Altyazı kutusunun zemin opaklığı (0-1). "Örtsün"ün güncel satırı "Zemin koyuluğu"ndan bağımsız tam opaktır: oyundaki
+    /// altyazıyı kapatmak bu yerleşimin işi. Eskiden koyuluğu izliyordu; varsayılan %72'de ve kaydırıcı düşükken İngilizce satır
+    /// Türkçenin altından görünüyordu (X, MertTurna19). Öbür yerleşimlerde ve önceki satırlarda koyuluk aynen geçerli (önceki
+    /// satır %83'ü). TV (app.js ownBackground), OBS katmanı ve Windows (OverlayPlacement.BoxOpacity) aynı kural.
+    public static func boxOpacity(background: Int, covering: Bool, current: Bool) -> Double {
+        if covering && current { return 1 }
+        return Double(max(0, min(100, background))) / 100 * (current ? 1 : 0.83)
+    }
 }
 
 /// "Örtsün" yerleşiminde yazı boyu sabittir (TV ve OBS sayfası aynı kuralı uygular; Windows: CoverFontScale): her satır

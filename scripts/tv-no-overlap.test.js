@@ -120,14 +120,24 @@ const lines = [
 const joined = { text: 'Satıcı: Bugün her zamankinden mi istersin?\nŞoför: Çek şu arabayı yoldan, adamım!\nÇocuk: Şuradaki arabaya bak!',
   box: { left: 0.33, top: 0.79, right: 0.67, bottom: 0.93 } };
 
-function scene(placement, withRegions) {
+// X (burakgr0, beta.102 sonrası: "hala ufaktan birbirine karışıyor"): aynı anda konuşan üç kişinin İngilizcesi çok satırlı
+// (kutu Türkçeden yüksek); "Örtsün"ün örtüsü Türkçenin üstüne taşıyor, üste yığılan önceki satırlar örtünün içine biniyordu.
+// Uzun replikler de (Türkçe iki satıra bölünür) aynı yığında.
+const tallLines = [
+  { text: 'Satıcı: Bugün her zamankinden mi istersin?', box: { left: 0.3, top: 0.72, right: 0.7, bottom: 0.9 } },
+  { text: 'Şoför: Çek şu arabayı yoldan, adamım! Burada bütün gün bekleyemem, işim gücüm var, anladın mı beni?',
+    box: { left: 0.28, top: 0.7, right: 0.72, bottom: 0.91 } },
+  { text: 'Çocuk: Şuradaki arabaya bak!', box: { left: 0.32, top: 0.74, right: 0.68, bottom: 0.92 } },
+];
+
+function scene(placement, withRegions, sceneLines) {
   const send = (at, name, data) => `setTimeout(function () { __send('${name}', ${JSON.stringify(data)}); }, ${at});`;
   return [
     send(2000, 'style', { placement, background: 80 }),
     withRegions ? send(2400, 'region', beside) : '',
     withRegions ? send(2450, 'region', twin) : '',
     withRegions ? send(2500, 'region', mission) : '',
-    ...lines.map((line, i) => send(3000 + i * 200, 'subtitle', Object.assign({ duration: 6000, speakerNames: speakers }, line))),
+    ...(sceneLines || lines).map((line, i) => send(3000 + i * 200, 'subtitle', Object.assign({ duration: 6000, speakerNames: speakers }, line))),
     `setTimeout(function () { window.__stack = __measure(); }, 3500);`,
     send(3600, 'subtitle', Object.assign({ duration: 6000, speakerNames: speakers, replace: true }, joined)),
     `setTimeout(function () { window.__joined = __measure(); }, 3700);`,
@@ -138,7 +148,7 @@ function scene(placement, withRegions) {
   ].join('\n');
 }
 
-function render(placement, width, height, withRegions = true) {
+function render(placement, width, height, withRegions = true, sceneLines = null) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'couchsubs-no-overlap-test-'));
   try {
     for (const file of fs.readdirSync(root)) {
@@ -147,7 +157,7 @@ function render(placement, width, height, withRegions = true) {
     fs.writeFileSync(path.join(temp, 'platform.js'), PRELUDE);
     let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     html = html.replace('<script src="app.js"></script>',
-      `<script src="app.js"></script><pre id="__result"></pre><script>${MEASURE}${scene(placement, withRegions)}</script>`);
+      `<script src="app.js"></script><pre id="__result"></pre><script>${MEASURE}${scene(placement, withRegions, sceneLines)}</script>`);
     fs.writeFileSync(path.join(temp, 'index.html'), html);
     const run = spawnSync(browser, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run',
       '--no-default-browser-check', '--hide-scrollbars', '--force-device-scale-factor=1', `--window-size=${width},${height}`,
@@ -221,3 +231,30 @@ test('birleşik çok konuşanlı satır: her konuşan kendi satırında, adı ke
   // Üç satır yüksekliğinde (her konuşan ayrı satır): satır yüksekliği yazı boyunun ~1,2 katı, en az 46 px.
   assert.ok(sub[0][4] - sub[0][2] >= 3 * 46, JSON.stringify(sub));
 });
+
+// Önceki satırlar örtünün üstünde kalır: örtü (son satırın zemini) ile önceki satırların kutusu kesişmez.
+function assertAboveCover(m, label) {
+  const cover = m.boxes.find(b => b[0] === 'cover');
+  assert.ok(cover, `${label}: örtü yok ${JSON.stringify(m.boxes)}`);
+  const current = m.boxes.find(b => b[0] === 'sub' && b[5] && cover && b[2] >= cover[2] - 1 && b[4] <= cover[4] + 1);
+  for (const b of m.boxes) {
+    if (b[0] !== 'sub' || b === current) continue;
+    assert.ok(!meets(b, cover), `${label}: önceki satır örtünün içinde ${JSON.stringify(b)} ${JSON.stringify(cover)}`);
+    assert.ok(b[4] <= cover[2], `${label}: önceki satır örtünün altında ${JSON.stringify(b)} ${JSON.stringify(cover)}`);
+  }
+}
+
+for (const [width, height] of [[1920, 1080], [1280, 720], [3840, 2160]]) {
+  test(`"Örtsün": çok satırlı İngilizcede önceki satırlar örtüye binmez (burakgr0), ${width}×${height}`,
+    { skip: !browser && 'Chrome/Edge bulunamadı' }, (t) => {
+      for (const withRegions of [false, true]) {
+        const r = render('cover', width, height, withRegions, tallLines);
+        t.diagnostic(JSON.stringify(r.stack));
+        assert.ok(r.stack.prev && r.stack.prev2, 'önceki satırlar yığılmadı');
+        assertAboveCover(r.stack, `${width} yığın ${withRegions}`);
+        assertApart(r.stack, `${width} yığın ${withRegions}`);
+        assertApart(r.joined, `${width} birleşik ${withRegions}`);
+        assertApart(r.later, `${width} sonra ${withRegions}`);
+      }
+    });
+}

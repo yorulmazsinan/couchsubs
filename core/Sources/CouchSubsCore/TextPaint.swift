@@ -219,6 +219,25 @@ public enum TextPainter {
     public static let inkShare = 0.03
     /// Kutu yazı tanıma kutusunun dışına en çok bu kadar satır yüksekliği uzar (taşan harf ucu).
     public static let reachLines = 0.5
+    /// Çok satırlı yazıda tanıma kutusunun kaçırdığı satır ucu: örtü en çok bu kadar satır yüksekliği daha uzar ...
+    public static let spillLines = 8.0
+    /// ... harf ve sözcük arasındaki boşluk en çok bu kadar satır yüksekliğiyse (sözcük arası ~0,25; sütun arası çok daha geniş).
+    public static let bridgeLines = 0.45
+
+    /// `start`tan `step` yönünde harf sütunu aranır: boşluk `bridgeLines` satırı aşınca, engel (başka hedef, simge) gelince ya
+    /// da `spillLines` satır gidilince durur. Dönen: bulunan son harf sütunu (yoksa nil).
+    static func spill(from start: Int, step: Int, limit line: Double, ink: (Int) -> Bool, blocked: (Int) -> Bool) -> Int? {
+        let bridge = max(1, Int((bridgeLines * line).rounded())), most = max(1, Int((spillLines * line).rounded()))
+        var last: Int? = nil, blank = 0, x = start
+        while abs(x - start) < most, !blocked(x) {
+            if ink(x) { last = x; blank = 0 } else {
+                blank += 1
+                if blank > bridge { break }
+            }
+            x += step
+        }
+        return last
+    }
     /// Kenar payı: satır yüksekliğinin bu kadarı, en az 1, en çok `marginMax` piksel.
     public static let marginLines = 0.08
     public static let marginMax = 3
@@ -526,6 +545,17 @@ public enum TextPainter {
             x = l - 1
             while x >= max(0, textLeft - reach), inkColumn(x, t, b) { x -= 1 }
             l = x + 1
+            // 1b) Çok satırlı yazıda (görev/hedef cümlesi, harita kartı) tanıma kutusu satırın ucunu kaçırabiliyor: örtü
+            // İngilizcenin yalnız bir kısmını kapatıyor, yanında "…çal om the", "…p rking lot." artığı kalıyordu (X, Myres88,
+            // GTA 6 haritası). Kutunun dışında harf sürüyorsa (harf/sözcük arası en çok `bridgeLines`) örtü yazının sonuna
+            // kadar uzar; başka hedefe ya da simgeye değmez. Tek satırlık etikette simge ayrımı bozulmasın diye yapılmaz.
+            if target.rows > 1 {
+                let (top, bottom) = (t, b)
+                let ink: (Int) -> Bool = { inkColumn($0, top, bottom) }
+                let blocked: (Int) -> Bool = { x in x < 0 || x >= width || (top..<bottom).contains { others(x, $0) } }
+                if let last = spill(from: r, step: 1, limit: line, ink: ink, blocked: blocked) { r = last + 1 }
+                if let last = spill(from: l - 1, step: -1, limit: line, ink: ink, blocked: blocked) { l = last }
+            }
             // Kenar payı: yazının yanındaki boş noktalar; ötesinde başka yazı/simge varsa pay ona değmez.
             let margin = max(1, min(marginMax, Int((marginLines * line).rounded())))
             func pad(_ blank: (Int) -> Bool) -> Int {

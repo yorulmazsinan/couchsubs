@@ -58,7 +58,7 @@ html, body {
   position: absolute;
   z-index: 9;
   border-radius: 1.4vh;
-  background: rgba(0, 0, 0, 0.97);
+  background: rgb(0, 0, 0);
 }
 #subtitle-cover.hidden { display: none; }
 
