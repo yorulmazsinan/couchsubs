@@ -92,6 +92,8 @@ public sealed partial class RegionWatcher
     private sealed class State
     {
         public byte[]? Signature;
+        /// <summary>Günlüğe son yazılan, güveni düşük olduğu için çevrilmeyen satırlar (aynı satırlar her turda yeniden yazılmaz).</summary>
+        public IReadOnlyList<string> UnsureLogged = [];
         public CropRegion? ReadRegion;
         public GamePhonePage? ReadPhonePage;
         public GamePhoneReader? PhoneReader;
@@ -186,6 +188,8 @@ public sealed partial class RegionWatcher
         public GamePhonePage? PhonePage { get; init; }
         /// <summary>Otomatik alanda haritanın görev kartı var (yardım köşesinde değil): türü "Görev ve hedef yazısı".</summary>
         public bool MissionCard { get; init; }
+        /// <summary>Menüde güveni düşük okunduğu için çeviriye gönderilmeyen satırlar (<see cref="ScreenTextNoise.IsUnsure"/>; günlük için).</summary>
+        public IReadOnlyList<string> Unsure { get; init; } = [];
     }
 
     /// <summary>
@@ -536,6 +540,21 @@ public sealed partial class RegionWatcher
         state.PanelMisses = 0;
         var candidate = ReadCandidate(frame, crop, signature, area, state, started);
         if (candidate is null) return;
+        if (!candidate.Unsure.SequenceEqual(state.UnsureLogged))
+        {
+            state.UnsureLogged = candidate.Unsure;
+            if (candidate.Unsure.Count > 0)
+                Log?.Invoke($"ek alan {area.Name}: güveni düşük okunan satır çeviriye gönderilmedi: "
+                            + string.Join(", ", candidate.Unsure.Select(text => $"«{SubtitleLog.Excerpt(IconText.Plain(text))}»")));
+        }
+        if (candidate.Key.Length == 0 && candidate.Unsure.Count > 0)
+        {
+            // Okunan her satır güvensiz: boş alan değildir (alan reddedilmez, gösterilen kutu kalır); sonraki tur yeniden okur.
+            state.Signature = null;
+            state.LastRead = null;
+            state.Candidate = null;
+            return;
+        }
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
         // kararı ClearIfUnsteady'de (özgün yazının izi ya da süre).
         var emptyWhileShown = candidate.Key.Length == 0 && !string.IsNullOrEmpty(state.RenderedText);
@@ -936,6 +955,8 @@ public sealed partial class RegionWatcher
             : unpacked).Lines;
         // Otomatik alanda aynı satırın yan yana okunan parçaları (simgeden, renkli addan bölünen cümle) tek satırdır.
         var lines = (auto && !phone ? JoinedPieces(cleaned, aspect) : cleaned)
+            // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
+            .Select(line => auto && menu ? ScreenTranslation.WithoutBadge(line) : line)
             .SelectMany(line => phone ? [line] : ScreenTranslation.MenuPieces(line, aspect, frame))
             .Where(line => ScreenTranslation.IsWords(line.Text))
             .Where(line => !styled || !ScreenTranslation.IsClock(line.Text))
@@ -947,6 +968,14 @@ public sealed partial class RegionWatcher
                                       || (line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null)))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
+        // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
+        // satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
+        List<string> unsure = [];
+        if (auto && menu)
+        {
+            unsure = [.. lines.Where(ScreenTextNoise.IsUnsure).Select(line => line.Text)];
+            lines.RemoveAll(ScreenTextNoise.IsUnsure);
+        }
         // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827; "Ekranı
         // çevir" ile aynı). Telefon alanı girmez.
         // Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
@@ -1062,7 +1091,10 @@ public sealed partial class RegionWatcher
             var own = card.All.Select(i => lines[i].Box!.Value).ToList();
             return !CouchSubs.Core.MissionCard.InHelpCorner(own.Skip(1).Aggregate(own[0], (a, b) => a.Union(b)).PlacedIn(place));
         });
-        return new Candidate(paragraphs, box, lineHeight, key, cut, blocks) { Text = TextKey(paragraphs), MissionCard = missionCard };
+        return new Candidate(paragraphs, box, lineHeight, key, cut, blocks)
+        {
+            Text = TextKey(paragraphs), MissionCard = missionCard, Unsure = unsure,
+        };
     }
 
     /// <summary>
@@ -2044,6 +2076,18 @@ public sealed partial class RegionWatcher
             }
             foreach (var part in pending) part.Translation = map.GetValueOrDefault(part.Core.Trim());
         }
+        // Paket ya da motor görev başlığını olduğu gibi döndürdü ("Hit Kingpin Bowling"): yalnız fiil çevrilir, ad kalır (#1365).
+        if (TranslatesUiCommands)
+            foreach (var part in parts.SelectMany(list => list))
+            {
+                var source = part.Core.Trim();
+                if (part.Translation is not { } text || !source.Any(char.IsLetter)
+                    || !TextMatch.IsSimilar(TextMatch.Normalize(source), TextMatch.Normalize(text), 0.90)
+                    || UiCommands.MissionTitle(source) is not { } title) continue;
+                part.Translation = title;
+                lock (terms)
+                    if (terms.ContainsKey(source)) terms[source] = title;
+            }
         string?[] result = [.. parts.Select(list => list.Any(part => part.Translation is null) ? null
             : string.Join(" / ", list.Select(part => part.Prefix + part.Translation + part.Suffix)))];
         var readyCount = parts.Count(list => list.All(part => !pending.Contains(part)));

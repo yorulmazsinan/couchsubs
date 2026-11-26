@@ -486,7 +486,7 @@ class RegionWatcher(
          */
         fun candidate(
             reading: Reading, region: CropRegion, frame: GrayFrame? = null, keepPrompts: Boolean = false, auto: Boolean = false,
-            styled: Boolean = false, color: ((Int, Int) -> Int)? = null,
+            styled: Boolean = false, color: ((Int, Int) -> Int)? = null, menu: Boolean = false,
         ): Candidate {
             // Fiilsiz yerlerdeki simgeler (tuş çubuğu, satır ucu) karede doğrulanır; otomatik alanda yalnız renksiz simgeler
             // ([color]), satır ucundaki simge çeviriye girmez (Mac ve Windows ile aynı).
@@ -498,14 +498,20 @@ class RegionWatcher(
             // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
             // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
             // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
-            val lines = ScreenTranslation.withoutDuplicateLines((if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
+            val read = (if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
+                // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
+                .map { if (auto && menu) ScreenTranslation.withoutBadge(it) else it }
                 .flatMap { ScreenTranslation.menuPieces(it, aspect, frame) }
                 .map(ScreenTranslation::withoutEdgeMarks)
                 .map(ScreenTranslation::withoutEdgeIcons)
                 .map { if (auto) it.copy(text = UiCommands.withoutKeyGlyph(it.text)) else it }
                 .filter { ScreenText.isWords(it.text) }
                 .filter { !stylish || !ScreenTranslation.isClock(it.text) }
-                .sortedBy { it.box?.top ?: 0.0 })
+                .sortedBy { it.box?.top ?: 0.0 }
+            // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna
+            // gitmez; satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
+            val unsure = if (auto && menu) read.filter(ScreenTextNoise::isUnsure).map { it.text } else emptyList()
+            val lines = ScreenTranslation.withoutDuplicateLines(if (auto && menu) read.filterNot(ScreenTextNoise::isUnsure) else read)
             var paragraphs = ScreenText.paragraphs(lines)
             val boxes = lines.mapNotNull { it.box }
             val box = boxes.reduceOrNull { a, b -> a.union(b) }?.placedIn(region.box)
@@ -559,7 +565,8 @@ class RegionWatcher(
             val missionCard = cards.any { card ->
                 !MissionCard.inHelpCorner(card.all.map { lines[it].box!! }.reduce { a, b -> a.union(b) }.placedIn(region.box))
             }
-            return Candidate(paragraphs, box, lineHeight, key, cut, blocks, textKey(paragraphs), missionCard = missionCard)
+            return Candidate(paragraphs, box, lineHeight, key, cut, blocks, textKey(paragraphs), missionCard = missionCard,
+                unsure = unsure)
         }
 
         /** Kısa etiket satırı: en çok bu kadar sözcük. */
@@ -1118,10 +1125,14 @@ class RegionWatcher(
         val auto: Boolean = false,
         /** Otomatik alanda haritanın görev kartı var (yardım köşesinde değil): türü "Görev ve hedef yazısı". */
         val missionCard: Boolean = false,
+        /** Menüde güveni düşük okunduğu için çeviriye gönderilmeyen satırlar ([ScreenTextNoise.isUnsure]; günlük için). */
+        val unsure: List<String> = emptyList(),
     )
 
     private class State {
         var signature: ByteArray? = null
+        /** Günlüğe son yazılan, güveni düşük olduğu için çevrilmeyen satırlar (aynı satırlar her turda yeniden yazılmaz). */
+        var unsureLogged: List<String> = emptyList()
         /** Bir önceki turun izi ([BIG_CHANGE_SHARE] için; [signature] okuma hatasında silinir). */
         var passSignature: ByteArray? = null
         /** Çevirisi gösterilirken art arda kaç turdur okuma değişip doğrulanamadı ([UNSTEADY_TURNS]) ve ilkinin zamanı ([UNSTEADY_MS]). */
@@ -1480,7 +1491,21 @@ class RegionWatcher(
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Windows aynı.
         var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = true,
-            color = crop.color)
+            color = crop.color, menu = area.menu)
+        if (candidate.unsure != state.unsureLogged) {
+            state.unsureLogged = candidate.unsure
+            if (candidate.unsure.isNotEmpty()) {
+                onLog?.invoke("ek alan ${area.name}: güveni düşük okunan satır çeviriye gönderilmedi: " +
+                    candidate.unsure.joinToString(", ") { "«${logExcerpt(IconText.plain(it))}»" })
+            }
+        }
+        if (candidate.key.isEmpty() && candidate.unsure.isNotEmpty()) {
+            // Okunan her satır güvensiz: boş alan değildir (alan reddedilmez, gösterilen kutu kalır); sonraki tur yeniden okur.
+            state.signature = null
+            state.lastRead = null
+            state.candidate = null
+            return
+        }
         if (area.auto) {
             if (area.menu && !candidate.missionCard && ScreenTextKind.isHud(candidate.paragraphs)) onAutoHud?.invoke(area.id)
             // Menü dışındaki otomatik alanın türü okunan yazıdan çıkar (yardım/eylem ya da diğer); kapalı tür gürültü gibi
@@ -1991,6 +2016,14 @@ class RegionWatcher(
                 }
             }
             missing.forEach { it.result = found[it.text] ?: it.text }
+        }
+        // Paket ya da motor görev başlığını olduğu gibi döndürdü ("Hit Kingpin Bowling"): yalnız fiil çevrilir, ad kalır (#1365).
+        for (piece in pieces.flatten()) {
+            val result = piece.result ?: continue
+            if (!TextMatch.isSimilar(TextMatch.normalize(piece.text), TextMatch.normalize(result), 0.90)) continue
+            val title = UiCommands.missionTitle(piece.text) ?: continue
+            piece.result = title
+            synchronized(sessionTerms) { if (sessionTerms.containsKey(piece.text)) sessionTerms[piece.text] = title }
         }
         return pieces.map { parts -> parts.joinToString(" / ") { (heads[it] ?: "") + it.result!! } }
     }

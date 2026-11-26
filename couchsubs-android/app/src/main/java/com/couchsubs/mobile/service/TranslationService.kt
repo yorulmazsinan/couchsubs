@@ -496,7 +496,10 @@ class TranslationService : Service() {
      * Ekranda beliren yazı kutularını bulan ("Ekran yazılarını otomatik çevir"); bulduğu geçici alanlar ek alanlarla
      * birlikte [regionWatcher]'a verilir. Karo örneği kare iş parçacığında alınır, işlenmesi [detectorWork]'te.
      */
-    private val detector = com.couchsubs.mobile.core.ScreenTextDetector()
+    private val detector = com.couchsubs.mobile.core.ScreenTextDetector().apply {
+        // Harita düzeni bulundu/bitti (#1365 tanısı) altyazı günlüğüne.
+        onLog = { Log.i(TAG, it) }
+    }
     @Volatile private var autoAreas: List<com.couchsubs.mobile.core.ExtraArea> = emptyList()
     @Volatile private var fullScreenArea = false
     private val detectorWork = Executors.newSingleThreadExecutor { Thread(it, "CouchSubs screen text").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }

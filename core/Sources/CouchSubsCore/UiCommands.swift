@@ -89,7 +89,43 @@ enum UiCommands {
         "HANDBRAKE": "El freni", "HORN": "Korna", "HEADLIGHTS": "Farlar", "SWIM": "Yüz", "TAKE COVER": "Siper al",
         "THROW": "Fırlat", "SPECIAL ABILITY": "Özel yetenek", "SWITCH CHARACTER": "Karakter değiştir",
         "SWITCH WEAPON": "Silah değiştir", "CONTROLS": "Kontroller",
+        // Haritanın görev listesi ve görev kartı (#1365): "GOAL" motordan "GOL." dönüyordu; arayüz etiketi olarak sabit.
+        "GOAL": "Hedef", "GOALS": "Hedefler", "OBJECTIVES": "Hedefler", "MISSION": "Görev", "MISSIONS": "Görevler",
+        "STORY": "Hikâye", "OPTIONAL": "İsteğe bağlı", "REWARD": "Ödül", "REWARDS": "Ödüller",
     ]
+
+    /// Görev başlığı: emir fiili ve ardında özel ad ("Hit Kingpin Bowling", "Meet Bret"). Motor özel adı görüp başlığı
+    /// olduğu gibi döndürünce başlık hiç çevrilmiyordu (#1365); yalnız fiil çevrilir, ad olduğu gibi kalır ve Türkçe eki
+    /// alır ("Kingpin Bowling'i Soy", "Bret ile Buluş"). Adın her sözcüğü büyük harfle başlar, yalnız harf; bağlaç/edat
+    /// ("for", "the") ya da iyelik ("Vicki's") varsa başlık bu kalıba girmez. Yalnız motor çevirmediğinde kullanılır
+    /// (Windows/Android aynı).
+    private static let titleVerbs: [(verb: String, suffix: String, turkish: String)] = [
+        ("hit", "i", "Soy"), ("rob", "i", "Soy"), ("meet", "", "ile Buluş"), ("visit", "i", "Ziyaret Et"),
+        ("find", "i", "Bul"), ("check out", "a", "Göz At"), ("go to", "a", "Git"), ("head to", "a", "Git"),
+        ("return to", "a", "Dön"), ("call", "i", "Ara"), ("follow", "i", "Takip Et"), ("steal", "i", "Çal"),
+        ("protect", "i", "Koru"), ("chase", "i", "Kovala"), ("rescue", "i", "Kurtar"), ("defend", "i", "Savun"),
+        ("explore", "i", "Keşfet"), ("investigate", "i", "Araştır"), ("pick up", "i", "Al"), ("help", "a", "Yardım Et"),
+    ]
+
+    static func missionTitle(_ title: String) -> String? {
+        let words = title.trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init)
+        guard (2...6).contains(words.count), !TextStyleSampler.isUpper(title) else { return nil }
+        let posix = Locale(identifier: "en_US_POSIX")
+        for entry in titleVerbs {
+            let verb = entry.verb.split(separator: " ").map(String.init)
+            guard words.count > verb.count,
+                  zip(words, verb).allSatisfy({ $0.0.lowercased(with: posix) == $0.1 }),
+                  words[0].first?.isUppercase == true else { continue }
+            let name = Array(words.dropFirst(verb.count))
+            guard name.allSatisfy({ word in
+                word.first?.isUppercase == true && word.count >= 2 && word.allSatisfy { $0.isLetter || $0 == "-" }
+            }) else { return nil }
+            let joined = name.joined(separator: " ")
+            let object = entry.suffix.isEmpty ? joined : TurkishSuffix.attach(joined, suffix: entry.suffix)
+            return object + " " + entry.turkish
+        }
+        return nil
+    }
 
     /// Etiketin sonunda önündeki sözcüklerden ayrı duran tek harf (yazı tanımanın tuş simgesinden okuduğu harf, #1362:
     /// "RADIO CONTROLS f" → "RADYO KONTROLLERİ F", "RADIO MENU (I") atılır. Yalnız en az iki sözcüklü (iki harften uzun)

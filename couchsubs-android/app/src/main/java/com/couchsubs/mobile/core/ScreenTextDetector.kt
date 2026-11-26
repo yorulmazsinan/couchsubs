@@ -68,6 +68,87 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         /** Panel zemini: karoların en az bu kadarının zemin tonu ortak tondan en çok [PANEL_TONE] uzakta. */
         const val PANEL_SAME_TONE = 0.70
         const val PANEL_TONE = 20.0
+
+        /**
+         * Harita düzeni (#1365, GTA 6 Harita › STORY): ekranın bir yanında tam boy koyu panel (görev listesi), yanında geniş,
+         * açık ve keskin harita. Harita ayrıntılı olduğu için bileşen dışı karoların yalnız ~%55'i sakin ([MENU_CALM_SHARE]
+         * %60'ın altında); tuş çubuğu menü dışında aday olmadığından çoğu karede yalnız iki bileşen (liste, görev kartı) var.
+         * Ekran menü sayılmıyor, liste, kart ve tuş çubuğu ayrı alanlara (hazır Help/Messages alanları dahil) bölünüyordu.
+         * Düzen tanınınca menü için [MAP_COMPONENTS] bileşen ve [MAP_QUIET_SHARE] sakin zemin yeter. Oyun sahnesi düzeni
+         * karşılamaz: panel ekranın tam boyunda ve koyu, kenarı keskin; yanındaki alanın büyük bölümü ondan belirgin açık ve
+         * yerinde sabit; panelde en az üç karo satırlık liste var. Mac/iPhone ve Windows aynı.
+         */
+        const val MAP_QUIET_SHARE = 0.4
+        const val MAP_COMPONENTS = 2
+        /** Panelin genişliği (karo): ekranın ~%15'i ile ~%45'i arası. */
+        val MAP_PANEL_COLUMNS = 5..14
+        /** Panel zemini: karo ortalaması bundan koyu. */
+        const val MAP_PANEL_DARK = 90.0
+        /** Harita karoları panelin ortanca tonundan en az bu kadar açık. */
+        const val MAP_CONTRAST = 35.0
+        /** Panel dışındaki yazısız karoların en az bu kadarı harita tonunda ve yerinde sabit. */
+        const val MAP_SHARE = 0.7
+        /** Panelin karo satırlarının en az bu kadarı panel (koyu ya da yazı): panel tam boy. */
+        const val MAP_ROWS = 0.9
+
+        /**
+         * Harita düzeninin paneli; yoksa null. [inside]: yazı karosu (aday ya da bileşen). Menüde aday kuralı genişleyince
+         * (kontur yazı) haritanın yazıları da aday olur, liste bileşeni onlarla birleşip büyüyebilir; düzen bileşenlere
+         * değil karolara bakar, menü gidip gelmez. [tile]: karonun ortalama parlaklığı ve yerinde sabit olup olmadığı
+         * (testler sentetik karolarla çağırır).
+         */
+        fun mapPanel(inside: (Int) -> Boolean, tile: (Int) -> Pair<Double, Boolean>): MapPanel? {
+            for (left in listOf(true, false)) {
+                // k: panelin dış kenarından içeri doğru sütun sırası.
+                fun column(k: Int) = if (left) k else COLUMNS - 1 - k
+                for (width in MAP_PANEL_COLUMNS) {
+                    val ground = mutableListOf<Double>()
+                    var panelRows = 0
+                    for (row in 0 until ROWS) {
+                        var own = 0
+                        for (k in 0 until width) {
+                            val index = row * COLUMNS + column(k)
+                            if (inside(index)) { own++; continue }
+                            val mean = tile(index).first
+                            if (mean < MAP_PANEL_DARK) own++
+                            ground.add(mean)
+                        }
+                        if (own >= 0.6 * width) panelRows++
+                    }
+                    if (panelRows < MAP_ROWS * ROWS || ground.isEmpty() ||
+                        ground.count { it < MAP_PANEL_DARK } < 0.85 * ground.size) continue
+                    val tone = ground.sorted()[ground.size / 2]
+                    val light = tone + MAP_CONTRAST
+                    // Panelin kenarı: içteki son sütun panel, dıştaki ilk sütun harita.
+                    var edgeIn = 0
+                    var edgeOut = 0
+                    for (row in 0 until ROWS) {
+                        val a = row * COLUMNS + column(width - 1)
+                        val b = row * COLUMNS + column(width)
+                        if (inside(a) || tile(a).first < MAP_PANEL_DARK) edgeIn++
+                        if (inside(b) || tile(b).first >= light) edgeOut++
+                    }
+                    if (edgeIn < 0.75 * ROWS || edgeOut < 0.75 * ROWS) continue
+                    // Harita: panel dışındaki yazısız karoların çoğu açık ve yerinde sabit (oyun sahnesinde kamera oynar).
+                    var mapTiles = 0
+                    var lit = 0
+                    var steady = 0
+                    for (row in 0 until ROWS) for (k in width until COLUMNS) {
+                        val index = row * COLUMNS + column(k)
+                        if (inside(index)) continue
+                        mapTiles++
+                        val (mean, still) = tile(index)
+                        if (mean >= light) lit++
+                        if (still) steady++
+                    }
+                    if (mapTiles == 0 || lit < MAP_SHARE * mapTiles || steady < MAP_SHARE * mapTiles) continue
+                    // Panelde liste: en az üç karo satırında panelin dış yarısında yazı.
+                    val list = (0 until ROWS).count { row -> (0 until maxOf(1, width / 2)).any { inside(row * COLUMNS + column(it)) } }
+                    if (list >= 3) return MapPanel(left, width)
+                }
+            }
+            return null
+        }
         private const val WORDS = POINTS * POINTS / 64 // 576 bit maske: 9 × 64
         private const val TILES = COLUMNS * ROWS
 
@@ -117,6 +198,20 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     /** Şu an önerilen otomatik alanlar. */
     val areas: List<ExtraArea>
         get() = synchronized(lock) { autos.map { it.area() } }
+
+    /** Harita düzeninin paneli: yanı ([left]: sol) ve genişliği (karo). */
+    data class MapPanel(val left: Boolean, val width: Int)
+
+    /** Tanı satırları (harita düzeni bulundu/bitti); uygulama altyazı günlüğüne yazar. Kilidin dışında çağrılır. */
+    @Volatile var onLog: ((String) -> Unit)? = null
+    private val notes = mutableListOf<String>()
+    private var mapPanelSeen: String? = null
+    /** Bu örnekte bulunan harita düzeni ([isMenu]); menü onunla sürer ([MENU_LIFE_MS] dolmaz). */
+    private var mapPanelNow: MapPanel? = null
+
+    /** Son örnekte harita düzeni (#1365) tanındı. */
+    val inMapLayout: Boolean
+        get() = synchronized(lock) { mapPanelSeen != null }
 
     /** Tanı (yalnız testler): her örneğin bileşenleri. */
     internal var debug: ((String) -> Unit)? = null
@@ -200,7 +295,15 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
      * Örnek işlenir; önerilen otomatik alanlar döner. [excluded]: altyazı alanı ve kullanıcının ek alanları (oradaki
      * karolar aday olmaz).
      */
-    fun update(sample: Sample, excluded: List<CropRegion>, now: Long = clock(), subtitle: CropRegion? = null): List<ExtraArea> = synchronized(lock) {
+    fun update(sample: Sample, excluded: List<CropRegion>, now: Long = clock(), subtitle: CropRegion? = null): List<ExtraArea> {
+        val result = synchronized(lock) { updateLocked(sample, excluded, now, subtitle) }
+        // Tanı satırları kilidin dışında yazılır.
+        val pending = synchronized(lock) { notes.toList().also { notes.clear() } }
+        for (line in pending) onLog?.invoke(line)
+        return result
+    }
+
+    private fun updateLocked(sample: Sample, excluded: List<CropRegion>, now: Long, subtitle: CropRegion?): List<ExtraArea> {
         val candidate = BooleanArray(TILES)
         val inSubtitle = BooleanArray(TILES)
         val inverse = BooleanArray(TILES)
@@ -265,7 +368,10 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         val spoken = dialogueAt?.let { now - it <= DIALOGUE_MS } == true
         // Süresi dolan menünün yazıları yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla açılır.
         val floor = menuFloor
-        menu = !spoken && isMenu(if (floor == null) evidence else evidence.filter { members -> members.maxOf { tiles[it].stableSince } > floor }, sample)
+        mapPanelNow = null
+        if (spoken) notePanel(null, 0.0)
+        menu = !spoken && isMenu(if (floor == null) evidence else evidence.filter { members -> members.maxOf { tiles[it].stableSince } > floor },
+            sample, candidate, now)
         if (menu && !wasMenu) {
             menuAnchors = evidence.flatten().toSet()
             menuEnteredAt = now
@@ -279,7 +385,9 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         // Menüde bir şey değişmeden (gezinme, seçim) MENU_LIFE_MS geçti: menü sayılmaz, altyazı yeniden okunur
         // (Mac/iPhone, Windows ile aynı). Karanlık sahnede birlikte beliren sabit HUD yazıları da menü sanılabiliyor.
         var expired = false
-        if (menu && wasMenu) {
+        // Harita düzeni yerinde: oyuncu haritaya hareketsiz baksa da menü sürer ([MENU_LIFE_MS] dolmaz); süresi dolunca
+        // liste, görev kartı ve tuş çubuğu menü dışı alanlara bölünüyordu (#1365).
+        if (menu && wasMenu && mapPanelNow == null) {
             // Menünün geçmiş listesi altyazı alanında okunuyor ([noteList]): menü yerinde, süresi dolmaz.
             val listed = listAt?.takeIf { now - it <= LIST_MS } ?: 0L
             val activity = maxOf(menuEnteredAt, menuAnchors.maxOfOrNull { tiles[it].stableSince } ?: menuEnteredAt, listed)
@@ -354,7 +462,7 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
                 autos.add(Auto("auto-${++counter}", region, now, members.toMutableSet(), menu))
             }
         }
-        autos.map { it.area() }
+        return autos.map { it.area() }
     }
 
     /**
@@ -423,18 +531,18 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         dialogueAt = null
         lastSample = null
         busy = false
+        mapPanelSeen = null
+        mapPanelNow = null
+        notes.clear()
     }
 
     /**
      * Menü durumu: en az [MENU_COMPONENTS] aday bileşen aynı 300 ms içinde belirip duruyor ve bileşenlerin dışındaki
      * karoların en az %60'ı bulanık/karartılmış (menü arkasındaki oyun sahnesi). Net, hareketli sahnede kısa etiketler
-     * gürültü sayılmaya devam eder.
+     * gürültü sayılmaya devam eder. Harita düzeni (#1365, [mapPanel]) tanınınca [MAP_COMPONENTS] bileşen ve
+     * [MAP_QUIET_SHARE] sakin zemin yeter; düzen yoksa eşikler eskisi gibi. [candidate]: bu örneğin aday karoları.
      */
-    private fun isMenu(components: List<List<Int>>, sample: Sample): Boolean {
-        if (components.size < MENU_COMPONENTS) return false
-        val settled = components.map { members -> members.maxOf { tiles[it].stableSince } }.sorted()
-        val together = (0..settled.size - MENU_COMPONENTS).any { settled[it + MENU_COMPONENTS - 1] - settled[it] <= STABLE_MS }
-        if (!together) return false
+    private fun isMenu(components: List<List<Int>>, sample: Sample, candidate: BooleanArray, now: Long): Boolean {
         val inside = BooleanArray(TILES)
         components.forEach { members -> members.forEach { inside[it] = true } }
         var outside = 0
@@ -443,7 +551,35 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             outside++
             if (sample.deviation[index] < CALM_DEVIATION) calm++
         }
-        return outside > 0 && calm >= MENU_CALM_SHARE * outside
+        val calmShare = if (outside == 0) 0.0 else calm.toDouble() / outside
+        // Harita düzeni: keskin harita sakin zemin ve üç bileşen şartını karşılamıyor; düzen tanınınca eşikler gevşer.
+        val panel = if (components.size >= MAP_COMPONENTS && calmShare >= MAP_QUIET_SHARE && sample.mean.size == TILES)
+            mapPanel({ candidate[it] || inside[it] }) { index ->
+                sample.mean[index].toDouble() to (now - tiles[index].stableSince >= WORLD_STABLE_MS)
+            } else null
+        notePanel(panel, calmShare)
+        val need = if (panel == null) MENU_COMPONENTS else MAP_COMPONENTS
+        if (components.size < need) return false
+        val settled = components.map { members -> members.maxOf { tiles[it].stableSince } }.sorted()
+        val together = (0..settled.size - need).any { settled[it + need - 1] - settled[it] <= STABLE_MS }
+        if (!together) return false
+        if (outside == 0 || calm < (if (panel == null) MENU_CALM_SHARE else MAP_QUIET_SHARE) * outside) return false
+        mapPanelNow = panel
+        return true
+    }
+
+    /** Harita düzeninin bulunuşu ve bitişi günlüğe bir kez yazılır ([onLog]; #1365 tanısı). */
+    private fun notePanel(panel: MapPanel?, calmShare: Double) {
+        val seen = panel?.let { "${if (it.left) "sol" else "sağ"} ${it.width}" }
+        if (seen == mapPanelSeen) return
+        val ended = mapPanelSeen != null
+        mapPanelSeen = seen
+        if (panel != null) {
+            notes.add("ekran menüsü: harita düzeni bulundu (${if (panel.left) "sol" else "sağ"} panel ${panel.width} karo, " +
+                "sakin zemin %${Math.round(calmShare * 100)})")
+        } else if (ended) {
+            notes.add("ekran menüsü: harita düzeni bitti")
+        }
     }
 
     /**
@@ -609,6 +745,21 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
 
 /** Otomatik alanda okunan yazı gürültü mü (sayaç, saat, para, tek sözcüklük etiket). Windows ve Mac ile aynı kurallar. */
 object ScreenTextNoise {
+    /**
+     * Menüde güveni düşük okuma (#1365): yazı tanıma satırdan en çok [UNSURE_CONFIDENCE] kadar emin ve satır arayüz
+     * sözlüğünde yok. Bozuk okumalar ("scarch rol the onuin Ape", "AUD MARNER SET DESTINATION") paketle eşleşmeyip çeviri
+     * motoruna gidiyor, saçma çeviriler çıkıyordu ("Onur ape'de arama yap"). Kayıtlı okumalarda 0,5 güvenli satırların
+     * çoğu bozuk ("Earpc", "NAOE", "Stetahus"); sözlükteki etiket ("EXIT") güvensiz de olsa çevrilir. Mac/iPhone ve
+     * Windows aynı.
+     */
+    const val UNSURE_CONFIDENCE = 0.5
+
+    fun isUnsure(line: TextLine): Boolean {
+        val confidence = line.confidence ?: return false
+        if (confidence > UNSURE_CONFIDENCE) return false
+        return UiCommands.translateLabelLoosely(IconText.plain(line.text).trim(' ')) == null
+    }
+
     /**
      * [menu]: menü durumunda kısa etiketler ("OFF", "Map") de çevrilir; yalnız sayı/simge/noktalama olan etiketler
      * ("40", "0", "x3", "100%") her durumda gürültüdür.

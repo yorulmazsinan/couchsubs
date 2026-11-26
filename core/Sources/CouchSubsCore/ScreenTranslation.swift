@@ -692,6 +692,32 @@ public enum ScreenTranslation {
 
     private static let iconBrackets = CharacterSet(charactersIn: " ()[]")
 
+    /// Menü satırının başındaki görev simgesi (#1365, GTA 6 haritasının görev listesi: daire içinde "KM", "KK", "W"): yazı
+    /// tanıma simgeyi satırın ilk sözcüğü okuyor ("KM Collect Chemicals for Kyle"), simge çeviriye giriyor ("KM, Kyle için
+    /// kimyasalları topluyor") ve kutu simgenin üstünü örtüyordu. Baştaki bir-iki BÜYÜK harflik sözcük, ardında büyük harfle
+    /// başlayan ve küçük harf taşıyan (BÜYÜK HARFLİ olmayan) en az iki sözcük varsa simgedir: atılır, kutu ikinci sözcükten
+    /// başlar. Gerçek kısa sözcükler (`badgeWords`: "A", "I", "OK", "TV", "DJ"…) dokunulmaz. Windows ve Android aynı.
+    public static func withoutBadge(_ line: TextLine) -> TextLine {
+        let tokens = line.text.split(separator: " ").map(String.init)
+        guard tokens.count >= 3, let head = tokens.first, (1...2).contains(head.count),
+              head.allSatisfy({ $0.isLetter && $0.isUppercase }), !badgeWords.contains(head) else { return line }
+        let rest = Array(tokens.dropFirst())
+        guard rest[0].first?.isUppercase == true, rest.joined().contains(where: \.isLowercase) else { return line }
+        var trimmed = line
+        trimmed.text = rest.joined(separator: " ")
+        guard let box = line.box else { return trimmed }
+        let measured = (line.words ?? []).count == tokens.count && line.words![0].text == head
+        let words = measured ? line.words! : ButtonIcons.estimate(line.text, box)
+        guard words.count >= 2 else { return trimmed }
+        trimmed.box = TextBox(left: words[1].box.left, top: box.top, right: box.right, bottom: box.bottom)
+        trimmed.words = measured ? Array(words.dropFirst()) : nil
+        return trimmed
+    }
+
+    /// Satır başında simge sanılmayacak kısa BÜYÜK harfli sözcükler.
+    static let badgeWords: Set<String> = ["A", "I", "O", "OK", "TV", "DJ", "UK", "US", "UN", "LA", "NY", "MR", "DR", "MS",
+                                          "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP"]
+
     /// Satırın başındaki ya da sonundaki kumanda simgesi (kareden tanınmış simge ya da okunmuş tuş adı: "RECENTER L3",
     /// "EXIT (○)") çeviriye girmez; kutu yalnız yazının sözcüklerini kapsar, simge ekranda görünür kalır. Önceden çeviri
     /// kutusu simgenin üstünü örtüyordu ("Ortala" L3'ü kapatıyordu, #860). Sözcük yerleri bilinmiyorsa harf sayısına göre

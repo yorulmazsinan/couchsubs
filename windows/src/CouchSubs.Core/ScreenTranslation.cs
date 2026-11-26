@@ -772,6 +772,40 @@ public static class ScreenTranslation
     private static readonly char[] IconBrackets = [' ', '(', ')', '[', ']'];
 
     /// <summary>
+    /// Menü satırının başındaki görev simgesi (#1365, GTA 6 haritasının görev listesi: daire içinde "KM", "KK", "W"): yazı
+    /// tanıma simgeyi satırın ilk sözcüğü okuyor ("KM Collect Chemicals for Kyle"), simge çeviriye giriyor ("KM, Kyle için
+    /// kimyasalları topluyor") ve kutu simgenin üstünü örtüyordu. Baştaki bir-iki BÜYÜK harflik sözcük, ardında büyük harfle
+    /// başlayan ve küçük harf taşıyan (BÜYÜK HARFLİ olmayan) en az iki sözcük varsa simgedir: atılır, kutu ikinci sözcükten
+    /// başlar. Gerçek kısa sözcükler (<see cref="BadgeWords"/>: "A", "I", "OK", "TV", "DJ"…) dokunulmaz. Mac ve Android aynı.
+    /// </summary>
+    public static TextLine WithoutBadge(TextLine line)
+    {
+        var tokens = line.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 3) return line;
+        var head = tokens[0];
+        if (head.Length is < 1 or > 2 || !head.All(c => char.IsLetter(c) && char.IsUpper(c)) || BadgeWords.Contains(head)) return line;
+        var rest = tokens[1..];
+        if (!char.IsUpper(rest[0][0]) || !string.Concat(rest).Any(char.IsLower)) return line;
+        var trimmed = line with { Text = string.Join(' ', rest) };
+        if (line.Box is not { } box) return trimmed;
+        var measured = line.Words is { } known && known.Count == tokens.Length && known[0].Text == head;
+        var words = measured ? line.Words! : ButtonIcons.Estimate(line.Text, box);
+        if (words.Count < 2) return trimmed;
+        return trimmed with
+        {
+            Box = new TextBox(words[1].Box.Left, box.Top, box.Right, box.Bottom),
+            Words = measured ? [.. words.Skip(1)] : null,
+        };
+    }
+
+    /// <summary>Satır başında simge sanılmayacak kısa BÜYÜK harfli sözcükler.</summary>
+    internal static readonly HashSet<string> BadgeWords = new(StringComparer.Ordinal)
+    {
+        "A", "I", "O", "OK", "TV", "DJ", "UK", "US", "UN", "LA", "NY", "MR", "DR", "MS",
+        "ST", "PS", "AI", "HQ", "ID", "EU", "OF", "IN", "ON", "TO", "MY", "NO", "GO", "UP",
+    };
+
+    /// <summary>
     /// Satırın başındaki ya da sonundaki kumanda simgesi (kareden tanınmış simge ya da okunmuş tuş adı: "RECENTER L3",
     /// "EXIT (○)") çeviriye girmez; kutu yalnız yazının sözcüklerini kapsar, simge ekranda görünür kalır. Önceden çeviri
     /// kutusu simgenin üstünü örtüyordu ("Ortala" L3'ü kapatıyordu, #860). Sözcük yerleri bilinmiyorsa harf sayısına göre

@@ -67,6 +67,8 @@ public sealed class ScreenTextDetector
         /// <summary>Karo okununca tuş ipucu ya da görev/HUD yazısı çıktı (<see cref="MarkHud"/>): menü için sayılmaz.</summary>
         public bool IsHud;
         public bool Quiet;
+        /// <summary>Karonun ortalama parlaklığı (harita düzeni: koyu panel ↔ açık harita).</summary>
+        public double Mean;
         // Zemin (koyu) örneklerinin toplamları: panel zemini kanıtı için.
         public long DarkSum, DarkSquares;
         public int DarkCount;
@@ -137,6 +139,17 @@ public sealed class ScreenTextDetector
 
     private static string Fmt(CropRegion r) => FormattableString.Invariant($"[{r.Left:0.00}-{r.Right:0.00} x {r.Top:0.00}-{r.Bottom:0.00}]");
 
+    /// <summary>Tanı satırları (harita düzeni bulundu/bitti); uygulama altyazı günlüğüne yazar. Kilidin dışında çağrılır.</summary>
+    public Action<string>? OnLog { get; set; }
+    private List<string> notes = [];
+    private string? mapPanelSeen;
+
+    /// <summary>Son örnekte harita düzeni (#1365) tanındı.</summary>
+    public bool InMapLayout
+    {
+        get { lock (gate) return mapPanelSeen is not null; }
+    }
+
     /// <summary>Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).</summary>
     public bool InMenu
     {
@@ -162,6 +175,25 @@ public sealed class ScreenTextDetector
     /// </summary>
     public bool Sample(Frame frame, long now, IReadOnlyList<CropRegion> excluded, CropRegion? subtitle = null)
     {
+        try
+        {
+            return SampleLocked(frame, now, excluded, subtitle);
+        }
+        finally
+        {
+            // Tanı satırları kilidin dışında yazılır.
+            List<string> pending;
+            lock (gate)
+            {
+                pending = notes;
+                notes = [];
+            }
+            foreach (var line in pending) OnLog?.Invoke(line);
+        }
+    }
+
+    private bool SampleLocked(Frame frame, long now, IReadOnlyList<CropRegion> excluded, CropRegion? subtitle)
+    {
         lock (gate)
         {
             if (lastSample is { } last && now - last < SampleIntervalMs) return false;
@@ -173,8 +205,9 @@ public sealed class ScreenTextDetector
                 for (var column = 0; column < Columns; column++)
                 {
                     var index = row * Columns + column;
-                    var (bright, dark, deviation, darkSum, darkSquares) = Measure(frame, column, row, sampleMask);
+                    var (bright, dark, deviation, darkSum, darkSquares, mean) = Measure(frame, column, row, sampleMask);
                     ref var tile = ref tiles[index];
+                    tile.Mean = mean;
                     (tile.DarkSum, tile.DarkSquares, tile.DarkCount) = (darkSum, darkSquares, dark);
                     var previous = lastMasks.AsSpan(index * Words, Words);
                     tile.Quiet = deviation < QuietDeviation;
@@ -195,7 +228,7 @@ public sealed class ScreenTextDetector
                     anywhere[index] = textLike && now - tile.StableSince >= StableMs && !tile.IsRejected && !Excluded(column, row, excluded);
                     candidate[index] = anywhere[index] && (subtitle is not { } area || !Excluded(column, row, [area]));
                 }
-            var inMenu = IsMenu(Components(candidate), now);
+            var inMenu = IsMenu(Components(candidate), candidate, now);
             // Menüde altyazı alanındaki satırlar da menünün parçasıdır (alttaki seçenekler, tuş çubuğu).
             if (inMenu) candidate = anywhere;
             var all = Components(candidate);
@@ -305,6 +338,8 @@ public sealed class ScreenTextDetector
             menuFloor = null;
             dialogueAt = null;
             listAt = null;
+            mapPanelSeen = null;
+            notes = [];
         }
     }
 
@@ -336,7 +371,7 @@ public sealed class ScreenTextDetector
         return means.Count(value => Math.Abs(value - median) <= GroundTone) >= GroundShare * means.Count;
     }
 
-    private static (int Bright, int Dark, double Deviation, long DarkSum, long DarkSquares) Measure(Frame frame, int column, int row, ulong[] mask)
+    private static (int Bright, int Dark, double Deviation, long DarkSum, long DarkSquares, double Mean) Measure(Frame frame, int column, int row, ulong[] mask)
     {
         Array.Clear(mask);
         var x0 = (long)column * frame.Width / Columns;
@@ -371,7 +406,7 @@ public sealed class ScreenTextDetector
             }
         }
         var mean = (double)sum / Points;
-        return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)), darkSum, darkSquares);
+        return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)), darkSum, darkSquares, mean);
     }
 
     private static bool Excluded(int column, int row, IReadOnlyList<CropRegion> excluded)
@@ -528,18 +563,31 @@ public sealed class ScreenTextDetector
     /// <summary>Menü durumu <see cref="MenuLifeMs"/> dolduğu için bitti (<see cref="IsMenu"/>); <see cref="Update"/> bir kez kullanır.</summary>
     private bool menuExpired;
 
-    private bool IsMenu(List<(Cells Cells, List<int> Tiles)> all, long now)
+    private bool IsMenu(List<(Cells Cells, List<int> Tiles)> all, bool[] candidate, long now)
     {
         // Konuşma satırı az önce okundu: menü yok (#1240).
-        if (dialogueAt is { } spoken && now - spoken <= DialogueMs) return false;
+        if (dialogueAt is { } spoken && now - spoken <= DialogueMs)
+        {
+            NotePanel(null, 0);
+            return false;
+        }
         // Tuş ipucu ve görev/HUD yazısı (MarkHud) menü bileşeni sayılmaz; zeminin sakinliğinde yazı karosu olarak kalır.
         var components = all.Where(item => !item.Tiles.All(index => tiles[index].IsHud)).ToList();
-        if (components.Count < MenuComponents) return false;
         var inside = all.SelectMany(item => item.Tiles).ToHashSet();
         var outside = Enumerable.Range(0, tiles.Length).Where(index => !inside.Contains(index)).ToList();
-        if (outside.Count == 0 || outside.Count(index => tiles[index].Quiet) < MenuQuietShare * outside.Count) return false;
+        var quietShare = outside.Count == 0 ? 0 : (double)outside.Count(index => tiles[index].Quiet) / outside.Count;
+        // Harita düzeni (#1365): keskin harita sakin zemin ve üç bileşen şartını karşılamıyor; düzen tanınınca eşikler
+        // gevşer. Düzen yoksa eşikler eskisi gibi.
+        var panel = components.Count >= MapComponents && quietShare >= MapQuietShare
+            ? MapPanel(index => candidate[index] || inside.Contains(index), now) : null;
+        NotePanel(panel, quietShare);
+        if (components.Count < (panel is null ? MenuComponents : MapComponents)
+            || quietShare < (panel is null ? MenuQuietShare : MapQuietShare)) return false;
         if (menu && components.Any(item => item.Tiles.Count(menuAnchors.Contains) >= KeepOverlap * item.Tiles.Count))
         {
+            // Harita düzeni yerinde: oyuncu haritaya hareketsiz baksa da menü sürer (MenuLifeMs dolmaz); süresi dolunca
+            // liste, görev kartı ve tuş çubuğu menü dışı alanlara bölünüyordu (#1365).
+            if (panel is not null) return true;
             // Menüde bir şey değişmeden (gezinme, seçim) MenuLifeMs geçti: menü sayılmaz, altyazı yeniden gösterilir. Aynı
             // yazılar yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla yeniden açılır (menuFloor).
             var activity = menuAnchors.Count == 0 ? menuEnteredAt : menuAnchors.Max(index => tiles[index].StableSince);
@@ -556,6 +604,114 @@ public sealed class ScreenTextDetector
         if (!menu) menuEnteredAt = now;
         menuAnchors = components.SelectMany(item => item.Tiles).ToHashSet();
         return true;
+    }
+
+    /// <summary>
+    /// Harita düzeni (#1365, GTA 6 Harita › STORY): ekranın bir yanında tam boy koyu panel (görev listesi), yanında geniş,
+    /// açık ve keskin harita. Harita ayrıntılı olduğu için bileşen dışı karoların yalnız ~%55'i sakin
+    /// (<see cref="MenuQuietShare"/> %60'ın altında); tuş çubuğu menü dışında aday olmadığından çoğu karede yalnız iki
+    /// bileşen (liste, görev kartı) var. Ekran menü sayılmıyor, liste, kart ve tuş çubuğu ayrı alanlara (hazır
+    /// Help/Messages alanları dahil) bölünüyordu. Düzen tanınınca menü için <see cref="MapComponents"/> bileşen ve
+    /// <see cref="MapQuietShare"/> sakin zemin yeter. Oyun sahnesi düzeni karşılamaz: panel ekranın tam boyunda ve koyu,
+    /// kenarı keskin; yanındaki alanın büyük bölümü ondan belirgin açık ve yerinde sabit; panelde en az üç karo satırlık
+    /// liste var. Mac/iPhone ve Android aynı.
+    /// </summary>
+    public const double MapQuietShare = 0.4;
+    public const int MapComponents = 2;
+    /// <summary>Panelin genişliği (karo): ekranın ~%15'i ile ~%45'i arası.</summary>
+    internal const int MapPanelMinColumns = 5, MapPanelMaxColumns = 14;
+    /// <summary>Panel zemini: karo ortalaması bundan koyu.</summary>
+    internal const double MapPanelDark = 90;
+    /// <summary>Harita karoları panelin ortanca tonundan en az bu kadar açık.</summary>
+    internal const double MapContrast = 35;
+    /// <summary>Panel dışındaki yazısız karoların en az bu kadarı harita tonunda ve yerinde sabit.</summary>
+    internal const double MapShare = 0.7;
+    /// <summary>Panelin karo satırlarının en az bu kadarı panel (koyu ya da yazı): panel tam boy.</summary>
+    internal const double MapRows = 0.9;
+
+    /// <summary>
+    /// Harita düzeninin paneli: yanı (sol: true) ve genişliği (karo). Yoksa null. <paramref name="text"/>: yazı karosu (aday
+    /// ya da bileşen). Menüde aday kuralı genişleyince (kontur yazı) haritanın yazıları da aday olur, liste bileşeni onlarla
+    /// birleşip büyüyebilir; düzen bileşenlere değil karolara bakar, menü gidip gelmez.
+    /// </summary>
+    private (bool Left, int Width)? MapPanel(Func<int, bool> text, long now) =>
+        MapPanel(text, index => (tiles[index].Mean, now - tiles[index].StableSince >= UiStableMs));
+
+    /// <summary>
+    /// <paramref name="tile"/>: karonun ortalama parlaklığı ve yerinde sabit olup olmadığı (testler sentetik karolarla çağırır).
+    /// </summary>
+    internal static (bool Left, int Width)? MapPanel(Func<int, bool> inside, Func<int, (double Mean, bool Steady)> tile)
+    {
+        foreach (var left in new[] { true, false })
+        {
+            // k: panelin dış kenarından içeri doğru sütun sırası.
+            int Column(int k) => left ? k : Columns - 1 - k;
+            for (var width = MapPanelMinColumns; width <= MapPanelMaxColumns; width++)
+            {
+                var ground = new List<double>();
+                var panelRows = 0;
+                for (var row = 0; row < Rows; row++)
+                {
+                    var own = 0;
+                    for (var k = 0; k < width; k++)
+                    {
+                        var index = row * Columns + Column(k);
+                        if (inside(index)) { own++; continue; }
+                        var mean = tile(index).Mean;
+                        if (mean < MapPanelDark) own++;
+                        ground.Add(mean);
+                    }
+                    if (own >= 0.6 * width) panelRows++;
+                }
+                if (panelRows < MapRows * Rows || ground.Count == 0
+                    || ground.Count(value => value < MapPanelDark) < 0.85 * ground.Count) continue;
+                ground.Sort();
+                var light = ground[ground.Count / 2] + MapContrast;
+                // Panelin kenarı: içteki son sütun panel, dıştaki ilk sütun harita.
+                int edgeIn = 0, edgeOut = 0;
+                for (var row = 0; row < Rows; row++)
+                {
+                    int a = row * Columns + Column(width - 1), b = row * Columns + Column(width);
+                    if (inside(a) || tile(a).Mean < MapPanelDark) edgeIn++;
+                    if (inside(b) || tile(b).Mean >= light) edgeOut++;
+                }
+                if (edgeIn < 0.75 * Rows || edgeOut < 0.75 * Rows) continue;
+                // Harita: panel dışındaki yazısız karoların çoğu açık ve yerinde sabit (oyun sahnesinde kamera oynar).
+                int mapTiles = 0, lit = 0, steady = 0;
+                for (var row = 0; row < Rows; row++)
+                    for (var k = width; k < Columns; k++)
+                    {
+                        var index = row * Columns + Column(k);
+                        if (inside(index)) continue;
+                        mapTiles++;
+                        var t = tile(index);
+                        if (t.Mean >= light) lit++;
+                        if (t.Steady) steady++;
+                    }
+                if (mapTiles == 0 || lit < MapShare * mapTiles || steady < MapShare * mapTiles) continue;
+                // Panelde liste: en az üç karo satırında panelin dış yarısında yazı.
+                var list = 0;
+                for (var row = 0; row < Rows; row++)
+                    for (var k = 0; k < Math.Max(1, width / 2); k++)
+                        if (inside(row * Columns + Column(k))) { list++; break; }
+                if (list >= 3) return (left, width);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Harita düzeninin bulunuşu ve bitişi günlüğe bir kez yazılır (<see cref="OnLog"/>; #1365 tanısı).</summary>
+    private void NotePanel((bool Left, int Width)? panel, double quietShare)
+    {
+        var seen = panel is { } p ? $"{(p.Left ? "sol" : "sağ")} {p.Width}" : null;
+        if (seen == mapPanelSeen) return;
+        var ended = mapPanelSeen is not null;
+        mapPanelSeen = seen;
+        if (panel is { } found)
+            notes.Add($"ekran menüsü: harita düzeni bulundu ({(found.Left ? "sol" : "sağ")} panel {found.Width} karo, "
+                      + $"sakin zemin %{(int)Math.Round(quietShare * 100, MidpointRounding.AwayFromZero)})");
+        else if (ended)
+            notes.Add("ekran menüsü: harita düzeni bitti");
     }
 
     /// <summary>
@@ -688,6 +844,18 @@ public static partial class ScreenTextNoise
         var text = IconText.Plain(line).Trim().TrimStart('•', '·', '●', ' ');
         return Domain().IsMatch(text) || Overlay.Contains(text);
     }
+
+    /// <summary>
+    /// Menüde güveni düşük okuma (#1365): yazı tanıma satırdan en çok <see cref="UnsureConfidence"/> kadar emin ve satır
+    /// arayüz sözlüğünde yok. Bozuk okumalar ("scarch rol the onuin Ape", "AUD MARNER SET DESTINATION") paketle eşleşmeyip
+    /// çeviri motoruna gidiyor, saçma çeviriler çıkıyordu ("Onur ape'de arama yap"). Kayıtlı Vision okumalarında 0,5 güvenli
+    /// satırların çoğu bozuk ("Earpc", "NAOE", "Stetahus"); sözlükteki etiket ("EXIT") güvensiz de olsa çevrilir.
+    /// </summary>
+    public const double UnsureConfidence = 0.5;
+
+    public static bool IsUnsure(TextLine line) =>
+        line.Confidence is { } confidence && confidence <= UnsureConfidence
+        && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text).Trim(' ', '\t')) is null;
 
     /// <param name="menu">
     /// Menü durumunda (<see cref="WatchedArea.Menu"/>) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz

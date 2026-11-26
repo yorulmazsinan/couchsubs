@@ -69,7 +69,41 @@ object UiCommands {
         "HANDBRAKE" to "El freni", "HORN" to "Korna", "HEADLIGHTS" to "Farlar", "SWIM" to "Yüz", "TAKE COVER" to "Siper al",
         "THROW" to "Fırlat", "SPECIAL ABILITY" to "Özel yetenek", "SWITCH CHARACTER" to "Karakter değiştir",
         "SWITCH WEAPON" to "Silah değiştir", "CONTROLS" to "Kontroller",
+        // Haritanın görev listesi ve görev kartı (#1365): "GOAL" motordan "GOL." dönüyordu; arayüz etiketi olarak sabit.
+        "GOAL" to "Hedef", "GOALS" to "Hedefler", "OBJECTIVES" to "Hedefler", "MISSION" to "Görev", "MISSIONS" to "Görevler",
+        "STORY" to "Hikâye", "OPTIONAL" to "İsteğe bağlı", "REWARD" to "Ödül", "REWARDS" to "Ödüller",
     )
+
+    /**
+     * Görev başlığı: emir fiili ve ardında özel ad ("Hit Kingpin Bowling", "Meet Bret"). Motor özel adı görüp başlığı
+     * olduğu gibi döndürünce başlık hiç çevrilmiyordu (#1365); yalnız fiil çevrilir, ad olduğu gibi kalır ve Türkçe eki
+     * alır ("Kingpin Bowling'i Soy", "Bret ile Buluş"). Adın her sözcüğü büyük harfle başlar, yalnız harf; bağlaç/edat
+     * ("for", "the") ya da iyelik ("Vicki's") varsa başlık bu kalıba girmez. Yalnız motor çevirmediğinde kullanılır
+     * (Mac/iPhone ve Windows aynı).
+     */
+    private val titleVerbs: List<Triple<String, String, String>> = listOf(
+        Triple("hit", "i", "Soy"), Triple("rob", "i", "Soy"), Triple("meet", "", "ile Buluş"), Triple("visit", "i", "Ziyaret Et"),
+        Triple("find", "i", "Bul"), Triple("check out", "a", "Göz At"), Triple("go to", "a", "Git"), Triple("head to", "a", "Git"),
+        Triple("return to", "a", "Dön"), Triple("call", "i", "Ara"), Triple("follow", "i", "Takip Et"), Triple("steal", "i", "Çal"),
+        Triple("protect", "i", "Koru"), Triple("chase", "i", "Kovala"), Triple("rescue", "i", "Kurtar"), Triple("defend", "i", "Savun"),
+        Triple("explore", "i", "Keşfet"), Triple("investigate", "i", "Araştır"), Triple("pick up", "i", "Al"), Triple("help", "a", "Yardım Et"),
+    )
+
+    fun missionTitle(title: String): String? {
+        val words = title.trim(' ').split(' ').filter { it.isNotEmpty() }
+        if (words.size !in 2..6 || TextStyleSampler.isUpper(title)) return null
+        for ((verbText, suffix, turkishVerb) in titleVerbs) {
+            val verb = verbText.split(' ')
+            if (words.size <= verb.size || !words.zip(verb).all { (word, v) -> word.lowercase(Locale.ROOT) == v } ||
+                !words[0].first().isUpperCase()) continue
+            val name = words.drop(verb.size)
+            if (!name.all { word -> word.first().isUpperCase() && word.length >= 2 && word.all { it.isLetter() || it == '-' } }) return null
+            val joined = name.joinToString(" ")
+            val target = if (suffix.isEmpty()) joined else com.couchsubs.mobile.translation.TurkishSuffix.attach(joined, suffix)
+            return "$target $turkishVerb"
+        }
+        return null
+    }
 
     /**
      * Etiketin sonunda önündeki sözcüklerden ayrı duran tek harf (yazı tanımanın tuş simgesinden okuduğu harf, #1362:

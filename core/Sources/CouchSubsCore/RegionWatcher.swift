@@ -77,6 +77,8 @@ public final class RegionWatcher {
 
     private struct State {
         var signature: [UInt8]?
+        /// Günlüğe son yazılan, güveni düşük olduğu için çevrilmeyen satırlar (aynı satırlar her turda yeniden yazılmaz).
+        var unsureLogged: [String] = []
         /// Son okumanın sadeleştirilmiş yazısı; bir sonraki okuma aynıysa yazı kararlıdır.
         var lastRead: String?
         /// Okunmuş ama henüz kararlı sayılmamış yazı.
@@ -172,6 +174,8 @@ public final class RegionWatcher {
         var text = ""
         /// Otomatik alanda haritanın görev kartı var (yardım köşesinde değil): türü "Görev ve hedef yazısı".
         var missionCard = false
+        /// Menüde güveni düşük okunduğu için çeviriye gönderilmeyen satırlar (`ScreenTextNoise.isUnsure`; günlük için).
+        var unsure: [String] = []
     }
 
     /// Sadeleştirilmiş yazı; tuş simgeleri `ButtonIcons.marker` olarak kalır. Simgesi sonradan bulunan okuma
@@ -481,6 +485,21 @@ public final class RegionWatcher {
         let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
                                        styled: true, kind: ScreenTextKind.of(area), screen: screen)
         timing.add(Self.stagePaint, nanoseconds: Int64(DispatchTime.now().uptimeNanoseconds - painting))
+        if candidate.unsure != state.unsureLogged {
+            state.unsureLogged = candidate.unsure
+            if !candidate.unsure.isEmpty {
+                onLog?("ek alan \(area.name): güveni düşük okunan satır çeviriye gönderilmedi: "
+                       + candidate.unsure.map { "«\(SubtitleLog.excerpt(IconText.plain($0)))»" }.joined(separator: ", "))
+            }
+        }
+        if candidate.key.isEmpty, !candidate.unsure.isEmpty {
+            // Okunan her satır güvensiz: boş alan değildir (alan reddedilmez, gösterilen kutu kalır); sonraki tur yeniden okur.
+            state.signature = nil
+            state.lastRead = nil
+            state.candidate = nil
+            states[area.id] = state
+            return
+        }
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
         // kararı `clearIfUnsteady`'de (özgün yazının izi ya da süre).
         let emptyWhileShown = candidate.key.isEmpty && !(state.renderedText ?? "").isEmpty
@@ -737,7 +756,9 @@ public final class RegionWatcher {
         let cleaned = (auto && kind != .phone ? PackageText.filter(unpacked, in: place, look: frame.map(PackageText.sampler)).kept
             : unpacked).lines
         // Otomatik alanda aynı satırın yan yana okunan parçaları (simgeden, renkli addan bölünen cümle) tek satırdır.
-        let read = (auto ? joinedPieces(cleaned, aspect: aspect) : cleaned)
+        var read = (auto ? joinedPieces(cleaned, aspect: aspect) : cleaned)
+            // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
+            .map { auto && menu ? ScreenTranslation.withoutBadge($0) : $0 }
             .flatMap { ScreenTranslation.menuPieces($0, aspect: aspect, frame: frame) }
             .filter { ScreenTranslation.isWords($0.text) }
             // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı"), karenin kenarında kesilmiş tek sözcük, menüde alanın
@@ -746,6 +767,13 @@ public final class RegionWatcher {
                 || (menu && cutAtAreaEdge($0, region: region)) || ScreenTextNoise.isGarbled($0)) }
             .filter { !styled || !ScreenTranslation.isClock($0.text) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
+        // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
+        // satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
+        var unsure: [String] = []
+        if auto && menu {
+            unsure = read.filter(ScreenTextNoise.isUnsure).map(\.text)
+            read.removeAll(where: ScreenTextNoise.isUnsure)
+        }
         // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
         // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
         // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
@@ -867,7 +895,7 @@ public final class RegionWatcher {
             return !MissionCard.inHelpCorner(own.dropFirst().reduce(own[0]) { $0.union($1) }.placed(in: place))
         }
         return Candidate(paragraphs: paragraphs, box: box, lineHeight: lineHeight, key: key, icons: cut, blocks: blocks,
-                         text: textKey(paragraphs), missionCard: missionCard)
+                         text: textKey(paragraphs), missionCard: missionCard, unsure: unsure)
     }
 
     /// Günlük için blokların çizim kipi ve boyu (kareye oranla yüzde, genişlik×yükseklik): "ikiz 43.8×33.9 (yazı 9.1×3.9)",
@@ -1596,6 +1624,14 @@ public final class RegionWatcher {
                 guard !trimmed.isEmpty else { continue }
                 terms[source] = trimmed
                 known[source] = trimmed
+            }
+        }
+        // Paket ya da motor görev başlığını olduğu gibi döndürdü ("Hit Kingpin Bowling"): yalnız fiil çevrilir, ad kalır (#1365).
+        if translatesUiCommands {
+            for (source, text) in known where TextMatch.isSimilar(TextMatch.normalize(source), TextMatch.normalize(text), threshold: 0.90) {
+                guard let title = UiCommands.missionTitle(source) else { continue }
+                known[source] = title
+                if terms[source] != nil { terms[source] = title }
             }
         }
         let result: [String?] = parts.map { list in

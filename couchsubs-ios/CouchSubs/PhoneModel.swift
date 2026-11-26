@@ -1598,7 +1598,12 @@ final class PhoneModel: ObservableObject {
             screenTextDetector = nil
             return []
         }
-        let detector = screenTextDetector ?? ScreenTextDetector()
+        let detector = screenTextDetector ?? {
+            let made = ScreenTextDetector()
+            // Harita düzeni bulundu/bitti (#1365 tanısı).
+            made.onLog = { SubtitleLog.write($0) }
+            return made
+        }()
         screenTextDetector = detector
         if !screenTextBusy, detector.due(capturedAt) {
             screenTextBusy = true

@@ -58,6 +58,8 @@ public final class ScreenTextDetector: @unchecked Sendable {
         /// Karo okununca tuş ipucu ya da görev/HUD yazısı çıktı (`markHud`): menü için sayılmaz.
         var isHud = false
         var quiet = false
+        /// Karonun ortalama parlaklığı (harita düzeni: koyu panel ↔ açık harita).
+        var mean = 0.0
         // Zemin (koyu) örneklerinin toplamları: panel zemini kanıtı için.
         var darkSum = 0, darkSquares = 0, darkCount = 0
     }
@@ -101,7 +103,15 @@ public final class ScreenTextDetector: @unchecked Sendable {
     /// Menü durumu bu örnekte `menuLifeMs` dolduğu için bitti: menüde bulunan bütün alanlar kalkar (#1198).
     private var menuExpired = false
 
+    /// Tanı satırları (harita düzeni bulundu/bitti); uygulama altyazı günlüğüne yazar. Kilidin dışında çağrılır.
+    public var onLog: ((String) -> Void)?
+    private var notes: [String] = []
+    private var mapPanelSeen: String?
+
     public init() {}
+
+    /// Son örnekte harita düzeni (#1365) tanındı.
+    public var inMapLayout: Bool { lock.withLock { mapPanelSeen != nil } }
 
     /// Son örnekte ekranda menü vardı (bulanık zeminde birlikte beliren en az üç yazı).
     public var inMenu: Bool { lock.withLock { menu } }
@@ -130,6 +140,14 @@ public final class ScreenTextDetector: @unchecked Sendable {
         guard let pixels = GamePhonePixels(frame, width: Self.columns * Self.samples, height: Self.rows * Self.samples)
         else { return false }
         let measured = Self.measure(pixels)
+        defer {
+            let pending: [String] = lock.withLock {
+                let list = notes
+                notes = []
+                return list
+            }
+            for line in pending { onLog?(line) }
+        }
         return lock.withLock {
             if let last = lastSample, now - last < Self.sampleIntervalMs { return false }
             lastSample = now
@@ -138,9 +156,10 @@ public final class ScreenTextDetector: @unchecked Sendable {
             for row in 0..<Self.rows {
                 for column in 0..<Self.columns {
                     let index = row * Self.columns + column
-                    let (mask, bright, dark, deviation, darkSum, darkSquares) = measured[index]
+                    let (mask, bright, dark, deviation, darkSum, darkSquares, mean) = measured[index]
                     var tile = tiles[index]
                     tile.quiet = deviation < Self.quietDeviation
+                    tile.mean = mean
                     (tile.darkSum, tile.darkSquares, tile.darkCount) = (darkSum, darkSquares, dark)
                     if !tile.hasLast || tile.last.distance(mask) > Self.maskChange { tile.stableSince = now; tile.isHud = false }
                     tile.last = mask
@@ -164,7 +183,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
                 }
             }
             let all = Self.components(candidate)
-            let inMenu = isMenu(all, now: now)
+            let inMenu = isMenu(all, candidate: candidate, now: now)
             // Menü dışında tek karoluk bileşen (kısa etiket, simge) alan olmaz.
             // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
             // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez (Windows ile aynı).
@@ -243,11 +262,13 @@ public final class ScreenTextDetector: @unchecked Sendable {
             menuFloor = nil
             menuExpired = false
             dialogueAt = nil
+            mapPanelSeen = nil
+            notes = []
         }
     }
 
-    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int, Double, Int, Int)] {
-        var result = [(Mask, Int, Int, Double, Int, Int)](repeating: (Mask(), 0, 0, 0, 0, 0), count: columns * rows)
+    private static func measure(_ pixels: GamePhonePixels) -> [(Mask, Int, Int, Double, Int, Int, Double)] {
+        var result = [(Mask, Int, Int, Double, Int, Int, Double)](repeating: (Mask(), 0, 0, 0, 0, 0, 0), count: columns * rows)
         pixels.bytes.withUnsafeBufferPointer { bytes in
             for row in 0..<rows {
                 for column in 0..<columns {
@@ -274,7 +295,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
                     let count = Double(samples * samples)
                     let mean = Double(sum) / count
                     let deviation = max(0, Double(squares) / count - mean * mean).squareRoot()
-                    result[row * columns + column] = (mask, bright, dark, deviation, darkSum, darkSquares)
+                    result[row * columns + column] = (mask, bright, dark, deviation, darkSum, darkSquares, mean)
                 }
             }
         }
@@ -443,19 +464,30 @@ public final class ScreenTextDetector: @unchecked Sendable {
         return Double(means.filter { abs($0 - median) <= Self.groundTone }.count) >= Self.groundShare * Double(means.count)
     }
 
-    private func isMenu(_ all: [(cells: Cells, tiles: [Int])], now: Int) -> Bool {
+    private func isMenu(_ all: [(cells: Cells, tiles: [Int])], candidate: [Bool], now: Int) -> Bool {
         // Konuşma satırı az önce okundu: menü yok (#1240).
-        if let spoken = dialogueAt, now - spoken <= Self.dialogueMs { return false }
+        if let spoken = dialogueAt, now - spoken <= Self.dialogueMs {
+            notePanel(nil, quietShare: 0)
+            return false
+        }
         // Tuş ipucu ve görev/HUD yazısı (`markHud`) menü bileşeni sayılmaz; zeminin sakinliğinde yazı karosu olarak kalır.
         let components = all.filter { !$0.tiles.allSatisfy { tiles[$0].isHud } }
-        guard components.count >= Self.menuComponents else { return false }
         let inside = Set(all.flatMap(\.tiles))
         let outside = tiles.indices.filter { !inside.contains($0) }
-        guard !outside.isEmpty,
-              Double(outside.filter { tiles[$0].quiet }.count) >= Self.menuQuietShare * Double(outside.count) else { return false }
+        let quietShare = outside.isEmpty ? 0 : Double(outside.filter { tiles[$0].quiet }.count) / Double(outside.count)
+        // Harita düzeni (#1365): keskin harita sakin zemin ve üç bileşen şartını karşılamıyor; düzen tanınınca eşikler
+        // gevşer. Düzen yoksa eşikler eskisi gibi.
+        let panel = components.count >= Self.mapComponents && quietShare >= Self.mapQuietShare
+            ? mapPanel(text: { candidate[$0] || inside.contains($0) }, now: now) : nil
+        notePanel(panel, quietShare: quietShare)
+        guard components.count >= (panel == nil ? Self.menuComponents : Self.mapComponents),
+              quietShare >= (panel == nil ? Self.menuQuietShare : Self.mapQuietShare) else { return false }
         if menu, components.contains(where: { component in
             Double(component.tiles.filter(menuAnchors.contains).count) >= Self.keepOverlap * Double(component.tiles.count)
         }) {
+            // Harita düzeni yerinde: oyuncu haritaya hareketsiz baksa da menü sürer (`menuLifeMs` dolmaz); süresi dolunca
+            // liste, görev kartı ve tuş çubuğu menü dışı alanlara bölünüyordu (#1365).
+            if panel != nil { return true }
             // Menüde bir şey değişmeden (gezinme, seçim) `menuLifeMs` geçti: menü sayılmaz, altyazı yeniden okunur. Aynı
             // yazılar yeniden menü sayılmaz; menü ancak sonradan beliren yazılarla yeniden açılır (`menuFloor`).
             var activity = menuAnchors.map { tiles[$0].stableSince }.max() ?? menuEnteredAt
@@ -472,6 +504,103 @@ public final class ScreenTextDetector: @unchecked Sendable {
         if !menu { menuEnteredAt = now }
         menuAnchors = Set(components.flatMap(\.tiles))
         return true
+    }
+
+    /// Harita düzeni (#1365, GTA 6 Harita › STORY): ekranın bir yanında tam boy koyu panel (görev listesi), yanında geniş,
+    /// açık ve keskin harita. Harita ayrıntılı olduğu için bileşen dışı karoların yalnız ~%55'i sakin (`menuQuietShare`
+    /// %60'ın altında); tuş çubuğu menü dışında aday olmadığından çoğu karede yalnız iki bileşen (liste, görev kartı) var.
+    /// Ekran menü sayılmıyor, liste, kart ve tuş çubuğu ayrı alanlara (hazır Help/Messages alanları dahil) bölünüyordu.
+    /// Düzen tanınınca menü için `mapComponents` bileşen ve `mapQuietShare` sakin zemin yeter. Oyun sahnesi düzeni
+    /// karşılamaz: panel ekranın tam boyunda ve koyu, kenarı keskin; yanındaki alanın büyük bölümü ondan belirgin açık ve
+    /// yerinde sabit; panelde en az üç karo satırlık liste var. Windows ve Android aynı.
+    public static let mapQuietShare = 0.4
+    public static let mapComponents = 2
+    /// Panelin genişliği (karo): ekranın ~%15'i ile ~%45'i arası.
+    static let mapPanelColumns = 5...14
+    /// Panel zemini: karo ortalaması bundan koyu.
+    static let mapPanelDark = 90.0
+    /// Harita karoları panelin ortanca tonundan en az bu kadar açık.
+    static let mapContrast = 35.0
+    /// Panel dışındaki yazısız karoların en az bu kadarı harita tonunda ve yerinde sabit.
+    static let mapShare = 0.7
+    /// Panelin karo satırlarının en az bu kadarı panel (koyu ya da yazı): panel tam boy.
+    static let mapRows = 0.9
+
+    /// Harita düzeninin paneli: yanı (sol: true) ve genişliği (karo). Yoksa nil.
+    /// `text`: yazı karosu (aday ya da bileşen). Menüde aday kuralı genişleyince (kontur yazı) haritanın yazıları da aday
+    /// olur, liste bileşeni onlarla birleşip büyüyebilir; düzen bileşenlere değil karolara bakar, menü gidip gelmez.
+    private func mapPanel(text: @escaping (Int) -> Bool, now: Int) -> (left: Bool, width: Int)? {
+        Self.mapPanel(text: text) { index in
+            (tiles[index].mean, now - tiles[index].stableSince >= Self.uiStableMs)
+        }
+    }
+
+    /// `tile`: karonun ortalama parlaklığı ve yerinde sabit olup olmadığı (testler sentetik karolarla çağırır).
+    static func mapPanel(text inside: (Int) -> Bool,
+                         tile: (Int) -> (mean: Double, steady: Bool)) -> (left: Bool, width: Int)? {
+        for left in [true, false] {
+            // `k`: panelin dış kenarından içeri doğru sütun sırası.
+            func column(_ k: Int) -> Int { left ? k : columns - 1 - k }
+            for width in mapPanelColumns {
+                var ground: [Double] = []
+                var panelRows = 0
+                for row in 0..<rows {
+                    var own = 0
+                    for k in 0..<width {
+                        let index = row * columns + column(k)
+                        if inside(index) { own += 1; continue }
+                        let mean = tile(index).mean
+                        if mean < mapPanelDark { own += 1 }
+                        ground.append(mean)
+                    }
+                    if Double(own) >= 0.6 * Double(width) { panelRows += 1 }
+                }
+                guard Double(panelRows) >= mapRows * Double(rows), !ground.isEmpty,
+                      Double(ground.filter { $0 < mapPanelDark }.count) >= 0.85 * Double(ground.count) else { continue }
+                let tone = ground.sorted()[ground.count / 2]
+                let light = tone + mapContrast
+                // Panelin kenarı: içteki son sütun panel, dıştaki ilk sütun harita.
+                var edgeIn = 0, edgeOut = 0
+                for row in 0..<rows {
+                    let a = row * columns + column(width - 1), b = row * columns + column(width)
+                    if inside(a) || tile(a).mean < mapPanelDark { edgeIn += 1 }
+                    if inside(b) || tile(b).mean >= light { edgeOut += 1 }
+                }
+                guard Double(edgeIn) >= 0.75 * Double(rows), Double(edgeOut) >= 0.75 * Double(rows) else { continue }
+                // Harita: panel dışındaki yazısız karoların çoğu açık ve yerinde sabit (oyun sahnesinde kamera oynar).
+                var mapTiles = 0, lit = 0, steady = 0
+                for row in 0..<rows {
+                    for k in width..<columns {
+                        let index = row * columns + column(k)
+                        guard !inside(index) else { continue }
+                        mapTiles += 1
+                        let t = tile(index)
+                        if t.mean >= light { lit += 1 }
+                        if t.steady { steady += 1 }
+                    }
+                }
+                guard mapTiles > 0, Double(lit) >= mapShare * Double(mapTiles), Double(steady) >= mapShare * Double(mapTiles)
+                else { continue }
+                // Panelde liste: en az üç karo satırında panelin dış yarısında yazı.
+                let list = (0..<rows).filter { row in (0..<max(1, width / 2)).contains { inside(row * columns + column($0)) } }.count
+                if list >= 3 { return (left, width) }
+            }
+        }
+        return nil
+    }
+
+    /// Harita düzeninin bulunuşu ve bitişi günlüğe bir kez yazılır (`onLog`; #1365 tanısı).
+    private func notePanel(_ panel: (left: Bool, width: Int)?, quietShare: Double) {
+        let seen = panel.map { "\($0.left ? "sol" : "sağ") \($0.width)" }
+        guard seen != mapPanelSeen else { return }
+        let ended = mapPanelSeen != nil
+        mapPanelSeen = seen
+        if let panel {
+            notes.append("ekran menüsü: harita düzeni bulundu (\(panel.left ? "sol" : "sağ") panel \(panel.width) karo, "
+                         + "sakin zemin %\(Int((quietShare * 100).rounded())))")
+        } else if ended {
+            notes.append("ekran menüsü: harita düzeni bitti")
+        }
     }
 
     /// Menüde hiçbir yazı değişmeden bu kadar süre geçince menü durumu biter (altyazı okunur). Karanlık sahnede birlikte
@@ -568,6 +697,16 @@ public enum ScreenTextNoise {
             return mixedCase || mixedSymbols
         }.reduce(0) { $0 + $1.filter(\.isLetter).count }
         return Double(odd) > 0.3 * Double(letters)
+    }
+
+    /// Menüde güveni düşük okuma (#1365): yazı tanıma satırdan en çok `unsureConfidence` kadar emin ve satır arayüz
+    /// sözlüğünde yok. Bozuk okumalar ("scarch rol the onuin Ape", "AUD MARNER SET DESTINATION") paketle eşleşmeyip çeviri
+    /// motoruna gidiyor, saçma çeviriler çıkıyordu ("Onur ape'de arama yap"). Kayıtlı Vision okumalarında 0,5 güvenli
+    /// satırların çoğu bozuk ("Earpc", "NAOE", "Stetahus"); sözlükteki etiket ("EXIT") güvensiz de olsa çevrilir.
+    public static let unsureConfidence = 0.5
+    public static func isUnsure(_ line: TextLine) -> Bool {
+        guard let confidence = line.confidence, confidence <= unsureConfidence else { return false }
+        return UiCommands.translateLabelLoosely(IconText.plain(line.text).trimmingCharacters(in: .whitespaces)) == nil
     }
 
     /// `menu`: menü durumunda (`ExtraArea.menu`) kısa etiketler de çevrilir ("OFF", "ON", "OUTFITS"): yalnız harfsiz

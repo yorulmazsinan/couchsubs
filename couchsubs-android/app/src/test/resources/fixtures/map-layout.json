@@ -1,0 +1,104 @@
+{
+  "about": "Harita düzeni (#1365, GTA 6 Harita › STORY): solda tam boy koyu panelde görev listesi, ortada görev kartı, sağ altta haritanın üstünde kontur yazılı tuş çubuğu, geri kalanı keskin, açık harita. Sentetik 640x360 kare (karo 20x20 piksel, 32x18 karo); oyun karesi değildir. Mac MapLayoutTests.swift, Windows MapLayoutTests.cs ve Android MapLayoutTest.kt aynı dosyayı okur. Çizim: kare 'map' gri tonuyla dolar; 'texture' karolarında (panel dışında, (sütun+satır)%3 != 0) satırlar 3 pikselde bir 200, kalanı 120 (keskin harita: sakin değil, yazı değil); 'moving' ise desen her örnekte bir piksel kayar (kamera oynuyor). 'panel': ekranın 'side' yanında 'columns' karo genişliğinde, 'fill' tonunda tam boy panel. 'boxes': [sol, üst, sağ, alt] karo dikdörtgeni (iki uç dahil), 'fill' tonunda düz kutu (görev kartı). 'texts': yazı satırları; 'dark': koyu zeminde (24) açık yazı (240), 'outlined': haritanın kendi tonunda beyaz harf (240) ve koyu kontur (40). Yazı karosunda piksel satırı y (karo içinde 3..16): (y%6 2 ya da 3) ve x%5<2 ise yazı; 'outlined'de (y%6 1 ya da 4) ve x%5<2 ise kontur; kalanı zemin. 'mirror': sütunlar aynalanır (sütun → 32-sütun-genişlik, kutu sol/sağ → 31-sağ/31-sol, panel öbür yana). Örnekler 0'dan 'untilMs'e 100 ms arayla, altyazı alanı (CropRegion()) dışlanarak. Beklenen: 'menu' ve 'mapLayout' son örnekte; 'apart': bu rollerin yazı ortaları aynı alanda olmaz; 'together': bu rolün bütün yazı ortaları tek alanda; 'presetsYield': GTA 6'nın hazır alanları (Help, Messages) bulunan alanlarla birlikte verilince hiçbiri okunmaz (RegionWatcher.yieldingPresets).",
+  "scenes": [
+    {
+      "name": "harita: sol panelde liste, kart, tuş çubuğu",
+      "map": 150, "texture": true, "moving": false,
+      "panel": { "side": "left", "columns": 9, "fill": 45 },
+      "boxes": [ { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 1, "row": 1, "width": 3, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 2, "width": 5, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 3, "width": 4, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 4, "width": 7, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 5, "width": 7, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 6, "width": 6, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 7, "width": 6, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 8, "width": 6, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 7, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 8, "width": 7, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 9, "width": 6, "kind": "dark" },
+        { "role": "bar", "column": 27, "row": 12, "width": 3, "kind": "outlined" },
+        { "role": "bar", "column": 27, "row": 13, "width": 3, "kind": "outlined" },
+        { "role": "bar", "column": 26, "row": 14, "width": 4, "kind": "outlined" }
+      ],
+      "untilMs": 1500,
+      "expect": { "menu": true, "mapLayout": true, "together": ["list"], "apart": [["list", "card"], ["list", "bar"]], "presetsYield": true }
+    },
+    {
+      "name": "harita: oyuncu haritaya 8 sn hareketsiz bakıyor, menü süresi dolmuyor",
+      "map": 150, "texture": true, "moving": false,
+      "panel": { "side": "left", "columns": 9, "fill": 45 },
+      "boxes": [ { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 1, "row": 1, "width": 3, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 2, "width": 5, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 3, "width": 4, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 4, "width": 7, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 7, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 8, "width": 7, "kind": "dark" }
+      ],
+      "untilMs": 8000,
+      "expect": { "menu": true, "mapLayout": true, "together": ["list"], "apart": [["list", "card"]], "presetsYield": true }
+    },
+    {
+      "name": "harita: panel sağda (aynalı)",
+      "map": 150, "texture": true, "moving": false, "mirror": true,
+      "panel": { "side": "left", "columns": 9, "fill": 45 },
+      "boxes": [ { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 1, "row": 1, "width": 3, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 2, "width": 5, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 3, "width": 4, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 4, "width": 7, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 7, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 8, "width": 7, "kind": "dark" }
+      ],
+      "untilMs": 1500,
+      "expect": { "menu": true, "mapLayout": true, "together": ["list"], "apart": [["list", "card"]] }
+    },
+    {
+      "name": "oyun: kamera oynuyor (harita deseni kayıyor), aynı panel ve kart",
+      "map": 150, "texture": true, "moving": true,
+      "panel": { "side": "left", "columns": 9, "fill": 45 },
+      "boxes": [ { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 1, "row": 1, "width": 3, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 2, "width": 5, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 3, "width": 4, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 4, "width": 7, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 7, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 8, "width": 7, "kind": "dark" }
+      ],
+      "untilMs": 1500,
+      "expect": { "menu": false, "mapLayout": false }
+    },
+    {
+      "name": "oyun: karanlık sahne, solda yardım kutusu, yanı da karanlık",
+      "map": 50, "texture": false, "moving": false,
+      "panel": { "side": "left", "columns": 9, "fill": 45 },
+      "boxes": [ { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 1, "row": 1, "width": 6, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 2, "width": 7, "kind": "dark" },
+        { "role": "list", "column": 1, "row": 3, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 7, "width": 5, "kind": "dark" }
+      ],
+      "untilMs": 1500,
+      "expect": { "menu": false, "mapLayout": false }
+    },
+    {
+      "name": "oyun: panelsiz keskin sahnede iki yazı kutusu",
+      "map": 150, "texture": true, "moving": false,
+      "panel": null,
+      "boxes": [ { "cells": [1, 1, 8, 4], "fill": 30 }, { "cells": [17, 7, 25, 10], "fill": 30 } ],
+      "texts": [
+        { "role": "list", "column": 2, "row": 2, "width": 5, "kind": "dark" },
+        { "role": "list", "column": 2, "row": 3, "width": 5, "kind": "dark" },
+        { "role": "card", "column": 18, "row": 8, "width": 6, "kind": "dark" }
+      ],
+      "untilMs": 1500,
+      "expect": { "menu": false, "mapLayout": false }
+    }
+  ]
+}

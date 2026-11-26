@@ -1,0 +1,39 @@
+{
+  "about": "Harita ekranının görev listesi ve görev kartındaki yazılar (#1365). Mac MapMenuTextTests.swift, Windows MapMenuTextTests.cs ve Android MapMenuTextTest.kt aynı dosyayı okur. 'labels': UiCommands.translateLabel (arayüz etiketi, biçim korunur). 'missionTitles': UiCommands.missionTitle (motor başlığı olduğu gibi döndürünce: fiil çevrilir, özel ad kalır; null: kalıba girmez). 'badges': ScreenTranslation.withoutBadge; satırın başındaki görev simgesi ('KM') atılır, kutu [sol, üst, sağ, alt] ikinci sözcükten başlar ('left': beklenen sol kenar; sözcük yerleri bilinmiyor, harf sayısıyla kestirilir). 'unsure': ScreenTextNoise.isUnsure; menüde güveni en çok 0,5 olan ve arayüz sözlüğünde olmayan satır çeviriye gitmez.",
+  "labels": [
+    { "text": "GOAL", "expected": "HEDEF" },
+    { "text": "Goal", "expected": "Hedef" },
+    { "text": "OBJECTIVE", "expected": "HEDEF" },
+    { "text": "MISSION", "expected": "GÖREV" },
+    { "text": "STORY", "expected": "HİKÂYE" },
+    { "text": "OPTIONAL", "expected": "İSTEĞE BAĞLI" },
+    { "text": "REWARD", "expected": "ÖDÜL" }
+  ],
+  "missionTitles": [
+    { "text": "Hit Kingpin Bowling", "expected": "Kingpin Bowling'i Soy" },
+    { "text": "Meet Bret", "expected": "Bret ile Buluş" },
+    { "text": "Check Out Mud Club", "expected": "Mud Club'a Göz At" },
+    { "text": "Rob Vicki's Boss", "expected": null },
+    { "text": "Search for the Skunk Ape", "expected": null },
+    { "text": "Save for the Future", "expected": null },
+    { "text": "HIT KINGPIN BOWLING", "expected": null },
+    { "text": "Hit", "expected": null }
+  ],
+  "badges": [
+    { "text": "KM Collect Chemicals for Kyle", "box": [0.10, 0.30, 0.38, 0.34], "expected": "Collect Chemicals for Kyle", "left": 0.129 },
+    { "text": "W Check out the Mud Club", "box": [0.10, 0.36, 0.34, 0.40], "expected": "Check out the Mud Club", "left": 0.12 },
+    { "text": "KK Search for the Skunk Ape", "box": [0.10, 0.24, 0.37, 0.28], "expected": "Search for the Skunk Ape", "left": 0.13 },
+    { "text": "A Night Out", "box": [0.10, 0.30, 0.22, 0.34], "expected": "A Night Out", "left": 0.10 },
+    { "text": "TV Remote Control", "box": [0.10, 0.30, 0.27, 0.34], "expected": "TV Remote Control", "left": 0.10 },
+    { "text": "KM COLLECT CHEMICALS", "box": [0.10, 0.30, 0.30, 0.34], "expected": "KM COLLECT CHEMICALS", "left": 0.10 },
+    { "text": "Rob Vicki's Boss", "box": [0.10, 0.12, 0.26, 0.16], "expected": "Rob Vicki's Boss", "left": 0.10 },
+    { "text": "KM Kyle", "box": [0.10, 0.30, 0.17, 0.34], "expected": "KM Kyle", "left": 0.10 }
+  ],
+  "unsure": [
+    { "text": "scarch rol the onuin Ape", "confidence": 0.5, "expected": true },
+    { "text": "AUD MARNER SET DESTINATION CLOSE MENU", "confidence": 0.3, "expected": true },
+    { "text": "EXIT", "confidence": 0.5, "expected": false },
+    { "text": "Search for the Skunk Ape", "confidence": 1.0, "expected": false },
+    { "text": "Collect Chemicals for Kyle", "confidence": null, "expected": false }
+  ]
+}

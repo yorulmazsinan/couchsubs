@@ -3953,7 +3953,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             // ile aynı).
             if (pipeline is { } current) current.FindsPhone = running && GameName.Key(gameSense.Current?.Name) == "gta 6";
             if (running && settings.AutoScreenText && !settings.ExtraAreasPausedByFullScreen)
-                screenText ??= new ScreenTextDetector();
+                // Harita düzeni bulundu/bitti (#1365 tanısı).
+                screenText ??= new ScreenTextDetector { OnLog = SubtitleLog.Write };
             else
             {
                 screenText = null;

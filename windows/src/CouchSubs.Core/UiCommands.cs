@@ -67,7 +67,46 @@ public static class UiCommands
         ["HANDBRAKE"] = "El freni", ["HORN"] = "Korna", ["HEADLIGHTS"] = "Farlar", ["SWIM"] = "Yüz", ["TAKE COVER"] = "Siper al",
         ["THROW"] = "Fırlat", ["SPECIAL ABILITY"] = "Özel yetenek", ["SWITCH CHARACTER"] = "Karakter değiştir",
         ["SWITCH WEAPON"] = "Silah değiştir", ["CONTROLS"] = "Kontroller",
+        // Haritanın görev listesi ve görev kartı (#1365): "GOAL" motordan "GOL." dönüyordu; arayüz etiketi olarak sabit.
+        ["GOAL"] = "Hedef", ["GOALS"] = "Hedefler", ["OBJECTIVES"] = "Hedefler", ["MISSION"] = "Görev", ["MISSIONS"] = "Görevler",
+        ["STORY"] = "Hikâye", ["OPTIONAL"] = "İsteğe bağlı", ["REWARD"] = "Ödül", ["REWARDS"] = "Ödüller",
     };
+
+    /// <summary>
+    /// Görev başlığı: emir fiili ve ardında özel ad ("Hit Kingpin Bowling", "Meet Bret"). Motor özel adı görüp başlığı
+    /// olduğu gibi döndürünce başlık hiç çevrilmiyordu (#1365); yalnız fiil çevrilir, ad olduğu gibi kalır ve Türkçe eki
+    /// alır ("Kingpin Bowling'i Soy", "Bret ile Buluş"). Adın her sözcüğü büyük harfle başlar, yalnız harf; bağlaç/edat
+    /// ("for", "the") ya da iyelik ("Vicki's") varsa başlık bu kalıba girmez. Yalnız motor çevirmediğinde kullanılır
+    /// (Mac/Android aynı).
+    /// </summary>
+    private static readonly (string Verb, string Suffix, string Turkish)[] TitleVerbs =
+    [
+        ("hit", "i", "Soy"), ("rob", "i", "Soy"), ("meet", "", "ile Buluş"), ("visit", "i", "Ziyaret Et"),
+        ("find", "i", "Bul"), ("check out", "a", "Göz At"), ("go to", "a", "Git"), ("head to", "a", "Git"),
+        ("return to", "a", "Dön"), ("call", "i", "Ara"), ("follow", "i", "Takip Et"), ("steal", "i", "Çal"),
+        ("protect", "i", "Koru"), ("chase", "i", "Kovala"), ("rescue", "i", "Kurtar"), ("defend", "i", "Savun"),
+        ("explore", "i", "Keşfet"), ("investigate", "i", "Araştır"), ("pick up", "i", "Al"), ("help", "a", "Yardım Et"),
+    ];
+
+    public static string? MissionTitle(string title)
+    {
+        var words = title.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length is < 2 or > 6 || TextStyleSampler.IsUpper(title)) return null;
+        foreach (var (verb, suffix, turkish) in TitleVerbs)
+        {
+            var parts = verb.Split(' ');
+            if (words.Length <= parts.Length
+                || !parts.Select((part, index) => words[index].ToLowerInvariant() == part).All(match => match)
+                || !char.IsUpper(words[0][0])) continue;
+            var name = words[parts.Length..];
+            if (!name.All(word => char.IsUpper(word[0]) && word.Length >= 2 && word.All(c => char.IsLetter(c) || c == '-')))
+                return null;
+            var joined = string.Join(' ', name);
+            var item = suffix.Length == 0 ? joined : TurkishSuffix.Attach(joined, suffix);
+            return item + " " + turkish;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Etiketin sonunda önündeki sözcüklerden ayrı duran tek harf (yazı tanımanın tuş simgesinden okuduğu harf, #1362:
