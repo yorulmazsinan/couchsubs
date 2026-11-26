@@ -93,11 +93,17 @@ public enum SubtitleAccess {
         return url.scheme == "app" && !(url.host ?? "").isEmpty && url.user == nil && url.password == nil
             && ["", "/"].contains(url.path) && url.query == nil && url.fragment == nil
     }
-    /// Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok.
+    /// TV uygulamalarımızın kimlikleri (webOS/Android TV `com.couchsubs.tv`, Tizen `CouchSubsT.CouchSubs`). Bazı webOS
+    /// sürümleri (5.x, GitHub #1058) Origin'i `file://com.couchsubs.tv` olarak gönderir: ana makine olarak yalnız bunlar kabul edilir.
+    static let fileOriginHosts: Set<String> = ["com.couchsubs.tv", "CouchSubsT.CouchSubs"]
+    /// file: Origin'i: "file://", "file:///", "file:///yol" ya da ana makinesi tam olarak kendi uygulama kimliğimiz olan
+    /// "file://com.couchsubs.tv" / "file://com.couchsubs.tv/yol". Sorgu, parça, kullanıcı ve ters bölü yok.
     static func isFileOrigin(_ origin: String) -> Bool {
         guard origin.hasPrefix("file://") else { return false }
         let rest = origin.dropFirst(7)
-        return rest.isEmpty || rest.hasPrefix("/") && !rest.contains(where: { "?#@\\".contains($0) })
+        guard !rest.contains(where: { "?#@\\".contains($0) }) else { return false }
+        let host = rest.prefix(while: { $0 != "/" })
+        return host.isEmpty || fileOriginHosts.contains(String(host))
     }
     /// 403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır.
     public static func rejectedOriginLine(_ request: Request) -> String {

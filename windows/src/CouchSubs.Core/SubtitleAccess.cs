@@ -89,12 +89,20 @@ public static class SubtitleAccess
         Uri.TryCreate(origin, UriKind.Absolute, out var url) && url.Scheme == "app" && url.Host.Length > 0
         && url.UserInfo.Length == 0 && url.Query.Length == 0 && url.Fragment.Length == 0 && url.AbsolutePath is "" or "/";
 
-    /// <summary>Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok.</summary>
+    /// <summary>TV uygulamalarımızın kimlikleri (webOS/Android TV <c>com.couchsubs.tv</c>, Tizen <c>CouchSubsT.CouchSubs</c>). Bazı webOS
+    /// sürümleri (5.x, GitHub #1058) Origin'i <c>file://com.couchsubs.tv</c> olarak gönderir: ana makine olarak yalnız bunlar kabul edilir.</summary>
+    public static readonly IReadOnlySet<string> FileOriginHosts = new HashSet<string>(StringComparer.Ordinal) { "com.couchsubs.tv", "CouchSubsT.CouchSubs" };
+
+    /// <summary>file: Origin'i: "file://", "file:///", "file:///yol" ya da ana makinesi tam olarak kendi uygulama kimliğimiz olan
+    /// "file://com.couchsubs.tv" / "file://com.couchsubs.tv/yol". Sorgu, parça, kullanıcı ve ters bölü yok.</summary>
     public static bool IsFileOrigin(string origin)
     {
         if (!origin.StartsWith("file://", StringComparison.Ordinal)) return false;
         var rest = origin[7..];
-        return rest.Length == 0 || rest.StartsWith('/') && rest.IndexOfAny(['?', '#', '@', '\\']) < 0;
+        if (rest.IndexOfAny(['?', '#', '@', '\\']) >= 0) return false;
+        var slash = rest.IndexOf('/');
+        var host = slash < 0 ? rest : rest[..slash];
+        return host.Length == 0 || FileOriginHosts.Contains(host);
     }
 
     /// <summary>403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır.</summary>

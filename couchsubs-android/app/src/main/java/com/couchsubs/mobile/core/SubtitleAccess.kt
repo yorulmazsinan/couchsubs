@@ -81,11 +81,21 @@ object SubtitleAccess {
         val url = uri(origin) ?: return false
         return url.scheme == "app" && !url.host.isNullOrEmpty() && url.rawUserInfo == null && url.rawPath in listOf("", "/") && url.rawQuery == null && url.rawFragment == null
     }
-    /** Ana makinesiz file: Origin'i: "file://", "file:///" ya da "file:///yol". Sorgu, parça, kullanıcı ve ters bölü yok. */
+    /**
+     * TV uygulamalarımızın kimlikleri (webOS/Android TV `com.couchsubs.tv`, Tizen `CouchSubsT.CouchSubs`). Bazı webOS
+     * sürümleri (5.x, GitHub #1058) Origin'i `file://com.couchsubs.tv` olarak gönderir: ana makine olarak yalnız bunlar kabul edilir.
+     */
+    val fileOriginHosts = setOf("com.couchsubs.tv", "CouchSubsT.CouchSubs")
+    /**
+     * file: Origin'i: "file://", "file:///", "file:///yol" ya da ana makinesi tam olarak kendi uygulama kimliğimiz olan
+     * "file://com.couchsubs.tv" / "file://com.couchsubs.tv/yol". Sorgu, parça, kullanıcı ve ters bölü yok.
+     */
     fun isFileOrigin(origin: String): Boolean {
         if (!origin.startsWith("file://")) return false
         val rest = origin.substring(7)
-        return rest.isEmpty() || rest.startsWith("/") && rest.none { it in "?#@\\" }
+        if (rest.any { it in "?#@\\" }) return false
+        val host = rest.substringBefore('/')
+        return host.isEmpty() || host in fileOriginHosts
     }
     /** 403 alan isteğin günlük satırı (GitHub #1132): reddedilen Origin değeri olduğu gibi (en çok 120 karakter) yazılır. */
     fun rejectedOriginLine(request: Request): String =
