@@ -6,13 +6,12 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Xbox** (#1308, #1314, #1252): Android, iPhone ve Mac'te uzun oturumda bellek şişip yayının düşmesi düzeltildi; Windows'ta ses cızırtısı ve yeniden bağlanma giderildi; telefonlar daha iyi görüntü biçimini teklif ediyor.
-- **GTA 6 telefonu** (#1253, #1326, #1334): "Ekranı çevir" çevirisi telefon elde sallanınca kaybolmuyor; telefon kapanınca çeviri yaklaşık 1 sn'de kalkıyor.
-- **Altyazıya karışan yazılar** (#1097, #1285, #1293): Gösterge sayıları ("88"), silah çarkı, dükkân ve menü yazıları altyazı sanılmıyor.
-- **Menüler** (#1339): Bir menü sütunundaki bütün satırlar aynı tarafa, kendi satırı hizasında yazılıyor; hiçbiri İngilizcenin üstüne binmiyor.
-- **Kendi eklediğiniz alanlar** (#1324): Yazı boyu zıplamıyor, düğme simgelerinin üstüne binmiyor.
-- **TV** (TV uygulaması 0.9.114+): Philips ve benzeri Google TV'lerde HDMI'nin siyah kalması (#1221), HDMI girişini uygulamaya açmayan projektörler (#1292), eski LG'lerde ekranın yarısının görünmesi (#1098). LG'de "ipk verified failed" kurulum hatası: paket TV saati geride olsa da kuruluyor; saat yanlışsa uygulama düzeltme adımlarını gösteriyor.
-- **Uyarılar**: DeepL veya yapay zekâ çevirisi çalışmadığında gerçek neden (anahtar, kota, internet) gösteriliyor (#1322); uygulama arka plandayken TV bağlantısı koparsa "CouchSubs'ı açık tutun" uyarısı (#1303); eski LG'de eşleşme 403 hatası (#1132).
+- **GTA 6 telefonu tanınıyor** (#1251): Telefon elde yukarıda tutulunca, el kenarını örtünce ya da sahne karanlıkken de açılıyor; mesajları altyazıya düşmüyor, telefonun yanında balon olarak çıkıyor. Henüz doğrulanmamış telefon adayındaki yazılar kısa süre bekletiliyor.
+- **Tuş ipuçları**: Karanlık sahnede "◯ Geri" gibi ipuçlarının Türkçesi dev siyah kutu olarak çizilmiyor; her ipucu kendi boyunda, yanına yazılıyor (TV uygulaması 0.9.115).
+- **Kaçan altyazılar** (beta.103'te gelen gerileme): Noktasız, büyük harfli ya da rakamlı konuşmalar, sola yaslı veya konuşmacı adlı satırlar artık atılmıyor; iki karakterin konuşması tek satırda birleşmiyor. Atılan her satırın nedeni günlüğe yazılıyor.
+- **Hız**: Menü ve kutu ölçümü her turda bütün kareyi yeniden işlemiyor; Android ve iPhone'da telefon ve ekran yazısı çevirisi daha akıcı.
+
+**beta.103'te gelenler:** Xbox kararlılığı, "Ekranı çevir" çevirisinin kaybolmaması, gösterge/silah çarkı/dükkân yazılarının altyazıya karışmaması, menü hizası, Philips HDMI, projektör, eski LG yarım ekran, LG kurulum hatası, DeepL uyarısı.
 
 **beta.102'de gelenler:** telefonun sosyal akış, haber ve hava ekranları telefonun yanında kartlarla; telefon yazısı altyazıya karışmıyor; kalabalıkta üst üste binme yok; ürün yazıları çevrilmiyor; LG kararma; Mac'te okuma takılması.
 
