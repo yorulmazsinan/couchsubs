@@ -60,6 +60,8 @@ public static class SceneText
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if (IsSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)";
         if (IsNumber(block.Text)) return "harfsiz sayı";
+        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
+        if (IsMenuItem(block)) return MenuItemReason;
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
         var learned = band?.Contains(box) == true;
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
@@ -122,6 +124,38 @@ public static class SceneText
     internal const int SignLineLength = 20;
 
     /// <summary>Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir.</summary>
+    internal const string MenuItemReason = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)";
+
+    /// <summary>
+    /// Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
+    /// düşen "srow LONGARMS O TAKE AMMO", "SHOW SHIRT (1/3) A BUY O BU", "IN LJ TYPE 9 SMG" konuşma sanılıp bozuk
+    /// çevriliyordu. Hiçbir satırı konuşma izi (<see cref="LooksSpoken"/>) taşımayan blokta: tuş simgesinin okunuşunun
+    /// ("O", "X", "A", "•", simge) hemen ardından menü eylemi (<see cref="MenuActions"/>) ya da küçük harfsiz, en az bir
+    /// sözcüklü ve rakamlı yazı (ürün/silah adı, fiyat). Konuşan adlı blok ve noktalamalı bağırma altyazı kalır (Mac:
+    /// SceneText.isMenuItem, Android: isMenuItem).
+    /// </summary>
+    internal static bool IsMenuItem(Reading block)
+    {
+        if (block.Lines.Any(line => LooksSpoken(line.Text))) return false;
+        var tokens = block.Lines.SelectMany(line => line.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToList();
+        for (var i = 0; i + 1 < tokens.Count; i++)
+            if (IsGlyph(tokens[i]) && MenuActions.Contains(tokens[i + 1])) return true;
+        var text = block.Text;
+        return text.Any(char.IsUpper) && !text.Any(char.IsLower) && tokens.Any(token => token.Any(char.IsDigit))
+            && tokens.Any(token => token.Count(char.IsLetter) >= 2);
+    }
+
+    /// <summary>Menünün tuş eylemleri ("△ BUY", "○ TAKE AMMO", "□ ADD TO TRUNK"); büyük harfle yazılır.</summary>
+    internal static readonly HashSet<string> MenuActions =
+        ["BUY", "SELL", "TAKE", "EQUIP", "ADD", "REMOVE", "RENAME", "DELETE", "CUSTOMIZE", "PREVIEW", "PURCHASE"];
+
+    /// <summary>
+    /// Tuş simgesinin yazı tanımadaki okunuşu: "O" (○), "X" (✕), "A" (△) ya da harf ve rakam olmayan tek karakter
+    /// ("•", "□", <see cref="ButtonIcons.Marker"/>).
+    /// </summary>
+    internal static bool IsGlyph(string token) =>
+        token is "O" or "X" or "A" || (new System.Globalization.StringInfo(token).LengthInTextElements == 1 && !token.Any(char.IsLetterOrDigit));
+
     internal static bool IsNumber(string text) => !text.Any(char.IsLetter) && text.Any(char.IsDigit);
 
     internal static bool IsCentered(TextBox box) => Math.Abs((box.Left + box.Right) / 2 - 0.5) <= CenterTolerance;
@@ -148,6 +182,9 @@ public sealed class SubtitleBand
     public const int SureWords = 4;
 
     private readonly List<(double Top, double Bottom, double Line)> spans = [];
+
+    /// <summary>Bu oturumda hiç altyazı yüksekliği öğrenilmedi.</summary>
+    public bool IsEmpty => spans.Count == 0;
 
     /// <summary>
     /// Hatırlanan yüksekliğin her yanındaki pay (satır boyuna oranla). GTA 6'da görev satırı ("Follow the plane") altyazının

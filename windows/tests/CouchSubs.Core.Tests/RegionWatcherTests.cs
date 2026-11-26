@@ -1205,7 +1205,8 @@ public partial class RegionWatcherTests
         foreach (var shade in new byte[] { 10, 60, 110, 160, 210 }) await watcher.PassAsync(Shade(shade), [Quest]);
         Assert.Equal(5, reader.Count);
         Assert.Equal(["Talk to Arthur"], translator.Calls);
-        Assert.Equal(["TR: Talk to Arthur"], server.Sent.Select(s => s.Text));
+        // Zemin rengi değişince kutunun rengi güncellenir (özgün stil); çeviri aynı kalır.
+        Assert.Equal(["TR: Talk to Arthur"], server.Sent.Select(s => s.Text).Distinct());
     }
 
     [Fact]
@@ -1387,7 +1388,7 @@ public partial class RegionWatcherTests
 
     /// <summary>Tek grup (alt alta sarılmış tek yazı) eskisi gibi tek kutudur, blok gönderilmez.</summary>
     [Fact]
-    public async Task OneGroupIsSentWithoutBlocks()
+    public async Task OneGroupIsSentAsOneStyledBlock()
     {
         var reader = new Reader { Lines = [Line("Find the blacksmith and ask him", 0.2), Line("to repair your sword.", 0.3)] };
         var translator = new Translator { Map = _ => "Demirciyi bul ve kılıcını onarmasını iste." };
@@ -1397,7 +1398,10 @@ public partial class RegionWatcherTests
         await watcher.PassAsync(Shade(10), [Quest]);
         Assert.Equal(["Find the blacksmith and ask him to repair your sword."], translator.Calls);
         Assert.Equal(["Demirciyi bul ve kılıcını onarmasını iste."], server.Sent.Select(s => s.Text));
-        Assert.Equal([null], server.Blocks);
+        // Kullanıcının alanında da özgün stilinde tek blok (#1324: tek siyah kutu tuş simgelerini örtüyordu).
+        var block = Assert.Single(Assert.Single(server.Blocks)!);
+        Assert.Equal("Demirciyi bul ve kılıcını onarmasını iste.", block.Translation);
+        Assert.NotNull(block.Paint);
     }
 
     /// <summary>Çevirisi aslıyla aynı grup (ad) blok olarak gönderilmez; İngilizcesi görünür kalır.</summary>
@@ -1463,18 +1467,21 @@ public partial class RegionWatcherTests
         Assert.Equal(InQuest(new TextBox(0.76, 0.65, 0.92, 0.75)), blocks[1].Box);
     }
 
-    /// <summary>Menü satırlarını bölme yalnız GTA 6'da: başka oyunda (ya da oyun bilinmiyorsa) yerleşim değişmez.</summary>
+    /// <summary>
+    /// Kullanıcının alanı otomatik alan gibi gruplanır (#1324; Mac ve Android aynı): kısa menü satırları her oyunda kendi
+    /// bloğudur, her biri kendi yerine çizilir.
+    /// </summary>
     [Theory]
     [InlineData("Red Dead Redemption 2")]
     [InlineData(null)]
-    public async Task MenuRowsStayInOneBoxOutsideGta6(string? game)
+    public async Task MenuRowsAreOneBlockPerRowInEveryGame(string? game)
     {
         var reader = new Reader { Lines = Gta6Menu() };
         var server = new Server();
         var watcher = new RegionWatcher(reader, new Translator(), server) { Game = () => game };
         await watcher.PassAsync(Shade(10), [Quest]);
         await watcher.PassAsync(Shade(10), [Quest]);
-        Assert.Equal([null], server.Blocks);
+        Assert.Equal(3, Assert.Single(server.Blocks)!.Count);
     }
 
     /// <summary>GTA 6'da da büyük-küçük harfli bilgi kutusu bölünmez: tek cümle, tek kutu.</summary>
@@ -1539,7 +1546,7 @@ public partial class RegionWatcherTests
         await Show(watcher, reader, "SET DESTINATIPN EXIT", 90);
         await Show(watcher, reader, "SET DESTINATION EXIT", 170);
         Assert.Equal(["SET DESTINATION EXIT"], translator.Calls);
-        Assert.Single(server.Sent);
+        Assert.Equal(["TR: SET DESTINATION EXIT"], server.Sent.Select(s => s.Text).Distinct());
     }
 
     /// <summary>Yalnız bir sözcüğü değişen görev, o hâlde kalırsa birkaç tur sonra gösterilir.</summary>

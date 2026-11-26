@@ -56,6 +56,8 @@ public enum SceneText {
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if isSign(block) { return "plaka/tabela (kısa büyük harfli satırlar)" }
         if isNumber(block.text) { return "harfsiz sayı" }
+        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
+        if isMenuItem(block) { return menuItemReason }
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
         let learned = band.contains(box)
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
@@ -69,6 +71,36 @@ public enum SceneText {
             return "karenin ortasında kısa satır"
         }
         return nil
+    }
+
+    static let menuItemReason = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)"
+
+    /// Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
+    /// düşen "srow LONGARMS O TAKE AMMO", "SHOW SHIRT (1/3) A BUY O BU", "IN LJ TYPE 9 SMG" konuşma sanılıp bozuk
+    /// çevriliyordu. Hiçbir satırı konuşma izi (`looksSpoken`: cümle sonu, virgül, tırnak) taşımayan blokta:
+    /// - tuş simgesinin okunuşunun ("O", "X", "A", "•", simge) hemen ardından menü eylemi (`menuActions`: "BUY", "TAKE") ya da
+    /// - küçük harfsiz, en az bir sözcüklü ve rakamlı yazı (ürün/silah adı, fiyat, sayaç: "TYPE 9 SMG", "1 555 0127").
+    /// Konuşan adlı blok (`reason` onu hiç incelemez) ve noktalamalı bağırma ("GET DOWN!", "THREE OF THEM, 2 CARS!")
+    /// altyazı kalır. Windows (SceneText.IsMenuItem) ve Android (isMenuItem) aynı.
+    static func isMenuItem(_ block: Reading) -> Bool {
+        guard !block.lines.contains(where: { looksSpoken($0.text) }) else { return false }
+        let tokens = block.lines.flatMap { $0.text.split(whereSeparator: \.isWhitespace).map(String.init) }
+        if zip(tokens, tokens.dropFirst()).contains(where: { isGlyph($0) && menuActions.contains($1) }) { return true }
+        let text = block.text
+        return text.contains(where: \.isUppercase) && !text.contains(where: \.isLowercase)
+            && tokens.contains { $0.contains(where: \.isNumber) } && tokens.contains { $0.filter(\.isLetter).count >= 2 }
+    }
+
+    /// Menünün tuş eylemleri ("△ BUY", "○ TAKE AMMO", "□ ADD TO TRUNK"); büyük harfle yazılır.
+    static let menuActions: Set<String> = [
+        "BUY", "SELL", "TAKE", "EQUIP", "ADD", "REMOVE", "RENAME", "DELETE", "CUSTOMIZE", "PREVIEW", "PURCHASE",
+    ]
+
+    /// Tuş simgesinin yazı tanımadaki okunuşu: "O" (○), "X" (✕), "A" (△) ya da harf ve rakam olmayan tek karakter
+    /// ("•", "□", `ButtonIcons.marker`).
+    static func isGlyph(_ token: String) -> Bool {
+        if token == "O" || token == "X" || token == "A" { return true }
+        return token.count == 1 && !token.contains(where: { $0.isLetter || $0.isNumber })
     }
 
     /// Sözcük yerleri biliniyorsa satır eğik mi (perspektifli tabela, yan duran tişört). Altyazı yatay yazılır.
@@ -153,6 +185,9 @@ public struct SubtitleBand: Equatable, Sendable {
     /// hemen altında belirir; pencere kaynağında orta noktası bir satır payının hemen dışında kalıyor, tek başına geldiğinde
     /// "karenin ortasında kısa satır" sayılıp atılıyordu (gerçek kare pencere-kare-2-gorev).
     public static let margin = 1.5
+
+    /// Bu oturumda hiç altyazı yüksekliği öğrenilmedi.
+    public var isEmpty: Bool { spans.isEmpty }
 
     /// Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine (`margin` satır boyu payla) düşüyor mu.
     public func contains(_ box: TextBox) -> Bool {

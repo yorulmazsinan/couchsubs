@@ -751,8 +751,11 @@ public sealed partial class RegionWatcher
                 && !ScreenNotices.IsNotice(area.Id);
             reading = echo.Filter(reading, place, geometry);
         }
+        // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
+        // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
+        // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Android aynı.
         return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
-                             styled: area.RequiresPanel, kind: ScreenTextKinds.Of(area));
+                             styled: true, kind: ScreenTextKinds.Of(area));
     }
 
     private static int IconCount(Candidate candidate) =>
@@ -819,7 +822,7 @@ public sealed partial class RegionWatcher
     /// <param name="auto">Otomatik bulunmuş alan: her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.</param>
     /// <param name="menu">Otomatik alan menüde: satır yükseklikleri farklı olabilir (başlık, etiket).</param>
     /// <param name="styled">
-    /// Oyunun hazır alanı (<see cref="GameAreaPresets"/>): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
+    /// Ek alan (oyunun hazır alanı <see cref="GameAreaPresets"/> ya da kullanıcının alanı, #1324): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// </param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
@@ -909,7 +912,7 @@ public sealed partial class RegionWatcher
                     var joined = string.Join(' ', group.Paragraphs);
                     return new TextPainter.Target(group.Box, group.LineHeight, rows, block.Style!.Background, block.Style.Foreground,
                                                   block.Look!.Upper, block.Look.Align, TextPainter.WordCount(joined),
-                                                  auto ? PaintKind(group, lines, cards, kind) : null,
+                                                  PaintKind(group, lines, cards, kind),
                                                   joined.Contains(ButtonIcons.Marker) || ButtonPrompts.IsPrompt(IconText.Plain(joined)));
                 }).ToList();
                 var paints = TextPainter.Paints(targets, frame)

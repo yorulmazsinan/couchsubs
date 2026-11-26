@@ -3,6 +3,7 @@ package com.couchsubs.mobile.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -107,6 +108,32 @@ class TextStyleSamplerTest {
         assertFalse(style.surface.flat)
         assertTrue(style.surface.background, distance(style.surface.background, 58, 148, 187) <= 8)
         assertTrue(style.surface.foreground, distance(style.surface.foreground, 240, 240, 240) <= 8)
+    }
+
+    /**
+     * Kullanıcının ek alanı ve hazır alan (otomatik değil), otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş
+     * simgelerini örtmez, yazı boyu özgünden ölçülür (Mac ve Windows aynı).
+     */
+    @Test
+    fun extraAreaGetsTheAutoAreaPaintMode() {
+        // Koyu zeminde solda tek satır yazı; sağı ve altı boş.
+        val width = 400
+        val height = 120
+        val luma = ByteArray(width * height) { index ->
+            val x = index % width
+            val y = index / width
+            (if (y in 15 until 45 && x in 20 until 200 && x % 10 < 5) 240 else 22).toByte()
+        }
+        val frame = GrayFrame(luma, width, height)
+        val region = CropRegion(0.0, 1.0, 0.0, 1.0)
+        val reading = Reading(listOf(TextLine("ROB VICKI'S BOSS", TextBox(20.0 / 400, 15.0 / 120, 200.0 / 400, 45.0 / 120))))
+        val auto = RegionWatcher.styled(RegionWatcher.candidate(reading, region, frame, auto = true), reading, region, frame, modes = true)
+            .blocks!!.single().paint!!
+        val extra = RegionWatcher.styled(RegionWatcher.candidate(reading, region, frame, styled = true), reading, region, frame,
+            modes = true).blocks!!.single().paint!!
+        assertEquals(auto.mode, extra.mode)
+        assertNotEquals(TextPaint.MODE_COVER, extra.mode)
+        assertEquals(auto.pitch, extra.pitch, 1e-9)
     }
 
     /**

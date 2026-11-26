@@ -55,6 +55,8 @@ object SceneText {
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if (isSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)"
         if (isNumber(block.text)) return "harfsiz sayı"
+        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
+        if (isMenuItem(block)) return MENU_ITEM_REASON
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
         val learned = band?.contains(box) == true
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
@@ -118,6 +120,37 @@ object SceneText {
     /** Plaka/tabela satırının en çok karakteri ("C118 DISCOVER 76"). */
     const val SIGN_LINE_LENGTH = 20
 
+    internal const val MENU_ITEM_REASON = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)"
+
+    /**
+     * Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
+     * düşen "srow LONGARMS O TAKE AMMO", "SHOW SHIRT (1/3) A BUY O BU", "IN LJ TYPE 9 SMG" konuşma sanılıp bozuk
+     * çevriliyordu. Hiçbir satırı konuşma izi ([looksSpoken]) taşımayan blokta: tuş simgesinin okunuşunun ("O", "X", "A",
+     * "•", simge) hemen ardından menü eylemi ([MENU_ACTIONS]) ya da küçük harfsiz, en az bir sözcüklü ve rakamlı yazı
+     * (ürün/silah adı, fiyat). Konuşan adlı blok ve noktalamalı bağırma altyazı kalır (Mac: SceneText.isMenuItem,
+     * Windows: SceneText.IsMenuItem).
+     */
+    internal fun isMenuItem(block: Reading): Boolean {
+        if (block.lines.any { looksSpoken(it.text) }) return false
+        val tokens = block.lines.flatMap { line -> line.text.split(Regex("\\s+")).filter { it.isNotEmpty() } }
+        if (tokens.zipWithNext().any { (a, b) -> isGlyph(a) && b in MENU_ACTIONS }) return true
+        val text = block.text
+        return text.any { it.isUpperCase() } && text.none { it.isLowerCase() } && tokens.any { token -> token.any { it.isDigit() } } &&
+            tokens.any { token -> token.count { it.isLetter() } >= 2 }
+    }
+
+    /** Menünün tuş eylemleri ("△ BUY", "○ TAKE AMMO", "□ ADD TO TRUNK"); büyük harfle yazılır. */
+    internal val MENU_ACTIONS = setOf("BUY", "SELL", "TAKE", "EQUIP", "ADD", "REMOVE", "RENAME", "DELETE", "CUSTOMIZE", "PREVIEW", "PURCHASE")
+
+    /**
+     * Tuş simgesinin yazı tanımadaki okunuşu: "O" (○), "X" (✕), "A" (△) ya da harf ve rakam olmayan tek karakter
+     * ("•", "□", [ButtonIcons.MARKER]).
+     */
+    internal fun isGlyph(token: String): Boolean {
+        if (token == "O" || token == "X" || token == "A") return true
+        return token.codePointCount(0, token.length) == 1 && token.none { it.isLetterOrDigit() }
+    }
+
     /** Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir. */
     internal fun isNumber(text: String) = !text.any { it.isLetter() } && text.any { it.isDigit() }
 
@@ -139,6 +172,9 @@ class SubtitleBand {
     private data class Span(val top: Double, val bottom: Double, val line: Double)
 
     private val spans = ArrayList<Span>()
+
+    /** Bu oturumda hiç altyazı yüksekliği öğrenilmedi. */
+    val isEmpty: Boolean get() = spans.isEmpty()
 
     /** Kutunun (karede) dikey ortası hatırlanan bir altyazı yüksekliğine ([MARGIN] satır boyu payla) düşüyor mu. */
     fun contains(box: TextBox): Boolean {

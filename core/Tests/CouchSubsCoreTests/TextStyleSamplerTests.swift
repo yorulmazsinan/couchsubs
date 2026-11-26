@@ -130,6 +130,31 @@ final class TextStyleSamplerTests: XCTestCase {
         XCTAssertEqual(preset.blocks?.first?.style?.background, "#14161E")
     }
 
+    /// Kullanıcının ek alanı ve hazır alan, otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş simgelerini örtmez,
+    /// yazı boyu özgünden ölçülür (Windows ve Android aynı).
+    @MainActor
+    func testExtraAreaGetsTheAutoAreaPaintMode() throws {
+        // Koyu zeminde solda tek satır yazı; sağı ve altı boş.
+        let width = 400, height = 120
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let ink = (15..<45).contains(y) && x >= 20 && x < 200 && x % 10 < 5
+                let p = (y * width + x) * 4
+                (pixels[p], pixels[p + 1], pixels[p + 2]) = ink ? (240, 240, 240) : (20, 22, 30)
+            }
+        }
+        let frame = ScreenTextDetectorTests.image(pixels, width: width, height: height)
+        let header = TextBox(left: 20.0 / 400, top: 15.0 / 120, right: 200.0 / 400, bottom: 45.0 / 120)
+        let reading = Reading(lines: [TextLine("ROB VICKI'S BOSS", box: header)])
+        let whole = CropRegion(top: 0, bottom: 1, left: 0, right: 1)
+        let auto = try XCTUnwrap(RegionWatcher.candidate(reading, in: whole, frame: frame, auto: true).blocks?.first?.paint)
+        let extra = try XCTUnwrap(RegionWatcher.candidate(reading, in: whole, frame: frame, styled: true).blocks?.first?.paint)
+        XCTAssertEqual(extra.mode, auto.mode)
+        XCTAssertNotEqual(extra.mode, .cover)
+        XCTAssertEqual(extra.pitch, auto.pitch, accuracy: 1e-9)
+    }
+
     /// Görev/hedef satırının çevirisi altyazıdan ve öbür ekran yazılarından ayrı görünür (beta.100): özgün zemin yerine koyu
     /// kehribar kutu, birebir çizim yok, başında hedef imi; TV'ye zemin `surface` olarak gider (Windows ve Android aynı).
     @MainActor

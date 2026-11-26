@@ -66,6 +66,9 @@ class Reading(lines: List<TextLine>) {
     companion object {
         val Empty = Reading(emptyList())
 
+        /** Altyazının okunduğu yükseklikten uzak ortalanmamış blok atılınca günlüğe yazılan neden (GitHub #1293). */
+        internal const val OFF_BAND_REASON = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"
+
         /** [isMenu]: menü satırlarının sol ya da sağ kenarı bu kadar içinde hizalı (okunan alana oranla). */
         const val MENU_EDGE = 0.012
 
@@ -334,7 +337,15 @@ class Reading(lines: List<TextLine>) {
             val lowest = centered.indices.maxBy { centered[it].box!!.bottom }
             return objectiveBelow(lowest, centered, area) ?: centered[lowest]
         }
-        return candidates.filter { wordCount(it.text) >= 3 }.maxByOrNull { it.box!!.bottom } ?: Empty
+        // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
+        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
+        // altyazı sanılıp çevriliyordu). Mac ve Windows aynı.
+        return candidates.filter { block ->
+            if (wordCount(block.text) < 3) return@filter false
+            if (band == null || band.isEmpty || band.contains(block.box!!.placedIn(area))) return@filter true
+            dropped?.invoke(block, OFF_BAND_REASON)
+            false
+        }.maxByOrNull { it.box!!.bottom } ?: Empty
     }
 
     /**
@@ -424,12 +435,22 @@ class Reading(lines: List<TextLine>) {
      * işleniyordu. Ayrılan: konuşan adlı satırın üstündeki kısa büyük harfli satırlar ([SceneText.isSignLine]; konuşan
      * adı yeni konuşmanın ilk satırıdır) ve küçük harfli konuşmanın altında, cümlenin devamı olmayan, rakam taşıyan kısa
      * büyük harfli satır ("AKB 51"). Tümü büyük harfli altyazının devamı ("LUCIA: GET / DOWN!", "I'm with the / FBI.")
-     * ayrılmaz (Mac: Reading.withoutSignLines, Windows: Reading.WithoutSignLines).
+     * ayrılmaz (Mac: Reading.withoutSignLines, Windows: Reading.WithoutSignLines). Harfsiz sayı satırı (HUD sayacı, "88",
+     * "19") konuşan adlı satırın üstündeyse ya da bloğun başındaysa da ayrılır (GitHub #1097: "88 / Lucia: …" tek altyazı
+     * çevriliyordu).
      */
     private fun withoutSignLines(block: List<TextLine>): List<List<TextLine>> {
         val speaker = (1 until block.size).firstOrNull { SpeakerPrefix.split(block[it].text) != null }
-        if (speaker != null && block.take(speaker).all { SceneText.isSignLine(it.text) }) {
+        if (speaker != null && block.take(speaker).all { isHudLine(it.text) }) {
             return listOf(block.take(speaker)) + withoutSignLines(block.drop(speaker))
+        }
+        // Baştaki HUD satırları (en az biri harfsiz sayı: "14", "MANATEES / 10") büyük harfle başlayan, küçük harfli konuşmanın
+        // üstünden ayrılır (GitHub #1097). Büyük harfli ürün satırı ("59 / PED T-SHIRT") bölünmez; SceneText onu bütün atar.
+        // Konuşmanın ortasındaki sayı cevabı bölünmez.
+        val hud = block.takeWhile { isHudLine(it.text) }.size
+        if (hud in 1 until block.size && block.take(hud).any { SceneText.isNumber(it.text) } &&
+            block[hud].text.firstOrNull { it.isLetter() }?.isUpperCase() == true && block[hud].text.any { it.isLowerCase() }) {
+            return listOf(block.take(hud)) + withoutSignLines(block.drop(hud))
         }
         if (block.size < 2 || SpeakerPrefix.split(block[0].text) == null || block[0].text.none { it.isLowerCase() }) return listOf(block)
         val cut = (1 until block.size).firstOrNull { i ->
@@ -437,6 +458,9 @@ class Reading(lines: List<TextLine>) {
         } ?: return listOf(block)
         return listOf(block.take(cut), block.drop(cut))
     }
+
+    /** Konuşan adlı satırın üstünde ayrılan satır: kısa büyük harfli tabela ya da harfsiz sayı (GitHub #1097). */
+    private fun isHudLine(text: String) = SceneText.isSignLine(text) || SceneText.isNumber(text)
 
     /** [centered] blokların sabit olanları ([STALE_MS]) çıkarılmış hali; satır yaşı bilinmiyorsa olduğu gibi kalır. */
     private fun withoutStale(centered: List<Reading>, age: ((String) -> Long?)?, skipped: ((Reading) -> Unit)?): List<Reading> {

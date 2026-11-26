@@ -139,6 +139,34 @@ public class TextStyleSamplerTests
     }
 
     /// <summary>
+    /// Kullanıcının ek alanı ve hazır alan, otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş simgelerini örtmez,
+    /// yazı boyu özgünden ölçülür (Mac ve Android aynı).
+    /// </summary>
+    [Fact]
+    public void ExtraAreaGetsTheAutoAreaPaintMode()
+    {
+        // Koyu zeminde solda tek satır yazı; sağı ve altı boş.
+        var frame = Frame.Blank(400, 120);
+        for (var y = 0; y < 120; y++)
+            for (var x = 0; x < 400; x++)
+            {
+                var ink = y is >= 15 and < 45 && x is >= 20 and < 200 && x % 10 < 5;
+                var p = y * frame.Stride + x * 4;
+                (frame.Pixels[p + 2], frame.Pixels[p + 1], frame.Pixels[p]) = ink ? ((byte)240, (byte)240, (byte)240) : ((byte)20, (byte)22, (byte)30);
+                frame.Pixels[p + 3] = 255;
+            }
+        var reading = new Reading([new TextLine("ROB VICKI'S BOSS", new TextBox(20.0 / 400, 15.0 / 120, 200.0 / 400, 45.0 / 120))]);
+        var whole = new CropRegion(0, 1, 0, 1);
+        var auto = Assert.Single(RegionWatcher.MakeCandidate(reading, whole, frame, auto: true).Blocks!).Paint;
+        var extra = Assert.Single(RegionWatcher.MakeCandidate(reading, whole, frame, styled: true).Blocks!).Paint;
+        Assert.NotNull(auto);
+        Assert.NotNull(extra);
+        Assert.Equal(auto!.Mode, extra!.Mode);
+        Assert.NotEqual(PaintMode.Cover, extra.Mode);
+        Assert.Equal(auto.Pitch, extra.Pitch, 9);
+    }
+
+    /// <summary>
     /// Görev/hedef satırının çevirisi altyazıdan ve öbür ekran yazılarından ayrı görünür (beta.100): özgün zemin yerine koyu
     /// kehribar kutu, birebir çizim yok, başında hedef imi (Mac ve Android aynı).
     /// </summary>

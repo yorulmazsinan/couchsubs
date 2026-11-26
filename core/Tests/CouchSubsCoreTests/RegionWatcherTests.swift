@@ -106,8 +106,9 @@ final class RegionWatcherTests: XCTestCase {
         XCTAssertEqual(server.sent[0].box, inQuest(TextBox(left: 0.1, top: 0.1, right: 0.95, bottom: 0.7)))
     }
 
-    /// Tek grup (alt alta sarılmış tek yazı) eskisi gibi tek kutudur, blok gönderilmez.
-    func testOneGroupIsSentWithoutBlocks() async {
+    /// Tek grup (alt alta sarılmış tek yazı) tek çeviridir; kullanıcının alanında da özgün stilinde tek blok olarak çizilir
+    /// (#1324: tek siyah kutu tuş simgelerini örtüyor, yazı boyu okumadan okumaya değişiyordu).
+    func testOneGroupIsSentAsOneStyledBlock() async throws {
         let reader = Reader(), translator = Translator(), server = Server()
         translator.map = { _ in "Demirciyi bul ve kılıcını onarmasını iste." }
         let watcher = RegionWatcher(reader: reader, translator: translator, server: server)
@@ -117,7 +118,9 @@ final class RegionWatcherTests: XCTestCase {
         XCTAssertEqual(translator.calls, ["Find the blacksmith and ask him to repair your sword."])
         XCTAssertEqual(server.sent.map(\.text), ["Demirciyi bul ve kılıcını onarmasını iste."])
         XCTAssertEqual(server.blocks.count, 1)
-        XCTAssertNil(server.blocks[0])
+        let blocks = try XCTUnwrap(server.blocks[0])
+        XCTAssertEqual(blocks.map(\.translation), ["Demirciyi bul ve kılıcını onarmasını iste."])
+        XCTAssertNotNil(blocks[0].paint)
     }
 
     /// Çevirisi aslıyla aynı grup (ad) blok olarak gönderilmez; İngilizcesi görünür kalır.
@@ -466,7 +469,8 @@ final class RegionWatcherTests: XCTestCase {
         for shade: UInt8 in [10, 60, 110, 160, 210] { await watcher.pass(frame(shade), areas: [quest]) }
         XCTAssertEqual(reader.count, 5)
         XCTAssertEqual(translator.calls, ["Talk to Arthur"])
-        XCTAssertEqual(server.sent.map(\.text), ["TR: Talk to Arthur"])
+        // Zemin rengi değişince kutunun rengi güncellenir (özgün stil); çeviri aynı kalır.
+        XCTAssertEqual(Set(server.sent.map(\.text)), ["TR: Talk to Arthur"])
     }
 
     func testChangedTextIsTranslatedAndEmptyAreaRemovesTheBox() async {
@@ -606,7 +610,7 @@ final class RegionWatcherTests: XCTestCase {
         await show(watcher, reader, "SET DESTINATIPN EXIT", 90)
         await show(watcher, reader, "SET DESTINATION EXIT", 170)
         XCTAssertEqual(translator.calls, ["SET DESTINATION EXIT"])
-        XCTAssertEqual(server.sent.count, 1)
+        XCTAssertEqual(Set(server.sent.map(\.text)), ["TR: SET DESTINATION EXIT"])
     }
 
     /// Yalnız bir sözcüğü değişen görev, o hâlde kalırsa birkaç tur sonra gösterilir.

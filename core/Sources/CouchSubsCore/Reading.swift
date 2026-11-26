@@ -297,9 +297,18 @@ public struct Reading: Equatable, Sendable {
         if let lowest = centered.indices.max(by: { centered[$0].box!.bottom < centered[$1].box!.bottom }) {
             return Self.objectiveBelow(lowest, centered, in: area) ?? centered[lowest]
         }
-        return candidates.filter { $0.text.split(whereSeparator: \.isWhitespace).count >= 3 }
-            .max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
+        // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
+        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
+        // altyazı sanılıp çevriliyordu). Windows ve Android aynı.
+        return candidates.filter { block in
+            guard block.text.split(whereSeparator: \.isWhitespace).count >= 3 else { return false }
+            guard !band.isEmpty, let box = block.box?.placed(in: area), !band.contains(box) else { return true }
+            dropped?(block, Self.offBandReason)
+            return false
+        }.max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
     }
+
+    static let offBandReason = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"
 
     private static func isSpoken(_ block: Reading) -> Bool {
         SpeakerPrefix.split(block.lines[0].text) != nil
@@ -382,10 +391,21 @@ public struct Reading: Equatable, Sendable {
     /// adı yeni konuşmanın ilk satırıdır) ve küçük harfli konuşmanın altında, cümlenin devamı olmayan, rakam taşıyan kısa
     /// büyük harfli satır ("AKB 51"). Tümü büyük harfli altyazının devamı ("LUCIA: GET / DOWN!", "I'm with the / FBI.")
     /// ayrılmaz (Windows: Reading.WithoutSignLines, Android: Reading.withoutSignLines).
+    /// Harfsiz sayı satırı (HUD sayacı, "88", "19") konuşan adlı satırın üstündeyse ya da bloğun başındaysa (yanındaki
+    /// kısa büyük harfli satırlarla, altında küçük harfli konuşma varsa) da ayrılır (GitHub #1097: "88 / Lucia: …" tek
+    /// altyazı çevriliyordu). Konuşmanın ortasındaki sayı cevabı ("Lucia: How many? / 19.") bölünmez.
     static func withoutSignLines(_ block: [TextLine]) -> [[TextLine]] {
         if let speaker = block.indices.dropFirst().first(where: { SpeakerPrefix.split(block[$0].text) != nil }),
-           block[..<speaker].allSatisfy({ SceneText.isSignLine($0.text) }) {
+           block[..<speaker].allSatisfy({ isHudLine($0.text) }) {
             return [Array(block[..<speaker])] + withoutSignLines(Array(block[speaker...]))
+        }
+        // Baştaki HUD satırları (en az biri harfsiz sayı: "14", "MANATEES / 10") büyük harfle başlayan, küçük harfli konuşmanın
+        // üstünden ayrılır (GitHub #1097). Büyük harfli ürün satırı ("59 / PED T-SHIRT") bölünmez; `SceneText` onu bütün atar.
+        let hud = block.prefix(while: { isHudLine($0.text) }).count
+        if hud >= 1, hud < block.count, block[..<hud].contains(where: { SceneText.isNumber($0.text) }),
+           let letter = block[hud].text.first(where: \.isLetter), letter.isUppercase,
+           block[hud].text.contains(where: \.isLowercase) {
+            return [Array(block[..<hud])] + withoutSignLines(Array(block[hud...]))
         }
         guard block.count >= 2, let first = block.first, SpeakerPrefix.split(first.text) != nil,
               first.text.contains(where: \.isLowercase),
@@ -396,6 +416,9 @@ public struct Reading: Equatable, Sendable {
               }) else { return [block] }
         return [Array(block[..<cut]), Array(block[cut...])]
     }
+
+    /// Konuşan adlı satırın üstünde ayrılan satır: kısa büyük harfli tabela ya da harfsiz sayı (GitHub #1097).
+    private static func isHudLine(_ text: String) -> Bool { SceneText.isSignLine(text) || SceneText.isNumber(text) }
 
     /// Ortalı blok bu kadar süredir hiç değişmediyse ve yanında ondan en az `StickyRows.youngerByMs` daha yeni (kırıntı
     /// olmayan) ortalı blok varsa altyazı sayılmaz. Kullanıcı bildirimi (GitHub #933, GTA 6): karakter TV izlerken haber

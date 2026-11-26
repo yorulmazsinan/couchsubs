@@ -1522,6 +1522,324 @@
     }
    ],
    "subtitle": "I told you to wait right\nnow."
+  },
+  {
+   "name": "GTA 6 konuşmanın üstündeki HUD sayısı ayrılır (GitHub #1097)",
+   "lines": [
+    {
+     "text": "88",
+     "box": [
+      0.47,
+      0.6,
+      0.53,
+      0.68
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Lucia: Let's go, Jason.",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Lucia: Let's go, Jason."
+  },
+  {
+   "name": "GTA 6 adsız konuşmanın üstündeki HUD sayısı ayrılır (GitHub #1097)",
+   "lines": [
+    {
+     "text": "19",
+     "box": [
+      0.47,
+      0.6,
+      0.53,
+      0.68
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "We need to move now.",
+     "box": [
+      0.32,
+      0.7,
+      0.68,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "We need to move now."
+  },
+  {
+   "name": "konuşmanın ortasındaki sayı cevabı bölünmez (GitHub #1097)",
+   "lines": [
+    {
+     "text": "Lucia: How many did you count?",
+     "box": [
+      0.28,
+      0.6,
+      0.72,
+      0.68
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "19.",
+     "box": [
+      0.47,
+      0.7,
+      0.53,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Lucia: How many did you count?\n19."
+  },
+  {
+   "name": "GTA 6 HUD satırları adsız konuşmanın üstünden ayrılır (GitHub #1097)",
+   "lines": [
+    {
+     "text": "MANATEES",
+     "box": [
+      0.42,
+      0.5,
+      0.58,
+      0.58
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "10",
+     "box": [
+      0.47,
+      0.6,
+      0.53,
+      0.68
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "Yeah, look, they can think these bars goofy all they like.",
+     "box": [
+      0.15,
+      0.7,
+      0.85,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "Yeah, look, they can think these bars goofy all they like."
+  },
+  {
+   "name": "GTA 6 silah çarkının tuş ipucu çevrilmez (GitHub #1293)",
+   "lines": [
+    {
+     "text": "srow LONGARMS O TAKE AMMO",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 mağaza satırı tuş eylemiyle çevrilmez (GitHub #1285)",
+   "lines": [
+    {
+     "text": "SHOW SHIRT (1/3) A BUY O BU",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 bagaj menüsünün tuş satırı çevrilmez (GitHub #1285)",
+   "lines": [
+    {
+     "text": "RENAME DELETE A • ADD TO TRU",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 rakamlı silah adı çevrilmez (GitHub #1285)",
+   "lines": [
+    {
+     "text": "IN LJ TYPE 9 SMG",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "GTA 6 fiyatlı ürün adı bölünmeden atılır (GitHub #1285)",
+   "lines": [
+    {
+     "text": "59",
+     "box": [
+      0.47,
+      0.6,
+      0.53,
+      0.68
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "PED T-SHIRT",
+     "box": [
+      0.4,
+      0.7,
+      0.6,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "konuşan adlı büyük harfli bağırma rakamla da altyazıdır (GitHub #1285)",
+   "lines": [
+    {
+     "text": "LUCIA: 2 CARS BEHIND US",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "LUCIA: 2 CARS BEHIND US"
+  },
+  {
+   "name": "noktalamalı büyük harfli bağırma rakamla da altyazıdır (GitHub #1285)",
+   "lines": [
+    {
+     "text": "THREE OF THEM, 2 CARS!",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "THREE OF THEM, 2 CARS!"
+  },
+  {
+   "name": "büyük harfli bağırma altyazıdır (GitHub #1285)",
+   "before": [
+    {
+     "text": "Lucia, we need to get out of here before they come back.",
+     "box": [
+      0.15,
+      0.85,
+      0.85,
+      0.93
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "WE HAVE TO GET OUT OF HERE NOW",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "WE HAVE TO GET OUT OF HERE NOW"
+  },
+  {
+   "name": "konuşmadaki büyük harfli A ve eylem tuş ipucu sayılmaz (GitHub #1285)",
+   "lines": [
+    {
+     "text": "I'll take a TAKE on it later.",
+     "box": [
+      0.3,
+      0.7,
+      0.7,
+      0.78
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "I'll take a TAKE on it later."
+  },
+  {
+   "name": "altyazı yüksekliği biliniyorken sola yaslı menü açıklaması çevrilmez (GitHub #1293)",
+   "before": [
+    {
+     "text": "Lucia, we need to get out of here before they come back.",
+     "box": [
+      0.15,
+      0.85,
+      0.85,
+      0.93
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "Vicki has figured out Jason and Lucia are behind a",
+     "box": [
+      0.02,
+      0.05,
+      0.45,
+      0.12
+     ],
+     "confidence": 1.0
+    },
+    {
+     "text": "string of local stick ups, and suggests they meet",
+     "box": [
+      0.02,
+      0.13,
+      0.45,
+      0.2
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
   }
  ]
 }

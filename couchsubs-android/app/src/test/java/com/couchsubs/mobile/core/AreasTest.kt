@@ -131,9 +131,12 @@ class AreasTest {
         assertEquals(inQuest(TextBox(0.1, 0.1, 0.95, 0.7)), recorder.placements[0].first)
     }
 
-    /** Tek grup (alt alta sarılmış tek yazı) eskisi gibi tek kutudur, blok gönderilmez. */
+    /**
+     * Tek grup (alt alta sarılmış tek yazı) tek çeviridir; kullanıcının alanında da otomatik alan gibi tek blok olarak
+     * çizilir (#1324: tek siyah kutu tuş simgelerini örtüyordu; Mac ve Windows aynı).
+     */
     @Test
-    fun oneGroupIsSentWithoutBlocks() {
+    fun oneGroupIsSentAsOneBlock() {
         val recorder = Recorder()
         val calls = mutableListOf<String>()
         val lines = listOf(at("Find the blacksmith and ask him", 0.1, 0.2, 0.9, 0.3), at("to repair your sword.", 0.1, 0.3, 0.9, 0.4))
@@ -141,7 +144,7 @@ class AreasTest {
         repeat(2) { watcher.pass(setOf(quest.id), listOf(quest to RegionWatcher.Crop(Unit, signature(10)))) }
         assertEquals(listOf("Find the blacksmith and ask him to repair your sword."), calls)
         assertEquals(listOf("q" to "Demirciyi bul ve kılıcını onarmasını iste."), recorder.sent)
-        assertEquals(listOf<List<ScreenTranslation.Item>?>(null), recorder.blocks)
+        assertEquals(listOf(listOf("Demirciyi bul ve kılıcını onarmasını iste.")), recorder.blocks.map { b -> b?.map { it.translation } })
     }
 
     /** Çevirisi aslıyla aynı grup (ad) blok olarak gönderilmez; İngilizcesi görünür kalır. */

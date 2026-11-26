@@ -1277,8 +1277,10 @@ class RegionWatcher(
         val unpacked = if (area.auto && area.id != GameAreaPresets.PHONE_ID)
             PackageText.filter(pieced, area.region.box, PackageText.sampler(crop.frame, crop.color)).first else pieced
         val text = if (area.auto) AutoText.clean(unpacked, area.menu) else own
-        val preset = GameAreaPresets.isPreset(area.id)
-        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = preset,
+        // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
+        // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
+        // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Windows aynı.
+        var candidate = candidate(text, area.region, crop.frame, keepPrompts = area.menu, auto = area.auto, styled = true,
             color = crop.color)
         if (area.auto) {
             if (area.menu && !candidate.missionCard && ScreenTextKind.isHud(candidate.paragraphs)) onAutoHud?.invoke(area.id)
@@ -1313,9 +1315,10 @@ class RegionWatcher(
             }
             candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true,
                 kind = ScreenTextKind.of(area)).copy(auto = true)
-        } else if (preset) {
-            // Oyunun hazır alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda çizilir (siyah kutu değil, #856).
-            candidate = styled(candidate, text, area.region, crop.frame, crop.color)
+        } else {
+            // Oyunun hazır alanı ve kullanıcının alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda, çizim
+            // kipiyle çizilir (siyah kutu değil, #856; tuş simgesini örtmez, yazı boyu sabit, #1324).
+            candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true, kind = ScreenTextKind.of(area))
         }
         state.rejectPending = false
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma

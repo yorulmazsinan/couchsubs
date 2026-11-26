@@ -299,7 +299,16 @@ public sealed class Reading
             var lowest = centered.MaxBy(reading => reading.Box!.Value.Bottom)!;
             return ObjectiveBelow(lowest, centered, area) ?? lowest;
         }
-        return candidates.Where(reading => WordCount(reading.Text) >= 3).MaxBy(reading => reading.Box!.Value.Bottom) ?? Empty;
+        // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
+        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
+        // altyazı sanılıp çevriliyordu). Mac ve Android aynı.
+        return candidates.Where(reading =>
+        {
+            if (WordCount(reading.Text) < 3) return false;
+            if (band is null || band.IsEmpty || band.Contains(reading.Box!.Value.PlacedIn(area))) return true;
+            dropped?.Invoke(reading, OffBandReason);
+            return false;
+        }).MaxBy(reading => reading.Box!.Value.Bottom) ?? Empty;
     }
 
     /// <summary>
@@ -351,6 +360,9 @@ public sealed class Reading
 
     private static int Letters(string text) => text.Count(char.IsLetter);
 
+    /// <summary>Konuşan adlı satırın üstünde ayrılan satır: kısa büyük harfli tabela ya da harfsiz sayı (GitHub #1097).</summary>
+    private static bool IsHudLine(string text) => SceneText.IsSignLine(text) || SceneText.IsNumber(text);
+
     /// <summary>
     /// Konuşmayla aynı bloğa düşen plaka/tabela satırları ayrı blok olur (sonra <see cref="SceneText"/> ya da
     /// <see cref="IsActionLabel"/> ile atılır). Kullanıcı bildirimi (GitHub #1052, GTA 6, beta.84): plaka konuşmanın hemen
@@ -359,13 +371,22 @@ public sealed class Reading
     /// (<see cref="SceneText.IsSignLine"/>; konuşan adı yeni konuşmanın ilk satırıdır) ve küçük harfli konuşmanın altında,
     /// cümlenin devamı olmayan, rakam taşıyan kısa büyük harfli satır ("AKB 51"). Tümü büyük harfli altyazının devamı
     /// ("LUCIA: GET / DOWN!", "I'm with the / FBI.") ayrılmaz (Mac: Reading.withoutSignLines, Android: Reading.withoutSignLines).
+    /// Harfsiz sayı satırı (HUD sayacı, "88", "19") konuşan adlı satırın üstündeyse ya da bloğun başındaysa da ayrılır
+    /// (GitHub #1097: "88 / Lucia: …" tek altyazı çevriliyordu).
     /// </summary>
     internal static List<List<TextLine>> WithoutSignLines(List<TextLine> block)
     {
         var speaker = Enumerable.Range(1, Math.Max(0, block.Count - 1))
             .FirstOrDefault(i => SpeakerPrefix.Parse(block[i].Text) is not null, -1);
-        if (speaker > 0 && block.Take(speaker).All(line => SceneText.IsSignLine(line.Text)))
+        if (speaker > 0 && block.Take(speaker).All(line => IsHudLine(line.Text)))
             return [block.Take(speaker).ToList(), .. WithoutSignLines(block.Skip(speaker).ToList())];
+        // Baştaki HUD satırları (en az biri harfsiz sayı: "14", "MANATEES / 10") büyük harfle başlayan, küçük harfli konuşmanın
+        // üstünden ayrılır (GitHub #1097). Büyük harfli ürün satırı ("59 / PED T-SHIRT") bölünmez; SceneText onu bütün atar.
+        // Konuşmanın ortasındaki sayı cevabı bölünmez.
+        var hud = block.TakeWhile(line => IsHudLine(line.Text)).Count();
+        if (hud >= 1 && hud < block.Count && block.Take(hud).Any(line => SceneText.IsNumber(line.Text))
+            && block[hud].Text.FirstOrDefault(char.IsLetter) is var letter && char.IsUpper(letter) && block[hud].Text.Any(char.IsLower))
+            return [block.Take(hud).ToList(), .. WithoutSignLines(block.Skip(hud).ToList())];
         if (block.Count < 2 || SpeakerPrefix.Parse(block[0].Text) is null || !block[0].Text.Any(char.IsLower)) return [block];
         var cut = Enumerable.Range(1, block.Count - 1).FirstOrDefault(i =>
             SceneText.IsSignLine(block[i].Text) && block[i].Text.Any(char.IsDigit) && !Continues(block[i - 1].Text, block[i].Text), -1);
@@ -550,6 +571,8 @@ public sealed class Reading
         var centers = boxes.Select(box => (box.Left + box.Right) / 2).ToList();
         return lefts.Max() - lefts.Min() > MenuEdge * 2 && centers.Max() - centers.Min() <= MenuEdge * 2;
     }
+
+    internal const string OffBandReason = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)";
 
     private static bool IsSpoken(Reading block) => SpeakerPrefix.Parse(block.Lines[0].Text) is not null;
 

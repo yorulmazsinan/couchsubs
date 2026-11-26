@@ -400,8 +400,11 @@ public final class RegionWatcher {
         let geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.areaId
             && !ScreenNotices.isNotice(id: area.id)
         let own = subtitleEcho?.filter(reading, place: place, geometry: geometry) ?? reading
+        // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
+        // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
+        // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.
         let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
-                                       styled: GameAreaPresets.isPreset(area.id), kind: ScreenTextKind.of(area))
+                                       styled: true, kind: ScreenTextKind.of(area))
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
         // kararı `clearIfUnsteady`'de (özgün yazının izi ya da süre).
         let emptyWhileShown = candidate.key.isEmpty && !(state.renderedText ?? "").isEmpty
@@ -595,7 +598,7 @@ public final class RegionWatcher {
     /// (okunan alan) kesilir; çeviride yerleri korunur.
     /// `auto`: otomatik bulunmuş alan; her yazı grubu (tek grup da) blok olur ve özgün stili çıkarılır.
     /// `menu`: otomatik alan menüde; satır yükseklikleri farklı olabilir (başlık, etiket).
-    /// `styled`: oyunun hazır alanı (`GameAreaPresets`): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
+    /// `styled`: ek alan (oyunun hazır alanı `GameAreaPresets` ya da kullanıcının alanı, #1324): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// `kind`: alanın yerinden belli türü (`ScreenTextKind.of(area)`); otomatik alanda grupların çizim kipini seçer.
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
@@ -684,7 +687,7 @@ public final class RegionWatcher {
                                               background: block.style!.background, foreground: block.style!.foreground,
                                               upper: block.look!.upper, align: block.look!.align,
                                               words: TextPainter.words(joined),
-                                              kind: auto ? Self.paintKind(group, lines: lines, cards: cards, area: kind) : nil,
+                                              kind: Self.paintKind(group, lines: lines, cards: cards, area: kind),
                                               prompt: joined.contains(ButtonIcons.marker) || ButtonPrompts.isPrompt(IconText.plain(joined)))
                 }
                 var paints = TextPainter.paints(targets, frame: frame)
