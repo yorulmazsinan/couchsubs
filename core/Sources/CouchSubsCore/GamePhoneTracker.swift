@@ -321,8 +321,8 @@ public enum GamePhoneGeometry {
         return (left, bottom - h, w, h)
     }
 
-    /// Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255).
-    static let darkTone = 24
+    /// Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255). Önceden 24'tü: karanlık sahnede (gece, karartılmış oyun) görüntünün kenar sütunları ve alt satırları da şerit sayılıp kırpılıyor, 16:9 olmayan pencerede (Remote Play, şeritli ya da başlık çubuklu) oyun görüntüsü küçük ve kaymış bulunuyor, telefon aranamıyordu. Oyun penceresinin şeritleri simsiyahtır (0–3).
+    static let darkTone = 8
 
     /// Karedeki telefon. `near`: açık telefonun son yeri; sıkı arama ıskalarsa o yerin hemen çevresinde gevşek doğrulama
     /// yapılır (`confirmPicture`): hoparlör yarığı ve kamera üstte, alt çentik altta aynı yerde duruyorsa telefon

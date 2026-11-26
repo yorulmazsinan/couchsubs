@@ -337,8 +337,8 @@ object GamePhoneGeometry {
     /** Karenin içindeki dikdörtgen (piksel). */
     data class Area(val x: Int, val y: Int, val width: Int, val height: Int)
 
-    /** Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255). */
-    const val DARK_TONE = 24
+    /** Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255). Önceden 24'tü: karanlık sahnede (gece, karartılmış oyun) görüntünün kenar sütunları ve alt satırları da şerit sayılıp kırpılıyor, 16:9 olmayan pencerede (Remote Play, şeritli ya da başlık çubuklu) oyun görüntüsü küçük ve kaymış bulunuyor, telefon aranamıyordu. Oyun penceresinin şeritleri simsiyahtır (0–3). */
+    const val DARK_TONE = 8
 
     private fun widescreen(width: Int, height: Int) = abs(width.toDouble() / height - 400.0 / 225) <= 0.04
 

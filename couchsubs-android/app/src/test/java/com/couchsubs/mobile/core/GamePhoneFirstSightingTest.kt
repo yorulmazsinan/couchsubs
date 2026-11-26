@@ -82,6 +82,37 @@ class GamePhoneFirstSightingTest {
         })
     }
 
+    /**
+     * Pencereden okunan kare: görüntü 16:10 pencerede siyah şeritli (letterbox), geniş pencerede yanları siyah şeritli
+     * (pillarbox) ya da üstünde açık başlık çubuğuyla (titlebar).
+     */
+    private fun framed(source: Picture, kind: String): Picture {
+        val w = source.width
+        val h = source.height
+        var width = w
+        var height = h
+        var x = 0
+        var top = 0
+        when (kind) {
+            "letterbox" -> {
+                height = w * 10 / 16
+                top = (height - h) / 2
+            }
+            "pillarbox" -> {
+                width = w + 2 * (w / 12)
+                x = w / 12
+            }
+            else -> {
+                height = h + h / 34
+                top = height - h
+            }
+        }
+        val out = IntArray(width * height)
+        if (kind == "titlebar") java.util.Arrays.fill(out, 0, top * width, (240 shl 16) or (240 shl 8) or 240)
+        for (y in 0 until h) System.arraycopy(source.pixels, y * w, out, (top + y) * width + x, w)
+        return Picture(width, height, out)
+    }
+
     /** Çift doğrusal büyütme (piksel ortalarından; 1440p akış). */
     private fun resized(source: Picture, width: Int, height: Int): Picture {
         val scaleX = source.width.toDouble() / width
@@ -112,6 +143,8 @@ class GamePhoneFirstSightingTest {
 
     internal fun transformed(source: Picture, transform: String, cover: List<Double>? = null): Picture {
         if (transform == "scale1440") return resized(source, 2560, 1440)
+        if (transform == "scale720") return resized(source, 1280, 720)
+        if (transform in setOf("letterbox", "pillarbox", "titlebar")) return framed(source, transform)
         val width = source.width
         val height = source.height
         val out = when (transform) {

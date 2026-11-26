@@ -292,8 +292,8 @@ internal static class GamePhoneGeometry
 
     internal static CropRegion? Locate(Frame frame) => TryLocate(frame, out var pose) ? pose.Bounds : null;
 
-    /// <summary>Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255).</summary>
-    internal const int DarkTone = 24;
+    /// <summary>Simsiyah şerit: örneklerin hepsi bu tondan koyu (0–255). Önceden 24'tü: karanlık sahnede (gece, karartılmış oyun) görüntünün kenar sütunları ve alt satırları da şerit sayılıp kırpılıyor, 16:9 olmayan pencerede (Remote Play, şeritli ya da başlık çubuklu) oyun görüntüsü küçük ve kaymış bulunuyor, telefon aranamıyordu. Oyun penceresinin şeritleri simsiyahtır (0–3).</summary>
+    internal const int DarkTone = 8;
 
     private static bool Widescreen(int width, int height) => Math.Abs(width / (double)height - Width / (double)Height) <= .04;
 

@@ -78,6 +78,37 @@ public class GamePhoneFirstSightingTests
         return frame;
     }
 
+    /// <summary>
+    /// Pencereden okunan kare: görüntü 16:10 pencerede siyah şeritli (letterbox), geniş pencerede yanları siyah şeritli
+    /// (pillarbox) ya da üstünde açık başlık çubuğuyla (titlebar).
+    /// </summary>
+    internal static Frame Framed(Frame source, string kind)
+    {
+        int w = source.Width, h = source.Height, width = w, height = h, x = 0, top = 0;
+        switch (kind)
+        {
+            case "letterbox":
+                height = w * 10 / 16;
+                top = (height - h) / 2;
+                break;
+            case "pillarbox":
+                width = w + 2 * (w / 12);
+                x = w / 12;
+                break;
+            default:
+                height = h + h / 34;
+                top = height - h;
+                break;
+        }
+        var frame = Frame.Blank(width, height);
+        for (var i = 3; i < frame.Pixels.Length; i += 4) frame.Pixels[i] = 255;
+        if (kind == "titlebar")
+            for (var i = 0; i < top * frame.Stride; i++) frame.Pixels[i] = (byte)(i % 4 == 3 ? 255 : 240);
+        for (var y = 0; y < h; y++)
+            Buffer.BlockCopy(source.Pixels, y * source.Stride, frame.Pixels, (top + y) * frame.Stride + x * 4, w * 4);
+        return frame;
+    }
+
     private static double[]? ShiftOf(JsonElement sample) =>
         sample.TryGetProperty("shift", out var shift) ? shift.EnumerateArray().Select(item => item.GetDouble()).ToArray() : null;
 
@@ -88,6 +119,8 @@ public class GamePhoneFirstSightingTests
     {
         if (transform == "none") return source;
         if (transform == "scale1440") return source.Resized(2560, 1440);
+        if (transform == "scale720") return source.Resized(1280, 720);
+        if (transform is "letterbox" or "pillarbox" or "titlebar") return Framed(source, transform);
         var frame = Frame.Blank(source.Width, source.Height);
         if (transform == "shiftUp")
         {

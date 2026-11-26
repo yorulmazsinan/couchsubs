@@ -30,7 +30,12 @@ final class GamePhoneFirstSightingTests: XCTestCase {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               var image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw XCTSkip("gerçek kare yok: \(name)") }
         for part in transform.split(separator: "+").map(String.init) {
-            image = part == "scale1440" ? scaled(image, width: 2560, height: 1440) : transformed(image, part)
+            switch part {
+            case "scale1440": image = scaled(image, width: 2560, height: 1440)
+            case "scale720": image = scaled(image, width: 1280, height: 720)
+            case "letterbox", "pillarbox", "titlebar": image = framed(image, part)
+            default: image = transformed(image, part)
+            }
         }
         if let shift { image = shifted(image, dx: shift[0], dy: shift[1]) }
         let result = cover == nil ? image : transformed(image, "none", cover: cover)
@@ -44,6 +49,35 @@ final class GamePhoneFirstSightingTests: XCTestCase {
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+
+    /// Pencereden okunan kare: görüntü 16:10 pencerede siyah şeritli (letterbox), geniş pencerede yanları siyah şeritli
+    /// (pillarbox) ya da üstünde açık başlık çubuğuyla (titlebar).
+    static func framed(_ image: CGImage, _ kind: String) -> CGImage {
+        let w = image.width, h = image.height
+        var width = w, height = h, x = 0, top = 0
+        switch kind {
+        case "letterbox":
+            height = w * 10 / 16
+            top = (height - h) / 2
+        case "pillarbox":
+            width = w + 2 * (w / 12)
+            x = w / 12
+        default:
+            height = h + h / 34
+            top = height - h
+        }
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        if kind == "titlebar" {
+            context.setFillColor(red: 240 / 255, green: 240 / 255, blue: 240 / 255, alpha: 1)
+            context.fill(CGRect(x: 0, y: h, width: width, height: height - h))
+        }
+        // CoreGraphics'te y aşağıdan yukarı: görüntünün üstü pencerenin üstünden `top` aşağıda.
+        context.draw(image, in: CGRect(x: x, y: height - top - h, width: w, height: h))
         return context.makeImage()!
     }
 
