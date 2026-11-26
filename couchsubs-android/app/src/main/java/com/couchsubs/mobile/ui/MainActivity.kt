@@ -275,12 +275,16 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Tokens.foreground = true
+        // #1303: arka plandayken TV bağlantısı koptuysa ana ekranda "CouchSubs'ı açık tutun" (iPhone ile aynı).
+        com.couchsubs.mobile.service.TvAwayAlert.returned(this)
     }
 
     override fun onStop() {
         super.onStop()
         // Uygulama arka plandayken sürekli animasyonlar durur (hareket kapısı).
         Tokens.foreground = false
+        // Yapılandırma değişikliğinde (döndürme) ekran yeniden kurulur: bu arka plana geçiş değildir.
+        if (!isChangingConfigurations) com.couchsubs.mobile.service.TvAwayAlert.left()
     }
 
     /** Durum ve gezinme çubuğu: koyu görünümde açık simgeler, açık görünümde koyu simgeler. */

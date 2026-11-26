@@ -675,6 +675,9 @@
     <string name="channel_connection">Bağlantı</string>
     <string name="connection_lost_title">PS5 bağlantısı koptu</string>
     <string name="connection_lost_body">Altyazı durdu. Yeniden bağlanmak için CouchSubs\'ı aç.</string>
+    <string name="tv_lost_away_title">TV bağlantısı koptu</string>
+    <string name="tv_lost_away_body">CouchSubs arka plandayken TV ile bağlantı koptu. Oynarken CouchSubs\'ı açık tutun; şimdi açın, kendiliğinden yeniden bağlanır.</string>
+    <string name="tv_lost_away_note">CouchSubs\'ı açık tutun: CouchSubs arka plandayken TV ile bağlantı koptu, altyazı yalnız telefonda kaldı. Oynarken uygulamayı ekranda açık tutun; TV\'ye kendiliğinden yeniden bağlanır.</string>
     <string name="psn_sign_out">PSN\'den çıkış yap ve hesabı sıfırla</string>
     <string name="psn_sign_out_title">PSN\'den çıkış yapılsın mı?</string>
     <string name="psn_sign_out_body">İkinci PSN hesabı ve PS5 eşleşmesi bu telefondan silinir. Yeniden çeviri yapmak için Sony ile giriş yap ve PS5\'i yeniden eşle.</string>

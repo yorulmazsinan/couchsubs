@@ -248,7 +248,7 @@ object TvSessionLauncher {
             sleep(pollMs)
         }
         if (connected()) return output
-        log("Android TV: TV uygulaması çalışıyordu ($output) ama ${waitMs / 1000} sn'de bağlanmadı; kapatılıp (am force-stop) yeniden açılıyor")
+        log("Android TV: TV uygulaması çalışıyordu ($output) ama ${waitMs / 1000} sn'de bağlanmadı; kapatılıp (kapanma isteği, gerekirse am force-stop) yeniden açılıyor")
         return open(true).trim()
     }
 

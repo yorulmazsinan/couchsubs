@@ -54,6 +54,23 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
             ((line.Contains("Hist") && line.Contains("ActivityRecord{")) || line.Contains("ServiceRecord{"))
             && line.Contains(PackageName + "/"));
 
+    /// <summary>
+    /// Uygulamadan kendisinin kapanmasını isteyen komut (TV 0.9.114+: MainActivity EXTRA_EXIT → HDMI bırakılır, ekran ve
+    /// katman kapanır). Eski TV uygulaması bunu sıradan açılış sayar; o zaman <see cref="ForceStopCommand"/> gönderilir.
+    /// Mac/iPhone exitCommand ve Android telefondaki EXIT_COMMAND ile aynı.
+    /// </summary>
+    public const string ExitCommand = $"shell:am start -n {PackageName}/.MainActivity --ez exit true";
+
+    /// <summary>Kapanma isteğinden sonra <c>am force-stop</c>'a kadar beklenen süre (testlerde kısaltılır).</summary>
+    internal static TimeSpan ExitWait { get; set; } = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>
+    /// Kapanma isteğinden sonraki <see cref="RunningCommand"/> çıktısına göre <c>am force-stop</c> gerekiyor mu: uygulama
+    /// hâlâ görünüyorsa ya da çıktı okunamıyorsa (boş, <c>grep</c> yok: yığın satırı hiç yok) evet.
+    /// </summary>
+    public static bool NeedsForceStop(string runningOutput) =>
+        IsRunning(runningOutput) || !runningOutput.Contains("Hist", StringComparison.Ordinal);
+
     /// <summary>TV'de ADB açık mı (port yanıt veriyor mu)?</summary>
     public static async Task<bool> IsReachableAsync(string host, int port = DefaultPort, TimeSpan? timeout = null)
     {
@@ -165,12 +182,29 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
     public const string ForceStopCommand = $"shell:am force-stop {PackageName}";
 
     /// <summary>
-    /// Güncellemeden önce TV'deki CouchSubs'ı kapatır. Kapatılamasa da kurulum sürer (paket yöneticisi de kapatır); TV
-    /// yanıt vermezse bekçi adımı takılmış sayar.
+    /// TV'deki CouchSubs'ı kapatır (güncellemeden önce ve bekçinin "kapat ve aç" denemesinde). #1221: önce kendisinden
+    /// kapanması istenir (<see cref="ExitCommand"/>; HDMI girişini bırakır), <see cref="ExitWait"/> beklenir, hâlâ
+    /// çalışıyorsa (ya da bilinemiyorsa) <c>am force-stop</c>. Eskiden doğrudan <c>am force-stop</c> gönderiliyordu;
+    /// MediaTek'li Philips Google TV'lerde bırakılmayan HDMI TV kapatılıp açılana kadar siyah kalıyordu. Kapatılamasa da
+    /// kurulum sürer (paket yöneticisi de kapatır); TV yanıt vermezse bekçi adımı takılmış sayar. Android telefondaki
+    /// stopApp ve iPhone'daki stopApp ile aynı.
     /// </summary>
-    internal static async Task ForceStopAsync(AdbConnection adb, TvStall? stall, CancellationToken cancellationToken)
+    internal static async Task ForceStopAsync(AdbConnection adb, TvStall? stall, CancellationToken cancellationToken,
+        Action<string>? log = null)
     {
         stall?.Enter("closing");
+        try { await adb.RunAsync(ExitCommand, cancellationToken: cancellationToken); }
+        catch (Exception error) when (error is not OperationCanceledException and not AndroidInstallException) { }
+        if (ExitWait > TimeSpan.Zero) await Task.Delay(ExitWait, cancellationToken);
+        string after;
+        try { after = await adb.RunAsync(RunningCommand, cancellationToken: cancellationToken); }
+        catch (Exception error) when (error is not OperationCanceledException and not AndroidInstallException) { after = ""; }
+        if (!NeedsForceStop(after))
+        {
+            log?.Invoke("Android TV: uygulama kapanma isteğiyle kapandı (am force-stop gerekmedi)");
+            return;
+        }
+        log?.Invoke($"Android TV: uygulama kapanma isteğinden {ExitWait.TotalMilliseconds:0} ms sonra hâlâ çalışıyordu; am force-stop");
         try { await adb.RunAsync(ForceStopCommand, cancellationToken: cancellationToken); }
         catch (Exception error) when (error is not OperationCanceledException and not AndroidInstallException) { }
     }
@@ -291,13 +325,17 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         var started = (await adb.RunAsync(StartCommand(launchParams), cancellationToken: cancellationToken)).Trim();
         if (!StartedExisting(started)) return started;
         log?.Invoke($"Android TV: uygulama zaten çalışıyordu ({started}); kapatılıp (am force-stop) yeniden açılıyor");
-        return await RestartOnAsync(adb, launchParams, cancellationToken);
+        return await RestartOnAsync(adb, launchParams, cancellationToken, log);
     }
 
-    /// <summary>Uygulamayı kapatır (<c>am force-stop</c>) ve temiz açar (<c>am start</c>); <c>am start</c> çıktısı döner.</summary>
-    internal static async Task<string> RestartOnAsync(AdbConnection adb, string? launchParams, CancellationToken cancellationToken)
+    /// <summary>
+    /// Uygulamayı kapatır (<see cref="ForceStopAsync"/>: kapanma isteği, gerekirse <c>am force-stop</c>) ve temiz açar
+    /// (<c>am start</c>); <c>am start</c> çıktısı döner.
+    /// </summary>
+    internal static async Task<string> RestartOnAsync(AdbConnection adb, string? launchParams, CancellationToken cancellationToken,
+        Action<string>? log = null)
     {
-        await ForceStopAsync(adb, null, cancellationToken);
+        await ForceStopAsync(adb, null, cancellationToken, log);
         return (await adb.RunAsync(StartCommand(launchParams), cancellationToken: cancellationToken)).Trim();
     }
 
@@ -332,7 +370,7 @@ public sealed partial class AndroidTvInstaller(string host, string keyDirectory,
         {
             await using var adb = await AdbConnection.ConnectAsync(host, port, LoadOrCreateKey(keyDirectory),
                 () => throw new AndroidInstallException(AndroidInstallError.NotApproved, "onay gerekiyor"), cancellationToken: cancellationToken);
-            return restart ? await RestartOnAsync(adb, launchParams, cancellationToken) : await OpenOnAsync(adb, launchParams, cancellationToken);
+            return restart ? await RestartOnAsync(adb, launchParams, cancellationToken, log) : await OpenOnAsync(adb, launchParams, cancellationToken);
         }, log, cancellationToken);
     }
 

@@ -397,6 +397,15 @@ private fun RunningScreen(status: LiveStatus, topBar: @Composable () -> Unit, on
         // "Otomatik açmayı dene" (Windows, Mac ve iPhone ile aynı).
         if (!status.demo && Services.settings.target.showsOnTv && status.connectedTvs == 0)
             Services.settings.installedTv?.let { tv -> TvOpenCard(tv.brand, status.tvOpenProblem, status.tvReconnecting) { onTvInstall(tv) } }
+        // #1303: arka plandayken TV bağlantısı koptu; altyazı yalnız telefonda kalıyordu (iPhone ile aynı not).
+        if (!status.demo && Services.settings.target.showsOnTv && status.tvLostWhileAway) {
+            Tile(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.tv_lost_away_note), style = Tokens.Type.body, color = Tokens.Color.text)
+                SecondaryButton(stringResource(R.string.ok)) {
+                    com.couchsubs.mobile.service.LiveState.update { it.copy(tvLostWhileAway = false) }
+                }
+            }
+        }
         val current = status.recent.firstOrNull()
         // İlk altyazı gelene kadar ve bağlantı koptuğunda: kolu açınca PS5'te ana hesap seçilmeli (GitHub #231, MainAccountTip).
         if (com.couchsubs.mobile.remoteplay.MainAccountTip.visible(ps5 = !Services.settings.xbox, demo = status.demo,

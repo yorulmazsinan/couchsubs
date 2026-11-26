@@ -694,6 +694,7 @@ class TranslationService : Service() {
         com.couchsubs.mobile.translation.SentenceTranslator.fallbackLog = Backend::breadcrumb
         startedAt = System.currentTimeMillis()
         LiveState.update { LiveStatus(running = true, demo = demo, phase = getString(R.string.phase_preparing), startedAt = startedAt, engineLabel = engineLabel()) }
+        TvAwayAlert.reset(this)
         Telemetry.event(Telemetry.SESSION_START, "target" to settings.target.name.lowercase(), "engine" to settings.engine.name.lowercase(),
             "packs" to settings.packsEnabled)
         // Paketlerin açılması, çeviri modeli ve sunucu kurulumu ana iş parçacığında yapılırsa zayıf telefonda
@@ -766,13 +767,18 @@ class TranslationService : Service() {
             Log.i(TAG, "TV alındı göndermedi: bağlantı kopmuş sayıldı, yeniden bağlanılıyor")
             com.couchsubs.mobile.tv.TvOpenRetry.request()
             markTvReconnecting()
+            // #1303: uygulama arka plandaysa "CouchSubs'ı açık tutun" (iPhone ile aynı).
+            TvAwayAlert.lost(this, "alındı gelmedi")
         }
         subtitleServer.onClientsChanged = { count ->
             val before = LiveState.status.value.connectedTvs
             LiveState.update { it.copy(connectedTvs = count, tvOpenProblem = if (count > 0) null else it.tvOpenProblem,
                 tvReconnecting = if (count > 0) false else it.tvReconnecting) }
             if (count > 0) tvReconnectTimer?.cancel(false)
-            else if (before > 0 && LiveState.status.value.running && settings.target.showsOnTv) markTvReconnecting()
+            else if (before > 0 && LiveState.status.value.running && settings.target.showsOnTv) {
+                markTvReconnecting()
+                TvAwayAlert.lost(this, "bağlantı kapandı")
+            }
             if (count == 0) com.couchsubs.mobile.tv.TvAppUpdate.disconnected()
             if (before == 0 && count > 0) Telemetry.event(Telemetry.TV_CONNECTED, "count" to count)
             // TV uygulaması bağlandı: bu Samsung TV'de kurulu olduğu artık biliniyor (liste "yok" demiş olsa da).
@@ -1726,7 +1732,8 @@ class TranslationService : Service() {
         wifiLocks.forEach { lock -> runCatching { if (lock.isHeld) lock.release() } }
         wifiLocks = emptyList()
         tvReconnectTimer?.cancel(false)
-        LiveState.update { it.copy(running = false, phase = "", streaming = false, framesSince = null, subtitleOffTip = false, tvOpenProblem = null, tvReconnecting = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
+        LiveState.update { it.copy(running = false, phase = "", streaming = false, framesSince = null, subtitleOffTip = false, tvOpenProblem = null, tvReconnecting = false, tvLostWhileAway = false, current = "", previous = "", regions = emptyList(), screen = emptyList(), screenState = LiveStatus.ScreenState.IDLE) }
+        TvAwayAlert.reset(this)
         super.onDestroy()
     }
 }

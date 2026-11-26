@@ -1,0 +1,1 @@
+0.9.114: Yeniden açılırken HDMI önce bırakılıyor, görüntü siyah kalmıyor; HDMI girişini farklı türde bildiren projektörlerde uygulama içi mod seçilebiliyor.

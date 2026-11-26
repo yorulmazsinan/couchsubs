@@ -53,7 +53,15 @@ struct CouchSubsApp: App {
             model.requestNotificationPermission = { ConnectionAlert.requestPermission() }
             model.onConnectionLost = { ConnectionAlert.post() }
             model.onPausedInBackground = { [weak model] in ConnectionAlert.schedulePausedInBackground(pipEnabled: model?.backgroundPiP ?? false) }
-            model.onResumedFromBackground = { ConnectionAlert.clearPausedInBackground() }
+            model.onResumedFromBackground = {
+                ConnectionAlert.clearPausedInBackground()
+                ConnectionAlert.clearTVLostWhileAway()
+            }
+            // #1303: arka plandayken TV bağlantısı koptu (Android ile aynı uyarı).
+            model.onTVLostWhileAway = { [weak model] in
+                guard model?.notifiesDisconnect == true else { return }
+                ConnectionAlert.postTVLostWhileAway()
+            }
             // "Arka planda sürdür": çeviri sürerken uygulamadan çıkınca Resim içinde resim penceresi; açıkken çeviri sürer,
             // "duraklatıldı" uyarısı gerekmez. Pencere arka planda kapanırsa uyarı yeniden kurulur.
             let pip = BackgroundPiP.shared
@@ -194,6 +202,23 @@ enum ConnectionAlert {
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: pausedDelay, repeats: false)
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: pausedIdentifier, content: content, trigger: trigger))
+    }
+
+    private static let tvLostIdentifier = "tv-lost-while-away"
+
+    /// #1303: uygulama arka plandayken TV bağlantısı koptu; altyazı yalnız telefonda kalıyordu ve nedeni söylenmiyordu.
+    /// Uygulama öndeyse gösterilmez (ana ekrandaki not yeter). Android'deki TvAwayAlert ile aynı metin.
+    static func postTVLostWhileAway() {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "TV connection lost")
+        content.body = String(localized: "The TV lost the connection while CouchSubs was in the background. Keep CouchSubs open while you play; open it now and it reconnects by itself.")
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: tvLostIdentifier, content: content, trigger: nil))
+    }
+
+    static func clearTVLostWhileAway() {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [tvLostIdentifier])
     }
 
     static func clearPausedInBackground() {

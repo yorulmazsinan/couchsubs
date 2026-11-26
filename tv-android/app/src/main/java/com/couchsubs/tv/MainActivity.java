@@ -52,6 +52,13 @@ public class MainActivity extends Activity implements TvPage.Host {
     private static final String EXTRA_DISPLAY_MODE = "displayMode";
     /** CouchSubs ekranı TV'nin kendi giriş ekranından kendini geri aldı (bkz. ScreenReclaim): ekran ve mod değişmez. */
     private static final String EXTRA_RECLAIM = "reclaim";
+    /**
+     * Bilgisayar/telefon uygulamayı kapatıp yeniden açmadan önce kibarca kapanmasını ister
+     * ({@code am start -n com.couchsubs.tv/.MainActivity --ez exit true}; bkz. {@link #exit()}). #1221: eskiden doğrudan
+     * {@code am force-stop} gönderiliyordu; işlem öldürülünce HDMI girişi bırakılmıyor (TvView.reset çalışmıyor),
+     * MediaTek'li Philips Google TV'lerde HDMI TV kapatılıp açılana kadar siyah kalıyordu.
+     */
+    static final String EXTRA_EXIT = "exit";
     private static final long WATCH_EVERY_MS = 1000;
     private static final long HELP_VISIBLE_MS = 25_000;
     /** Giriş seçicide bundan çok düğme varsa yan yana sığmaz, alt alta dizilir. */
@@ -142,6 +149,12 @@ public class MainActivity extends Activity implements TvPage.Host {
         super.onCreate(savedInstanceState);
         current = this;
         Intent intent = getIntent();
+        if (intent != null && intent.getBooleanExtra(EXTRA_EXIT, false)) {
+            // Kapanma isteği uygulama kapalıyken geldi (ya da yalnız katman çalışıyordu): hiçbir giriş açılmaz, katman da kapanır.
+            if (OverlayService.running) OverlayService.stop(this);
+            finishAndRemoveTask();
+            return;
+        }
         launchParams = paramsOf(intent);
         TvPage.storeDisplayMode(this, intent.getStringExtra(EXTRA_DISPLAY_MODE));
         // Ekran sistemce yeniden kurulduysa (ayar değişikliği) kullanıcının katmandan çıktığı unutulmaz: yoksa kayıtlı
@@ -778,10 +791,15 @@ public class MainActivity extends Activity implements TvPage.Host {
      */
     @Override
     public void exit() {
+        exit("exit");
+    }
+
+    private void exit(String why) {
         stopWatching();
         stopOutageWatch();
+        handler.removeCallbacksAndMessages(null);
         session.clear();
-        releaseHdmi(true, "exit");
+        releaseHdmi(true, why);
         finishAndRemoveTask();
     }
 
@@ -850,6 +868,12 @@ public class MainActivity extends Activity implements TvPage.Host {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (intent.getBooleanExtra(EXTRA_EXIT, false)) {
+            // #1221: bilgisayar/telefon kapatıp yeniden açacak; HDMI girişi işlem öldürülmeden önce bırakılır.
+            if (OverlayService.running) OverlayService.stop(this);
+            exit("exit (keeper)");
+            return;
+        }
         TvPage.storeDisplayMode(this, intent.getStringExtra(EXTRA_DISPLAY_MODE));
         if (page == null || intent.getBooleanExtra(EXTRA_RECLAIM, false)) return;
         String params = paramsOf(intent);
@@ -1058,6 +1082,8 @@ public class MainActivity extends Activity implements TvPage.Host {
     }
 
     private void tune(String id) {
+        // Kapanıyor (çıkış isteği): giriş yeniden açılmaz, bırakılan HDMI bırakılmış kalır (#1221).
+        if (isFinishing() || tvView == null) return;
         // Ekran arka plandaysa giriş açılmaz, yalnız hatırlanır; öne gelince açılır (onResume).
         if (!session.want(id)) return;
         // Bekleyen gecikmeli bırakma bu yeni oturumu kapatmasın.

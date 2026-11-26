@@ -112,4 +112,57 @@ public class HdmiInputsTest {
     public void tvWithoutHdmiInputsForAppsAsksTheUser() {
         assertEquals(0, HdmiInputs.pick(Collections.<HdmiInputs.Choice>emptyList(), 3, 0).port);
     }
+
+    // --- Seçilebilecek girişler (#1292) ---
+
+    private static final int HDMI = android.media.tv.TvInputInfo.TYPE_HDMI;
+    private static final int OTHER = android.media.tv.TvInputInfo.TYPE_OTHER;
+    private static final int COMPONENT = android.media.tv.TvInputInfo.TYPE_COMPONENT;
+    private static final int TUNER = android.media.tv.TvInputInfo.TYPE_TUNER;
+
+    private static HdmiInputs.Entry entry(String id, int type, boolean passthrough, String parent) {
+        return new HdmiInputs.Entry(id, type, passthrough, parent);
+    }
+
+    private static String ids(List<HdmiInputs.Entry> entries) {
+        StringBuilder out = new StringBuilder();
+        for (HdmiInputs.Entry e : entries) out.append(out.length() == 0 ? "" : ",").append(e.id);
+        return out.toString();
+    }
+
+    /** HDMI girişleri varsa yalnız onlar: alt girişler (CEC), tuner ve TYPE_OTHER girişleri sayılmaz. */
+    @Test
+    public void hdmiInputsWinAndSubInputsAreSkipped() {
+        List<HdmiInputs.Entry> all = Arrays.asList(
+                entry("mtk/HW10", HDMI, true, null), entry("mtk/HW2", HDMI, true, null),
+                entry("mtk/HDMI2-PS5", HDMI, true, "mtk/HW2"), entry("oem/AV1", OTHER, true, null),
+                entry("tuner", TUNER, false, null));
+        assertEquals("mtk/HW2,mtk/HW10", ids(HdmiInputs.select(all)));
+    }
+
+    /** #1292: projektör HDMI girişini TYPE_OTHER bildiriyor; eskiden liste boştu, uygulama içi mod kullanılamıyordu. */
+    @Test
+    public void projectorWithoutHdmiTypeFallsBackToOtherPassthroughInputs() {
+        List<HdmiInputs.Entry> all = Arrays.asList(
+                entry("com.wanbo.tvinput/.HdmiService/HW3", OTHER, true, null),
+                entry("com.wanbo.tvinput/.HdmiService/HW1", COMPONENT, true, null),
+                entry("com.example.app/.Channels", OTHER, false, null),
+                entry("com.wanbo.tvinput/.HdmiService/HW3-cec", OTHER, true, "com.wanbo.tvinput/.HdmiService/HW3"));
+        assertEquals("com.wanbo.tvinput/.HdmiService/HW1,com.wanbo.tvinput/.HdmiService/HW3", ids(HdmiInputs.select(all)));
+    }
+
+    @Test
+    public void onlyAppInputsMeanNoInputs() {
+        assertTrue(HdmiInputs.select(Arrays.asList(entry("tuner", TUNER, false, null),
+                entry("app", OTHER, false, null))).isEmpty());
+    }
+
+    /** Bilgi paneline TV'nin bütün girişleri yazılır: kimliğin son parçası, türü, uygulama girişi, alt giriş. */
+    @Test
+    public void inputListIsDescribedForDiagnostics() {
+        assertEquals("HW2 hdmi, PS5 hdmi/sub, HW3 other, Channels tuner/app",
+                HdmiInputs.describe(Arrays.asList(entry("mtk/HW2", HDMI, true, null), entry("mtk/PS5", HDMI, true, "mtk/HW2"),
+                        entry("oem/HW3", OTHER, true, null), entry("tv/Channels", TUNER, false, null))));
+        assertEquals("", HdmiInputs.describe(Collections.<HdmiInputs.Entry>emptyList()));
+    }
 }

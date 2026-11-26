@@ -112,6 +112,13 @@ final class PhoneModel: ObservableObject {
     private var tvReconnectTask: Task<Void, Never>?
     /// Çeviri bir süredir sürüyor ama TV uygulaması bağlanmadı: TV kartının altında ne yapılacağı söylenir.
     @Published private(set) var tvWaitingLong = false
+    /// #1303: uygulama arka plandayken TV bağlantısı koptu: ana ekranda "CouchSubs'ı açık tutun" notu (kullanıcı kapatana ya da
+    /// çeviri durana kadar). Android ile aynı.
+    @Published private(set) var tvLostWhileAway = false
+    /// Arka plan gezisi ve TV bağlantısı (bkz. `TVAway`).
+    private var tvAway = TVAway()
+    /// Arka plandayken TV bağlantısı koptu: uygulama, etkin değilse yerel bildirim gösterir. Testlerde boş.
+    var onTVLostWhileAway: () -> Void = {}
     /// TV uygulamasını kendiliğinden açmanın son denemesi neden olmadı (TV kartının altında tek satır); açıldıysa nil.
     @Published private(set) var tvOpenProblem: TVOpenProblem?
     /// Kayıtlı TV adresi hiç yanıt vermiyor (kapılar zaman aşımında; "reddedildi" yanıt sayılır): kart "Yanıt vermiyor —
@@ -913,6 +920,8 @@ final class PhoneModel: ObservableObject {
         tvWaitingLong = false
         tvOpenProblem = nil
         endTVReconnecting()
+        tvAway.reset()
+        tvLostWhileAway = false
         SessionHealth.saveMark(nil, defaults)
         runningSince = nil
         packInUse = nil
@@ -972,6 +981,10 @@ final class PhoneModel: ObservableObject {
     /// oturumu kapatılıp açılmaz: eskiden her dönüşte kapatılıyor, PS5'te ikinci hesap girip çıkıyordu.
     func becameActive(afterBackground: Bool = true) {
         if afterBackground { onResumedFromBackground() }
+        // #1303: TV giderken bağlıydı, dönüşte bağlı değil (iPhone askıdayken kopma olayı gelmez).
+        if tvAway.away, tvAway.returned(at: Date().timeIntervalSinceReferenceDate, linked: tvClients > 0) {
+            noteTVLostWhileAway("dönüşte TV bağlı değil")
+        }
         // iOS askıdayken altyazı sunucusunun dinleyicisini kapatabiliyor; dönüşte açık değilse yeniden açılır.
         // Dinleyici "açık" görünse de askıdan sonra bağlantı kabul etmeyebilir: kendi adresinden sorulur, yanıt yoksa
         // yeniden açılır (TV uygulaması telefonu bulamıyor, telefon "TV uygulaması bekleniyor"da kalıyordu).
@@ -996,6 +1009,7 @@ final class PhoneModel: ObservableObject {
     /// (pencere açılınca uyarı kalkar). Deneme modunda PS5 yok, uyarı da yok.
     func enteredBackground() {
         if isRunning { markBackground(true) }
+        if isRunning, settings.output.showsOnTV, !demoMode { tvAway.left(linked: tvClients > 0) }
         guard isRunning, !demoMode, notifiesDisconnect else { return }
         onPausedInBackground()
     }
@@ -1091,6 +1105,9 @@ final class PhoneModel: ObservableObject {
     /// yeniden bağlanır.
     private func tvLost(stale: Bool) {
         guard isRunning, settings.output.showsOnTV, !demoMode, tvClients == 0 else { return }
+        if tvAway.lost(at: Date().timeIntervalSinceReferenceDate) {
+            noteTVLostWhileAway(stale ? "alındı gelmedi" : "bağlantı kapandı")
+        }
         tvReconnecting = true
         tvReconnectTask?.cancel()
         tvReconnectTask = Task { [weak self] in
@@ -1102,6 +1119,20 @@ final class PhoneModel: ObservableObject {
             SubtitleLog.write("TV alındı göndermiyor: TV uygulaması yeniden açılıyor")
             if keeper == nil { startKeeper() } else { keeper?.reconnect() }
         }
+    }
+
+    /// #1303: TV bağlantısı uygulama arka plandayken koptu: ana ekranda not, uygulama etkin değilse bildirim; günlüğe yazılır
+    /// (kullanıcı günlüğünde "altyazı yalnız telefonda kaldı"nın nedeni görünsün).
+    private func noteTVLostWhileAway(_ why: String) {
+        guard isRunning, settings.output.showsOnTV, !demoMode else { return }
+        SubtitleLog.write("TV bağlantısı uygulama arka plandayken koptu (\(why)); \"CouchSubs'ı açık tutun\" uyarısı gösterildi")
+        tvLostWhileAway = true
+        onTVLostWhileAway()
+    }
+
+    /// Ana ekrandaki "CouchSubs'ı açık tutun" notu kapatıldı.
+    func dismissTVLostWhileAway() {
+        tvLostWhileAway = false
     }
 
     private func endTVReconnecting() {

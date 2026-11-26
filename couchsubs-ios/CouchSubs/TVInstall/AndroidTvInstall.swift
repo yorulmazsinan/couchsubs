@@ -490,7 +490,7 @@ final class AndroidTvInstaller {
         // Güncellemede TV'de çalışan eski uygulama önce kapatılır; kurulumdan sonra temiz açılır.
         if installed != nil {
             stall?.enter("closing")
-            log.write("Güncellemeden önce eski uygulama kapatılıyor: \(((try? adb.run(Self.forceStopCommand)) ?? "?").trimmingCharacters(in: .whitespacesAndNewlines))")
+            log.write("Güncellemeden önce eski uygulama kapatılıyor: \(Self.stopApp(run: { try adb.run($0) }))")
         }
         progress(.installing)
         let bytes = try apk()
@@ -583,14 +583,32 @@ final class AndroidTvInstaller {
         log.write("Uygulama açılıyor: \(started)")
         // TV "zaten çalışıyor, öne getirildi" derse eski ekran kapatılıp temiz açılır (Samsung'daki "resumed" gibi, #1248).
         guard started.contains("Activity not started") else { return }
-        log.write("Uygulama zaten çalışıyordu (eski ekran); kapatılıp (am force-stop) yeniden açılıyor")
-        log.write("Uygulama açılıyor: \(((try? Self.restart(adb, launchParams: launchParams)) ?? "açılamadı"))")
+        log.write("Uygulama zaten çalışıyordu (eski ekran); kapatılıp (kapanma isteği, gerekirse am force-stop) yeniden açılıyor")
+        log.write("Uygulama açılıyor: \(((try? Self.restart(adb, launchParams: launchParams, log: { [log] in log.write($0) })) ?? "açılamadı"))")
     }
 
-    /// Uygulamayı kapatır (`am force-stop`) ve temiz açar (`am start`); `am start` çıktısı döner.
-    static func restart(_ adb: AdbConnection, launchParams: String?) throws -> String {
-        _ = try? adb.run(forceStopCommand)
+    /// Uygulamayı kapatır (`stopApp`: kapanma isteği, gerekirse `am force-stop`) ve temiz açar (`am start`); `am start` çıktısı döner.
+    static func restart(_ adb: AdbConnection, launchParams: String?, log: ((String) -> Void)? = nil) throws -> String {
+        let stopped = stopApp(run: { try adb.run($0) })
+        log?("Android TV uygulaması kapatılıyor: \(stopped)")
         return try adb.run(startCommand(launchParams)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Kapanma isteğinden sonra `am force-stop`'a kadar beklenen süre.
+    static let exitWait: TimeInterval = 1.5
+
+    /// Çalışan uygulamayı kapatır (#1221): önce kendisinden kapanmasını ister (`AndroidTVApp.exitCommand`; HDMI girişini
+    /// bırakır), `wait` bekler, hâlâ çalışıyorsa (ya da bilinemiyorsa) `am force-stop`. Eskiden doğrudan `am force-stop`
+    /// gönderiliyordu; MediaTek'li Philips Google TV'lerde bırakılmayan HDMI TV kapatılıp açılana kadar siyah kalıyordu.
+    /// Günlüğe yazılacak sonucu döner. Android telefondaki stopApp ve Windows/Mac ForceStopAsync ile aynı.
+    static func stopApp(run: (String) throws -> String, wait: TimeInterval = exitWait,
+                        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }) -> String {
+        let exit = ((try? run(AndroidTVApp.exitCommand)) ?? "?").trimmingCharacters(in: .whitespacesAndNewlines)
+        if wait > 0 { sleep(wait) }
+        let after = (try? run(AndroidTVApp.runningCommand)) ?? ""
+        guard AndroidTVApp.needsForceStop(after) else { return "kapanma isteğiyle kapandı (\(exit))" }
+        let forced = ((try? run(forceStopCommand)) ?? "?").trimmingCharacters(in: .whitespacesAndNewlines)
+        return "kapanma isteğinden \(Int(wait * 1000)) ms sonra hâlâ çalışıyordu; am force-stop (\(forced))"
     }
 
     /// Uygulama açılırken verilecek başlatma parametreleri (`{"server":"http://…"}`); TV telefonu ağda aramadan bağlanır.
@@ -638,7 +656,7 @@ final class AndroidTvInstaller {
                                             onApprovalNeeded: { throw AndroidInstallFailure(error: .notApproved, detail: "onay gerekiyor") },
                                             connectTimeout: connectTimeout)
         defer { adb.close() }
-        if restart { return try Self.restart(adb, launchParams: launchParams) }
+        if restart { return try Self.restart(adb, launchParams: launchParams, log: { [log] in log.write($0) }) }
         if AndroidTVApp.isRunning((try? adb.run(AndroidTVApp.runningCommand)) ?? "") {
             // Çalışan uygulama telefona bağlı değil (bekçi yalnız o zaman açar): kayıtlı eski bir adrese bağlı kalmış olabilir.
             // Adres ekranı öne çekmeden bildirilir (TV 0.9.63+; eski TV uygulaması yok sayar). Windows/Mac ve Android'le aynı.

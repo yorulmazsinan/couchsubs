@@ -462,6 +462,14 @@ struct RunningScreen: View {
                 // "Test on TV" TV'ye gitmedi: TV'deki 6 haneli kod bir yere yazılmaz, bu telefonda onaylanır.
                 MobileNote(text: String(localized: "The test subtitle did not reach the TV because the TV app is not connected. Open CouchSubs on the TV. If the TV shows a 6-digit code, don't type it anywhere: approve it in the “Pair this TV?” window that opens on this phone, then test again."))
             }
+            // #1303: arka plandayken TV bağlantısı koptu; altyazı yalnız telefonda kalıyordu (Android ile aynı not).
+            if model.settings.output.showsOnTV, model.tvLostWhileAway, !model.demoMode {
+                Tile {
+                    MobileNote(text: String(localized: "Keep CouchSubs open: the TV lost the connection while CouchSubs was in the background, so subtitles stayed on the phone. Keep the app on screen while you play; it reconnects to the TV by itself."))
+                    Button { model.dismissTVLostWhileAway() } label: { Text("OK") }
+                        .buttonStyle(MobileButtonStyle(kind: .secondary, compact: true))
+                }
+            }
             // "Arka planda sürdür (Resim içinde resim)": bu önizleme uygulamadan çıkınca küçük pencereye geçer (BackgroundPiP).
             if model.backgroundPiP && BackgroundPiP.isSupported {
                 BackgroundPiPTile()

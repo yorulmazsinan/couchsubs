@@ -666,6 +666,9 @@
     <string name="channel_connection">Connection</string>
     <string name="connection_lost_title">PS5 connection lost</string>
     <string name="connection_lost_body">Subtitles stopped. Open CouchSubs to reconnect.</string>
+    <string name="tv_lost_away_title">TV connection lost</string>
+    <string name="tv_lost_away_body">The TV lost the connection while CouchSubs was in the background. Keep CouchSubs open while you play; open it now and it reconnects by itself.</string>
+    <string name="tv_lost_away_note">Keep CouchSubs open: the TV lost the connection while CouchSubs was in the background, so subtitles stayed on the phone. Keep the app on screen while you play; it reconnects to the TV by itself.</string>
     <string name="psn_sign_out">Sign out of PSN and reset the account</string>
     <string name="psn_sign_out_title">Sign out of PSN?</string>
     <string name="psn_sign_out_body">The second PSN account and the PS5 pairing are removed from this phone. To translate again, sign in with Sony and pair the PS5 again.</string>

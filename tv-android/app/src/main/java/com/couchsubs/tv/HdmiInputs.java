@@ -23,21 +23,117 @@ final class HdmiInputs {
      * TV'nin HDMI girişleri, port numarasına göre sıralı. Girişin numarası sıradaki yeridir.
      * HDMI-CEC ile bağlı cihazlar (PS5 gibi) bazı TV'lerde girişin "alt girişi" olarak ayrıca listelenir; onlar sayılmaz,
      * yoksa numaralar kayar ve iki bağlı giriş görünür. Kimlikler sayısal sıralanır ("HW10", "HW2"den sonra gelir).
+     * TV hiç HDMI türünde giriş bildirmiyorsa (#1292, projektör: HDMI girişi kendi OEM uygulamasında, listede TYPE_OTHER
+     * olarak görünüyor) dışarıdan gelen (passthrough) TYPE_OTHER/TYPE_COMPONENT girişleri kullanılır; eskiden liste boş
+     * kalıyor, uygulama içi mod hiç seçilemiyordu.
      */
     static List<TvInputInfo> list(Context context) {
         List<TvInputInfo> inputs = new ArrayList<>();
         TvInputManager manager = manager(context);
         if (manager == null) return inputs;
-        for (TvInputInfo input : manager.getTvInputList()) {
-            if (input.getType() == TvInputInfo.TYPE_HDMI && input.isPassthroughInput() && input.getParentId() == null) {
-                inputs.add(input);
+        List<TvInputInfo> all;
+        try {
+            all = manager.getTvInputList();
+        } catch (RuntimeException e) {
+            return inputs;
+        }
+        List<Entry> entries = new ArrayList<>();
+        for (TvInputInfo input : all) entries.add(Entry.of(input));
+        for (Entry entry : select(entries)) {
+            for (TvInputInfo input : all) {
+                if (input.getId().equals(entry.id)) {
+                    inputs.add(input);
+                    break;
+                }
             }
         }
+        return inputs;
+    }
+
+    /** getTvInputList'teki bir giriş, yalnız seçimin baktığı alanlarla (birim testleri TvInputInfo kuramaz). */
+    static final class Entry {
+        final String id;
+        final int type;
+        final boolean passthrough;
+        final String parentId;
+
+        Entry(String id, int type, boolean passthrough, String parentId) {
+            this.id = id;
+            this.type = type;
+            this.passthrough = passthrough;
+            this.parentId = parentId;
+        }
+
+        static Entry of(TvInputInfo input) {
+            return new Entry(input.getId(), input.getType(), input.isPassthroughInput(), input.getParentId());
+        }
+    }
+
+    /**
+     * Açılabilecek girişler, numara sırasıyla: önce HDMI türündeki üst girişler; hiç yoksa (projektör, OEM kutusu)
+     * dışarıdan gelen TYPE_OTHER ve TYPE_COMPONENT üst girişleri. Tuner ve uygulama girişleri (passthrough değil) ve
+     * HDMI-CEC alt girişleri hiçbir zaman sayılmaz.
+     */
+    static List<Entry> select(List<Entry> all) {
+        List<Entry> hdmi = new ArrayList<>();
+        List<Entry> other = new ArrayList<>();
+        for (Entry input : all) {
+            if (input == null || input.id == null || !input.passthrough || input.parentId != null) continue;
+            if (input.type == TvInputInfo.TYPE_HDMI) hdmi.add(input);
+            else if (input.type == TvInputInfo.TYPE_OTHER || input.type == TvInputInfo.TYPE_COMPONENT) other.add(input);
+        }
+        List<Entry> inputs = hdmi.isEmpty() ? other : hdmi;
         Collections.sort(inputs, (first, second) -> {
-            int order = Long.compare(lastNumber(first.getId()), lastNumber(second.getId()));
-            return order != 0 ? order : first.getId().compareTo(second.getId());
+            int order = Long.compare(lastNumber(first.id), lastNumber(second.id));
+            return order != 0 ? order : first.id.compareTo(second.id);
         });
         return inputs;
+    }
+
+    /**
+     * Bilgi panelinin tanı satırı için TV'nin bildirdiği bütün girişler (#1292): "HW2 hdmi, HW5 hdmi/sub, tv tuner/app"
+     * gibi; kimliğin son parçası, türü, passthrough değilse "/app", alt girişse "/sub". Okunamazsa boş.
+     */
+    static String describe(Context context) {
+        TvInputManager manager = manager(context);
+        if (manager == null) return "";
+        try {
+            List<Entry> entries = new ArrayList<>();
+            for (TvInputInfo input : manager.getTvInputList()) entries.add(Entry.of(input));
+            return describe(entries);
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
+    static String describe(List<Entry> entries) {
+        StringBuilder out = new StringBuilder();
+        for (Entry input : entries) {
+            if (input == null || input.id == null) continue;
+            if (out.length() > 0) out.append(", ");
+            int slash = input.id.lastIndexOf('/');
+            out.append(slash >= 0 && slash < input.id.length() - 1 ? input.id.substring(slash + 1) : input.id)
+                    .append(' ').append(typeName(input.type));
+            if (!input.passthrough) out.append("/app");
+            if (input.parentId != null) out.append("/sub");
+        }
+        return out.toString();
+    }
+
+    private static String typeName(int type) {
+        switch (type) {
+            case TvInputInfo.TYPE_HDMI: return "hdmi";
+            case TvInputInfo.TYPE_OTHER: return "other";
+            case TvInputInfo.TYPE_COMPONENT: return "component";
+            case TvInputInfo.TYPE_TUNER: return "tuner";
+            case TvInputInfo.TYPE_COMPOSITE: return "composite";
+            case TvInputInfo.TYPE_SVIDEO: return "svideo";
+            case TvInputInfo.TYPE_SCART: return "scart";
+            case TvInputInfo.TYPE_VGA: return "vga";
+            case TvInputInfo.TYPE_DVI: return "dvi";
+            case TvInputInfo.TYPE_DISPLAY_PORT: return "dp";
+            default: return "t" + type;
+        }
     }
 
     /** 1'den başlayan numaraya karşılık gelen HDMI girişinin kimliği, yoksa null. */

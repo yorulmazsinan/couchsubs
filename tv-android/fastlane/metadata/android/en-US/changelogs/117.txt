@@ -1,0 +1,1 @@
+0.9.114: HDMI is released before the app restarts, so the picture no longer stays black; in-app mode works on projectors that report their HDMI input as another type.

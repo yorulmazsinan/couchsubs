@@ -149,7 +149,7 @@ test('webOS HDMI: sağlam görüntüye dokunulmaz (sayaç ilerlese de ilerlemese
     assert.strictEqual(tv.videos.length, 1, moving ? 'sayaç ilerlerken' : 'sayaç hiç ilerlemezken');
     assert.strictEqual(tv.video.attributes.src, undefined);
     assert.strictEqual(tv.video.children[0].attributes.src, 'ext://hdmi:3');
-    assert.match(tv.platform.diagnostics(), /^hdmi playing rs4 1920x1080 t[+=] · snd on sx no · webOS 7\.4\.0 55NANO756PA cr79$/);
+    assert.match(tv.platform.diagnostics(), /^hdmi playing rs4 1920x1080 t[+=] · snd on sx no · webOS 7\.4\.0 55NANO756PA cr79 · scr [^ ]+ dpr [0-9.]+ vp 1920 iw [0-9]+x[0-9]+$/);
   }
 });
 

@@ -20,6 +20,61 @@
     return pick ? { ip: pick.ipAddress, mask: pick.netmask || null } : null;
   }
 
+  // --- Ekran ölçüsü (#1098) ---
+  // Ortak index.html'deki <meta name="viewport" content="width=1920"> Android TV'nin WebView'i için eklendi (#7) ama LG
+  // paketine de giriyor. LG 43LH590V'de (webOS 3.x, 05.70.50) sayfa ekranın yalnız sol üst kısmına çiziliyordu: panelin
+  // alt yarısı ekranın ortasında kesik, yalnız sol üstteki çeviriler görünüyor. Bu TV'nin tarayıcısı ekranı 1920'den dar
+  // (ya da piksel oranı 1 değil) bildirince sabit 1920 görünüm küçültülmeden büyük çiziliyor (varsayım; tanı satırı "scr"
+  // doğrular). Ekran 1920 genişlikte ve oran 1 ise (bugüne kadarki bütün LG'ler) hiçbir şey değişmez. Değilse görünüm
+  // ekran genişliğinde açılır, sayfa CSS zoom ile 1920x1080 uzayına sığdırılır; app.js ölçüleri COUCHSUBS_ZOOM'a böler
+  // (fitPanel, altyazı ve ek alanlar 1920x1080 uzayında kalır).
+  var PAGE_WIDTH = 1920;
+  var PAGE_HEIGHT = 1080;
+  var screenFit = { content: 'width=' + PAGE_WIDTH, zoom: 1 };
+
+  // Ekranın bildirdiği ölçü (CSS pikseli) ve piksel oranı → { content: görünüm ya da null (dokunulmaz), zoom }.
+  function viewportPlan(screenWidth, screenHeight, ratio) {
+    if (!(screenWidth > 0) || !(screenHeight > 0)) return { content: null, zoom: 1 };
+    var dpr = ratio > 0 ? ratio : 1;
+    if (screenWidth >= PAGE_WIDTH && Math.abs(dpr - 1) < 0.01) return { content: null, zoom: 1 };
+    var zoom = Math.round(Math.min(screenWidth / PAGE_WIDTH, screenHeight / PAGE_HEIGHT) * 10000) / 10000;
+    return { content: 'width=device-width', zoom: zoom > 0 && zoom < 1 ? zoom : 1 };
+  }
+
+  function fitScreen() {
+    try {
+      var scr = window.screen || {};
+      var plan = viewportPlan(scr.width, scr.height, window.devicePixelRatio);
+      if (!plan.content) return;
+      var meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.setAttribute('content', plan.content);
+      screenFit.content = plan.content;
+      screenFit.zoom = plan.zoom;
+      if (plan.zoom !== 1) {
+        document.documentElement.style.zoom = String(plan.zoom);
+        window.COUCHSUBS_ZOOM = plan.zoom;
+      }
+    } catch (e) {}
+  }
+  fitScreen();
+
+  // Tanı satırı: ekranın bildirdiği ölçü, piksel oranı, görünüm ve sayfanın gördüğü alan
+  // ("scr 1920x1080 dpr 1 vp 1920 iw 1920x1080"; düzeltildiyse "vp device z 0.5").
+  function screenText() {
+    try {
+      var scr = window.screen || {};
+      var dpr = window.devicePixelRatio || 1;
+      var root = document.documentElement || {};
+      var iw = root.clientWidth || window.innerWidth || 0;
+      var ih = root.clientHeight || window.innerHeight || 0;
+      return 'scr ' + (scr.width || '?') + 'x' + (scr.height || '?') + ' dpr ' + Math.round(dpr * 100) / 100 +
+        ' vp ' + (screenFit.content === 'width=device-width' ? 'device' : PAGE_WIDTH) +
+        (screenFit.zoom !== 1 ? ' z ' + screenFit.zoom : '') + ' iw ' + iw + 'x' + ih;
+    } catch (e) {
+      return 'scr ?';
+    }
+  }
+
   // --- Konsolun girişi ---
   // luna://com.webos.service.eim/getAllInputStatus LG'nin TV belgelerinde yok (LG'nin geliştirici forumu: "giriş durumunu
   // veren bir API sağlanmıyor"); yanıtta yalnız bu uygulamanın 0.9'dan beri okuduğu alanlar kullanılır: id (HDMI_n),
@@ -1175,11 +1230,13 @@
 
     // Bilgi panelindeki ikinci tanı satırı: HDMI görüntüsünün durumu, yeniden kurma sayısı, son hata ve webOS sürümü.
     diagnostics: function () {
-      return hdmiText() + ' · ' + systemText();
+      return hdmiText() + ' · ' + systemText() + ' · ' + screenText();
     },
 
     // Birim testi için (scripts/tv-webos-hdmi.test.js).
     rankInputs: rankInputs,
+    // Birim testi için (scripts/tv-webos-screen.test.js).
+    viewportPlan: viewportPlan,
 
     // Son okunan giriş listesindeki etiket (bilgi panelinde "HDMI 2 — PS5"); bilinmiyorsa ''.
     inputLabel: function (port) {

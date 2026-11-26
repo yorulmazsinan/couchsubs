@@ -27,6 +27,11 @@ data class LiveStatus(
      * bağlanana, çeviri durana ya da TranslationService.TV_RECONNECT_MS dolana kadar "yeniden bağlanılıyor" gösterilir.
      */
     val tvReconnecting: Boolean = false,
+    /**
+     * #1303: uygulama arka plandayken TV bağlantısı koptu (TvAwayAlert): ana ekranda "CouchSubs'ı açık tutun" notu,
+     * kullanıcı kapatana ya da çeviri durana kadar (iPhone ile aynı).
+     */
+    val tvLostWhileAway: Boolean = false,
     /** TV uygulamasını kendiliğinden açmanın son denemesi neden olmadı (ana ekranda tek satır); açıldıysa null. */
     val tvOpenProblem: com.couchsubs.mobile.tv.TvOpenProblem? = null,
     /** Son gösterilen çeviriler, yeniden eskiye. */

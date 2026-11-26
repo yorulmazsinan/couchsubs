@@ -301,8 +301,11 @@ final class TvPage {
             } catch (RuntimeException e) {
                 state = "";
             }
+            // TV'nin bildirdiği bütün girişler (#1292): HDMI girişi farklı türde görünen TV/projektörler buradan anlaşılır.
+            String inputs = HdmiInputs.describe(context);
             return (state == null || state.isEmpty() ? "" : state + " · ") + Build.MANUFACTURER + " " + Build.MODEL
-                    + " · Android " + Build.VERSION.RELEASE + " (" + Build.VERSION.SDK_INT + ")";
+                    + " · Android " + Build.VERSION.RELEASE + " (" + Build.VERSION.SDK_INT + ")"
+                    + (inputs.isEmpty() ? "" : " · inputs " + inputs);
         }
 
         /** Panelde görünen sürüm: Android uygulamasının kendi sürümü (ortak sayfadaki sayı diğer TV'lerinkidir). */

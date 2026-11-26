@@ -12,6 +12,9 @@ namespace CouchSubs.TvInstall.Tests;
 
 public class AdbConnectionTests
 {
+    /// <summary>Kapanma isteğinden sonraki bekleme testlerde yok (sahte TV hemen yanıt verir).</summary>
+    public AdbConnectionTests() => AndroidTvInstaller.ExitWait = TimeSpan.Zero;
+
     /// <summary>Android TV'nin adbd'si gibi davranan sahte sunucu.</summary>
     private sealed class FakeAdbd : IAsyncDisposable
     {
@@ -26,6 +29,8 @@ public class AdbConnectionTests
         /// <summary>Açılan bütün hizmetler, sırasıyla (ör. kurulumdan sonra izin ve açma komutları).</summary>
         public List<string> OpenedServices { get; } = [];
         public string Reply { get; set; } = "Success\n";
+        /// <summary>Hizmete özel yanıt (shell: hizmetleri); null dönerse <see cref="Reply"/>.</summary>
+        public Func<string, string?>? ReplyFor { get; set; }
         /// <summary>Bu önekle açılan hizmete hiç yanıt verilmez (TV takıldı).</summary>
         public string? HangOn { get; set; }
         private Task? serving;
@@ -78,7 +83,8 @@ public class AdbConnectionTests
                         await Send(AdbConnection.Okay, 77, packet.Arg0, []);
                         if (!OpenedService.StartsWith("exec:"))
                         {
-                            await Send(AdbConnection.Wrte, 77, packet.Arg0, Encoding.UTF8.GetBytes(Reply));
+                            var reply = ReplyFor?.Invoke(OpenedService) ?? Reply;
+                            await Send(AdbConnection.Wrte, 77, packet.Arg0, Encoding.UTF8.GetBytes(reply));
                             await Send(AdbConnection.Clse, 77, packet.Arg0, []);
                         }
                         else if (ExpectedLength(OpenedService) == 0)
@@ -427,11 +433,11 @@ public class AdbConnectionTests
     }
 
     /// <summary>
-    /// Bekçinin "kapat ve aç" denemesi (uygulama çalışıyordu ama 10 sn'de bağlanmadı): önce am force-stop, sonra am start;
-    /// çalışıyor denetimi yapılmaz (Samsung'daki was_kill + was_execute ile aynı sıra).
+    /// Bekçinin "kapat ve aç" denemesi (uygulama çalışıyordu ama 10 sn'de bağlanmadı): önce kapanma isteği (#1221), uygulama
+    /// hâlâ çalışıyorsa ya da bilinemiyorsa am force-stop, sonra am start (Samsung'daki was_kill + was_execute ile aynı sıra).
     /// </summary>
     [Fact]
-    public async Task RestartForceStopsThenStarts()
+    public async Task RestartAsksTheAppToExitThenForceStopsThenStarts()
     {
         var dir = Directory.CreateTempSubdirectory().FullName;
         using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
@@ -439,7 +445,46 @@ public class AdbConnectionTests
         tv.Serve();
         await using (var adb = await AdbConnection.ConnectAsync("127.0.0.1", tv.Port, key, () => { }))
             await AndroidTvInstaller.RestartOnAsync(adb, null, CancellationToken.None);
-        Assert.Equal([AndroidTvInstaller.ForceStopCommand, "shell:am start -n com.couchsubs.tv/.MainActivity"], tv.OpenedServices);
+        Assert.Equal([AndroidTvInstaller.ExitCommand, AndroidTvInstaller.RunningCommand, AndroidTvInstaller.ForceStopCommand,
+            "shell:am start -n com.couchsubs.tv/.MainActivity"], tv.OpenedServices);
+    }
+
+    /// <summary>
+    /// #1221: TV uygulaması kapanma isteğiyle kapandıysa (HDMI'yı kendisi bıraktı) am force-stop gönderilmez; MediaTek'li
+    /// Philips Google TV'de öldürülen işlem HDMI'yı bırakmıyor, giriş TV kapatılana kadar siyah kalıyordu.
+    /// </summary>
+    [Fact]
+    public async Task AppThatExitsOnRequestIsNotForceStopped()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        using var key = AndroidTvInstaller.LoadOrCreateKey(dir);
+        await using var tv = new FakeAdbd
+        {
+            TrustedKey = key,
+            Reply = "Starting: Intent { cmp=com.couchsubs.tv/.MainActivity }\n",
+            ReplyFor = service => service == AndroidTvInstaller.RunningCommand
+                ? "    * Hist #0: ActivityRecord{2a1d9e1 u0 com.google.android.tvlauncher/.MainActivity t1}\n" : null,
+        };
+        tv.Serve();
+        List<string> lines = [];
+        await using (var adb = await AdbConnection.ConnectAsync("127.0.0.1", tv.Port, key, () => { }))
+            await AndroidTvInstaller.RestartOnAsync(adb, null, CancellationToken.None, lines.Add);
+        Assert.Equal([AndroidTvInstaller.ExitCommand, AndroidTvInstaller.RunningCommand,
+            "shell:am start -n com.couchsubs.tv/.MainActivity"], tv.OpenedServices);
+        Assert.Contains(lines, line => line.Contains("kapanma isteğiyle kapandı"));
+    }
+
+    [Fact]
+    public void ForceStopIsNeededOnlyWhileTheAppStillShowsOrTheListCannotBeRead()
+    {
+        const string launcher = "    * Hist #0: ActivityRecord{2a1d9e1 u0 com.google.android.tvlauncher/.MainActivity t1}";
+        const string ours = "    * Hist #1: ActivityRecord{6c1b2f0 u0 com.couchsubs.tv/.MainActivity t42}";
+        Assert.False(AndroidTvInstaller.NeedsForceStop(launcher));
+        Assert.True(AndroidTvInstaller.NeedsForceStop($"{ours}\n{launcher}"));
+        Assert.True(AndroidTvInstaller.NeedsForceStop($"{launcher}\n    ServiceRecord{{1f2e u0 com.couchsubs.tv/.OverlayService}}"));
+        Assert.True(AndroidTvInstaller.NeedsForceStop(""));
+        Assert.True(AndroidTvInstaller.NeedsForceStop("/system/bin/sh: grep: not found"));
+        Assert.Equal("shell:am start -n com.couchsubs.tv/.MainActivity --ez exit true", AndroidTvInstaller.ExitCommand);
     }
 
     /// <summary>
@@ -459,7 +504,9 @@ public class AdbConnectionTests
         await using (var adb = await AdbConnection.ConnectAsync("127.0.0.1", tv.Port, key, () => { }))
             await AndroidTvInstaller.StartFreshAsync(adb, null, lines.Add, CancellationToken.None);
         const string start = "shell:am start -n com.couchsubs.tv/.MainActivity";
-        Assert.Equal(restarted ? [start, AndroidTvInstaller.ForceStopCommand, start] : [start], tv.OpenedServices);
+        Assert.Equal(restarted
+            ? [start, AndroidTvInstaller.ExitCommand, AndroidTvInstaller.RunningCommand, AndroidTvInstaller.ForceStopCommand, start]
+            : [start], tv.OpenedServices);
         Assert.Equal(restarted, lines.Any(line => line.Contains("am force-stop")));
     }
 

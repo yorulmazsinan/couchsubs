@@ -39,7 +39,7 @@ public sealed class AndroidTvLauncher(Func<bool, Task<string>> open, Func<bool> 
         var output = (await open(false)).Trim();
         if (!IsResumed(output)) return output;
         if (await WaitForConnectionAsync(cancellationToken)) return output;
-        log?.Invoke($"Android TV: TV uygulaması çalışıyordu ({output}) ama {wait.TotalSeconds:0} sn'de bağlanmadı; kapatılıp (am force-stop) yeniden açılıyor");
+        log?.Invoke($"Android TV: TV uygulaması çalışıyordu ({output}) ama {wait.TotalSeconds:0} sn'de bağlanmadı; kapatılıp (kapanma isteği, gerekirse am force-stop) yeniden açılıyor");
         return (await open(true)).Trim();
     }
 

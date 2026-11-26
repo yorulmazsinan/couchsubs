@@ -19,7 +19,7 @@ public enum AndroidTVLauncher {
     }
 
     static func restartLine(_ output: String, seconds: Int64) -> String {
-        "Android TV: TV uygulaması çalışıyordu (\(output)) ama \(seconds) sn'de bağlanmadı; kapatılıp (am force-stop) yeniden açılıyor"
+        "Android TV: TV uygulaması çalışıyordu (\(output)) ama \(seconds) sn'de bağlanmadı; kapatılıp (kapanma isteği, gerekirse am force-stop) yeniden açılıyor"
     }
 
     /// Açar (`open(false)`); çalışan ama bağlanmayan uygulamayı bir kez kapatıp açar (`open(true)`). Son açma çıktısı döner;

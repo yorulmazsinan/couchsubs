@@ -69,4 +69,17 @@ final class AndroidTVOpenRuleTests: XCTestCase {
         XCTAssertEqual(AndroidTVApp.runningCommand,
                        "shell:dumpsys activity activities | grep Hist; dumpsys activity services com.couchsubs.tv | grep ServiceRecord")
     }
+
+    /// #1221: kapanma isteğinden sonra am force-stop yalnız uygulama hâlâ görünüyorsa ya da liste okunamıyorsa gider
+    /// (Windows/Mac AdbConnectionTests, Android AndroidTvTest ile aynı).
+    func testForceStopIsNeededOnlyWhileTheAppStillShowsOrTheListCannotBeRead() {
+        let launcher = "    * Hist #0: ActivityRecord{2a1d9e1 u0 com.google.android.tvlauncher/.MainActivity t1}"
+        let ours = "    * Hist #1: ActivityRecord{6c1b2f0 u0 com.couchsubs.tv/.MainActivity t42}"
+        XCTAssertFalse(AndroidTVApp.needsForceStop(launcher))
+        XCTAssertTrue(AndroidTVApp.needsForceStop("\(ours)\n\(launcher)"))
+        XCTAssertTrue(AndroidTVApp.needsForceStop("\(launcher)\n    ServiceRecord{1f2e u0 com.couchsubs.tv/.OverlayService}"))
+        XCTAssertTrue(AndroidTVApp.needsForceStop(""))
+        XCTAssertTrue(AndroidTVApp.needsForceStop("/system/bin/sh: grep: not found"))
+        XCTAssertEqual(AndroidTVApp.exitCommand, "shell:am start -n com.couchsubs.tv/.MainActivity --ez exit true")
+    }
 }

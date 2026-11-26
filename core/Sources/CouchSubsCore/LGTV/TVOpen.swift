@@ -210,4 +210,15 @@ public enum AndroidTVApp {
 
     /// Uygulama zaten açıkken açma denemesinin sonucu (günlükte "açıldı: zaten açık").
     public static let alreadyRunning = "zaten açık"
+
+    /// Uygulamadan kendisinin kapanmasını isteyen komut (#1221; TV 0.9.114+: MainActivity EXTRA_EXIT → HDMI bırakılır, ekran
+    /// ve katman kapanır). Eski TV uygulaması bunu sıradan açılış sayar; o zaman `am force-stop` gönderilir. Windows/Mac
+    /// ExitCommand ve Android telefondaki EXIT_COMMAND ile aynı.
+    public static let exitCommand = "shell:am start -n \(packageName)/.MainActivity --ez exit true"
+
+    /// Kapanma isteğinden sonraki `runningCommand` çıktısına göre `am force-stop` gerekiyor mu: uygulama hâlâ görünüyorsa ya
+    /// da çıktı okunamıyorsa (boş, `grep` yok: yığın satırı hiç yok) evet.
+    public static func needsForceStop(_ runningOutput: String) -> Bool {
+        isRunning(runningOutput) || !runningOutput.contains("Hist")
+    }
 }

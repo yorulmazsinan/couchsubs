@@ -59,11 +59,45 @@ class AndroidTvInstaller(
         report(step)
     }
 
+    /** Kibar kapanma isteğinden sonra uygulamanın kapanması için beklenen süre (testlerde kısaltılır). */
+    internal var exitWaitMs = EXIT_WAIT_MS
+
+    /**
+     * Çalışan uygulamayı kapatır (#1221): önce kendisinden kapanmasını ister ([EXIT_COMMAND]; HDMI girişini bırakır),
+     * [exitWaitMs] bekler, hâlâ çalışıyorsa (ya da bilinemiyorsa) `am force-stop`. Eskiden doğrudan `am force-stop`
+     * gönderiliyordu; MediaTek'li Philips Google TV'lerde bırakılmayan HDMI TV kapatılıp açılana kadar siyah kalıyordu.
+     * Günlüğe yazılacak sonucu döner. Windows/Mac (AndroidTvInstaller.StopAppAsync) ve iPhone (stopApp) ile aynı.
+     */
+    private fun stopApp(adb: AdbConnection): String {
+        val exit = runCatching { adb.run(EXIT_COMMAND).trim() }.getOrElse { it.message ?: "?" }
+        if (exitWaitMs > 0) Thread.sleep(exitWaitMs)
+        val after = try { adb.run(RUNNING_COMMAND) } catch (_: IOException) { "" }
+        if (!needsForceStop(after)) return "kapanma isteğiyle kapandı ($exit)"
+        val forced = runCatching { adb.run(FORCE_STOP_COMMAND).trim() }.getOrElse { it.message ?: "?" }
+        return "kapanma isteğinden ${exitWaitMs} ms sonra hâlâ çalışıyordu; am force-stop ($forced)"
+    }
+
     companion object {
         const val PACKAGE_NAME = "com.couchsubs.tv"
 
         /** Çalışan uygulamayı kapatan komut (Windows/Mac ForceStopCommand, iPhone forceStopCommand ile aynı). */
         const val FORCE_STOP_COMMAND = "shell:am force-stop $PACKAGE_NAME"
+
+        /**
+         * Uygulamadan kendisinin kapanmasını isteyen komut (TV 0.9.114+: MainActivity EXTRA_EXIT → HDMI bırakılır, ekran
+         * ve katman kapanır). Eski TV uygulaması bunu sıradan açılış sayar; o zaman [FORCE_STOP_COMMAND] gönderilir.
+         * Windows/Mac ExitCommand ve iPhone exitCommand ile aynı.
+         */
+        const val EXIT_COMMAND = "shell:am start -n $PACKAGE_NAME/.MainActivity --ez exit true"
+
+        /** Kapanma isteğinden sonra `am force-stop`'a kadar beklenen süre. */
+        const val EXIT_WAIT_MS = 1_500L
+
+        /**
+         * Kapanma isteğinden sonraki [RUNNING_COMMAND] çıktısına göre `am force-stop` gerekiyor mu: uygulama hâlâ
+         * görünüyorsa ya da çıktı okunamıyorsa (boş, `grep` yok: yığın satırı hiç yok) evet.
+         */
+        fun needsForceStop(runningOutput: String): Boolean = isRunning(runningOutput) || !runningOutput.contains("Hist")
 
         /** Takılma ya da bağlantı kopması: yeni bağlantıyla bir kez daha denenir. */
         fun isRetryable(error: Exception): Boolean = when (error) {
@@ -317,9 +351,9 @@ class AndroidTvInstaller(
         // da başka bir ADB oturumu sürüyorsa sırası beklenir (#1223; TvLane).
         lane.run(host, if (restart) "kapatıp açma" else "açma", log::write) { openNow(params, restart) }
 
-    /** Uygulamayı kapatır (`am force-stop`) ve temiz açar (`am start`); `am start` çıktısı döner. */
+    /** Uygulamayı kapatır ([stopApp]: kapanma isteği, gerekirse `am force-stop`) ve temiz açar (`am start`); `am start` çıktısı döner. */
     private fun restartOn(adb: AdbConnection, params: String?): String {
-        runCatching { adb.run(FORCE_STOP_COMMAND) }
+        log.write("Android TV uygulaması kapatılıyor: ${stopApp(adb)}")
         return adb.run(startCommand(params)).trim()
     }
 
@@ -388,7 +422,7 @@ class AndroidTvInstaller(
             // Güncellemede TV'de çalışan eski uygulama önce kapatılır; kurulumdan sonra temiz açılır.
             if (installed != null) {
                 stall?.enter("closing")
-                log.write("Güncellemeden önce eski uygulama kapatılıyor: ${runCatching { adb.run(FORCE_STOP_COMMAND).trim() }.getOrElse { it.message ?: "?" }}")
+                log.write("Güncellemeden önce eski uygulama kapatılıyor: ${stopApp(adb)}")
             }
             step(InstallStep.INSTALLING)
             val bytes = apk()
@@ -472,7 +506,7 @@ class AndroidTvInstaller(
             log.write("Uygulama açılıyor: $started")
             // TV "zaten çalışıyor, öne getirildi" derse eski ekran kapatılıp temiz açılır (Samsung'daki "resumed" gibi, #1248).
             if (started.contains("Activity not started")) {
-                log.write("Uygulama zaten çalışıyordu (eski ekran); kapatılıp (am force-stop) yeniden açılıyor")
+                log.write("Uygulama zaten çalışıyordu (eski ekran); kapatılıp (kapanma isteği, gerekirse am force-stop) yeniden açılıyor")
                 log.write("Uygulama açılıyor: ${restartOn(adb, launchParams)}")
             }
         } catch (error: IOException) {

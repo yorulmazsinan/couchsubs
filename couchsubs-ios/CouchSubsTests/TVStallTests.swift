@@ -2,6 +2,7 @@
 
 import XCTest
 @testable import CouchSubs
+import CouchSubsCore
 
 /// TV uygulaması güncellemesi takılınca: adımın süresi dolar, bağlantı kapatılır, bir kez daha denenir; yine takılırsa
 /// "bağlantı koptu, tekrar dene" gösterilir (Windows TvStallTests ve Android TvStallTest ile aynı durumlar).
@@ -117,6 +118,32 @@ final class TVStallTests: XCTestCase {
 
     func testAndroidTvStopsTheAppWithForceStop() {
         XCTAssertEqual(AndroidTvInstaller.forceStopCommand, "shell:am force-stop com.couchsubs.tv")
+    }
+
+    /// #1221: önce kapanma isteği, beklenir; uygulama hâlâ çalışıyorsa ya da bilinemiyorsa am force-stop (Android ve
+    /// Windows/Mac ile aynı sıra).
+    func testAndroidTvAsksTheAppToExitBeforeForceStop() {
+        var sent: [String] = []
+        var slept: TimeInterval = 0
+        let result = AndroidTvInstaller.stopApp(run: { command in
+            sent.append(command)
+            return command == AndroidTVApp.runningCommand ? "" : "Starting: Intent { cmp=com.couchsubs.tv/.MainActivity }"
+        }, sleep: { slept += $0 })
+        XCTAssertEqual(sent, [AndroidTVApp.exitCommand, AndroidTVApp.runningCommand, AndroidTvInstaller.forceStopCommand])
+        XCTAssertEqual(slept, AndroidTvInstaller.exitWait)
+        XCTAssertTrue(result.contains("am force-stop"))
+    }
+
+    /// #1221: kapanma isteğiyle kapanan uygulamaya am force-stop gönderilmez (HDMI'yı kendisi bıraktı).
+    func testAndroidTvAppThatExitsOnRequestIsNotForceStopped() {
+        var sent: [String] = []
+        let result = AndroidTvInstaller.stopApp(run: { command in
+            sent.append(command)
+            return command == AndroidTVApp.runningCommand
+                ? "    * Hist #0: ActivityRecord{2a1d9e1 u0 com.google.android.tvlauncher/.MainActivity t1}" : ""
+        }, sleep: { _ in })
+        XCTAssertEqual(sent, [AndroidTVApp.exitCommand, AndroidTVApp.runningCommand])
+        XCTAssertTrue(result.contains("kapanma isteğiyle kapandı"))
     }
 
     func testEveryStepHasALimitExceptTheOnesWaitingForTheUser() {
