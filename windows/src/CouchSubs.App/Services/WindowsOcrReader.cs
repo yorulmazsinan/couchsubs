@@ -107,6 +107,9 @@ public sealed class WindowsOcrReader : ITextReader
     private int sparseCounter;
     private readonly object engineGate = new();
 
+    /// <summary>Tek yazı tanıma isteğinin en uzun süresi; aşan istek iptal edilir (FrameGate'in 15 sn'sinden önce).</summary>
+    internal const int RecognizeTimeoutMs = 10_000;
+
     /// <summary>
     /// GTA V gibi oyunlarda altyazı beyaz yazı ve sağ-alta düşen koyu gölgedir; açık zeminde (ten, gömlek, kaldırım)
     /// Windows OCR harfleri zeminden ayıramaz. Aynı kare farklı hazırlıklarla okunur, paketteki bir satıra birebir denk
@@ -283,7 +286,20 @@ public sealed class WindowsOcrReader : ITextReader
         // ReadingFallback eskiden iki büyütülmüş okumayı paralel başlatıyordu, biri hata verip okuma boş dönüyordu.
         if (engine is null) return Reading.Empty;
         OcrResult result;
-        lock (engineGate) result = engine.RecognizeAsync(bitmap).AsTask().GetAwaiter().GetResult();
+        lock (engineGate)
+        {
+            // Dönmeyen okuma süresiz beklenmez, iptal edilir (#1333; Mac/iPhone: ReadCancellation ile VNRequest.cancel).
+            // Eskiden takılan istek kilidi (engineGate) süresiz tutuyordu; bu okuyucudaki sonraki her okuma da bekliyordu,
+            // FrameGate hattı yeni okuyucuyla kursa da takılan istek ve iş parçacığı oturum boyunca kalıyordu.
+            var operation = engine.RecognizeAsync(bitmap);
+            var pending = operation.AsTask();
+            if (!((IAsyncResult)pending).AsyncWaitHandle.WaitOne(RecognizeTimeoutMs))
+            {
+                operation.Cancel();
+                throw new TimeoutException($"yazı tanıma {RecognizeTimeoutMs} ms'de dönmedi; istek iptal edildi");
+            }
+            result = pending.GetAwaiter().GetResult();
+        }
         double width = image.Width, height = image.Height;
         var lines = result.Lines
             .SelectMany(line => Split(line, width, height))

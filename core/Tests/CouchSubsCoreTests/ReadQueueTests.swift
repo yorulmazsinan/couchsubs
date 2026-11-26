@@ -34,7 +34,7 @@ private final class FirstHangsReader: TextReader, @unchecked Sendable {
 
 /// Bağımsız bağlam yerine geçen sahte yedek: kaç kez bırakıldığını ve kapatıldığını sayar.
 private final class FakeRescuer: ReadRescuer, @unchecked Sendable {
-    let abandons = Counter(), standDowns = Counter(), reads = Counter()
+    let abandons = Counter(), standDowns = Counter(), reads = Counter(), promotions = Counter()
     private let lock = NSLock()
     private var fullQuality = true
     func recognize(_ image: CGImage, language: String) throws -> Reading {
@@ -43,9 +43,52 @@ private final class FakeRescuer: ReadRescuer, @unchecked Sendable {
     }
     func abandon() { abandons.add() }
     func standDown() { standDowns.add() }
+    func preferFullQuality() { promotions.add() }
     var isFullQuality: Bool {
         get { lock.withLock { fullQuality } }
         set { lock.withLock { fullQuality = newValue } }
+    }
+}
+
+/// İptal edilebilen takılı Vision isteğinin yerine (#1333): ilk istek süreç genelindeki kilidi tutup takılır, ancak
+/// iptal edilince (`ReadCancellation`) kilidi bırakıp `CancellationError` ile döner; sonraki istekler kilidi bekler.
+private final class WedgedVision: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var wedged = true
+    private var used = false
+    private var cancels = 0
+    func recognize() throws {
+        condition.lock()
+        let first = !used
+        used = true
+        condition.unlock()
+        if first {
+            guard let cancellation = ReadQueue.currentCancellation else { throw ReadQueueError.stuck }
+            try cancellation.run(onCancel: { [self] in
+                condition.lock()
+                cancels += 1
+                condition.unlock()
+                free()
+            }) { waitWhileWedged() }
+            throw CancellationError()
+        }
+        waitWhileWedged()
+    }
+    private func waitWhileWedged() {
+        condition.lock()
+        while wedged { condition.wait() }
+        condition.unlock()
+    }
+    var cancelCount: Int {
+        condition.lock()
+        defer { condition.unlock() }
+        return cancels
+    }
+    func free() {
+        condition.lock()
+        wedged = false
+        condition.broadcast()
+        condition.unlock()
     }
 }
 
@@ -714,7 +757,7 @@ final class ReadQueueTests: XCTestCase {
         XCTAssertEqual(rescued.text, "yedekten")
 
         for _ in 0..<200 where Self.count(events, Self.isAbandoned) == 0 { try await Task.sleep(for: .milliseconds(10)) }
-        guard case .abandoned(let ms, rescued: true)? = events.all.first(where: Self.isAbandoned) else {
+        guard case .abandoned(let ms, rescued: true, cancelled: false)? = events.all.first(where: Self.isAbandoned) else {
             return XCTFail("takılan okuma bırakılmadı")
         }
         XCTAssertGreaterThanOrEqual(ms, 300)
@@ -771,6 +814,7 @@ final class ReadQueueTests: XCTestCase {
         XCTAssertTrue(queue.isPrimaryParked)
         for _ in 0..<100 where Self.count(events, Self.isParked) == 0 { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(events.all.first(where: Self.isParked), .parked(stillStuck: 1, rescued: true))
+        XCTAssertEqual(rescuer.promotions.value, 1, "kilitliyken yedekten hemen isabetli düzey istenir (#1333)")
 
         // Boşuna yeniden kurma yok: bırakma süresinin kat kat fazlası boyunca okumalar yedekte sürer, bırakma denenmez.
         let checks = queue.abandonCheckCount
@@ -838,6 +882,84 @@ final class ReadQueueTests: XCTestCase {
         XCTAssertFalse(queue.isPrimaryParked)
         let value = try await queue.run { 5 }
         XCTAssertEqual(value, 5)
+    }
+
+    private static func wasCancelled(_ event: ReadQueue.Event?) -> Bool? {
+        guard case .abandoned(_, _, let cancelled)? = event else { return nil }
+        return cancelled
+    }
+
+    /// #1333 (Mac, beta.101): ekran yazıyla dolunca takılan Vision isteği hiç dönmüyordu; bırakılan istek kilidi oturum
+    /// boyunca tuttu, yeniden kurulan okuyucu hemen takıldı, okumalar yedekte (önce hızlı düzeyde) kaldı. Artık bırakılan
+    /// istek iptal edilir: kilit serbest kalır, bırakılan okuma biter, asıl okuyucu kilitli sayılmaz ve geri döner.
+    func testAbandonedReadIsCancelledReleasingTheLockAndPrimaryRecovers() async throws {
+        defer { VisionReader.useFastLevel = false }
+        let vision = WedgedVision()
+        defer { vision.free() }
+        let queue = ReadQueue(label: "test.cancel", timeoutMs: 5000, subtitleTimeoutMs: 80,
+                              abandonStallAfterMs: 200, recoverAfterReads: 3, cancelsAbandonedRead: { true })
+        let rescuer = FakeRescuer()
+        queue.rescuer = rescuer
+        let events = Events()
+        queue.onEvent = { events.add($0) }
+        let read: @Sendable () throws -> Reading = {
+            if ReadQueue.activeRescuer == nil { try vision.recognize() }
+            return try Self.rescuedOrPrimary()
+        }
+
+        _ = try? await queue.run(priority: .subtitle, read)
+        XCTAssertTrue(queue.isRescuing)
+        for _ in 0..<200 where Self.count(events, Self.isAbandoned) == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(Self.wasCancelled(events.all.first(where: Self.isAbandoned)), true)
+        XCTAssertEqual(vision.cancelCount, 1, "takılan istek iptal edildi")
+
+        // Kilit serbest: bırakılan okuma biter, yeni okuyucu okumaları süresinde bitirir, asıl okuyucuya dönülür.
+        for _ in 0..<200 where Self.count(events, Self.isRebuilt) == 0 {
+            _ = try await queue.run(priority: .subtitle, read)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(events.all.contains(.abandonedFinished(stillStuck: 0)))
+        XCTAssertEqual(events.all.last(where: Self.isRebuilt), .recoveredAfterRebuild(reads: 3))
+        XCTAssertFalse(queue.isPrimaryParked)
+        XCTAssertEqual(Self.count(events, Self.isParked), 0, "iptal edilen istek kilidi tutmaz, asıl okuyucu kilitli sayılmaz")
+        XCTAssertFalse(queue.isRescuing)
+        let primary = try await queue.run(priority: .subtitle, read)
+        XCTAssertEqual(primary.text, "asıl")
+    }
+
+    /// İsabetli model henüz hazır değilken (ilk açılışta derleniyor) bırakılan istek iptal edilmez: iptal derlemeyi
+    /// baştan başlatırdı. Takılma eskisi gibi yedekte sürer.
+    func testAbandonedReadIsNotCancelledBeforeTheModelIsReady() async throws {
+        defer { VisionReader.useFastLevel = false }
+        let vision = WedgedVision()
+        defer { vision.free() }
+        let queue = ReadQueue(label: "test.cancel.cold", timeoutMs: 5000, subtitleTimeoutMs: 80,
+                              abandonStallAfterMs: 200, cancelsAbandonedRead: { false })
+        queue.rescuer = FakeRescuer()
+        let events = Events()
+        queue.onEvent = { events.add($0) }
+
+        _ = try? await queue.run(priority: .subtitle) { if ReadQueue.activeRescuer == nil { try vision.recognize() } }
+        for _ in 0..<200 where Self.count(events, Self.isAbandoned) == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(Self.wasCancelled(events.all.first(where: Self.isAbandoned)), false)
+        XCTAssertEqual(vision.cancelCount, 0)
+    }
+
+    /// İptal, kayıtlı isteği bir kez iptal eder; iptalden sonra yeni istek başlatılmaz (derin okumanın ikinci isteği).
+    func testReadCancellationCancelsRunningRequestOnceAndBlocksLaterOnes() throws {
+        let cancellation = ReadCancellation()
+        let cancels = Counter()
+        let value = try cancellation.run(onCancel: { cancels.add() }) { () -> Int in
+            cancellation.cancel()
+            cancellation.cancel()
+            return 7
+        }
+        XCTAssertEqual(value, 7)
+        XCTAssertEqual(cancels.value, 1)
+        XCTAssertTrue(cancellation.isCancelled)
+        XCTAssertThrowsError(try cancellation.run(onCancel: { cancels.add() }) { 1 }) { XCTAssertTrue($0 is CancellationError) }
+        XCTAssertEqual(cancels.value, 1)
+        XCTAssertNil(ReadQueue.currentCancellation, "kuyruk dışında iptal yok")
     }
 
     /// #1307: art arda bırakma sınırı dolunca takılma 5 sn'de bir boşuna yeniden deneniyordu. Artık denenmez; bırakılan

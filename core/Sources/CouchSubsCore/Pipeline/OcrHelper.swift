@@ -314,6 +314,15 @@ public final class OcrHelperRescuer: ReadRescuer, @unchecked Sendable {
         }
     }
 
+    /// Asıl okuyucu kilitli kaldı (#1333): yedek kalıcı okuyucudur, isabetli düzey bir sonraki okumada hemen denenir
+    /// (`accurateAfterMs` beklenmez). Eskiden iki dakika hızlı düzeyde okunuyor, altyazılar bozuk geliyordu.
+    public func preferFullQuality() {
+        lock.withLock {
+            guard accurate == nil, !probed else { return }
+            since = ReadQueue.uptimeMs() - accurateAfterMs
+        }
+    }
+
     public func abandon() {
         let helper: OcrHelperProcess? = lock.withLock {
             let helper = serving

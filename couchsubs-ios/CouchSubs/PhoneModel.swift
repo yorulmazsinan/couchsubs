@@ -1452,8 +1452,8 @@ final class PhoneModel: ObservableObject {
             case .rescueFailed: break
             case .abandonedFinished(let still):
                 SubtitleLog.write("bırakılan takılı okuma sonunda bitti (bitmeyen bırakılmış okuma: \(still))")
-            case .abandoned(let ms, _):
-                SubtitleLog.write("takılan okuma bırakıldı, okuyucu yeniden kuruldu: okuma \(ms) ms'dir dönmüyordu; okuma yeni okuyucuda hızlı düzeyde sürüyor")
+            case .abandoned(let ms, _, let cancelled):
+                SubtitleLog.write("takılan okuma bırakıldı, okuyucu yeniden kuruldu: okuma \(ms) ms'dir dönmüyordu\(cancelled ? ", istek iptal edildi" : ""); okuma yeni okuyucuda hızlı düzeyde sürüyor")
             case .recoveredAfterRebuild(let reads):
                 SubtitleLog.write("okuma düzeldi (yeniden kurulumdan sonra): yeni okuyucu art arda \(reads) okumayı süresinde bitirdi")
             case .parked(let still, _):

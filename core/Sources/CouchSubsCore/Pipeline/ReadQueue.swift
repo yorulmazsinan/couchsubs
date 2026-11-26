@@ -32,10 +32,49 @@ public protocol ReadRescuer: AnyObject, Sendable {
     /// Yedek, asıl okuyucunun düzeyinde (isabetli) okuyor mu. Asıl okuyucu süreç genelinde kilitli kaldığında yedek
     /// kalıcı okuyucu olur; isabetli okuyorsa kullanıcıya uyarı gösterilmez (#1307).
     var isFullQuality: Bool { get }
+    /// Asıl okuyucu süreç genelinde kilitli kaldı (`isPrimaryParked`): yedek artık geçici değil, kalıcı okuyucudur;
+    /// isabetli düzeye hemen geçmeli (#1333). Eskiden yedek iki dakika hızlı düzeyde okuyordu, altyazılar bozuk geliyordu.
+    func preferFullQuality()
 }
 
-extension ReadRescuer {
-    public var isFullQuality: Bool { true }
+public extension ReadRescuer {
+    var isFullQuality: Bool { true }
+    func preferFullQuality() {}
+}
+
+/// Süren bir okumanın iptali (#1333). Okuma kuyruğunun iş parçacığında `ReadQueue.currentCancellation` ile alınır;
+/// okuyucu (Vision) süren isteğini `run(onCancel:)` ile kaydeder. Takılan okuma bırakılınca (`ReadQueue.abandonStall`)
+/// istek iptal edilir: Vision isteği ancak böyle süreç genelindeki kilidi bırakır. Eskiden bırakılan istek hiç dönmüyor,
+/// kilidi oturum boyunca tutuyordu; yeniden kurulan okuyucu da hemen takılıyor, asıl okuyucuya bir daha dönülmüyordu.
+public final class ReadCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var onCancel: (() -> Void)?
+
+    public init() {}
+
+    public var isCancelled: Bool { lock.withLock { cancelled } }
+
+    /// `body` sürerken iptal gelirse `onCancel` çağrılır (başka iş parçacığından). Önceden iptal edildiyse `body`
+    /// çalıştırılmaz, `CancellationError` atılır.
+    public func run<T>(onCancel: @escaping () -> Void, _ body: () throws -> T) throws -> T {
+        try lock.withLock { () throws -> Void in
+            if cancelled { throw CancellationError() }
+            self.onCancel = onCancel
+        }
+        defer { lock.withLock { self.onCancel = nil } }
+        return try body()
+    }
+
+    /// Süren isteği iptal eder; sonraki `run` hemen `CancellationError` atar.
+    public func cancel() {
+        let handler: (() -> Void)? = lock.withLock {
+            guard !cancelled else { return nil }
+            cancelled = true
+            return onCancel
+        }
+        handler?()
+    }
 }
 
 /// Yazı tanıma (Vision) çağrılarının tek sırası (#385, #507, #679).
@@ -71,7 +110,14 @@ extension ReadRescuer {
 ///   okumalar yedekte sürer (Mac'te yedek ayrı süreçtir, takılırsa öldürülüp yenisi açılır). Kilit serbest kalınca
 ///   takılı okuma kendiliğinden biter ve asıl okuyucuya dönülür; bırakılan okumalar bitince bırakma yeniden denenebilir.
 ///   Eskiden 3 kez yeniden kurulup her biri 3 sn içinde takılıyor, sınır dolunca 5 sn'de bir boşuna deneniyor, ana
-///   okuyucuya bir saatten uzun dönülmüyor, uyarı ekranda kalıyordu.
+///   okuyucuya bir saatten uzun dönülmüyor, uyarı ekranda kalıyordu. Kilitli kalınca yedekten hemen isabetli düzey
+///   istenir (`preferFullQuality`, #1333).
+/// - **Bırakılan okuma iptal edilir** (#1333): kilidi tutan, takılan Vision isteğidir; bırakılırken iptal edilir
+///   (`ReadCancellation`, `VNRequest.cancel`), kilit serbest kalır, bırakılan okuma biter ve yeniden kurulan okuyucu
+///   okuyabilir. Eskiden bırakılan istek kendi hâline bırakılıyordu: kullanıcı günlüklerinde (beta.99–101) hiçbiri bir
+///   saat içinde bile dönmedi, ana okuyucu oturum boyunca kilitli kaldı. İptal yalnız bu süreçte isabetli düzeyde en
+///   az bir okuma bittiyse istenir (`cancelsAbandonedRead`): ilk açılışta isabetli model derlenirken (30–90 sn) iptal,
+///   derlemeyi her seferinde baştan başlatırdı.
 /// - **Bırakma sınırı ardışıktır**: sınır (`maxAbandons`) sağlıklı okumayla (yeniden kurulan okuyucu art arda
 ///   `recoverAfterReads` okumayı süresinde bitirdi) ya da bırakılan okumalar bitince sıfırlanır; bitmeyen bırakılmış okuma
 ///   sayısı ayrıca `maxAbandons × 3` ile sınırlıdır (her biri bir iş parçacığı tutar).
@@ -121,8 +167,8 @@ public final class ReadQueue: @unchecked Sendable {
         /// Bırakılan takılı okuma sonunda bitti; `stillStuck`: hâlâ bitmemiş bırakılan okuma sayısı.
         case abandonedFinished(stillStuck: Int)
         /// `ms`'dir dönmeyen okuma bırakıldı, asıl okuyucu yeniden kuruldu (`abandonStall`). `rescued`: yeni okuyucu
-        /// sınanırken okumalar yedekte sürüyor.
-        case abandoned(ms: Int, rescued: Bool)
+        /// sınanırken okumalar yedekte sürüyor. `cancelled`: bırakılan istek iptal edildi (kilidi bırakması beklenir).
+        case abandoned(ms: Int, rescued: Bool, cancelled: Bool)
         /// Yeniden kurulan okuyucu art arda `reads` okumayı sınırında bitirdi: asıl okuyucuya dönüldü, yedek kapatıldı.
         case recoveredAfterRebuild(reads: Int)
         /// Yeniden kurulan okuyucu tek okuma bitiremeden takıldı: Vision kilidi bırakılan okumada (`stillStuck` bitmemiş
@@ -159,6 +205,8 @@ public final class ReadQueue: @unchecked Sendable {
         var limitMs: Int?
         /// Süresi doldu, çağırana haber verildi; iş hâlâ sürüyor olabilir.
         var expired = false
+        /// Bırakılırken süren isteği iptal etmeye yarar.
+        let cancellation = ReadCancellation()
         let work: @Sendable () -> Void
         let fail: @Sendable (Error) -> Void
         init(priority: ReadPriority, detail: String, droppable: Bool,
@@ -227,13 +275,18 @@ public final class ReadQueue: @unchecked Sendable {
     private let recoverAfterReads: Int
     /// Okuyucu yeniden kuruldu ve sınanıyor: art arda sınırında biten okuma sayısı; nil: sınanmıyor.
     private var probation: Int?
+    /// Bırakılan okuma iptal edilsin mi (o an sorulur). Varsayılan: bu süreçte isabetli düzeyde okuma bitti mi
+    /// (`VisionReader.hasReadAccurately`); model daha derlenirken iptal edilmez.
+    private let cancelsAbandonedRead: @Sendable () -> Bool
 
     public init(label: String = "com.couchsubs.ocr", timeoutMs: Int = ReadQueue.defaultTimeoutMs,
                 maxRescueFailures: Int = ReadQueue.defaultMaxRescueFailures, degradeAfterStalls: Int? = nil,
                 subtitleTimeoutMs: Int? = nil, subtitleTimeoutCapMs: Int? = nil,
                 fastLevelHoldMs: Int = ReadQueue.defaultFastLevelHoldMs, abandonStallAfterMs: Int? = nil,
                 recoverAfterReads: Int = ReadQueue.defaultRecoverAfterReads,
-                abandonRetryMs: Int = ReadQueue.defaultAbandonRetryMs) {
+                abandonRetryMs: Int = ReadQueue.defaultAbandonRetryMs,
+                cancelsAbandonedRead: @escaping @Sendable () -> Bool = { VisionReader.hasReadAccurately }) {
+        self.cancelsAbandonedRead = cancelsAbandonedRead
         self.abandonRetryMs = abandonRetryMs
         self.abandonStallAfterMs = abandonStallAfterMs
         self.recoverAfterReads = max(1, recoverAfterReads)
@@ -290,6 +343,7 @@ public final class ReadQueue: @unchecked Sendable {
     /// takılmanın süresi (ms), bırakılmadıysa nil.
     @discardableResult
     public func abandonStall(olderThanMs: Int, maxAbandons: Int = ReadQueue.defaultMaxAbandons) -> Int? {
+        var stuck: Item?
         let abandoned: Int? = lock.withLock {
             guard let since = primary.stalledSince, !parked, abandonStreak < maxAbandons,
                   abandonedStalls < maxAbandons * Self.outstandingAbandonFactor else { return nil }
@@ -297,6 +351,7 @@ public final class ReadQueue: @unchecked Sendable {
             guard ms >= olderThanMs else { return nil }
             abandonedStalls += 1
             abandonStreak += 1
+            stuck = primary.running
             primary.abandoned = true
             primaryGeneration += 1
             // Eski kuyruğun bekleyenleri yoktur (takılınca yedeğe taşındı ya da hata aldı); takılan iş orada kalır.
@@ -307,8 +362,12 @@ public final class ReadQueue: @unchecked Sendable {
             return ms
         }
         guard let abandoned else { return nil }
+        // Takılan istek iptal edilir: süreç genelindeki kilidi bırakır, bırakılan okuma biter (`finished`), yeniden kurulan
+        // okuyucu okuyabilir (#1333). Yeni kuyruğa okuma verilmeden önce istenir.
+        let cancelled = stuck != nil && cancelsAbandonedRead()
+        if cancelled { stuck?.cancellation.cancel() }
         let (current, rescued) = lock.withLock { (primary, rescueUsable) }
-        onEvent?(.abandoned(ms: abandoned, rescued: rescued))
+        onEvent?(.abandoned(ms: abandoned, rescued: rescued, cancelled: cancelled))
         pump(current)
         return abandoned
     }
@@ -358,6 +417,12 @@ public final class ReadQueue: @unchecked Sendable {
     }
 
     private static let rescuerKey = "com.couchsubs.ocr.rescuer"
+    private static let cancellationKey = "com.couchsubs.ocr.cancellation"
+
+    /// Okuma kuyruğunun iş parçacığında süren okumanın iptali (`VisionReader` isteğini buna kaydeder); kuyruk dışında nil.
+    public static var currentCancellation: ReadCancellation? {
+        Thread.current.threadDictionary[cancellationKey] as? ReadCancellation
+    }
     private final class RescuerBox { let rescuer: ReadRescuer; init(_ rescuer: ReadRescuer) { self.rescuer = rescuer } }
 
     private var rescueUsable: Bool { _rescuer != nil && rescueFailures < maxRescueFailures }
@@ -534,9 +599,12 @@ public final class ReadQueue: @unchecked Sendable {
         let item = next.item
         let limitMs = next.limitMs
         lane.queue.async { [self] in
-            if let rescuer = next.rescuer { Thread.current.threadDictionary[Self.rescuerKey] = RescuerBox(rescuer) }
+            let thread = Thread.current.threadDictionary
+            if let rescuer = next.rescuer { thread[Self.rescuerKey] = RescuerBox(rescuer) }
+            thread[Self.cancellationKey] = item.cancellation
             item.work()
-            Thread.current.threadDictionary.removeObject(forKey: Self.rescuerKey)
+            thread.removeObject(forKey: Self.rescuerKey)
+            thread.removeObject(forKey: Self.cancellationKey)
             finished(item, on: lane)
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(limitMs)) { [self, weak item, weak lane] in
@@ -631,6 +699,7 @@ public final class ReadQueue: @unchecked Sendable {
         var stranded: [Item] = []
         var abandonIn: Int?
         var parkedEvent: Event?
+        var promote: ReadRescuer?
         let stuck: Bool = lock.withLock {
             guard lane.running === item, !item.expired else { return false }
             item.expired = true
@@ -648,6 +717,7 @@ public final class ReadQueue: @unchecked Sendable {
                     // Yeni okuyucu kurmak boşuna; takılı okuma kilit serbest kalınca kendiliğinden biter (#1307).
                     parked = true
                     parkedEvent = .parked(stillStuck: abandonedStalls, rescued: rescueUsable)
+                    promote = rescueUsable ? _rescuer : nil
                 } else if let abandonStallAfterMs {
                     abandonIn = abandonStallAfterMs - stall.ms
                 }
@@ -669,6 +739,8 @@ public final class ReadQueue: @unchecked Sendable {
         }
         guard stuck else { return }
         abandon?.abandon()
+        // Asıl okuyucu kilitli: yedek kalıcı okuyucudur, isabetli düzeye hemen geçer (#1333).
+        promote?.preferFullQuality()
         if let event { onEvent?(event) }
         if let parkedEvent { onEvent?(parkedEvent) }
         if let abandonIn { scheduleAbandon(lane, inMs: abandonIn) }

@@ -86,6 +86,14 @@ public struct VisionReader: TextReader {
     }
     private static let fastLevel = Locked(false)
 
+    /// Bu süreçte isabetli düzeyde en az bir okuma bitti mi (model hazır). `ReadQueue` takılan okumayı bırakırken isteği
+    /// ancak o zaman iptal eder: ilk açılışta model derlenirken iptal etmek derlemeyi her seferinde baştan başlatırdı.
+    public static var hasReadAccurately: Bool {
+        get { accurateDone.withLock { $0 } }
+        set { accurateDone.withLock { $0 = newValue } }
+    }
+    private static let accurateDone = Locked(false)
+
     private final class Locked: @unchecked Sendable {
         private let lock = NSLock()
         private var value: Bool
@@ -100,7 +108,15 @@ public struct VisionReader: TextReader {
         request.recognitionLevel = fast ? .fast : .accurate
         request.recognitionLanguages = [language]
         request.usesLanguageCorrection = true
-        try VNImageRequestHandler(cgImage: image).perform([request])
+        let handler = VNImageRequestHandler(cgImage: image)
+        if let cancellation = ReadQueue.currentCancellation {
+            // Takılan istek bırakılınca iptal edilir (#1333): Vision'ın süreç genelindeki kilidini ancak böyle bırakır.
+            // Eskiden bırakılan istek hiç dönmüyor, yeniden kurulan okuyucu da aynı kilitte takılıyordu.
+            try cancellation.run(onCancel: { request.cancel() }) { try handler.perform([request]) }
+        } else {
+            try handler.perform([request])
+        }
+        if !fast, !hasReadAccurately { hasReadAccurately = true }
         let lines = (request.results ?? [])
             .compactMap { observation -> TextLine? in
                 guard let candidate = observation.topCandidates(1).first, candidate.confidence >= 0.5 else { return nil }
