@@ -6,10 +6,20 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6 telefonu tanınıyor** (#1251): Telefon elde yukarıda tutulunca, el kenarını örtünce ya da sahne karanlıkken de açılıyor; mesajları altyazıya düşmüyor, telefonun yanında balon olarak çıkıyor. Henüz doğrulanmamış telefon adayındaki yazılar kısa süre bekletiliyor.
-- **Tuş ipuçları**: Karanlık sahnede "◯ Geri" gibi ipuçlarının Türkçesi dev siyah kutu olarak çizilmiyor; her ipucu kendi boyunda, yanına yazılıyor (TV uygulaması 0.9.115).
-- **Kaçan altyazılar** (beta.103'te gelen gerileme): Noktasız, büyük harfli ya da rakamlı konuşmalar, sola yaslı veya konuşmacı adlı satırlar artık atılmıyor; iki karakterin konuşması tek satırda birleşmiyor. Atılan her satırın nedeni günlüğe yazılıyor.
-- **Hız**: Menü ve kutu ölçümü her turda bütün kareyi yeniden işlemiyor; Android ve iPhone'da telefon ve ekran yazısı çevirisi daha akıcı.
+- **GTA 6 telefonu** (#1251): Karanlık sahnede ve koyu temalı ekranlarda da tanınıyor; elde sallanınca ya da biraz sağa kayınca kaybolmuyor; koyu zemindeki açık yazılar okunuyor. Bilgisayar ekranındaki panelde en üstteki uzun mesaj artık atılmıyor; cevap seçenekleri ayrı ayrı, aynı renkte çiziliyor.
+- **Menüler** (#1359, #1360, #1362): Seçim çubuğu kayınca çeviriler kaybolup gelmiyor; seçili satır kendi rengini alıyor. Tuş çubuğundaki etiketler aynı boy ve yazı tipinde. Kontrol şeması ekranında dev kutu ve panelden taşma yok; RUN "Koş", MOVE "Hareket" gibi komutlar doğru çevriliyor.
+- **Xbox** (#1308, #1252): Kopmadan ya da "Yeniden bağlan"dan sonra konsolu yeniden başlatmak gerekmiyor; eski oturum kapanmadan yenisi açılmıyor, uygulama kapanırken oturum kapatılıyor.
+- **LG** : Bazı modellerde ekranın sürekli kararıp gelmesi düzeldi. Eski Full HD LG'lerde (ör. 43LH590V) altyazı ve ekran çevirisi ekranın tamamında görünüyor 
+- **GTA 6 görev satırı**: Ekranın altındaki hedef yazısı ("Get in the speedboat" gibi) kendi kutusunda çevriliyor; altyazı kutusu artık onu örtmüyor. Tuş ipuçları telefon açıkken de çevriliyor.
+- **Uzun konuşmalar**: Parça parça beliren uzun satır tek altyazı olarak yerinde güncelleniyor; aynı satır tekrar tekrar çevrilip ekranı doldurmuyor.
+- **"Üstünü ört" modu**: Örtme kutusu artık her zaman tam opak, İngilizce altından görünmüyor; kalabalıkta önceki satırlar kutunun içine girmiyor (saydam kutu isteyen üstte/altta/sabit yerleşimi seçebilir).
+- **Mac ve iPhone çökmesi** (#1369): GTA 6'da telefon aranırken uygulamanın kendiliğinden kapanması düzeldi.
+- **GTA 6 haritası** (#1365): Harita ekranı menü gibi tek düzende çevriliyor; görev simgeleri yazı sanılmıyor, "GOAL" artık "Hedef"; üstteki sekme şeridi (#1372) her sekmeyi ayrı çeviriyor ve yanıp sönmüyor.
+- **Android TV'de köşedeki nokta**: Katman modunda sağ üstte kalan turuncu nokta kalktı; bağlantı gidince Katman kendini kapatıyor (TV uygulaması 0.9.119).
+- **Windows Ayarlar**: Koyu temada okunmayan yazılar ve boş kart düzeldi.
+- **İçe aktarılan paketler** (#1355): Yeni biçimdeki topluluk paketleri kabul ediliyor ve oyun seçiliyken de kullanılıyor; içe aktarma kaç satırı neden atladığını gösteriyor.
+
+**beta.104'te gelenler:** telefonun tanınması, beta.103'te kaçan altyazılar, dev tuş ipucu kutusu, akıcılık.
 
 **beta.103'te gelenler:** Xbox kararlılığı, "Ekranı çevir" çevirisinin kaybolmaması, gösterge/silah çarkı/dükkân yazılarının altyazıya karışmaması, menü hizası, Philips HDMI, projektör, eski LG yarım ekran, LG kurulum hatası, DeepL uyarısı.
 
