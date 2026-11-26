@@ -390,22 +390,70 @@ public sealed partial class RegionWatcher
         }
     }
 
-    /// <summary>Menüdeki otomatik alanla kesişen hazır alan o turda okunmaz: haritanın tuş listesi iki alana bölünüp bölünme
-    /// yerindeki satır ("ADD MARKER") çevrilmiyordu (beta.100; Mac/Android ile aynı).</summary>
+    /// <summary>
+    /// Menüdeki otomatik alanla kesişen hazır alan o turda okunmaz: haritanın tuş listesi iki alana bölünüp bölünme
+    /// yerindeki satır ("ADD MARKER") çevrilmiyordu (beta.100; Mac/Android ile aynı).
+    /// Menü dışındaki otomatik alan da (#1391): hazır alanlar artık dedektörde dışlanmıyor; haritanın konum kartı (dükkân,
+    /// garaj açıklaması) sağdaki mesaj alanına taşınca kart iki alana bölünüyordu: otomatik alan cümlenin solunu, hazır alan
+    /// sağdaki kesik parçaları ("ctibles, like", "nd") ayrı ayrı çeviriyordu ("Hayır!"); örtü cümlenin yalnız bir kısmını
+    /// kapatıyordu. Hazır alana en az bir karo taşan otomatik alan varken hazır alan o turda okunmaz; hazır alanın içinde
+    /// kalan (alanının en az <see cref="PresetInsideShare"/>'i) otomatik alan ise okunmaz (hazır alan okuyor, eskisi gibi).
+    /// </summary>
     internal static IReadOnlyList<WatchedArea> YieldingPresets(IReadOnlyList<WatchedArea> areas)
     {
-        var menus = areas.Where(a => a.Auto && a.Menu).Select(a => a.Region).ToList();
-        if (menus.Count == 0) return areas;
-        return [.. areas.Where(area => area.Id is not (GameAreaPresets.HelpId or GameAreaPresets.PhoneId) || !menus.Any(m =>
-            Math.Min(area.Region.Right, m.Right) > Math.Max(area.Region.Left, m.Left)
-            && Math.Min(area.Region.Bottom, m.Bottom) > Math.Max(area.Region.Top, m.Top)))];
+        static bool IsPreset(WatchedArea a) => a.Id is GameAreaPresets.HelpId or GameAreaPresets.PhoneId;
+        var presets = areas.Where(IsPreset).Select(a => a.Region).ToList();
+        if (presets.Count == 0) return areas;
+        static (double Width, double Height) Overlap(CropRegion a, CropRegion b) =>
+            (Math.Max(0, Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left)),
+             Math.Max(0, Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top)));
+        bool InsidePreset(WatchedArea area)
+        {
+            var r = area.Region;
+            var size = Math.Max(1e-9, (r.Right - r.Left) * (r.Bottom - r.Top));
+            return !area.Menu && presets.Any(p =>
+            {
+                var o = Overlap(r, p);
+                return o.Width * o.Height >= PresetInsideShare * size;
+            });
+        }
+        var autos = areas.Where(a => a.Auto && !InsidePreset(a)).ToList();
+        return [.. areas.Where(area =>
+        {
+            if (IsPreset(area))
+                return !autos.Any(a =>
+                {
+                    var o = Overlap(a.Region, area.Region);
+                    return a.Menu ? o.Width > 0 && o.Height > 0
+                        : o.Width >= 1.0 / ScreenTextDetector.Columns && o.Height >= 1.0 / ScreenTextDetector.Rows;
+                });
+            return !(area.Auto && InsidePreset(area));
+        })];
     }
+
+    /// <summary>Otomatik alanın en az bu kadarı hazır alanın içindeyse hazır alan okur (<see cref="YieldingPresets"/>).</summary>
+    internal const double PresetInsideShare = 0.8;
+
+    /// <summary>Son turda öbürüne yol verdiği için okunmayan alanlar (<see cref="YieldingPresets"/>; günlüğe değişince yazılır).</summary>
+    private HashSet<string> yieldLogged = [];
 
     private async Task PassAreasAsync(Frame frame, IReadOnlyList<WatchedArea> all, int started, bool regularDue, bool confirmOnly, bool phoneDue)
     {
         // Ayarlar'da kapalı türün alanı (menü, hazır yardım/mesaj alanı, görev satırı) okunmaz; kutusu kalkar.
-        var areas = YieldingPresets(Allows is { } allows ? [.. all.Where(area => ScreenTextKinds.Reads(area, allows))] : all);
+        IReadOnlyList<WatchedArea> offered = Allows is { } allows ? [.. all.Where(area => ScreenTextKinds.Reads(area, allows))] : all;
+        var areas = YieldingPresets(offered);
         var map = states;
+        // Tanı (#1391): ekran yazısına yol veren hazır alan ve hazır alanın içinde kaldığı için okunmayan otomatik alan.
+        var readIds = areas.Select(area => area.Id).ToHashSet();
+        var yielded = offered.Where(area => !readIds.Contains(area.Id)).Select(area => area.Id).ToHashSet();
+        if (!yielded.SetEquals(yieldLogged))
+        {
+            foreach (var area in offered.Where(area => yielded.Contains(area.Id) && !yieldLogged.Contains(area.Id)))
+                Log?.Invoke(area.Id is GameAreaPresets.HelpId or GameAreaPresets.PhoneId
+                    ? $"ek alan {area.Name}: ekran yazısı bu alana taşıyor, alan bu sırada okunmuyor"
+                    : $"ek alan {area.Name}: yazı hazır alanın içinde, hazır alan okuyor");
+            yieldLogged = yielded;
+        }
         if (regularDue || phoneDue) Interlocked.Increment(ref passes);
         var ids = areas.Select(area => area.Id).ToHashSet();
         List<string> removed;
@@ -583,7 +631,9 @@ public sealed partial class RegionWatcher
             // yoksa okuma doğrulanınca çizilir. Mac ve Android aynı.
             var shownItems = (state.RenderedBlocks ?? []).Select(block => block.Item).ToList();
             var texts = BlockTexts(candidate);
-            var listShifted = area.Menu && ListMoved(shownItems, texts);
+            // Haritanın konum kartı da (#1391): imleç gezip kart kayınca yazısı aynı kalan blok çevirisiyle yeni yerine taşınır,
+            // kart iki aynı okumayı beklerken kalkıp gelmez (yanıp sönmez).
+            var listShifted = (area.Menu || candidate.MissionCard) && ListMoved(shownItems, texts);
             if (!string.IsNullOrEmpty(state.RenderedText)
                 && (listShifted || SelectionMoved(shownItems, candidate.Blocks ?? [])))
             {
@@ -969,6 +1019,9 @@ public sealed partial class RegionWatcher
             .Where(line => !auto || !(ScreenTextNoise.IsOverlay(line.Text) || CutAtEdge(line)
                                       || (menu && !phone && CutAtAreaEdge(line, region))
                                       || (line.Confidence < 0.5 && UiCommands.TranslateLabelLoosely(IconText.Plain(line.Text)) is null)))
+            // Hazır mesaj alanının sol kenarına değen satır alanın dışından taşan yazının kesik parçasıdır (#1391: harita
+            // kartının "ctibles, like", "nd" parçaları tek başına çevriliyordu, "Hayır!"); çevrilmez.
+            .Where(line => auto || phone || kind != ScreenTextKind.Phone || !CutAtAreaLeftEdge(line, region))
             .OrderBy(line => line.Box?.Top ?? 0)
             .ToList();
         // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
@@ -1204,6 +1257,13 @@ public sealed partial class RegionWatcher
             result.Add(block with { Look = look with { Align = align } });
         }
         return result;
+    }
+
+    /// <summary>Satır alanın sol kenarına (karenin kenarı değilse) <see cref="AreaEdgeTiles"/> karodan yakın değiyor (hazır mesaj alanı, #1391).</summary>
+    internal static bool CutAtAreaLeftEdge(TextLine line, CropRegion region)
+    {
+        if (line.Box is not { } box || region.Left <= 0.001 || region.Right - region.Left <= 0) return false;
+        return box.Left <= AreaEdgeTiles / ScreenTextDetector.Columns / (region.Right - region.Left);
     }
 
     /// <summary><see cref="CutAtAreaEdge"/> payı (karo genişliği cinsinden).</summary>

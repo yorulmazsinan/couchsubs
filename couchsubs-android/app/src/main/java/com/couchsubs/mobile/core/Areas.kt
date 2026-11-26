@@ -1066,15 +1066,56 @@ class RegionWatcher(
          * yerindeki satır ("ADD MARKER") çevrilmiyordu (beta.100; Mac/Windows ile aynı).
          */
         internal fun yieldingPresets(areas: List<ExtraArea>): List<ExtraArea> {
-            val menus = areas.filter { it.auto && it.menu }.map { it.region }
-            if (menus.isEmpty()) return areas
+            // Menü dışındaki otomatik alan da (#1391): hazır alanlar artık dedektörde dışlanmıyor; haritanın konum kartı
+            // (dükkân, garaj açıklaması) sağdaki mesaj alanına taşınca kart iki alana bölünüyordu: otomatik alan cümlenin
+            // solunu, hazır alan sağdaki kesik parçaları ("ctibles, like", "nd") ayrı ayrı çeviriyordu ("Hayır!"); örtü
+            // cümlenin yalnız bir kısmını kapatıyordu. Hazır alana en az bir karo taşan otomatik alan varken hazır alan o turda
+            // okunmaz; hazır alanın içinde kalan (alanının en az [PRESET_INSIDE_SHARE]'i) otomatik alan ise okunmaz (hazır
+            // alan okuyor, eskisi gibi).
+            val presets = areas.filter { GameAreaPresets.isPreset(it.id) }.map { it.region }
+            if (presets.isEmpty()) return areas
+            fun overlap(a: CropRegion, b: CropRegion): Pair<Double, Double> =
+                maxOf(0.0, minOf(a.right, b.right) - maxOf(a.left, b.left)) to
+                    maxOf(0.0, minOf(a.bottom, b.bottom) - maxOf(a.top, b.top))
+            fun insidePreset(area: ExtraArea): Boolean {
+                val r = area.region
+                val size = maxOf(1e-9, (r.right - r.left) * (r.bottom - r.top))
+                return !area.menu && presets.any { p ->
+                    val (w, h) = overlap(r, p)
+                    w * h >= PRESET_INSIDE_SHARE * size
+                }
+            }
+            val autos = areas.filter { it.auto && !insidePreset(it) }
             return areas.filter { area ->
-                !GameAreaPresets.isPreset(area.id) || menus.none { m ->
-                    minOf(area.region.right, m.right) > maxOf(area.region.left, m.left) &&
-                        minOf(area.region.bottom, m.bottom) > maxOf(area.region.top, m.top)
+                if (GameAreaPresets.isPreset(area.id)) {
+                    autos.none { a ->
+                        val (w, h) = overlap(a.region, area.region)
+                        if (a.menu) w > 0 && h > 0
+                        else w >= 1.0 / ScreenTextDetector.COLUMNS && h >= 1.0 / ScreenTextDetector.ROWS
+                    }
+                } else {
+                    !(area.auto && insidePreset(area))
                 }
             }
         }
+
+        /** Otomatik alanın en az bu kadarı hazır alanın içindeyse hazır alan okur ([yieldingPresets]). */
+        const val PRESET_INSIDE_SHARE = 0.8
+
+        /** Satır alanın sol kenarına (karenin kenarı değilse) [AREA_EDGE_TILES] karodan yakın değiyor (hazır mesaj alanı, #1391). */
+        internal fun cutAtAreaLeftEdge(line: TextLine, region: CropRegion): Boolean {
+            val box = line.box ?: return false
+            if (region.left <= 0.001 || region.right - region.left <= 0) return false
+            return box.left <= AREA_EDGE_TILES / ScreenTextDetector.COLUMNS / (region.right - region.left)
+        }
+
+        /**
+         * Hazır mesaj alanının sol kenarına değen satır alanın dışından taşan yazının kesik parçasıdır (#1391: harita kartının
+         * "ctibles, like", "nd" parçaları tek başına çevriliyordu, "Hayır!"); çevrilmez. Öbür alanlarda okuma aynen kalır.
+         */
+        internal fun withoutPresetFragments(reading: Reading, area: ExtraArea): Reading =
+            if (area.auto || area.id != GameAreaPresets.PHONE_ID) reading
+            else Reading(reading.lines.filterNot { cutAtAreaLeftEdge(it, area.region) })
     }
 
     /**
@@ -1207,6 +1248,8 @@ class RegionWatcher(
     private val lock = Any()
     private val states = mutableMapOf<String, State>()
     private val steadiness = HashMap<String, Steadiness>()
+    /** Son turda öbürüne yol verdiği için okunmayan alanlar ([yieldingPresets]; günlüğe değişince yazılır). */
+    @Volatile private var yieldLogged = emptySet<String>()
     private var lastPass: Long? = null
     private var busy = false
     @Volatile private var session = 0
@@ -1403,7 +1446,17 @@ class RegionWatcher(
 
     /** Bir tur: kaldırılan alanların kutusu kalkar, her açık alan gerekirse okunur ve kararlı yazısı çevrilir. */
     fun pass(offeredIds: Set<String>, offered: List<Pair<ExtraArea, Crop>>, started: Int = session) {
-        val kept = yieldingPresets(offered.map { it.first }.filter { wanted(it) }).map { it.id }.toSet()
+        val wantedAreas = offered.map { it.first }.filter { wanted(it) }
+        val kept = yieldingPresets(wantedAreas).map { it.id }.toSet()
+        // Tanı (#1391): ekran yazısına yol veren hazır alan ve hazır alanın içinde kaldığı için okunmayan otomatik alan.
+        val yielded = wantedAreas.filter { it.id !in kept }.map { it.id }.toSet()
+        if (yielded != yieldLogged) {
+            for (area in wantedAreas) if (area.id in yielded && area.id !in yieldLogged) {
+                onLog?.invoke(if (GameAreaPresets.isPreset(area.id)) "ek alan ${area.name}: ekran yazısı bu alana taşıyor, alan bu sırada okunmuyor"
+                    else "ek alan ${area.name}: yazı hazır alanın içinde, hazır alan okuyor")
+            }
+            yieldLogged = yielded
+        }
         val crops = offered.filter { it.first.id in kept }
         val ids = offeredIds - offered.filterNot { it.first.id in kept }.map { it.first.id }.toSet()
         synchronized(lock) {
@@ -1502,7 +1555,7 @@ class RegionWatcher(
         val own = subtitleEcho?.filter(reading, area.region.box, geometry) ?: reading
         // Otomatik alanda aynı satırın yan yana okunan parçaları tek satırdır; menüde alanın kenarında kesik satır çevrilmez
         // ([joinedPieces], [cutAtAreaEdge]; Sinan Bey beta.100 3380-3383).
-        val pieced = if (!area.auto) own else {
+        val pieced = if (!area.auto) withoutPresetFragments(own, area) else {
             val aspect = (area.region.right - area.region.left) * 16 / maxOf(1e-6, (area.region.bottom - area.region.top) * 9)
             Reading(joinedPieces(own.lines, aspect).filter { !area.menu || !cutAtAreaEdge(it, area.region) })
         }
@@ -1595,7 +1648,9 @@ class RegionWatcher(
             // yoksa okuma doğrulanınca çizilir. Mac/iPhone ve Windows aynı.
             val rendered = state.renderedBlocks.orEmpty().map { it.second }
             val texts = blockTexts(candidate)
-            val listShifted = area.menu && listMoved(rendered, texts)
+            // Haritanın konum kartı da (#1391): imleç gezip kart kayınca yazısı aynı kalan blok çevirisiyle yeni yerine taşınır,
+            // kart iki aynı okumayı beklerken kalkıp gelmez (yanıp sönmez).
+            val listShifted = (area.menu || candidate.missionCard) && listMoved(rendered, texts)
             // Satır farkından sonra gösterilen kutuların zemini kutuların kendisinden (Mac: gösterilen öğelerin stili).
             val shownGrounds = if (state.renderedLayout == null) rendered.mapNotNull { item -> item.surface?.let { item.box to it.background } }
                 else grounds(state.renderedLayout, state.renderedStyles)

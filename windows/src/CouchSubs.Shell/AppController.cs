@@ -4097,8 +4097,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 // Karo örneği kare iş parçacığını tutmaz: arka planda, tek uçuşta (sürerken gelen kare atlanır). Görünen
                 // telefon dışlanır: telefonun yazısı ekran yazısı olmaz, dışındaki tuş çubuğu olur.
+                // Hazır alanlar (GTA 6 yardım/mesaj köşesi) dışlanmaz: üstlerine taşan yazı (haritanın konum kartı) tek alan
+                // olarak bulunur, hazır alan o sırada okunmaz (RegionWatcher.YieldingPresets, #1391).
                 IReadOnlyList<CropRegion> excluded = [.. savedWatchedAreas.Select(item => item.Region),
-                                                      .. presetAreas.Select(item => item.Region),
                                                       .. phoneArea is null ? [] : new[] { phoneArea.Region },
                                                       .. phoneSeen && phoneBounds is { } bounds ? new[] { ScreenTextDetector.PaddedPhone(bounds) } : []];
                 var subtitle = settings.Region;

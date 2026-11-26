@@ -10,7 +10,11 @@ import XCTest
 final class MissionCardTests: XCTestCase {
     private struct Vectors: Decodable {
         struct Line: Decodable { let text: String; let box: [Double] }
-        struct Expected: Decodable { let title: String; let subtitles: [String]; let body: [String]; let details: [String]; let helpCorner: Bool }
+        struct Expected: Decodable {
+            let title: String; let subtitles: [String]; let body: [String]; let details: [String]; let helpCorner: Bool
+            /// Konum kartı (#1391): başlık yer adı, çevrilmez (grubu yok).
+            var place: Bool?
+        }
         struct Case: Decodable { let name: String; let lines: [Line]; let cards: [Expected] }
         let cases: [Case]
     }
@@ -31,11 +35,15 @@ final class MissionCardTests: XCTestCase {
             XCTAssertEqual(cards.count, vector.cards.count, vector.name)
             for (card, expected) in zip(cards, vector.cards) {
                 let groups = MissionCard.groups(card, lines)
-                XCTAssertEqual(groups.first?.paragraphs, [expected.title], vector.name)
-                XCTAssertEqual(groups.dropFirst().prefix(expected.subtitles.count).flatMap(\.paragraphs), expected.subtitles, vector.name)
-                XCTAssertEqual(groups[1 + expected.subtitles.count].paragraphs, expected.body, vector.name)
+                let place = expected.place ?? false
+                XCTAssertEqual(card.place, place, vector.name)
+                XCTAssertEqual(card.title.map { lines[$0].text }.joined(separator: " "), expected.title, vector.name)
+                let head = place ? 0 : 1
+                if !place { XCTAssertEqual(groups.first?.paragraphs, [expected.title], vector.name) }
+                XCTAssertEqual(groups.dropFirst(head).prefix(expected.subtitles.count).flatMap(\.paragraphs), expected.subtitles, vector.name)
+                XCTAssertEqual(groups[head + expected.subtitles.count].paragraphs, expected.body, vector.name)
                 XCTAssertEqual(groups.suffix(expected.details.count).flatMap(\.paragraphs), expected.details, vector.name)
-                XCTAssertEqual(groups.count, 2 + expected.subtitles.count + expected.details.count, vector.name)
+                XCTAssertEqual(groups.count, head + 1 + expected.subtitles.count + expected.details.count, vector.name)
                 let box = card.all.map { lines[$0].box! }.reduce(lines[card.title[0]].box!) { $0.union($1) }
                 XCTAssertEqual(MissionCard.inHelpCorner(box), expected.helpCorner, vector.name)
             }

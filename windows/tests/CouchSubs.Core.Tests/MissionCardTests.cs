@@ -13,7 +13,8 @@ namespace CouchSubs.Core.Tests;
 /// </summary>
 public class MissionCardTests
 {
-    private sealed record Expected(string Title, string[] Subtitles, string[] Body, string[] Details, bool HelpCorner);
+    /// <param name="Place">Konum kartı (#1391): başlık yer adı, çevrilmez (grubu yok).</param>
+    private sealed record Expected(string Title, string[] Subtitles, string[] Body, string[] Details, bool HelpCorner, bool Place);
     private sealed record Case(string Name, List<TextLine> Lines, List<Expected> Cards);
 
     private static List<Case> Vectors()
@@ -29,7 +30,8 @@ public class MissionCardTests
             })],
             [.. vector.GetProperty("cards").EnumerateArray().Select(card => new Expected(
                 card.GetProperty("title").GetString()!, Strings(card.GetProperty("subtitles")), Strings(card.GetProperty("body")),
-                Strings(card.GetProperty("details")), card.GetProperty("helpCorner").GetBoolean()))]))];
+                Strings(card.GetProperty("details")), card.GetProperty("helpCorner").GetBoolean(),
+                card.TryGetProperty("place", out var place) && place.GetBoolean()))]))];
     }
 
     [Fact]
@@ -43,11 +45,14 @@ public class MissionCardTests
             foreach (var (card, expected) in cards.Zip(vector.Cards))
             {
                 var groups = MissionCard.Groups(card, lines);
-                Assert.Equal([expected.Title], groups[0].Paragraphs);
-                Assert.Equal(expected.Subtitles, groups.Skip(1).Take(expected.Subtitles.Length).SelectMany(g => g.Paragraphs));
-                Assert.Equal(expected.Body, groups[1 + expected.Subtitles.Length].Paragraphs);
+                Assert.True(card.Place == expected.Place, vector.Name);
+                Assert.Equal(expected.Title, string.Join(' ', card.Title.Select(i => lines[i].Text)));
+                var head = expected.Place ? 0 : 1;
+                if (!expected.Place) Assert.Equal([expected.Title], groups[0].Paragraphs);
+                Assert.Equal(expected.Subtitles, groups.Skip(head).Take(expected.Subtitles.Length).SelectMany(g => g.Paragraphs));
+                Assert.Equal(expected.Body, groups[head + expected.Subtitles.Length].Paragraphs);
                 Assert.Equal(expected.Details, groups.TakeLast(expected.Details.Length).SelectMany(g => g.Paragraphs));
-                Assert.Equal(2 + expected.Subtitles.Length + expected.Details.Length, groups.Count);
+                Assert.Equal(head + 1 + expected.Subtitles.Length + expected.Details.Length, groups.Count);
                 var box = card.All.Select(i => lines[i].Box!.Value).Aggregate((a, b) => a.Union(b));
                 Assert.True(MissionCard.InHelpCorner(box) == expected.HelpCorner, vector.Name);
             }

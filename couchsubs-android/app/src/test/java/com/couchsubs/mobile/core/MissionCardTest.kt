@@ -13,7 +13,15 @@ import org.junit.Test
  * MissionCardTests.swift ve Windows MissionCardTests.cs aynı dosyayı okur).
  */
 class MissionCardTest {
-    private data class Expected(val title: String, val subtitles: List<String>, val body: List<String>, val details: List<String>, val helpCorner: Boolean)
+    /** [place]: konum kartı (#1391), başlık yer adı, çevrilmez (grubu yok). */
+    private data class Expected(
+        val title: String,
+        val subtitles: List<String>,
+        val body: List<String>,
+        val details: List<String>,
+        val helpCorner: Boolean,
+        val place: Boolean,
+    )
     private data class Case(val name: String, val lines: List<TextLine>, val cards: List<Expected>)
 
     private fun strings(array: org.json.JSONArray) = (0 until array.length()).map { array.getString(it) }
@@ -33,7 +41,7 @@ class MissionCardTest {
                 (0 until array.length()).map { j ->
                     val card = array.getJSONObject(j)
                     Expected(card.getString("title"), strings(card.getJSONArray("subtitles")), strings(card.getJSONArray("body")),
-                        strings(card.getJSONArray("details")), card.getBoolean("helpCorner"))
+                        strings(card.getJSONArray("details")), card.getBoolean("helpCorner"), card.optBoolean("place", false))
                 }
             }
             Case(case.getString("name"), lines, cards)
@@ -47,11 +55,14 @@ class MissionCardTest {
             assertEquals(vector.name, vector.cards.size, cards.size)
             for ((card, expected) in cards.zip(vector.cards)) {
                 val groups = MissionCard.groups(card, vector.lines)
-                assertEquals(vector.name, listOf(expected.title), groups.first().paragraphs)
-                assertEquals(vector.name, expected.subtitles, groups.drop(1).take(expected.subtitles.size).flatMap { it.paragraphs })
-                assertEquals(vector.name, expected.body, groups[1 + expected.subtitles.size].paragraphs)
+                assertEquals(vector.name, expected.place, card.place)
+                assertEquals(vector.name, expected.title, card.title.joinToString(" ") { vector.lines[it].text })
+                val head = if (expected.place) 0 else 1
+                if (!expected.place) assertEquals(vector.name, listOf(expected.title), groups.first().paragraphs)
+                assertEquals(vector.name, expected.subtitles, groups.drop(head).take(expected.subtitles.size).flatMap { it.paragraphs })
+                assertEquals(vector.name, expected.body, groups[head + expected.subtitles.size].paragraphs)
                 assertEquals(vector.name, expected.details, groups.takeLast(expected.details.size).flatMap { it.paragraphs })
-                assertEquals(vector.name, 2 + expected.subtitles.size + expected.details.size, groups.size)
+                assertEquals(vector.name, head + 1 + expected.subtitles.size + expected.details.size, groups.size)
                 val box = card.all.map { vector.lines[it].box!! }.reduce { a, b -> a.union(b) }
                 assertEquals(vector.name, expected.helpCorner, MissionCard.inHelpCorner(box))
             }

@@ -34,8 +34,10 @@ internal static class MissionCard
     internal const double PictureWidth = 2.5;
 
     /// <summary>Bulunan kart: satırların sırası (verilen listede), yukarıdan aşağı.</summary>
+    /// <param name="Place">Konum kartı (#1391: dükkân, garaj; başlığı yer adı, <see cref="IsPlaceTitle"/>): başlık çevrilmez,
+    /// açıklama tek paragraf.</param>
     internal sealed record Card(IReadOnlyList<int> Title, IReadOnlyList<int> Subtitles, IReadOnlyList<int> Body,
-                                IReadOnlyList<int> Details)
+                                IReadOnlyList<int> Details, bool Place = false)
     {
         public IReadOnlyList<int> All => [.. Title, .. Subtitles, .. Body, .. Details];
     }
@@ -70,6 +72,8 @@ internal static class MissionCard
             // souvenir") ki altında küçük harfle süren cümle satırı var; böyle satır alt başlık değildir.
             bool OpensBody(int i, int? after)
             {
+                // Fiyatla başlayan kısa satır ("$150 - Collectibles to sell") alt başlıktır: açıklamaya katılıp cümleyi bozuyordu (#1391).
+                if (StartsWithPrice(lines[i].Text) && Words(lines[i].Text) <= DetailWords) return false;
                 if (IsSentence(lines[i].Text)) return true;
                 return SentenceCased(lines[i].Text, 2) && after is { } next && Aligned(next, i, Height(i))
                        && lines[next].Text.Length > 0 && char.IsLower(lines[next].Text[0]) && IsSentence(lines[next].Text)
@@ -102,8 +106,12 @@ internal static class MissionCard
             rest.Dequeue();
             // Alt satır cümlenin devamı: yazı boyu benzer; küçük harfle başlayan kısa son satır ("treasure.") harfleri kısa
             // diye daha alçak okunabilir. Sıradaki görevin BÜYÜK HARFLİ başlığı açıklamaya katılmaz (görev listesi).
+            // Bitmemiş cümlenin altındaki bir iki sözcüklük kısa satır ("No", "and") harfleri kısa diye daha alçak okunsa da
+            // cümlenin devamıdır: ayrıntı sanılıp tek başına çevriliyordu ("Hayır!", #1391).
+            bool ShortTail(int next) => Words(lines[next].Text) <= TailWords && Height(next) >= line * 0.5
+                                        && Height(next) <= line * 1.5 && !SubtitleStabilizer.EndsSentence(lines[last].Text.Trim());
             while (rest.TryPeek(out var next) && Aligned(next, first, line) && !IsTitle(lines[next].Text)
-                   && (Math.Abs(Height(next) - line) <= line * 0.3
+                   && (Math.Abs(Height(next) - line) <= line * 0.3 || ShortTail(next)
                        || (lines[next].Text.Length > 0 && char.IsLower(lines[next].Text[0]) && Height(next) <= line * 1.5
                            && !SubtitleStabilizer.EndsSentence(lines[last].Text.Trim()))))
             {
@@ -133,7 +141,8 @@ internal static class MissionCard
                 last = next;
                 rest.Dequeue();
             }
-            var card = new Card(title, subtitles, body, details);
+            var card = new Card(title, subtitles, body, details,
+                IsPlaceTitle(string.Join(' ', title.Select(i => lines[i].Text))));
             var span = card.All.Select(B).ToList();
             if (body.Sum(i => Words(lines[i].Text)) < BodyWords || span.Max(b => b.Right) - span.Min(b => b.Left) > MaxWidth) continue;
             used.UnionWith(card.All);
@@ -166,6 +175,51 @@ internal static class MissionCard
     }
 
     private static int Words(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+    /// <summary>Açıklamanın sonuna katılan kısa satır en çok bu kadar sözcük.</summary>
+    internal const int TailWords = 2;
+
+    /// <summary>Satır fiyatla başlıyor ("$150 - Collectibles to sell", "150$").</summary>
+    internal static bool StartsWithPrice(string text)
+    {
+        var first = IconText.Plain(text).Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return first is { Length: > 0 } && ("$€£".Contains(first[0]) || char.IsDigit(first[0])) && first.Any(char.IsDigit);
+    }
+
+    /// <summary>
+    /// Konum kartının başlığı bir yer adıdır (#1391, GTA 6 haritası: "PAY 'N' SPRAY - PORT GELLHORN", "BUCK'S JEWELRY &
+    /// PAWN", "PAWN GUN - PORT GELLHORN"): çevrilmez, özgün yazı görünür kalır. Motor yer adını sözcük sözcük çeviriyor
+    /// ("LİMAN GELLHORN"), başlığı açıklamayla bir tutup kartın üstüne taşan tek kutu çiziyordu. Görev başlığı ("STEAL
+    /// VEHICLES FOR MOSES", fiille başlar) değildir. Yer adı: "AD - SEMT", iyelik ("BUCK'S"), "&", "'N'" ya da son sözcüğü
+    /// işletme/yer türü. Mac/iPhone ve Android aynı.
+    /// </summary>
+    internal static bool IsPlaceTitle(string text)
+    {
+        var plain = IconText.Plain(text).Trim();
+        if (!TextStyleSampler.IsUpper(plain)) return false;
+        var tokens = plain.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.ToUpperInvariant()).ToList();
+        if (tokens.Count == 0 || MissionVerbs.Contains(tokens[0])) return false;
+        if (tokens.Any(t => t is "-" or "–" or "&" or "'N'" or "’N’")) return true;
+        if (tokens.Any(t => t.Length > 2 && (t.EndsWith("'S", StringComparison.Ordinal) || t.EndsWith("’S", StringComparison.Ordinal)))) return true;
+        return PlaceNouns.Contains(tokens[^1]);
+    }
+
+    /// <summary>Görev başlığını açan fiiller (BÜYÜK HARFLİ başlıkta; <c>UiCommands</c> görev fiilleri ve haritadaki görev türleri).</summary>
+    internal static readonly HashSet<string> MissionVerbs =
+    [
+        "HIT", "ROB", "MEET", "VISIT", "FIND", "CHECK", "GO", "HEAD", "RETURN", "CALL", "FOLLOW", "STEAL", "PROTECT", "CHASE",
+        "RESCUE", "DEFEND", "EXPLORE", "INVESTIGATE", "PICK", "HELP", "DELIVER", "COLLECT", "ESCAPE", "KILL", "TAKE", "GET",
+        "LOSE", "DESTROY", "DRIVE", "BUY", "SELL", "WIN", "SURVIVE",
+    ];
+
+    /// <summary>Konum kartı başlığının son sözcüğü olan işletme ve yer türleri.</summary>
+    internal static readonly HashSet<string> PlaceNouns =
+    [
+        "PAWN", "GARAGE", "CABARET", "CLUB", "BAR", "DINER", "MOTEL", "HOTEL", "SHOP", "STORE", "BANK", "MARKET", "SALON", "GYM",
+        "CLINIC", "HOSPITAL", "DEALERSHIP", "CUSTOMS", "LOUNGE", "CASINO", "MARINA", "PIER", "MALL", "PLAZA", "MOTORS", "AUTOS",
+        "TATTOO", "BARBER", "CAFE", "RESTAURANT", "NIGHTCLUB", "THEATER", "THEATRE", "ARCADE", "AMMU-NATION", "SPRAY", "BOWLING",
+        "LIQUOR", "PHARMACY",
+    ];
 
     /// <summary>Kartın kutusu yardım kutularının durduğu sol üst köşede mi (oradaki başlıklı kutu bir ipucudur, görev kartı değil).</summary>
     internal static bool InHelpCorner(TextBox box) => box.Left < 0.25 && box.Top < 0.3;
@@ -203,7 +257,10 @@ internal static class MissionCard
             return new ScreenTranslation.Group(paragraphs, boxes.Skip(1).Aggregate(boxes[0], (a, b) => a.Union(b)),
                 heights[heights.Count / 2], slots.Any(list => list.Count > 0) ? slots : null) { Rows = ScreenTranslation.Rows(own) };
         }
-        return [Make(card.Title, true), .. card.Subtitles.Select(i => Make([i], true)), Make(card.Body, false),
+        // Konum kartında başlık (yer adı) çevrilmez; açıklamanın sarılmış satırları tek cümle olarak birlikte çevrilir ve
+        // tek blokta çizilir (#1391: satır satır bölünüp yarısı çevriliyordu).
+        List<ScreenTranslation.Group> title = card.Place ? [] : [Make(card.Title, true)];
+        return [.. title, .. card.Subtitles.Select(i => Make([i], true)), Make(card.Body, card.Place),
                 .. card.Details.Select(i => Make([i], true))];
     }
 }

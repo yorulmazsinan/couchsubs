@@ -616,9 +616,11 @@ class TranslationService : Service() {
             detector.finished()
             return
         }
-        // Altyazı alanı, kullanıcının ek alanları ve oyunun hazır alanları zaten okunuyor: oradaki yazı ikinci kez önerilmez.
+        // Altyazı alanı ve kullanıcının ek alanları zaten okunuyor: oradaki yazı ikinci kez önerilmez. Oyunun hazır alanları
+        // (GTA 6 yardım/mesaj köşesi) dışlanmaz: üstlerine taşan yazı (haritanın konum kartı) tek alan olarak bulunur, hazır
+        // alan o sırada okunmaz ([com.couchsubs.mobile.core.RegionWatcher.yieldingPresets], #1391).
         val phone = if (phoneSeen) phoneBounds else null
-        val excluded = (extraAreas + presetAreas).map { it.region } +
+        val excluded = extraAreas.map { it.region } +
             listOfNotNull(phone?.let { com.couchsubs.mobile.core.ScreenTextDetector.paddedPhone(it) })
         val subtitle = region
         try {

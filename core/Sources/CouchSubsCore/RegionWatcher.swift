@@ -217,6 +217,8 @@ public final class RegionWatcher {
     private var translations: [String: Translation] = [:]
     /// Alanların kaldırma geçmişi (`Steadiness`).
     private var steadiness: [String: Steadiness] = [:]
+    /// Son turda öbürüne yol verdiği için okunmayan alanlar (`yieldingPresets`; günlüğe değişince yazılır).
+    private var yieldLogged = Set<String>()
 
     /// Oyun paketi: satırın hazır Türkçesi (ana altyazıyla aynı arama).
     public var packLookup: ((String) -> PackMatch?)?
@@ -378,8 +380,19 @@ public final class RegionWatcher {
         server.regionsAlive()
         defer { server.regionsAlive() }
         // Ayarlar'da kapalı türün alanı (menü, hazır yardım/mesaj alanı, görev satırı) okunmaz; kutusu kalkar.
-        let areas = Self.yieldingPresets(all.filter { area in ScreenTextKind.reads(area, allows: allows) })
+        let offered = all.filter { area in ScreenTextKind.reads(area, allows: allows) }
+        let areas = Self.yieldingPresets(offered)
         let ids = Set(areas.map(\.id))
+        // Tanı (#1391): ekran yazısına yol veren hazır alan ve hazır alanın içinde kaldığı için okunmayan otomatik alan.
+        let yielded = Set(offered.filter { !ids.contains($0.id) }.map(\.id))
+        if yielded != yieldLogged {
+            for area in offered where yielded.contains(area.id) && !yieldLogged.contains(area.id) {
+                onLog?(GameAreaPresets.isPreset(area.id)
+                       ? "ek alan \(area.name): ekran yazısı bu alana taşıyor, alan bu sırada okunmuyor"
+                       : "ek alan \(area.name): yazı hazır alanın içinde, hazır alan okuyor")
+            }
+            yieldLogged = yielded
+        }
         for (id, state) in states where !ids.contains(id) {
             if !state.shown.isEmpty { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
             states[id] = nil
@@ -527,7 +540,9 @@ public final class RegionWatcher {
             // yoksa okuma doğrulanınca çizilir. Windows ve Android aynı.
             let rendered = state.renderedBlocks?.map(\.item) ?? []
             let texts = Self.blockTexts(candidate)
-            let listShifted = area.menu && Self.listMoved(rendered: rendered, current: texts)
+            // Haritanın konum kartı da (#1391): imleç gezip kart kayınca yazısı aynı kalan blok çevirisiyle yeni yerine taşınır,
+            // kart iki aynı okumayı beklerken kalkıp gelmez (yanıp sönmez).
+            let listShifted = (area.menu || candidate.missionCard) && Self.listMoved(rendered: rendered, current: texts)
             if !(state.renderedText ?? "").isEmpty,
                listShifted || Self.selectionMoved(rendered: rendered, current: candidate.blocks ?? []) {
                 let diff = Self.carriedRows(rendered: rendered, current: texts, listMoved: listShifted)
@@ -768,6 +783,9 @@ public final class RegionWatcher {
             // kenarında kesilmiş satır ve bozuk okuma (düşük güven, tuhaf harfler) atılır.
             .filter { !auto || !(ScreenTextNoise.isOverlay($0.text) || cutAtEdge($0)
                 || (menu && cutAtAreaEdge($0, region: region)) || ScreenTextNoise.isGarbled($0)) }
+            // Hazır mesaj alanının sol kenarına değen satır alanın dışından taşan yazının kesik parçasıdır (#1391: harita
+            // kartının "ctibles, like", "nd" parçaları tek başına çevriliyordu, "Hayır!"); çevrilmez.
+            .filter { auto || kind != .phone || !cutAtAreaLeftEdge($0, region: region) }
             .filter { !styled || !ScreenTranslation.isClock($0.text) }
             .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
         // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
@@ -922,16 +940,41 @@ public final class RegionWatcher {
     /// Menüdeki otomatik alanla kesişen hazır alan (GTA 6 sağdaki mesaj kartı alanı haritanın tuş listesine biniyor) o turda
     /// okunmaz: liste iki alana bölünüp yarısı hazır alanda (ayrı grup, ayrı yazı boyu, örtme), yarısı menü alanında
     /// çiziliyor, bölünme yerindeki satır ("ADD MARKER") hiç çevrilmiyordu (beta.100, 3385). Windows ve Android aynı.
+    ///
+    /// Menü dışındaki otomatik alan da (#1391): hazır alanlar artık dedektörde dışlanmıyor; haritanın konum kartı (dükkân,
+    /// garaj açıklaması) sağdaki mesaj alanına taşınca kart iki alana bölünüyordu: otomatik alan cümlenin solunu, hazır
+    /// alan sağdaki kesik parçaları ("ctibles, like", "nd") ayrı ayrı çeviriyordu ("Hayır!"); örtü cümlenin yalnız bir
+    /// kısmını kapatıyordu. Hazır alana en az bir karo taşan otomatik alan varken hazır alan o turda okunmaz; hazır alanın
+    /// içinde kalan (alanının en az `presetInsideShare`'i) otomatik alan ise okunmaz (hazır alan okuyor, eskisi gibi).
     static func yieldingPresets(_ areas: [ExtraArea]) -> [ExtraArea] {
-        let menus = areas.filter { $0.auto && $0.menu }.map(\.region)
-        guard !menus.isEmpty else { return areas }
-        return areas.filter { area in
-            !GameAreaPresets.isPreset(area.id) || !menus.contains { m in
-                let r = area.region
-                return min(r.right, m.right) > max(r.left, m.left) && min(r.bottom, m.bottom) > max(r.top, m.top)
+        let presets = areas.filter { GameAreaPresets.isPreset($0.id) }.map(\.region)
+        guard !presets.isEmpty else { return areas }
+        func overlap(_ a: CropRegion, _ b: CropRegion) -> (width: Double, height: Double) {
+            (max(0, min(a.right, b.right) - max(a.left, b.left)), max(0, min(a.bottom, b.bottom) - max(a.top, b.top)))
+        }
+        func insidePreset(_ area: ExtraArea) -> Bool {
+            let r = area.region
+            let size = max(1e-9, (r.right - r.left) * (r.bottom - r.top))
+            return !area.menu && presets.contains { p in
+                let o = overlap(r, p)
+                return o.width * o.height >= presetInsideShare * size
             }
         }
+        let autos = areas.filter { $0.auto && !insidePreset($0) }
+        return areas.filter { area in
+            if GameAreaPresets.isPreset(area.id) {
+                return !autos.contains { a in
+                    let o = overlap(a.region, area.region)
+                    return a.menu ? o.width > 0 && o.height > 0
+                        : o.width >= 1.0 / Double(ScreenTextDetector.columns) && o.height >= 1.0 / Double(ScreenTextDetector.rows)
+                }
+            }
+            return !(area.auto && insidePreset(area))
+        }
     }
+
+    /// Otomatik alanın en az bu kadarı hazır alanın içindeyse hazır alan okur (`yieldingPresets`).
+    static let presetInsideShare = 0.8
 
     /// Otomatik alandaki grubun çizim kipini seçen türü (`TextPainter.Target.kind`): alanın yerinden belli türü (menü,
     /// telefon, yardım köşesi, görev satırı), haritanın görev kartının parçası görev/hedef, kalanı okunan yazıdan
@@ -1191,6 +1234,12 @@ public final class RegionWatcher {
         guard width > 0 else { return false }
         let margin = areaEdgeTiles / Double(ScreenTextDetector.columns) / width
         return (region.left > 0.001 && box.left <= margin) || (region.right < 0.999 && box.right >= 1 - margin)
+    }
+
+    /// Satır alanın sol kenarına (karenin kenarı değilse) `areaEdgeTiles` karodan yakın değiyor (hazır mesaj alanı, #1391).
+    static func cutAtAreaLeftEdge(_ line: TextLine, region: CropRegion) -> Bool {
+        guard let box = line.box, region.left > 0.001, region.right - region.left > 0 else { return false }
+        return box.left <= areaEdgeTiles / Double(ScreenTextDetector.columns) / (region.right - region.left)
     }
 
     /// `cutAtAreaEdge` payı (karo genişliği cinsinden).

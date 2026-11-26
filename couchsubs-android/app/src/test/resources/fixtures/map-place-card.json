@@ -1,0 +1,354 @@
+{
+ "about": "Haritanın konum kartı (#1391, GTA 6 haritası: dükkân ve garaj açıklaması). Sentetik yerleşim, beta.105 günlüğündeki kart düzeninden (başlık, fiyat satırı, 2-4 satıra sarılmış açıklama; sağ ucu GTA 6'nın hazır 'Messages' alanına taşar); oyun karesi değildir. Kutular kareye oranla [sol, üst, sağ, alt]. 'cards': MissionCard.find ile bulunan kart; 'place': başlık yer adı (çevrilmez, grubu yok), 'subtitles', 'body' (sarılmış satırlar tek paragraf), 'details' grupların yazıları. 'titles': MissionCard.isPlaceTitle. 'areas': 'region' [sol, üst, sağ, alt] otomatik alanı GTA 6 hazır alanlarıyla birlikte verilince RegionWatcher.yieldingPresets'ten kalan alan kimlikleri (sırayla: hazır alanlar, sonra otomatik alan 'auto-1'). 'fragments': hazır 'Messages' alanında (alana oranlı kutular) okunan satırlar; 'cut': alanın sol kenarına değen kesik parça (RegionWatcher.cutAtAreaLeftEdge). Mac MapPlaceCardTests.swift, Windows MapPlaceCardTests.cs ve Android MapPlaceCardTest.kt aynı dosyayı okur.",
+ "cards": [
+  {
+   "name": "dükkân: başlık, fiyat satırı, üç satıra sarılmış açıklama",
+   "lines": [
+    {
+     "text": "BUCK'S JEWELRY & PAWN",
+     "box": [
+      0.4,
+      0.38,
+      0.56,
+      0.427
+     ]
+    },
+    {
+     "text": "$150 - Collectibles to sell",
+     "box": [
+      0.415,
+      0.448,
+      0.585,
+      0.487
+     ]
+    },
+    {
+     "text": "Pawn shop that buys collectibles, like",
+     "box": [
+      0.405,
+      0.5,
+      0.755,
+      0.539
+     ]
+    },
+    {
+     "text": "cards doubloons and",
+     "box": [
+      0.405,
+      0.546,
+      0.64,
+      0.585
+     ]
+    },
+    {
+     "text": "meteorites",
+     "box": [
+      0.405,
+      0.592,
+      0.505,
+      0.631
+     ]
+    },
+    {
+     "text": "1.30 km",
+     "box": [
+      0.05,
+      0.7,
+      0.11,
+      0.735
+     ]
+    }
+   ],
+   "place": true,
+   "subtitles": [
+    "$150 - Collectibles to sell"
+   ],
+   "body": [
+    "Pawn shop that buys collectibles, like cards doubloons and meteorites"
+   ],
+   "details": []
+  },
+  {
+   "name": "garaj: başlık 'AD - SEMT', iki satıra sarılmış açıklama",
+   "lines": [
+    {
+     "text": "PAY 'N' SPRAY - PORT GELLHORN",
+     "box": [
+      0.38,
+      0.38,
+      0.64,
+      0.427
+     ]
+    },
+    {
+     "text": "Garage offering repairs and resprays to",
+     "box": [
+      0.39,
+      0.45,
+      0.745,
+      0.489
+     ]
+    },
+    {
+     "text": "lower recognition",
+     "box": [
+      0.39,
+      0.496,
+      0.56,
+      0.535
+     ]
+    }
+   ],
+   "place": true,
+   "subtitles": [],
+   "body": [
+    "Garage offering repairs and resprays to lower recognition"
+   ],
+   "details": []
+  },
+  {
+   "name": "kabare: dört satırlık açıklama, son satır kısa ve alçak okunmuş 'No'",
+   "lines": [
+    {
+     "text": "DELIGHTS CABARET",
+     "box": [
+      0.38,
+      0.38,
+      0.52,
+      0.427
+     ]
+    },
+    {
+     "text": "Run-down Port Gellhorn strip club with",
+     "box": [
+      0.39,
+      0.45,
+      0.72,
+      0.489
+     ]
+    },
+    {
+     "text": "local talent. Features multiple stages",
+     "box": [
+      0.39,
+      0.496,
+      0.715,
+      0.535
+     ]
+    },
+    {
+     "text": "and offers private dances. Say",
+     "box": [
+      0.39,
+      0.542,
+      0.65,
+      0.581
+     ]
+    },
+    {
+     "text": "No",
+     "box": [
+      0.39,
+      0.592,
+      0.418,
+      0.616
+     ]
+    }
+   ],
+   "place": true,
+   "subtitles": [],
+   "body": [
+    "Run-down Port Gellhorn strip club with local talent. Features multiple stages and offers private dances. Say No"
+   ],
+   "details": []
+  },
+  {
+   "name": "görev kartı: başlık fiille başlar, çevrilir",
+   "lines": [
+    {
+     "text": "STEAL VEHICLES FOR MOSES",
+     "box": [
+      0.38,
+      0.38,
+      0.6,
+      0.427
+     ]
+    },
+    {
+     "text": "There's a Yosemite 1500 on Bastion St.",
+     "box": [
+      0.39,
+      0.45,
+      0.72,
+      0.489
+     ]
+    },
+    {
+     "text": "Bring it to Moses.",
+     "box": [
+      0.39,
+      0.496,
+      0.56,
+      0.535
+     ]
+    }
+   ],
+   "place": false,
+   "subtitles": [],
+   "body": [
+    "There's a Yosemite 1500 on Bastion St.",
+    "Bring it to Moses."
+   ],
+   "details": []
+  }
+ ],
+ "titles": [
+  {
+   "text": "PAY 'N' SPRAY - PORT GELLHORN",
+   "place": true
+  },
+  {
+   "text": "BUCK'S JEWELRY & PAWN",
+   "place": true
+  },
+  {
+   "text": "MW BUCK'S JEWELRY PAWN",
+   "place": true
+  },
+  {
+   "text": "PAWN GUN - PORT GELLHORN",
+   "place": true
+  },
+  {
+   "text": "DELIGHTS CABARET",
+   "place": true
+  },
+  {
+   "text": "STEAL VEHICLES FOR MOSES",
+   "place": false
+  },
+  {
+   "text": "THE MARINA JOB",
+   "place": false
+  },
+  {
+   "text": "ESCAPE FROM THE PORT OF LEONIDA",
+   "place": false
+  },
+  {
+   "text": "Buck's Jewelry & Pawn",
+   "place": false
+  }
+ ],
+ "areas": [
+  {
+   "name": "kart mesaj alanına taşıyor: mesaj alanı okunmaz",
+   "region": [
+    0.37,
+    0.36,
+    0.78,
+    0.66
+   ],
+   "menu": false,
+   "kept": [
+    "preset-help",
+    "auto-1"
+   ]
+  },
+  {
+   "name": "mesaj kartı hazır alanın içinde: otomatik alan okunmaz",
+   "region": [
+    0.75,
+    0.55,
+    0.97,
+    0.7
+   ],
+   "menu": false,
+   "kept": [
+    "preset-help",
+    "preset-phone"
+   ]
+  },
+  {
+   "name": "hazır alanlara değmeyen yazı: hepsi okunur",
+   "region": [
+    0.05,
+    0.85,
+    0.3,
+    0.95
+   ],
+   "menu": false,
+   "kept": [
+    "preset-help",
+    "preset-phone",
+    "auto-1"
+   ]
+  },
+  {
+   "name": "menü alanı hazır alana değiyor: mesaj alanı okunmaz",
+   "region": [
+    0.8,
+    0.7,
+    0.98,
+    0.96
+   ],
+   "menu": true,
+   "kept": [
+    "preset-help",
+    "auto-1"
+   ]
+  }
+ ],
+ "fragments": [
+  {
+   "text": "ell",
+   "box": [
+    0.0,
+    0.08,
+    0.06,
+    0.19
+   ],
+   "cut": true
+  },
+  {
+   "text": "ctibles, like",
+   "box": [
+    0.004,
+    0.21,
+    0.13,
+    0.32
+   ],
+   "cut": true
+  },
+  {
+   "text": "nd",
+   "box": [
+    0.0,
+    0.34,
+    0.035,
+    0.45
+   ],
+   "cut": true
+  },
+  {
+   "text": "Just saw Moses. Thx",
+   "box": [
+    0.2,
+    0.5,
+    0.8,
+    0.58
+   ],
+   "cut": false
+  },
+  {
+   "text": "RECENTER",
+   "box": [
+    0.62,
+    0.9,
+    0.9,
+    0.97
+   ],
+   "cut": false
+  }
+ ]
+}

@@ -35,7 +35,14 @@ object MissionCard {
     const val PICTURE_WIDTH = 2.5
 
     /** Bulunan kart: satırların sırası (verilen listede), yukarıdan aşağı. */
-    data class Card(val title: List<Int>, val subtitles: List<Int>, val body: List<Int>, val details: List<Int>) {
+    /** [place]: konum kartı (#1391: dükkân, garaj; başlığı yer adı, [isPlaceTitle]): başlık çevrilmez, açıklama tek paragraf. */
+    data class Card(
+        val title: List<Int>,
+        val subtitles: List<Int>,
+        val body: List<Int>,
+        val details: List<Int>,
+        val place: Boolean = false,
+    ) {
         val all: List<Int> get() = title + subtitles + body + details
     }
 
@@ -63,6 +70,8 @@ object MissionCard {
             // Açıklamanın ilk satırı: cümle satırı ya da sözcükleri cümle gibi yazılmış kısa satır ("Nautical-themed
             // souvenir") ki altında küçük harfle süren cümle satırı var; böyle satır alt başlık değildir.
             fun opensBody(i: Int, next: Int?): Boolean {
+                // Fiyatla başlayan kısa satır ("$150 - Collectibles to sell") alt başlıktır: açıklamaya katılıp cümleyi bozuyordu (#1391).
+                if (startsWithPrice(lines[i].text) && words(lines[i].text) <= DETAIL_WORDS) return false
                 if (isSentence(lines[i].text)) return true
                 return sentenceCased(lines[i].text, 2) && next != null && aligned(next, i, height(i)) &&
                     lines[next].text.firstOrNull()?.isLowerCase() == true && isSentence(lines[next].text) &&
@@ -100,8 +109,13 @@ object MissionCard {
                 val next = rest.firstOrNull() ?: break
                 // Alt satır cümlenin devamı: yazı boyu benzer; küçük harfle başlayan kısa son satır ("treasure.") harfleri
                 // kısa diye daha alçak okunabilir. Sıradaki görevin BÜYÜK HARFLİ başlığı açıklamaya katılmaz (görev listesi).
-                val continuation = lines[next].text.firstOrNull()?.isLowerCase() == true && height(next) <= line * 1.5 &&
-                    !SubtitleStabilizer.endsSentence(lines[last].text.trim())
+                val unfinished = !SubtitleStabilizer.endsSentence(lines[last].text.trim())
+                // Bitmemiş cümlenin altındaki bir iki sözcüklük kısa satır ("No", "and") harfleri kısa diye daha alçak okunsa da
+                // cümlenin devamıdır: ayrıntı sanılıp tek başına çevriliyordu ("Hayır!", #1391).
+                val shortTail = words(lines[next].text) <= TAIL_WORDS && height(next) >= line * 0.5 && height(next) <= line * 1.5 &&
+                    unfinished
+                val continuation = shortTail ||
+                    (lines[next].text.firstOrNull()?.isLowerCase() == true && height(next) <= line * 1.5 && unfinished)
                 if (!aligned(next, first, line) || isTitle(lines[next].text) ||
                     (abs(height(next) - line) > line * 0.3 && !continuation)) break
                 val gap = boxes[next]!!.top - boxes[last]!!.bottom
@@ -130,7 +144,7 @@ object MissionCard {
                 last = next
                 rest.removeFirst()
             }
-            val card = Card(title, subtitles, body, details)
+            val card = Card(title, subtitles, body, details, isPlaceTitle(title.joinToString(" ") { lines[it].text }))
             val span = card.all.map { boxes[it]!! }
             if (body.sumOf { words(lines[it].text) } < BODY_WORDS || span.maxOf { it.right } - span.minOf { it.left } > MAX_WIDTH) continue
             used.addAll(card.all)
@@ -161,6 +175,47 @@ object MissionCard {
     }
 
     private fun words(text: String) = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+
+    /** Açıklamanın sonuna katılan kısa satır en çok bu kadar sözcük. */
+    const val TAIL_WORDS = 2
+
+    /** Satır fiyatla başlıyor ("$150 - Collectibles to sell", "150$"). */
+    fun startsWithPrice(text: String): Boolean {
+        val first = IconText.plain(text).trim().split(' ').firstOrNull { it.isNotEmpty() } ?: return false
+        return (first[0] in "$€£" || first[0].isDigit()) && first.any { it.isDigit() }
+    }
+
+    /**
+     * Konum kartının başlığı bir yer adıdır (#1391, GTA 6 haritası: "PAY 'N' SPRAY - PORT GELLHORN", "BUCK'S JEWELRY &
+     * PAWN", "PAWN GUN - PORT GELLHORN"): çevrilmez, özgün yazı görünür kalır. Motor yer adını sözcük sözcük çeviriyor
+     * ("LİMAN GELLHORN"), başlığı açıklamayla bir tutup kartın üstüne taşan tek kutu çiziyordu. Görev başlığı ("STEAL
+     * VEHICLES FOR MOSES", fiille başlar) değildir. Yer adı: "AD - SEMT", iyelik ("BUCK'S"), "&", "'N'" ya da son sözcüğü
+     * işletme/yer türü. Mac/iPhone ve Windows aynı.
+     */
+    fun isPlaceTitle(text: String): Boolean {
+        val plain = IconText.plain(text).trim()
+        if (!TextStyleSampler.isUpper(plain)) return false
+        val tokens = plain.split(' ').filter { it.isNotEmpty() }.map { it.uppercase(java.util.Locale.ROOT) }
+        if (tokens.isEmpty() || tokens[0] in MISSION_VERBS) return false
+        if (tokens.any { it == "-" || it == "–" || it == "&" || it == "'N'" || it == "’N’" }) return true
+        if (tokens.any { it.length > 2 && (it.endsWith("'S") || it.endsWith("’S")) }) return true
+        return tokens.last() in PLACE_NOUNS
+    }
+
+    /** Görev başlığını açan fiiller (BÜYÜK HARFLİ başlıkta; UiCommands görev fiilleri ve haritadaki görev türleri). */
+    val MISSION_VERBS = setOf(
+        "HIT", "ROB", "MEET", "VISIT", "FIND", "CHECK", "GO", "HEAD", "RETURN", "CALL", "FOLLOW", "STEAL", "PROTECT", "CHASE",
+        "RESCUE", "DEFEND", "EXPLORE", "INVESTIGATE", "PICK", "HELP", "DELIVER", "COLLECT", "ESCAPE", "KILL", "TAKE", "GET",
+        "LOSE", "DESTROY", "DRIVE", "BUY", "SELL", "WIN", "SURVIVE",
+    )
+
+    /** Konum kartı başlığının son sözcüğü olan işletme ve yer türleri. */
+    val PLACE_NOUNS = setOf(
+        "PAWN", "GARAGE", "CABARET", "CLUB", "BAR", "DINER", "MOTEL", "HOTEL", "SHOP", "STORE", "BANK", "MARKET", "SALON", "GYM",
+        "CLINIC", "HOSPITAL", "DEALERSHIP", "CUSTOMS", "LOUNGE", "CASINO", "MARINA", "PIER", "MALL", "PLAZA", "MOTORS", "AUTOS",
+        "TATTOO", "BARBER", "CAFE", "RESTAURANT", "NIGHTCLUB", "THEATER", "THEATRE", "ARCADE", "AMMU-NATION", "SPRAY", "BOWLING",
+        "LIQUOR", "PHARMACY",
+    )
 
     /** Kartın kutusu yardım kutularının durduğu sol üst köşede mi (oradaki başlıklı kutu bir ipucudur, görev kartı değil). */
     fun inHelpCorner(box: TextBox): Boolean = box.left < 0.25 && box.top < 0.3
@@ -200,7 +255,10 @@ object MissionCard {
             return ScreenTranslation.Group(paragraphs, boxes.reduce { a, b -> a.union(b) }, heights[heights.size / 2],
                 if (slots.any { it.isNotEmpty() }) slots else null, rows = ScreenTranslation.rows(own))
         }
-        return listOf(group(card.title, true)) + card.subtitles.map { group(listOf(it), true) } +
-            listOf(group(card.body, false)) + card.details.map { group(listOf(it), true) }
+        // Konum kartında başlık (yer adı) çevrilmez; açıklamanın sarılmış satırları tek cümle olarak birlikte çevrilir ve
+        // tek blokta çizilir (#1391: satır satır bölünüp yarısı çevriliyordu).
+        val title = if (card.place) emptyList() else listOf(group(card.title, true))
+        return title + card.subtitles.map { group(listOf(it), true) } +
+            listOf(group(card.body, card.place)) + card.details.map { group(listOf(it), true) }
     }
 }

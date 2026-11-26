@@ -374,7 +374,8 @@ final class TextPaintTests: XCTestCase {
     func testPresetYieldsToMenuArea() {
         let phone = ExtraArea(id: GameAreaPresets.phoneId, name: "Messages", region: CropRegion(top: 0.45, bottom: 0.80, left: 0.72, right: 0.99))
         var menu = ExtraArea(id: "auto-1", name: ScreenTextDetector.areaName, region: CropRegion(top: 0.70, bottom: 0.96, left: 0.80, right: 0.98), auto: true)
-        XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), [phone.id, "auto-1"], "menü dışında hazır alan kalır")
+        // #1391: menü dışındaki alan da hazır alana taşıyorsa hazır alan okunmaz (konum kartı iki alana bölünmesin).
+        XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), ["auto-1"], "taşan alan")
         menu.menu = true
         XCTAssertEqual(RegionWatcher.yieldingPresets([phone, menu]).map(\.id), ["auto-1"])
         menu.region = CropRegion(top: 0.05, bottom: 0.12, left: 0.4, right: 0.9)

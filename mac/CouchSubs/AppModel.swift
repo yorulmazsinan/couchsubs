@@ -3988,7 +3988,9 @@ final class AppModel: ObservableObject {
         screenTextDetector = detector
         if !screenTextBusy, detector.due(capturedAt) {
             screenTextBusy = true
-            let excluded = [settings.region] + watched.map(\.region)
+            // Hazır alanlar (GTA 6 yardım/mesaj köşesi) dışlanmaz: üstlerine taşan yazı (haritanın konum kartı) tek alan
+            // olarak bulunur, hazır alan o sırada okunmaz (`RegionWatcher.yieldingPresets`, #1391).
+            let excluded = [settings.region] + watched.filter { !GameAreaPresets.isPreset($0.id) }.map(\.region)
             let blocked = phone.map { [ScreenTextDetector.paddedPhone($0)] } ?? []
             Task.detached(priority: .utility) { [weak self] in
                 detector.sample(frame, now: capturedAt, excluded: excluded, blocked: blocked)

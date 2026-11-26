@@ -500,7 +500,8 @@ public class TextPaintTests
     {
         var phone = new WatchedArea(GameAreaPresets.PhoneId, "Messages", new CropRegion(0.45, 0.80, 0.72, 0.99));
         var menu = new WatchedArea("auto-1", ScreenTextDetector.AreaName, new CropRegion(0.70, 0.96, 0.80, 0.98)) { Auto = true };
-        Assert.Equal([phone.Id, "auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
+        // #1391: menü dışındaki alan da hazır alana taşıyorsa hazır alan okunmaz (konum kartı iki alana bölünmesin).
+        Assert.Equal(["auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
         menu = menu with { Menu = true };
         Assert.Equal(["auto-1"], RegionWatcher.YieldingPresets([phone, menu]).Select(a => a.Id));
         menu = menu with { Region = new CropRegion(0.05, 0.12, 0.4, 0.9) };

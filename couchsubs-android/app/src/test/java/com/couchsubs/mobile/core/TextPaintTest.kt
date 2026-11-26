@@ -433,7 +433,8 @@ class TextPaintTest {
     fun presetYieldsToMenuArea() {
         val phone = ExtraArea(GameAreaPresets.PHONE_ID, "Messages", CropRegion(top = 0.45, bottom = 0.80, left = 0.72, right = 0.99))
         var menu = ExtraArea("auto-1", ScreenTextDetector.NAME, CropRegion(top = 0.70, bottom = 0.96, left = 0.80, right = 0.98), auto = true)
-        assertEquals("menü dışında hazır alan kalır", listOf(phone.id, "auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
+        // #1391: menü dışındaki alan da hazır alana taşıyorsa hazır alan okunmaz (konum kartı iki alana bölünmesin).
+        assertEquals("taşan alan", listOf("auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
         menu = menu.copy(menu = true)
         assertEquals(listOf("auto-1"), RegionWatcher.yieldingPresets(listOf(phone, menu)).map { it.id })
         menu = menu.copy(region = CropRegion(top = 0.05, bottom = 0.12, left = 0.4, right = 0.9))

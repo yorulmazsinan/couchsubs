@@ -36,6 +36,8 @@ enum MissionCard {
         var subtitles: [Int]
         var body: [Int]
         var details: [Int]
+        /// Konum kartı (#1391: dükkân, garaj; başlığı yer adı, `isPlaceTitle`): başlık çevrilmez, açıklama tek paragraf.
+        var place = false
         var all: [Int] { title + subtitles + body + details }
     }
 
@@ -60,6 +62,8 @@ enum MissionCard {
             // Açıklamanın ilk satırı: cümle satırı ya da sözcükleri cümle gibi yazılmış kısa satır ("Nautical-themed
             // souvenir") ki altında küçük harfle süren cümle satırı var; böyle satır alt başlık değildir.
             func opensBody(_ i: Int, _ after: ArraySlice<Int>) -> Bool {
+                // Fiyatla başlayan kısa satır ("$150 - Collectibles to sell") alt başlıktır: açıklamaya katılıp cümleyi bozuyordu (#1391).
+                if startsWithPrice(lines[i].text), words(lines[i].text) <= detailWords { return false }
                 if isSentence(lines[i].text) { return true }
                 guard sentenceCased(lines[i].text, words: 2), let next = after.first, aligned(next, i, height(i)),
                       lines[next].text.first?.isLowercase == true, isSentence(lines[next].text),
@@ -96,8 +100,14 @@ enum MissionCard {
             rest = rest.dropFirst()
             // Alt satır cümlenin devamı: yazı boyu benzer; küçük harfle başlayan kısa son satır ("treasure.") harfleri
             // kısa diye daha alçak okunabilir. Sıradaki görevin BÜYÜK HARFLİ başlığı açıklamaya katılmaz (görev listesi).
+            // Bitmemiş cümlenin altındaki bir iki sözcüklük kısa satır ("No", "and") harfleri kısa diye daha alçak okunsa da
+            // cümlenin devamıdır: ayrıntı sanılıp tek başına çevriliyordu ("Hayır!", #1391).
+            func shortTail(_ next: Int) -> Bool {
+                words(lines[next].text) <= tailWords && height(next) >= line * 0.5 && height(next) <= line * 1.5
+                    && !SubtitleStabilizer.endsSentence(lines[last].text.trimmingCharacters(in: .whitespaces))
+            }
             while let next = rest.first, aligned(next, first, line), !isTitle(lines[next].text),
-                  abs(height(next) - line) <= line * 0.3
+                  abs(height(next) - line) <= line * 0.3 || shortTail(next)
                     || (lines[next].text.first?.isLowercase == true && height(next) <= line * 1.5
                         && !SubtitleStabilizer.endsSentence(lines[last].text.trimmingCharacters(in: .whitespaces))) {
                 let gap = boxes[next]!.top - boxes[last]!.bottom
@@ -124,7 +134,8 @@ enum MissionCard {
                 last = next
                 rest = rest.dropFirst()
             }
-            let card = Card(title: title, subtitles: subtitles, body: body, details: details)
+            let card = Card(title: title, subtitles: subtitles, body: body, details: details,
+                            place: isPlaceTitle(title.map { lines[$0].text }.joined(separator: " ")))
             let span = card.all.map { boxes[$0]! }
             guard body.reduce(0, { $0 + words(lines[$1].text) }) >= bodyWords,
                   span.map(\.right).max()! - span.map(\.left).min()! <= maxWidth else { continue }
@@ -154,6 +165,43 @@ enum MissionCard {
     }
 
     private static func words(_ text: String) -> Int { text.split(whereSeparator: \.isWhitespace).count }
+
+    /// Açıklamanın sonuna katılan kısa satır en çok bu kadar sözcük (`shortTail`).
+    static let tailWords = 2
+
+    /// Satır fiyatla başlıyor ("$150 - Collectibles to sell", "150$").
+    static func startsWithPrice(_ text: String) -> Bool {
+        guard let first = IconText.plain(text).trimmingCharacters(in: .whitespaces).split(separator: " ").first else { return false }
+        return first.first.map { "$€£".contains($0) || $0.isNumber } == true && first.contains(where: \.isNumber)
+    }
+
+    /// Konum kartının başlığı bir yer adıdır (#1391, GTA 6 haritası: "PAY 'N' SPRAY - PORT GELLHORN", "BUCK'S JEWELRY &
+    /// PAWN", "PAWN GUN - PORT GELLHORN"): çevrilmez, özgün yazı görünür kalır. Motor yer adını sözcük sözcük çeviriyor
+    /// ("LİMAN GELLHORN"), başlığı açıklamayla bir tutup kartın üstüne taşan tek kutu çiziyordu. Görev başlığı ("STEAL
+    /// VEHICLES FOR MOSES", fiille başlar) değildir. Yer adı: "AD - SEMT", iyelik ("BUCK'S"), "&", "'N'" ya da son sözcüğü
+    /// işletme/yer türü. Windows ve Android aynı.
+    static func isPlaceTitle(_ text: String) -> Bool {
+        let plain = IconText.plain(text).trimmingCharacters(in: .whitespaces)
+        guard TextStyleSampler.isUpper(plain) else { return false }
+        let tokens = plain.split(separator: " ").map { String($0).uppercased(with: Locale(identifier: "en_US_POSIX")) }
+        guard let first = tokens.first, !missionVerbs.contains(first) else { return false }
+        if tokens.contains(where: { $0 == "-" || $0 == "–" || $0 == "&" || $0 == "'N'" || $0 == "’N’" }) { return true }
+        if tokens.contains(where: { $0.count > 2 && ($0.hasSuffix("'S") || $0.hasSuffix("’S")) }) { return true }
+        return tokens.last.map { placeNouns.contains($0) } ?? false
+    }
+
+    /// Görev başlığını açan fiiller (BÜYÜK HARFLİ başlıkta; `UiCommands.titleVerbs` ve haritadaki görev türleri).
+    static let missionVerbs: Set<String> = ["HIT", "ROB", "MEET", "VISIT", "FIND", "CHECK", "GO", "HEAD", "RETURN", "CALL",
+                                            "FOLLOW", "STEAL", "PROTECT", "CHASE", "RESCUE", "DEFEND", "EXPLORE",
+                                            "INVESTIGATE", "PICK", "HELP", "DELIVER", "COLLECT", "ESCAPE", "KILL", "TAKE",
+                                            "GET", "LOSE", "DESTROY", "DRIVE", "BUY", "SELL", "WIN", "SURVIVE"]
+
+    /// Konum kartı başlığının son sözcüğü olan işletme ve yer türleri.
+    static let placeNouns: Set<String> = ["PAWN", "GARAGE", "CABARET", "CLUB", "BAR", "DINER", "MOTEL", "HOTEL", "SHOP",
+                                          "STORE", "BANK", "MARKET", "SALON", "GYM", "CLINIC", "HOSPITAL", "DEALERSHIP",
+                                          "CUSTOMS", "LOUNGE", "CASINO", "MARINA", "PIER", "MALL", "PLAZA", "MOTORS",
+                                          "AUTOS", "TATTOO", "BARBER", "CAFE", "RESTAURANT", "NIGHTCLUB", "THEATER",
+                                          "THEATRE", "ARCADE", "AMMU-NATION", "SPRAY", "BOWLING", "LIQUOR", "PHARMACY"]
 
     /// Kartın kutusu yardım kutularının durduğu sol üst köşede mi (oradaki başlıklı kutu bir ipucudur, görev kartı değil).
     static func inHelpCorner(_ box: TextBox) -> Bool { box.left < 0.25 && box.top < 0.3 }
@@ -189,7 +237,9 @@ enum MissionCard {
             made.rows = ScreenTranslation.rows(own)
             return made
         }
-        return [group(card.title, joined: true)] + card.subtitles.map { group([$0], joined: true) }
-            + [group(card.body, joined: false)] + card.details.map { group([$0], joined: true) }
+        // Konum kartında başlık (yer adı) çevrilmez; açıklamanın sarılmış satırları tek cümle olarak birlikte çevrilir ve
+        // tek blokta çizilir (#1391: satır satır bölünüp yarısı çevriliyordu).
+        return (card.place ? [] : [group(card.title, joined: true)]) + card.subtitles.map { group([$0], joined: true) }
+            + [group(card.body, joined: card.place)] + card.details.map { group([$0], joined: true) }
     }
 }
