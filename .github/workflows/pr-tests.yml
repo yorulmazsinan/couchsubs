@@ -196,6 +196,8 @@ jobs:
         run: python3 scripts/fetch-packs.py
       - name: TV keşif ve eşleştirme testleri
         run: node --test scripts/tv-discovery.test.js
+      - name: Android TV sayfası testleri (katman)
+        run: node --test scripts/tv-android-overlay.test.js scripts/tv-android-background.test.js
       - name: JVM testleri
         working-directory: couchsubs-android
         shell: bash
