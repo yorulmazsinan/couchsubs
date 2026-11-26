@@ -15,7 +15,7 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 - **"Üstünü ört" modu**: Örtme kutusu artık her zaman tam opak, İngilizce altından görünmüyor; kalabalıkta önceki satırlar kutunun içine girmiyor (saydam kutu isteyen üstte/altta/sabit yerleşimi seçebilir).
 - **Mac ve iPhone çökmesi** (#1369): GTA 6'da telefon aranırken uygulamanın kendiliğinden kapanması düzeldi.
 - **GTA 6 haritası** (#1365): Harita ekranı menü gibi tek düzende çevriliyor; görev simgeleri yazı sanılmıyor, "GOAL" artık "Hedef"; üstteki sekme şeridi (#1372) her sekmeyi ayrı çeviriyor ve yanıp sönmüyor.
-- **Android TV'de köşedeki nokta**: Katman modunda sağ üstte kalan turuncu nokta kalktı; bağlantı gidince Katman kendini kapatıyor (TV uygulaması 0.9.119).
+- **Android TV'de köşedeki nokta**: Katman modunda sağ üstte kalan turuncu nokta kalktı; bağlantı gidince Katman kendini kapatıyor (TV uygulaması 0.9.120).
 - **Windows Ayarlar**: Koyu temada okunmayan yazılar ve boş kart düzeldi.
 - **İçe aktarılan paketler** (#1355): Yeni biçimdeki topluluk paketleri kabul ediliyor ve oyun seçiliyken de kullanılıyor; içe aktarma kaç satırı neden atladığını gösteriyor.
 
