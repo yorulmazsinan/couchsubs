@@ -36,6 +36,10 @@ public static class ExtraAreaMigration
             foreach (var profile in profiles)
                 if (profile?["Areas"] is JsonObject areas) Upgrade(areas);
         var settings = root.Deserialize<UserSettings>() ?? new UserSettings();
+        // Yalnız alanı henüz bulunmayan eski Remote Play kayıtları göç eder. Kullanıcının açıkça seçtiği false korunur.
+        if (!root.ContainsKey(nameof(UserSettings.OverlayFollowSubtitle))
+            && settings.FrameSource == FrameSource.RemotePlayWindow && settings.Style.Placement == SubtitlePlacement.Cover)
+            settings = settings with { OverlayFollowSubtitle = true };
         return order is null ? settings : settings with { Hotkeys = HotkeyTable.MoveAreaKeys(settings.Hotkeys, order) };
     }
 

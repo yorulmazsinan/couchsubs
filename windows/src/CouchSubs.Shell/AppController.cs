@@ -74,6 +74,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public SpeakerColorBook SpeakerBook => server.SpeakerBook;
     private bool serverStarted;
     private IStreamSession? session;
+    /// <summary>Aktif yakalama oturumunun penceresi; oturum kapanınca sıfır olur.</summary>
+    public IntPtr CapturedWindowHandle => (session as IWindowCaptureSession)?.CapturedWindowHandle ?? IntPtr.Zero;
     private IKeeper? keeper;
     private SubtitlePipeline? pipeline;
     /// <summary>Hattın yazı okuyucusu; ek bölgelerin tek seferlik okuması da bunu kullanır.</summary>
@@ -492,6 +494,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     public bool XboxReadsWindow => IsXbox && settings.XboxFrameSource == XboxFrameSource.CaptureWindow;
     /// <summary>Görüntü seçilen OBS/oyun penceresinden okunuyor (PS5'te ya da Xbox'ta).</summary>
     private bool ReadsCaptureWindow => IsXbox ? XboxReadsWindow : settings.FrameSource == FrameSource.CaptureWindow;
+    public bool ReadsComputerWindow => ReadsRemotePlayWindow || ReadsCaptureWindow;
     /// <summary>Görüntü bu bilgisayardaki PS Remote Play / chiaki-ng penceresinden okunuyor (yalnız PS5).</summary>
     private bool ReadsRemotePlayWindow => !IsXbox && settings.FrameSource == FrameSource.RemotePlayWindow;
     /// <summary>

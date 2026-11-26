@@ -227,6 +227,12 @@ public enum XboxFrameSource { Xbox, CaptureWindow }
 /// </summary>
 public sealed record WindowCaptureTarget(string ProcessName, string Title);
 
+/// <summary>Halen yakalanan pencere; yakalama yoksa sıfır. Tutamak iş parçacıkları arasında güvenle okunur.</summary>
+public interface IWindowCaptureSession
+{
+    IntPtr CapturedWindowHandle { get; }
+}
+
 /// <summary>
 /// Seçilen pencere OBS'in ve Kaynak projektörü değil (Program/Önizleme projektörü ya da OBS'in ana penceresi): bu
 /// görüntüde CouchSubs'ın OBS katmanı (tarayıcı kaynağı) da vardır, kendi altyazısını okur (bkz. <c>OwnSubtitles</c>).
@@ -467,6 +473,8 @@ public sealed record UserSettings
     public SubtitleOutput Output { get; init; } = SubtitleOutput.Tv;
     /// <summary>Bilgisayar ekranındaki altyazı penceresi tıklamaları alttaki pencereye (oyun, PS Remote Play) geçirir.</summary>
     public bool OverlayClickThrough { get; init; }
+    /// <summary>Remote Play penceresinde bilgisayar altyazısı İngilizce satırın konumunu izler ve üzerini örter.</summary>
+    public bool OverlayFollowSubtitle { get; init; }
     /// <summary>Altyazı penceresinin son yeri; null ise ana ekranın altında ortada açılır.</summary>
     public OverlayBounds? Overlay { get; init; }
     /// <summary>Oyun paketlerindeki hazır Türkçe çeviriler kullanılır (yalnız İngilizce→Türkçe).</summary>

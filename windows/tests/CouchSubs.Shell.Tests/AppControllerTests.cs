@@ -37,8 +37,9 @@ internal sealed class FakeSleep : ISleepGuard
     public void End() => (Active, DisplayOn) = (false, false);
 }
 
-internal sealed class FakeStream : IStreamSession
+internal sealed class FakeStream : IStreamSession, IWindowCaptureSession
 {
+    public IntPtr CapturedWindowHandle { get; set; }
     public event Action<Frame>? FrameReceived;
     public event Action<SessionState>? StateChanged;
     public event Action<RegisteredConsole>? ConsoleMoved;
@@ -1404,6 +1405,8 @@ public class AppControllerRunTests
 
         await controller.StartAsync();
         Assert.Equal([first], services.CaptureWindowStreams);
+        services.Streams[0].CapturedWindowHandle = new IntPtr(123);
+        Assert.Equal(new IntPtr(123), controller.CapturedWindowHandle);
         Assert.Empty(services.StreamPasscodes);
         Assert.Empty(services.WindowStreams);
         Assert.True(controller.IsRunning);
@@ -1412,6 +1415,11 @@ public class AppControllerRunTests
         for (var i = 0; i < 200 && services.CaptureWindowStreams.Count < 2; i++) await Task.Delay(10);
         Assert.Equal([first, second], services.CaptureWindowStreams);
         Assert.Equal(2, services.Streams.Count);
+        for (var i = 0; i < 200 && controller.CapturedWindowHandle != IntPtr.Zero; i++) await Task.Delay(10);
+        Assert.Equal(IntPtr.Zero, controller.CapturedWindowHandle);
+        services.Streams[1].CapturedWindowHandle = new IntPtr(456);
+        for (var i = 0; i < 200 && controller.CapturedWindowHandle != new IntPtr(456); i++) await Task.Delay(10);
+        Assert.Equal(new IntPtr(456), controller.CapturedWindowHandle);
         Assert.True(controller.IsRunning);
         controller.Dispose();
     }

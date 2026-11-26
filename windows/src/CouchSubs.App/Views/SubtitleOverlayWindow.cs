@@ -55,11 +55,18 @@ public sealed partial class SubtitleOverlayWindow : Window
     private readonly Grid adjustLayer = new() { Visibility = Visibility.Collapsed };
     /// <summary>Başka bir tam ekran ya da üstte duran pencere öne gelince altyazıyı yeniden en üste koyar.</summary>
     private readonly TopmostKeeper topmost;
+    private ScreenArea? coverSource;
+    private bool followingCover;
+    private double manualWidth;
     private IntPtr handle;
     /// <summary>Pencere bir kez açılamadı ya da çizilemedi: bu oturumda bir daha denenmez, çeviri pencere olmadan sürer.</summary>
     private bool broken;
 
     private double Now => clock.Elapsed.TotalSeconds;
+
+    /// <summary>Remote Play penceresinde bilgisayarın yerleşimi TV ayarından bağımsızdır.</summary>
+    private bool CoveringSubtitle => controller.ReadsComputerWindow
+        ? controller.Settings.OverlayFollowSubtitle : controller.Settings.Style.Placement == SubtitlePlacement.Cover;
 
     /// <summary>Yazı boyu TV'deki gibi 1080 satırlık ekrana göredir.</summary>
     private static double Scale => OverlayPlacement.Scale(SystemParameters.PrimaryScreenHeight);
@@ -164,7 +171,7 @@ public sealed partial class SubtitleOverlayWindow : Window
                     // "Örtsün": oyundaki altyazının yeri gelmezse son bilinen yer örtülür; yazı seçilen boyda kalır, ancak 3
                     // satıra sığmazsa bir kademe küçülür (Mac ve TV/OBS sayfası ile aynı).
                     var look = controller.Settings.Style;
-                    var covering = look.Placement == SubtitlePlacement.Cover && look.BackgroundShape != SubtitleBackgroundShape.Band && !e.Paragraphs;
+                    var covering = CoveringSubtitle && look.BackgroundShape != SubtitleBackgroundShape.Band && !e.Paragraphs;
                     subtitleBox = (e.Text, e.Box ?? subtitleBox?.Box, covering ? coverFont.Scale(e.Text, look.FontSize) : 1);
                 }
                 stack.Show(e.Text, e.DurationMs, e.Paragraphs, Now, e.Replaces);
@@ -267,6 +274,25 @@ public sealed partial class SubtitleOverlayWindow : Window
             lines.Add(new SubtitleStack.Line(0, Localizer.Current["Subtitles appear here."], SubtitleStack.Role.Current, false, false));
         adjustLayer.Visibility = adjusting ? Visibility.Visible : Visibility.Collapsed;
 
+        var visible = controller.ShowsOnComputer && (lines.Count > 0 || regions.Count > 0);
+        if (visible && !IsVisible) Show();
+        var follow = visible && !adjusting && controller.ReadsComputerWindow
+            && controller.Settings.OverlayFollowSubtitle;
+        coverSource = follow ? RemotePlaySource() : null;
+        if (!follow && followingCover)
+        {
+            followingCover = false;
+            PlaceFromSettings();
+        }
+        if (follow && lines.Any(line => line.Role == SubtitleStack.Role.Current && subtitleBox?.Text == line.Text)
+            && OverlayPlacement.FollowEnglish(subtitleBox?.Box, coverSource ?? default, manualWidth, Height, Scale) is { } place)
+        {
+            Width = place.Width;
+            Left = place.Left;
+            Top = place.Top;
+            followingCover = true;
+        }
+
         linesPanel.Children.Clear();
         foreach (var id in boxes.Keys.Except(lines.Select(l => l.Id)).ToList()) boxes.Remove(id);
         foreach (var line in lines)
@@ -289,9 +315,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         regionsPanel.PanelFont = OverlayPlacement.FontSize(controller.Settings.Style.FontSize) * Scale * 0.55;
         regionsPanel.ShowRegions(regions, MakeRegionBox);
 
-        var visible = controller.ShowsOnComputer && (lines.Count > 0 || regions.Count > 0);
-        if (visible && !IsVisible) Show();
-        else if (!visible && IsVisible) Hide();
+        if (!visible && IsVisible) Hide();
         // Arada öne gelen tam ekran/üstte duran pencere altyazıyı örtmüş olabilir; odak alınmadan yeniden üste konur.
         if (visible) topmost.RaiseThrottled();
 
@@ -312,7 +336,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         // Satır yüksekliği sıfır olursa WPF hata verir; boy en az 1.
         // Bant: kutu pencerenin tüm genişliğini kaplar, oyundaki İngilizce yazıyı yan yana da gizler.
         var band = style.BackgroundShape == SubtitleBackgroundShape.Band;
-        var coverLine = !band && current && !line.Paragraphs && style.Placement == SubtitlePlacement.Cover
+        var coverLine = !band && current && !line.Paragraphs && CoveringSubtitle
                         && subtitleBox is { } known && known.Text == line.Text ? subtitleBox : null;
         // Uzun çeviri en çok 3 satıra dengeli bölünür; 3 satıra sığmazsa yazı biraz küçülür (bkz. SubtitleWrap). "Örtsün"de yazı
         // seçilen boyda kalır, hiç küçülmez; sığmazsa daha çok satıra bölünür (CoverFontScale).
@@ -337,7 +361,8 @@ public sealed partial class SubtitleOverlayWindow : Window
         // kalınca oyunun altyazısı kutunun yanlarından taşıyordu; çeviri daha uzunsa kutu yine yazı kadar büyür (TV'deki örtü gibi).
         UIElement content = text;
         if (coverLine is { } cover
-            && OverlayPlacement.CoverSize(cover.Box, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight, scale) is { } area)
+            && OverlayPlacement.CoverSize(cover.Box, coverSource?.Width ?? SystemParameters.PrimaryScreenWidth,
+                coverSource?.Height ?? SystemParameters.PrimaryScreenHeight, scale) is { } area)
         {
             // Kutu pencereye sığar (yanlarda 24 birim boşluk ve kutunun dolgusu); taşan kutuyu WPF sola yaslayıp keserdi.
             var room = double.IsFinite(Width) ? Math.Max(0, Width - 2 * 24 * scale - padding.Left - padding.Right) : double.PositiveInfinity;
@@ -545,6 +570,17 @@ public sealed partial class SubtitleOverlayWindow : Window
         if (!double.IsNaN(bottom)) Top = bottom - height;
     }
 
+    private ScreenArea? RemotePlaySource()
+    {
+        if (PresentationSource.FromVisual(this) is null
+            || RemotePlayWindowStream.OverlayTargetBounds(controller.CapturedWindowHandle) is not { } pixels)
+            return null;
+        // PointFromScreen fiziksel pikseli bu WPF penceresinin ekran birimine çevirir.
+        var upper = PointFromScreen(new Point(pixels.Left, pixels.Top));
+        var lower = PointFromScreen(new Point(pixels.Right, pixels.Bottom));
+        return new ScreenArea(Left + upper.X, Top + upper.Y, lower.X - upper.X, lower.Y - upper.Y);
+    }
+
     /// <summary>
     /// Kayıtlı yer (ekranlardan birinde yeterince görünüyorsa) ya da ana ekranın altında ortada, %70 genişlikte. Kayıt
     /// bozuksa ya da o ekran artık bağlı değilse pencere ekran dışında ya da sıfır genişlikte açılmaz.
@@ -560,6 +596,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         heightScale = place.HeightScale;
         Height = Math.Round(height * heightScale);
         Width = place.Width;
+        manualWidth = place.Width;
         Left = place.Left;
         Top = place.Top;
     }

@@ -161,6 +161,8 @@ public struct UserSettings: Codable, Equatable {
     public var output = SubtitleOutput.tv
     /// Bilgisayar ekranındaki altyazı penceresi tıklamaları alttaki pencereye (oyun, PS Remote Play) geçirir.
     public var overlayClickThrough = false
+    /// Bilgisayarda altyazı, yakalanan penceredeki İngilizce satırı takip edip örter.
+    public var overlayFollowSubtitle = false
     /// Oyun paketlerindeki hazır Türkçe çeviriler kullanılır (yalnız İngilizce→Türkçe).
     public var gamePacks = true
     /// Pakette bulunmayan İngilizce satırlar ortak havuza gönderilir (anonim; bkz. `LinePool`).
@@ -277,6 +279,7 @@ public struct UserSettings: Codable, Equatable {
         aiInstruction = (try? values.decodeIfPresent(String.self, forKey: .aiInstruction)) ?? defaults.aiInstruction
         output = (try? values.decodeIfPresent(SubtitleOutput.self, forKey: .output)) ?? defaults.output
         overlayClickThrough = try values.decodeIfPresent(Bool.self, forKey: .overlayClickThrough) ?? defaults.overlayClickThrough
+        overlayFollowSubtitle = try values.decodeIfPresent(Bool.self, forKey: .overlayFollowSubtitle) ?? defaults.overlayFollowSubtitle
         freeAreaTarget = (try? values.decodeIfPresent(ResultTarget.self, forKey: .freeAreaTarget)) ?? defaults.freeAreaTarget
         // Bozuk tek bir kayıt bütün kısayolları silmesin: okunamayan seçimler atlanır.
         hotkeys = ((try? values.decodeIfPresent([LossyHotkeyChoice].self, forKey: .hotkeys)) ?? []).compactMap(\.choice)

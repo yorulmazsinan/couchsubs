@@ -31,8 +31,45 @@ public class ComputerScreenTests
         var old = JsonSerializer.Deserialize<UserSettings>("""{"SourceLanguage":"en","Style":{"FontSize":58}}""")!;
         Assert.Equal(SubtitleOutput.Tv, old.Output);
         Assert.False(old.OverlayClickThrough);
+        Assert.False(old.OverlayFollowSubtitle);
         Assert.Null(old.Overlay);
         Assert.Equal(58, old.Style.FontSize);
+    }
+
+    [Theory]
+    [InlineData(SubtitlePlacement.Above)]
+    [InlineData(SubtitlePlacement.Below)]
+    public void ComputerFollowIsSavedIndependentlyOfTvPlacement(SubtitlePlacement tvPlacement)
+    {
+        var settings = new UserSettings { Style = new SubtitleStyle(Placement: tvPlacement), OverlayFollowSubtitle = true };
+        var restored = JsonSerializer.Deserialize<UserSettings>(JsonSerializer.Serialize(settings))!;
+        Assert.True(restored.OverlayFollowSubtitle);
+        Assert.Equal(tvPlacement, restored.Style.Placement);
+        var disabled = restored with { OverlayFollowSubtitle = false };
+        Assert.Equal(tvPlacement, disabled.Style.Placement);
+        Assert.False(disabled.OverlayFollowSubtitle);
+    }
+
+    [Fact]
+    public void LegacyRemotePlayCoverMigratesOnceAndPreservesExplicitChoice()
+    {
+        const string legacy = """{"FrameSource":1,"Style":{"Placement":"Cover"}}""";
+        var migrated = ExtraAreaMigration.Load(legacy);
+        Assert.True(migrated.OverlayFollowSubtitle);
+        Assert.Equal(SubtitlePlacement.Cover, migrated.Style.Placement);
+        var disabled = migrated with { OverlayFollowSubtitle = false };
+        Assert.False(ExtraAreaMigration.Load(JsonSerializer.Serialize(disabled)).OverlayFollowSubtitle);
+    }
+
+    [Theory]
+    [InlineData("Above")]
+    [InlineData("Below")]
+    [InlineData("Fixed")]
+    public void LegacyOtherPlacementsDoNotEnableComputerCover(string placement)
+    {
+        var json = JsonSerializer.Serialize(new { FrameSource = 1, Style = new { Placement = placement } });
+        Assert.False(ExtraAreaMigration.Load(json).OverlayFollowSubtitle);
+        Assert.False(ExtraAreaMigration.Load("""{"FrameSource":0,"Style":{"Placement":"Cover"}}""").OverlayFollowSubtitle);
     }
 
     [Fact]

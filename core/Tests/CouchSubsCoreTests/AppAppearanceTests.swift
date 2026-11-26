@@ -6,6 +6,13 @@ import XCTest
 
 /// Ayarlardaki görünüm: varsayılan koyu, kaydedilip geri okunur (Windows ile aynı testler).
 final class AppAppearanceTests: XCTestCase {
+    func testComputerFollowSettingDefaultsOffAndRoundTrips() throws {
+        XCTAssertFalse(try JSONDecoder().decode(UserSettings.self, from: Data("{}".utf8)).overlayFollowSubtitle)
+        var settings = UserSettings()
+        settings.overlayFollowSubtitle = true
+        XCTAssertTrue(try JSONDecoder().decode(UserSettings.self, from: JSONEncoder().encode(settings)).overlayFollowSubtitle)
+    }
+
     func testNewSettingsAreDark() {
         XCTAssertEqual(UserSettings().appearance, .dark)
     }

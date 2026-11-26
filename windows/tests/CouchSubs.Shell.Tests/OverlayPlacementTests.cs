@@ -57,6 +57,31 @@ public class OverlayPlacementTests
     }
 
     [Fact]
+    public void CoverFollowsTheEnglishLineInsideAWindow()
+    {
+        var source = new ScreenArea(100, 50, 1280, 720);
+        var box = new CouchSubs.Core.TextBox(0.25, 0.8, 0.75, 0.9);
+        var placed = OverlayPlacement.FollowEnglish(box, source, 800, 300, 1);
+        Assert.NotNull(placed);
+        Assert.Equal(800, placed.Width);
+        Assert.Equal(340, placed.Left);
+        Assert.Equal(406, placed.Top);
+    }
+
+    [Fact]
+    public void CoverWidensForTheOriginalAndStaysInsideTheWindow()
+    {
+        var source = new ScreenArea(2000, 0, 960, 540);
+        var box = new CouchSubs.Core.TextBox(0.65, 0.8, 0.95, 0.9);
+        var placed = OverlayPlacement.FollowEnglish(box, source, 320, 250, 1);
+        Assert.NotNull(placed);
+        Assert.True(placed.Width > 320);
+        Assert.True(placed.Left >= source.Left);
+        Assert.True(placed.Left + placed.Width <= source.Right);
+        Assert.Null(OverlayPlacement.FollowEnglish(null, source, 320, 250, 1));
+    }
+
+    [Fact]
     public void NothingSavedOpensAtBottomCenter() => AssertDefault(OverlayPlacement.Place(null, Screen, Work, Height));
 
     [Fact]
