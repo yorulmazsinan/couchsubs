@@ -102,18 +102,17 @@ class ConsoleIdentityTest {
             ConsoleIdentity.changeLine(saved(hostId = null), saved(host = "192.168.1.44", hostId = null)))
     }
 
-    /** İlk tarama hemen; bulunamazsa 10 sn, sonra 30 sn beklenir. Bağlantı kopunca yine hemen. */
+    /** İlk tarama hemen; bulunamazsa 10 sn, 30 sn, 1 dk, 2 dk, sonra hep 5 dk beklenir (#1366). Bağlantı kopunca yine hemen. */
     @Test
     fun relocateScheduleShortensAfterAFailure() {
         val schedule = RelocateSchedule()
         val now = 1_000_000L
         assertTrue(schedule.isDue(now))
-        schedule.searched(false, now)
-        assertFalse(schedule.isDue(now + 9_000))
-        assertTrue(schedule.isDue(now + 10_000))
-        schedule.searched(false, now)
-        assertFalse(schedule.isDue(now + 29_000))
-        assertTrue(schedule.isDue(now + 30_000))
+        for (wait in longArrayOf(10_000, 30_000, 60_000, 120_000, 300_000, 300_000)) {
+            schedule.searched(false, now)
+            assertFalse(schedule.isDue(now + wait - 1_000))
+            assertTrue(schedule.isDue(now + wait))
+        }
         schedule.connectionFailed()
         assertTrue(schedule.isDue(now))
         schedule.searched(true, now)

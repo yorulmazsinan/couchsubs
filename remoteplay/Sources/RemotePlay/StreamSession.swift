@@ -977,6 +977,7 @@ public final class StreamSession: @unchecked Sendable {
     private func scheduleReconnect(_ current: Int, reason: DisconnectReason, initialized: Bool = true, box failed: ChiakiSessionBox? = nil) {
         // Başlatılamamış kutunun join edilecek iş parçacığı yok; yalnız belleği bırakılır.
         if let failed, !initialized { failed.markUnused() }
+        NetworkLoad.shared.retry()
         let classified = search.classify(reason, host: console.host)
         // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).
         if isCurrent(current), let stop = retryLimit.ended(classified) {

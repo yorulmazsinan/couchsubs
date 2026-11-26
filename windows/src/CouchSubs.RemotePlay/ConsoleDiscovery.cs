@@ -37,12 +37,13 @@ public static class ConsoleDiscovery
     /// yanıt kabul edilir).</summary>
     internal static bool IsRegistered(ConsoleInfo info, string name) => ConsoleIdentity.MatchesName(info, name);
 
-    /// <summary>PS5'te o an çalışan oyun (ortak havuz için; bkz. <see cref="RunningGame"/>): kayıtlı adrese sorulur. Yanıt yoksa
-    /// ya da yanıt veren başka bir PS5'se kayıtlı PS5 ağda kimliğiyle aranır; yeni adreste bulunursa kayıt güncellenir
-    /// (<see cref="ConsoleFinder.Changed"/>). Eskiden yoklama hep ilk adrese bakıyordu.</summary>
+    /// <summary>PS5'te o an çalışan oyun (ortak havuz için; bkz. <see cref="RunningGame"/>): kayıtlı adrese sorulur. Yoklama yalnız
+    /// PS5'e bağlıyken yapılır: ağ taranmaz (#1366; PS5 zaten kayıtlı adreste, adresi değişirse oturumun kendi araması bulur).
+    /// Eskiden her yoklama yeni bir arayıcıyla geldiği için kayıtlı adres keşfe yanıt vermeyince bağlanır bağlanmaz ve iki
+    /// dakikada bir bütün ağ taranıyordu.</summary>
     public static async Task<RunningGame?> RunningGameAsync(ConsoleFinder finder, CancellationToken ct = default)
     {
-        var info = await Task.Factory.StartNew(() => finder.Locate().Info, CancellationToken.None,
+        var info = await Task.Factory.StartNew(() => finder.Locate(sweep: false).Info, CancellationToken.None,
                                                TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(ct).ConfigureAwait(false);
         return info is null ? null : RunningGame.Create(info.RunningAppTitleId, info.RunningAppName);
     }
@@ -83,6 +84,7 @@ public static class ConsoleDiscovery
             foreach (var pointer in strings) Marshal.FreeCoTaskMem(pointer);
             handle.Free();
         }
+        NetworkLoad.Shared.Discovery(SweepPacing.IsSweep(targets.Count), SweepPacing.PlannedPackets(targets.Count, (int)timeout.TotalMilliseconds));
         lock (collector) return [.. collector.Hosts.Values.OrderBy(c => c.Host, StringComparer.Ordinal)];
     }
 

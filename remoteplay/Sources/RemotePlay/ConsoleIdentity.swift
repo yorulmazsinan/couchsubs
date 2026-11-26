@@ -67,9 +67,10 @@ public enum ConsoleIdentity {
 
 /// Tüm ağı tarayarak PS5 araması ne zaman yapılır (Windows `RelocateSchedule`, Android `RelocateSchedule` ile aynı).
 /// Tarama pahalı (~1000 adres, 3 sn); PS5 kapalıyken her denemede yapılmaz. Eskiden iki tarama arası hep 30 sn'ydi; artık
-/// bağlantı kopunca ilk denemede hemen, sonra 10 sn, sonra 30 sn arayla taranır. PS5 bulununca sıra baştan başlar.
+/// bağlantı kopunca ilk denemede hemen, sonra 10 sn, 30 sn, 1 dk, 2 dk, sonra 5 dk arayla taranır (#1366: PS5 bulunamadıkça
+/// tarama seyrelir, ağ yarım dakikada bir taranmaz). PS5 bulununca sıra baştan başlar.
 public struct RelocateSchedule: Sendable {
-    public static let delays: [TimeInterval] = [0, 10, 30]
+    public static let delays: [TimeInterval] = [0, 10, 30, 60, 120, 300]
     private var next = Date.distantPast
     private var misses = 0
 
@@ -128,9 +129,13 @@ public final class ConsoleFinder: @unchecked Sendable {
         lock.lock(); schedule.connectionFailed(); lock.unlock()
     }
 
-    /// Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse ve tarama zamanıysa ağ
-    /// taranır. `atHost`: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar.
-    public func locate() -> (info: ConsoleInfo?, atHost: ConsoleInfo?) {
+    /// Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse, `sweep` açıksa ve tarama
+    /// zamanıysa ağ taranır. `atHost`: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar.
+    ///
+    /// `sweep: false`: ağ hiç taranmaz. Oturum bağlıyken çalışan oyun yoklaması bunu kullanır (#1366): PS5 zaten kayıtlı
+    /// adreste akış veriyor; eskiden her yoklama yeni bir arayıcıyla geldiği için kayıtlı adres keşfe yanıt vermeyince
+    /// bağlanır bağlanmaz ve sonra iki dakikada bir bütün ağ taranıyordu.
+    public func locate(sweep: Bool = true) -> (info: ConsoleInfo?, atHost: ConsoleInfo?) {
         let saved = console
         let atHost = discover(saved.host).first
         if let atHost, ConsoleIdentity.isRegistered(atHost, saved) {
@@ -138,9 +143,10 @@ public final class ConsoleFinder: @unchecked Sendable {
             return (atHost, atHost)
         }
         if let atHost {
-            RemotePlayLog.write("PS5: \(saved.host) adresinde başka PS5 yanıt verdi (\(atHost.name)), \(saved.name) ağda aranıyor")
+            RemotePlayLog.write("PS5: \(saved.host) adresinde başka PS5 yanıt verdi (\(atHost.name))"
+                                + (sweep ? ", \(saved.name) ağda aranıyor" : ""))
         }
-        return (relocate(), atHost)
+        return (sweep ? relocate() : nil, atHost)
     }
 
     /// Ağı tarar (zamanı geldiyse); kayıtlı PS5 bulunursa kayıt güncellenir.

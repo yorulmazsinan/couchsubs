@@ -68,11 +68,12 @@ object ConsoleIdentity {
 /**
  * Tüm ağı tarayarak PS5 araması ne zaman yapılır (Mac ve Windows `RelocateSchedule` ile aynı). Tarama pahalı (/24 ağın
  * bütün adresleri, 3 sn); PS5 kapalıyken her denemede yapılmaz. Eskiden iki tarama arası hep 30 sn'ydi; artık bağlantı kopunca
- * ilk denemede hemen, sonra 10 sn, sonra 30 sn arayla taranır. PS5 bulununca sıra baştan başlar.
+ * ilk denemede hemen, sonra 10 sn, 30 sn, 1 dk, 2 dk, sonra 5 dk arayla taranır (#1366: PS5 bulunamadıkça tarama seyrelir).
+ * PS5 bulununca sıra baştan başlar.
  */
 class RelocateSchedule {
     companion object {
-        val DELAYS_MS = longArrayOf(0L, 10_000L, 30_000L)
+        val DELAYS_MS = longArrayOf(0L, 10_000L, 30_000L, 60_000L, 120_000L, 300_000L)
     }
 
     private var next = 0L
@@ -121,18 +122,20 @@ class ConsoleFinder(
     data class Located(val info: ConsoleInfo?, val atHost: ConsoleInfo?)
 
     /**
-     * Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse ve tarama zamanıysa ağ
-     * taranır. [Located.atHost]: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar.
+     * Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse, [sweep] açıksa ve tarama
+     * zamanıysa ağ taranır. [Located.atHost]: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar. `sweep = false`: ağ
+     * hiç taranmaz (bağlıyken çalışan oyun yoklaması, #1366).
      */
-    fun locate(): Located {
+    fun locate(sweep: Boolean = true): Located {
         val saved = console
         val atHost = discover(saved.host).firstOrNull()
         if (atHost != null && ConsoleIdentity.isRegistered(atHost, saved)) {
             learn(atHost)
             return Located(atHost, atHost)
         }
-        if (atHost != null) log("PS5: ${saved.host} adresinde başka PS5 yanıt verdi (${atHost.name}), ${saved.name} ağda aranıyor")
-        return Located(relocate(), atHost)
+        if (atHost != null)
+            log("PS5: ${saved.host} adresinde başka PS5 yanıt verdi (${atHost.name})" + if (sweep) ", ${saved.name} ağda aranıyor" else "")
+        return Located(if (sweep) relocate() else null, atHost)
     }
 
     /** Ağı tarar (zamanı geldiyse); kayıtlı PS5 bulunursa kayıt güncellenir. */

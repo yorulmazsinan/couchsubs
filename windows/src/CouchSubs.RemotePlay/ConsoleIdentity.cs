@@ -65,11 +65,16 @@ public static class ConsoleIdentity
 /// <summary>
 /// Tüm ağı tarayarak PS5 araması ne zaman yapılır (Mac <c>RelocateSchedule</c>, Android <c>RelocateSchedule</c> ile aynı).
 /// Tarama pahalı (~1000 adres, 3 sn); PS5 kapalıyken her denemede yapılmaz. Eskiden iki tarama arası hep 30 sn'ydi; artık
-/// bağlantı kopunca ilk denemede hemen, sonra 10 sn, sonra 30 sn arayla taranır. PS5 bulununca sıra baştan başlar.
+/// bağlantı kopunca ilk denemede hemen, sonra 10 sn, 30 sn, 1 dk, 2 dk, sonra 5 dk arayla taranır (#1366: PS5 bulunamadıkça
+/// tarama seyrelir). PS5 bulununca sıra baştan başlar.
 /// </summary>
 public sealed class RelocateSchedule
 {
-    public static readonly TimeSpan[] Delays = [TimeSpan.Zero, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
+    public static readonly TimeSpan[] Delays =
+    [
+        TimeSpan.Zero, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2),
+        TimeSpan.FromMinutes(5),
+    ];
     private DateTime next = DateTime.MinValue;
     private int misses;
 
@@ -124,9 +129,10 @@ public sealed class ConsoleFinder(RegisteredConsole console, Func<string?, IRead
         lock (gate) schedule.ConnectionFailed();
     }
 
-    /// <summary>Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse ve tarama zamanıysa
-    /// ağ taranır. <c>AtHost</c>: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar.</summary>
-    public (ConsoleInfo? Info, ConsoleInfo? AtHost) Locate()
+    /// <summary>Kayıtlı adresi sorar. Yanıt veren kayıtlı PS5'se o (eski kayıtta kimliği öğrenilir). Değilse, <paramref name="sweep"/>
+    /// açıksa ve tarama zamanıysa ağ taranır. <c>AtHost</c>: kayıtlı adreste yanıt veren (başka PS5 olabilir). Bloklar.
+    /// <c>sweep: false</c>: ağ hiç taranmaz (bağlıyken çalışan oyun yoklaması, #1366).</summary>
+    public (ConsoleInfo? Info, ConsoleInfo? AtHost) Locate(bool sweep = true)
     {
         var saved = Console;
         var atHost = discover(saved.Host).FirstOrDefault();
@@ -136,8 +142,8 @@ public sealed class ConsoleFinder(RegisteredConsole console, Func<string?, IRead
             return (atHost, atHost);
         }
         if (atHost is not null)
-            RemotePlayLog.Note($"PS5: {saved.Host} adresinde başka PS5 yanıt verdi ({atHost.Name}), {saved.Name} ağda aranıyor");
-        return (Relocate(), atHost);
+            RemotePlayLog.Note($"PS5: {saved.Host} adresinde başka PS5 yanıt verdi ({atHost.Name})" + (sweep ? $", {saved.Name} ağda aranıyor" : ""));
+        return (sweep ? Relocate() : null, atHost);
     }
 
     /// <summary>Ağı tarar (zamanı geldiyse); kayıtlı PS5 bulunursa kayıt güncellenir.</summary>

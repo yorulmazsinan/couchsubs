@@ -181,9 +181,11 @@ object ConsoleDiscovery {
         if (!NativeBridge.available) return emptyList()
         val targets = if (host != null) listOf(host) else subnetAddresses()
         if (targets.isEmpty()) return emptyList()
-        return NativeBridge.discover(targets.toTypedArray(), timeoutMs)?.mapNotNull { line ->
+        val found = NativeBridge.discover(targets.toTypedArray(), timeoutMs)?.mapNotNull { line ->
             parseLine(line)
         } ?: emptyList()
+        NetworkLoad.shared.discovery(SweepPacing.isSweep(targets.size), SweepPacing.plannedPackets(targets.size, timeoutMs))
+        return found
     }
 
     /** "adres\tad\tuyanık(0/1)[\toyun kimliği\toyun adı[\thost-id]]" (yerel kütüphanenin yanıt satırı). */
@@ -195,12 +197,12 @@ object ConsoleDiscovery {
     }
 
     /**
-     * PS5'te o an çalışan oyun (bloklar; ortak havuz için): kayıtlı adrese sorulur. Yanıt yoksa ya da yanıt veren başka bir
-     * PS5'se kayıtlı PS5 ağda kimliğiyle aranır; yeni adreste bulunursa kayıt güncellenir ([ConsoleFinder.onChange]).
-     * Eskiden yoklama hep ilk adrese bakıyordu.
+     * PS5'te o an çalışan oyun (bloklar; ortak havuz için): kayıtlı adrese sorulur. Yoklama yalnız PS5'e bağlıyken yapılır:
+     * ağ taranmaz (#1366; PS5 zaten kayıtlı adreste, adresi değişirse oturumun kendi araması bulur). Eskiden her yoklama yeni
+     * bir arayıcıyla geldiği için kayıtlı adres keşfe yanıt vermeyince iki dakikada bir bütün ağ taranıyordu.
      */
     fun runningGame(finder: ConsoleFinder): RunningGame? =
-        finder.locate().info?.let { RunningGame.create(it.runningAppTitleId, it.runningAppName) }
+        finder.locate(sweep = false).info?.let { RunningGame.create(it.runningAppTitleId, it.runningAppName) }
 
     fun wake(console: RegisteredConsole) {
         val credential = console.wakeCredential ?: throw IllegalStateException("Registration key is not a wake credential")

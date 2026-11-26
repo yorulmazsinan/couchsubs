@@ -31,9 +31,10 @@ extension AppServices {
     func openScreenRecordingSettings() { RemotePlayWindowStream.openScreenRecordingSettings() }
     /// PS5'te o an çalışan oyun (ortak havuz için; bkz. `RunningGame`): kayıtlı adrese keşif sorusu gider. Yanıt yoksa ya
     /// da yanıt veren başka bir PS5'se kayıtlı PS5 ağda kimliğiyle aranır; yeni adreste bulunursa kayıt güncellenir
-    /// (`ConsoleFinder.onChange`). Eskiden yoklama hep ilk adrese bakıyordu.
+    /// (`ConsoleFinder.onChange`). Eskiden yoklama hep ilk adrese bakıyordu. Yoklama yalnız PS5'e bağlıyken yapılır: ağ
+    /// taranmaz (#1366; PS5 zaten kayıtlı adreste, adresi değişirse oturumun kendi araması bulur).
     func runningGame(finder: ConsoleFinder) async -> RunningGame? {
-        let info = await Task.detached { finder.locate().info }.value
+        let info = await Task.detached { finder.locate(sweep: false).info }.value
         guard let info else { return nil }
         return RunningGame(titleId: info.runningAppTitleId, name: info.runningAppName)
     }

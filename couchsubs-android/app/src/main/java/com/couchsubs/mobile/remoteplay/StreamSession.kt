@@ -921,6 +921,7 @@ class StreamSession(
     }
 
     private fun scheduleReconnect(current: Int, state: SessionState.Disconnected) {
+        NetworkLoad.shared.retry()
         // Ağ hatasıyla düştüyse ve PS5 aramaya da yanıt vermediyse neden "bulunamadı"dır.
         val classified = search.classify(state, console.host)
         // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).

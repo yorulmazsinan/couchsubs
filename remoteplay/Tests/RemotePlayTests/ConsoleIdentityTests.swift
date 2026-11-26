@@ -90,17 +90,16 @@ final class ConsoleIdentityTests: XCTestCase {
         XCTAssertEqual(console.hostId, "1C98C1AABBCC")
     }
 
-    /// İlk tarama hemen; bulunamazsa 10 sn, sonra 30 sn beklenir. Bağlantı kopunca yine hemen.
+    /// İlk tarama hemen; bulunamazsa 10 sn, 30 sn, 1 dk, 2 dk, sonra hep 5 dk beklenir (#1366). Bağlantı kopunca yine hemen.
     func testRelocateScheduleShortensAfterAFailure() {
         var schedule = RelocateSchedule()
         let now = Date()
         XCTAssertTrue(schedule.isDue(now))
-        schedule.searched(found: false, now: now)
-        XCTAssertFalse(schedule.isDue(now.addingTimeInterval(9)))
-        XCTAssertTrue(schedule.isDue(now.addingTimeInterval(10)))
-        schedule.searched(found: false, now: now)
-        XCTAssertFalse(schedule.isDue(now.addingTimeInterval(29)))
-        XCTAssertTrue(schedule.isDue(now.addingTimeInterval(30)))
+        for wait in [10.0, 30, 60, 120, 300, 300] {
+            schedule.searched(found: false, now: now)
+            XCTAssertFalse(schedule.isDue(now.addingTimeInterval(wait - 1)))
+            XCTAssertTrue(schedule.isDue(now.addingTimeInterval(wait)))
+        }
         schedule.connectionFailed()
         XCTAssertTrue(schedule.isDue(now))
         schedule.searched(found: true, now: now)
@@ -148,4 +147,44 @@ final class ConsoleIdentityTests: XCTestCase {
         XCTAssertNil(finder.locate().info)
         XCTAssertEqual(scans, 2)
     }
+
+    /// Bağlıyken çalışan oyun yoklaması (`sweep: false`) kayıtlı adres sessiz de olsa ağı hiç taramaz (#1366).
+    func testLocateWithoutSweepNeverScansTheNetwork() {
+        var asked: [String?] = []
+        let finder = ConsoleFinder(console: saved()) { host in asked.append(host); return [] }
+        XCTAssertNil(finder.locate(sweep: false).info)
+        XCTAssertNil(finder.locate(sweep: false).info)
+        XCTAssertEqual(asked, ["192.168.1.20", "192.168.1.20"])
+    }
+
+    /// Tarama yalnız iki tur gönderir; birkaç adrese soru her turda gider (#1366).
+    func testSweepSendsOnlyTwoRounds() {
+        XCTAssertTrue(SweepPacing.isSweep(255))
+        XCTAssertFalse(SweepPacing.isSweep(1))
+        XCTAssertEqual((0..<6).filter { SweepPacing.sendsInRound($0, targetCount: 255) }, [0, 1])
+        XCTAssertEqual((0..<6).filter { SweepPacing.sendsInRound($0, targetCount: 1) }, [0, 1, 2, 3, 4, 5])
+        // 254 adres 4 ms arayla: saniyede en çok 250 paket.
+        XCTAssertLessThanOrEqual(1000 / SweepPacing.paceMilliseconds, 250)
+    }
+
+    /// Ağ yükü satırı: ilk olay hemen, sonrakiler dakikada bir tek satırda.
+    func testNetworkLoadWritesAtMostOneLinePerMinute() {
+        let lines = LockedLines()
+        let load = NetworkLoad(write: { lines.append($0) })
+        let start = Date()
+        load.discovery(sweep: true, packets: 510, now: start)
+        XCTAssertEqual(lines.all, ["Ağ yükü (son 0 sn): PS5 ağ taraması 1 kez, 510 paket; tek adres sorgusu 0 kez, 0 paket; PS5'e yeniden bağlanma 0"])
+        for second in 1...59 { load.discovery(sweep: false, packets: 4, now: start.addingTimeInterval(Double(second))) }
+        load.retry(now: start.addingTimeInterval(59))
+        XCTAssertEqual(lines.all.count, 1)
+        load.discovery(sweep: true, packets: 500, now: start.addingTimeInterval(60))
+        XCTAssertEqual(lines.all.last, "Ağ yükü (son 59 sn): PS5 ağ taraması 1 kez, 500 paket; tek adres sorgusu 59 kez, 236 paket; PS5'e yeniden bağlanma 1")
+    }
+}
+
+private final class LockedLines: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+    func append(_ line: String) { lock.withLock { lines.append(line) } }
+    var all: [String] { lock.withLock { lines } }
 }

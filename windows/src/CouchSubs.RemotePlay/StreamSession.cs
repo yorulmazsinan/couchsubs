@@ -832,6 +832,7 @@ public sealed class StreamSession : IStreamSession
 
     private void ScheduleReconnect(int current, DisconnectReason reason)
     {
+        NetworkLoad.Shared.Retry();
         reason = search.Classify(reason, console.Host);
         // PS5 kapattı ya da ağ denemeleri bitti: sınırsız döngü yerine dur, nedeni ve "Yeniden bağlan"ı göster (GitHub #353).
         if (IsCurrent(current) && retryLimit.Ended(reason.Kind, Environment.TickCount64) is { } stop)

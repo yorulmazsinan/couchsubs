@@ -89,19 +89,19 @@ public class ConsoleIdentityTests
                      ConsoleIdentity.ChangeLine(Saved(hostId: null), Saved(host: "192.168.1.44", hostId: null)));
     }
 
-    /// <summary>İlk tarama hemen; bulunamazsa 10 sn, sonra 30 sn beklenir. Bağlantı kopunca yine hemen.</summary>
+    /// <summary>İlk tarama hemen; bulunamazsa 10 sn, 30 sn, 1 dk, 2 dk, sonra hep 5 dk beklenir (#1366). Bağlantı kopunca yine hemen.</summary>
     [Fact]
     public void RelocateScheduleShortensAfterAFailure()
     {
         var schedule = new RelocateSchedule();
         var now = DateTime.UtcNow;
         Assert.True(schedule.IsDue(now));
-        schedule.Searched(false, now);
-        Assert.False(schedule.IsDue(now.AddSeconds(9)));
-        Assert.True(schedule.IsDue(now.AddSeconds(10)));
-        schedule.Searched(false, now);
-        Assert.False(schedule.IsDue(now.AddSeconds(29)));
-        Assert.True(schedule.IsDue(now.AddSeconds(30)));
+        foreach (var wait in new[] { 10, 30, 60, 120, 300, 300 })
+        {
+            schedule.Searched(false, now);
+            Assert.False(schedule.IsDue(now.AddSeconds(wait - 1)));
+            Assert.True(schedule.IsDue(now.AddSeconds(wait)));
+        }
         schedule.ConnectionFailed();
         Assert.True(schedule.IsDue(now));
         schedule.Searched(true, now);
@@ -146,5 +146,46 @@ public class ConsoleIdentityTests
         finder.ConnectionFailed();
         Assert.Null(finder.Locate().Info);
         Assert.Equal(2, scans);
+    }
+
+    /// <summary>Bağlıyken çalışan oyun yoklaması (<c>sweep: false</c>) kayıtlı adres sessiz de olsa ağı hiç taramaz (#1366).</summary>
+    [Fact]
+    public void LocateWithoutSweepNeverScansTheNetwork()
+    {
+        var asked = new List<string?>();
+        var finder = new ConsoleFinder(Saved(), host => { asked.Add(host); return []; });
+        Assert.Null(finder.Locate(sweep: false).Info);
+        Assert.Null(finder.Locate(sweep: false).Info);
+        Assert.Equal(["192.168.1.20", "192.168.1.20"], asked);
+    }
+
+    /// <summary>Tarama yalnız iki tur gönderir, paketler 4 ms arayla; birkaç adrese soru her turda gider (#1366).</summary>
+    [Fact]
+    public void SweepSendsOnlyTwoPacedRounds()
+    {
+        Assert.True(SweepPacing.IsSweep(254));
+        Assert.False(SweepPacing.IsSweep(1));
+        Assert.Equal([0, 1], Enumerable.Range(0, 6).Where(r => SweepPacing.SendsInRound(r, 254)));
+        Assert.Equal(Enumerable.Range(0, 6), Enumerable.Range(0, 6).Where(r => SweepPacing.SendsInRound(r, 1)));
+        Assert.Equal(508, SweepPacing.PlannedPackets(254, 3000));
+        Assert.Equal(4, SweepPacing.PlannedPackets(1, 2000));
+        Assert.True(1000 / SweepPacing.PaceMs <= 250);
+    }
+
+    /// <summary>Ağ yükü satırı: ilk olay hemen, sonrakiler dakikada bir tek satırda.</summary>
+    [Fact]
+    public void NetworkLoadWritesAtMostOneLinePerMinute()
+    {
+        var lines = new List<string>();
+        var load = new NetworkLoad(lines.Add);
+        var start = new DateTime(2026, 11, 27, 0, 0, 0, DateTimeKind.Utc);
+        load.Discovery(true, 508, start);
+        Assert.Equal(["Ağ yükü (son 0 sn): PS5 ağ taraması 1 kez, 508 paket; tek adres sorgusu 0 kez, 0 paket; PS5'e yeniden bağlanma 0"], lines);
+        for (var second = 1; second <= 59; second++) load.Discovery(false, 4, start.AddSeconds(second));
+        load.Retry(start.AddSeconds(59));
+        Assert.Single(lines);
+        load.Discovery(true, 500, start.AddSeconds(60));
+        Assert.Equal("Ağ yükü (son 59 sn): PS5 ağ taraması 1 kez, 500 paket; tek adres sorgusu 59 kez, 236 paket; PS5'e yeniden bağlanma 1",
+                     lines[^1]);
     }
 }

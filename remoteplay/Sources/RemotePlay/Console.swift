@@ -127,10 +127,14 @@ public enum Console {
         // yanıt gelmeyebiliyor, tek tek sorgu her ağda çalışıyor.
         let targets: [in_addr_t] = host.map { [inet_addr($0)] } ?? localSubnetAddresses()
 
-        // Yanıt kaçmasın diye arama birkaç kez tekrarlanır.
+        // Yanıt kaçmasın diye arama birkaç kez tekrarlanır; ağ taraması seyreltilir (bkz. `SweepPacing`).
         let end = ContinuousClock.now + timeout
+        let sweep = SweepPacing.isSweep(targets.count)
+        var round = 0
+        var sent = 0
         while ContinuousClock.now < end {
-            for target in targets {
+            for target in SweepPacing.sendsInRound(round, targetCount: targets.count) ? targets : [] {
+                if sweep && ContinuousClock.now >= end { break }
                 var address = sockaddr_in()
                 address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
                 address.sin_family = sa_family_t(AF_INET)
@@ -141,11 +145,15 @@ public enum Console {
                         _ = chiaki_discovery_send(discovery, &packet, $0, MemoryLayout<sockaddr_in>.size)
                     }
                 }
+                sent += 1
+                if sweep { usleep(SweepPacing.paceMicroseconds) }
             }
+            round += 1
             Thread.sleep(forTimeInterval: 0.5)
         }
         chiaki_discovery_thread_stop(thread)
         for line in sendErrors.summary(targets: targets.count) { RemotePlayLog.write(line) }
+        NetworkLoad.shared.discovery(sweep: sweep, packets: sent)
 
         collector.lock.lock()
         defer { collector.lock.unlock() }

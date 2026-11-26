@@ -185,6 +185,11 @@ static void cs_discovery_cb(ChiakiDiscoveryHost *host, void *user)
 	chiaki_mutex_unlock(&ctx->mutex);
 }
 
+/* PS5 ağ taramasının seyreltilmesi (SweepPacing ile aynı). */
+#define CS_SWEEP_MIN_TARGETS 8
+#define CS_SWEEP_ROUNDS 2
+#define CS_SWEEP_PACE_MS 4
+
 static void cs_sleep_ms(unsigned int ms)
 {
 	struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
@@ -239,12 +244,26 @@ JNIEXPORT jobjectArray JNICALL JNI_FCN(discover)(JNIEnv *env, jclass cls, jobjec
 	memset(&packet, 0, sizeof(packet));
 	packet.cmd = CHIAKI_DISCOVERY_CMD_SRCH;
 	packet.protocol_version = version;
-	/* Yanıt kaçmasın diye arama süre dolana kadar yinelenir. */
+	/* Yanıt kaçmasın diye arama süre dolana kadar yinelenir. Ağ taraması (8'den çok adres) yalnız iki tur gönderir ve
+	 * paketler arasında 4 ms beklenir (en çok ~250 paket/sn; #1366: her turda 254 paket ve ARP genel yayını birkaç
+	 * milisaniyede gidiyor, zayıf modemlerde evin Wi-Fi'ı kopuyordu). Kural SweepPacing'de (Kotlin, Swift, C#) aynı. */
 	uint64_t end = chiaki_time_now_monotonic_ms() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0);
+	int sweep = address_count > CS_SWEEP_MIN_TARGETS;
+	int round = 0;
 	do
 	{
-		for(int i = 0; i < address_count; i++)
-			chiaki_discovery_send(&discovery, &packet, (struct sockaddr *)&addresses[i], sizeof(struct sockaddr_in));
+		if(!sweep || round < CS_SWEEP_ROUNDS)
+		{
+			for(int i = 0; i < address_count; i++)
+			{
+				if(sweep && chiaki_time_now_monotonic_ms() >= end)
+					break;
+				chiaki_discovery_send(&discovery, &packet, (struct sockaddr *)&addresses[i], sizeof(struct sockaddr_in));
+				if(sweep)
+					cs_sleep_ms(CS_SWEEP_PACE_MS);
+			}
+		}
+		round++;
 		cs_sleep_ms(500);
 	} while(chiaki_time_now_monotonic_ms() < end);
 
