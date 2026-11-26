@@ -8,10 +8,9 @@
   var relaunch = function () {};
   // Katman modu: sayfa TV'nin kendi HDMI ekranının üstündeki, kumandanın ulaşmadığı şeffaf pencerede çalışır.
   var overlay = !!(bridge.isOverlay && bridge.isOverlay());
-  // Bağlantı bu süre içinde gelmezse katmanda küçük kırmızı nokta görünür.
-  var DOT_AFTER_MS = 5000;
-  var dot = null;
-  var dotTimer = null;
+  // Açık altyazı bağlantıları (tarama sırasında birden çok EventSource olabilir); sayısı 0'a inince bağlantı koptu sayılır.
+  var openSources = 0;
+  var reportedOpen = null;
 
   // Uygulamadan çıkılınca (Ana ekran, başka uygulama) Türkçe dublaj susar, öne gelince yeniden duyulur. Ortak sayfa sesi
   // new Audio(...) ile çalar; burada sarılır ki çalan ve arka plandayken başlayan ses kısılsın. Zamanlama değişmez.
@@ -48,46 +47,45 @@
     document.dispatchEvent(event);
   };
 
-  // Bağlantı kopukken katmanda sağ üstte küçük bir nokta; bağlıyken hiçbir şey görünmez.
-  function connection(open) {
-    if (!dot) return;
-    if (open) {
-      clearTimeout(dotTimer);
-      dotTimer = null;
-      dot.className = 'hidden';
-      return;
-    }
-    if (dotTimer !== null || dot.className !== 'hidden') return;
-    dotTimer = setTimeout(function () {
-      dotTimer = null;
-      dot.className = '';
-    }, DOT_AFTER_MS);
+  // Bağlantı durumu Android'e bildirilir: katman uzun süre bağlantısız kalırsa kendini kapatır (OverlayIdle.java).
+  // Katmanda ekrana hiçbir durum işareti çizilmez. beta.104'e kadar bağlantı 5 sn kopuk kalınca sağ üstte küçük pembe bir
+  // nokta çıkıyordu; bilgisayar kapanınca katman da açık kaldığından nokta TV yeniden başlatılana kadar duruyordu (Vestel).
+  function connection() {
+    var open = openSources > 0;
+    if (!overlay || open === reportedOpen) return;
+    reportedOpen = open;
+    try { if (bridge.connection) bridge.connection(open); } catch (e) { /* eski köprü */ }
   }
 
   function setupOverlay() {
     var style = document.createElement('style');
     // Bekleme kutusu ve demo kumandayla kapatılamaz; oyunun üstünde asılı kalmasın.
-    style.textContent = 'body.overlay #waiting, body.overlay #demo-badge { display: none !important; }' +
-      '#overlay-dot { position: absolute; top: 32px; right: 32px; width: 14px; height: 14px; border-radius: 50%;' +
-      ' background: #F28B82; opacity: 0.8; z-index: 50; }' +
-      '#overlay-dot.hidden { display: none; }';
+    style.textContent = 'body.overlay #waiting, body.overlay #demo-badge { display: none !important; }';
     document.head.appendChild(style);
     document.body.className += ' overlay';
-    dot = document.createElement('div');
-    dot.id = 'overlay-dot';
-    dot.className = 'hidden';
-    document.body.appendChild(dot);
-    connection(false);
+    connection();
   }
 
   // Ortak sayfanın EventSource'u sarılır: bilgisayarın görüntü modu seçimi (style olayındaki displayMode) Android'e
-  // iletilir, bağlantı durumu katmandaki noktayı yönetir. Sayfanın kendi dinleyicileri olduğu gibi çalışır.
+  // iletilir, bağlantı durumu katmana bildirilir. Sayfanın kendi dinleyicileri olduğu gibi çalışır.
   var NativeSource = window.EventSource;
   if (NativeSource) {
     var Source = function (url, options) {
       var source = options === undefined ? new NativeSource(url) : new NativeSource(url, options);
-      source.addEventListener('open', function () { connection(true); });
-      source.addEventListener('error', function () { connection(source.readyState === 1); });
+      var counted = false;
+      var track = function (open) {
+        if (open === counted) return;
+        counted = open;
+        openSources += open ? 1 : -1;
+        connection();
+      };
+      source.addEventListener('open', function () { track(true); });
+      source.addEventListener('error', function () { track(source.readyState === 1); });
+      var close = source.close;
+      source.close = function () {
+        track(false);
+        return close.apply(source, arguments);
+      };
       source.addEventListener('style', function (e) {
         var mode;
         try { mode = JSON.parse(e.data).displayMode; } catch (err) { return; }

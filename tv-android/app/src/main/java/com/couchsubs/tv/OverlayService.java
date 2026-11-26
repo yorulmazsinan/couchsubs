@@ -44,7 +44,9 @@ import java.util.List;
  * Pencere odak almaz: kumanda TV'de ve oyunda normal çalışır, CouchSubs'ın kumanda tuşları bu modda yoktur. Dokunmaya
  * kapatılmaz (bkz. showWindow: Android 12L+ öyle pencereyi %80 opaklıkla çizer), dokunmalar sayfada yutulur.
  * Altyazıyı uygulama içindeki modla aynı sayfa çizer (TvPage), olaylar yine bilgisayardan SSE ile gelir.
- * Kapatmak için CouchSubs yeniden açılır.
+ * Kapatmak için CouchSubs yeniden açılır. Bağlantı OverlayIdle.EXIT_AFTER_MS boyunca kurulmazsa (bilgisayar/telefon
+ * kapandı) katman kendini kapatır; pencere boşken ekranda hiçbir şey çizilmez (beta.104'e kadar sağ üstte bağlantı
+ * noktası vardı). Pencerenin eklenmesi ve kaldırılması nedeniyle TV olay günlüğüne yazılır (TvEvents).
  */
 public class OverlayService extends Service implements TvPage.Host {
     private static final String TAG = "CouchSubsOverlay";
@@ -77,6 +79,11 @@ public class OverlayService extends Service implements TvPage.Host {
     private final Runnable switchInput = () -> switchInput(pendingPort);
     /** WebView işleminin gidişleri (bkz. pageGone): kısa sürede çok giderse katman bırakılır. */
     private final PageRestarts restarts = new PageRestarts();
+    /** Sayfanın bağlantısı: uzun süre yoksa katman kapanır (bkz. OverlayIdle). */
+    private final OverlayIdle idle = new OverlayIdle();
+    private final Runnable idleCheck = this::checkIdle;
+    /** Servisin neden durdurulduğu (TvEvents "overlay remove" satırı); boşsa dışarıdan durduruldu (CouchSubs, ayarlar). */
+    private String stopReason;
     /** Pencere donanımla mı yazılımla mı çizilir (#1074); ilk pencerede kurulur. */
     private OverlayDrawing drawing;
     /** Pencereye eklenen görünüm: donanımlıysa sayfanın WebView'i, yazılımlıysa onu saran çerçeve. */
@@ -125,7 +132,7 @@ public class OverlayService extends Service implements TvPage.Host {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!goForeground()) {
             // TV ön plan servisine izin vermedi: katman açılamaz, uygulama içi moda dönülür ve nedeni söylenir.
-            stopSelf();
+            stop("foreground refused");
             if (page == null) {
                 TvPage.markOverlayBroken(this);
                 openApp(DisplayMode.FAILED_FOREGROUND);
@@ -136,13 +143,13 @@ public class OverlayService extends Service implements TvPage.Host {
         if (page == null) {
             if (!canDrawOverlays(this)) {
                 // İzin geri alınmış: uygulama içi moda dönülür, iznin nasıl verileceği gösterilir.
-                stopSelf();
+                stop("no permission");
                 openApp(DisplayMode.FAILED_PERMISSION);
                 return START_NOT_STICKY;
             }
             if (!showWindow(params == null ? "" : params)) {
                 // İzin var ama TV katman penceresini açtırmadı (BadTokenException ya da benzeri).
-                stopSelf();
+                stop("window refused");
                 TvPage.markOverlayBroken(this);
                 openApp(DisplayMode.FAILED_WINDOW);
                 return START_NOT_STICKY;
@@ -208,8 +215,47 @@ public class OverlayService extends Service implements TvPage.Host {
             ui.postDelayed(proofDraw, OverlayDrawing.SETTLE_MS + PROOF_DRAW_DELAY_MS);
         }
         Log.i(TAG, "overlay window " + drawing.diagnostics());
+        event("overlay add (" + (software ? "software" : "hardware") + ")");
+        idle.started(SystemClock.elapsedRealtime());
+        scheduleIdle();
         page.load();
         return true;
+    }
+
+    /** Sayfanın bağlantısı değişti: kopuksa katmanın kapanacağı an yeniden kurulur. */
+    @Override
+    public void connectionChanged(boolean open) {
+        if (page == null) return;
+        if (idle.connection(open, SystemClock.elapsedRealtime())) scheduleIdle();
+    }
+
+    private void scheduleIdle() {
+        ui.removeCallbacks(idleCheck);
+        long at = idle.exitAt();
+        if (at < 0) return;
+        ui.postDelayed(idleCheck, Math.max(0, at - SystemClock.elapsedRealtime()));
+    }
+
+    /** Bağlantı EXIT_AFTER_MS'dir yok: bilgisayar/telefon kapanmış, katman (pencere ve ön plan servisi) kapanır. */
+    private void checkIdle() {
+        if (page == null) return;
+        long now = SystemClock.elapsedRealtime();
+        if (!idle.expired(now)) {
+            scheduleIdle();
+            return;
+        }
+        Log.i(TAG, "overlay idle: no connection, closing");
+        stop("idle, no connection " + idle.secondsSince(now) + "s");
+    }
+
+    /** Servisi durdurur; neden onDestroy'daki "overlay remove" satırına yazılır. */
+    private void stop(String why) {
+        if (stopReason == null) stopReason = why;
+        stopSelf();
+    }
+
+    private void event(String line) {
+        TvEvents.of(this).add(line, System.currentTimeMillis());
     }
 
     /**
@@ -335,7 +381,7 @@ public class OverlayService extends Service implements TvPage.Host {
     }
 
     @Override
-    public void exit() { stopSelf(); }
+    public void exit() { stop("exit"); }
 
     /** Bilgi panelinin tanı satırı: katman modu ve TV'nin girişe nasıl geçirildiği. */
     @Override
@@ -356,7 +402,7 @@ public class OverlayService extends Service implements TvPage.Host {
     @Override
     public void pageGone(boolean crashed) {
         String params = page == null ? "" : page.launchParams();
-        removeWindow();
+        removeWindow(crashed ? "page crashed" : "page gone");
         // Donanımlı pencerede WebView işlemi çöktü: GPU yüzeyi ayrılamıyor olabilir (#1074), sonraki pencere yazılımla.
         if (crashed && drawing != null && drawing.rendererCrashed()) {
             Log.w(TAG, "overlay renderer crashed with hardware drawing; next window draws in software");
@@ -365,13 +411,13 @@ public class OverlayService extends Service implements TvPage.Host {
             Log.w(TAG, "overlay page keeps dying; leaving overlay mode");
             TvPage.markOverlayBroken(this);
             Toast.makeText(this, R.string.overlay_renderer_failed, Toast.LENGTH_LONG).show();
-            stopSelf();
+            stop("page keeps dying");
             return;
         }
         ui.postDelayed(() -> {
             if (!running || page != null) return;
             if (!showWindow(params == null ? "" : params)) {
-                stopSelf();
+                stop("window refused");
                 TvPage.markOverlayBroken(this);
                 openApp(DisplayMode.FAILED_WINDOW);
             }
@@ -392,7 +438,7 @@ public class OverlayService extends Service implements TvPage.Host {
     @Override
     public void displayModeChanged(String mode) {
         if (!DisplayMode.IN_APP.equals(mode)) return;
-        stopSelf();
+        stop("in-app mode");
         openApp(null);
     }
 
@@ -444,16 +490,18 @@ public class OverlayService extends Service implements TvPage.Host {
         running = false;
         if (current == this) current = null;
         ui.removeCallbacksAndMessages(null);
-        removeWindow();
+        removeWindow(stopReason == null ? "service stopped" : stopReason);
         if (drawing != null) drawing.closed();
         super.onDestroy();
     }
 
-    private void removeWindow() {
+    private void removeWindow(String why) {
         ui.removeCallbacks(proofSurvived);
         ui.removeCallbacks(proofDraw);
+        ui.removeCallbacks(idleCheck);
         proofPending = false;
         if (page != null) {
+            event("overlay remove (" + why + ")");
             try { windows.removeView(root); } catch (RuntimeException ignored) { /* pencere zaten yok */ }
             page.destroy();
             page = null;

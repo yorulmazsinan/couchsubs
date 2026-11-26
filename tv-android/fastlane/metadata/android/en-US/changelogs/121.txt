@@ -1,0 +1,1 @@
+0.9.118: In overlay mode (sideload) no dot is drawn in the top-right corner any more; when the computer or phone stays disconnected for two minutes the overlay closes itself.

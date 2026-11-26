@@ -11,7 +11,7 @@ name: tv-android
 on:
   push:
     branches: [main, "feat/windows-*"]
-    paths: ["tv-android/**", "tv-webos/**", "scripts/tv-discovery.test.js", ".github/workflows/tv-android.yml"]
+    paths: ["tv-android/**", "tv-webos/**", "scripts/tv-discovery.test.js", "scripts/tv-android-overlay.test.js", "scripts/tv-android-background.test.js", ".github/workflows/tv-android.yml"]
   workflow_dispatch:
   # Sürüm iş akışı (release.yml) paketi buradan alır.
   workflow_call:
@@ -36,6 +36,9 @@ jobs:
       # TV sayfasının ortak kodu (tv-webos): altyazı kaynağını ağda bulma.
       - name: TV sayfası testleri
         run: node --test scripts/tv-discovery.test.js
+      # Android'e özgü sayfa kodu (platform.js): katmanda durum işareti yok, bağlantı Android'e bildirilir.
+      - name: Android TV sayfası testleri
+        run: node --test scripts/tv-android-overlay.test.js scripts/tv-android-background.test.js
       - name: İmza anahtarı
         env:
           TV_KEYSTORE_BASE64: ${{ secrets.TV_KEYSTORE_BASE64 }}

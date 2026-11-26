@@ -54,6 +54,12 @@ final class TvPage {
          * Sayfanın iş parçacığından çağrılır; yalnız iş parçacığı güvenli alanlar okunmalı.
          */
         String diagnostics();
+
+        /**
+         * Sayfanın bilgisayar/telefon bağlantısı açıldı ya da koptu (platform.js). Katman bununla boşta kaldığını anlar ve
+         * kendini kapatır (bkz. OverlayIdle); uygulama içi modda kullanılmaz.
+         */
+        void connectionChanged(boolean open);
     }
 
     private static final String TAG = "CouchSubsPage";
@@ -279,6 +285,10 @@ final class TvPage {
 
         @JavascriptInterface
         public void exit() { ui.post(host::exit); }
+
+        /** Sayfanın bağlantısı açıldı/koptu (bkz. Host.connectionChanged). */
+        @JavascriptInterface
+        public void connection(boolean open) { ui.post(() -> host.connectionChanged(open)); }
 
         /** Bekleyen TV olay satırları (TvEvents), satır satır; sayfa bilgisayara/telefona gönderir (app.js tvLog). */
         @JavascriptInterface

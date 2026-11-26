@@ -783,6 +783,11 @@ public class MainActivity extends Activity implements TvPage.Host {
         tune(id, "port " + port);
     }
 
+    /** Uygulama içi modda bağlantı durumu ekranı etkilemez (sayfa kendisi gösterir); yalnız katman kullanır. */
+    @Override
+    public void connectionChanged(boolean open) {
+    }
+
     /**
      * Konsolun girişi bulunamadı (CEC kapalı, birden çok giriş bağlı görünüyor, kayıtlı seçim yok): eskiden HDMI 1
      * açılıyordu (#367). Artık hiçbir giriş açılmaz, giriş seçici hemen gösterilir; seçilen giriş kaydedilir.

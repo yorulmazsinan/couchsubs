@@ -1,0 +1,1 @@
+0.9.118: Katman modunda sağ üst köşede nokta çizilmiyor; bilgisayar ya da telefon iki dakika bağlanmazsa katman kendiliğinden kapanıyor.
