@@ -727,6 +727,20 @@ public class ScreenPhoneCardTests
         Assert.False(ScreenPhoneCard.Holds(Box([0.949, 0.93197, 0.99577, 0.95692]), phone));
     }
 
+    /// <summary>
+    /// Doğrulanmamış telefon adayı yalnız ekranının içindeki adsız satırları bekletir: telefonun altındaki satır ve konuşan
+    /// adlı altyazı geçer (beta.103 kaçan altyazı; Mac ve Android aynı).
+    /// </summary>
+    [Fact]
+    public void UnconfirmedCandidateHoldsOnlyUnnamedLinesOnItsScreen()
+    {
+        var phone = Handset([0.50375, 0.12444, 0.46125, 0.68444]);
+        Assert.True(ScreenPhoneCard.HoldsUnconfirmed("Kingfishers a message. Hit", Box([0.39415, 0.47436, 0.54888, 0.52616]), phone));
+        Assert.False(ScreenPhoneCard.HoldsUnconfirmed("Locating...", Box([0.3974, 0.74924, 0.4632, 0.79995]), phone));
+        Assert.False(ScreenPhoneCard.HoldsUnconfirmed("Lucia: Hit the gas", Box([0.39415, 0.47436, 0.54888, 0.52616]), phone));
+        Assert.False(ScreenPhoneCard.HoldsUnconfirmed("Get in", Box([0.46, 0.90, 0.54, 0.94]), phone));
+    }
+
     private sealed class Fixed(string text) : ITextTranslator
     {
         public Task<string> TranslateAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult(text);

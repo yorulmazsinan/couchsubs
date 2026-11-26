@@ -138,6 +138,8 @@ public final class SubtitlePipeline {
     private var mission = MissionLine()
     /// Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (`DropLog`).
     private let drops: DropLog
+    /// Altyazı sayılmayan satırların neden başına sayacı (`RejectTally`; beta.103 kaçan altyazı).
+    private let rejects = RejectTally()
     /// Görev satırının bölgesi değişti (nil: görev kalktı). Görev altyazıya girmez; bölgesi "auto-mission" ek alanı olarak
     /// kendi yerinde ve özgün stilinde gösterilir (bkz. `MissionLine`).
     public var onMissionChanged: ((CropRegion?) -> Void)?
@@ -368,7 +370,13 @@ public final class SubtitlePipeline {
         // Karede kendi altyazımız (OBS Program projektörü, CouchSubs'ın OBS katmanı) varsa okunmaz (bkz. `OwnSubtitles`).
         var (seen, ownLines) = own.split(visible, place: place)
         if let phone = handset {
-            let kept = seen.lines.filter { line in line.box.map { !ScreenPhoneCard.holds($0.placed(in: place), handset: phone) } ?? true }
+            let kept = seen.lines.filter { line in
+                line.box.map { box in
+                    let placed = box.placed(in: place)
+                    return unconfirmed ? !ScreenPhoneCard.holdsUnconfirmed(line.text, box: placed, handset: phone)
+                        : !ScreenPhoneCard.holds(placed, handset: phone)
+                } ?? true
+            }
             if kept.count < seen.lines.count {
                 let text = seen.lines.filter { !kept.contains($0) }.map(\.text).joined(separator: " ")
                 if text != loggedPhone {
@@ -377,6 +385,7 @@ public final class SubtitlePipeline {
                         : "telefon yazısı: \(SubtitleLog.excerpt(text)) telefonun ekranında, altyazı sayılmadı")
                 }
                 seen = Reading(lines: kept)
+                countReject(unconfirmed ? "telefon adayı bekletti" : "telefon yazısı")
             }
         }
         if let first = ownLines.first, first.text != loggedOwn {
@@ -1010,16 +1019,26 @@ public final class SubtitlePipeline {
     }
 
     /// Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822: atılan altyazı günlükte görünsün).
+    /// Her eleme nedeniyle sayılır (`RejectTally`): satır sonunda o nedenin sayısı, dakikada bir neden başına özet.
     private func logSceneText(_ text: String, _ reason: String) {
         let key = text + "|" + reason
-        guard !loggedSceneText.contains(key) else { return }
-        loggedSceneText.append(key)
-        if loggedSceneText.count > 20 { loggedSceneText.removeFirst() }
-        log("sahne yazısı: \(SubtitleLog.excerpt(text)) altyazı sayılmadı (\(reason))")
+        let fresh = !loggedSceneText.contains(key)
+        if fresh {
+            loggedSceneText.append(key)
+            if loggedSceneText.count > 20 { loggedSceneText.removeFirst() }
+        }
+        let line = fresh ? "sahne yazısı: \(SubtitleLog.excerpt(text)) altyazı sayılmadı (\(reason))" : nil
+        for entry in rejects.note(reason, line: line, now: now()) { log(entry) }
+    }
+
+    /// Kendi satırı ayrıca yazılan eleme (telefon, sabit blok) yalnız sayılır (`RejectTally`).
+    private func countReject(_ reason: String) {
+        for entry in rejects.note(reason, line: nil, now: now()) { log(entry) }
     }
 
     /// Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933).
     private func logStale(_ texts: [String]) {
+        if !texts.isEmpty { countReject("sabit blok (\(Reading.staleMs / 1000) sn değişmeyen)") }
         let key = texts.joined(separator: "\n")
         guard key != loggedStale else { return }
         loggedStale = key
@@ -1123,6 +1142,7 @@ public final class SubtitlePipeline {
         subtitleBand.reset()
         darkInkStyle.reset()
         loggedSceneText.removeAll()
+        rejects.reset()
         settled.reset()
         mission.reset()
         notices.reset()

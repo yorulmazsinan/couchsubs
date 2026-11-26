@@ -79,8 +79,11 @@ internal static partial class SubtitleSegmenter
         {
             var line = raw.Trim();
             if (line.Length == 0) continue;
-            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir.
-            if (SpeakerLabel(line) is not null || DialogueDash().IsMatch(line)) FlushBlock();
+            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir. Altyazı seçicinin
+            // konuşan adı saydığı satır (SpeakerPrefix: "JASON : …", "Lucia：…") da yeni konuşmadır; aynı anda konuşan iki
+            // kişinin satırı tek satıra birleşiyordu (beta.103 bildirimi; Mac, iPhone ve Android aynı).
+            if (SpeakerLabel(line) is not null || CouchSubs.Core.SpeakerPrefix.Parse(line) is not null
+                || DialogueDash().IsMatch(line)) FlushBlock();
             if (block.Length > 0) block.Append(' ');
             block.Append(line);
         }

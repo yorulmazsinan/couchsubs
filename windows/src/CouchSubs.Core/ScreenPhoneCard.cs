@@ -252,6 +252,20 @@ public static class ScreenPhoneCard
     }
 
     /// <summary>
+    /// Doğrulanmamış telefon adayı (#1251, CandidateHoldMs) yalnız ekranının içindeki satırları bekletir: alt gövde payı
+    /// (BelowSlack) yok ve konuşan adlı satır ("Lucia: …") hiç bekletilmez. Yanlış aday (yanları zayıf, telefon olmayan
+    /// dikdörtgen) altındaki ya da önündeki altyazıyı 1,5 sn yutuyordu (beta.103 kaçan altyazı denetimi).
+    /// Mac/iPhone (ScreenPhoneCard.holdsUnconfirmed) ve Android (holdsUnconfirmed) aynı.
+    /// </summary>
+    public static bool HoldsUnconfirmed(string text, TextBox box, Handset handset)
+    {
+        if (SpeakerPrefix.Parse(text) is not null) return false;
+        var flat = handset.Flat(box);
+        var v = (flat.Top + flat.Bottom) / 2;
+        return v >= -ScreenSlack && v <= 1 + ScreenSlack && flat.Left >= -SideSlack && flat.Right <= 1 + SideSlack;
+    }
+
+    /// <summary>
     /// Holds: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını SideSlack kadar aşabilir. Alt kenarda
     /// pay BelowSlack: telefonun alt gövdesi örtülünce telefon kısa bulunuyor, son mesajlar ekranın altında kalıyordu
     /// (gerçek kare gta6-telefon-sohbet-2; Mac ile aynı).

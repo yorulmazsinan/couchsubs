@@ -78,4 +78,16 @@ class SpokenTogetherTest {
         val reading = Reading(listOf(line("Vendor: Fresh fruit!", 0.7), line("Driver: Move it.", 0.8, 0.07)))
         assertEquals("Vendor: Fresh fruit!", reading.subtitleBlock(area).text)
     }
+
+    /**
+     * Altyazı seçicinin konuşan adı saydığı her satır ("JASON : …", "Lucia：…") kendi satırında kalır; iki konuşanın sözü
+     * tek satıra birleşmez (beta.103 bildirimi; Mac ve Windows aynı).
+     */
+    @Test fun everySpeakerLineStartsItsOwnRow() {
+        for (second in listOf("JASON : I'm coming.", "Jason：I'm coming.", "DJ Pooh: I'm coming.")) {
+            val pieces = SubtitleSegmenter.split("Lucia: Get in the car.\n$second")
+            assertTrue("$second: $pieces", pieces.any { !it.translate && it.text == "\n" })
+            assertFalse("$pieces", pieces.any { it.translate && "Get in" in it.text && "coming" in it.text })
+        }
+    }
 }

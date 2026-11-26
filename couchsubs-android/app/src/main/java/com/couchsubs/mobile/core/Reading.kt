@@ -74,6 +74,9 @@ class Reading(lines: List<TextLine>) {
         /** Altyazının okunduğu yükseklikten uzak ortalanmamış blok atılınca günlüğe yazılan neden (GitHub #1293). */
         internal const val OFF_BAND_REASON = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"
 
+        /** Menü açıklaması sayılmak için en az sözcük ([isDescription]). */
+        internal const val DESCRIPTION_WORDS = 8
+
         /** [isMenu]: menü satırlarının sol ya da sağ kenarı bu kadar içinde hizalı (okunan alana oranla). */
         const val MENU_EDGE = 0.012
 
@@ -343,11 +346,11 @@ class Reading(lines: List<TextLine>) {
             return objectiveBelow(lowest, centered, area) ?: centered[lowest]
         }
         // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
-        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
-        // altyazı sanılıp çevriliyordu). Mac ve Windows aynı.
+        // ondan uzak, açıklama paragrafına benzeyen blok ([isDescription]) altyazı değildir (GitHub #1293: kayıt menüsünün
+        // sola yaslı görev açıklaması altyazı sanılıp çevriliyordu). Mac ve Windows aynı.
         return candidates.filter { block ->
             if (wordCount(block.text) < 3) return@filter false
-            if (band == null || band.isEmpty || band.contains(block.box!!.placedIn(area))) return@filter true
+            if (band == null || band.isEmpty || band.contains(block.box!!.placedIn(area)) || !isDescription(block, area)) return@filter true
             dropped?.invoke(block, OFF_BAND_REASON)
             false
         }.maxByOrNull { it.box!!.bottom } ?: Empty
@@ -361,6 +364,20 @@ class Reading(lines: List<TextLine>) {
      * ayırır (Windows ve Mac ile aynı).
      */
     private fun isSpoken(block: Reading): Boolean = SpeakerPrefix.split(block.lines[0].text) != null
+
+    /**
+     * Menü açıklaması paragrafı: en az iki satır, satırların sol kenarı hizalı (yarım satır boyu), en az
+     * [DESCRIPTION_WORDS] sözcük, konuşan adı yok ve son satır cümleyi bitirmiyor (panelde kesik paragraf). Önceden
+     * yükseklikten uzak her ortalanmamış blok atılıyordu (beta.103, iki kullanıcı: "bazı altyazıları kaçırıyor"): sola
+     * yaslı tek satır, konuşan adlı ya da noktalamalı iki satırlık altyazı da gidiyordu. Mac ve Windows aynı.
+     */
+    internal fun isDescription(block: Reading, area: TextBox): Boolean {
+        if (block.lines.size < 2 || isSpoken(block) || wordCount(block.text) < DESCRIPTION_WORDS ||
+            SubtitleStabilizer.endsSentence(block.lines.last().text)) return false
+        val boxes = block.lines.map { it.box?.placedIn(area) ?: return false }
+        val lefts = boxes.map { it.left }
+        return lefts.max() - lefts.min() <= (boxes[0].bottom - boxes[0].top) / 2
+    }
 
     /**
      * Kalabalık sahnede birden çok kişi aynı anda konuşur (GTA 6 yan konuşmaları; X, beta.100): ekranda alt alta, her biri

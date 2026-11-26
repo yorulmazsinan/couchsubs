@@ -87,4 +87,14 @@ final class SpokenTogetherTests: XCTestCase {
         XCTAssertTrue(kept.contains("Driver:"), "\(pieces)")
         XCTAssertTrue(kept.contains("\n"), "\(pieces)")
     }
+
+    /// Altyazı seçicinin konuşan adı saydığı her satır ("JASON : …", "Lucia：…") kendi satırında kalır; iki konuşanın
+    /// sözü tek satıra birleşmez (beta.103 bildirimi; Windows ve Android aynı).
+    func testEverySpeakerLineStartsItsOwnRow() {
+        for second in ["JASON : I'm coming.", "Jason：I'm coming.", "DJ Pooh: I'm coming."] {
+            let pieces = SubtitleSegmenter.split("Lucia: Get in the car.\n" + second)
+            XCTAssertTrue(pieces.contains { !$0.translate && $0.text == "\n" }, "\(second): \(pieces)")
+            XCTAssertFalse(pieces.contains { $0.translate && $0.text.contains("Get in") && $0.text.contains("coming") }, "\(pieces)")
+        }
+    }
 }

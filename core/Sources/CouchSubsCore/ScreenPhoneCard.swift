@@ -230,6 +230,17 @@ public enum ScreenPhoneCard {
         return v >= -screenSlack && v <= 1 + belowSlack && flat.left >= -sideSlack && flat.right <= 1 + sideSlack
     }
 
+    /// Doğrulanmamış telefon adayı (#1251, `candidateHoldMs`) yalnız ekranının içindeki satırları bekletir: alt gövde payı
+    /// (`belowSlack`) yok ve konuşan adlı satır ("Lucia: …") hiç bekletilmez. Yanlış aday (yanları zayıf, telefon olmayan
+    /// dikdörtgen) altındaki ya da önündeki altyazıyı 1,5 sn yutuyordu (beta.103 kaçan altyazı denetimi).
+    /// Windows (ScreenPhoneCard.HoldsUnconfirmed) ve Android (holdsUnconfirmed) aynı.
+    public static func holdsUnconfirmed(_ text: String, box: TextBox, handset: Handset) -> Bool {
+        guard SpeakerPrefix.split(text) == nil else { return false }
+        let flat = handset.flat(box)
+        let v = (flat.top + flat.bottom) / 2
+        return v >= -screenSlack && v <= 1 + screenSlack && flat.left >= -sideSlack && flat.right <= 1 + sideSlack
+    }
+
     /// `holds`: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını `sideSlack` kadar aşabilir (düz
     /// ekrana oranla; eğik telefonda kutular biraz taşar). Alt kenarda pay `belowSlack`: telefonun alt gövdesi elle ya da
     /// altyazıyla örtülünce telefon kısa bulunuyor (alt çentik görünmüyor), sohbetin son mesajları ekranın altında kalıyordu

@@ -301,17 +301,34 @@ public struct Reading: Equatable, Sendable {
             return Self.objectiveBelow(lowest, centered, in: area) ?? centered[lowest]
         }
         // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
-        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
-        // altyazı sanılıp çevriliyordu). Windows ve Android aynı.
+        // ondan uzak, açıklama paragrafına benzeyen blok (`isDescription`) altyazı değildir (GitHub #1293: kayıt menüsünün
+        // sola yaslı görev açıklaması altyazı sanılıp çevriliyordu). Windows ve Android aynı.
         return candidates.filter { block in
             guard block.text.split(whereSeparator: \.isWhitespace).count >= 3 else { return false }
-            guard !band.isEmpty, let box = block.box?.placed(in: area), !band.contains(box) else { return true }
+            guard !band.isEmpty, let box = block.box?.placed(in: area), !band.contains(box),
+                  Self.isDescription(block, in: area) else { return true }
             dropped?(block, Self.offBandReason)
             return false
         }.max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
     }
 
     static let offBandReason = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"
+
+    /// Menü açıklaması paragrafı: en az iki satır, satırların sol kenarı hizalı (yarım satır boyu), en az
+    /// `descriptionWords` sözcük, konuşan adı yok ve son satır cümleyi bitirmiyor (panelde kesik paragraf). Önceden
+    /// yükseklikten uzak her ortalanmamış blok atılıyordu (beta.103, iki kullanıcı: "bazı altyazıları kaçırıyor"): sola
+    /// yaslı tek satır, konuşan adlı ya da noktalamalı iki satırlık altyazı da gidiyordu. Windows ve Android aynı.
+    static func isDescription(_ block: Reading, in area: TextBox) -> Bool {
+        guard block.lines.count >= 2, !isSpoken(block), wordCount(block.text) >= descriptionWords,
+              let last = block.lines.last, !SubtitleStabilizer.endsSentence(last.text) else { return false }
+        let boxes = block.lines.compactMap { $0.box?.placed(in: area) }
+        guard boxes.count == block.lines.count, let first = boxes.first else { return false }
+        let lefts = boxes.map(\.left)
+        return lefts.max()! - lefts.min()! <= (first.bottom - first.top) / 2
+    }
+
+    /// Menü açıklaması sayılmak için en az sözcük (`isDescription`).
+    static let descriptionWords = 8
 
     private static func isSpoken(_ block: Reading) -> Bool {
         SpeakerPrefix.split(block.lines[0].text) != nil

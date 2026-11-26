@@ -61,8 +61,10 @@ object SubtitleSegmenter {
         for (raw in text.replace("\r\n", "\n").split('\n')) {
             val line = raw.trim()
             if (line.isEmpty()) continue
-            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir.
-            if (speakerLabel(line) != null || dialogueDash.containsMatchIn(line)) flushBlock()
+            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir. Altyazı seçicinin
+            // konuşan adı saydığı satır (SpeakerPrefix: "JASON : …", "Lucia：…") da yeni konuşmadır; aynı anda konuşan iki
+            // kişinin satırı tek satıra birleşiyordu (beta.103 bildirimi; Windows, Mac ve iPhone aynı).
+            if (speakerLabel(line) != null || SpeakerPrefix.split(line) != null || dialogueDash.containsMatchIn(line)) flushBlock()
             if (block.isNotEmpty()) block.append(' ')
             block.append(line)
         }

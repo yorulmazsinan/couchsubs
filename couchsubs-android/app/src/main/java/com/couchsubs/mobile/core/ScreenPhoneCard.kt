@@ -245,6 +245,19 @@ object ScreenPhoneCard {
     }
 
     /**
+     * Doğrulanmamış telefon adayı (#1251, CANDIDATE_HOLD_MS) yalnız ekranının içindeki satırları bekletir: alt gövde payı
+     * (BELOW_SLACK) yok ve konuşan adlı satır ("Lucia: …") hiç bekletilmez. Yanlış aday (yanları zayıf, telefon olmayan
+     * dikdörtgen) altındaki ya da önündeki altyazıyı 1,5 sn yutuyordu (beta.103 kaçan altyazı denetimi).
+     * Mac/iPhone (ScreenPhoneCard.holdsUnconfirmed) ve Windows (HoldsUnconfirmed) aynı.
+     */
+    fun holdsUnconfirmed(text: String, box: TextBox, handset: Handset): Boolean {
+        if (SpeakerPrefix.split(text) != null) return false
+        val flat = handset.flat(box)
+        val v = (flat.top + flat.bottom) / 2
+        return v >= -SCREEN_SLACK && v <= 1 + SCREEN_SLACK && flat.left >= -SIDE_SLACK && flat.right <= 1 + SIDE_SLACK
+    }
+
+    /**
      * [holds]: satırın ortası ekranın üst kenarını bu kadar, yanları ekranın kenarlarını [SIDE_SLACK] kadar aşabilir. Alt
      * kenarda pay [BELOW_SLACK]: telefonun alt gövdesi örtülünce telefon kısa bulunuyor, son mesajlar ekranın altında
      * kalıyordu (gerçek kare gta6-telefon-sohbet-2; Mac ile aynı).

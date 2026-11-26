@@ -55,10 +55,11 @@ object SceneText {
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if (isSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)"
         if (isNumber(block.text)) return "harfsiz sayı"
-        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
-        if (isMenuItem(block)) return MENU_ITEM_REASON
-        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
+        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         val learned = band?.contains(box) == true
+        // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
+        // dışında (beta.103 kaçan altyazı).
+        if (isMenuItem(block, learned)) return MENU_ITEM_REASON
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         val subtitleLike = isCentered(box) && middle >= 1 - EDGE_BAND && words >= 2
         if (block.lines.any { isTilted(it) } && !subtitleLike) return "eğik satır (tabela)"
@@ -128,12 +129,15 @@ object SceneText {
      * çevriliyordu. Hiçbir satırı konuşma izi ([looksSpoken]) taşımayan blokta: tuş simgesinin okunuşunun ("O", "X", "A",
      * "•", simge) hemen ardından menü eylemi ([MENU_ACTIONS]) ya da küçük harfsiz, en az bir sözcüklü ve rakamlı yazı
      * (ürün/silah adı, fiyat). Konuşan adlı blok ve noktalamalı bağırma altyazı kalır (Mac: SceneText.isMenuItem,
-     * Windows: SceneText.IsMenuItem).
+     * Windows: SceneText.IsMenuItem). Rakamlı büyük harfli yazı yalnız kanıtla atılır (beta.103, iki kullanıcı: "bazı
+     * altyazıları kaçırıyor"): bu oturumda altyazının okunduğu yükseklikteyse ([learned]) ya da kişi zamiri taşıyorsa
+     * ("I NEED 50 GRAND") noktalamasız bağırma altyazıdır. Tuş simgesi + menü eylemi her yerde atılır.
      */
-    internal fun isMenuItem(block: Reading): Boolean {
+    internal fun isMenuItem(block: Reading, learned: Boolean = false): Boolean {
         if (block.lines.any { looksSpoken(it.text) }) return false
         val tokens = block.lines.flatMap { line -> line.text.split(Regex("\\s+")).filter { it.isNotEmpty() } }
         if (tokens.zipWithNext().any { (a, b) -> isGlyph(a) && b in MENU_ACTIONS }) return true
+        if (learned || tokens.any { it.replace('\u2019', '\'') in PRONOUNS }) return false
         val text = block.text
         return text.any { it.isUpperCase() } && text.none { it.isLowerCase() } && tokens.any { token -> token.any { it.isDigit() } } &&
             tokens.any { token -> token.count { it.isLetter() } >= 2 }
@@ -148,8 +152,14 @@ object SceneText {
      */
     internal fun isGlyph(token: String): Boolean {
         if (token == "O" || token == "X" || token == "A") return true
-        return token.codePointCount(0, token.length) == 1 && token.none { it.isLetterOrDigit() }
+        return token.codePointCount(0, token.length) == 1 && token.none { it.isLetterOrDigit() || it in "-–—" }
     }
+
+    /** Büyük harfli konuşmanın kişi zamirleri: ürün, silah ve menü adında geçmez ([isMenuItem]). */
+    internal val PRONOUNS = setOf(
+        "I", "I'M", "I'LL", "I'VE", "I'D", "ME", "MY", "YOU", "YOU'RE", "YOUR", "WE", "WE'RE", "US", "OUR",
+        "HE", "SHE", "HIM", "HER", "THEY", "THEM",
+    )
 
     /** Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir. */
     internal fun isNumber(text: String) = !text.any { it.isLetter() } && text.any { it.isDigit() }

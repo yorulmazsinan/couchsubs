@@ -692,4 +692,14 @@ final class ScreenPhoneCardTests: XCTestCase {
         XCTAssertFalse(ScreenPhoneCard.holds(box([0.46, 0.90, 0.54, 0.94]), handset: phone)) // telefonun altındaki kısa altyazı
         XCTAssertFalse(ScreenPhoneCard.holds(box([0.949, 0.93197, 0.99577, 0.95692]), handset: phone)) // SCROLL
     }
+
+    /// Doğrulanmamış telefon adayı yalnız ekranının içindeki adsız satırları bekletir: telefonun altındaki satır ve konuşan
+    /// adlı altyazı geçer (beta.103 kaçan altyazı; Windows ve Android aynı).
+    func testUnconfirmedCandidateHoldsOnlyUnnamedLinesOnItsScreen() {
+        let phone = handset([0.50375, 0.12444, 0.46125, 0.68444])
+        XCTAssertTrue(ScreenPhoneCard.holdsUnconfirmed("Kingfishers a message. Hit", box: box([0.39415, 0.47436, 0.54888, 0.52616]), handset: phone))
+        XCTAssertFalse(ScreenPhoneCard.holdsUnconfirmed("Locating...", box: box([0.3974, 0.74924, 0.4632, 0.79995]), handset: phone))
+        XCTAssertFalse(ScreenPhoneCard.holdsUnconfirmed("Lucia: Hit the gas", box: box([0.39415, 0.47436, 0.54888, 0.52616]), handset: phone))
+        XCTAssertFalse(ScreenPhoneCard.holdsUnconfirmed("Get in", box: box([0.46, 0.90, 0.54, 0.94]), handset: phone))
+    }
 }

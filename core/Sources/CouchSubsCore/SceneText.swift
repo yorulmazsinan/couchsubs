@@ -56,10 +56,11 @@ public enum SceneText {
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if isSign(block) { return "plaka/tabela (kısa büyük harfli satırlar)" }
         if isNumber(block.text) { return "harfsiz sayı" }
-        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
-        if isMenuItem(block) { return menuItemReason }
-        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
+        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         let learned = band.contains(box)
+        // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
+        // dışında (beta.103 kaçan altyazı).
+        if isMenuItem(block, learned: learned) { return menuItemReason }
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         let subtitleLike = isCentered(box) && middle >= 1 - edgeBand && words >= 2
         if block.lines.contains(where: isTilted), !subtitleLike { return "eğik satır (tabela)" }
@@ -82,14 +83,24 @@ public enum SceneText {
     /// - küçük harfsiz, en az bir sözcüklü ve rakamlı yazı (ürün/silah adı, fiyat, sayaç: "TYPE 9 SMG", "1 555 0127").
     /// Konuşan adlı blok (`reason` onu hiç incelemez) ve noktalamalı bağırma ("GET DOWN!", "THREE OF THEM, 2 CARS!")
     /// altyazı kalır. Windows (SceneText.IsMenuItem) ve Android (isMenuItem) aynı.
-    static func isMenuItem(_ block: Reading) -> Bool {
+    /// Rakamlı büyük harfli yazı yalnız kanıtla atılır (beta.103, iki kullanıcı: "bazı altyazıları kaçırıyor"): bu oturumda
+    /// altyazının okunduğu yükseklikteyse (`learned`) ya da kişi zamiri taşıyorsa ("I NEED 50 GRAND") noktalamasız bağırma
+    /// altyazıdır. Tuş simgesi + menü eylemi her yerde atılır.
+    static func isMenuItem(_ block: Reading, learned: Bool = false) -> Bool {
         guard !block.lines.contains(where: { looksSpoken($0.text) }) else { return false }
         let tokens = block.lines.flatMap { $0.text.split(whereSeparator: \.isWhitespace).map(String.init) }
         if zip(tokens, tokens.dropFirst()).contains(where: { isGlyph($0) && menuActions.contains($1) }) { return true }
+        guard !learned, !tokens.contains(where: { pronouns.contains($0.replacingOccurrences(of: "’", with: "'")) }) else { return false }
         let text = block.text
         return text.contains(where: \.isUppercase) && !text.contains(where: \.isLowercase)
             && tokens.contains { $0.contains(where: \.isNumber) } && tokens.contains { $0.filter(\.isLetter).count >= 2 }
     }
+
+    /// Büyük harfli konuşmanın kişi zamirleri: ürün, silah ve menü adında geçmez (`isMenuItem`).
+    static let pronouns: Set<String> = [
+        "I", "I'M", "I'LL", "I'VE", "I'D", "ME", "MY", "YOU", "YOU'RE", "YOUR", "WE", "WE'RE", "US", "OUR",
+        "HE", "SHE", "HIM", "HER", "THEY", "THEM",
+    ]
 
     /// Menünün tuş eylemleri ("△ BUY", "○ TAKE AMMO", "□ ADD TO TRUNK"); büyük harfle yazılır.
     static let menuActions: Set<String> = [
@@ -98,9 +109,10 @@ public enum SceneText {
 
     /// Tuş simgesinin yazı tanımadaki okunuşu: "O" (○), "X" (✕), "A" (△) ya da harf ve rakam olmayan tek karakter
     /// ("•", "□", `ButtonIcons.marker`).
+    /// Konuşmanın tiresi ("- TAKE IT EASY") tuş simgesi sayılmaz.
     static func isGlyph(_ token: String) -> Bool {
         if token == "O" || token == "X" || token == "A" { return true }
-        return token.count == 1 && !token.contains(where: { $0.isLetter || $0.isNumber })
+        return token.count == 1 && !token.contains(where: { $0.isLetter || $0.isNumber || "-–—".contains($0) })
     }
 
     /// Sözcük yerleri biliniyorsa satır eğik mi (perspektifli tabela, yan duran tişört). Altyazı yatay yazılır.

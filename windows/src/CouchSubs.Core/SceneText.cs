@@ -60,10 +60,11 @@ public static class SceneText
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
         if (IsSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)";
         if (IsNumber(block.Text)) return "harfsiz sayı";
-        // Silah çarkı, mağaza ve menü satırı altyazının yerinde de atılır (GitHub #1285, #1293).
-        if (IsMenuItem(block)) return MenuItemReason;
-        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela atılır.
+        // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         var learned = band?.Contains(box) == true;
+        // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
+        // dışında (beta.103 kaçan altyazı).
+        if (IsMenuItem(block, learned)) return MenuItemReason;
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         var subtitleLike = IsCentered(box) && middle >= 1 - EdgeBand && words >= 2;
         if (block.Lines.Any(IsTilted) && !subtitleLike) return "eğik satır (tabela)";
@@ -132,14 +133,17 @@ public static class SceneText
     /// çevriliyordu. Hiçbir satırı konuşma izi (<see cref="LooksSpoken"/>) taşımayan blokta: tuş simgesinin okunuşunun
     /// ("O", "X", "A", "•", simge) hemen ardından menü eylemi (<see cref="MenuActions"/>) ya da küçük harfsiz, en az bir
     /// sözcüklü ve rakamlı yazı (ürün/silah adı, fiyat). Konuşan adlı blok ve noktalamalı bağırma altyazı kalır (Mac:
-    /// SceneText.isMenuItem, Android: isMenuItem).
+    /// SceneText.isMenuItem, Android: isMenuItem). Rakamlı büyük harfli yazı yalnız kanıtla atılır (beta.103, iki kullanıcı:
+    /// "bazı altyazıları kaçırıyor"): bu oturumda altyazının okunduğu yükseklikteyse (<paramref name="learned"/>) ya da
+    /// kişi zamiri taşıyorsa ("I NEED 50 GRAND") noktalamasız bağırma altyazıdır. Tuş simgesi + menü eylemi her yerde atılır.
     /// </summary>
-    internal static bool IsMenuItem(Reading block)
+    internal static bool IsMenuItem(Reading block, bool learned = false)
     {
         if (block.Lines.Any(line => LooksSpoken(line.Text))) return false;
         var tokens = block.Lines.SelectMany(line => line.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToList();
         for (var i = 0; i + 1 < tokens.Count; i++)
             if (IsGlyph(tokens[i]) && MenuActions.Contains(tokens[i + 1])) return true;
+        if (learned || tokens.Any(token => Pronouns.Contains(token.Replace('’', '\'')))) return false;
         var text = block.Text;
         return text.Any(char.IsUpper) && !text.Any(char.IsLower) && tokens.Any(token => token.Any(char.IsDigit))
             && tokens.Any(token => token.Count(char.IsLetter) >= 2);
@@ -154,7 +158,13 @@ public static class SceneText
     /// ("•", "□", <see cref="ButtonIcons.Marker"/>).
     /// </summary>
     internal static bool IsGlyph(string token) =>
-        token is "O" or "X" or "A" || (new System.Globalization.StringInfo(token).LengthInTextElements == 1 && !token.Any(char.IsLetterOrDigit));
+        token is "O" or "X" or "A" || (new System.Globalization.StringInfo(token).LengthInTextElements == 1
+            && !token.Any(char.IsLetterOrDigit) && token is not ("-" or "–" or "—"));
+
+    /// <summary>Büyük harfli konuşmanın kişi zamirleri: ürün, silah ve menü adında geçmez (<see cref="IsMenuItem"/>).</summary>
+    internal static readonly HashSet<string> Pronouns =
+        ["I", "I'M", "I'LL", "I'VE", "I'D", "ME", "MY", "YOU", "YOU'RE", "YOUR", "WE", "WE'RE", "US", "OUR",
+         "HE", "SHE", "HIM", "HER", "THEY", "THEM"];
 
     internal static bool IsNumber(string text) => !text.Any(char.IsLetter) && text.Any(char.IsDigit);
 

@@ -255,6 +255,7 @@ class SubtitlePipeline(
 
     /** Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933). */
     private fun logStale(texts: List<String>) {
+        if (texts.isNotEmpty()) countReject("sabit blok (${Reading.STALE_MS / 1000} sn değişmeyen)")
         val key = texts.joinToString("\n")
         if (key == loggedStale) return
         loggedStale = key
@@ -263,15 +264,29 @@ class SubtitlePipeline(
         onLog?.invoke("sabit blok atlandı: \"$excerpt\" ${Reading.STALE_MS / 1000} sn'dir değişmiyor, yanında yeni ortalı blok var")
     }
 
-    /** Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822). */
+    /**
+     * Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822). Her eleme nedeniyle sayılır
+     * ([RejectTally]): satır sonunda o nedenin sayısı, dakikada bir neden başına özet.
+     */
     private fun logSceneText(text: String, reason: String) {
         val key = "$text|$reason"
-        if (key in loggedSceneText) return
-        loggedSceneText.addLast(key)
-        if (loggedSceneText.size > 20) loggedSceneText.removeFirst()
+        val fresh = key !in loggedSceneText
+        if (fresh) {
+            loggedSceneText.addLast(key)
+            if (loggedSceneText.size > 20) loggedSceneText.removeFirst()
+        }
         val excerpt = text.replace('\n', ' ').let { if (it.length > 120) it.take(120) + "…" else it }
-        onLog?.invoke("sahne yazısı: \"$excerpt\" altyazı sayılmadı ($reason)")
+        val line = if (fresh) "sahne yazısı: \"$excerpt\" altyazı sayılmadı ($reason)" else null
+        for (entry in rejects.note(reason, line, now())) onLog?.invoke(entry)
     }
+
+    /** Kendi satırı ayrıca yazılan eleme (telefon, sabit blok) yalnız sayılır ([RejectTally]). */
+    private fun countReject(reason: String) {
+        for (entry in rejects.note(reason, null, now())) onLog?.invoke(entry)
+    }
+
+    /** Altyazı sayılmayan satırların neden başına sayacı ([RejectTally]; beta.103 kaçan altyazı). */
+    private val rejects = RejectTally()
     private val mission = MissionLine()
     /** Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız ([DropLog]). */
     private val drops = DropLog(now)
@@ -382,7 +397,12 @@ class SubtitlePipeline(
         // kendi yerindedir. Kullanıcı bildirimleri (X, beta.79): telefonun alt kısmındaki mesajlar (telefon ortaya yakın
         // tutulunca bütün sohbet) altyazı sanılıp ekranın ortasında tek uzun satır olarak çevriliyordu (Mac, Windows ile aynı).
         if (phone != null) {
-            val kept = seen.lines.filter { line -> line.box?.let { !ScreenPhoneCard.holds(it.placedIn(area), phone) } ?: true }
+            val kept = seen.lines.filter { line ->
+                line.box?.let {
+                    val placed = it.placedIn(area)
+                    !(if (unconfirmed) ScreenPhoneCard.holdsUnconfirmed(line.text, placed, phone) else ScreenPhoneCard.holds(placed, phone))
+                } ?: true
+            }
             if (kept.size < seen.lines.size) {
                 val text = seen.lines.filter { it !in kept }.joinToString(" ") { it.text }
                 val fresh = synchronized(lock) { (text != loggedPhone).also { loggedPhone = text } }
@@ -391,6 +411,7 @@ class SubtitlePipeline(
                     if (unconfirmed) "telefon adayı: \"$excerpt\" telefon doğrulanana dek bekletildi, altyazı sayılmadı"
                     else "telefon yazısı: \"$excerpt\" telefonun ekranında, altyazı sayılmadı")
                 seen = Reading(kept)
+                countReject(if (unconfirmed) "telefon adayı bekletti" else "telefon yazısı")
             }
         }
         if (ownLines.isNotEmpty()) {
@@ -961,6 +982,7 @@ class SubtitlePipeline(
         subtitleBand.reset()
         darkInkStyle.reset()
         loggedSceneText.clear()
+        rejects.reset()
         settled.reset()
         loggedStale = ""
         mission.reset()

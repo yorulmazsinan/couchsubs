@@ -305,12 +305,13 @@ public sealed class Reading
             return ObjectiveBelow(lowest, centered, area) ?? lowest;
         }
         // Ortalanmış blok yoksa en alttaki en az üç sözcüklü blok. Bu oturumda altyazının okunduğu yükseklik biliniyorsa
-        // ondan uzak ortalanmamış blok altyazı değildir (GitHub #1293: kayıt menüsünün sola yaslı görev açıklaması
-        // altyazı sanılıp çevriliyordu). Mac ve Android aynı.
+        // ondan uzak, açıklama paragrafına benzeyen blok (IsDescription) altyazı değildir (GitHub #1293: kayıt menüsünün
+        // sola yaslı görev açıklaması altyazı sanılıp çevriliyordu). Mac ve Android aynı.
         return candidates.Where(reading =>
         {
             if (WordCount(reading.Text) < 3) return false;
-            if (band is null || band.IsEmpty || band.Contains(reading.Box!.Value.PlacedIn(area))) return true;
+            if (band is null || band.IsEmpty || band.Contains(reading.Box!.Value.PlacedIn(area))
+                || !IsDescription(reading, area)) return true;
             dropped?.Invoke(reading, OffBandReason);
             return false;
         }).MaxBy(reading => reading.Box!.Value.Bottom) ?? Empty;
@@ -578,6 +579,25 @@ public sealed class Reading
     }
 
     internal const string OffBandReason = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)";
+
+    /// <summary>
+    /// Menü açıklaması paragrafı: en az iki satır, satırların sol kenarı hizalı (yarım satır boyu), en az
+    /// <see cref="DescriptionWords"/> sözcük, konuşan adı yok ve son satır cümleyi bitirmiyor (panelde kesik paragraf).
+    /// Önceden yükseklikten uzak her ortalanmamış blok atılıyordu (beta.103, iki kullanıcı: "bazı altyazıları kaçırıyor"):
+    /// sola yaslı tek satır, konuşan adlı ya da noktalamalı iki satırlık altyazı da gidiyordu. Mac ve Android aynı.
+    /// </summary>
+    internal static bool IsDescription(Reading block, TextBox area)
+    {
+        if (block.Lines.Count < 2 || IsSpoken(block) || WordCount(block.Text) < DescriptionWords
+            || SubtitleStabilizer.EndsSentence(block.Lines[^1].Text)) return false;
+        if (block.Lines.Any(line => line.Box is null)) return false;
+        var boxes = block.Lines.Select(line => line.Box!.Value.PlacedIn(area)).ToList();
+        var lefts = boxes.Select(box => box.Left).ToList();
+        return lefts.Max() - lefts.Min() <= (boxes[0].Bottom - boxes[0].Top) / 2;
+    }
+
+    /// <summary>Menü açıklaması sayılmak için en az sözcük (<see cref="IsDescription"/>).</summary>
+    internal const int DescriptionWords = 8;
 
     private static bool IsSpoken(Reading block) => SpeakerPrefix.Parse(block.Lines[0].Text) is not null;
 

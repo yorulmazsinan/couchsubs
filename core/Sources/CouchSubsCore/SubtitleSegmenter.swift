@@ -51,8 +51,10 @@ public enum SubtitleSegmenter {
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir.
-            if speakerLabel(in: line) != nil || match(dash, in: line) != nil { flush() }
+            // Etiketli ya da tireli satır yeni bir konuşmadır; diğer satırlar sarmadır, birleştirilir. Altyazı seçicinin
+            // konuşan adı saydığı satır (`SpeakerPrefix`: "JASON : …", "Lucia：…", "DJ Pooh: …") da yeni konuşmadır; aynı
+            // anda konuşan iki kişinin satırı tek satıra birleşiyordu (beta.103 bildirimi).
+            if speakerLabel(in: line) != nil || SpeakerPrefix.split(line) != nil || match(dash, in: line) != nil { flush() }
             if !block.isEmpty { block += " " }
             block += line
         }

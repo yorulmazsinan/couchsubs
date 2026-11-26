@@ -99,6 +99,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private readonly DarkInkStyle darkInkStyle = new();
     /// <summary>Günlüğe yazılmış son sahne yazıları (her karede yeniden yazılmasın).</summary>
     private readonly List<string> loggedSceneText = [];
+    /// <summary>Altyazı sayılmayan satırların neden başına sayacı (<see cref="RejectTally"/>; beta.103 kaçan altyazı).</summary>
+    private readonly RejectTally rejects = new();
     /// <summary>
     /// Karara bağlanmış (atılan ya da gösterilen) satırlar, ekranda durdukça (<see cref="SettledText"/>): zaten hedef dilde
     /// olan bloğun bozuk okunmuş parçası çevrilmez, aynı satır değişmeyen ekranda yeniden işlenmez.
@@ -317,19 +319,33 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
 
     private void Write(string message) => Log?.Invoke(message);
 
-    /// <summary>Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822).</summary>
+    /// <summary>
+    /// Sahne yazısı sayılıp atılan blok günlüğe nedeniyle bir kez yazılır (GitHub #822). Her eleme nedeniyle sayılır
+    /// (<see cref="RejectTally"/>): satır sonunda o nedenin sayısı, dakikada bir neden başına özet.
+    /// </summary>
     private void LogSceneText(string text, string reason)
     {
         var key = text + "|" + reason;
-        if (loggedSceneText.Contains(key)) return;
-        loggedSceneText.Add(key);
-        if (loggedSceneText.Count > 20) loggedSceneText.RemoveAt(0);
-        Write($"sahne yazısı: {SubtitleLog.Excerpt(text)} altyazı sayılmadı ({reason})");
+        var fresh = !loggedSceneText.Contains(key);
+        if (fresh)
+        {
+            loggedSceneText.Add(key);
+            if (loggedSceneText.Count > 20) loggedSceneText.RemoveAt(0);
+        }
+        var line = fresh ? $"sahne yazısı: {SubtitleLog.Excerpt(text)} altyazı sayılmadı ({reason})" : null;
+        foreach (var entry in rejects.Note(reason, line, now())) Write(entry);
+    }
+
+    /// <summary>Kendi satırı ayrıca yazılan eleme (telefon, sabit blok) yalnız sayılır (<see cref="RejectTally"/>).</summary>
+    private void CountReject(string reason)
+    {
+        foreach (var entry in rejects.Note(reason, null, now())) Write(entry);
     }
 
     /// <summary>Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933).</summary>
     private void LogStale(List<string> texts)
     {
+        if (texts.Count > 0) CountReject($"sabit blok ({Reading.StaleMs / 1000} sn değişmeyen)");
         var key = string.Join("\n", texts);
         if (key == loggedStale) return;
         loggedStale = key;
@@ -455,7 +471,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         }
         if (handset is not null)
         {
-            var kept = seen.Lines.Where(line => line.Box is not { } box || !ScreenPhoneCard.Holds(box.PlacedIn(area), handset)).ToList();
+            var kept = seen.Lines.Where(line => line.Box is not { } box || !(unconfirmed
+                ? ScreenPhoneCard.HoldsUnconfirmed(line.Text, box.PlacedIn(area), handset)
+                : ScreenPhoneCard.Holds(box.PlacedIn(area), handset))).ToList();
             if (kept.Count < seen.Lines.Count)
             {
                 var phoneText = string.Join(' ', seen.Lines.Where(line => !kept.Contains(line)).Select(line => line.Text));
@@ -470,6 +488,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                         ? $"telefon adayı: {SubtitleLog.Excerpt(phoneText)} telefon doğrulanana dek bekletildi, altyazı sayılmadı"
                         : $"telefon yazısı: {SubtitleLog.Excerpt(phoneText)} telefonun ekranında, altyazı sayılmadı");
                 seen = new Reading(kept);
+                CountReject(unconfirmed ? "telefon adayı bekletti" : "telefon yazısı");
             }
         }
         if (ownLines.Count > 0)
@@ -1432,6 +1451,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             subtitleBand.Reset();
             darkInkStyle.Reset();
             loggedSceneText.Clear();
+            rejects.Reset();
             settled.Reset();
             loggedStale = "";
             mission.Reset();

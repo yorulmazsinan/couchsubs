@@ -576,6 +576,19 @@ class ScreenPhoneCardTest {
     }
 
     /**
+     * Doğrulanmamış telefon adayı yalnız ekranının içindeki adsız satırları bekletir: telefonun altındaki satır ve konuşan
+     * adlı altyazı geçer (beta.103 kaçan altyazı; Mac ve Windows aynı).
+     */
+    @Test
+    fun unconfirmedCandidateHoldsOnlyUnnamedLinesOnItsScreen() {
+        val phone = handset(listOf(0.50375, 0.12444, 0.46125, 0.68444))
+        assertTrue(ScreenPhoneCard.holdsUnconfirmed("Kingfishers a message. Hit", TextBox(0.39415, 0.47436, 0.54888, 0.52616), phone))
+        assertFalse(ScreenPhoneCard.holdsUnconfirmed("Locating...", TextBox(0.3974, 0.74924, 0.4632, 0.79995), phone))
+        assertFalse(ScreenPhoneCard.holdsUnconfirmed("Lucia: Hit the gas", TextBox(0.39415, 0.47436, 0.54888, 0.52616), phone))
+        assertFalse(ScreenPhoneCard.holdsUnconfirmed("Get in", TextBox(0.46, 0.90, 0.54, 0.94), phone))
+    }
+
+    /**
      * Otomatik telefon okumasında Yanda Panel (varsayılan; Mac PhoneRegionSessionTests ve Windows ile aynı düzen): grupların
      * rolü düz ekrandaki yerinden (başlık, sola yaslı karşı taraf, sağa yaslı oyuncu); panel telefonun yanında, parçaları
      * JSON'da "panel" alanıyla; Balonların Üstünde'de aslıyla aynı ad çizilmez, balonlar yerinde.

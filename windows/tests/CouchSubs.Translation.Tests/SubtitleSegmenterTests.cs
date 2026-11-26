@@ -45,6 +45,21 @@ public class SubtitleSegmenterTests
         Assert.Equal("- [Who are you?]\n- [A friend.]", Render("- Who are you?\n- A friend."));
     }
 
+    /// <summary>
+    /// Altyazı seçicinin konuşan adı saydığı her satır ("JASON : …", "Lucia：…") kendi satırında kalır; iki konuşanın sözü
+    /// tek satıra birleşmez (beta.103 bildirimi; Mac ve Android aynı).
+    /// </summary>
+    [Theory]
+    [InlineData("JASON : I'm coming.")]
+    [InlineData("Jason：I'm coming.")]
+    [InlineData("DJ Pooh: I'm coming.")]
+    public void EverySpeakerLineStartsItsOwnRow(string second)
+    {
+        var pieces = SubtitleSegmenter.Split("Lucia: Get in the car.\n" + second);
+        Assert.Contains(pieces, piece => !piece.Translate && piece.Text == "\n");
+        Assert.DoesNotContain(pieces, piece => piece.Translate && piece.Text.Contains("Get in") && piece.Text.Contains("coming"));
+    }
+
     [Theory]
     [InlineData("...", "...")]
     [InlineData("?!", "?!")]
