@@ -47,6 +47,14 @@ public static class TvAppMessages
     /// <summary>Eşli TV kartında "TV'yi Eşleştir" ya da "Deneme Altyazısı Gönder" TV'ye ulaşamayınca (adres yazılır).</summary>
     public const string TvNotRespondingAtMessage = "The TV isn't responding at %@. Its address may have changed.";
 
+    /// <summary>LG "ipk verified failed" (-5) ve TV'nin saati çok geride; Mac, iPhone ve Android'dekiyle aynı.</summary>
+    public const string LgClockWrongMessage =
+        "The TV's date and time are wrong, so it rejected the TV app package (ipk verified failed). On the TV, open Settings › General › System › Time & Timer › Time, turn off Set Automatically, enter today's date and time, then restart the TV and try again.";
+
+    /// <summary>LG "ipk verified failed" (-5), TV'nin saati yerinde ya da okunamadı; Mac, iPhone ve Android'dekiyle aynı.</summary>
+    public const string LgVerifyFailedMessage =
+        "The TV could not verify the TV app package (ipk verified failed). Check that the TV's date and time are right (Settings › General › System › Time & Timer), unplug the TV for 30 seconds, plug it back in and try again. If it fails again, send us the reason below.";
+
     /// <summary>Hata iletisinin sonunda günlük dosyasını söyleyen satır.</summary>
     public const string SendLogLine = "If this keeps happening, send us this file: %@";
 
@@ -61,6 +69,9 @@ public static class TvAppMessages
         if (error == DevModeError.HostPcMismatch)
             return text.Format(HostPcMismatchMessage, state.HostPcIp ?? "?", state.ComputerAddress ?? computerAddress ?? "?");
         var result = text[Key(error, brand)];
+        // LG "ipk verified failed" (-5): saat yerindeyse de ne yapılacağı söylenir (Mac, iPhone, Android aynı).
+        if (brand == TvBrand.Lg && error == DevModeError.InstallFailed && state.Reason is { } verify && DevModeInstaller.IsPackageVerifyFailure(verify))
+            result = text[LgVerifyFailedMessage];
         if (samsung && error == DevModeError.Unreachable && !string.IsNullOrWhiteSpace(computerAddress))
             result += "\n\n" + text.Format(ComputerAddressLine, computerAddress);
         if (samsung && error == DevModeError.Unreachable)
@@ -124,6 +135,7 @@ public static class TvAppMessages
             "A CouchSubs TV app signed on another computer is still on the TV and could not be removed. On the TV, open Apps, select CouchSubs, delete it and try again.",
         DevModeError.CertificateRejected =>
             "The TV did not accept the signing certificate. Make sure the TV is connected to the internet (it checks the certificate with Samsung) and its date and time are right (Settings › General › System Manager › Time), then try again. CouchSubs gets a new certificate, so you sign in to Samsung once more.",
+        DevModeError.TvClockWrong when brand == TvBrand.Lg => LgClockWrongMessage,
         DevModeError.TvClockWrong =>
             "The TV's clock is behind, so the new certificate is not valid for it yet. Set the TV's date and time (Settings › General › System Manager › Time) or wait a few minutes, then try again.",
         DevModeError.PackageBlocked =>

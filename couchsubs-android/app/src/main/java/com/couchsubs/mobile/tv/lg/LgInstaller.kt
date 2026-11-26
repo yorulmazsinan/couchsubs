@@ -33,6 +33,11 @@ enum class LgInstallError {
      * Kullanıcı onaylamadan kaldırılmaz; onaylarsa kaldırılıp CouchSubs kurulur.
      */
     FOREIGN_APP,
+    /**
+     * TV paketi "ipk verified failed" (errorCode -5) ile reddetti ve TV'nin saati çok geride (paketteki dosya tarihleri
+     * ona göre gelecekte). Kullanıcı TV'nin saatini düzeltir (iPhone'daki LGInstallError.tvClockWrong).
+     */
+    TV_CLOCK_WRONG,
 }
 
 /**
@@ -103,6 +108,9 @@ class LgInstaller(
     private val verifyTimeoutMs: Long? = null,
 ) {
     data class Result(val version: String, val installed: Boolean)
+
+    /** "ipk verified failed" (-5) ayrıntısı; saat çok gerideyse `clockWrong`. */
+    data class VerifyFailure(val clockWrong: Boolean, val detail: String)
 
     companion object {
         const val PORT = 9922
@@ -269,6 +277,31 @@ class LgInstaller(
             RegexOption.IGNORE_CASE).containsMatchIn(text)
 
         private fun short(text: String) = if (text.length <= 500) text.trim() else text.substring(0, 500).trim() + "…"
+
+        /**
+         * TV'nin saati (UTC, saniye). webOS'un kurulum servisi paketi GNU tar ile açar ve tar'ın her uyarısını hata sayar:
+         * paketteki dosya tarihleri TV'nin saatine göre gelecekteyse kurulum "ipk verified failed" (errorCode -5) ile
+         * reddedilir (LG OLED CX/webOS 5'te ağ saati alınamayınca saat 2020-01-01'e döner). Paket artık tarihleri 2010'a
+         * çekilmiş gelir (scripts/normalize-ipk.py); TV'nin saati yine de günlüğe yazılır ve çok gerideyse kullanıcıya
+         * saati düzeltmesi söylenir. Mac, iPhone ve Windows'taki komut, eşik ve ayrıntı metniyle aynı.
+         */
+        const val CLOCK_COMMAND = "date +%s"
+        /** TV bu kadar saniyeden fazla geride ise sebep saattir. */
+        const val MAX_CLOCK_LAG = 600L
+
+        /** TV paketi doğrulayamadı mı ("ipk verified failed", errorCode -5)? */
+        fun isPackageVerifyFailure(text: String) = Regex("""verif|errorCode -5\b""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+
+        /** -5 hatasının ayrıntısı: TV'nin sebebi ve iki saat; saat çok gerideyse `clockWrong`. */
+        fun verifyFailureDetail(reason: String, tvClock: String?, nowSeconds: Long): VerifyFailure {
+            val tv = tvClock?.trim()?.toLongOrNull() ?: return VerifyFailure(false, "$reason; TV saati okunamadı")
+            val lag = nowSeconds - tv
+            val side = if (lag >= 0) "$lag sn geride" else "${-lag} sn ileride"
+            return VerifyFailure(lag > MAX_CLOCK_LAG, "$reason; TV saati ${utc(tv)} UTC, bu cihaz ${utc(nowSeconds)} UTC (TV $side)")
+        }
+
+        private fun utc(seconds: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(seconds * 1000))
     }
 
     /**
@@ -364,8 +397,18 @@ class LgInstaller(
         log.write("Kurulum yanıtı (${response.status}):\n${response.output.trim()}")
         val outcome = parseInstallReplies(response.output)
         if (outcome.failed) {
+            val reason = outcome.reason?.takeIf { it.isNotBlank() } ?: "kurulum başarısız: ${short(response.output)}"
+            // "ipk verified failed" (-5): TV'nin saati okunur ve günlüğe yazılır; çok gerideyse kullanıcıya saati
+            // düzeltmesi söylenir (Mac, iPhone ve Windows ile aynı).
+            if (isPackageVerifyFailure(reason)) {
+                val clock = try { shell.run(CLOCK_COMMAND, null).output } catch (error: IOException) { null }
+                remove(remote)
+                val result = verifyFailureDetail(reason, clock, System.currentTimeMillis() / 1000)
+                log.write("LG paket doğrulaması reddedildi: ${result.detail}")
+                throw LgInstallException(if (result.clockWrong) LgInstallError.TV_CLOCK_WRONG else LgInstallError.INSTALL_FAILED, result.detail)
+            }
             remove(remote)
-            throw failure(outcome.reason?.takeIf { it.isNotBlank() } ?: "kurulum başarısız: ${short(response.output)}", response.output)
+            throw failure(reason, response.output)
         }
         val limit = verifyTimeoutMs ?: if (outcome.installed) 30_000L else 60_000L
         val started = System.currentTimeMillis()

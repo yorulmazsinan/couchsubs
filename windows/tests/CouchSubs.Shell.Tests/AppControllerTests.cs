@@ -2721,6 +2721,24 @@ public class TvAppInstallTests
         Assert.DoesNotContain("192.168.1.34", TvAppMessages.Problem(state, TvBrand.Lg, Localizer.ForLanguage("tr"), "x.log", "192.168.1.34"));
     }
 
+    /// <summary>LG "ipk verified failed" (-5): saat çok gerideyse saati düzeltme adımları, değilse doğrulama ipucu (Türkçesi de var).</summary>
+    [Fact]
+    public void LgVerifyFailureGivesClockSteps()
+    {
+        var tr = Localizer.ForLanguage("tr");
+        Assert.NotEqual(TvAppMessages.LgClockWrongMessage, tr[TvAppMessages.LgClockWrongMessage]);
+        Assert.NotEqual(TvAppMessages.LgVerifyFailedMessage, tr[TvAppMessages.LgVerifyFailedMessage]);
+        var clock = new TvAppState(TvAppKind.Failed, Error: DevModeError.TvClockWrong, Reason: "ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC");
+        var text = TvAppMessages.Problem(clock, TvBrand.Lg, tr, "x.log");
+        Assert.StartsWith(tr[TvAppMessages.LgClockWrongMessage], text);
+        Assert.Contains("Saat ve Zamanlayıcı", text);
+        Assert.Contains("2020-01-01 00:23:49", text);
+        var verify = new TvAppState(TvAppKind.Failed, Error: DevModeError.InstallFailed, Reason: "ipk verified failed (errorCode -5); TV saati okunamadı");
+        Assert.StartsWith(tr[TvAppMessages.LgVerifyFailedMessage], TvAppMessages.Problem(verify, TvBrand.Lg, tr, "x.log"));
+        // Samsung'un saat metni değişmez.
+        Assert.DoesNotContain("ipk", TvAppMessages.Problem(new TvAppState(TvAppKind.Failed, Error: DevModeError.TvClockWrong), TvBrand.Samsung, tr, "x.log"));
+    }
+
     /// <summary>"IP hatası" (#1158): metin menüyü, iki ayarı ve bu cihazın adresini tek satırda söyler (Türkçesi de var).</summary>
     [Fact]
     public void SamsungUnreachableGivesHostPcStepsWithThisAddress()

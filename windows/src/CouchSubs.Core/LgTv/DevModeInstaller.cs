@@ -34,7 +34,8 @@ public enum DevModeError
     CertificateMismatch,
     /// <summary>Samsung: TV imza sertifikasını reddetti (internet, saat ya da sertifika).</summary>
     CertificateRejected,
-    /// <summary>Samsung: TV'nin saati geride; sertifika ona göre henüz geçerli değil.</summary>
+    /// <summary>TV'nin saati geride. Samsung: sertifika ona göre henüz geçerli değil. LG: TV paketi "ipk verified failed"
+    /// (errorCode -5) ile reddetti; paketteki dosya tarihleri TV'ye göre gelecekte.</summary>
     TvClockWrong,
     /// <summary>Samsung: TV, silinmiş eski kopyanın kaydı yüzünden uygulamayı kabul etmiyor ([118, -22]).</summary>
     PackageBlocked,
@@ -287,9 +288,19 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
         var outcome = ParseInstallReplies(response.Output);
         if (outcome.Failed)
         {
+            var reason = string.IsNullOrWhiteSpace(outcome.Reason) ? $"kurulum başarısız: {Short(response.Output)}" : outcome.Reason;
+            // "ipk verified failed" (-5): TV'nin saati okunur; çok gerideyse kullanıcıya saati düzeltmesi söylenir.
+            if (IsPackageVerifyFailure(reason))
+            {
+                string? clock;
+                try { clock = (await SshAsync(ClockCommand)).Output; }
+                catch (DevModeException) { clock = null; }
+                await RemoveAsync(remote);
+                var (clockWrong, detail) = VerifyFailureDetail(reason, clock, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                throw new DevModeException(clockWrong ? DevModeError.TvClockWrong : DevModeError.InstallFailed, detail);
+            }
             await RemoveAsync(remote);
-            throw Failure(string.IsNullOrWhiteSpace(outcome.Reason) ? $"kurulum başarısız: {Short(response.Output)}" : outcome.Reason,
-                response.Output);
+            throw Failure(reason, response.Output);
         }
 
         // TV "installed" dese de (ya da sonucu okunamadıysa) sürüm appinfo.json'dan doğrulanır.
@@ -376,6 +387,33 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
         }
         return new(false, false, null);
     }
+
+    /// <summary>
+    /// TV'nin saati (UTC, saniye). webOS'un kurulum servisi paketi GNU tar ile açar ve tar'ın her uyarısını hata sayar:
+    /// paketteki dosya tarihleri TV'nin saatine göre gelecekteyse kurulum "ipk verified failed" (errorCode -5) ile
+    /// reddedilir (LG OLED CX/webOS 5'te ağ saati alınamayınca saat 2020-01-01'e döner). Paket artık tarihleri 2010'a
+    /// çekilmiş gelir (scripts/normalize-ipk.py); TV'nin saati yine de günlüğe yazılır ve çok gerideyse kullanıcıya
+    /// saati düzeltmesi söylenir. Mac, iPhone ve Android'deki komut, eşik ve ayrıntı metniyle aynı.
+    /// </summary>
+    public const string ClockCommand = "date +%s";
+    /// <summary>TV bu kadar saniyeden fazla geride ise sebep saattir.</summary>
+    public const long MaxClockLag = 600;
+
+    /// <summary>TV paketi doğrulayamadı mı ("ipk verified failed", errorCode -5)?</summary>
+    public static bool IsPackageVerifyFailure(string text) => Regex.IsMatch(text, @"verif|errorCode -5\b", RegexOptions.IgnoreCase);
+
+    /// <summary>-5 hatasının ayrıntısı: TV'nin sebebi ve iki saat; saat çok gerideyse <c>ClockWrong</c>.</summary>
+    public static (bool ClockWrong, string Detail) VerifyFailureDetail(string reason, string? tvClock, long nowSeconds)
+    {
+        if (!long.TryParse(tvClock?.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var tv))
+            return (false, $"{reason}; TV saati okunamadı");
+        var lag = nowSeconds - tv;
+        var side = lag >= 0 ? $"{lag} sn geride" : $"{-lag} sn ileride";
+        return (lag > MaxClockLag, $"{reason}; TV saati {Utc(tv)} UTC, bu cihaz {Utc(nowSeconds)} UTC (TV {side})");
+    }
+
+    private static string Utc(long seconds) =>
+        DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>TV ya da kabuk yer kalmadığını mı söylüyor?</summary>
     public static bool IsStorageProblem(string text) => Regex.IsMatch(text,

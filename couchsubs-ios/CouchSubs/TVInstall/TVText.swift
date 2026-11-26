@@ -93,6 +93,10 @@ enum TVText {
     static var tvNotResponding: String { String(localized: "The TV isn't responding at this address (is it on and on the same network?)") }
     static var tvNotRespondingHint: String { String(localized: "It was searched for on the network but not found. Pick the right TV from the list above or type its IP address (on the TV under Settings › Network).") }
     static var lgErrTvNotFound: String { tvNotResponding + "\n\n" + tvNotRespondingHint }
+    /// LG "ipk verified failed" (-5) ve TV'nin saati çok geride.
+    static var lgErrClock: String { String(localized: "The TV's date and time are wrong, so it rejected the TV app package (ipk verified failed). On the TV, open Settings › General › System › Time & Timer › Time, turn off Set Automatically, enter today's date and time, then restart the TV and try again.") }
+    /// LG "ipk verified failed" (-5), TV'nin saati yerinde ya da okunamadı.
+    static var lgErrVerify: String { String(localized: "The TV could not verify the TV app package (ipk verified failed). Check that the TV's date and time are right (Settings › General › System › Time & Timer), unplug the TV for 30 seconds, plug it back in and try again. If it fails again, send us the reason below.") }
     static var lgErrKeyServer: String { String(localized: "Key Server is off. Turn it on in the Developer Mode app and keep the app on screen.") }
     static var lgErrPassphrase: String { String(localized: "The passphrase is not correct. Check it on the TV screen.") }
     static var lgErrKeyRefused: String { String(localized: "The TV refused the key. Open Key Server and type the passphrase again.") }

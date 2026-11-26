@@ -267,6 +267,10 @@ struct TVAppCard: View {
         if error == .foreignApp { return message(for: error, brand: brand) }
         var text = message(for: error, brand: brand, hasReason: reason != nil)
         let samsung = brand == .samsung
+        // LG "ipk verified failed" (-5): saat yerindeyse de ne yapılacağı söylenir (iPhone, Windows, Android aynı).
+        if brand == .lg, error == .installFailed, let reason, DevModeInstaller.isPackageVerifyFailure(reason) {
+            text = String(localized: "The TV could not verify the TV app package (ipk verified failed). Check that the TV's date and time are right (Settings › General › System › Time & Timer), unplug the TV for 30 seconds, plug it back in and try again. If it fails again, send us the reason below.")
+        }
         // Kurulum bağlantısı reddedildi ("IP hatası", #1158): menü, iki ayar ve bu cihazın adresi tek satırda (iPhone,
         // Windows ve Android ile aynı).
         if samsung, error == .unreachable { text += "\n\n" + hostPcSteps(address) }
@@ -331,6 +335,8 @@ struct TVAppCard: View {
             String(localized: "A CouchSubs TV app signed on another computer is still on the TV and could not be removed. On the TV, open Apps, select CouchSubs, delete it and try again.")
         case .certificateRejected:
             String(localized: "The TV did not accept the signing certificate. Make sure the TV is connected to the internet (it checks the certificate with Samsung) and its date and time are right (Settings › General › System Manager › Time), then try again. CouchSubs gets a new certificate, so you sign in to Samsung once more.")
+        case .tvClockWrong where brand == .lg:
+            String(localized: "The TV's date and time are wrong, so it rejected the TV app package (ipk verified failed). On the TV, open Settings › General › System › Time & Timer › Time, turn off Set Automatically, enter today's date and time, then restart the TV and try again.")
         case .tvClockWrong:
             String(localized: "The TV's clock is behind, so the new certificate is not valid for it yet. Set the TV's date and time (Settings › General › System Manager › Time) or wait a few minutes, then try again.")
         case .packageBlocked:

@@ -25,6 +25,9 @@ enum LGInstallError: Equatable {
     /// TV'de com.couchsubs.tv kimliğiyle başka bir uygulama kurulu (appinfo.json'daki ad ya da yapımcı bizim değil);
     /// kullanıcı onaylamadan kaldırılmaz.
     case foreignApp
+    /// TV paketi "ipk verified failed" (errorCode -5) ile reddetti ve TV'nin saati çok geride (paketteki dosya tarihleri
+    /// ona göre gelecekte). Kullanıcı TV'nin saatini düzeltir (masaüstündeki DevModeError.tvClockWrong).
+    case tvClockWrong
 }
 
 struct LGInstallFailure: Error, CustomStringConvertible {
@@ -443,8 +446,18 @@ struct LGInstaller {
         log.write("Kurulum yanıtı (\(response.status)):\n\(response.output.trimmingCharacters(in: .whitespacesAndNewlines))")
         let outcome = Self.parseInstallReplies(response.output)
         if outcome.failed {
+            let reason = outcome.reason.flatMap { $0.isEmpty ? nil : $0 } ?? "kurulum başarısız: \(Self.short(response.output))"
+            // "ipk verified failed" (-5): TV'nin saati okunur ve günlüğe yazılır; çok gerideyse kullanıcıya saati
+            // düzeltmesi söylenir (masaüstündeki DevModeInstaller ile aynı komut, eşik ve ayrıntı).
+            if DevModeInstaller.isPackageVerifyFailure(reason) {
+                let clock = try? shell.run(DevModeInstaller.clockCommand, input: nil).output
+                remove(remote)
+                let result = DevModeInstaller.verifyFailureDetail(reason: reason, tvClock: clock, now: Date())
+                log.write("LG paket doğrulaması reddedildi: \(result.detail)")
+                throw LGInstallFailure(error: result.clockWrong ? .tvClockWrong : .installFailed, detail: result.detail)
+            }
             remove(remote)
-            throw failure(outcome.reason.flatMap { $0.isEmpty ? nil : $0 } ?? "kurulum başarısız: \(Self.short(response.output))", evidence: response.output)
+            throw failure(reason, evidence: response.output)
         }
         let limit = verifyTimeout ?? (outcome.installed ? 30 : 60)
         let started = Date()
@@ -784,7 +797,10 @@ struct LGInstallSection: View {
         case .notEnoughSpace: TVText.errSpace
         case .connectionLost: TVText.errConnection
         case .packageMissing: TVText.errPackageMissing
+        // "ipk verified failed" (-5): saat yerindeyse de ne yapılacağı söylenir (Mac, Windows, Android aynı).
+        case .installFailed where failure.detail.map(DevModeInstaller.isPackageVerifyFailure) == true: TVText.lgErrVerify
         case .installFailed: TVText.errFailed
+        case .tvClockWrong: TVText.lgErrClock
         case .foreignApp: TVText.foreignMessage
         }
         guard failure.error != .wrongPassphrase, failure.error != .foreignApp, let detail = failure.detail, !detail.isEmpty else { return advice }

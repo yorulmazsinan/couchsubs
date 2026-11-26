@@ -157,7 +157,7 @@ class LgTest {
 
     /** Sahte TV kabuğu: komutları ve gelen veriyi kaydeder, appinfo.json'u kurulumdan sonra yeni sürümle döner. */
     private class FakeTv(var installed: String?, private val installReply: String = """{"returnValue":true,"details":{"state":"installed"}}""",
-                         private val sizeOverride: Long? = null) : LgShell {
+                         private val sizeOverride: Long? = null, private val clock: String = "") : LgShell {
         val commands = mutableListOf<String>()
         var uploaded: ByteArray? = null
 
@@ -168,6 +168,7 @@ class LgTest {
                     CommandResult(if (installed == null) 1 else 0, installed?.let { """{"id":"com.couchsubs.tv","version":"$it"}""" } ?: "cat: no such file")
                 command.contains("cat > ") -> { uploaded = input; CommandResult(0, "") }
                 command.startsWith("wc -c") -> CommandResult(0, "${sizeOverride ?: uploaded?.size ?: 0}\n")
+                command == LgInstaller.CLOCK_COMMAND -> CommandResult(0, clock)
                 command.contains("appInstallService") -> {
                     if (installReply.contains("installed")) installed = "0.9.18"
                     CommandResult(0, installReply)
@@ -194,6 +195,44 @@ class LgTest {
         assertEquals(listOf(InstallStep.CONNECTING, InstallStep.INSTALLING, InstallStep.LAUNCHING), steps)
         // Geliştirici modunun süresine dokunulmaz.
         assertFalse(tv.commands.any { it.contains("devmode_enabled") })
+    }
+
+    /** LG OLED CX (webOS 5): "ipk verified failed" (errorCode -5); Mac, iPhone ve Windows'taki testlerle aynı. */
+    private val verifyFailed = """{"details":{"state":"FAILED_IPKG_INSTALL","verified":false,"errorCode":-5,"reason":"ipk verified failed"},"returnValue":true}"""
+
+    @Test
+    fun recognisesPackageVerifyFailuresAndNamesBothClocks() {
+        assertTrue(LgInstaller.isPackageVerifyFailure("ipk verified failed (errorCode -5)"))
+        assertTrue(LgInstaller.isPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -5)"))
+        assertFalse(LgInstaller.isPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -50)"))
+        assertFalse(LgInstaller.isPackageVerifyFailure("Not enough space"))
+        assertEquals("date +%s", LgInstaller.CLOCK_COMMAND)
+        assertEquals(600L, LgInstaller.MAX_CLOCK_LAG)
+        val now = 1_795_660_080L // 2026-11-26 02:28:00 UTC
+        assertEquals(LgInstaller.VerifyFailure(true, "ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 217821851 sn geride)"),
+            LgInstaller.verifyFailureDetail("ipk verified failed (errorCode -5)", "1577838229\n", now))
+        assertEquals(LgInstaller.VerifyFailure(false, "r; TV saati 2026-11-26 02:27:00 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 60 sn geride)"),
+            LgInstaller.verifyFailureDetail("r", "1795660020", now))
+        assertTrue(LgInstaller.verifyFailureDetail("r", "1795660090", now).detail.endsWith("(TV 10 sn ileride)"))
+        assertEquals(LgInstaller.VerifyFailure(false, "r; TV saati okunamadı"), LgInstaller.verifyFailureDetail("r", "sh: date: not found", now))
+    }
+
+    @Test
+    fun verifyFailureWithTheTvClockBehindAsksToFixTheClock() {
+        val tv = FakeTv(installed = "0.9.10", installReply = verifyFailed, clock = "1577838229\n")
+        val error = expect<LgInstallException> { LgInstaller(tv, pollIntervalMs = 1).install(ipk, "com.couchsubs.tv_0.9.18_all.ipk", "0.9.18") }
+        assertEquals(LgInstallError.TV_CLOCK_WRONG, error.error)
+        assertTrue(error.detail!!.startsWith("ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC"))
+        assertEquals("rm -f '/media/developer/temp/com.couchsubs.tv_0.9.18_all.ipk'", tv.commands.last())
+    }
+
+    @Test
+    fun verifyFailureWithTheRightClockStaysAnInstallFailure() {
+        val tv = FakeTv(installed = "0.9.10", installReply = verifyFailed, clock = "${System.currentTimeMillis() / 1000}")
+        val error = expect<LgInstallException> { LgInstaller(tv, pollIntervalMs = 1).install(ipk, "com.couchsubs.tv_0.9.18_all.ipk", "0.9.18") }
+        assertEquals(LgInstallError.INSTALL_FAILED, error.error)
+        assertTrue(LgInstaller.isPackageVerifyFailure(error.detail!!))
+        assertTrue(error.detail!!.contains("TV saati"))
     }
 
     @Test

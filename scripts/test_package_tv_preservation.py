@@ -3,11 +3,17 @@
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("package-tv.sh")
+NORMALIZER = Path(__file__).with_name("normalize-ipk.py")
+sys.path.insert(0, str(Path(__file__).parent))
+from test_normalize_ipk import build_ipk, load_normalizer  # noqa: E402
+
+NEW_IPK = build_ipk("0.9.75", mtime=4102444800)
 
 
 def bash_executable():
@@ -30,6 +36,7 @@ class PackageTvTests(unittest.TestCase):
             (root / "scripts").mkdir(parents=True)
             (root / "tv-webos").mkdir()
             shutil.copy2(SCRIPT, root / "scripts/package-tv.sh")
+            shutil.copy2(NORMALIZER, root / "scripts/normalize-ipk.py")
             out = root / "dist/tv-app"
             out.mkdir(parents=True)
             (out / "couchsubs-samsung_0.9.75.wgt").write_bytes(b"samsung WGT")
@@ -38,10 +45,11 @@ class PackageTvTests(unittest.TestCase):
             old.write_bytes(b"last working LG installer")
             fake = Path(tmp) / "bin"
             fake.mkdir()
+            (fake / "new.ipk").write_bytes(NEW_IPK)
             cmd = fake / "ares-package"
             cmd.write_text('#!/bin/sh\n' + (
                 'exit 33\n' if fail else
-                'mkdir -p "$3"\nprintf "new LG installer" > "$3/com.couchsubs.tv_0.9.75_all.ipk"\n'
+                'mkdir -p "$3"\ncp "$(dirname "$0")/new.ipk" "$3/com.couchsubs.tv_0.9.75_all.ipk"\n'
             ), encoding="utf-8")
             cmd.chmod(0o755)
             env = {**os.environ, "PATH": posix(fake) + ":/usr/bin:/bin"}
@@ -54,7 +62,8 @@ class PackageTvTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertEqual(files["couchsubs-samsung_0.9.75.wgt"], b"samsung WGT")
         self.assertEqual(files["couchsubs-androidtv_0.9.75.apk"], b"android APK")
-        self.assertEqual(files["com.couchsubs.tv_0.9.75_all.ipk"], b"new LG installer")
+        # Yeni paket zaman damgaları geçmişe çekilmiş olarak gelir (normalize-ipk.py).
+        self.assertEqual(files["com.couchsubs.tv_0.9.75_all.ipk"], load_normalizer().normalize(NEW_IPK))
 
     def test_failed_lg_packager_preserves_previous_installers(self):
         proc, files = self.package(fail=True)

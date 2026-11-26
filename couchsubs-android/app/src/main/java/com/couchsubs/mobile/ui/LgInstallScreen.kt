@@ -252,7 +252,10 @@ private fun lgFailureText(failure: LgState.Failed): String {
         LgInstallError.CONNECTION_LOST -> context.getString(R.string.tvinstall_err_connection)
         LgInstallError.PACKAGE_MISSING -> context.getString(R.string.tvinstall_err_package_missing)
         LgInstallError.FOREIGN_APP -> return context.getString(R.string.tvinstall_foreign_body)
-        LgInstallError.INSTALL_FAILED, null -> context.getString(R.string.tvinstall_err_failed)
+        LgInstallError.TV_CLOCK_WRONG -> context.getString(R.string.tvinstall_lg_err_clock)
+        // "ipk verified failed" (-5): saat yerindeyse de ne yapılacağı söylenir (Mac, iPhone, Windows aynı).
+        LgInstallError.INSTALL_FAILED, null -> context.getString(
+            if (failure.detail?.let { LgInstaller.isPackageVerifyFailure(it) } == true) R.string.tvinstall_lg_err_verify else R.string.tvinstall_err_failed)
     }
     val detail = failure.detail?.takeIf { it.isNotBlank() && failure.error != LgInstallError.WRONG_PASSPHRASE && it != TvReach.NOT_RESPONDING_LINE } ?: return advice
     return advice + "\n\n" + context.getString(R.string.tvinstall_lg_tv_says, detail)

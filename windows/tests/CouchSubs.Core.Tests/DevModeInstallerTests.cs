@@ -282,6 +282,56 @@ public class DevModeInstallerTests
         Assert.DoesNotContain(shell.Calls, call => call.Command.Contains("appInstallService"));
     }
 
+    /// <summary>LG OLED CX (webOS 5): "ipk verified failed" (errorCode -5); Mac, iPhone ve Android'deki testlerle aynı.</summary>
+    private const string VerifyFailedReply =
+        "{\"details\":{\"state\":\"FAILED_IPKG_INSTALL\",\"verified\":false,\"errorCode\":-5,\"reason\":\"ipk verified failed\"},\"returnValue\":true}";
+
+    [Fact]
+    public void PackageVerifyFailureIsRecognisedAndNamesBothClocks()
+    {
+        Assert.True(DevModeInstaller.IsPackageVerifyFailure("ipk verified failed (errorCode -5)"));
+        Assert.True(DevModeInstaller.IsPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -5)"));
+        Assert.False(DevModeInstaller.IsPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -50)"));
+        Assert.False(DevModeInstaller.IsPackageVerifyFailure("Not enough space"));
+        Assert.Equal("date +%s", DevModeInstaller.ClockCommand);
+        Assert.Equal(600, DevModeInstaller.MaxClockLag);
+        const long now = 1_795_660_080; // 2026-11-26 02:28:00 UTC
+        Assert.Equal((true, "ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 217821851 sn geride)"),
+            DevModeInstaller.VerifyFailureDetail("ipk verified failed (errorCode -5)", "1577838229\n", now));
+        Assert.Equal((false, "r; TV saati 2026-11-26 02:27:00 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 60 sn geride)"),
+            DevModeInstaller.VerifyFailureDetail("r", "1795660020", now));
+        Assert.EndsWith("(TV 10 sn ileride)", DevModeInstaller.VerifyFailureDetail("r", "1795660090", now).Detail);
+        Assert.Equal((false, "r; TV saati okunamadı"), DevModeInstaller.VerifyFailureDetail("r", "sh: date: not found", now));
+    }
+
+    [Fact]
+    public async Task VerifyFailureWithTheTvClockBehindAsksToFixTheClock()
+    {
+        var shell = new FakeShell
+        {
+            Answer = line => IsInstall(line) ? new CommandResult(0, VerifyFailedReply)
+                : line == DevModeInstaller.ClockCommand ? new CommandResult(0, "1577838229\n") : null,
+        };
+        var error = await Assert.ThrowsAsync<DevModeException>(() => Installer(shell).InstallAsync(Package(), "0.6.1"));
+        Assert.Equal(DevModeError.TvClockWrong, error.Error);
+        Assert.StartsWith("ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC", error.Detail);
+        Assert.StartsWith("rm -f '/media/developer/temp/couchsubs-test-", shell.Calls[^1].Command);
+    }
+
+    [Fact]
+    public async Task VerifyFailureWithTheRightClockStaysAnInstallFailure()
+    {
+        var shell = new FakeShell
+        {
+            Answer = line => IsInstall(line) ? new CommandResult(0, VerifyFailedReply)
+                : line == DevModeInstaller.ClockCommand ? new CommandResult(0, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()) : null,
+        };
+        var error = await Assert.ThrowsAsync<DevModeException>(() => Installer(shell).InstallAsync(Package(), "0.6.1"));
+        Assert.Equal(DevModeError.InstallFailed, error.Error);
+        Assert.True(DevModeInstaller.IsPackageVerifyFailure(error.Detail!));
+        Assert.Contains("TV saati", error.Detail);
+    }
+
     [Fact]
     public async Task FailedUploadStopsBeforeInstalling()
     {

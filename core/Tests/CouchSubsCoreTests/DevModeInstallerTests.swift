@@ -235,6 +235,81 @@ final class DevModeInstallerTests: XCTestCase {
         XCTAssertFalse(runner.calls.contains { $0.arguments.last!.contains("appinfo.json") })
     }
 
+    /// LG OLED CX (webOS 5): "ipk verified failed" (errorCode -5). TV'nin saati okunur; çok gerideyse sebep saattir.
+    private static let verifyFailedReply =
+        #"{"details":{"state":"FAILED_IPKG_INSTALL","verified":false,"errorCode":-5,"reason":"ipk verified failed"},"returnValue":true}"#
+
+    func testPackageVerifyFailureIsRecognised() {
+        XCTAssertTrue(DevModeInstaller.isPackageVerifyFailure("ipk verified failed (errorCode -5)"))
+        XCTAssertTrue(DevModeInstaller.isPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -5)"))
+        XCTAssertFalse(DevModeInstaller.isPackageVerifyFailure("FAILED_IPKG_INSTALL (errorCode -50)"))
+        XCTAssertFalse(DevModeInstaller.isPackageVerifyFailure("Not enough space"))
+        XCTAssertEqual(DevModeInstaller.clockCommand, "date +%s")
+        XCTAssertEqual(DevModeInstaller.maxClockLag, 600)
+    }
+
+    func testVerifyFailureDetailNamesBothClocks() {
+        let now = Date(timeIntervalSince1970: 1_795_660_080) // 2026-11-26 02:28:00 UTC
+        let behind = DevModeInstaller.verifyFailureDetail(reason: "ipk verified failed (errorCode -5)", tvClock: "1577838229\n", now: now)
+        XCTAssertTrue(behind.clockWrong)
+        XCTAssertEqual(behind.detail, "ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 217821851 sn geride)")
+        let fine = DevModeInstaller.verifyFailureDetail(reason: "r", tvClock: "1795660020", now: now)
+        XCTAssertFalse(fine.clockWrong)
+        XCTAssertEqual(fine.detail, "r; TV saati 2026-11-26 02:27:00 UTC, bu cihaz 2026-11-26 02:28:00 UTC (TV 60 sn geride)")
+        XCTAssertEqual(DevModeInstaller.verifyFailureDetail(reason: "r", tvClock: "1795660090", now: now).detail.hasSuffix("(TV 10 sn ileride)"), true)
+        XCTAssertEqual(DevModeInstaller.verifyFailureDetail(reason: "r", tvClock: "sh: date: not found", now: now).detail, "r; TV saati okunamadı")
+        XCTAssertFalse(DevModeInstaller.verifyFailureDetail(reason: "r", tvClock: nil, now: now).clockWrong)
+    }
+
+    func testVerifyFailureWithTheTVClockBehindAsksToFixTheClock() async {
+        let runner = FakeRunner()
+        runner.answers = [{ [self] line in
+            if isInstall(line) { return CommandResult(status: 0, output: Self.verifyFailedReply) }
+            return line.hasSuffix(DevModeInstaller.clockCommand) ? CommandResult(status: 0, output: "1577838229\n") : nil
+        }]
+        do {
+            try await installer(runner).install(package: URL(fileURLWithPath: "/tmp/a.ipk"), version: "0.6.1")
+            XCTFail("Hata bekleniyordu")
+        } catch {
+            let failure = error as? DevModeFailure
+            XCTAssertEqual(failure?.error, .tvClockWrong)
+            XCTAssertTrue(failure?.detail.hasPrefix("ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC") == true)
+        }
+        XCTAssertTrue(runner.calls.last!.arguments.last!.contains("rm -f '/media/developer/temp/a.ipk'"))
+    }
+
+    func testVerifyFailureWithTheRightClockStaysAnInstallFailure() async {
+        let runner = FakeRunner()
+        runner.answers = [{ [self] line in
+            if isInstall(line) { return CommandResult(status: 0, output: Self.verifyFailedReply) }
+            return line.hasSuffix(DevModeInstaller.clockCommand) ? CommandResult(status: 0, output: "\(Int(Date().timeIntervalSince1970))\n") : nil
+        }]
+        do {
+            try await installer(runner).install(package: URL(fileURLWithPath: "/tmp/a.ipk"), version: "0.6.1")
+            XCTFail("Hata bekleniyordu")
+        } catch {
+            let failure = error as? DevModeFailure
+            XCTAssertEqual(failure?.error, .installFailed)
+            XCTAssertTrue(failure.map { DevModeInstaller.isPackageVerifyFailure($0.detail) } == true)
+            XCTAssertTrue(failure?.detail.contains("TV saati") == true)
+        }
+    }
+
+    func testTruncatedUploadStopsBeforeInstalling() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("couchsubs-test-\(UUID().uuidString).ipk")
+        try Data(count: 10).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let runner = FakeRunner()
+        runner.answers = [{ line in line.contains("wc -c") ? CommandResult(status: 0, output: "7\n") : nil }]
+        do {
+            try await installer(runner).install(package: file, version: "0.6.1")
+            XCTFail("Hata bekleniyordu")
+        } catch {
+            XCTAssertEqual(error as? DevModeFailure, DevModeFailure(.installFailed, detail: "paket TV'ye eksik ya da bozuk ulaştı: 7/10 bayt"))
+        }
+        XCTAssertFalse(runner.calls.contains { $0.arguments.last!.contains("appInstallService") })
+    }
+
     func testStorageErrorsAreReportedAsMissingSpace() async {
         let runner = FakeRunner()
         runner.answers = [{ [self] line in

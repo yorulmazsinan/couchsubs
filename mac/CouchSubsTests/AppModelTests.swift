@@ -1464,6 +1464,18 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertTrue(TVAppCard.message(for: .installFailed, brand: .lg, reason: "Invalid package").contains(String(localized: "TV says:") + " Invalid package"))
     }
 
+    /// LG "ipk verified failed" (-5): saat çok gerideyse saati düzeltme adımları, değilse doğrulama ipucu; Samsung'un saat
+    /// metni değişmez (iPhone, Windows, Android aynı).
+    func testLgVerifyFailureGivesClockSteps() {
+        let clockSteps = String(localized: "The TV's date and time are wrong, so it rejected the TV app package (ipk verified failed). On the TV, open Settings › General › System › Time & Timer › Time, turn off Set Automatically, enter today's date and time, then restart the TV and try again.")
+        let verifyHint = String(localized: "The TV could not verify the TV app package (ipk verified failed). Check that the TV's date and time are right (Settings › General › System › Time & Timer), unplug the TV for 30 seconds, plug it back in and try again. If it fails again, send us the reason below.")
+        let clock = TVAppCard.message(for: .tvClockWrong, brand: .lg, reason: "ipk verified failed (errorCode -5); TV saati 2020-01-01 00:23:49 UTC")
+        XCTAssertTrue(clock.hasPrefix(clockSteps))
+        XCTAssertTrue(clock.contains("2020-01-01 00:23:49"))
+        XCTAssertTrue(TVAppCard.message(for: .installFailed, brand: .lg, reason: "ipk verified failed (errorCode -5); TV saati okunamadı").hasPrefix(verifyHint))
+        XCTAssertFalse(TVAppCard.message(for: .tvClockWrong, brand: .samsung, reason: nil).contains("ipk"))
+    }
+
     /// Samsung kısa basışta tam kapanmaz: "yeniden başlatın" diyen hatada güç tuşunun basılı tutulacağı yazar. Kurulum
     /// sırasında bağlantı koparsa HDMI-CEC (Anynet+) ve otomatik kaynak değiştirme anlatılır.
     func testSamsungFailureExplainsRestartAndSourceSwitching() {

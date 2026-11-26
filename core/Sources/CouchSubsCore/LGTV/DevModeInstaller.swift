@@ -35,7 +35,8 @@ public enum DevModeError: Error, Equatable {
     case certificateMismatch
     /// Samsung: TV imza sertifikasını reddetti (internet, saat ya da sertifika).
     case certificateRejected
-    /// Samsung: TV'nin saati geride; sertifika ona göre henüz geçerli değil.
+    /// TV'nin saati geride. Samsung: sertifika ona göre henüz geçerli değil. LG: TV paketi "ipk verified failed"
+    /// (errorCode -5) ile reddetti; paketteki dosya tarihleri TV'ye göre gelecekte.
     case tvClockWrong
     /// Samsung: TV, silinmiş eski kopyanın kaydı yüzünden uygulamayı kabul etmiyor ([118, -22]).
     case packageBlocked
@@ -259,13 +260,23 @@ public struct DevModeInstaller: Sendable {
         guard upload.status == 0 else {
             throw Self.failure("yükleme çıkış kodu \(upload.status): \(Self.short(upload.output))", evidence: upload.output)
         }
+        // Paket TV'ye eksiksiz ulaştı mı? (wc yoksa ya da çıktı okunamazsa denetim atlanır; iPhone, Android, Windows aynı.)
+        if let expected = (try? FileManager.default.attributesOfItem(atPath: package.path)[.size] as? NSNumber)?.intValue,
+           let size = Int(try await ssh("wc -c < '\(remote)'").output.trimmingCharacters(in: .whitespacesAndNewlines)), size != expected {
+            throw DevModeFailure(.installFailed, detail: "paket TV'ye eksik ya da bozuk ulaştı: \(size)/\(expected) bayt")
+        }
 
         let wait = max(1, Int((Double(installTimeout.components.seconds) + Double(installTimeout.components.attoseconds) / 1e18).rounded(.up)))
         let response = try await ssh(Self.installCommand(remotePackage: remote, waitSeconds: wait))
         let outcome = Self.parseInstallReplies(response.output)
         if outcome.failed {
-            _ = try? await ssh("rm -f '\(remote)'")
             let reason = outcome.reason.flatMap { $0.isEmpty ? nil : $0 } ?? "kurulum başarısız: \(Self.short(response.output))"
+            // "ipk verified failed" (-5): TV'nin saati okunur; çok gerideyse kullanıcıya saati düzeltmesi söylenir.
+            let verify = Self.isPackageVerifyFailure(reason)
+            var clock: String?
+            if verify { clock = try? await ssh(Self.clockCommand).output }
+            _ = try? await ssh("rm -f '\(remote)'")
+            if verify { throw Self.verifyFailure(reason: reason, tvClock: clock, now: Date()) }
             throw Self.failure(reason, evidence: response.output)
         }
 
@@ -342,6 +353,50 @@ public struct DevModeInstaller: Sendable {
             }
         }
         return InstallOutcome()
+    }
+
+    // MARK: - Paket doğrulaması (errorCode -5)
+
+    /// TV'nin saati (UTC, saniye). webOS'un kurulum servisi paketi GNU tar ile açar ve tar'ın her uyarısını hata sayar:
+    /// paketteki dosya tarihleri TV'nin saatine göre gelecekteyse kurulum "ipk verified failed" (errorCode -5) ile
+    /// reddedilir (LG OLED CX/webOS 5'te ağ saati alınamayınca saat 2020-01-01'e döner). Paket artık tarihleri 2010'a
+    /// çekilmiş gelir (scripts/normalize-ipk.py); TV'nin saati yine de günlüğe yazılır ve çok gerideyse kullanıcıya
+    /// saati düzeltmesi söylenir. iPhone, Android ve Windows'taki komut, eşik ve ayrıntı metniyle aynı.
+    public static let clockCommand = "date +%s"
+    /// TV bu kadar saniyeden fazla geride ise sebep saattir.
+    public static let maxClockLag = 600
+
+    /// TV paketi doğrulayamadı mı ("ipk verified failed", errorCode -5)?
+    public static func isPackageVerifyFailure(_ text: String) -> Bool {
+        text.range(of: #"verif|errorCode -5\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// TV'nin saati bu cihazınkinden kaç saniye geride (eksi: ileride); okunamazsa nil.
+    public static func clockLag(tvClock: String?, now: Date) -> Int? {
+        guard let tv = tvClock.flatMap({ Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) else { return nil }
+        return Int(now.timeIntervalSince1970) - tv
+    }
+
+    /// -5 hatasının ayrıntısı: TV'nin sebebi ve iki saat ("ipk verified failed (errorCode -5); TV saati … UTC, bu cihaz
+    /// … UTC (TV 3600 sn geride)"). Saat çok gerideyse ilk değer true (saati düzeltmek gerekir).
+    public static func verifyFailureDetail(reason: String, tvClock: String?, now: Date) -> (clockWrong: Bool, detail: String) {
+        guard let lag = clockLag(tvClock: tvClock, now: now) else { return (false, "\(reason); TV saati okunamadı") }
+        let here = Int(now.timeIntervalSince1970)
+        let side = lag >= 0 ? "\(lag) sn geride" : "\(-lag) sn ileride"
+        return (lag > maxClockLag, "\(reason); TV saati \(utc(here - lag)) UTC, bu cihaz \(utc(here)) UTC (TV \(side))")
+    }
+
+    static func verifyFailure(reason: String, tvClock: String?, now: Date) -> DevModeFailure {
+        let result = verifyFailureDetail(reason: reason, tvClock: tvClock, now: now)
+        return DevModeFailure(result.clockWrong ? .tvClockWrong : .installFailed, detail: result.detail)
+    }
+
+    public static func utc(_ seconds: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(seconds)))
     }
 
     /// TV ya da kabuk yer kalmadığını mı söylüyor?

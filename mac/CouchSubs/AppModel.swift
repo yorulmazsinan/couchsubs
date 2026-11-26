@@ -409,7 +409,13 @@ final class LiveServices: AppServices {
             if replaceForeign {
                 TVInstallLog.write("LG: kullanıcı onayıyla TV'deki com.couchsubs.tv kaldırıldı: \(try await installer.removeApp())")
             }
-            try await installer.install(package: package, version: version)
+            do {
+                try await installer.install(package: package, version: version)
+            } catch let failure as DevModeFailure {
+                // TV'nin sebebi (luna yanıtı) ve -5'te TV'nin saati günlükte görünsün (iPhone, Android, Windows aynı).
+                TVInstallLog.write("LG kurulumu başarısız (\(failure.error)): \(failure.detail)")
+                throw failure
+            }
         }
     }
 
