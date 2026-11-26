@@ -288,6 +288,8 @@ class SubtitlePipeline(
     /** Altyazı sayılmayan satırların neden başına sayacı ([RejectTally]; beta.103 kaçan altyazı). */
     private val rejects = RejectTally()
     private val mission = MissionLine()
+    /** TV'ye son bildirilen görev satırı yeri ([MissionLine.clearance]). */
+    private var sentClearance: TextBox? = null
     /** Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız ([DropLog]). */
     private val drops = DropLog(now)
 
@@ -428,6 +430,8 @@ class SubtitlePipeline(
         if (listed) onList?.invoke()
         var missionChanged = false
         var missionRegion: CropRegion? = null
+        var clearanceChanged = false
+        var clearance: TextBox? = null
         var noticesChanged = false
         var noticeAreas: List<ExtraArea> = emptyList()
         var filteredRows = Reading(emptyList())
@@ -442,6 +446,15 @@ class SubtitlePipeline(
             if (mission.observe(stickyRows.removed, area, now())) {
                 missionChanged = true
                 missionRegion = mission.region
+            }
+            clearance = mission.clearance
+            if (clearance != sentClearance) {
+                clearanceChanged = true
+                if ((clearance == null) != (sentClearance == null)) onLog?.invoke(clearance?.let {
+                    "görev satırının yeri y " + String.format(java.util.Locale.ROOT, "%.2f-%.2f", it.top, it.bottom) +
+                        ": altyazı kutusu onu örtmez, üstüne kayar"
+                } ?: "görev satırının yeri kalktı: altyazı kutusu yerine döner")
+                sentClearance = clearance
             }
             for (line in mission.dropped) {
                 drops.note("MissionLine", "${MissionLine.SETTLE_MS / 1000} sn dolmadan kalktı, görev sayılmadı, çevrilmedi", line, onLog)
@@ -492,6 +505,8 @@ class SubtitlePipeline(
             }
         }
         quietMessage?.let { onLog?.invoke(it) }
+        // Görev satırının yeri TV'ye: altyazı kutusu onu örtmez ([SubtitleServer.sendObjective]; Mac/iPhone ve Windows aynı).
+        if (clearanceChanged) sender.sendObjective(clearance)
         if (missionChanged) onMissionChanged?.invoke(missionRegion)
         var flushed: (() -> Unit)? = null
         val after: (() -> Unit)? = synchronized(lock) {
@@ -986,6 +1001,10 @@ class SubtitlePipeline(
         settled.reset()
         loggedStale = ""
         mission.reset()
+        if (sentClearance != null) {
+            sentClearance = null
+            sender.sendObjective(null)
+        }
         notices.reset()
         echo?.reset()
         loggedOwn = null

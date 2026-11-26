@@ -942,6 +942,8 @@ final class AppModel: ObservableObject {
     /// Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var); örnek arka planda, tek uçuşta alınır.
     private var screenTextDetector: ScreenTextDetector?
     private var screenTextBusy = false
+    /// Telefon açıkken telefonun dışında kalan ekran yazısı alanı sayısı (günlüğe değişince yazılır; telefon yoksa nil).
+    private var loggedOutsidePhone: Int?
     /// Altyazı hattının göndericisi: ekranda menü varken satırları bekletir, menü kapanınca konuşma satırını gönderir
     /// (#1240); her karede yoklanır.
     private var menuSender: MenuHeldSender?
@@ -3916,12 +3918,15 @@ final class AppModel: ObservableObject {
         let seen = tracked?.pose
         let pose = settings.readsGamePhone ? seen : nil
         var areas = settings.watchedExtraAreas(game: gameChoice.game?.name, phoneOpen: pose != nil)
-        if settings.autoScreenText, let missionRegion {
+        // Görev satırı altyazı alanının içindedir: "Ekran yazılarını otomatik çevir" kapalıyken de kendi kutusunda çevrilir
+        // (yalnız açıkken "Görev ve hedef yazısı" türüne bakılır). Kullanıcı bildirimi (X, beta.100–104): görev satırı
+        // altyazıdan ayrılıyor ama ayar kapalı olduğu için hiç çevrilmiyordu (Windows ve Android ile aynı).
+        if settings.screenTextAllows(.mission), let missionRegion {
             areas.append(ExtraArea(id: MissionLine.areaId, name: "Mission", region: missionRegion, auto: true))
         }
         // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz.
         if seen == nil { areas += noticeAreas }
-        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phoneOpen: seen != nil)
+        areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phone: seen?.bounds)
         if regionWatcher == nil, !areas.isEmpty || pose != nil, let pipeline {
             regionWatcher = makeRegionWatcher(packLookup: pipeline.packLookup)
         }
@@ -3962,11 +3967,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Kendiliğinden bulunan ekran yazıları (ayar açıkken, Tam ekran dışında; oyun telefonu açıkken değil). Karo örneği
+    /// Kendiliğinden bulunan ekran yazıları (ayar açıkken, Tam ekran dışında; oyun telefonu açıkken telefonun dışında). Karo örneği
     /// kare akışını tutmaz: arka planda tek uçuşta alınır, sonuç sonraki karelerde kullanılır. Altyazı alanı ve okunan
     /// ek alanlar (hazır alanlar dahil) dışlanır.
-    private func screenTextAreas(_ frame: CGImage, capturedAt: Int, watched: [ExtraArea], phoneOpen: Bool) -> [ExtraArea] {
-        guard settings.autoScreenText, !settings.extraAreasPausedByFullScreen, !phoneOpen else {
+    private func screenTextAreas(_ frame: CGImage, capturedAt: Int, watched: [ExtraArea], phone: CropRegion?) -> [ExtraArea] {
+        guard settings.autoScreenText, !settings.extraAreasPausedByFullScreen else {
             screenTextDetector = nil
             return []
         }
@@ -3980,12 +3985,20 @@ final class AppModel: ObservableObject {
         if !screenTextBusy, detector.due(capturedAt) {
             screenTextBusy = true
             let excluded = [settings.region] + watched.map(\.region)
+            let blocked = phone.map { [ScreenTextDetector.paddedPhone($0)] } ?? []
             Task.detached(priority: .utility) { [weak self] in
-                detector.sample(frame, now: capturedAt, excluded: excluded)
+                detector.sample(frame, now: capturedAt, excluded: excluded, blocked: blocked)
                 await MainActor.run { self?.screenTextBusy = false }
             }
         }
-        return detector.areas
+        // Oyun telefonu görünürken telefonun dışındaki ekran yazısı (tuş çubuğu) yine çevrilir; telefona değen alan atılır.
+        let areas = ScreenTextDetector.outsidePhone(detector.areas, phone: phone)
+        let outside = phone == nil ? nil : areas.count
+        if outside != loggedOutsidePhone {
+            if let outside { SubtitleLog.write("telefon açık: ekran yazısı telefonun dışında aranıyor (\(outside) alan)") }
+            loggedOutsidePhone = outside
+        }
+        return areas
     }
 
     // MARK: - Geçmiş

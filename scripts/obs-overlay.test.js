@@ -108,6 +108,22 @@ function render(width, height) {
     var preset = document.querySelector('#regions .phone.auto');
     result.preset = preset ? preset.textContent + ' ' + getComputedStyle(preset).backgroundColor : 'yok';
     fire('region', {id:'preset-help', text:''});
+    // Görev satırı (gta6-854-gorev-3 karesinin okumasından): altyazı ve örtüsü görev satırının üstünde kalır (X, beta.100–104).
+    var eng = {left:.2975,top:.8395,right:.8209,bottom:.9334}, obj = {left:.4749,top:.9422,right:.6371,bottom:.9682};
+    var two = 'Biri özgür kalmaya çok sevinmiş, değil mi? Hadi bakalım, sürat teknesine binelim artık.';
+    function lineBottom() { var b = document.getElementById('line').getBoundingClientRect(); return {top:b.top, bottom:b.bottom}; }
+    fire('style', {fontSize:48, placement:'cover', backgroundShape:'box'});
+    fire('subtitle', {text:two, duration:8000, box:eng});
+    result.objectiveOld = lineBottom();
+    fire('subtitle', {text:two, duration:8000, box:eng, keep:obj});
+    result.objectiveKeep = lineBottom();
+    fire('objective', {});
+    result.objectiveGone = lineBottom();
+    fire('objective', {box:obj});
+    result.objectiveEvent = lineBottom();
+    result.objectiveLimit = obj.top * innerHeight;
+    result.englishTop = eng.top * innerHeight;
+    fire('objective', {});
     result.viewport = { width: innerWidth, height: innerHeight };
     document.getElementById('result').textContent = btoa(unescape(encodeURIComponent(JSON.stringify(result))));
   </script>`;
@@ -186,6 +202,15 @@ for (const [width, height] of [[1920, 1080], [1280, 720]]) {
       assert.equal(r.legacy, 'region Eski olay');
       assert.equal(r.afterPhone, 'Görev');
       assert.equal(r.preset, 'ADA RÜYALARI rgb(14, 31, 85)');
+    });
+    await t.test('altyazı görev satırını örtmez; yer kalkınca yerine döner (TV 0.9.120 ile aynı)', () => {
+      const detail = JSON.stringify({ old: r.objectiveOld, keep: r.objectiveKeep, gone: r.objectiveGone, event: r.objectiveEvent,
+        limit: r.objectiveLimit });
+      assert.ok(r.objectiveOld.bottom > r.objectiveLimit, 'düzeltmeden önceki örtüşme yok: ' + detail);
+      assert.ok(r.objectiveKeep.bottom <= r.objectiveLimit, detail);
+      assert.ok(r.objectiveEvent.bottom <= r.objectiveLimit, detail);
+      assert.ok(r.objectiveKeep.top <= r.englishTop + 1, 'örtü İngilizceyi açıkta bıraktı: ' + detail);
+      assert.ok(Math.abs(r.objectiveGone.bottom - r.objectiveOld.bottom) <= 1, detail);
     });
     await t.test('altyazı telefonun çevirisinin üstüne binmez, telefon kalkınca yerine döner', () => {
       // Görev kutusu kaldırıldı (altyazıyı kaydırmasın). Önceden telefon altyazının altında kalıp okunmuyordu (X, beta.79);

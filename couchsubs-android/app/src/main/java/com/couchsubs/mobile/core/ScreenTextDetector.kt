@@ -15,6 +15,31 @@ import kotlin.math.min
  */
 class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
     companion object {
+        /** Açık telefonun çevresinde bırakılan pay (karenin oranı). */
+        const val PHONE_MARGIN = 0.02
+
+        /**
+         * Oyun telefonu görünürken ekran yazısı telefonun dışında aranır: telefona değen alan (pay dahil) atılır, telefonun
+         * dışındakiler (tuş çubuğu "SCROLL / SEND / EXIT", "DRINK / PUT DOWN") kalır. Kullanıcı bildirimi (X, beta.104, üç
+         * kullanıcı): telefon açıkken tuş ipuçları hiç çevrilmiyordu; telefon tanınmadığında çevriliyordu. Eskiden telefon
+         * görünür görünmez dedektör bütünüyle bırakılıyordu (#1332: telefonun yazısı ekran yazısı kutusuna gitmesin); o kural
+         * telefonun kendisi için korunur. Mac/iPhone ve Windows (ScreenTextDetector.OutsidePhone) aynı.
+         */
+        fun outsidePhone(areas: List<ExtraArea>, phone: CropRegion?): List<ExtraArea> {
+            if (phone == null) return areas
+            val padded = paddedPhone(phone)
+            return areas.filter {
+                it.region.right <= padded.left || it.region.left >= padded.right ||
+                    it.region.bottom <= padded.top || it.region.top >= padded.bottom
+            }
+        }
+
+        /** Telefonun payla genişletilmiş yeri (örnekte dışlanan yer olarak da verilir). */
+        fun paddedPhone(phone: CropRegion) = CropRegion(
+            top = max(0.0, phone.top - PHONE_MARGIN), bottom = min(1.0, phone.bottom + PHONE_MARGIN),
+            left = max(0.0, phone.left - PHONE_MARGIN), right = min(1.0, phone.right + PHONE_MARGIN),
+        )
+
         const val COLUMNS = 32
         const val ROWS = 18
         /** Karo başına 24×24 nokta: ince yazı (dar başlık, menü etiketi) 12×12'de karodan kaçıyordu (gerçek GTA 6 kareleri). */

@@ -34,6 +34,13 @@ class MissionLine {
          */
         fun isCandidate(text: String, box: TextBox) = !ScreenNotices.isNotice(box) && !OcrNoise.isCrumb(text)
 
+        /** İki kutu satır boyunun çeyreğinden az oynamış mı. */
+        internal fun near(a: TextBox, b: TextBox): Boolean {
+            val tolerance = 0.25 * minOf(a.bottom - a.top, b.bottom - b.top)
+            return abs(a.top - b.top) <= tolerance && abs(a.bottom - b.bottom) <= tolerance &&
+                abs(a.left - b.left) <= tolerance * 2 && abs(a.right - b.right) <= tolerance * 2
+        }
+
         private fun within(a: CropRegion, b: CropRegion, tolerance: Double) =
             abs(a.top - b.top) <= tolerance && abs(a.bottom - b.bottom) <= tolerance &&
                 abs(a.left - b.left) <= tolerance * 2 && abs(a.right - b.right) <= tolerance * 2
@@ -45,6 +52,15 @@ class MissionLine {
 
     /** Görevin karedeki bölgesi; görev yoksa null. */
     var region: CropRegion? = null
+        private set
+
+    /**
+     * Ekranda duran görev satırlarının karedeki yeri ([SETTLE_MS] dolmadan da): TV ve OBS sayfası altyazı kutusunu bunun
+     * üstüne taşır, kutu oyundaki görev satırını örtmez. Kullanıcı bildirimi (X, beta.100–104, GTA 6): "Örtsün"de iki
+     * satırlık Türkçe İngilizce satırın ortasına göre büyüyor, alttaki görev satırının ("Get in the speedboat") üst yarısını
+     * kapatıyordu. Okuma kutusunun küçük oynaması değer değiştirmez. Mac/iPhone ve Windows aynı.
+     */
+    var clearance: TextBox? = null
         private set
 
     /**
@@ -73,6 +89,9 @@ class MissionLine {
         }
         dropped = tracks.filter { time - it.lastSeen > FORGET_MS && it.lastSeen - it.since < SETTLE_MS }.map { it.source }
         tracks.removeAll { time - it.lastSeen > FORGET_MS }
+        val shown = tracks.firstOrNull()?.let { first -> tracks.drop(1).fold(first.box) { total, track -> total.union(track.box) } }
+        val current = clearance
+        if (shown == null || current == null || !near(shown, current)) clearance = shown
         val settled = tracks.filter { time - it.since >= SETTLE_MS }
         var next: CropRegion? = null
         if (settled.isNotEmpty()) {
@@ -95,5 +114,6 @@ class MissionLine {
         tracks.clear()
         dropped = emptyList()
         region = null
+        clearance = null
     }
 }

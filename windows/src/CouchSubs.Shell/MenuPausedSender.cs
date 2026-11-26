@@ -63,6 +63,9 @@ public sealed class MenuPausedSender(ISubtitleSender inner, Func<bool> inMenu, A
 
     public void Clear() => inner.Clear();
 
+    /// <summary>Görev satırının yeri menüde de bekletilmez.</summary>
+    public void SendObjective(TextBox? box) => inner.SendObjective(box);
+
     /// <summary>
     /// Altyazı alanında menünün geçmiş listesi okundu (SubtitlePipeline.ListRead): menü sırasında bekletilen satırlar
     /// listenin satırlarıdır (kaydırırken tek satır okunabiliyor), menü kapanınca altyazı olarak gönderilmez.

@@ -3,6 +3,10 @@
   "translate": [
     { "text": "SET DESTINATION ￼ EXIT ￼", "expected": "Hedef belirle ￼ Çık ￼" },
     { "text": "OPEN ￼", "expected": "Aç ￼" },
+    { "text": "SCROLL ￼ SEND ￼ EXIT ￼", "expected": "Kaydır ￼ Gönder ￼ Çık ￼" },
+    { "text": "DRINK ￼", "expected": "İç ￼" },
+    { "text": "PUT DOWN ￼", "expected": "Bırak ￼" },
+    { "text": "BARTENDER ￼", "expected": "Barmen ￼" },
     { "text": "REFUEL", "expected": "Yakıt al" },
     { "text": "INSPECT", "expected": "İncele" },
     { "text": "2D VIEW", "expected": "2B görünüm" },

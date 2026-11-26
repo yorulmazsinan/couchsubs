@@ -238,4 +238,27 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
         Assert.False(ScreenTextDetector.Outlined(0, 576));
         Assert.False(ScreenTextDetector.Outlined(400, 100));
     }
+
+    /// <summary>
+    /// X, beta.104 (üç kullanıcı): telefon açıkken sağ alttaki tuş çubuğu ("SCROLL / SEND / EXIT") çevrilmiyordu. Telefona
+    /// değen alan atılır, telefonun dışındaki tuş çubuğu kalır (Mac/iPhone ve Android aynı).
+    /// </summary>
+    [Fact]
+    public void TelefonAcikkenDisindakiIpuclariKalir()
+    {
+        var phone = new CropRegion(0.25, 0.85, 0.55, 0.75);
+        WatchedArea Area(string id, double top, double bottom, double left, double right) =>
+            new(id, ScreenTextDetector.AreaName, new CropRegion(top, bottom, left, right)) { Auto = true };
+        IReadOnlyList<WatchedArea> areas =
+        [
+            Area("auto-1", 0.4, 0.5, 0.58, 0.72), Area("auto-2", 0.86, 0.9, 0.6, 0.7),
+            Area("auto-3", 0.9, 0.96, 0.8, 0.97), Area("auto-4", 0.6, 0.75, 0.86, 0.97),
+        ];
+        Assert.Equal(["auto-3", "auto-4"], ScreenTextDetector.OutsidePhone(areas, phone).Select(area => area.Id));
+        Assert.Equal(areas, ScreenTextDetector.OutsidePhone(areas, null));
+        var padded = ScreenTextDetector.PaddedPhone(new CropRegion(0.01, 0.99, 0.5, 0.7));
+        Assert.Equal(0, padded.Top);
+        Assert.Equal(1, padded.Bottom);
+        Assert.Equal(0.48, padded.Left, 9);
+    }
 }

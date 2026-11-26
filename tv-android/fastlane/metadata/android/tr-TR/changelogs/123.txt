@@ -1,0 +1,1 @@
+0.9.120: Altyazı kutusu oyundaki görev satırını örtmüyor; görev satırı altyazının altındayken çeviri onun üstüne kayıyor.

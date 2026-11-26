@@ -21,6 +21,19 @@ class SubtitleServerTest {
         )
     }
 
+    /** Ekrandaki görev satırının yeri altyazıyla `keep` alanında gider (TV altyazıyı onun üstüne taşır; Mac/Windows aynı). */
+    @Test
+    fun subtitleFrameCarriesTheObjectiveLine() {
+        val frame = SubtitleServer.subtitleFrame("Merhaba", 4000, null, at = 1, keep = TextBox(0.46, 0.94, 0.69, 0.97))
+        assertEquals(
+            "event: subtitle\ndata: {\"at\":1,\"duration\":4000,\"keep\":{\"bottom\":0.97,\"left\":0.46,\"right\":0.69,\"top\":0.94}," +
+                "\"text\":\"Merhaba\"}\n\n",
+            frame,
+        )
+        // Çok parçalı yazı (görev paneli) taşımaz.
+        assertFalse(SubtitleServer.subtitleFrame("A\nB", 4000, null, at = 1, paragraphs = true, keep = TextBox(0.4, 0.9, 0.6, 0.95)).contains("keep"))
+    }
+
     @Test
     fun turkishLettersAndQuotesAreEncodedLikeSystemTextJson() {
         val frame = SubtitleServer.subtitleFrame("Işığı \"aç\"\nşimdi", 15000, null, at = 1)

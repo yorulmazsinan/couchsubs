@@ -12,6 +12,27 @@ class ScreenTextDetectorTest {
     private val width = 640
     private val height = 360
 
+    /**
+     * X, beta.104 (üç kullanıcı): telefon açıkken sağ alttaki tuş çubuğu ("SCROLL / SEND / EXIT") çevrilmiyordu. Telefona
+     * değen alan atılır, telefonun dışındaki tuş çubuğu kalır (Mac/iPhone ve Windows aynı).
+     */
+    @Test
+    fun phoneOpenKeepsPromptsOutsideThePhone() {
+        val phone = CropRegion(0.25, 0.85, 0.55, 0.75)
+        fun area(id: String, top: Double, bottom: Double, left: Double, right: Double) =
+            ExtraArea(id, ScreenTextDetector.NAME, CropRegion(top, bottom, left, right), auto = true)
+        val areas = listOf(
+            area("auto-1", 0.4, 0.5, 0.58, 0.72), area("auto-2", 0.86, 0.9, 0.6, 0.7),
+            area("auto-3", 0.9, 0.96, 0.8, 0.97), area("auto-4", 0.6, 0.75, 0.86, 0.97),
+        )
+        assertEquals(listOf("auto-3", "auto-4"), ScreenTextDetector.outsidePhone(areas, phone).map { it.id })
+        assertEquals(areas, ScreenTextDetector.outsidePhone(areas, null))
+        val padded = ScreenTextDetector.paddedPhone(CropRegion(0.01, 0.99, 0.5, 0.7))
+        assertEquals(0.0, padded.top, 0.0)
+        assertEquals(1.0, padded.bottom, 0.0)
+        assertEquals(0.48, padded.left, 1e-9)
+    }
+
     /** Kare: her örnekte değişen gürültülü zemin; [box] (x0, y0, x1, y1 piksel) içinde koyu kutu ve beyaz "yazı" çizgileri. */
     private fun frame(seed: Int, box: IntArray? = null): ByteArray {
         val random = Random(seed)

@@ -65,6 +65,28 @@ class MissionLineTest {
         assertFalse(mission.observe(listOf(line("Lucia: Go to the docks.", 0.30)), area, 10_000))
     }
 
+    /**
+     * X, beta.100–104 (GTA 6): altyazı kutusu alttaki görev satırını örtüyordu. Görev satırının yeri görev sayılmasını
+     * beklemeden bilinir (TV altyazıyı onun üstüne taşır); küçük oynama değiştirmez, gerçek kayma değiştirir, görev kalkınca
+     * null (Mac/iPhone ve Windows aynı).
+     */
+    @Test
+    fun clearanceIgnoresSmallJitterAndFollowsRealMoves() {
+        val mission = MissionLine()
+        val whole = TextBox(0.0, 0.0, 1.0, 1.0)
+        fun see(top: Double, time: Long) =
+            mission.observe(listOf(TextLine("Get in the speedboat", TextBox(0.45, top, 0.62, top + 0.03))), whole, time)
+        see(0.94, 0)
+        val first = mission.clearance
+        assertNotNull(first)
+        see(0.945, 500)
+        assertEquals(first, mission.clearance)
+        see(0.80, 1000)
+        assertEquals(0.80, mission.clearance!!.top, 1e-4)
+        mission.observe(emptyList(), whole, 3000)
+        assertNull(mission.clearance)
+    }
+
     @Test
     fun simultaneousMissionAndSubtitleAreSplitByGapOrSize() {
         // Aynı anda belirdiler: aradaki boşluk satır yüksekliğinin 0,6'sından büyük → ayrı blok; konuşan adlı blok altyazı.

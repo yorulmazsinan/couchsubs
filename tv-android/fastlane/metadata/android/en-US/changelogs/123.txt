@@ -1,0 +1,1 @@
+0.9.120: The subtitle box no longer covers the game's objective line; when the objective is below the subtitle, the translation moves above it.

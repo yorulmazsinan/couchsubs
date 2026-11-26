@@ -542,6 +542,8 @@ public final class SubtitleServer: @unchecked Sendable {
         if let box { json["box"] = Self.json(box) }
         if paragraphs { json["paragraphs"] = true }
         if replaces { json["replace"] = true }
+        // Ekrandaki görev satırının yeri: TV/OBS altyazı kutusunu onun üstüne taşır (eski TV yok sayar).
+        if !paragraphs, let keep = objectiveLock.withLock({ objective }) { json["keep"] = Self.json(keep) }
         if speakerColors {
             let speakers = SpeakerColors.speakers(in: text, book: speakerBook)
             if !speakers.isEmpty { json["speakerNames"] = speakers.map { ["name": $0.name, "color": $0.color] } }
@@ -646,6 +648,22 @@ public final class SubtitleServer: @unchecked Sendable {
     public func clear() {
         broadcast(event: "clear", json: [:])
         onEvent?(.clear)
+    }
+
+    private let objectiveLock = NSLock()
+    private var objective: TextBox?
+
+    /// Ekrandaki görev satırının karedeki yeri (yoksa nil; `MissionLine.clearance`). Değişince `objective` olayı gider ve
+    /// sonraki her altyazı `keep` alanında taşır (sonradan bağlanan TV de alır). TV ve OBS sayfası altyazıyı (örtüsüyle)
+    /// görev satırının üstüne taşır; eski TV uygulamaları yok sayar. Windows ve Android aynı olayı gönderir.
+    public func sendObjective(_ box: TextBox?) {
+        let changed = objectiveLock.withLock { () -> Bool in
+            guard objective != box else { return false }
+            objective = box
+            return true
+        }
+        guard changed else { return }
+        broadcast(event: "objective", json: box.map { ["box": Self.json($0)] } ?? [:])
     }
 
     /// TV uygulamasını kapatır; çeviri durduğunda TV kendi girişine (HDMI) döner (#268, Windows ile aynı). Yalnız
@@ -1218,7 +1236,7 @@ public final class SubtitleServer: @unchecked Sendable {
     }
 
     static let subtitleEvents: Set<String> = ["subtitle", "clear", "screen", "screen-clear", "style", "region", "region-clear",
-                                              "anchor"]
+                                              "anchor", "objective"]
 
     /// Gönderim hatası alan bağlantı kopmuş sayılır ve listeden çıkarılır. `includingTVs` false ise yalnız izleyiciler
     /// (OBS) alır.

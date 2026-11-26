@@ -132,9 +132,10 @@ public final class ScreenTextDetector: @unchecked Sendable {
     }
 
     /// Kareyi örnekler ve alanları günceller. `excluded`: altyazı alanı ve kullanıcının etkin ek alanları (merkezi
-    /// bunların içinde kalan karo aday olmaz). Alan listesi değiştiyse true.
+    /// bunların içinde kalan karo aday olmaz). `blocked`: menüde de dışlanan yerler (açık oyun telefonu, bkz.
+    /// `outsidePhone`). Alan listesi değiştiyse true.
     @discardableResult
-    public func sample(_ frame: CGImage, now: Int, excluded: [CropRegion]) -> Bool {
+    public func sample(_ frame: CGImage, now: Int, excluded: [CropRegion], blocked: [CropRegion] = []) -> Bool {
         guard due(now) else { return false }
         // Nokta örnekleri: kare, her karoya 24x24 piksel düşecek boya (768x432) ara değerlemesiz küçültülür.
         guard let pixels = GamePhonePixels(frame, width: Self.columns * Self.samples, height: Self.rows * Self.samples)
@@ -180,6 +181,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
                     candidate[index] = textLike && now - tile.stableSince >= Self.stableMs && !tile.isRejected
                         // Menü durumunda altyazı alanı dışlanmaz (menü satırları orada da olabilir).
                         && (menu || !Self.excluded(column, row, excluded))
+                        && !Self.excluded(column, row, blocked)
                 }
             }
             let all = Self.components(candidate)
@@ -307,6 +309,30 @@ public final class ScreenTextDetector: @unchecked Sendable {
     static let outlineMin = 24
     static func outlined(bright: Int, dark: Int) -> Bool {
         (outlineMin...288).contains(bright) && (outlineMin...288).contains(dark)
+    }
+
+    /// Açık telefonun çevresinde bırakılan pay (karenin oranı).
+    public static let phoneMargin = 0.02
+
+    /// Oyun telefonu görünürken ekran yazısı telefonun dışında aranır: telefona değen alan (pay dahil) atılır, telefonun
+    /// dışındakiler (tuş çubuğu "SCROLL / SEND / EXIT", "DRINK / PUT DOWN") kalır. Kullanıcı bildirimi (X, beta.104, üç
+    /// kullanıcı): telefon açıkken tuş ipuçları hiç çevrilmiyordu; telefon tanınmadığında çevriliyordu. Eskiden telefon
+    /// görünür görünmez dedektör bütünüyle kapanıyordu (#1332: telefonun yazısı ekran yazısı kutusuna gitmesin); o kural
+    /// telefonun kendisi için korunur. Windows (ScreenTextDetector.OutsidePhone) ve Android (ScreenTextDetector.outsidePhone)
+    /// aynı kuralı uygular.
+    public static func outsidePhone(_ areas: [ExtraArea], phone: CropRegion?) -> [ExtraArea] {
+        guard let phone else { return areas }
+        let padded = paddedPhone(phone)
+        return areas.filter {
+            $0.region.right <= padded.left || $0.region.left >= padded.right
+                || $0.region.bottom <= padded.top || $0.region.top >= padded.bottom
+        }
+    }
+
+    /// Telefonun payla genişletilmiş yeri (dedektöre `blocked` olarak da verilir).
+    public static func paddedPhone(_ phone: CropRegion) -> CropRegion {
+        CropRegion(top: max(0, phone.top - phoneMargin), bottom: min(1, phone.bottom + phoneMargin),
+                   left: max(0, phone.left - phoneMargin), right: min(1, phone.right + phoneMargin))
     }
 
     private static func excluded(_ column: Int, _ row: Int, _ regions: [CropRegion]) -> Bool {

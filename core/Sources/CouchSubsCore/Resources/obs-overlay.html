@@ -814,8 +814,39 @@
     var base = el.dataset.baseTransform !== undefined ? el.dataset.baseTransform : (el.dataset.baseTransform = el.style.transform || '');
     el.style.transform = dy ? (base + ' translateY(' + Math.round(dy) + 'px)').trim() : base;
   }
-  function avoidPhone() {
+  // Altyazı görev satırını örtmez (TV uygulaması 0.9.120 ile aynı): bilgisayar görev satırının karedeki yerini gönderir
+  // ("objective" olayı; altyazıda "keep"). Satır (örtüyle birlikte) görev satırının ve yerindeki görev çevirisinin üstüne
+  // kayar; "Altında"da İngilizce satırın üstüne geçer. Görev satırı altyazının yerinin ortasından yukarıdaysa kayma olmaz.
+  var objectiveBox = null, objectiveShift = 0;
+
+  function clearObjective() {
+    objectiveShift = 0;
     wrap.style.transform = '';
+    if (!objectiveBox || !line.classList.contains('on')) return;
+    if (lastBox && objectiveBox.top < (lastBox.top + lastBox.bottom) / 2) return;
+    var sub = line.getBoundingClientRect();
+    if (!(sub.width > 0) || !(sub.height > 0)) return;
+    var w = window.innerWidth || 1920, h = window.innerHeight || 1080;
+    var top = objectiveBox.top * h, row = (objectiveBox.bottom - objectiveBox.top) * h;
+    var mission = regions['auto-mission'];
+    if (mission) {
+      Array.prototype.forEach.call(mission.children.length ? mission.children : [mission], function (el) {
+        var r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0 && r.bottom > top && r.top >= top - 2 * row) top = Math.min(top, r.top);
+      });
+    }
+    var limit = top - Math.max(4, Math.round(h * 0.006));
+    if (sub.bottom <= limit || sub.right <= objectiveBox.left * w || sub.left >= objectiveBox.right * w) return;
+    var dy = limit - sub.bottom;
+    if (shownMode === 'below' && lastBox) dy = Math.min(dy, lastBox.top * h - h * 0.024 - sub.bottom);
+    if (sub.top + dy < 0) dy = -sub.top;
+    if (dy >= 0) return;
+    objectiveShift = Math.round(dy);
+    wrap.style.transform = 'translate(0px, ' + objectiveShift + 'px)';
+  }
+
+  function avoidPhone() {
+    wrap.style.transform = objectiveShift ? 'translate(0px, ' + objectiveShift + 'px)' : '';
     var phone = regions['game-phone'];
     if (!phone || !line.classList.contains('on')) return;
     var rect = null;
@@ -838,13 +869,14 @@
     } else if (sub.bottom + rect.bottom + gap - sub.top <= h) {
       dy = rect.bottom + gap - sub.top;
     }
-    if (dx || dy) wrap.style.transform = 'translate(' + Math.round(dx) + 'px, ' + Math.round(dy) + 'px)';
+    if (dx || dy) wrap.style.transform = 'translate(' + Math.round(dx) + 'px, ' + Math.round(dy + objectiveShift) + 'px)';
   }
 
   function avoidRegions() {
-    avoidPhone();
     var parts = Array.prototype.slice.call(regionsBox.querySelectorAll('.region:not(#phone-region), .phone.auto'));
     parts.forEach(function (el) { shiftBox(el, 0); });
+    clearObjective();
+    avoidPhone();
     if (!line.classList.contains('on') || !parts.length) return;
     var sub = line.getBoundingClientRect();
     if (!(sub.height > 0)) return;
@@ -1078,7 +1110,14 @@
   events.onerror = function () { if (!everOpen) showHint(TEXTS.offline, 12); };
   events.addEventListener('style', function (e) { try { apply(JSON.parse(e.data)); } catch (err) {} });
   events.addEventListener('subtitle', function (e) {
-    try { var d = JSON.parse(e.data); show(d.text, d.duration, d.box, d.speakerNames || d.speakers); } catch (err) {}
+    try {
+      var d = JSON.parse(e.data);
+      if (d.paragraphs !== true) objectiveBox = validBox(d.keep);
+      show(d.text, d.duration, d.box, d.speakerNames || d.speakers);
+    } catch (err) {}
+  });
+  events.addEventListener('objective', function (e) {
+    try { objectiveBox = validBox(JSON.parse(e.data).box); avoidRegions(); } catch (err) {}
   });
   events.addEventListener('clear', hide);
   // Sürekli okunan ek alanlar (Ayarlar > Altyazı alanı > Alan 1-3 > "Sürekli oku").

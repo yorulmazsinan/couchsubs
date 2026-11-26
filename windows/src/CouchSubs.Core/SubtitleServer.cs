@@ -126,6 +126,9 @@ public interface ISubtitleSender
     /// <param name="replaces">Satır az önce gösterilenin uzamış ya da düzelmiş okumasıdır (<see cref="TextMatch.IsRevision"/>); TV onu öncekinin üstüne yığmaz.</param>
     void SendSubtitle(string text, int durationMs = 15000, TextBox? box = null, bool paragraphs = false, bool replaces = false);
     void Clear();
+
+    /// <summary>Ekrandaki görev satırının karedeki yeri (yoksa null): altyazı kutusu onu örtmez, üstüne kayar (<see cref="MissionLine.Clearance"/>).</summary>
+    void SendObjective(TextBox? box) { }
 }
 
 /// <summary>
@@ -446,6 +449,10 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         if (paragraphs) json["paragraphs"] = true;
         if (replaces) json["replace"] = true;
         if (box is { } b) json["box"] = BoxJson(b);
+        // Ekrandaki görev satırının yeri: TV/OBS altyazı kutusunu onun üstüne taşır (eski TV yok sayar).
+        TextBox? keep;
+        lock (gate) keep = objective;
+        if (!paragraphs && keep is { } k) json["keep"] = BoxJson(k);
         if (SpeakerColors && Core.SpeakerColors.Speakers(text) is { Count: > 0 } speakers)
             json["speakerNames"] = speakers.Select(name => new SortedDictionary<string, object> { ["name"] = name, ["color"] = SpeakerBook.Color(name)! }).ToList();
         lock (gate)
@@ -462,6 +469,25 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// çevirirken OverflowException ile çöküyordu (Mac/iPhone ve Android ile aynı).
     internal static decimal Round(double value) =>
         Math.Round((decimal)Math.Clamp(double.IsNaN(value) ? 0 : value, 0, 1), 4) / 1.000000000000000000000000000000000m;
+
+    private TextBox? objective;
+
+    /// <summary>
+    /// Ekrandaki görev satırının karedeki yeri (yoksa null; <see cref="MissionLine.Clearance"/>). Değişince <c>objective</c>
+    /// olayı gider ve sonraki her altyazı <c>keep</c> alanında taşır (sonradan bağlanan TV de alır). TV ve OBS sayfası
+    /// altyazıyı (örtüsüyle) görev satırının üstüne taşır; eski TV uygulamaları yok sayar. Mac/iPhone ve Android aynı.
+    /// </summary>
+    public void SendObjective(TextBox? box)
+    {
+        lock (gate)
+        {
+            if (objective == box) return;
+            objective = box;
+        }
+        var json = new SortedDictionary<string, object>();
+        if (box is { } b) json["box"] = BoxJson(b);
+        Broadcast(Frame("objective", json), subtitle: true);
+    }
 
     public void Clear()
     {

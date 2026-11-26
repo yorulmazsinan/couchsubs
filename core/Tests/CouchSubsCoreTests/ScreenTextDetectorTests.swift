@@ -283,4 +283,21 @@ final class ScreenTextDetectorTests: XCTestCase {
         XCTAssertFalse(ScreenTextDetector.outlined(bright: 0, dark: 576), "düz koyu zemin")
         XCTAssertFalse(ScreenTextDetector.outlined(bright: 400, dark: 100), "açık sahne")
     }
+
+    /// X, beta.104 (üç kullanıcı): telefon açıkken sağ alttaki tuş çubuğu ("SCROLL / SEND / EXIT") çevrilmiyordu.
+    /// Telefona değen alan atılır, telefonun dışındaki tuş çubuğu kalır (Windows ScreenTextDetectorTests, Android aynı).
+    func testPhoneOpenKeepsPromptsOutsideThePhone() {
+        let phone = CropRegion(top: 0.25, bottom: 0.85, left: 0.55, right: 0.75)
+        let onPhone = ExtraArea(id: "auto-1", name: "Auto", region: CropRegion(top: 0.4, bottom: 0.5, left: 0.58, right: 0.72), auto: true)
+        let edge = ExtraArea(id: "auto-2", name: "Auto", region: CropRegion(top: 0.86, bottom: 0.9, left: 0.6, right: 0.7), auto: true)
+        let prompts = ExtraArea(id: "auto-3", name: "Auto", region: CropRegion(top: 0.9, bottom: 0.96, left: 0.8, right: 0.97), auto: true)
+        let drink = ExtraArea(id: "auto-4", name: "Auto", region: CropRegion(top: 0.6, bottom: 0.75, left: 0.86, right: 0.97), auto: true)
+        let areas = [onPhone, edge, prompts, drink]
+        XCTAssertEqual(ScreenTextDetector.outsidePhone(areas, phone: phone).map(\.id), ["auto-3", "auto-4"])
+        XCTAssertEqual(ScreenTextDetector.outsidePhone(areas, phone: nil).map(\.id), areas.map(\.id))
+        let padded = ScreenTextDetector.paddedPhone(CropRegion(top: 0.01, bottom: 0.99, left: 0.5, right: 0.7))
+        XCTAssertEqual(padded.top, 0)
+        XCTAssertEqual(padded.bottom, 1)
+        XCTAssertEqual(padded.left, 0.48, accuracy: 1e-9)
+    }
 }

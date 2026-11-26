@@ -68,6 +68,9 @@ public final class MenuHeldSender: SubtitleSending, @unchecked Sendable {
 
     public func clear() { inner.clear() }
 
+    /// Görev satırının yeri menüde de bekletilmez.
+    public func sendObjective(_ box: TextBox?) { inner.sendObjective(box) }
+
     /// Altyazı alanında menünün geçmiş listesi okundu (`SubtitlePipeline.onList`): menü sırasında bekletilen satırlar
     /// listenin satırlarıdır (kaydırırken tek satır okunabiliyor), menü kapanınca altyazı olarak gönderilmez.
     public func forget() {

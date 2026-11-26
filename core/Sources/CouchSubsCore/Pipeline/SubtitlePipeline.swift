@@ -9,6 +9,12 @@ public protocol SubtitleSending: AnyObject {
     /// `replaces`: satır az önce gösterilenin uzamış ya da düzelmiş okumasıdır; TV onu öncekinin üstüne yığmaz.
     func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool)
     func clear()
+    /// Ekrandaki görev satırının karedeki yeri (yoksa nil): altyazı kutusu onu örtmez, üstüne kayar (`MissionLine.clearance`).
+    func sendObjective(_ box: TextBox?)
+}
+
+extension SubtitleSending {
+    public func sendObjective(_ box: TextBox?) {}
 }
 
 extension SubtitleServer: SubtitleSending {}
@@ -136,6 +142,8 @@ public final class SubtitlePipeline {
     /// bloğun bozuk okunmuş parçası çevrilmez, aynı satır değişmeyen ekranda yeniden işlenmez.
     private var settled = SettledText()
     private var mission = MissionLine()
+    /// TV'ye son bildirilen görev satırı yeri (`MissionLine.clearance`).
+    private var sentClearance: TextBox?
     /// Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (`DropLog`).
     private let drops: DropLog
     /// Altyazı sayılmayan satırların neden başına sayacı (`RejectTally`; beta.103 kaçan altyazı).
@@ -405,6 +413,15 @@ public final class SubtitlePipeline {
         if mission.observe(stickyRows.removed, area: place, at: now()) {
             log(mission.region == nil ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor")
             onMissionChanged?(mission.region)
+        }
+        if mission.clearance != sentClearance {
+            if (mission.clearance == nil) != (sentClearance == nil) {
+                log(mission.clearance.map { "görev satırının yeri " + String(format: "y %.2f-%.2f", $0.top, $0.bottom)
+                    + ": altyazı kutusu onu örtmez, üstüne kayar" }
+                    ?? "görev satırının yeri kalktı: altyazı kutusu yerine döner")
+            }
+            sentClearance = mission.clearance
+            server.sendObjective(mission.clearance)
         }
         for line in mission.dropped {
             drops.note("MissionLine", "\(MissionLine.settleMs / 1000) sn dolmadan kalktı, görev sayılmadı, çevrilmedi", line, log: onLog)
@@ -1145,6 +1162,10 @@ public final class SubtitlePipeline {
         rejects.reset()
         settled.reset()
         mission.reset()
+        if sentClearance != nil {
+            sentClearance = nil
+            server.sendObjective(nil)
+        }
         notices.reset()
         echo?.reset()
         loggedOwn = nil

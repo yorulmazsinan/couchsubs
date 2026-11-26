@@ -57,6 +57,50 @@ public class MissionLineTests
         Assert.Null(regions.Last());
     }
 
+    /// <summary>
+    /// X, beta.100–104 (GTA 6): altyazı kutusu alttaki görev satırını örtüyordu. Görev satırının yeri, görev sayılmasını
+    /// beklemeden TV'ye bildirilir; konuşma değişse de yeniden gönderilmez, görev kalkınca null gider (Mac/iPhone aynı).
+    /// </summary>
+    [Fact]
+    public async Task ObjectiveBelowDialogueIsSentAsClearanceOnce()
+    {
+        var frames = ObjectiveWithDialogueTests.Frames(true, 0.1, 4);
+        frames.AddRange(Enumerable.Repeat(Reading.Empty, 6));
+        long clock = 0;
+        var sender = new FakeSender();
+        var pipeline = new SubtitlePipeline(new SequenceReader(frames), new FakeTranslator(), sender, clock: () => clock)
+        { PackWait = 0, CleanWait = 0 };
+        foreach (var _ in frames)
+        {
+            await pipeline.ProcessAsync(Frame.Blank(64, 64), new CropRegion(0, 1, 0, 1));
+            await pipeline.WaitForTranslationsAsync();
+            clock += 500;
+        }
+        Assert.Equal(2, sender.Objectives.Count);
+        var first = Assert.IsType<TextBox>(sender.Objectives[0]);
+        Assert.Equal(0.8, first.Top, 3);
+        Assert.Equal(0.88, first.Bottom, 3);
+        Assert.Null(sender.Objectives[1]);
+    }
+
+    [Fact]
+    public void ClearanceIgnoresSmallJitterAndFollowsRealMoves()
+    {
+        var mission = new MissionLine();
+        var area = new TextBox(0, 0, 1, 1);
+        void See(double top, long time) =>
+            mission.Observe([new TextLine("Get in the speedboat", new TextBox(0.45, top, 0.62, top + 0.03))], area, time);
+        See(0.94, 0);
+        var first = mission.Clearance;
+        Assert.NotNull(first);
+        See(0.945, 500);
+        Assert.Equal(first, mission.Clearance);
+        See(0.80, 1000);
+        Assert.Equal(0.80, mission.Clearance!.Value.Top, 4);
+        mission.Observe([], area, 3000);
+        Assert.Null(mission.Clearance);
+    }
+
     [Fact]
     public void SpokenLinesAreNeverAMission()
     {

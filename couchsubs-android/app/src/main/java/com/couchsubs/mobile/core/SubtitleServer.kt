@@ -83,6 +83,9 @@ interface SubtitleSender {
      */
     fun sendSubtitle(text: String, durationMs: Int = 15000, box: TextBox? = null, replaces: Boolean = false)
     fun clear()
+
+    /** Ekrandaki görev satırının karedeki yeri (yoksa null): altyazı kutusu onu örtmez, üstüne kayar ([MissionLine.clearance]). */
+    fun sendObjective(box: TextBox?) {}
 }
 
 /** Sunucudan geçen ve telefon ekranındaki altyazı görünümünün de gösterdiği olay. */
@@ -233,9 +236,11 @@ class SubtitleServer(
          */
         fun subtitleFrame(
             text: String, durationMs: Int, box: TextBox?, at: Long, paragraphs: Boolean = false, replaces: Boolean = false,
-            speakerColors: Boolean = false,
+            speakerColors: Boolean = false, keep: TextBox? = null,
         ): String {
             val json = mutableMapOf<String, Any?>("at" to at, "duration" to durationMs, "text" to text)
+            // Ekrandaki görev satırının yeri: TV/OBS altyazı kutusunu onun üstüne taşır (eski TV yok sayar).
+            if (keep != null && !paragraphs) json["keep"] = boxJson(keep)
             if (paragraphs) json["paragraphs"] = true
             if (replaces) json["replace"] = true
             // Konuşan adı yoksa ya da ayar kapalıysa alan hiç yazılmaz; eski TV uygulamaları alanı yok sayar.
@@ -575,8 +580,24 @@ class SubtitleServer(
             legacyHoldGeneration++
             legacyHoldUntil = System.currentTimeMillis() + legacyClearHoldMs(text.length)
         }
-        broadcast(subtitleFrame(text, durationMs, box, clock(), replaces = replaces, speakerColors = speakerColors), subtitle = true)
+        val keep = synchronized(lock) { objective }
+        broadcast(subtitleFrame(text, durationMs, box, clock(), replaces = replaces, speakerColors = speakerColors, keep = keep), subtitle = true)
         onEvent?.invoke(SubtitleEvent.Subtitle(text, durationMs, replaces, box))
+    }
+
+    private var objective: TextBox? = null
+
+    /**
+     * Ekrandaki görev satırının karedeki yeri (yoksa null; [MissionLine.clearance]). Değişince `objective` olayı gider ve
+     * sonraki her altyazı `keep` alanında taşır (sonradan bağlanan TV de alır). TV ve OBS sayfası altyazıyı (örtüsüyle)
+     * görev satırının üstüne taşır; eski TV uygulamaları yok sayar. Mac/iPhone ve Windows aynı.
+     */
+    override fun sendObjective(box: TextBox?) {
+        synchronized(lock) {
+            if (objective == box) return
+            objective = box
+        }
+        broadcast(frame("objective", if (box != null) mapOf("box" to boxJson(box)) else emptyMap()), subtitle = true)
     }
 
     override fun clear() {

@@ -40,6 +40,14 @@ public sealed class MissionLine
     public CropRegion? Region { get; private set; }
 
     /// <summary>
+    /// Ekranda duran görev satırlarının karedeki yeri (<see cref="SettleMs"/> dolmadan da): TV ve OBS sayfası altyazı
+    /// kutusunu bunun üstüne taşır, kutu oyundaki görev satırını örtmez. Kullanıcı bildirimi (X, beta.100–104, GTA 6):
+    /// "Örtsün"de iki satırlık Türkçe İngilizce satırın ortasına göre büyüyor, alttaki görev satırının ("Get in the
+    /// speedboat") üst yarısını kapatıyordu. Okuma kutusunun küçük oynaması değer değiştirmez. Mac/iPhone ve Android aynı.
+    /// </summary>
+    public TextBox? Clearance { get; private set; }
+
+    /// <summary>
     /// Son <see cref="Observe"/>'da <see cref="SettleMs"/> dolmadan ekrandan kalkan (görev sayılmayan) satırlar, özgün
     /// metinleriyle; altyazı günlüğü için. Mac/iPhone ve Android aynıdır.
     /// </summary>
@@ -65,6 +73,8 @@ public sealed class MissionLine
         var gone = tracks.Where(item => time - item.LastSeen > ForgetMs).ToList();
         Dropped = [.. gone.Where(item => item.LastSeen - item.Since < SettleMs).Select(item => item.Source)];
         tracks.RemoveAll(gone.Contains);
+        TextBox? shown = tracks.Count == 0 ? null : tracks.Select(item => item.Box).Aggregate((a, b) => a.Union(b));
+        if (shown is not { } visible || Clearance is not { } kept || !Near(visible, kept)) Clearance = shown;
         var settled = tracks.Where(item => time - item.Since >= SettleMs).ToList();
         CropRegion? next = null;
         if (settled.Count > 0)
@@ -93,7 +103,16 @@ public sealed class MissionLine
     {
         tracks.Clear();
         Region = null;
+        Clearance = null;
         Dropped = [];
+    }
+
+    /// <summary>İki kutu satır boyunun çeyreğinden az oynamış mı.</summary>
+    internal static bool Near(TextBox a, TextBox b)
+    {
+        var tolerance = 0.25 * Math.Min(a.Bottom - a.Top, b.Bottom - b.Top);
+        return Math.Abs(a.Top - b.Top) <= tolerance && Math.Abs(a.Bottom - b.Bottom) <= tolerance
+            && Math.Abs(a.Left - b.Left) <= tolerance * 2 && Math.Abs(a.Right - b.Right) <= tolerance * 2;
     }
 
     private static bool Within(CropRegion a, CropRegion b, double tolerance) =>

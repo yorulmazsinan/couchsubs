@@ -3826,6 +3826,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// (<see cref="phoneArea"/>; Mac/iPhone ve Android ile aynı).
     /// </summary>
     private bool phoneSeen;
+    /// <summary>Görünen telefonun karedeki yeri (<see cref="phoneSeen"/> iken).</summary>
+    private CropRegion? phoneBounds;
     private CancellationTokenSource? phoneLifetime;
     private bool watcherRequested;
     /// <summary>Ekran yazılarını kendiliğinden bulan (ayar açık ve çeviri sürerken var) ve bulduğu geçici alanlar.</summary>
@@ -3904,7 +3906,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         var request = false;
         lock (regionGate)
         {
-            missionArea = region is null || !settings.AutoScreenText ? null
+            // Görev satırı altyazı alanının içindedir: "Ekran yazılarını otomatik çevir" kapalıyken de kendi kutusunda çevrilir
+            // (yalnız açıkken "Görev ve hedef yazısı" türüne bakılır). Kullanıcı bildirimi (X, beta.100–104): görev satırı
+            // altyazıdan ayrılıyor ama ayar kapalı olduğu için hiç çevrilmiyordu (Mac/iPhone ve Android ile aynı).
+            missionArea = region is null || !settings.ScreenTextAllows(ScreenTextKind.Mission) ? null
                 : new WatchedArea(MissionLine.AreaId, "Mission", region) { Auto = true };
             ComposeWatchedAreas();
             if (missionArea is not null && regionWatcher is null && !watcherRequested) request = watcherRequested = true;
@@ -3917,8 +3922,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     {
         presetAreas = presetRunning ? settings.PresetAreas(gameSense.Current?.Name, phoneArea is not null) : [];
         // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz. Telefon görünüyorsa
-        // (phoneSeen; telefon çevirisi kapalıyken de) otomatik ekran yazısı ve kenar bildirimi telefona çizilmez.
-        watchedAreas = [.. savedWatchedAreas, .. presetAreas, .. phoneSeen ? [] : autoAreas,
+        // (phoneSeen; telefon çevirisi kapalıyken de) otomatik ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun
+        // dışındaki ekran yazısı (tuş çubuğu) yine çevrilir (ScreenTextDetector.OutsidePhone).
+        watchedAreas = [.. savedWatchedAreas, .. presetAreas, .. ScreenTextDetector.OutsidePhone(autoAreas, phoneSeen ? phoneBounds : null),
                         .. missionArea is null ? [] : new[] { missionArea }, .. phoneSeen || phoneArea is not null ? [] : noticeAreas,
                         .. phoneArea is null ? [] : new[] { phoneArea }];
     }
@@ -3946,6 +3952,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 ClosePhone();
                 phoneTracker = null;
                 phoneSeen = false;
+                phoneBounds = null;
             }
             // Altyazı hattı telefonu yalnız GTA 6'da arar: başka oyunda ya da karanlık sahnede yanlış bulunan telefon alt
             // şeritteki altyazıyı silmesin. Telefon ayarı kapalıyken de arar (#1282): telefonun mesaj listesi altyazı olarak
@@ -3960,9 +3967,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 screenText = null;
                 autoAreas = [];
             }
-            // Otomatik ekran yazısı kapandı (ya da çeviri durdu): görev satırının ayrı kutusu da kalkar; görev yine
-            // altyazıya girmez ama altyazı alanı dışında hiçbir yazı çevrilmez.
-            if (!running || !settings.AutoScreenText) missionArea = null;
+            // Çeviri durdu ya da "Görev ve hedef yazısı" kapandı: görev satırının ayrı kutusu da kalkar; görev yine
+            // altyazıya girmez.
+            if (!running || !settings.ScreenTextAllows(ScreenTextKind.Mission)) missionArea = null;
             if (!running) noticeAreas = [];
             savedWatchedAreas = running ? settings.WatchedAreas() : [];
             presetRunning = running;
@@ -4027,6 +4034,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             ClosePhone();
             phoneTracker?.Reset();
             phoneSeen = false;
+            phoneBounds = null;
             screenText?.Reset();
             autoAreas = [];
             missionArea = null;
@@ -4052,15 +4060,13 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 Volatile.Read(ref regionWatcher)?.Timing.Add(RegionWatcher.StageTrack, System.Diagnostics.Stopwatch.GetElapsedTime(tracking));
                 // Telefon görünüyorsa ekran yazısı ve kenar bildirimi telefona çizilmez; telefonun okunması ayarla.
                 var seen = region is not null;
-                if (seen != phoneSeen)
+                if (seen != phoneSeen || region != phoneBounds)
                 {
+                    if (seen != phoneSeen)
+                        SubtitleLog.Write(seen ? "telefon açık: ekran yazısı telefonun dışında aranıyor"
+                                               : "telefon kapandı: ekran yazısı bütün ekranda aranıyor");
                     phoneSeen = seen;
-                    if (seen)
-                    {
-                        // Telefon açıldı: dedektör yeniden başlar (Mac'te telefon açıkken dedektör kalkar), bulduğu alanlar düşer.
-                        screenText?.Reset();
-                        autoAreas = [];
-                    }
+                    phoneBounds = region;
                     ComposeWatchedAreas();
                 }
                 if (region is null || !settings.ReadsGamePhone)
@@ -4079,12 +4085,14 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                     requestWatcher = watcherRequested = true;
             }
             regionWatcher?.Offer(frame, watchedAreas);
-            if (!phoneSeen && screenText is { } detector && detector.Due(arrived) && Interlocked.CompareExchange(ref screenTextBusy, 1, 0) == 0)
+            if (screenText is { } detector && detector.Due(arrived) && Interlocked.CompareExchange(ref screenTextBusy, 1, 0) == 0)
             {
-                // Karo örneği kare iş parçacığını tutmaz: arka planda, tek uçuşta (sürerken gelen kare atlanır).
+                // Karo örneği kare iş parçacığını tutmaz: arka planda, tek uçuşta (sürerken gelen kare atlanır). Görünen
+                // telefon dışlanır: telefonun yazısı ekran yazısı olmaz, dışındaki tuş çubuğu olur.
                 IReadOnlyList<CropRegion> excluded = [.. savedWatchedAreas.Select(item => item.Region),
                                                       .. presetAreas.Select(item => item.Region),
-                                                      .. phoneArea is null ? [] : new[] { phoneArea.Region }];
+                                                      .. phoneArea is null ? [] : new[] { phoneArea.Region },
+                                                      .. phoneSeen && phoneBounds is { } bounds ? new[] { ScreenTextDetector.PaddedPhone(bounds) } : []];
                 var subtitle = settings.Region;
                 _ = Task.Run(() => SampleScreenText(detector, frame, arrived, excluded, subtitle));
             }

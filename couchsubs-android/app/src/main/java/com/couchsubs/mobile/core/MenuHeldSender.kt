@@ -60,6 +60,9 @@ class MenuHeldSender(
 
     override fun clear() = inner.clear()
 
+    /** Görev satırının yeri menüde de bekletilmez. */
+    override fun sendObjective(box: TextBox?) = inner.sendObjective(box)
+
     /**
      * Altyazı alanında menünün geçmiş listesi okundu ([SubtitlePipeline.onList]): menü sırasında bekletilen satırlar
      * listenin satırlarıdır (kaydırırken tek satır okunabiliyor), menü kapanınca altyazı olarak gönderilmez.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+using System.Globalization;
 using CouchSubs.Core.Dubbing;
 
 namespace CouchSubs.Core;
@@ -222,6 +223,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public event Action<CropRegion?>? MissionChanged;
 
     private readonly MissionLine mission = new();
+    /// <summary>TV'ye son bildirilen görev satırı yeri (<see cref="MissionLine.Clearance"/>).</summary>
+    private TextBox? sentClearance;
     /// <summary>Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (<see cref="DropLog"/>).</summary>
     private readonly DropLog drops = new(clock ?? DefaultClock);
     /// <summary>
@@ -515,6 +518,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         if (listed) ListRead?.Invoke();
         bool missionMoved;
         CropRegion? missionRegion;
+        TextBox? clearance;
+        bool clearanceChanged;
         lock (gate)
         {
             rows = stickyRows.Filter(rows, now());
@@ -529,9 +534,18 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             foreach (var line in packaged.Removed) LogSceneText(line.Text, PackageText.Reason);
             missionMoved = mission.Observe(stickyRows.Removed, area, now());
             missionRegion = mission.Region;
+            clearance = mission.Clearance;
+            clearanceChanged = clearance != sentClearance;
+            if (clearanceChanged && (clearance is null) != (sentClearance is null))
+                Write(clearance is { } keep
+                    ? $"görev satırının yeri y {keep.Top.ToString("0.00", CultureInfo.InvariantCulture)}-{keep.Bottom.ToString("0.00", CultureInfo.InvariantCulture)}: altyazı kutusu onu örtmez, üstüne kayar"
+                    : "görev satırının yeri kalktı: altyazı kutusu yerine döner");
+            sentClearance = clearance;
             foreach (var dropped in mission.Dropped)
                 drops.Note("MissionLine", $"{MissionLine.SettleMs / 1000} sn dolmadan kalktı, görev sayılmadı, çevrilmedi", dropped, Log);
         }
+        // Görev satırının yeri TV'ye: altyazı kutusu onu örtmez (SubtitleServer.SendObjective; Mac/iPhone ve Android aynı).
+        if (clearanceChanged) sender.SendObjective(clearance);
         if (missionMoved)
         {
             Write(missionRegion is null ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor");
@@ -1455,6 +1469,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             settled.Reset();
             loggedStale = "";
             mission.Reset();
+            if (sentClearance is not null)
+            {
+                sentClearance = null;
+                sender.SendObjective(null);
+            }
             notices.Reset();
             Echo?.Reset();
             loggedOwn = null;

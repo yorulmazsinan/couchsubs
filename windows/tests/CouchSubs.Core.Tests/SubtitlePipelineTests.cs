@@ -89,6 +89,8 @@ internal sealed class FakeSender : ISubtitleSender
         lock (Sent) { Sent.Add(text); Durations.Add(durationMs); Boxes.Add(box); Replaces.Add(replaces); }
     }
     public void Clear() => Clears++;
+    public List<TextBox?> Objectives { get; } = [];
+    public void SendObjective(TextBox? box) => Objectives.Add(box);
 }
 
 public class SubtitlePipelineTests

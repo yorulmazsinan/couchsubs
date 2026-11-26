@@ -491,6 +491,8 @@ class TranslationService : Service() {
      * kutusu ve kenar bildirimi çizilmez (Sinan Bey, beta.100 3420–3425). [phoneOpen] telefonun okunmasıdır (ayara bağlı).
      */
     @Volatile private var phoneSeen = false
+    /** Görünen telefonun karedeki yeri ([phoneSeen] iken): ekran yazısı telefonun dışında aranır. */
+    @Volatile private var phoneBounds: CropRegion? = null
 
     /**
      * Ekranda beliren yazı kutularını bulan ("Ekran yazılarını otomatik çevir"); bulduğu geçici alanlar ek alanlarla
@@ -549,6 +551,7 @@ class TranslationService : Service() {
         phoneTracking = true
         val reads = settings.readsGamePhone
         var seen = false
+        var seenBounds: CropRegion? = null
         val capture = try {
             val started = System.nanoTime()
             val sample = phoneTracker.sample(com.couchsubs.mobile.ocr.LivePhoneImage(frame), com.couchsubs.mobile.core.monotonicClock())
@@ -562,11 +565,16 @@ class TranslationService : Service() {
                 return
             }
             seen = sample.pose != null
+            seenBounds = sample.pose?.bounds
             if (reads) sample.pose?.let { com.couchsubs.mobile.ocr.PhoneFrames.copy(frame, it) } else null
         } catch (error: Exception) {
             null
         }
+        if (seen != phoneSeen) {
+            Log.i(TAG, if (seen) "telefon açık: ekran yazısı telefonun dışında aranıyor" else "telefon kapandı: ekran yazısı bütün ekranda aranıyor")
+        }
         phoneSeen = seen
+        phoneBounds = seenBounds
         if (capture != null) watcher.observePhone(capture) else watcher.closePhone()
         setPhoneOpen(capture != null)
     }
@@ -576,6 +584,7 @@ class TranslationService : Service() {
         phoneTracker.reset()
         regionWatcher?.closePhone()
         phoneSeen = false
+        phoneBounds = null
         setPhoneOpen(false)
     }
 
@@ -592,8 +601,9 @@ class TranslationService : Service() {
     private fun offerScreenText(frame: com.couchsubs.mobile.remoteplay.VideoFrame) {
         if (regionWatcher == null) return
         // Oyun telefonu açıkken ekranı telefon oturumu okur; otomatik ekran yazısı aynı yazıyı ikinci kez çevirmesin. Telefon
-        // çevirisi kapalıyken de görünen telefonun ekranına kutu çizilmez ([phoneSeen]).
-        if (fullScreenArea || !settings.autoScreenText || phoneOpen || phoneSeen) {
+        // çevirisi kapalıyken de görünen telefonun ekranına kutu çizilmez ([phoneSeen]): telefonun yeri dışlanır, dışındaki
+        // tuş çubuğu ("SCROLL / SEND / EXIT") yine çevrilir ([com.couchsubs.mobile.core.ScreenTextDetector.outsidePhone]).
+        if (fullScreenArea || !settings.autoScreenText) {
             if (autoAreas.isNotEmpty()) resetScreenText()
             return
         }
@@ -607,7 +617,9 @@ class TranslationService : Service() {
             return
         }
         // Altyazı alanı, kullanıcının ek alanları ve oyunun hazır alanları zaten okunuyor: oradaki yazı ikinci kez önerilmez.
-        val excluded = (extraAreas + presetAreas).map { it.region }
+        val phone = if (phoneSeen) phoneBounds else null
+        val excluded = (extraAreas + presetAreas).map { it.region } +
+            listOfNotNull(phone?.let { com.couchsubs.mobile.core.ScreenTextDetector.paddedPhone(it) })
         val subtitle = region
         try {
             detectorWork.execute {
@@ -880,11 +892,13 @@ class TranslationService : Service() {
                 } else null
             }
             showSpeakerNames = { settings.showSpeakerNames }
-            // Görev satırı altyazıya girmez; otomatik ekran yazısı açıksa "auto-mission" ek alanı olarak kendi yerinde ve
-            // özgün stilinde gösterilir (Windows ve Mac ile aynı). Kapalıysa ayrıca gösterilmez.
+            // Görev satırı altyazıya girmez; "auto-mission" ek alanı olarak kendi yerinde ve özgün stilinde gösterilir. Görev
+            // satırı altyazı alanının içindedir: "Ekran yazılarını otomatik çevir" kapalıyken de çevrilir (yalnız açıkken
+            // "Görev ve hedef yazısı" türüne bakılır). Kullanıcı bildirimi (X, beta.100–104): görev satırı altyazıdan ayrılıyor
+            // ama ayar kapalı olduğu için hiç çevrilmiyordu (Windows ve Mac ile aynı).
             missionAreas = emptyList()
             onMissionChanged = { region ->
-                missionAreas = if (region != null && settings.autoScreenText)
+                missionAreas = if (region != null && settings.screenTextAllows(com.couchsubs.mobile.core.ScreenTextKind.MISSION))
                     listOf(com.couchsubs.mobile.core.ExtraArea(com.couchsubs.mobile.core.MissionLine.AREA_ID, "Mission", region, auto = true))
                 else emptyList()
             }
@@ -1064,7 +1078,8 @@ class TranslationService : Service() {
             // okunacak alan varsa ve turda bir kez kopyalanır; arabelleği turlar arasında yeniden kullanılır (beta.103'te her
             // turda yeni ~4 MB kopya alınıyordu).
             var screenTaken: RegionPixels? = null
-            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, crop = { r ->
+            val screenText = com.couchsubs.mobile.core.ScreenTextDetector.outsidePhone(autoAreas, if (phoneSeen) phoneBounds else null)
+            regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + screenText, crop = { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
                 }

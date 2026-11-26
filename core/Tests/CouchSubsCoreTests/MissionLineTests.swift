@@ -17,8 +17,10 @@ final class MissionLineTests: XCTestCase {
         func readLines(_ image: CGImage, deep: Bool) throws -> Reading { readings.isEmpty ? .empty : readings.removeFirst() }
     }
     private final class Sender: SubtitleSending {
+        var objectives: [TextBox?] = []
         func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool) {}
         func clear() {}
+        func sendObjective(_ box: TextBox?) { objectives.append(box) }
     }
     private final class Translator: TextTranslator {
         var requested: [String] = []
@@ -28,10 +30,10 @@ final class MissionLineTests: XCTestCase {
         }
     }
 
-    private func run(_ frames: [Reading]) async -> (regions: [CropRegion?], requested: [String]) {
+    private func run(_ frames: [Reading], sender: Sender = Sender()) async -> (regions: [CropRegion?], requested: [String]) {
         var time = 0
         let translator = Translator()
-        let pipeline = SubtitlePipeline(reader: Reader(frames), translator: translator, server: Sender(), clock: { time })
+        let pipeline = SubtitlePipeline(reader: Reader(frames), translator: translator, server: sender, clock: { time })
         pipeline.packWait = 0
         pipeline.cleanWait = 0
         var regions: [CropRegion?] = []
@@ -65,6 +67,38 @@ final class MissionLineTests: XCTestCase {
         let (regions, _) = await run(frames)
         XCTAssertNotNil(regions.first ?? nil)
         XCTAssertNil(regions.last ?? CropRegion())
+    }
+
+    /// X, beta.100–104 (GTA 6): altyazı kutusu alttaki görev satırını örtüyordu. Görev satırının yeri, görev sayılmasını
+    /// (`settleMs`) beklemeden TV'ye bildirilir; konuşma değişse de yeniden gönderilmez, görev kalkınca nil gider.
+    func testObjectiveBelowDialogueIsSentAsClearanceOnce() async throws {
+        let sender = Sender()
+        let frames = ObjectiveWithDialogueTests.frames(below: true, gap: 0.1, objectiveFirst: 4) + Array(repeating: .empty, count: 6)
+        let (regions, _) = await run(frames, sender: sender)
+        let first = try XCTUnwrap(sender.objectives.first ?? nil)
+        XCTAssertEqual(first.top, 0.8, accuracy: 0.001)
+        XCTAssertEqual(first.bottom, 0.88, accuracy: 0.001)
+        XCTAssertEqual(sender.objectives.count, 2, "\(sender.objectives)")
+        XCTAssertNil(sender.objectives.last ?? first)
+        XCTAssertNotNil(regions.first ?? nil)
+    }
+
+    func testClearanceIgnoresSmallJitterAndFollowsRealMoves() {
+        var mission = MissionLine()
+        let area = TextBox(left: 0, top: 0, right: 1, bottom: 1)
+        func see(_ top: Double, _ time: Int) {
+            _ = mission.observe([TextLine("Get in the speedboat", box: TextBox(left: 0.45, top: top, right: 0.62, bottom: top + 0.03))],
+                                area: area, at: time)
+        }
+        see(0.94, 0)
+        let first = mission.clearance
+        XCTAssertNotNil(first)
+        see(0.945, 500)
+        XCTAssertEqual(mission.clearance, first)
+        see(0.80, 1000)
+        XCTAssertEqual(mission.clearance?.top ?? 0, 0.80, accuracy: 0.0001)
+        _ = mission.observe([], area: area, at: 3000)
+        XCTAssertNil(mission.clearance)
     }
 
     func testSpokenLinesAreNeverAMission() {

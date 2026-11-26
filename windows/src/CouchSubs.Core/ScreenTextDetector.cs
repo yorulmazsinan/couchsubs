@@ -409,6 +409,29 @@ public sealed class ScreenTextDetector
         return (bright, dark, Math.Sqrt(Math.Max(0, (double)squares / Points - mean * mean)), darkSum, darkSquares, mean);
     }
 
+    /// <summary>Açık telefonun çevresinde bırakılan pay (karenin oranı).</summary>
+    public const double PhoneMargin = 0.02;
+
+    /// <summary>
+    /// Oyun telefonu görünürken ekran yazısı telefonun dışında aranır: telefona değen alan (pay dahil) atılır, telefonun
+    /// dışındakiler (tuş çubuğu "SCROLL / SEND / EXIT", "DRINK / PUT DOWN") kalır. Kullanıcı bildirimi (X, beta.104, üç
+    /// kullanıcı): telefon açıkken tuş ipuçları hiç çevrilmiyordu; telefon tanınmadığında çevriliyordu. Eskiden telefon
+    /// görünür görünmez otomatik alanlar bütünüyle düşüyordu (#1332: telefonun yazısı ekran yazısı kutusuna gitmesin); o
+    /// kural telefonun kendisi için korunur. Mac/iPhone (ScreenTextDetector.outsidePhone) ve Android aynı.
+    /// </summary>
+    public static IReadOnlyList<WatchedArea> OutsidePhone(IReadOnlyList<WatchedArea> areas, CropRegion? phone)
+    {
+        if (phone is null) return areas;
+        var padded = PaddedPhone(phone);
+        return [.. areas.Where(area => area.Region.Right <= padded.Left || area.Region.Left >= padded.Right
+                                       || area.Region.Bottom <= padded.Top || area.Region.Top >= padded.Bottom)];
+    }
+
+    /// <summary>Telefonun payla genişletilmiş yeri (örnekte dışlanan yer olarak da verilir).</summary>
+    public static CropRegion PaddedPhone(CropRegion phone) =>
+        new(Math.Max(0, phone.Top - PhoneMargin), Math.Min(1, phone.Bottom + PhoneMargin),
+            Math.Max(0, phone.Left - PhoneMargin), Math.Min(1, phone.Right + PhoneMargin));
+
     private static bool Excluded(int column, int row, IReadOnlyList<CropRegion> excluded)
     {
         var x = (column + 0.5) / Columns;

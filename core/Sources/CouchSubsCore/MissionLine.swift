@@ -33,6 +33,11 @@ public struct MissionLine {
 
     /// Görevin karedeki bölgesi; görev yoksa nil.
     public private(set) var region: CropRegion?
+    /// Ekranda duran görev satırlarının karedeki yeri (`settleMs` dolmadan da): TV ve OBS sayfası altyazı kutusunu bunun
+    /// üstüne taşır, kutu oyundaki görev satırını örtmez. Kullanıcı bildirimi (X, beta.100–104, GTA 6): "Örtsün"de iki
+    /// satırlık Türkçe İngilizce satırın ortasına göre büyüyor, alttaki görev satırının ("Get in the speedboat") üst
+    /// yarısını kapatıyordu. Okuma kutusunun küçük oynaması değer değiştirmez (yeniden gönderilmez).
+    public private(set) var clearance: TextBox?
     /// Son `observe`ta görev sayılmadan (`settleMs` dolmadan) ekrandan kalkan satırlar: altyazıdan da çıkarıldıkları için
     /// hiç çevrilmediler; günlüğe bir kez yazılır.
     public private(set) var dropped: [String] = []
@@ -56,6 +61,12 @@ public struct MissionLine {
         }
         dropped = tracks.filter { time - $0.lastSeen > Self.forgetMs && $0.lastSeen - $0.since < Self.settleMs }.map(\.source)
         tracks.removeAll { time - $0.lastSeen > Self.forgetMs }
+        let shown = tracks.first.map { first in tracks.dropFirst().reduce(first.box) { $0.union($1.box) } }
+        if let shown, let current = clearance, Self.near(shown, current) {
+            // Aynı yer: değişmez.
+        } else {
+            clearance = shown
+        }
         let settled = tracks.filter { time - $0.since >= Self.settleMs }
         var next: CropRegion?
         if let first = settled.first {
@@ -84,6 +95,14 @@ public struct MissionLine {
         tracks.removeAll()
         dropped = []
         region = nil
+        clearance = nil
+    }
+
+    /// İki kutu satır boyunun çeyreğinden az oynamış mı.
+    static func near(_ a: TextBox, _ b: TextBox) -> Bool {
+        let tolerance = 0.25 * min(a.bottom - a.top, b.bottom - b.top)
+        return abs(a.top - b.top) <= tolerance && abs(a.bottom - b.bottom) <= tolerance
+            && abs(a.left - b.left) <= tolerance * 2 && abs(a.right - b.right) <= tolerance * 2
     }
 
     private static func within(_ a: CropRegion, _ b: CropRegion, _ tolerance: Double) -> Bool {

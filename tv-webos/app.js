@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.119';
+  var APP_VERSION = '0.9.120';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -118,7 +118,7 @@
   // regions/big: gelen ek alan ve "ekranı çevir" olayları ile çizilmeyen aşırı büyük kutular; speechWeb/speechElement:
   // dublajın hangi yoldan çalındığı (LG ve Samsung'da <audio> yolu HDMI görüntüsünü karartabiliyor).
   var diag = { subtitles: 0, clears: 0, drops: 0, backgrounded: 0, lastHide: '-', place: '-', error: '',
-    regions: 0, big: 0, speechWeb: 0, speechElement: 0 };
+    regions: 0, big: 0, speechWeb: 0, speechElement: 0, keep: null };
 
   function $(id) { return document.getElementById(id); }
 
@@ -171,7 +171,9 @@
     var text = '';
     try { text = typeof platform.diagnostics === 'function' ? String(platform.diagnostics() || '') : ''; } catch (e) { text = ''; }
     var size = pageText();
+    // keep: görev satırının üstü (ekranın yüzdesi) ve altyazının ondan kaçmak için kayması (bkz. clearObjective).
     var page = (size ? size + ' · ' : '') + 'reg ' + diag.regions + ' · big ' + diag.big + ' · ' + coverageText() +
+      (diag.keep !== null && diag.keep !== undefined ? ' · keep ' + diag.keep + '%' + (objectiveShift ? ' ' + objectiveShift + 'px' : '') : '') +
       (diag.speechWeb || diag.speechElement ? ' · tts w' + diag.speechWeb + ' a' + diag.speechElement : '') +
       // Dublaj çalarken açık Web Audio bağlamı (dublaj hiç çalmadıysa bağlam yoktur, HDMI sesine karışamaz).
       (audioContext ? ' ac ' + audioContext.state : '');
@@ -2722,6 +2724,7 @@
   function avoidRegions() {
     var parts = regionParts();
     for (var i = 0; i < parts.length; i++) setShift(parts[i].el, 0);
+    clearObjective();
     avoidPhone();
     if (!parts.length) return;
     var height = pageSize().height;
@@ -2740,6 +2743,75 @@
       var dy = freeShift(r, parts[j].layer, placed, gap, height);
       setShift(el, dy);
       placed.push({ rect: { left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy }, layer: parts[j].layer });
+    }
+  }
+
+  // --- Altyazı görev satırını örtmez ---
+  // Bilgisayar ekrandaki görev satırının karedeki yerini gönderir ("objective" olayı; altyazıda "keep"). Kullanıcı
+  // bildirimi (X, beta.100–104, GTA 6): "Örtsün"de iki satırlık Türkçe İngilizce satırın ortasına göre büyüyor, alttaki
+  // görev satırının ("Get in the speedboat") üst yarısını örtüyordu. Altyazının son satırı ve örtüsü görev satırının (ve
+  // yerindeki görev çevirisi kutusunun) üstüne kayar; "Altında"da çeviri İngilizce satırın üstüne geçer. Görev satırı
+  // altyazının özgün yerinin ortasından yukarıdaysa (altyazı görevin kendisiyse) kayma olmaz. Eski bilgisayar göndermez.
+  var objectiveBox = null;
+  var objectiveShift = 0;
+
+  function setObjective(box) {
+    objectiveBox = validBox(box);
+    diag.keep = objectiveBox ? Math.round(objectiveBox.top * 100) : null;
+  }
+
+  function clearObjective() {
+    objectiveShift = 0;
+    var el = $('subtitle');
+    var cover = $('subtitle-cover');
+    if (!el || !cover) return;
+    cover.style.webkitTransform = '';
+    cover.style.transform = '';
+    setSubtitleShift(0, 0);
+    if (!objectiveBox || SUBTITLE_BAND || el.className === 'hidden') return;
+    var page = pageSize();
+    var width = page.width;
+    var height = page.height;
+    var keep = screenBox(objectiveBox, isOverlay());
+    var source = currentBox ? screenBox(currentBox, isOverlay()) : null;
+    if (source && keep.top < (source.top + source.bottom) / 2) return;
+    var top = keep.top * height;
+    var line = (keep.bottom - keep.top) * height;
+    // Görev satırının yerindeki Türkçesi (kehribar kutu) de örtülmez.
+    var mission = regionBoxes[MISSION_ID];
+    if (mission) {
+      var list = mission.className === 'region-blocks' ? mission.children : [mission];
+      for (var m = 0; m < list.length; m++) {
+        if (list[m].style.visibility === 'hidden') continue;
+        var r = pageRect(list[m].getBoundingClientRect());
+        if (r.width > 0 && r.height > 0 && r.bottom > top && r.top >= top - 2 * line) top = Math.min(top, r.top);
+      }
+    }
+    var limit = top - Math.max(4, Math.round(height * AVOID_GAP));
+    var rects = [pageRect($('subtitle-text').getBoundingClientRect())];
+    if (cover.className !== 'hidden') rects.push(pageRect(cover.getBoundingClientRect()));
+    var upper = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+    for (var i = 0; i < rects.length; i++) {
+      var b = rects[i];
+      if (!(b.width > 0) || !(b.height > 0)) continue;
+      upper = Math.min(upper, b.top);
+      bottom = Math.max(bottom, b.bottom);
+      left = Math.min(left, b.left);
+      right = Math.max(right, b.right);
+    }
+    if (!(bottom > limit) || right <= keep.left * width || left >= keep.right * width) return;
+    var dy = limit - bottom;
+    // "Altında": İngilizce satır ile görev satırı arasında yer yok; çeviri İngilizce satırın üstüne geçer.
+    if (placement === 'below' && source && cover.className === 'hidden') {
+      dy = Math.min(dy, source.top * height - Math.round(height * PLACE_GAP) - bottom);
+    }
+    if (upper + dy < 0) dy = -upper;
+    if (dy >= 0) return;
+    objectiveShift = Math.round(dy);
+    setSubtitleShift(0, 0);
+    if (cover.className !== 'hidden') {
+      cover.style.webkitTransform = 'translateY(' + objectiveShift + 'px)';
+      cover.style.transform = 'translateY(' + objectiveShift + 'px)';
     }
   }
 
@@ -2767,7 +2839,8 @@
 
   function setSubtitleShift(dx, dy) {
     var el = $('subtitle');
-    var value = dx || dy ? 'translate(' + Math.round(dx || 0) + 'px, ' + Math.round(dy || 0) + 'px)' : '';
+    dy = (dy || 0) + objectiveShift;
+    var value = dx || dy ? 'translate(' + Math.round(dx || 0) + 'px, ' + Math.round(dy) + 'px)' : '';
     el.style.webkitTransform = value;
     el.style.transform = value;
   }
@@ -3403,6 +3476,7 @@
       if (!data.text) return;
       // Yeni bilgisayar/telefon `speakerNames` gönderir; eski sürüm `speakers` gönderir, o da yalnız adı boyar.
       var speakers = data.speakerNames || data.speakers;
+      if (data.paragraphs !== true) setObjective(data.keep);
       showSubtitle(data.text, data.duration, data.box, data.paragraphs === true, data.replace === true,
         speakerMap(speakers));
       lastLine = { text: data.text, box: data.box, paragraphs: data.paragraphs === true, speakers: speakers, until: shownUntil };
@@ -3411,6 +3485,11 @@
       // Oyundaki satır kalktı: geri gelişte yeniden çizilmez (tutma süresi yine onClear'da).
       lastLine = null;
       onClear();
+    });
+    // Ekrandaki görev satırının yeri değişti (bkz. clearObjective).
+    onEvent('objective', function (data) {
+      setObjective(data.box);
+      avoidRegions();
     });
     onEvent('screen', function (data) { showScreen(data.items, data.duration); });
     onEvent('screen-clear', hideScreen);
