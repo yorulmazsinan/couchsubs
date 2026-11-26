@@ -256,7 +256,9 @@ public enum GamePhoneGeometry {
         }
 
         func at(_ x: Int, _ y: Int) -> Int {
-            let p = (y * 2 * pixels.width + 2 * (x - left)) * 4
+            // Izgaranın dışındaki örnek kenardan okunur: dizinin dışına okumak çöker (#1369).
+            let column = min(max(0, x - left), max(0, pixels.width / 2 - 1)), row = min(max(0, y), max(0, pixels.height / 2 - 1))
+            let p = (row * 2 * pixels.width + 2 * column) * 4
             let stride = pixels.width * 4
             func tone(_ i: Int) -> Int {
                 77 * Int(pixels.bytes[i]) + 150 * Int(pixels.bytes[i+1]) + 29 * Int(pixels.bytes[i+2])
@@ -449,10 +451,9 @@ public enum GamePhoneGeometry {
 
     private static func confirmPass(_ grid: Grid, near: Pose) -> Pose? {
         let topX = near.topX * 400, topY = near.topY * 225, bottomX = near.bottomX * 400, bottomY = near.bottomY * 225
-        let reach = Int(confirmReachY)
-        let upperRows = max(17, Int(topY.rounded()) - reach)..<min(75, Int(topY.rounded()) + reach + 1)
-        let lowerRows = max(145, Int(bottomY.rounded()) - reach)..<min(217, Int(bottomY.rounded()) + reach + 1)
-        guard !upperRows.isEmpty, !lowerRows.isEmpty else { return nil }
+        guard topX.isFinite, bottomX.isFinite,
+              let upperRows = confirmRows(topY, within: 17, 75),
+              let lowerRows = confirmRows(bottomY, within: 145, 217) else { return nil }
         let upper = slots(grid, rows: upperRows, lengths: 8...19, maximum: 12)
             .filter { abs($0.x - topX) <= confirmReachX && hasCamera(grid, $0) }
         let lower = slots(grid, rows: lowerRows, lengths: 5...14, maximum: 16).filter { abs($0.x - bottomX) <= confirmReachX }
@@ -472,6 +473,18 @@ public enum GamePhoneGeometry {
             }
         }
         return pose
+    }
+
+    /// Gevşek doğrulamanın tarandığı satırlar: `center ± confirmReachY`, `low..<high` şeridinin içinde; şeritle kesişmiyorsa
+    /// ya da yer sayı değilse nil. #1369 (beta-104, Mac): aralık sınırlar sıralanmadan kuruluyordu; son yer şeridin dışında
+    /// kalınca (telefon şeridin üstünde/altında, eksi ya da karenin altını aşan yer) alt sınır üst sınırı geçiyor, Swift
+    /// aralığı kurulurken uygulama çöküyordu. Önce kırpılır, boşsa atlanır (Windows ve Android ile aynı).
+    static func confirmRows(_ center: Double, within low: Int, _ high: Int) -> Range<Int>? {
+        guard center.isFinite, low < high else { return nil }
+        let reach = Int(confirmReachY)
+        let c = Int(min(Double(high + reach + 1), max(Double(low - reach - 1), center)).rounded())
+        let from = max(low, c - reach), to = min(high, c + reach + 1)
+        return from < to ? from..<to : nil
     }
 
     /// Karanlık sahne: üst şeridin ortanca tonu bundan azsa (0–255) sıkı arama kazançla da yapılır (`darkGains`).
@@ -568,6 +581,7 @@ public enum GamePhoneGeometry {
 
     /// Şeritteki yarıklar; `maximum`'dan çoksa hiçbiri (`crowded`: menü ya da yazı satırları, telefon aranmaz).
     private static func scan(_ grid: Grid, rows: Range<Int>, lengths: ClosedRange<Int>, maximum: Int) -> (slots: [Slot], crowded: Bool) {
+        guard !rows.isEmpty, rows.lowerBound >= 4, rows.upperBound <= 221 else { return ([], false) }
         let left = 95, width = scanRight + 11 - left
         var band = [UInt8](repeating: 0, count: (rows.count + 8) * width)
         for y in (rows.lowerBound - 4)..<(rows.upperBound + 4) {
@@ -604,8 +618,10 @@ public enum GamePhoneGeometry {
     }
 
     private static func hasCamera(_ grid: Grid, _ top: Slot) -> Bool {
+        let nearest = max(5, rounded(Double(top.length) * 0.62)), farthest = rounded(Double(top.length) * 1.15)
+        guard nearest <= farthest else { return false }
         for side in [-1, 1] {
-            for d in max(5, rounded(Double(top.length) * 0.62))...rounded(Double(top.length) * 1.15) {
+            for d in nearest...farthest {
                 for y in (top.y - 2)...(top.y + 2) {
                     let x = rounded(top.x) + side * d
                     let above = grid.at(x,y-3), below = grid.at(x,y+3), left = grid.at(x-3,y), right = grid.at(x+3,y)

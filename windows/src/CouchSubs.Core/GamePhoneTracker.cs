@@ -445,12 +445,9 @@ internal static class GamePhoneGeometry
     {
         pose = default;
         double topX = near.TopX * Width, topY = near.TopY * Height, bottomX = near.BottomX * Width, bottomY = near.BottomY * Height;
-        var reach = (int)ConfirmReachY;
-        int upperFrom = Math.Max(17, (int)Math.Round(topY, MidpointRounding.AwayFromZero) - reach);
-        int upperTo = Math.Min(75, (int)Math.Round(topY, MidpointRounding.AwayFromZero) + reach + 1);
-        int lowerFrom = Math.Max(145, (int)Math.Round(bottomY, MidpointRounding.AwayFromZero) - reach);
-        int lowerTo = Math.Min(217, (int)Math.Round(bottomY, MidpointRounding.AwayFromZero) + reach + 1);
-        if (upperFrom >= upperTo || lowerFrom >= lowerTo) return false;
+        if (!double.IsFinite(topX) || !double.IsFinite(bottomX) ||
+            ConfirmRows(topY, 17, 75) is not var (upperFrom, upperTo) ||
+            ConfirmRows(bottomY, 145, 217) is not var (lowerFrom, lowerTo)) return false;
         Span<Slot> upper = stackalloc Slot[12], lower = stackalloc Slot[16];
         int tops = FindSlots(grid, upperFrom, upperTo, 8, 19, upper);
         if (tops < 1) return false;
@@ -478,6 +475,21 @@ internal static class GamePhoneGeometry
             }
         }
         return found;
+    }
+
+    /// <summary>
+    /// Gevşek doğrulamanın tarandığı satırlar [from, to): <c>center ± ConfirmReachY</c>, [low, high) şeridinin içinde;
+    /// şeritle kesişmiyorsa ya da yer sayı değilse null. #1369 (beta-104, Mac): son yer şeridin dışında kalınca (eksi ya da
+    /// karenin altını aşan yer) Mac/iPhone'da aralık ters kuruluyor, uygulama çöküyordu; burada sayı olmayan ya da çok büyük
+    /// yer <c>(int)</c> dönüşümünde taşıyordu. Önce kırpılır, boşsa atlanır (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static (int From, int To)? ConfirmRows(double center, int low, int high)
+    {
+        if (!double.IsFinite(center) || low >= high) return null;
+        var reach = (int)ConfirmReachY;
+        var c = (int)Math.Round(Math.Clamp(center, low - reach - 1, high + reach + 1), MidpointRounding.AwayFromZero);
+        int from = Math.Max(low, c - reach), to = Math.Min(high, c + reach + 1);
+        return from < to ? (from, to) : null;
     }
 
     /// <summary>
@@ -606,6 +618,7 @@ internal static class GamePhoneGeometry
     private static int FindSlots(Samples grid, int from, int to, int min, int max, Span<Slot> slots)
     {
         const int stride = Right - Left + 1;
+        if (from >= to || from < 4 || to > Height - 4) return 0;
         Span<byte> band = stackalloc byte[(to - from + 8) * stride];
         for (int y = from - 4; y < to + 4; y++)
             grid.Row(y, band.Slice((y - from + 4) * stride, stride));
@@ -779,15 +792,16 @@ internal static class GamePhoneGeometry
 
         internal void Row(int y, scoped Span<byte> dest)
         {
-            (int a, int b) = Rows(y);
+            (int a, int b) = Rows(Math.Clamp(y, 0, Height - 1));
             for (int i = 0; i < dest.Length; i++)
                 dest[i] = (byte)Sample(Left + i, a, b);
         }
 
         internal int At(int x, int y)
         {
-            (int a, int b) = Rows(y);
-            return Sample(x, a, b);
+            // Izgaranın dışındaki örnek kenardan okunur: dizinin dışına okumak hata atar (#1369).
+            (int a, int b) = Rows(Math.Clamp(y, 0, Height - 1));
+            return Sample(Math.Clamp(x, 0, Width - 1), a, b);
         }
 
         private (int, int) Rows(int y) => (

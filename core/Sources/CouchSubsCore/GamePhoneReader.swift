@@ -9,7 +9,8 @@ enum GamePhoneReader {
                      retry: GamePhoneRetry? = nil) throws -> Reading {
         let topX = pose.topX * Double(frame.width), topY = pose.topY * Double(frame.height)
         let dx = (pose.bottomX - pose.topX) * Double(frame.width), dy = (pose.bottomY - pose.topY) * Double(frame.height)
-        guard dy > 0, region.right > region.left, region.bottom > region.top else { return .empty }
+        guard dy > 0, dy.isFinite, dx.isFinite, topX.isFinite, topY.isFinite,
+              region.right > region.left, region.bottom > region.top else { return .empty }
         func point(_ u: Double, _ v: Double) -> CGPoint {
             let t = 0.04 + 0.915 * v, side = (u - 0.5) * 0.52
             return CGPoint(x: topX + dx * t + side * dy,

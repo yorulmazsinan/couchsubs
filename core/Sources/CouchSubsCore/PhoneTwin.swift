@@ -39,7 +39,7 @@ public enum PhoneTwin {
     public static func build(frame: CGImage, pose: AnchorPose, items: [ScreenTranslation.Item]) -> Layer? {
         let r = pose.reference
         let rw = r.right - r.left, rh = r.bottom - r.top
-        guard rw > 0, rh > 0 else { return nil }
+        guard rw > 0, rh > 0, rw.isFinite, rh.isFinite else { return nil }
         let fw = Double(frame.width), fh = Double(frame.height)
         var outW = max(2, Int((rw * fw).rounded())), outH = max(2, Int((rh * fh).rounded()))
         if outH > maxHeight {

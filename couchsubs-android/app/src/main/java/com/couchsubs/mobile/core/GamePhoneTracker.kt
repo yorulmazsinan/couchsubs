@@ -543,15 +543,29 @@ object GamePhoneGeometry {
         return confirmPicture(whole, near) ?: darkGains(whole.level()).firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
     }
 
+    /**
+     * Gevşek doğrulamanın tarandığı satırlar: `center ± CONFIRM_REACH_Y`, `low until high` şeridinin içinde; şeritle
+     * kesişmiyorsa ya da yer sayı değilse null. #1369 (beta-104, Mac): son yer şeridin dışında kalınca (eksi ya da karenin
+     * altını aşan yer) Mac/iPhone'da aralık ters kuruluyor, uygulama çöküyordu; burada çok büyük yer `toInt` sonrası
+     * toplamada taşıyordu. Önce kırpılır, boşsa atlanır (Mac/iPhone ve Windows ile aynı).
+     */
+    internal fun confirmRows(center: Double, low: Int, high: Int): IntRange? {
+        if (!center.isFinite() || low >= high) return null
+        val reach = CONFIRM_REACH_Y.toInt()
+        val c = rounded(center.coerceIn((low - reach - 1).toDouble(), (high + reach + 1).toDouble()))
+        val from = maxOf(low, c - reach)
+        val to = minOf(high, c + reach + 1)
+        return if (from < to) from until to else null
+    }
+
     private fun confirmPicture(grid: Grid, near: Pose): Pose? {
         val topX = near.topX * 400
         val topY = near.topY * 225
         val bottomX = near.bottomX * 400
         val bottomY = near.bottomY * 225
-        val reach = CONFIRM_REACH_Y.toInt()
-        val upperRows = maxOf(17, rounded(topY) - reach) until minOf(75, rounded(topY) + reach + 1)
-        val lowerRows = maxOf(145, rounded(bottomY) - reach) until minOf(217, rounded(bottomY) + reach + 1)
-        if (upperRows.isEmpty() || lowerRows.isEmpty()) return null
+        if (!topX.isFinite() || !bottomX.isFinite()) return null
+        val upperRows = confirmRows(topY, 17, 75) ?: return null
+        val lowerRows = confirmRows(bottomY, 145, 217) ?: return null
         val upper = slots(grid, upperRows, 8..19, 12).filter { abs(it.x - topX) <= CONFIRM_REACH_X && hasCamera(grid, it) }
         val lower = slots(grid, lowerRows, 5..14, 16).filter { abs(it.x - bottomX) <= CONFIRM_REACH_X }
         var best = Double.POSITIVE_INFINITY
@@ -627,6 +641,7 @@ object GamePhoneGeometry {
 
     /** Şeritteki yarıklar; [maximum]'dan çoksa hiçbiri (crowded: menü ya da yazı satırları, telefon aranmaz). */
     private fun scan(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): Scan {
+        if (rows.isEmpty() || rows.first < 4 || rows.last > 220) return Scan(emptyList(), false)
         val left = 95
         val width = SCAN_RIGHT + 11 - left
         val count = rows.last - rows.first + 1

@@ -381,7 +381,7 @@ public enum ScreenPhoneCard {
             let bubble = kind == .incoming || kind == .outgoing
             let widest = (bubble ? bubbleShare : 1) * cardWidth - (bubble ? 0 : 2 * pad)
             let inner = widest - 2 * pad
-            let lines = wrap(item.translation, perLine: Int(inner * handset.aspect / (line * charWidth)))
+            let lines = wrap(item.translation, perLine: characters(inner * handset.aspect / (line * charWidth)))
             let longest = Double(lines.map(\.count).max() ?? 0) * line * charWidth / handset.aspect + 2 * pad
             let width = bubble ? min(widest, max(cardWidth * bubbleMin, longest)) : widest
             var placed = item
@@ -497,7 +497,7 @@ public enum ScreenPhoneCard {
         row.widget = false
         let inset = rowPadding * line / handset.aspect
         let inner = width - 2 * inset
-        let perLine = Int(inner * handset.aspect / (line * charWidth))
+        let perLine = characters(inner * handset.aspect / (line * charWidth))
         let lines = (title.isEmpty ? 0 : wrap(title, perLine: perLine).count) + (below.isEmpty ? 0 : wrap(below, perLine: perLine).count)
         let needed = Double(max(1, lines)) * line * lineSpacing + 2 * rowPadding * line
         let original = item.box.bottom - item.box.top + line * bubblePadding
@@ -536,7 +536,7 @@ public enum ScreenPhoneCard {
         row.widget = widget
         let inset = rowPadding * line / handset.aspect
         let inner = width - 2 * inset - (avatarLines + avatarGap) * line / handset.aspect
-        let wrapped = below.isEmpty ? 0 : wrap(below, perLine: Int(inner * handset.aspect / (line * charWidth))).count
+        let wrapped = below.isEmpty ? 0 : wrap(below, perLine: characters(inner * handset.aspect / (line * charWidth))).count
         let lines = (title.isEmpty ? 0 : 1) + wrapped
         let needed = max(Double(max(1, lines)) * line * lineSpacing, avatarLines * line) + 2 * rowPadding * line
         // Telefondaki satırın boyu (adın üstünden önizlemenin altına, dolguyla).
@@ -627,6 +627,13 @@ public enum ScreenPhoneCard {
     }
 
     /// Metni sözcük sözcük en çok `perLine` harflik satırlara böler (çok uzun sözcük kendi satırında kalır).
+    /// Satıra sığan harf sayısı; ölçü sayı değilse (sıfır boy, bozuk telefon yeri) 0. `Int(_:)` sonsuzda ve NaN'da çöker
+    /// (#1369; Windows ve Android ile aynı).
+    static func characters(_ value: Double) -> Int {
+        guard value.isFinite else { return 0 }
+        return Int(min(100_000, max(-100_000, value)))
+    }
+
     static func wrap(_ text: String, perLine: Int) -> [String] {
         let limit = max(4, perLine)
         var lines: [String] = []
@@ -726,7 +733,7 @@ public enum ScreenPhoneCard {
             let widest = (bubble ? bubbleShare : 1) * column
             // Liste kartında yazı avatarın sağında; kart en az avatar boyunda.
             let avatar = item.panel == .row ? (avatarLines + avatarGap + 2 * rowPadding) * line / aspect : 0
-            let lines = wrap(item.translation, perLine: Int((widest - 2 * padX - avatar) * aspect / (line * charWidth)))
+            let lines = wrap(item.translation, perLine: characters((widest - 2 * padX - avatar) * aspect / (line * charWidth)))
             // Telefondaki aralık satır yüksekliğine oranla korunur (önizleme kişi adının hemen altında kalır).
             var gap = bubbleSpacing
             if index > 0 {
