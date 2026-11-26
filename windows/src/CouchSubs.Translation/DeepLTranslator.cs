@@ -127,7 +127,8 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         Shown(text);
         if (_http == SharedClient.Value && _key.Length > 0) Interlocked.Exchange(ref _lastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
         var glossary = _glossary.Current;
-        if (_cache.TryGet(DeepLMarkup.CacheKey(text, glossary), out var cached)) return cached;
+        var wholeKey = DeepLMarkup.CacheKey(text, glossary);
+        if (_cache.TryGet(wholeKey, out var cached)) return cached;
         // Hata sonrası beklemede yerel çeviri yoksa (inmemiş, açılamadı) satır düşmesin: DeepL yine denenir. 429 beklemesi kalır.
         if (DateTimeOffset.UtcNow < _pausedUntil)
         {
@@ -182,9 +183,9 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         var builder = new StringBuilder();
         for (var i = 0; i < pieces.Count; i++) builder.Append(translations[i] ?? pieces[i].Text);
         if (_speech.Count >= 512) _speech.Clear();
-        _speech[text] = SpeechScript.Lines(pieces, translations);
+        _speech[wholeKey] = SpeechScript.Lines(pieces, translations);
         var result = builder.ToString();
-        _cache.Store(DeepLMarkup.CacheKey(text, glossary), result);
+        _cache.Store(wholeKey, result);
         return result;
     }
 
@@ -205,10 +206,15 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         }
     }
 
-    public IReadOnlyList<SpokenLine> SpokenLines(string text) =>
-        _speech.TryGetValue(text, out var lines) ? lines
-        : SpeechScript.FromCache(text, _cache) is { Count: > 0 } cached ? cached
-        : _fallback?.SpokenLines(text) ?? [];
+    public IReadOnlyList<SpokenLine> SpokenLines(string text)
+    {
+        var glossary = _glossary.Current;
+        var wholeKey = DeepLMarkup.CacheKey(text, glossary);
+        if (_speech.TryGetValue(wholeKey, out var lines)) return lines;
+        return SpeechScript.FromCache(text, _cache, part => DeepLMarkup.CacheKey(part, glossary)) is { Count: > 0 } cached
+            ? cached
+            : _fallback?.SpokenLines(text) ?? [];
+    }
 
     /// <summary>Cihaz üstü çeviri; yoksa ya da hata verirse null.</summary>
     private async Task<string?> TryFallbackAsync(string text, CancellationToken cancellationToken)
