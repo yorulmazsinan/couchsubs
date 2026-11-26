@@ -48,6 +48,8 @@ public sealed class GamePhoneTracker
         // Akıl sınırı: telefon ekranın küçük, dikey bir parçasıdır. Dışındaki bir aday (ör. menüde ya da koyu ekranda
         // yanlış eşleşme) kabul edilmez; TV'de büyük opak telefon kutusu oyun görüntüsünü kapatırdı.
         if (candidate is not null && !Plausible(candidate, frame)) candidate = null;
+        long unseenMs = 0;
+        var unseenMisses = 0;
         if (candidate is not null && ((previous is not null && candidate.IsClose(previous, 0.035))
                                       || (shown is not null && candidate.IsClose(shown, 0.035))))
         {
@@ -55,22 +57,28 @@ public sealed class GamePhoneTracker
             shown = candidate;
             shownPose = pose;
             misses = 0;
+            lastSeen = now;
         }
-        else if (shown is not null && misses < MissGrace)
+        else if (shown is not null && !Closes(misses + 1, Elapsed(lastSeen, now)))
         {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
-            // bildirim). Telefon gerçekten indirilince MissGrace tur sonra kapanır.
+            // bildirim). Telefon gerçekten indirilince MissGraceMs sonra kapanır (Closes).
             misses++;
         }
         else
         {
+            if (shown is not null)
+            {
+                unseenMs = Elapsed(lastSeen, now);
+                unseenMisses = misses + 1;
+            }
             shown = null;
             shownPose = null;
             misses = 0;
         }
         if (!wasShown && shown is not null) Trace(PhoneTrace.Opened);
-        else if (wasShown && shown is null) Trace(PhoneTrace.Closed);
+        else if (wasShown && shown is null) Trace(PhoneTrace.ClosedAfter(unseenMs, unseenMisses));
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if (shown is null && candidate is not null && previous is not null)
             Trace(PhoneTrace.Moving(PhoneTrace.Shift(candidate, previous)));
@@ -82,12 +90,30 @@ public sealed class GamePhoneTracker
     public WatchedArea WithPose(WatchedArea area) => area with { PhonePose = shownPose };
 
     /// <summary>
-    /// Açık telefon art arda bu kadar örnekte bulunamazsa kapanır (330 ms aralıkla ~1–1,3 sn; Mac ve Android ile aynı).
-    /// Önceden 2 örnekti (~0,7 sn): telefonun ekranı bir an okunamayınca panel kaybolup baştan çevrilerek geri geliyordu
-    /// (X, 22 Kas, GTA 6 telefonu).
+    /// Açık telefon bu kadar süre (ms) görülmezse kapanır; çevirisi hemen kalkar (ClosePhone). Önceden süre değil örnek
+    /// sayılıyordu (art arda 4 ıska): örnekler seyrek geldiğinde (ağır kare, takılan akış) telefon indirildikten 3–4 sn
+    /// sonra kalkıyordu (#1334). Tek karelik ıska yine kapatmaz: en az <see cref="MinimumMisses"/> ıska gerekir; yalnız
+    /// telefon 2 × <see cref="MissGraceMs"/> boyunca hiç görülmediyse tek ıska yeter. 330 ms aralıkla ~1 sn (Mac ve
+    /// Android ile aynı).
+    /// </summary>
+    internal const long MissGraceMs = 900;
+    /// <summary>
+    /// Altyazı süzgecinin açık telefonu bulunamadığı aramalarda tuttuğu arama sayısı (SubtitlePipeline.HeldPhone); telefon
+    /// oturumunun kapanması süreyle ölçülür (<see cref="MissGraceMs"/>).
     /// </summary>
     internal const int MissGrace = 3;
+    internal const int MinimumMisses = 2;
+    /// <summary>Saat geri giderse süre ölçülemez: art arda bu kadar ıskada her durumda kapanır (eski kural).</summary>
+    internal const int MaximumMisses = 4;
     private int misses;
+    /// <summary>Telefonun en son görüldüğü an (ms).</summary>
+    private long lastSeen;
+
+    /// <summary>Açık telefon <paramref name="misses"/> ıskadan, <paramref name="unseenMs"/> görülmeden sonra kapansın mı.</summary>
+    internal static bool Closes(int misses, long unseenMs) =>
+        misses >= MaximumMisses || (misses >= MinimumMisses && unseenMs >= MissGraceMs) || unseenMs >= 2 * MissGraceMs;
+
+    private static long Elapsed(long since, long now) => now >= since ? now - since : 0;
 
     /// <summary>Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı.</summary>
     internal const double MinArea = 0.04, MaxArea = 0.35;
@@ -114,6 +140,7 @@ public sealed class GamePhoneTracker
         lastTime = null;
         previous = shown = null;
         misses = 0;
+        lastSeen = 0;
         shownPose = null;
     }
 }

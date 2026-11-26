@@ -33,23 +33,31 @@ public final class GamePhoneTracker {
         // ekranlı uygulamada (haber, ayarlar, hava) telefonun yanları zemine karışıyor, sıkı arama ıskalıyordu.
         var found = locate(image, shown)
         if let pose = found, !Self.plausible(pose.bounds, width: image.width, height: image.height) { found = nil }
+        var unseen = (ms: 0, misses: 0)
         if let found, let previous, found.bounds.isClose(to: previous.bounds, tolerance: 0.035) {
             shown = found
             misses = 0
+            lastSeen = now
         } else if let current = shown, let found, found.bounds.isClose(to: current.bounds, tolerance: 0.035) {
             // Açık telefonun yakınında tek bir gözlem: aynı telefon, yeri güncellenir.
             shown = found
             misses = 0
-        } else if shown != nil, misses < Self.missGrace {
+            lastSeen = now
+        } else if shown != nil, !Self.closes(misses: misses + 1, unseenMs: Self.elapsed(since: lastSeen, now)) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
-            // bildirim). Telefon gerçekten indirilince `missGrace` tur sonra kapanır.
+            // bildirim). Telefon gerçekten indirilince `missGraceMs` sonra kapanır (`closes`).
             misses += 1
         } else {
+            if shown != nil { unseen = (Self.elapsed(since: lastSeen, now), misses + 1) }
             shown = nil
             misses = 0
         }
-        if !wasShown, shown != nil { note(PhoneTrace.opened) } else if wasShown, shown == nil { note(PhoneTrace.closed) }
+        if !wasShown, shown != nil {
+            note(PhoneTrace.opened)
+        } else if wasShown, shown == nil {
+            note(PhoneTrace.closed(afterMs: unseen.ms, misses: unseen.misses))
+        }
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if shown == nil, let found, let previous {
             note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, previous.bounds)))
@@ -58,11 +66,28 @@ public final class GamePhoneTracker {
         return (true, shown)
     }
 
-    /// Açık telefon art arda bu kadar örnekte bulunamazsa kapanır (330 ms aralıkla ~1–1,3 sn; Windows ve Android ile aynı).
-    /// Önceden 2 örnekti (~0,7 sn): telefonun ekranı bir an okunamayınca panel kaybolup baştan çevrilerek geri geliyordu
-    /// (X, 22 Kas, GTA 6 telefonu).
+    /// Açık telefon bu kadar süre (ms) görülmezse kapanır; çevirisi hemen kalkar (izleyici `closePhone`). Önceden süre
+    /// değil örnek sayılıyordu (art arda 4 ıska): örnekler seyrek geldiğinde (Android'de ağır kare, takılan akış) telefon
+    /// indirildikten 3–4 sn sonra kalkıyordu (#1334). Tek karelik ıska yine kapatmaz: en az `minimumMisses` ıska gerekir;
+    /// yalnız telefon `2 × missGraceMs` boyunca hiç görülmediyse tek ıska yeter. 330 ms aralıkla ~1 sn (Windows ve Android
+    /// ile aynı).
+    static let missGraceMs = 900
+    /// Altyazı süzgecinin açık telefonu bulunamadığı aramalarda tuttuğu arama sayısı (`SubtitlePipeline.heldPhone`); telefon
+    /// oturumunun kapanması süreyle ölçülür (`missGraceMs`).
     static let missGrace = 3
+    static let minimumMisses = 2
+    /// Saat geri giderse süre ölçülemez: art arda bu kadar ıskada her durumda kapanır (eski kural).
+    static let maximumMisses = 4
     private var misses = 0
+    /// Telefonun en son görüldüğü an (ms).
+    private var lastSeen = 0
+
+    /// Açık telefon `misses` ıskadan, `unseenMs` görülmeden sonra kapansın mı.
+    static func closes(misses: Int, unseenMs: Int) -> Bool {
+        misses >= maximumMisses || (misses >= minimumMisses && unseenMs >= missGraceMs) || unseenMs >= 2 * missGraceMs
+    }
+
+    private static func elapsed(since time: Int, _ now: Int) -> Int { now >= time ? now - time : 0 }
 
     /// Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı.
     static let minArea = 0.04, maxArea = 0.35
@@ -86,6 +111,7 @@ public final class GamePhoneTracker {
         previous = nil
         shown = nil
         misses = 0
+        lastSeen = 0
     }
 }
 

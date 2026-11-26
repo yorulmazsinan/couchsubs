@@ -53,13 +53,14 @@ class GamePhoneTrackerTest {
         assertNull(tracker.sample(image, 0).pose)
         assertFalse(tracker.sample(image, 250).sampled)
         assertNotNull(tracker.sample(image, 330).pose)
-        // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); art arda dördüncü ıskada (~1,3 sn) kapanır.
+        // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); son görülmeden ~1 sn sonra, üçüncü
+        // ıskada kapanır (#1334; önceden dördüncü ıskada, ~1,3 sn).
         val missing = TestPhoneImage.phone(camera = false)
         assertNotNull(tracker.sample(missing, 660).pose)
         assertNotNull(tracker.sample(image, 990).pose)
         assertNotNull(tracker.sample(missing, 1320).pose)
         assertNotNull(tracker.sample(missing, 1650).pose)
-        assertNotNull(tracker.sample(missing, 1980).pose)
+        assertNull(tracker.sample(missing, 1980).pose)
         assertNull(tracker.sample(missing, 2310).pose)
         // Kapandıktan sonra yeniden açılış yine iki gözlem ister.
         assertNull(tracker.sample(image, 2640).pose)

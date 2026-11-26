@@ -433,7 +433,7 @@ public sealed partial class RegionWatcher
                 {
                     // Telefon son karede bulunamadı: tek karelik ıska olabilir. Ekrandaki çeviri silinmez (önceden silinip
                     // sonraki turda geri geliyordu); çeviriler hafızada, sonraki tur yeniden dener. Telefon gerçekten
-                    // kapanınca izleyici paneli kaldırır (GamePhoneTracker.MissGrace).
+                    // kapanınca izleyici paneli kaldırır (GamePhoneTracker.MissGraceMs).
                     state.Shown = previousShown;
                     state.Candidate = null;
                     state.Signature = null;

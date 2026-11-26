@@ -46,6 +46,49 @@ final class PhoneTraceTests: XCTestCase {
         }
     }
 
+    /// #1334: telefon indirilince çevirisi süreyle (~1 sn) kalkar; örnekler seyrek gelse de ıska sayısı beklenmez. Tek
+    /// karelik ıska kapatmaz.
+    func testClosedPhoneLeavesWithinASecondEvenWhenSamplesAreSparse() {
+        let image = GamePhoneTestFrame.phone()
+        var found = true
+        let pose = GamePhoneGeometry.Pose(topX: 0.45, topY: 0.15, bottomX: 0.45, bottomY: 0.83)
+        func tracker() -> GamePhoneTracker { GamePhoneTracker(locate: { _ in found ? pose : nil }) }
+
+        // Olağan aralık (330 ms): üçüncü ıskada, son görülmeden ~1 sn sonra kapanır (önceden dördüncüde, ~1,3 sn).
+        var regular = tracker()
+        found = true
+        XCTAssertNil(regular.sample(image, now: 0).pose)
+        XCTAssertNotNil(regular.sample(image, now: 330).pose)
+        found = false
+        XCTAssertNotNil(regular.sample(image, now: 660).pose)
+        XCTAssertNotNil(regular.sample(image, now: 990).pose)
+        XCTAssertNil(regular.sample(image, now: 1320).pose)
+
+        // Seyrek örnekler (1 sn arayla): tek ıska kapatmaz, ikinci ıskada kapanır (önceden dördüncüde, ~4 sn).
+        regular = tracker()
+        found = true
+        _ = regular.sample(image, now: 0)
+        XCTAssertNotNil(regular.sample(image, now: 1000).pose)
+        found = false
+        XCTAssertNotNil(regular.sample(image, now: 2000).pose)
+        found = true
+        XCTAssertNotNil(regular.sample(image, now: 3000).pose)
+        found = false
+        XCTAssertNotNil(regular.sample(image, now: 4000).pose)
+        XCTAssertNil(regular.sample(image, now: 5000).pose)
+
+        // Akış takıldı, telefon iki kat süre hiç görülmedi: tek ıska yeter.
+        regular = tracker()
+        found = true
+        _ = regular.sample(image, now: 0)
+        XCTAssertNotNil(regular.sample(image, now: 330).pose)
+        found = false
+        XCTAssertNil(regular.sample(image, now: 330 + 2 * GamePhoneTracker.missGraceMs).pose)
+
+        XCTAssertFalse(GamePhoneTracker.closes(misses: 1, unseenMs: 1200))
+        XCTAssertTrue(GamePhoneTracker.closes(misses: 4, unseenMs: 0))
+    }
+
     func testTrackerLogsOpeningClosingAndAMovingPhoneOncePerMinute() {
         var log: [String] = []
         var top = 0.15
@@ -62,8 +105,8 @@ final class PhoneTraceTests: XCTestCase {
         sample()
         XCTAssertEqual(log, ["düşen satır [PhoneTrace] telefon açıldı: \"\""])
         found = false
-        for _ in 0...GamePhoneTracker.missGrace { sample() }
-        XCTAssertEqual(log.last, "düşen satır [PhoneTrace] telefon kapandı: \"\"")
+        for _ in 0..<3 { sample() }
+        XCTAssertEqual(log.last, "düşen satır [PhoneTrace] telefon kapandı (1200 ms görülmedi, 3 ıska): \"\"")
 
         // Elde sallanan telefon: her örnekte %10 kayıyor, iki uyumlu gözlem olmadığı için hiç açılmıyor.
         log = []

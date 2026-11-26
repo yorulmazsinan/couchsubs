@@ -15,6 +15,9 @@ object PhoneTrace {
     const val COMPONENT = "PhoneTrace"
     const val OPENED = "telefon açıldı"
     const val CLOSED = "telefon kapandı"
+
+    /** Telefon kapandı: kaç ms görülmedi, kaç örnekte bulunamadı (#1334: çevirinin kalkma gecikmesi günlükte görünsün). */
+    fun closed(afterMs: Long, misses: Int) = "$CLOSED ($afterMs ms görülmedi, $misses ıska)"
     const val MISSING = "PhoneMissing: telefon bu karede bulunamadı, tur atlandı"
     const val EMPTY_FLAT = "eğik ekran düzeltilmiş okuması boş"
 

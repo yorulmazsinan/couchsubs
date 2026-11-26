@@ -2443,7 +2443,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// </summary>
     private async Task FollowPhoneAsync(Frame frame)
     {
-        // Çeviriler balonların üstündeyken (kartsız) sohbet kayınca/değişince hemen kalkar (ScreenPhoneFollow.Step.Hide).
+        // Çeviriler balonların üstündeyken (kartsız) sohbet durulmadan değişmeyi sürdürürse kalkar (ScreenPhoneFollow.Step.Hide).
         var follow = screenFollow ?? new ScreenPhoneFollow { HidesOnChange = !settings.PhoneMessagesPanel };
         var look = await Task.Run(() => ScreenPhoneFollow.Look(frame)).ConfigureAwait(true);
         if (look is not { } found)

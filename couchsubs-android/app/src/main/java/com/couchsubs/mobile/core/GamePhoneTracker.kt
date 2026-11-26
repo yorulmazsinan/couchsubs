@@ -75,21 +75,29 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
         if (found != null && !plausible(found.bounds, image.width, image.height)) found = null
         val before = previous
         val current = shown
+        var unseenMs = 0L
+        var unseenMisses = 0
         if (found != null && ((before != null && found.bounds.isClose(before.bounds, 0.035)) ||
                 (current != null && found.bounds.isClose(current.bounds, 0.035)))) {
             // İki uyumlu gözlem ya da açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir.
             shown = found
             misses = 0
-        } else if (current != null && misses < MISS_GRACE) {
+            lastSeen = now
+        } else if (current != null && !closes(misses + 1, elapsed(lastSeen, now))) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
-            // bildirim). Telefon gerçekten indirilince [MISS_GRACE] tur sonra kapanır.
+            // bildirim). Telefon gerçekten indirilince [MISS_GRACE_MS] sonra kapanır ([closes]).
             misses++
         } else {
+            if (current != null) {
+                unseenMs = elapsed(lastSeen, now)
+                unseenMisses = misses + 1
+            }
             shown = null
             misses = 0
         }
-        if (!wasShown && shown != null) note(PhoneTrace.OPENED) else if (wasShown && shown == null) note(PhoneTrace.CLOSED)
+        if (!wasShown && shown != null) note(PhoneTrace.OPENED)
+        else if (wasShown && shown == null) note(PhoneTrace.closed(unseenMs, unseenMisses))
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if (shown == null && found != null && before != null) note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, before.bounds)))
         previous = found
@@ -97,6 +105,8 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
     }
 
     private var misses = 0
+    /** Telefonun en son görüldüğü an (ms). */
+    private var lastSeen = 0L
 
     @Synchronized
     fun reset() {
@@ -104,17 +114,34 @@ class GamePhoneTracker(private val locateNear: (PhoneImage, GamePhoneGeometry.Po
         previous = null
         shown = null
         misses = 0
+        lastSeen = 0L
     }
 
     companion object {
         const val INTERVAL_MS = 330L
 
         /**
-         * Açık telefon art arda bu kadar örnekte bulunamazsa kapanır (330 ms aralıkla ~1–1,3 sn; Mac ve Windows ile aynı).
-         * Önceden 2 örnekti (~0,7 sn): telefonun ekranı bir an okunamayınca panel kaybolup baştan çevrilerek geri geliyordu
-         * (X, 22 Kas, GTA 6 telefonu).
+         * Açık telefon bu kadar süre (ms) görülmezse kapanır; çevirisi hemen kalkar (izleyici closePhone). Önceden süre
+         * değil örnek sayılıyordu (art arda 4 ıska): örnekler seyrek geldiğinde (Android'de ağır kare, takılan akış) telefon
+         * indirildikten 3–4 sn sonra kalkıyordu (#1334). Tek karelik ıska yine kapatmaz: en az [MINIMUM_MISSES] ıska
+         * gerekir; yalnız telefon 2 × [MISS_GRACE_MS] boyunca hiç görülmediyse tek ıska yeter. 330 ms aralıkla ~1 sn (Mac ve
+         * Windows ile aynı).
+         */
+        const val MISS_GRACE_MS = 900L
+        /**
+         * Altyazı süzgecinin açık telefonu bulunamadığı aramalarda tuttuğu arama sayısı ([SubtitlePipeline]); telefon
+         * oturumunun kapanması süreyle ölçülür ([MISS_GRACE_MS]).
          */
         const val MISS_GRACE = 3
+        const val MINIMUM_MISSES = 2
+        /** Saat geri giderse süre ölçülemez: art arda bu kadar ıskada her durumda kapanır (eski kural). */
+        const val MAXIMUM_MISSES = 4
+
+        /** Açık telefon [misses] ıskadan, [unseenMs] görülmeden sonra kapansın mı. */
+        fun closes(misses: Int, unseenMs: Long): Boolean =
+            misses >= MAXIMUM_MISSES || (misses >= MINIMUM_MISSES && unseenMs >= MISS_GRACE_MS) || unseenMs >= 2 * MISS_GRACE_MS
+
+        private fun elapsed(since: Long, now: Long): Long = if (now >= since) now - since else 0L
 
         /** Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı. */
         const val MIN_AREA = 0.04

@@ -10,6 +10,8 @@ public enum PhoneTrace {
     public static let component = "PhoneTrace"
     public static let opened = "telefon açıldı"
     public static let closed = "telefon kapandı"
+    /// Telefon kapandı: kaç ms görülmedi, kaç örnekte bulunamadı (#1334: çevirinin kalkma gecikmesi günlükte görünsün).
+    public static func closed(afterMs ms: Int, misses: Int) -> String { "\(closed) (\(ms) ms görülmedi, \(misses) ıska)" }
     public static let missing = "PhoneMissing: telefon bu karede bulunamadı, tur atlandı"
     public static let emptyFlat = "eğik ekran düzeltilmiş okuması boş"
 

@@ -14,6 +14,9 @@ public static class PhoneTrace
     public const string Component = "PhoneTrace";
     public const string Opened = "telefon açıldı";
     public const string Closed = "telefon kapandı";
+
+    /// <summary>Telefon kapandı: kaç ms görülmedi, kaç örnekte bulunamadı (#1334: çevirinin kalkma gecikmesi günlükte görünsün).</summary>
+    public static string ClosedAfter(long ms, int misses) => $"{Closed} ({ms} ms görülmedi, {misses} ıska)";
     public const string Missing = "PhoneMissing: telefon bu karede bulunamadı, tur atlandı";
     public const string EmptyFlat = "eğik ekran düzeltilmiş okuması boş";
 

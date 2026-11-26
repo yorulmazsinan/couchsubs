@@ -188,18 +188,51 @@ final class ScreenPhoneCardTests: XCTestCase {
         XCTAssertNil(SubtitleServer.json(shown[0])["bubble"])
     }
 
-    /// Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkar (`hide`), durulunca yeniden
-    /// çevrilir; kartlı izleme eskisi gibi bekler.
-    func testInPlaceTranslationsLeaveAsSoonAsTheChatMoves() {
+    /// Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkmaz (elde sallanan telefon, #1253):
+    /// durulunca yeniden çevrilir; durulmadan değişmeye devam ederse ikinci yoklamada kalkar. Kartlı izleme gizlemez.
+    func testInPlaceTranslationsLeaveOnlyWhenTheChatKeepsChanging() {
         let a = [UInt8](repeating: 40, count: 768), b = [UInt8](repeating: 200, count: 768)
+        let c = [UInt8](repeating: 120, count: 768)
         let place = TextBox(left: 0.6, top: 0.2, right: 0.8, bottom: 0.85)
         let inPlace = ScreenPhoneFollow(hidesOnChange: true), card = ScreenPhoneFollow()
         for follow in [inPlace, card] { follow.settled(place, signature: a) }
         XCTAssertEqual(inPlace.step(place, signature: a), .keep)
-        XCTAssertEqual(inPlace.step(place, signature: b), .hide)
+        XCTAssertEqual(inPlace.step(place, signature: b), .wait)
         XCTAssertEqual(inPlace.step(place, signature: b), .refresh)
+        inPlace.settled(place, signature: b)
+        XCTAssertEqual(inPlace.step(place, signature: a), .wait)
+        XCTAssertEqual(inPlace.step(place, signature: c), .hide)
+        XCTAssertEqual(inPlace.step(place, signature: c), .refresh)
         XCTAssertEqual(card.step(place, signature: b), .wait)
-        XCTAssertEqual(card.step(place, signature: b), .refresh)
+        XCTAssertEqual(card.step(place, signature: c), .wait)
+        XCTAssertEqual(card.step(place, signature: c), .refresh)
+    }
+
+    /// Elde sallanan telefonun izi (#1253): ince ızgarada (hücrenin `subColumns` × `subRows` alt örneği) birkaç örnek
+    /// kayan sohbet, hücre ortalaması ve yatay kaydırmalı karşılaştırmayla değişmiş sayılmaz; yeni mesajla kayan sohbet
+    /// değişmiş sayılır. Windows ve Android aynı deneme.
+    func testSwayingPhoneSignatureStaysTheSame() {
+        let width = ReadScheduler.signatureWidth, height = ReadScheduler.signatureHeight
+        let fineWidth = width * ScreenPhoneFollow.subColumns, fineHeight = height * ScreenPhoneFollow.subRows
+        // Sohbet: 20 ince satırda bir balon (sırayla solda gri, sağda yeşil), balonun ortasında kelimeler.
+        func chat(dx: Int, dy: Int) -> [UInt8] {
+            (0..<(fineWidth * fineHeight)).map { index in
+                let x = index % fineWidth - dx, y = index / fineWidth - dy
+                let k = Int((Double(y) / 20).rounded(.down)), r = y - k * 20
+                let (left, right, color) = k % 2 == 0 ? (8, 160, 80) : (96, 248, 140)
+                guard r >= 4, r < 16, x >= left, x < right else { return 25 }
+                return r >= 6 && r < 14 && (x - left) % 32 < 24 ? 200 : UInt8(color)
+            }
+        }
+        let still = ScreenPhoneFollow.average(chat(dx: 0, dy: 0), width: width, height: height)
+        for (dx, dy) in [(2, 1), (-4, 1), (6, -1), (3, 0), (-2, -1), (5, 1)] {
+            let swayed = ScreenPhoneFollow.average(chat(dx: dx, dy: dy), width: width, height: height)
+            XCTAssertLessThanOrEqual(ScreenPhoneFollow.changedShare(still, swayed), ScreenPhoneFollow.changeShare, "\(dx),\(dy)")
+        }
+        for scroll in [8, 10, 16] {
+            let moved = ScreenPhoneFollow.average(chat(dx: 0, dy: -scroll), width: width, height: height)
+            XCTAssertGreaterThan(ScreenPhoneFollow.changedShare(still, moved), ScreenPhoneFollow.changeShare, "\(scroll)")
+        }
     }
 
     func testPhoneMessagesBecomeACardBesideThePhone() {
@@ -513,7 +546,7 @@ final class ScreenPhoneCardTests: XCTestCase {
         }
         struct Follow: Decodable {
             struct Step: Decodable { let settle: [Double]?; let phone: [Double]?; let sig: [Int]?; let expect: String? }
-            let name: String; let steps: [Step]
+            let name: String; let steps: [Step]; let hides: Bool?
         }
         struct Switch: Decodable { let chats: [String]; let calls: [Int] }
         let layouts: [Layout]; let follow: [Follow]; let `switch`: Switch
@@ -584,11 +617,17 @@ final class ScreenPhoneCardTests: XCTestCase {
     /// Kart ekrandayken telefon izlenir: sohbet değişip durulunca yeniden çevrilir, değişmeyen telefonda kart kalır,
     /// telefon kapanınca kart kalkar; tek karelik ıska kartı kaldırmaz (ortak deneme dosyasının `follow` bölümü).
     func testSharedFollowVectors() throws {
+        // [taban, sayı, değer] ya da [taban, sayı, değer, şerit, kayma]: ilk `sayı` örnek `değer`, gerisi `taban`; şerit
+        // verilirse 64 sütunluk izde `şerit` genişliğinde, `kayma` sütun sağa kaymış dikey şeritler de `değer`.
         func signature(_ spec: [Int]) -> [UInt8] {
-            (0..<768).map { UInt8($0 < spec[1] ? spec[2] : spec[0]) }
+            (0..<768).map { index in
+                if index < spec[1] { return UInt8(spec[2]) }
+                if spec.count >= 5, spec[3] > 0, ((index % 64 - spec[4] + 64) / spec[3]) % 2 == 1 { return UInt8(spec[2]) }
+                return UInt8(spec[0])
+            }
         }
         for vector in try shared().follow {
-            let follow = ScreenPhoneFollow()
+            let follow = ScreenPhoneFollow(hidesOnChange: vector.hides ?? false)
             for (index, step) in vector.steps.enumerated() {
                 if let settle = step.settle {
                     follow.settled(box(settle), signature: signature(step.sig!))

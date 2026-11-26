@@ -57,23 +57,62 @@ public class ScreenPhoneCardTests
     }
 
     /// <summary>
-    /// Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkar (Hide), durulunca yeniden çevrilir;
-    /// kartlı izleme eskisi gibi bekler (Mac ile aynı).
+    /// Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkmaz (elde sallanan telefon, #1253):
+    /// durulunca yeniden çevrilir; durulmadan değişmeye devam ederse ikinci yoklamada kalkar. Kartlı izleme gizlemez (Mac
+    /// ile aynı).
     /// </summary>
     [Fact]
-    public void InPlaceTranslationsLeaveAsSoonAsTheChatMoves()
+    public void InPlaceTranslationsLeaveOnlyWhenTheChatKeepsChanging()
     {
         byte[] a = [.. Enumerable.Repeat((byte)40, 768)], b = [.. Enumerable.Repeat((byte)200, 768)];
+        byte[] c = [.. Enumerable.Repeat((byte)120, 768)];
         var place = new TextBox(0.6, 0.2, 0.8, 0.85);
         var inPlace = new ScreenPhoneFollow { HidesOnChange = true };
         var card = new ScreenPhoneFollow();
         inPlace.Settled(place, a);
         card.Settled(place, a);
         Assert.Equal(ScreenPhoneFollow.Step.Keep, inPlace.Next(place, a));
-        Assert.Equal(ScreenPhoneFollow.Step.Hide, inPlace.Next(place, b));
+        Assert.Equal(ScreenPhoneFollow.Step.Wait, inPlace.Next(place, b));
         Assert.Equal(ScreenPhoneFollow.Step.Refresh, inPlace.Next(place, b));
+        inPlace.Settled(place, b);
+        Assert.Equal(ScreenPhoneFollow.Step.Wait, inPlace.Next(place, a));
+        Assert.Equal(ScreenPhoneFollow.Step.Hide, inPlace.Next(place, c));
+        Assert.Equal(ScreenPhoneFollow.Step.Refresh, inPlace.Next(place, c));
         Assert.Equal(ScreenPhoneFollow.Step.Wait, card.Next(place, b));
-        Assert.Equal(ScreenPhoneFollow.Step.Refresh, card.Next(place, b));
+        Assert.Equal(ScreenPhoneFollow.Step.Wait, card.Next(place, c));
+        Assert.Equal(ScreenPhoneFollow.Step.Refresh, card.Next(place, c));
+    }
+
+    /// <summary>
+    /// Elde sallanan telefonun izi (#1253): ince ızgarada birkaç örnek kayan sohbet, hücre ortalaması ve yatay kaydırmalı
+    /// karşılaştırmayla değişmiş sayılmaz; yeni mesajla kayan sohbet değişmiş sayılır (Mac ve Android ile aynı deneme).
+    /// </summary>
+    [Fact]
+    public void SwayingPhoneSignatureStaysTheSame()
+    {
+        const int width = ReadScheduler.SignatureWidth, height = ReadScheduler.SignatureHeight;
+        const int fineWidth = width * ScreenPhoneFollow.SubColumns, fineHeight = height * ScreenPhoneFollow.SubRows;
+        // Sohbet: 20 ince satırda bir balon (sırayla solda gri, sağda yeşil), balonun ortasında kelimeler.
+        static byte[] Chat(int dx, int dy) => [.. Enumerable.Range(0, fineWidth * fineHeight).Select(index =>
+        {
+            int x = index % fineWidth - dx, y = index / fineWidth - dy;
+            var k = (int)Math.Floor(y / 20.0);
+            var r = y - k * 20;
+            var (left, right, color) = k % 2 == 0 ? (8, 160, 80) : (96, 248, 140);
+            if (r < 4 || r >= 16 || x < left || x >= right) return (byte)25;
+            return (byte)(r >= 6 && r < 14 && (x - left) % 32 < 24 ? 200 : color);
+        })];
+        var still = ScreenPhoneFollow.Average(Chat(0, 0), width, height);
+        foreach (var (dx, dy) in new[] { (2, 1), (-4, 1), (6, -1), (3, 0), (-2, -1), (5, 1) })
+        {
+            var swayed = ScreenPhoneFollow.Average(Chat(dx, dy), width, height);
+            Assert.True(ScreenPhoneFollow.ChangedShare(still, swayed) <= ScreenPhoneFollow.ChangeShare, $"{dx},{dy}");
+        }
+        foreach (var scroll in new[] { 8, 10, 16 })
+        {
+            var moved = ScreenPhoneFollow.Average(Chat(0, -scroll), width, height);
+            Assert.True(ScreenPhoneFollow.ChangedShare(still, moved) > ScreenPhoneFollow.ChangeShare, $"{scroll}");
+        }
     }
 
     [Fact]
@@ -588,15 +627,23 @@ public class ScreenPhoneCardTests
     [Fact]
     public void SharedFollowVectors()
     {
+        // [taban, sayı, değer] ya da [taban, sayı, değer, şerit, kayma]: ilk "sayı" örnek "değer", gerisi "taban"; şerit
+        // verilirse 64 sütunluk izde "şerit" genişliğinde, "kayma" sütun sağa kaymış dikey şeritler de "değer".
         static byte[] Signature(JsonElement spec)
         {
-            var v = Numbers(spec);
-            return [.. Enumerable.Range(0, 768).Select(i => (byte)(i < v[1] ? v[2] : v[0]))];
+            var v = Numbers(spec).Select(n => (int)n).ToArray();
+            return [.. Enumerable.Range(0, 768).Select(i =>
+            {
+                if (i < v[1]) return (byte)v[2];
+                if (v.Length >= 5 && v[3] > 0 && (i % 64 - v[4] + 64) / v[3] % 2 == 1) return (byte)v[2];
+                return (byte)v[0];
+            })];
         }
         foreach (var vector in Vectors().GetProperty("follow").EnumerateArray())
         {
             var name = vector.GetProperty("name").GetString();
-            var follow = new ScreenPhoneFollow();
+            var hides = vector.TryGetProperty("hides", out var flag) && flag.GetBoolean();
+            var follow = new ScreenPhoneFollow { HidesOnChange = hides };
             var index = 0;
             foreach (var step in vector.GetProperty("steps").EnumerateArray())
             {

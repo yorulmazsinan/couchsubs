@@ -1328,7 +1328,7 @@ class TranslationService : Service() {
             screenFollow = null
             return
         }
-        // Çeviriler balonların üstündeyken (kartsız) sohbet kayınca/değişince hemen kalkar (ScreenPhoneFollow.Step.HIDE).
+        // Çeviriler balonların üstündeyken (kartsız) sohbet durulmadan değişmeyi sürdürürse kalkar (ScreenPhoneFollow.Step.HIDE).
         val follow = screenFollow ?: ScreenPhoneFollow(hidesOnChange = !settings.phoneMessagesPanel)
         follow.settled(look.first, look.second)
         screenFollow = follow

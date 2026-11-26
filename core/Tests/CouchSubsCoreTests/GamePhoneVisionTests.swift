@@ -63,13 +63,14 @@ final class GamePhoneTrackerTests: XCTestCase {
         XCTAssertNil(tracker.sample(image, now: 0).pose)
         XCTAssertFalse(tracker.sample(image, now: 250).sampled)
         XCTAssertNotNil(tracker.sample(image, now: 330).pose)
-        // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); art arda dördüncü ıskada (~1,3 sn) kapanır.
+        // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); son görülmeden ~1 sn sonra, üçüncü
+        // ıskada kapanır (#1334; önceden dördüncü ıskada, ~1,3 sn).
         let missing = GamePhoneTestFrame.phone(camera: false)
         XCTAssertNotNil(tracker.sample(missing, now: 660).pose)
         XCTAssertNotNil(tracker.sample(image, now: 990).pose)
         XCTAssertNotNil(tracker.sample(missing, now: 1320).pose)
         XCTAssertNotNil(tracker.sample(missing, now: 1650).pose)
-        XCTAssertNotNil(tracker.sample(missing, now: 1980).pose)
+        XCTAssertNil(tracker.sample(missing, now: 1980).pose)
         XCTAssertNil(tracker.sample(missing, now: 2310).pose)
         // Kapandıktan sonra yeniden açılış yine iki gözlem ister.
         XCTAssertNil(tracker.sample(image, now: 2640).pose)

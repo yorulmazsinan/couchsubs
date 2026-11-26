@@ -2964,7 +2964,7 @@ final class AppModel: ObservableObject {
     /// telefon kapanınca kart kalkar. Önceden kart tek karenin çevirisiydi: başka sohbete geçince eskisi kalıyor, süresi
     /// dolunca kayboluyordu.
     private func followPhone(in frame: CGImage) {
-        // Çeviriler balonların üstündeyken (kartsız) sohbet kayınca/değişince hemen kalkar (`ScreenPhoneFollow.hide`).
+        // Çeviriler balonların üstündeyken (kartsız) sohbet durulmadan değişmeyi sürdürürse kalkar (`ScreenPhoneFollow.hide`).
         let follow = screenFollow ?? ScreenPhoneFollow(hidesOnChange: !settings.phoneMessagesPanel)
         Task { [weak self] in
             guard let look = await Task.detached(priority: .utility, operation: { ScreenPhoneFollow.look(frame) }).value else {

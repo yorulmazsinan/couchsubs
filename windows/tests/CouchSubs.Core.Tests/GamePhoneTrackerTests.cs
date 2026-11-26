@@ -7,7 +7,7 @@ namespace CouchSubs.Core.Tests;
 public class GamePhoneTrackerTests
 {
     [Fact]
-    public void NeedsTwoAlignedSamplesAndClosesAfterMissGrace()
+    public void NeedsTwoAlignedSamplesAndClosesAfterMissGraceMs()
     {
         var frame = Frame.Blank(2, 2);
         CropRegion? candidate = new(0.15, 0.83, 0.32, 0.58);
@@ -20,7 +20,7 @@ public class GamePhoneTrackerTests
         Assert.True(tracker.TrySample(frame, 430, out var opened));
         Assert.Equal(candidate, opened);
         // Açık telefon tek karede bulunamayınca kapanmaz (çeviriler gidip gelmesin); yakınında yeniden bulununca sürer,
-        // art arda MissGrace + 1 ıskada kapanır. Yeniden açılış yine iki gözlem ister (Mac ve Android ile aynı).
+        // en az MinimumMisses ıska ve MissGraceMs sonra kapanır. Yeniden açılış yine iki gözlem ister (Mac ve Android ile aynı).
         var open = candidate;
         candidate = null;
         Assert.True(tracker.TrySample(frame, 760, out var kept));
@@ -29,12 +29,12 @@ public class GamePhoneTrackerTests
         Assert.True(tracker.TrySample(frame, 1090, out var followed));
         Assert.Equal(candidate, followed);
         candidate = null;
-        for (var i = 0; i < GamePhoneTracker.MissGrace; i++)
+        for (var i = 0; i < 2; i++)
         {
             Assert.True(tracker.TrySample(frame, 1420 + 330 * i, out var still));
             Assert.NotNull(still);
         }
-        Assert.True(tracker.TrySample(frame, 1420 + 330 * GamePhoneTracker.MissGrace, out var closed));
+        Assert.True(tracker.TrySample(frame, 1420 + 330 * 2, out var closed));
         Assert.Null(closed);
         candidate = new(0.14, 0.8, 0.31, 0.56);
         Assert.True(tracker.TrySample(frame, 3000, out var reopening));
@@ -42,6 +42,45 @@ public class GamePhoneTrackerTests
         tracker.Reset();
         Assert.True(tracker.TrySample(frame, 3001, out var reset));
         Assert.Null(reset);
+    }
+
+    /// <summary>#1334: telefon indirilince çevirisi süreyle (~1 sn) kalkar; örnekler seyrek gelse de ıska sayısı beklenmez.</summary>
+    [Fact]
+    public void ClosedPhoneLeavesWithinASecondEvenWhenSamplesAreSparse()
+    {
+        var frame = Frame.Blank(2, 2);
+        CropRegion? candidate = new(0.15, 0.83, 0.32, 0.58);
+        var open = candidate;
+
+        // Seyrek örnekler (1 sn arayla): tek ıska kapatmaz, ikinci ıskada kapanır (önceden dördüncüde, ~4 sn).
+        var tracker = new GamePhoneTracker(_ => candidate);
+        tracker.TrySample(frame, 0, out _);
+        Assert.True(tracker.TrySample(frame, 1000, out var opened));
+        Assert.NotNull(opened);
+        candidate = null;
+        tracker.TrySample(frame, 2000, out var kept);
+        Assert.NotNull(kept);
+        candidate = open;
+        tracker.TrySample(frame, 3000, out var back);
+        Assert.NotNull(back);
+        candidate = null;
+        tracker.TrySample(frame, 4000, out var once);
+        Assert.NotNull(once);
+        tracker.TrySample(frame, 5000, out var closed);
+        Assert.Null(closed);
+
+        // Akış takıldı, telefon iki kat süre hiç görülmedi: tek ıska yeter.
+        candidate = open;
+        tracker = new GamePhoneTracker(_ => candidate);
+        tracker.TrySample(frame, 0, out _);
+        tracker.TrySample(frame, 330, out var seen);
+        Assert.NotNull(seen);
+        candidate = null;
+        tracker.TrySample(frame, 330 + 2 * GamePhoneTracker.MissGraceMs, out var gone);
+        Assert.Null(gone);
+
+        Assert.False(GamePhoneTracker.Closes(1, 1200));
+        Assert.True(GamePhoneTracker.Closes(4, 0));
     }
 
     [Fact]

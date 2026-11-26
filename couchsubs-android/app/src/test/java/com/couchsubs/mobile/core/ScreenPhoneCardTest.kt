@@ -100,21 +100,65 @@ class ScreenPhoneCardTest {
         assertEquals(outgoing.box, shown[2].box)
     }
 
-    /** Çeviriler balonların üstündeyken sohbet kayınca ilk yoklamada kalkar (HIDE), durulunca yeniden çevrilir (Mac ile aynı). */
+    /**
+     * Çeviriler balonların üstündeyken sohbet kayınca/değişince ilk yoklamada kalkmaz (elde sallanan telefon, #1253):
+     * durulunca yeniden çevrilir; durulmadan değişmeye devam ederse ikinci yoklamada kalkar. Kartlı izleme gizlemez (Mac
+     * ile aynı).
+     */
     @Test
-    fun inPlaceTranslationsLeaveAsSoonAsTheChatMoves() {
+    fun inPlaceTranslationsLeaveOnlyWhenTheChatKeepsChanging() {
         val a = ByteArray(768) { 40 }
         val b = ByteArray(768) { 200.toByte() }
+        val c = ByteArray(768) { 120 }
         val place = TextBox(0.6, 0.2, 0.8, 0.85)
         val inPlace = ScreenPhoneFollow(hidesOnChange = true)
         val card = ScreenPhoneFollow()
         inPlace.settled(place, a)
         card.settled(place, a)
         assertEquals(ScreenPhoneFollow.Step.KEEP, inPlace.step(place, a))
-        assertEquals(ScreenPhoneFollow.Step.HIDE, inPlace.step(place, b))
+        assertEquals(ScreenPhoneFollow.Step.WAIT, inPlace.step(place, b))
         assertEquals(ScreenPhoneFollow.Step.REFRESH, inPlace.step(place, b))
+        inPlace.settled(place, b)
+        assertEquals(ScreenPhoneFollow.Step.WAIT, inPlace.step(place, a))
+        assertEquals(ScreenPhoneFollow.Step.HIDE, inPlace.step(place, c))
+        assertEquals(ScreenPhoneFollow.Step.REFRESH, inPlace.step(place, c))
         assertEquals(ScreenPhoneFollow.Step.WAIT, card.step(place, b))
-        assertEquals(ScreenPhoneFollow.Step.REFRESH, card.step(place, b))
+        assertEquals(ScreenPhoneFollow.Step.WAIT, card.step(place, c))
+        assertEquals(ScreenPhoneFollow.Step.REFRESH, card.step(place, c))
+    }
+
+    /**
+     * Elde sallanan telefonun izi (#1253): ince ızgarada birkaç örnek kayan sohbet, hücre ortalaması ve yatay kaydırmalı
+     * karşılaştırmayla değişmiş sayılmaz; yeni mesajla kayan sohbet değişmiş sayılır (Mac ve Windows ile aynı deneme).
+     */
+    @Test
+    fun swayingPhoneSignatureStaysTheSame() {
+        val width = RegionSignature.WIDTH
+        val height = RegionSignature.HEIGHT
+        val fineWidth = width * ScreenPhoneFollow.SUB_COLUMNS
+        val fineHeight = height * ScreenPhoneFollow.SUB_ROWS
+        // Sohbet: 20 ince satırda bir balon (sırayla solda gri, sağda yeşil), balonun ortasında kelimeler.
+        fun chat(dx: Int, dy: Int) = ByteArray(fineWidth * fineHeight) { index ->
+            val x = index % fineWidth - dx
+            val y = index / fineWidth - dy
+            val k = Math.floorDiv(y, 20)
+            val r = y - k * 20
+            val (left, right, color) = if (k % 2 == 0) Triple(8, 160, 80) else Triple(96, 248, 140)
+            when {
+                r < 4 || r >= 16 || x < left || x >= right -> 25.toByte()
+                r >= 6 && r < 14 && (x - left) % 32 < 24 -> 200.toByte()
+                else -> color.toByte()
+            }
+        }
+        val still = ScreenPhoneFollow.average(chat(0, 0), width, height)
+        for ((dx, dy) in listOf(2 to 1, -4 to 1, 6 to -1, 3 to 0, -2 to -1, 5 to 1)) {
+            val swayed = ScreenPhoneFollow.average(chat(dx, dy), width, height)
+            assertTrue("$dx,$dy", ScreenPhoneFollow.changedShare(still, swayed) <= ScreenPhoneFollow.CHANGE_SHARE)
+        }
+        for (scroll in listOf(8, 10, 16)) {
+            val moved = ScreenPhoneFollow.average(chat(0, -scroll), width, height)
+            assertTrue("$scroll", ScreenPhoneFollow.changedShare(still, moved) > ScreenPhoneFollow.CHANGE_SHARE)
+        }
     }
 
     @Test
@@ -459,9 +503,14 @@ class ScreenPhoneCardTest {
      */
     @Test
     fun sharedFollowVectors() {
-        fun signature(spec: JSONArray) = ByteArray(768) { (if (it < spec.getInt(1)) spec.getInt(2) else spec.getInt(0)).toByte() }
+        // [taban, sayı, değer] ya da [taban, sayı, değer, şerit, kayma]: ilk "sayı" örnek "değer", gerisi "taban"; şerit
+        // verilirse 64 sütunluk izde "şerit" genişliğinde, "kayma" sütun sağa kaymış dikey şeritler de "değer".
+        fun signature(spec: JSONArray) = ByteArray(768) {
+            val striped = spec.length() >= 5 && spec.getInt(3) > 0 && ((it % 64 - spec.getInt(4) + 64) / spec.getInt(3)) % 2 == 1
+            (if (it < spec.getInt(1) || striped) spec.getInt(2) else spec.getInt(0)).toByte()
+        }
         for (vector in objects(root.getJSONArray("follow"))) {
-            val follow = ScreenPhoneFollow()
+            val follow = ScreenPhoneFollow(hidesOnChange = vector.optBoolean("hides", false))
             objects(vector.getJSONArray("steps")).forEachIndexed { index, step ->
                 if (step.has("settle")) {
                     follow.settled(box(step.getJSONArray("settle")), signature(step.getJSONArray("sig")))

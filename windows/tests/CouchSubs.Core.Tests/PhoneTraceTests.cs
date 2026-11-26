@@ -25,8 +25,8 @@ public class PhoneTraceTrackerTests
         Sample();
         Assert.Equal(["düşen satır [PhoneTrace] telefon açıldı: \"\""], log);
         candidate = null;
-        for (var i = 0; i <= GamePhoneTracker.MissGrace; i++) Sample();
-        Assert.Equal("düşen satır [PhoneTrace] telefon kapandı: \"\"", log[^1]);
+        for (var i = 0; i < 3; i++) Sample();
+        Assert.Equal("düşen satır [PhoneTrace] telefon kapandı (1200 ms görülmedi, 3 ıska): \"\"", log[^1]);
 
         // Elde sallanan telefon: her örnekte %10 kayıyor, iki uyumlu gözlem olmadığı için hiç açılmıyor.
         log.Clear();

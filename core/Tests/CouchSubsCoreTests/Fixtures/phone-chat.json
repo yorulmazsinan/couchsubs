@@ -2133,7 +2133,7 @@
      ],
      "sig": [
       100,
-      70,
+      200,
       0
      ],
      "expect": "wait"
@@ -2147,7 +2147,289 @@
      ],
      "sig": [
       100,
-      70,
+      200,
+      0
+     ],
+     "expect": "refresh"
+    }
+   ]
+  },
+  {
+   "name": "elde sallanan telefon (yer ve yazı birkaç piksel oynuyor) yerindeki çeviriyi kaldırmaz",
+   "hides": true,
+   "steps": [
+    {
+     "settle": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0,
+      2,
+      0
+     ]
+    },
+    {
+     "phone": [
+      0.72,
+      0.18,
+      0.88,
+      0.86
+     ],
+     "sig": [
+      100,
+      0,
+      0,
+      2,
+      1
+     ],
+     "expect": "keep"
+    },
+    {
+     "phone": [
+      0.69,
+      0.16,
+      0.85,
+      0.84
+     ],
+     "sig": [
+      100,
+      0,
+      0,
+      2,
+      -1
+     ],
+     "expect": "keep"
+    },
+    {
+     "phone": [
+      0.73,
+      0.19,
+      0.89,
+      0.87
+     ],
+     "sig": [
+      100,
+      0,
+      0,
+      2,
+      2
+     ],
+     "expect": "keep"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0,
+      2,
+      0
+     ],
+     "expect": "keep"
+    }
+   ]
+  },
+  {
+   "name": "değişen sohbet ilk yoklamada yerindeki çeviriyi kaldırmaz, durulunca yeniden çevrilir",
+   "hides": true,
+   "steps": [
+    {
+     "settle": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0
+     ]
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      40,
+      0,
+      0
+     ],
+     "expect": "wait"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      40,
+      0,
+      0
+     ],
+     "expect": "refresh"
+    }
+   ]
+  },
+  {
+   "name": "tek yoklamalık değişim geri dönerse çeviri kalır",
+   "hides": true,
+   "steps": [
+    {
+     "settle": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0
+     ]
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      40,
+      0,
+      0
+     ],
+     "expect": "wait"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0
+     ],
+     "expect": "keep"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      40,
+      0,
+      0
+     ],
+     "expect": "wait"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0
+     ],
+     "expect": "keep"
+    }
+   ]
+  },
+  {
+   "name": "durulmayan ekranda yerindeki çeviri ikinci değişimde kalkar",
+   "hides": true,
+   "steps": [
+    {
+     "settle": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      100,
+      0,
+      0
+     ]
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      40,
+      0,
+      0
+     ],
+     "expect": "wait"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      200,
+      0,
+      0
+     ],
+     "expect": "hide"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      0,
+      0,
+      0
+     ],
+     "expect": "wait"
+    },
+    {
+     "phone": [
+      0.7,
+      0.17,
+      0.86,
+      0.85
+     ],
+     "sig": [
+      0,
+      0,
       0
      ],
      "expect": "refresh"
