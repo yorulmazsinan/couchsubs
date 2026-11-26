@@ -22,7 +22,7 @@ class GamePhoneFirstSightingTest {
     private val vectors = JSONObject(Fixtures.text("phone-first-sighting.json"))
 
     /** Gerçek kare (RGB). */
-    private class Picture(override val width: Int, override val height: Int, val pixels: IntArray) : PhoneImage {
+    internal class Picture(override val width: Int, override val height: Int, val pixels: IntArray) : PhoneImage {
         override fun rgb(x: Int, y: Int): Int = pixels[y * width + x]
         override fun tone(x: Int, y: Int): Int {
             val c = pixels[y * width + x]
@@ -38,11 +38,11 @@ class GamePhoneFirstSightingTest {
         override fun tone(x: Int, y: Int) = 0
     }
 
-    private val frames: File? = generateSequence(File(System.getProperty("user.dir")!!).absoluteFile) { it.parentFile }
+    internal val frames: File? = generateSequence(File(System.getProperty("user.dir")!!).absoluteFile) { it.parentFile }
         .map { File(it, "testdata/frames") }
         .firstOrNull { File(it, "frames.json").isFile }
 
-    private fun original(name: String): Picture {
+    internal fun original(name: String): Picture {
         val directory = frames
         assumeTrue("gerçek kare yok", directory != null)
         val file = File(directory, "$name.jpg")
@@ -59,11 +59,59 @@ class GamePhoneFirstSightingTest {
         }
     }
 
-    /** Gerçek kare, ortak dosyadaki dönüşümüyle (none, shiftUp, lowContrast, dark); [cover] el rengiyle örtülen dikdörtgen. */
-    private fun load(name: String, transform: String, cover: List<Double>? = null): Picture =
-        transformed(original(name), transform, cover)
+    /**
+     * Gerçek kare, ortak dosyadaki dönüşümleriyle ("+" ile birleşir: none, shiftUp, lowContrast, dark, night, gamma,
+     * scale1440); [shift] [dx, dy] (0..1) verilirse görüntü sağa ve aşağı kayar (el titredi), [cover] el rengiyle örtülen
+     * dikdörtgen.
+     */
+    internal fun load(name: String, transform: String, cover: List<Double>? = null, shift: List<Double>? = null): Picture {
+        var picture = original(name)
+        for (part in transform.split("+")) picture = transformed(picture, part)
+        if (shift != null) picture = shifted(picture, shift[0], shift[1])
+        return if (cover != null) transformed(picture, "none", cover) else picture
+    }
 
-    private fun transformed(source: Picture, transform: String, cover: List<Double>? = null): Picture {
+    /** Görüntü karenin [dx]'i kadar sağa, [dy]'si kadar aşağı kayar; boşalan yer kenar pikseliyle dolar. */
+    private fun shifted(source: Picture, dx: Double, dy: Double): Picture {
+        val width = source.width
+        val height = source.height
+        val sx = (dx * width).toInt()
+        val sy = (dy * height).toInt()
+        return Picture(width, height, IntArray(width * height) { i ->
+            source.pixels[(i / width - sy).coerceIn(0, height - 1) * width + (i % width - sx).coerceIn(0, width - 1)]
+        })
+    }
+
+    /** Çift doğrusal büyütme (piksel ortalarından; 1440p akış). */
+    private fun resized(source: Picture, width: Int, height: Int): Picture {
+        val scaleX = source.width.toDouble() / width
+        val scaleY = source.height.toDouble() / height
+        val out = IntArray(width * height)
+        for (y in 0 until height) {
+            val fy = ((y + 0.5) * scaleY - 0.5).coerceIn(0.0, source.height - 1.0)
+            val y0 = fy.toInt()
+            val y1 = minOf(source.height - 1, y0 + 1)
+            val wy = fy - y0
+            for (x in 0 until width) {
+                val fx = ((x + 0.5) * scaleX - 0.5).coerceIn(0.0, source.width - 1.0)
+                val x0 = fx.toInt()
+                val x1 = minOf(source.width - 1, x0 + 1)
+                val wx = fx - x0
+                var color = 0
+                for (shift in intArrayOf(16, 8, 0)) {
+                    fun c(px: Int, py: Int) = (source.pixels[py * source.width + px] shr shift) and 0xff
+                    val top = c(x0, y0) + (c(x1, y0) - c(x0, y0)) * wx
+                    val bottom = c(x0, y1) + (c(x1, y1) - c(x0, y1)) * wx
+                    color = color or (Math.round(top + (bottom - top) * wy).toInt().coerceIn(0, 255) shl shift)
+                }
+                out[y * width + x] = color
+            }
+        }
+        return Picture(width, height, out)
+    }
+
+    internal fun transformed(source: Picture, transform: String, cover: List<Double>? = null): Picture {
+        if (transform == "scale1440") return resized(source, 2560, 1440)
         val width = source.width
         val height = source.height
         val out = when (transform) {
@@ -72,9 +120,14 @@ class GamePhoneFirstSightingTest {
                 val shift = height / 12
                 IntArray(width * height) { i -> source.pixels[minOf(height - 1, i / width + shift) * width + i % width] }
             }
-            "lowContrast", "dark" -> IntArray(width * height) { i ->
+            "lowContrast", "dark", "night", "gamma" -> IntArray(width * height) { i ->
                 val c = source.pixels[i]
-                fun tone(v: Int) = (if (transform == "dark") v * 6 / 10 else 128 + (v - 128) * 6 / 10).coerceIn(0, 255)
+                fun tone(v: Int) = when (transform) {
+                    "dark" -> v * 6 / 10
+                    "night" -> v * 35 / 100
+                    "gamma" -> (255 * Math.pow(v / 255.0, 2.2)).toInt()
+                    else -> 128 + (v - 128) * 6 / 10
+                }.coerceIn(0, 255)
                 (tone((c shr 16) and 0xff) shl 16) or (tone((c shr 8) and 0xff) shl 8) or tone(c and 0xff)
             }
             else -> error(transform)
@@ -128,13 +181,18 @@ class GamePhoneFirstSightingTest {
             val name = sequence.getString("name")
             val tracker = GamePhoneTracker()
             var opened: Int? = null
+            var closedAfterOpening = false
             val samples = sequence.getJSONArray("samples")
             for (i in 0 until samples.length()) {
                 val sample = samples.getJSONObject(i)
-                val frame = load(sample.getString("frame"), sample.getString("transform"), sample.optJSONArray("cover")?.let(::doubles))
-                if (tracker.sample(frame, sample.getLong("t")).pose != null && opened == null) opened = i
+                val frame = load(sample.getString("frame"), sample.getString("transform"), sample.optJSONArray("cover")?.let(::doubles),
+                    sample.optJSONArray("shift")?.let(::doubles))
+                val open = tracker.sample(frame, sample.getLong("t")).pose != null
+                if (open && opened == null) opened = i
+                if (!open && opened != null) closedAfterOpening = true
             }
             assertEquals(name, expected(sequence), opened)
+            if (sequence.optBoolean("staysOpen")) assertFalse("$name: telefon kapandı", closedAfterOpening)
         }
     }
 

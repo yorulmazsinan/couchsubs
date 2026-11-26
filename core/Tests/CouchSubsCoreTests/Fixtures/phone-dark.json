@@ -1,0 +1,32 @@
+{
+  "about": "Karanlık sahnede ve koyu ekranlı GTA 6 telefonu (X, beta.104: \"telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor\"). Ortak deneme: Mac/iPhone GamePhoneDarkTests.swift, Windows GamePhoneDarkTests.cs, Android GamePhoneDarkTest.kt. 'gains': üst şeridin ortanca tonu (level) için denenen kazançlar (256 = 1×; boş: karanlık değil, kazanç denenmez). 'frames': testdata/frames gerçek kareleri phone-first-sighting.json'daki dönüşümlerle (none, dark, night, gamma); sıkı arama telefonu bulmalı, 'gain' true ise bulan aramanın kazancı 1×'ten büyük (kazanç gerekti). 'darkScreen': PhoneDarkScreen: 'histogram' [ton, adet] çiftleri; 'prepared' hazırlık yapılır mı; 'map' [giriş, çıkış] tonları. 'missLog': karanlıkta bulunamayan telefon 20 sn içinde tek satır yazar, parlaklık ve kazançla; 'missLine' satırın tam metni.",
+  "gains": [
+    {"level": 120, "gains": []},
+    {"level": 56, "gains": []},
+    {"level": 55, "gains": [384]},
+    {"level": 40, "gains": [384]},
+    {"level": 30, "gains": [384, 640]},
+    {"level": 20, "gains": [384, 640, 1024]},
+    {"level": 0, "gains": [384, 640, 1024]}
+  ],
+  "frames": [
+    {"name": "ana ekran, sahne × 0,6", "frame": "gta6-telefon-ana-1", "transform": "dark", "gain": true},
+    {"name": "ana ekran, gece (× 0,35)", "frame": "gta6-telefon-ana-1", "transform": "night", "gain": true},
+    {"name": "ana ekran, gama 2,2", "frame": "gta6-telefon-ana-1", "transform": "gamma", "gain": true},
+    {"name": "karanlık oda (ana-2): kazançsız hoparlör yarığında kalıyordu", "frame": "gta6-telefon-ana-2", "transform": "none", "gain": true},
+    {"name": "karanlık oda (ana-2), sahne × 0,6", "frame": "gta6-telefon-ana-2", "transform": "dark", "gain": true},
+    {"name": "sohbet, gece", "frame": "gta6-telefon-sohbet-1", "transform": "night", "gain": true},
+    {"name": "sohbet, gama 2,2", "frame": "gta6-telefon-sohbet-1", "transform": "gamma", "gain": true},
+    {"name": "yukarıda tutulan telefon, sahne × 0,6", "frame": "gta6-telefon-sohbet-2", "transform": "dark", "gain": true},
+    {"name": "yukarıda tutulan telefon, gece", "frame": "gta6-telefon-sohbet-2", "transform": "night", "gain": true}
+  ],
+  "darkScreen": [
+    {"name": "aydınlık ekran (koyu yazı): değişmez", "histogram": [[30, 8], [225, 92]], "prepared": false},
+    {"name": "koyu tema: açık yazı koyu zeminde, ters çevrilip gerilir", "histogram": [[20, 90], [220, 10]], "prepared": true, "map": [[20, 255], [220, 0], [120, 128], [0, 255], [255, 0]]},
+    {"name": "kısılmış ekran: soluk yazı (zeminden 50 ton açık) gerilir", "histogram": [[10, 4], [15, 86], [65, 10]], "prepared": true, "map": [[10, 255], [15, 232], [65, 0], [40, 116]]},
+    {"name": "koyu ve boş ekran (yazı yok): değişmez", "histogram": [[18, 50], [22, 49], [40, 1]], "prepared": false},
+    {"name": "ortanca 96: koyu sayılmaz", "histogram": [[96, 90], [250, 10]], "prepared": false}
+  ],
+  "missLog": {"name": "karanlık odada çok karanlık telefon (ana-2 gece): bulunamadı, 20 sn'de tek satır parlaklık ve kazançla", "frame": "gta6-telefon-ana-2", "transform": "night", "intervalMs": 330, "durationMs": 20500, "contains": ["telefon ilk aramada bulunamadı (", ", parlaklık ", "/255 (karanlık, kazanç ×"]},
+  "missLine": {"samples": 61, "furthest": "noCamera", "common": "noTopSlot", "commonCount": 40, "side": -1, "unconfirmed": 0, "strict": 0, "level": 11, "gain": 1024, "line": "telefon ilk aramada bulunamadı (61 arama): en ileri ölçüt ön kamera yok, en sık hoparlör yarığı yok (40), doğrulanmayan gözlem 0 (0 sıkı), parlaklık 11/255 (karanlık, kazanç ×4,0)"}
+}

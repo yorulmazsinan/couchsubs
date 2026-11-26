@@ -86,8 +86,10 @@ public final class GamePhoneTracker {
         let points = found == nil ? 0 : strict ? Self.strongPoints : Self.weakPoints
         var unseen = (ms: 0, misses: 0)
         var movedFrom: GamePhoneGeometry.Pose?
-        if let current = shown, let found, found.bounds.isClose(to: current.bounds, tolerance: 0.035) {
-            // Açık telefonun yakınında tek bir gözlem: aynı telefon, yeri güncellenir.
+        if let current = shown, let found,
+           found.bounds.isClose(to: current.bounds, tolerance: strict ? Self.strictMoveTolerance : Self.sameTolerance) {
+            // Açık telefonun yakınında tek bir gözlem: aynı telefon, yeri güncellenir. Sıkı aramanın bulduğu telefon daha çok
+            // oynamış da olabilir (el hızlı oynadı): yine aynı telefon sayılır, önceden ıska sayılıp telefonu kapatıyordu.
             shown = found
             misses = 0
             lastSeen = now
@@ -103,7 +105,7 @@ public final class GamePhoneTracker {
             clearPending()
         } else if let found {
             // Yeni telefon: doğrulanmayı bekleyen gözlemin yakınındaysa puanı eklenir, değilse yeni bekleyen gözlem olur.
-            if let pending, found.bounds.isClose(to: pending.bounds, tolerance: 0.035), pendingMisses == 0 || pendingFresh(now) {
+            if let pending, found.bounds.isClose(to: pending.bounds, tolerance: Self.sameTolerance), pendingMisses == 0 || pendingFresh(now) {
                 pendingPoints += points
             } else {
                 if let pending, pendingMisses == 0 { movedFrom = pending }
@@ -178,6 +180,10 @@ public final class GamePhoneTracker {
 
     private static func elapsed(since time: Int, _ now: Int) -> Int { now >= time ? now - time : 0 }
 
+    /// Açık telefonun yeni gözlemi en çok bu kadar oynadıysa (kutunun her kenarı, kareye oranla) aynı telefondur; sıkı
+    /// aramanın gözleminde `strictMoveTolerance` (Windows ve Android ile aynı).
+    static let sameTolerance = 0.035, strictMoveTolerance = 0.1
+
     /// Telefon kutusunun alanı (kareye oranla) bu aralıkta olmalı.
     static let minArea = 0.04, maxArea = 0.35
 
@@ -229,6 +235,9 @@ public enum GamePhoneGeometry {
     private struct Grid {
         let pixels: GamePhonePixels
         let left: Int
+        /// Parlaklık kazancı (256 = 1×; `darkGain`). Karanlık sahnede telefonun kasası ve yarıkları aynı oranda koyulaşır,
+        /// eşikler mutlak tonda kalıyordu; kazanç ızgarayı aydınlık sahnenin tonlarına taşır.
+        var gain = 256
 
         init?(_ image: CGImage, columns: Range<Int>, height: Int) {
             let xScale = Double(image.width) / 400, yScale = Double(image.height) / 225
@@ -252,7 +261,31 @@ public enum GamePhoneGeometry {
             func tone(_ i: Int) -> Int {
                 77 * Int(pixels.bytes[i]) + 150 * Int(pixels.bytes[i+1]) + 29 * Int(pixels.bytes[i+2])
             }
-            return (tone(p) + tone(p + 4) + tone(p + stride) + tone(p + stride + 4)) >> 10
+            let sum = tone(p) + tone(p + 4) + tone(p + stride) + tone(p + stride + 4)
+            return gain == 256 ? sum >> 10 : min(255, (sum * gain) >> 18)
+        }
+
+        func with(gain: Int) -> Grid {
+            var copy = self
+            copy.gain = gain
+            return copy
+        }
+
+        /// Şeritteki ortanca ton (kazançsız; her üç noktada bir örnek).
+        func level(rows: Range<Int>, columns: ClosedRange<Int>) -> Int {
+            var counts = [Int](repeating: 0, count: 256), total = 0
+            for y in stride(from: rows.lowerBound, to: rows.upperBound, by: 3) {
+                for x in stride(from: columns.lowerBound, through: columns.upperBound, by: 3) {
+                    counts[with(gain: 256).at(x, y)] += 1
+                    total += 1
+                }
+            }
+            var sum = 0
+            for (tone, count) in counts.enumerated() {
+                sum += count
+                if 2 * sum >= total { return tone }
+            }
+            return 255
         }
     }
 
@@ -344,6 +377,9 @@ public enum GamePhoneGeometry {
         var step: Step
         var side = -1
         var candidate: Pose?
+        /// Üst şeridin ortanca tonu (0–255; -1: ölçülmedi) ve sonucu veren aramanın kazancı (256 = 1×; `darkGain`).
+        var level = -1
+        var gain = 256
 
         static func missed(_ step: Step) -> Probe { Probe(step: step) }
 
@@ -392,22 +428,34 @@ public enum GamePhoneGeometry {
         return (confirmPicture(image, near: near), probe)
     }
 
-    /// Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir.
-    static let confirmReach = 4.0
+    /// Gevşek doğrulamada yarıklar açık telefonun son yerinden yatayda ve dikeyde en çok bu kadar (400×225 ızgarada) uzak
+    /// olabilir: izleyicinin aynı telefon saydığı oynama kadar (`GamePhoneTracker.sameTolerance`, karenin %3,5'i). Önceden
+    /// her yönde 4'tü (yatayda %1, dikeyde %1,8): el titreyince ya da telefon kaldırılınca 330 ms'de %2 oynayan telefon,
+    /// sıkı arama da ıskalarsa ~1,1 sn sonra kapanıyordu (#1251, beta-104 Windows günlüğü: "telefon kapandı (1141 ms
+    /// görülmedi, 3 ıska)", telefon ekranda; Windows ve Android ile aynı).
+    static let confirmReachX = 14.0, confirmReachY = 8.0
 
     /// Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
-    /// `confirmReach` kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
+    /// `confirmReachX`/`confirmReachY` kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
     /// gücüne bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa nil.
     static func confirmPicture(_ image: CGImage, near: Pose) -> Pose? {
-        guard let grid = Grid(image, columns: 40..<360, height: 225) else { return nil }
+        guard let whole = Grid(image, columns: 0..<400, height: 225) else { return nil }
+        if let pose = confirmPass(whole, near: near) { return pose }
+        for gain in darkGains(level: whole.level(rows: 0..<90, columns: 95...305)) {
+            if let pose = confirmPass(whole.with(gain: gain), near: near) { return pose }
+        }
+        return nil
+    }
+
+    private static func confirmPass(_ grid: Grid, near: Pose) -> Pose? {
         let topX = near.topX * 400, topY = near.topY * 225, bottomX = near.bottomX * 400, bottomY = near.bottomY * 225
-        let reach = Int(confirmReach)
+        let reach = Int(confirmReachY)
         let upperRows = max(17, Int(topY.rounded()) - reach)..<min(75, Int(topY.rounded()) + reach + 1)
         let lowerRows = max(145, Int(bottomY.rounded()) - reach)..<min(217, Int(bottomY.rounded()) + reach + 1)
         guard !upperRows.isEmpty, !lowerRows.isEmpty else { return nil }
         let upper = slots(grid, rows: upperRows, lengths: 8...19, maximum: 12)
-            .filter { abs($0.x - topX) <= confirmReach && hasCamera(grid, $0) }
-        let lower = slots(grid, rows: lowerRows, lengths: 5...14, maximum: 16).filter { abs($0.x - bottomX) <= confirmReach }
+            .filter { abs($0.x - topX) <= confirmReachX && hasCamera(grid, $0) }
+        let lower = slots(grid, rows: lowerRows, lengths: 5...14, maximum: 16).filter { abs($0.x - bottomX) <= confirmReachX }
         var best = Double.infinity, pose: Pose?
         for top in upper {
             for bottom in lower {
@@ -426,14 +474,51 @@ public enum GamePhoneGeometry {
         return pose
     }
 
+    /// Karanlık sahne: üst şeridin ortanca tonu bundan azsa (0–255) sıkı arama kazançla da yapılır (`darkGains`).
+    static let darkLevel = 56
+    /// Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×).
+    static let darkTarget = 96
+    static let gainSteps = [384, 640, 1024]
+
+    /// Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi
+    /// (X, beta.104): "telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor". Gece ya da karanlık odada telefonun
+    /// kasası koyu, hoparlör yarığıyla kasa arasındaki fark mutlak eşiğin (14–20 ton) altında kalıyordu; sıkı arama hoparlör
+    /// yarığında kalıyor, telefon hiç açılmıyordu. Ölçütler aynı, yalnız ızgara aydınlatılır. Sahne karanlık ama telefon
+    /// aydınlıksa büyük kazanç kasayı doyurur: kazançlar küçükten denenir, üst şeridi `darkTarget`'tan çok aydınlatan
+    /// kazanç denenmez (Windows ve Android ile aynı).
+    static func darkGains(level: Int) -> [Int] {
+        guard level < darkLevel else { return [] }
+        let most = 256 * darkTarget / max(8, level)
+        let steps = gainSteps.filter { $0 <= most }
+        return steps.isEmpty ? [gainSteps[0]] : steps
+    }
+
     private static func strictPicture(_ image: CGImage) -> (pose: Pose?, probe: Probe) {
-        guard let topBand = Grid(image, columns: 80..<320, height: 90) else { return (nil, .missed(.noPicture)) }
+        guard let topBand = Grid(image, columns: 80..<350, height: 90) else { return (nil, .missed(.noPicture)) }
+        let level = topBand.level(rows: 0..<90, columns: 95...305)
+        var (pose, probe) = strictPass(image, topBand: topBand, gain: 256)
+        probe.level = level
+        guard pose == nil else { return (pose, probe) }
+        for gain in darkGains(level: level) {
+            var (dark, darkProbe) = strictPass(image, topBand: topBand, gain: gain)
+            darkProbe.level = level
+            darkProbe.gain = gain
+            if dark != nil { return (dark, darkProbe) }
+            // Iskada en ileri geçilen ölçüt ve en iyi aday bütün aramalardan.
+            if darkProbe.step > probe.step { (probe.step, probe.gain) = (darkProbe.step, gain) }
+            if darkProbe.side > probe.side { (probe.side, probe.candidate) = (darkProbe.side, darkProbe.candidate) }
+        }
+        return (nil, probe)
+    }
+
+    private static func strictPass(_ image: CGImage, topBand whole: Grid, gain: Int) -> (pose: Pose?, probe: Probe) {
+        let topBand = whole.with(gain: gain)
         // Normal gameplay ends here. Only sample the body after seeing both a speaker and a camera in the upper band.
         let speakers = scan(topBand, rows: 17..<75, lengths: 8...19, maximum: 12)
         guard !speakers.slots.isEmpty else { return (nil, .missed(speakers.crowded ? .topCrowded : .noTopSlot)) }
         let upper = speakers.slots.filter { hasCamera(topBand, $0) }
         guard !upper.isEmpty else { return (nil, .missed(.noCamera)) }
-        guard let grid = Grid(image, columns: 40..<360, height: 225) else { return (nil, .missed(.noPicture)) }
+        guard let grid = Grid(image, columns: 0..<400, height: 225)?.with(gain: gain) else { return (nil, .missed(.noPicture)) }
         let notches = scan(grid, rows: 145..<217, lengths: 5...14, maximum: 16)
         guard !notches.slots.isEmpty else { return (nil, .missed(notches.crowded ? .bottomCrowded : .noBottomSlot)) }
         var best = 0.0, pose: Pose?
@@ -474,9 +559,16 @@ public enum GamePhoneGeometry {
         scan(grid, rows: rows, lengths: lengths, maximum: maximum).slots
     }
 
+    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+    /// telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
+    /// kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü: telefon
+    /// açılıp ~1,1 sn içinde kapanıyor, sonraki aramaların çoğu hoparlör yarığında kalıyor). Kamera, kasa ve yan kenar
+    /// örnekleri için ızgara karenin tamamı okunur (Windows ve Android ile aynı).
+    static let scanRight = 324
+
     /// Şeritteki yarıklar; `maximum`'dan çoksa hiçbiri (`crowded`: menü ya da yazı satırları, telefon aranmaz).
     private static func scan(_ grid: Grid, rows: Range<Int>, lengths: ClosedRange<Int>, maximum: Int) -> (slots: [Slot], crowded: Bool) {
-        let left = 95, width = 211
+        let left = 95, width = scanRight + 11 - left
         var band = [UInt8](repeating: 0, count: (rows.count + 8) * width)
         for y in (rows.lowerBound - 4)..<(rows.upperBound + 4) {
             let row = (y - rows.lowerBound + 4) * width
@@ -486,10 +578,10 @@ public enum GamePhoneGeometry {
         for y in rows {
             let row = (y - rows.lowerBound + 4) * width
             var start: Int?
-            for x in (105 - left)...(294 - left) {
+            for x in (105 - left)...(scanRight - left) {
                 let p = row + x
                 let surround = Int(min(band[p - 3 * width], band[p + 3 * width]))
-                if x < 294 - left, surround - Int(band[p]) >= limit(surround / 3, 14, 25) {
+                if x < scanRight - left, surround - Int(band[p]) >= limit(surround / 3, 14, 25) {
                     if start == nil { start = x }
                     continue
                 }

@@ -112,8 +112,10 @@ class GamePhoneTracker internal constructor(
         var unseenMisses = 0
         var movedFrom: GamePhoneGeometry.Pose? = null
         val sighted = found
-        if (current != null && sighted != null && sighted.bounds.isClose(current.bounds, 0.035)) {
-            // Açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir.
+        if (current != null && sighted != null &&
+            sighted.bounds.isClose(current.bounds, if (strict) STRICT_MOVE_TOLERANCE else SAME_TOLERANCE)) {
+            // Açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir. Sıkı aramanın bulduğu telefon daha çok
+            // oynamış da olabilir (el hızlı oynadı): yine aynı telefon sayılır, önceden ıska sayılıp telefonu kapatıyordu.
             shown = sighted
             misses = 0
             lastSeen = now
@@ -131,7 +133,7 @@ class GamePhoneTracker internal constructor(
         } else if (sighted != null) {
             // Yeni telefon: doğrulanmayı bekleyen gözlemin yakınındaysa puanı eklenir, değilse yeni bekleyen gözlem olur.
             val waiting = pending
-            if (waiting != null && sighted.bounds.isClose(waiting.bounds, 0.035) && (pendingMisses == 0 || pendingFresh(now))) {
+            if (waiting != null && sighted.bounds.isClose(waiting.bounds, SAME_TOLERANCE) && (pendingMisses == 0 || pendingFresh(now))) {
                 pendingPoints += points
             } else {
                 if (waiting != null && pendingMisses == 0) movedFrom = waiting
@@ -192,6 +194,12 @@ class GamePhoneTracker internal constructor(
     }
 
     companion object {
+        /**
+         * Açık telefonun yeni gözlemi en çok bu kadar oynadıysa (kutunun her kenarı, kareye oranla) aynı telefondur; sıkı
+         * aramanın gözleminde [STRICT_MOVE_TOLERANCE] (Mac/iPhone ve Windows ile aynı).
+         */
+        const val SAME_TOLERANCE = 0.035
+        const val STRICT_MOVE_TOLERANCE = 0.1
         const val INTERVAL_MS = 330L
 
         /** Sıkı aramayla bulunan telefonun gözlem puanı. */
@@ -283,15 +291,43 @@ object GamePhoneGeometry {
      * Yayın çözünürlüğünden bağımsız tek 400×225 algılama ızgarası, eksen başına iki örnek: kare 800×450'ye en yakın
      * komşuyla küçültülmüş gibi okunur (örnekler istenince, doğrudan kareden alınır).
      */
-    private class Grid(private val image: PhoneImage) {
-        private val xs = IntArray(800) { ((it + 0.5) * image.width / 800).toInt().coerceIn(0, image.width - 1) }
-        private val ys = IntArray(450) { ((it + 0.5) * image.height / 450).toInt().coerceIn(0, image.height - 1) }
-
-        fun at(x: Int, y: Int): Int {
+    private class Grid(
+        private val image: PhoneImage,
+        private val xs: IntArray = IntArray(800) { ((it + 0.5) * image.width / 800).toInt().coerceIn(0, image.width - 1) },
+        private val ys: IntArray = IntArray(450) { ((it + 0.5) * image.height / 450).toInt().coerceIn(0, image.height - 1) },
+        /** Parlaklık kazancı (256 = 1×; [darkGains]). */
+        private val gain: Int = 256,
+    ) {
+        private fun raw(x: Int, y: Int): Int {
             val cx = (2 * x).coerceIn(0, 798)
             val cy = (2 * y).coerceIn(0, 448)
-            return (image.tone(xs[cx], ys[cy]) + image.tone(xs[cx + 1], ys[cy]) +
-                image.tone(xs[cx], ys[cy + 1]) + image.tone(xs[cx + 1], ys[cy + 1])) shr 10
+            return image.tone(xs[cx], ys[cy]) + image.tone(xs[cx + 1], ys[cy]) +
+                image.tone(xs[cx], ys[cy + 1]) + image.tone(xs[cx + 1], ys[cy + 1])
+        }
+
+        fun at(x: Int, y: Int): Int {
+            val sum = raw(x, y)
+            return if (gain == 256) sum shr 10 else minOf(255L, (sum.toLong() * gain) shr 18).toInt()
+        }
+
+        fun withGain(gain: Int): Grid = Grid(image, xs, ys, gain)
+
+        /** Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek. */
+        fun level(): Int {
+            val counts = IntArray(256)
+            var total = 0
+            for (y in 0 until 90 step 3) {
+                for (x in 95..305 step 3) {
+                    counts[raw(x, y) shr 10]++
+                    total++
+                }
+            }
+            var sum = 0
+            for (tone in 0 until 256) {
+                sum += counts[tone]
+                if (2 * sum >= total) return tone
+            }
+            return 255
         }
     }
 
@@ -403,7 +439,15 @@ object GamePhoneGeometry {
      * yanı (yoksa -1); [candidate] o aday (yarık, kamera, çentik, oran ve kasa tutuyor, yanları zayıf). Aday tek başına
      * telefon açmaz.
      */
-    data class Probe(val step: Step, val side: Int = -1, val candidate: Pose? = null) {
+    data class Probe(
+        val step: Step,
+        val side: Int = -1,
+        val candidate: Pose? = null,
+        /** Üst şeridin ortanca tonu (0–255; -1: ölçülmedi). */
+        val level: Int = -1,
+        /** Sonucu veren aramanın kazancı (256 = 1×; [darkGains]). */
+        val gain: Int = 256,
+    ) {
         /** Zayıf gözlem sayılan aday ([WEAK_SIDE]). */
         val weak: Pose? get() = if (side >= WEAK_SIDE) candidate else null
     }
@@ -432,31 +476,84 @@ object GamePhoneGeometry {
 
     private fun locatePicture(image: PhoneImage, near: Pose? = null): Search {
         if (image.width < 400 || image.height < 225 || !widescreen(image.width, image.height)) return Search(null, Probe(Step.NO_PICTURE))
-        val strict = strictPicture(image)
-        if (strict.pose != null) return strict
-        return Search(near?.let { confirmPicture(image, it) }, strict.probe)
+        val whole = Grid(image)
+        val level = whole.level()
+        val first = strictPicture(whole)
+        if (first.pose != null) return Search(first.pose, first.probe.copy(level = level))
+        var probe = first.probe.copy(level = level)
+        val gains = darkGains(level)
+        for (gain in gains) {
+            val dark = strictPicture(whole.withGain(gain))
+            if (dark.pose != null) return Search(dark.pose, dark.probe.copy(level = level, gain = gain))
+            // Iskada en ileri geçilen ölçüt ve en iyi aday bütün aramalardan.
+            if (dark.probe.step > probe.step) probe = probe.copy(step = dark.probe.step, gain = gain)
+            if (dark.probe.side > probe.side) probe = probe.copy(side = dark.probe.side, candidate = dark.probe.candidate)
+        }
+        if (near == null) return Search(null, probe)
+        val confirmed = confirmPicture(whole, near) ?: gains.firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
+        return Search(confirmed, probe)
     }
 
-    /** Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir. */
-    const val CONFIRM_REACH = 4.0
+    /** Karanlık sahne: üst şeridin ortanca tonu bundan azsa (0–255) sıkı arama kazançla da yapılır ([darkGains]). */
+    const val DARK_LEVEL = 56
+    /** Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×). */
+    const val DARK_TARGET = 96
+    val GAIN_STEPS = intArrayOf(384, 640, 1024)
+
+    /**
+     * Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi (X,
+     * beta.104): "telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor". Gece ya da karanlık odada telefonun kasası
+     * koyu, hoparlör yarığıyla kasa arasındaki fark mutlak eşiğin (14–20 ton) altında kalıyordu; sıkı arama hoparlör
+     * yarığında kalıyor, telefon hiç açılmıyordu. Ölçütler aynı, yalnız ızgara aydınlatılır. Sahne karanlık ama telefon
+     * aydınlıksa büyük kazanç kasayı doyurur: kazançlar küçükten denenir, üst şeridi [DARK_TARGET]'tan çok aydınlatan
+     * kazanç denenmez (Mac/iPhone ve Windows ile aynı).
+     */
+    fun darkGains(level: Int): List<Int> {
+        if (level >= DARK_LEVEL) return emptyList()
+        val most = 256 * DARK_TARGET / maxOf(8, level)
+        val steps = GAIN_STEPS.filter { it <= most }
+        return steps.ifEmpty { listOf(GAIN_STEPS[0]) }
+    }
+
+    /**
+     * Gevşek doğrulamada yarıklar açık telefonun son yerinden yatayda ve dikeyde en çok bu kadar (400×225 ızgarada) uzak
+     * olabilir: izleyicinin aynı telefon saydığı oynama kadar ([GamePhoneTracker.SAME_TOLERANCE], karenin %3,5'i). Önceden
+     * her yönde 4'tü (yatayda %1, dikeyde %1,8): el titreyince ya da telefon kaldırılınca 330 ms'de %2 oynayan telefon,
+     * sıkı arama da ıskalarsa ~1,1 sn sonra kapanıyordu (#1251, beta-104 günlüğü: "telefon kapandı (1141 ms görülmedi,
+     * 3 ıska)", telefon ekranda; Mac/iPhone ve Windows ile aynı).
+     */
+    const val CONFIRM_REACH_X = 14.0
+    const val CONFIRM_REACH_Y = 8.0
+
+    /**
+     * Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+     * telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
+     * kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü; Mac/iPhone
+     * ve Windows ile aynı).
+     */
+    const val SCAN_RIGHT = 324
 
     /**
      * Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
-     * [CONFIRM_REACH] kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin gücüne
+     * [CONFIRM_REACH_X]/[CONFIRM_REACH_Y] kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin gücüne
      * bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa null.
      */
     internal fun confirmPicture(image: PhoneImage, near: Pose): Pose? {
-        val grid = Grid(image)
+        val whole = Grid(image)
+        return confirmPicture(whole, near) ?: darkGains(whole.level()).firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
+    }
+
+    private fun confirmPicture(grid: Grid, near: Pose): Pose? {
         val topX = near.topX * 400
         val topY = near.topY * 225
         val bottomX = near.bottomX * 400
         val bottomY = near.bottomY * 225
-        val reach = CONFIRM_REACH.toInt()
+        val reach = CONFIRM_REACH_Y.toInt()
         val upperRows = maxOf(17, rounded(topY) - reach) until minOf(75, rounded(topY) + reach + 1)
         val lowerRows = maxOf(145, rounded(bottomY) - reach) until minOf(217, rounded(bottomY) + reach + 1)
         if (upperRows.isEmpty() || lowerRows.isEmpty()) return null
-        val upper = slots(grid, upperRows, 8..19, 12).filter { abs(it.x - topX) <= CONFIRM_REACH && hasCamera(grid, it) }
-        val lower = slots(grid, lowerRows, 5..14, 16).filter { abs(it.x - bottomX) <= CONFIRM_REACH }
+        val upper = slots(grid, upperRows, 8..19, 12).filter { abs(it.x - topX) <= CONFIRM_REACH_X && hasCamera(grid, it) }
+        val lower = slots(grid, lowerRows, 5..14, 16).filter { abs(it.x - bottomX) <= CONFIRM_REACH_X }
         var best = Double.POSITIVE_INFINITY
         var pose: Pose? = null
         for (top in upper) {
@@ -477,8 +574,7 @@ object GamePhoneGeometry {
         return pose
     }
 
-    private fun strictPicture(image: PhoneImage): Search {
-        val grid = Grid(image)
+    private fun strictPicture(grid: Grid): Search {
         // Olağan oyun görüntüsü burada biter. Gövdeye ancak üst bantta hem hoparlör hem kamera görülünce bakılır.
         val speakers = scan(grid, 17 until 75, 8..19, 12)
         if (speakers.slots.isEmpty()) return Search(null, Probe(if (speakers.crowded) Step.TOP_CROWDED else Step.NO_TOP_SLOT))
@@ -532,7 +628,7 @@ object GamePhoneGeometry {
     /** Şeritteki yarıklar; [maximum]'dan çoksa hiçbiri (crowded: menü ya da yazı satırları, telefon aranmaz). */
     private fun scan(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): Scan {
         val left = 95
-        val width = 211
+        val width = SCAN_RIGHT + 11 - left
         val count = rows.last - rows.first + 1
         val band = IntArray((count + 8) * width)
         for (y in (rows.first - 4)..(rows.last + 4)) {
@@ -543,10 +639,10 @@ object GamePhoneGeometry {
         for (y in rows) {
             val row = (y - rows.first + 4) * width
             var start: Int? = null
-            for (x in (105 - left)..(294 - left)) {
+            for (x in (105 - left)..(SCAN_RIGHT - left)) {
                 val p = row + x
                 val surround = minOf(band[p - 3 * width], band[p + 3 * width])
-                if (x < 294 - left && surround - band[p] >= limit(surround / 3, 14, 25)) {
+                if (x < SCAN_RIGHT - left && surround - band[p] >= limit(surround / 3, 14, 25)) {
                     if (start == null) start = x
                     continue
                 }

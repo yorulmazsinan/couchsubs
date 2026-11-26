@@ -52,6 +52,8 @@ enum GamePhoneReader {
                 }
             }
         }
+        // Koyu ekran (koyu tema, gece, kısılmış ekran): gri, gerilmiş ve ters çevrilmiş okunur (`PhoneDarkScreen`).
+        rgba = darkScreenPrepared(rgba)
         guard let provider = CGDataProvider(data: rgba as CFData),
               let flat = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
                                  space: frame.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpaceCreateDeviceRGB(),
@@ -139,6 +141,24 @@ enum GamePhoneReader {
         recovered.words = found.words?.map { TextWord($0.text, box: $0.box.placed(in: strip)) }
         recovered.icons = found.icons?.map { IconSlot(box: $0.box.placed(in: strip), text: $0.text, image: $0.image) }
         return Reading(lines: (reading.lines + [recovered]).sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) })
+    }
+
+    /// Düzeltilmiş ekranın (RGBA) koyu ekran hazırlığı (`PhoneDarkScreen`); gerekmiyorsa olduğu gibi.
+    static func darkScreenPrepared(_ rgba: Data) -> Data {
+        let tones = rgba.withUnsafeBytes { raw -> [UInt8] in
+            let p = raw.bindMemory(to: UInt8.self)
+            return (0..<(p.count / 4)).map { i in UInt8((77 * Int(p[4*i]) + 150 * Int(p[4*i+1]) + 29 * Int(p[4*i+2])) >> 8) }
+        }
+        guard let map = PhoneDarkScreen.mapping(tones) else { return rgba }
+        var out = Data(count: rgba.count)
+        out.withUnsafeMutableBytes { raw in
+            let p = raw.bindMemory(to: UInt8.self)
+            for (i, tone) in tones.enumerated() {
+                let value = map[Int(tone)]
+                p[4*i] = value; p[4*i+1] = value; p[4*i+2] = value; p[4*i+3] = 255
+            }
+        }
+        return out
     }
 
     private static func sameRow(_ a: TextBox, _ b: TextBox) -> Bool {

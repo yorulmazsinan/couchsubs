@@ -22,16 +22,20 @@ public class GamePhoneFirstSightingTests
     private static readonly Dictionary<string, Frame> Loaded = [];
 
     /// <summary>
-    /// Gerçek kare, ortak dosyadaki dönüşümüyle (none, shiftUp, lowContrast, dark); <paramref name="cover"/> [sol, üst, sağ,
-    /// alt] (0..1) verilirse o dikdörtgen el rengiyle örtülür (parmak telefonun kenarında).
+    /// Gerçek kare, ortak dosyadaki dönüşümleriyle ("+" ile birleşir: none, shiftUp, lowContrast, dark, night, gamma,
+    /// scale1440); <paramref name="shift"/> [dx, dy] (0..1) verilirse görüntü sağa ve aşağı kayar (el titredi),
+    /// <paramref name="cover"/> [sol, üst, sağ, alt] (0..1) verilirse o dikdörtgen el rengiyle örtülür (parmak telefonun
+    /// kenarında).
     /// </summary>
-    internal static Frame Load(string name, string transform, double[]? cover = null)
+    internal static Frame Load(string name, string transform, double[]? cover = null, double[]? shift = null)
     {
-        var key = name + "|" + transform + "|" + (cover is null ? "" : string.Join(',', cover));
+        var key = name + "|" + transform + "|" + (cover is null ? "" : string.Join(',', cover)) + "|" + (shift is null ? "" : string.Join(',', shift));
         lock (Loaded)
         {
             if (Loaded.TryGetValue(key, out var cached)) return cached;
-            var frame = Transform(Jpeg.Load(FramePath(name + ".jpg")), transform);
+            var frame = Jpeg.Load(FramePath(name + ".jpg"));
+            foreach (var part in transform.Split('+')) frame = Transform(frame, part);
+            if (shift is not null) frame = Shift(frame, shift[0], shift[1]);
             if (cover is not null) frame = Cover(frame, cover);
             Loaded[key] = frame;
             return frame;
@@ -56,12 +60,34 @@ public class GamePhoneFirstSightingTests
         return frame;
     }
 
+    /// <summary>Görüntü karenin <paramref name="dx"/>'i kadar sağa, <paramref name="dy"/>'si kadar aşağı kayar; boşalan yer kenar pikseliyle dolar.</summary>
+    internal static Frame Shift(Frame source, double dx, double dy)
+    {
+        var frame = Frame.Blank(source.Width, source.Height);
+        int sx = (int)(dx * source.Width), sy = (int)(dy * source.Height);
+        for (var y = 0; y < source.Height; y++)
+        {
+            var from = Math.Clamp(y - sy, 0, source.Height - 1);
+            for (var x = 0; x < source.Width; x++)
+            {
+                int p = y * frame.Stride + x * 4, q = from * source.Stride + Math.Clamp(x - sx, 0, source.Width - 1) * 4;
+                (frame.Pixels[p], frame.Pixels[p + 1], frame.Pixels[p + 2], frame.Pixels[p + 3]) =
+                    (source.Pixels[q], source.Pixels[q + 1], source.Pixels[q + 2], 255);
+            }
+        }
+        return frame;
+    }
+
+    private static double[]? ShiftOf(JsonElement sample) =>
+        sample.TryGetProperty("shift", out var shift) ? shift.EnumerateArray().Select(item => item.GetDouble()).ToArray() : null;
+
     private static double[]? CoverOf(JsonElement sample) =>
         sample.TryGetProperty("cover", out var cover) ? cover.EnumerateArray().Select(item => item.GetDouble()).ToArray() : null;
 
     internal static Frame Transform(Frame source, string transform)
     {
         if (transform == "none") return source;
+        if (transform == "scale1440") return source.Resized(2560, 1440);
         var frame = Frame.Blank(source.Width, source.Height);
         if (transform == "shiftUp")
         {
@@ -74,6 +100,8 @@ public class GamePhoneFirstSightingTests
         {
             "lowContrast" => value => 128 + (value - 128) * 6 / 10,
             "dark" => value => value * 6 / 10,
+            "night" => value => value * 35 / 100,
+            "gamma" => value => (int)(255 * Math.Pow(value / 255.0, 2.2)),
             _ => throw new ArgumentException(transform),
         };
         for (var i = 0; i < source.Pixels.Length; i++)
@@ -125,16 +153,20 @@ public class GamePhoneFirstSightingTests
             var name = sequence.GetProperty("name").GetString();
             var tracker = new GamePhoneTracker();
             int? opened = null;
+            var closedAfterOpening = false;
             var index = 0;
             foreach (var sample in sequence.GetProperty("samples").EnumerateArray())
             {
-                var frame = Load(sample.GetProperty("frame").GetString()!, sample.GetProperty("transform").GetString()!, CoverOf(sample));
+                var frame = Load(sample.GetProperty("frame").GetString()!, sample.GetProperty("transform").GetString()!, CoverOf(sample), ShiftOf(sample));
                 tracker.TrySample(frame, sample.GetProperty("t").GetInt64(), out var visible);
                 if (visible is not null && opened is null) opened = index;
+                if (visible is null && opened is not null) closedAfterOpening = true;
                 index++;
             }
             int? expected = sequence.GetProperty("opensAt").ValueKind == JsonValueKind.Null ? null : sequence.GetProperty("opensAt").GetInt32();
             Assert.True(expected == opened, $"{name}: {opened?.ToString() ?? "açılmadı"}");
+            if (sequence.TryGetProperty("staysOpen", out var stays) && stays.GetBoolean())
+                Assert.False(closedAfterOpening, $"{name}: telefon kapandı");
         }
     }
 

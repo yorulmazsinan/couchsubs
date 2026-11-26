@@ -20,6 +20,8 @@ public class GamePhoneReaderTests
             int i = y * frame.Stride + x * 4;
             frame.Pixels[i] = (byte)(x / 4);
             frame.Pixels[i + 1] = (byte)(y / 2);
+            // Aydınlık ekran: koyu ekran hazırlığı (PhoneDarkScreen) kodlanmış koordinatları değiştirmesin.
+            frame.Pixels[i + 2] = 255;
         }
         var reader = new ProbeReader();
         var region = pose.Bounds;

@@ -44,13 +44,30 @@ public static class PhoneTrace
 
     /// <summary>
     /// Telefon açık değilken ilk açılış ıskalandı (#1251): <paramref name="samples"/> aramada en ileri geçilen ölçüt, en sık
-    /// ıska, en iyi adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz) ve tek görülüp doğrulanmayan gözlemler.
+    /// ıska, en iyi adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz), tek görülüp doğrulanmayan gözlemler ve üst
+    /// şeridin ortalama parlaklığı (<paramref name="level"/>, 0–255; -1: ölçülmedi). Karanlık sahnede
+    /// (<see cref="GamePhoneGeometry.DarkLevel"/>) en ileri ölçüte ulaşan aramanın kazancı da yazılır (<paramref name="gain"/>,
+    /// 256 = ×1,0).
     /// </summary>
-    public static string MissedFirst(int samples, string furthest, string common, int commonCount, int side, int unconfirmed, int strict)
+    public static string MissedFirst(int samples, string furthest, string common, int commonCount, int side, int unconfirmed, int strict,
+        int level = -1, int gain = 256)
     {
         var candidate = side >= 0 ? $", en iyi aday yan gücü {side}/{GamePhoneGeometry.SideThreshold}" : "";
+        var light = "";
+        if (level >= 0)
+        {
+            light = $", parlaklık {level}/255";
+            if (level < GamePhoneGeometry.DarkLevel) light += $" (karanlık, kazanç ×{Times(gain)})";
+        }
         return $"telefon ilk aramada bulunamadı ({samples} arama): en ileri ölçüt {furthest}, en sık {common} ({commonCount}){candidate}, "
-               + $"doğrulanmayan gözlem {unconfirmed} ({strict} sıkı)";
+               + $"doğrulanmayan gözlem {unconfirmed} ({strict} sıkı){light}";
+    }
+
+    /// <summary>Kazanç (256 = 1) bir ondalıkla, virgülle ("2,5").</summary>
+    internal static string Times(int gain)
+    {
+        int tenths = (gain * 10 + 128) / 256;
+        return $"{tenths / 10},{tenths % 10}";
     }
 
     /// <summary>Oranın yüzdesi (tam sayı).</summary>
@@ -66,8 +83,10 @@ public static class PhoneTrace
 /// İlk açılışın ıskalanma nedenleri (#1251; GamePhoneTracker). Telefon açık değilken her aramanın ıska ölçütü
 /// <see cref="WindowMs"/> boyunca toplanır; pencerede telefona benzer bir şey varsa (kameralı hoparlör yarığı bulundu ya da daha
 /// ileri, şerit kalabalık, tek görülüp doğrulanmayan gözlem) pencere sonunda tek satır yazılır
-/// (<see cref="PhoneTrace.MissedFirst"/>). Telefonsuz oyunda aramaların hemen hepsi "hoparlör yarığı yok"ta kalır, satır
-/// yazılmaz. Mac/iPhone (PhoneMissLog, PhoneTrace.swift) ve Android (PhoneTrace.kt) ile aynı.
+/// (<see cref="PhoneTrace.MissedFirst"/>). Karanlık sahnede (pencerenin ortalama parlaklığı
+/// <see cref="GamePhoneGeometry.DarkLevel"/>'dan az) hoparlör yarığı bulunan pencere de yazılır: karanlıkta telefon kameranın ya
+/// da alt çentiğin önünde kalıyordu ve satır hiç yazılmıyordu (X, beta.104: "karanlıksa olmuyor"). Telefonsuz oyunda
+/// aramaların hemen hepsi "hoparlör yarığı yok"ta kalır, satır yazılmaz. Mac/iPhone (PhoneMissLog, PhoneTrace.swift) ve Android (PhoneTrace.kt) ile aynı.
 /// </summary>
 internal sealed class PhoneMissLog
 {
@@ -77,6 +96,8 @@ internal sealed class PhoneMissLog
     private int samples, unconfirmed, unconfirmedStrict, side = -1;
     private GamePhoneGeometry.Step furthest;
     private readonly Dictionary<GamePhoneGeometry.Step, int> counts = [];
+    /// <summary>Ölçülen parlaklıkların toplamı ve sayısı; en ileri ölçüte ulaşan aramanın kazancı.</summary>
+    private int levelSum, levels, gain = 256;
 
     /// <summary>Doğrulanmayı bekleyen gözlem süresi dolup ya da başka yerde gözlem gelip bırakıldı.</summary>
     internal void Unconfirmed(bool strict)
@@ -90,21 +111,34 @@ internal sealed class PhoneMissLog
         if (windowStart is not { } start || now < start) windowStart = start = now;
         samples++;
         counts[probe.Step] = counts.GetValueOrDefault(probe.Step) + 1;
-        if (probe.Step > furthest) furthest = probe.Step;
+        if (probe.Step > furthest)
+        {
+            furthest = probe.Step;
+            gain = probe.Gain;
+        }
         if (probe.Side > side) side = probe.Side;
+        if (probe.Level >= 0)
+        {
+            levelSum += probe.Level;
+            levels++;
+        }
         if (now - start < WindowMs) return;
         if (Suspicious)
         {
             var common = counts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).First();
             log(PhoneTrace.MissedFirst(samples, PhoneTrace.Reason(furthest), PhoneTrace.Reason(common.Key), common.Value, side,
-                unconfirmed, unconfirmedStrict));
+                unconfirmed, unconfirmedStrict, Level, gain));
         }
         Begin(now);
     }
 
-    /// <summary>Pencerede telefona benzer bir şey görüldü mü.</summary>
+    /// <summary>Pencerenin ortalama parlaklığı (0–255); ölçülmediyse -1.</summary>
+    private int Level => levels > 0 ? levelSum / levels : -1;
+
+    /// <summary>Pencerede telefona benzer bir şey görüldü mü; karanlık sahnede hoparlör yarığı yeter.</summary>
     private bool Suspicious => furthest >= GamePhoneGeometry.Step.NoBottomSlot || unconfirmed > 0
-        || counts.ContainsKey(GamePhoneGeometry.Step.TopCrowded) || counts.ContainsKey(GamePhoneGeometry.Step.BottomCrowded);
+        || counts.ContainsKey(GamePhoneGeometry.Step.TopCrowded) || counts.ContainsKey(GamePhoneGeometry.Step.BottomCrowded)
+        || (Level >= 0 && Level < GamePhoneGeometry.DarkLevel && furthest >= GamePhoneGeometry.Step.NoCamera);
 
     /// <summary>Telefon açıldı ya da izleyici sıfırlandı: pencere baştan.</summary>
     internal void Reset() => Begin(null);
@@ -116,6 +150,8 @@ internal sealed class PhoneMissLog
         side = -1;
         furthest = GamePhoneGeometry.Step.NoPicture;
         counts.Clear();
+        levelSum = levels = 0;
+        gain = 256;
     }
 }
 

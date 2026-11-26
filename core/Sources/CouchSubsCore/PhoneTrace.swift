@@ -39,12 +39,25 @@ public enum PhoneTrace {
     }
 
     /// Telefon açık değilken ilk açılış ıskalandı (#1251): `samples` aramada en ileri geçilen ölçüt, en sık ıska, en iyi
-    /// adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz) ve tek görülüp doğrulanmayan gözlemler.
+    /// adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz), tek görülüp doğrulanmayan gözlemler ve üst şeridin
+    /// ortalama parlaklığı (`level`, 0–255; -1: ölçülmedi). Karanlık sahnede (`GamePhoneGeometry.darkLevel`) en ileri
+    /// ölçüte ulaşan aramanın kazancı da yazılır (`gain`, 256 = ×1,0).
     public static func missedFirst(samples: Int, furthest: String, common: String, commonCount: Int, side: Int,
-                                   unconfirmed: Int, strict: Int) -> String {
+                                   unconfirmed: Int, strict: Int, level: Int = -1, gain: Int = 256) -> String {
         let candidate = side >= 0 ? ", en iyi aday yan gücü \(side)/\(GamePhoneGeometry.sideThreshold)" : ""
+        var light = ""
+        if level >= 0 {
+            light = ", parlaklık \(level)/255"
+            if level < GamePhoneGeometry.darkLevel { light += " (karanlık, kazanç ×\(times(gain)))" }
+        }
         return "telefon ilk aramada bulunamadı (\(samples) arama): en ileri ölçüt \(furthest), en sık \(common) (\(commonCount))"
-            + "\(candidate), doğrulanmayan gözlem \(unconfirmed) (\(strict) sıkı)"
+            + "\(candidate), doğrulanmayan gözlem \(unconfirmed) (\(strict) sıkı)\(light)"
+    }
+
+    /// Kazanç (256 = 1) bir ondalıkla, virgülle ("2,5").
+    static func times(_ gain: Int) -> String {
+        let tenths = (gain * 10 + 128) / 256
+        return "\(tenths / 10),\(tenths % 10)"
     }
 
     /// Oranın yüzdesi (tam sayı).
@@ -58,9 +71,11 @@ public enum PhoneTrace {
 
 /// İlk açılışın ıskalanma nedenleri (#1251; `GamePhoneTracker`). Telefon açık değilken her aramanın ıska ölçütü `windowMs`
 /// boyunca toplanır; pencerede telefona benzer bir şey varsa (kameralı hoparlör yarığı bulundu ya da daha ileri, şerit
-/// kalabalık, tek görülüp doğrulanmayan gözlem) pencere sonunda tek satır yazılır (`PhoneTrace.missedFirst`). Telefonsuz
-/// oyunda aramaların hemen hepsi "hoparlör yarığı yok"ta kalır, satır yazılmaz. Windows (PhoneMissLog, PhoneTrace.cs) ve
-/// Android (PhoneTrace.kt) ile aynı.
+/// kalabalık, tek görülüp doğrulanmayan gözlem) pencere sonunda tek satır yazılır (`PhoneTrace.missedFirst`). Karanlık
+/// sahnede (pencerenin ortalama parlaklığı `GamePhoneGeometry.darkLevel`'dan az) hoparlör yarığı bulunan pencere de yazılır:
+/// karanlıkta telefon kameranın ya da alt çentiğin önünde kalıyordu ve satır hiç yazılmıyordu (X, beta.104: "karanlıksa
+/// olmuyor"). Telefonsuz oyunda aramaların hemen hepsi "hoparlör yarığı yok"ta kalır, satır yazılmaz. Windows (PhoneMissLog,
+/// PhoneTrace.cs) ve Android (PhoneTrace.kt) ile aynı.
 final class PhoneMissLog {
     /// Özet penceresi (ms): en çok bu aralıkla bir satır.
     static let windowMs = 20_000
@@ -68,6 +83,8 @@ final class PhoneMissLog {
     private var samples = 0, unconfirmed = 0, unconfirmedStrict = 0, side = -1
     private var furthest = GamePhoneGeometry.Step.noPicture
     private var counts: [GamePhoneGeometry.Step: Int] = [:]
+    /// Ölçülen parlaklıkların toplamı ve sayısı; en ileri ölçüte ulaşan aramanın kazancı.
+    private var levelSum = 0, levels = 0, gain = 256
 
     /// Doğrulanmayı bekleyen gözlem süresi dolup ya da başka yerde gözlem gelip bırakıldı.
     func unconfirmed(strict: Bool) {
@@ -83,19 +100,29 @@ final class PhoneMissLog {
         }
         samples += 1
         counts[probe.step, default: 0] += 1
+        if probe.step > furthest { gain = probe.gain }
         furthest = max(furthest, probe.step)
         side = max(side, probe.side)
+        if probe.level >= 0 {
+            levelSum += probe.level
+            levels += 1
+        }
         guard now - start >= Self.windowMs else { return }
         if suspicious, let common = counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }).first {
             log(PhoneTrace.missedFirst(samples: samples, furthest: PhoneTrace.reason(furthest), common: PhoneTrace.reason(common.key),
-                                       commonCount: common.value, side: side, unconfirmed: unconfirmed, strict: unconfirmedStrict))
+                                       commonCount: common.value, side: side, unconfirmed: unconfirmed, strict: unconfirmedStrict,
+                                       level: level, gain: gain))
         }
         begin(now)
     }
 
-    /// Pencerede telefona benzer bir şey görüldü mü.
+    /// Pencerenin ortalama parlaklığı (0–255); ölçülmediyse -1.
+    private var level: Int { levels > 0 ? levelSum / levels : -1 }
+
+    /// Pencerede telefona benzer bir şey görüldü mü; karanlık sahnede hoparlör yarığı yeter.
     private var suspicious: Bool {
         furthest >= .noBottomSlot || unconfirmed > 0 || counts[.topCrowded] != nil || counts[.bottomCrowded] != nil
+            || (level >= 0 && level < GamePhoneGeometry.darkLevel && furthest >= .noCamera)
     }
 
     /// Telefon açıldı ya da izleyici sıfırlandı: pencere baştan.
@@ -109,6 +136,9 @@ final class PhoneMissLog {
         side = -1
         furthest = .noPicture
         counts = [:]
+        levelSum = 0
+        levels = 0
+        gain = 256
     }
 }
 

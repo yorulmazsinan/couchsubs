@@ -20,17 +20,52 @@ final class GamePhoneFirstSightingTests: XCTestCase {
 
     private static var loaded: [String: CGImage] = [:]
 
-    /// Gerçek kare, ortak dosyadaki dönüşümüyle (none, shiftUp, lowContrast, dark); `cover` [sol, üst, sağ, alt] (0..1)
-    /// verilirse o dikdörtgen el rengiyle örtülür.
-    static func load(_ name: String, _ transform: String, cover: [Double]? = nil) throws -> CGImage {
-        let key = "\(name)|\(transform)|\(cover?.map { "\($0)" }.joined(separator: ",") ?? "")"
+    /// Gerçek kare, ortak dosyadaki dönüşümleriyle ("+" ile birleşir: none, shiftUp, lowContrast, dark, night, gamma,
+    /// scale1440); `shift` [dx, dy] (0..1) verilirse görüntü sağa ve aşağı kayar (el titredi), `cover` [sol, üst, sağ, alt]
+    /// (0..1) verilirse o dikdörtgen el rengiyle örtülür.
+    static func load(_ name: String, _ transform: String, cover: [Double]? = nil, shift: [Double]? = nil) throws -> CGImage {
+        let key = "\(name)|\(transform)|\(cover?.map { "\($0)" }.joined(separator: ",") ?? "")|\(shift?.map { "\($0)" }.joined(separator: ",") ?? "")"
         if let cached = loaded[key] { return cached }
         let url = frames.appendingPathComponent(name + ".jpg")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw XCTSkip("gerçek kare yok: \(name)") }
-        let result = transformed(image, transform, cover: cover)
+              var image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw XCTSkip("gerçek kare yok: \(name)") }
+        for part in transform.split(separator: "+").map(String.init) {
+            image = part == "scale1440" ? scaled(image, width: 2560, height: 1440) : transformed(image, part)
+        }
+        if let shift { image = shifted(image, dx: shift[0], dy: shift[1]) }
+        let result = cover == nil ? image : transformed(image, "none", cover: cover)
         loaded[key] = result
         return result
+    }
+
+    /// Kare çift doğrusal büyütülür (1440p akış).
+    static func scaled(_ image: CGImage, width: Int, height: Int) -> CGImage {
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.interpolationQuality = .medium
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+
+    /// Görüntü karenin `dx`'i kadar sağa, `dy`'si kadar aşağı kayar; boşalan yer kenar pikseliyle dolar.
+    static func shifted(_ image: CGImage, dx: Double, dy: Double) -> CGImage {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let sx = Int(dx * Double(width)), sy = Int(dy * Double(height))
+        var out = pixels
+        for y in 0..<height {
+            let from = min(height - 1, max(0, y - sy))
+            for x in 0..<width {
+                let p = (y * width + x) * 4, q = (from * width + min(width - 1, max(0, x - sx))) * 4
+                (out[p], out[p + 1], out[p + 2]) = (pixels[q], pixels[q + 1], pixels[q + 2])
+            }
+        }
+        let result = CGContext(data: &out, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                               space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        return result.makeImage()!
     }
 
     static func transformed(_ image: CGImage, _ transform: String, cover: [Double]? = nil) -> CGImage {
@@ -47,10 +82,17 @@ final class GamePhoneFirstSightingTests: XCTestCase {
                 let from = min(height - 1, y + shift) * width * 4
                 out.replaceSubrange(y * width * 4..<(y + 1) * width * 4, with: pixels[from..<from + width * 4])
             }
-        case "lowContrast", "dark":
+        case "lowContrast", "dark", "night", "gamma":
             for i in 0..<out.count where i % 4 != 3 {
                 let value = Int(pixels[i])
-                out[i] = UInt8(max(0, min(255, transform == "dark" ? value * 6 / 10 : 128 + (value - 128) * 6 / 10)))
+                let mapped: Int
+                switch transform {
+                case "dark": mapped = value * 6 / 10
+                case "night": mapped = value * 35 / 100
+                case "gamma": mapped = Int(255 * pow(Double(value) / 255, 2.2))
+                default: mapped = 128 + (value - 128) * 6 / 10
+                }
+                out[i] = UInt8(max(0, min(255, mapped)))
             }
         default:
             break
@@ -106,12 +148,17 @@ final class GamePhoneFirstSightingTests: XCTestCase {
             let name = sequence["name"] as! String
             let tracker = GamePhoneTracker()
             var opened: Int?
+            var closedAfterOpening = false
             for (index, sample) in (sequence["samples"] as! [[String: Any]]).enumerated() {
                 let cover = (sample["cover"] as? [NSNumber])?.map(\.doubleValue)
-                let frame = try Self.load(sample["frame"] as! String, sample["transform"] as! String, cover: cover)
-                if tracker.sample(frame, now: (sample["t"] as! NSNumber).intValue).pose != nil, opened == nil { opened = index }
+                let shift = (sample["shift"] as? [NSNumber])?.map(\.doubleValue)
+                let frame = try Self.load(sample["frame"] as! String, sample["transform"] as! String, cover: cover, shift: shift)
+                let open = tracker.sample(frame, now: (sample["t"] as! NSNumber).intValue).pose != nil
+                if open, opened == nil { opened = index }
+                if !open, opened != nil { closedAfterOpening = true }
             }
             XCTAssertEqual(opened, expected(sequence), name)
+            if sequence["staysOpen"] as? Bool == true { XCTAssertFalse(closedAfterOpening, "\(name): telefon kapandı") }
         }
     }
 

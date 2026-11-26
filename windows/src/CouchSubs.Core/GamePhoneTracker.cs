@@ -57,6 +57,12 @@ public sealed class GamePhoneTracker
     private bool pendingStrict;
     private readonly PhoneMissLog missLog = new();
 
+    /// <summary>
+    /// Açık telefonun yeni gözlemi en çok bu kadar oynadıysa (kutunun her kenarı, kareye oranla) aynı telefondur; sıkı
+    /// aramanın gözleminde <see cref="StrictMoveTolerance"/> (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const double SameTolerance = .035, StrictMoveTolerance = .1;
+
     public bool TrySample(Frame frame, long now, out CropRegion? visible)
     {
         if (lastTime is { } last && now >= last && now - last < IntervalMs)
@@ -112,9 +118,10 @@ public sealed class GamePhoneTracker
         long unseenMs = 0;
         var unseenMisses = 0;
         CropRegion? movedFrom = null;
-        if (shown is not null && candidate is not null && candidate.IsClose(shown, 0.035))
+        if (shown is not null && candidate is not null && candidate.IsClose(shown, strict ? StrictMoveTolerance : SameTolerance))
         {
-            // Açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir.
+            // Açık telefonun yakınında tek gözlem: aynı telefon, yeri güncellenir. Sıkı aramanın bulduğu telefon daha çok
+            // oynamış da olabilir (el hızlı oynadı): yine aynı telefon sayılır, önceden ıska sayılıp telefonu kapatıyordu.
             shown = candidate;
             shownPose = pose;
             misses = 0;
@@ -139,7 +146,7 @@ public sealed class GamePhoneTracker
         else if (candidate is not null)
         {
             // Yeni telefon: doğrulanmayı bekleyen gözlemin yakınındaysa puanı eklenir, değilse yeni bekleyen gözlem olur.
-            if (pending is not null && candidate.IsClose(pending, 0.035) && (pendingMisses == 0 || PendingFresh(now)))
+            if (pending is not null && candidate.IsClose(pending, SameTolerance) && (pendingMisses == 0 || PendingFresh(now)))
                 pendingPoints += points;
             else
             {
@@ -256,7 +263,17 @@ public sealed class GamePhoneTracker
 
 internal static class GamePhoneGeometry
 {
-    private const int Width = 400, Height = 225, Left = 95, Right = 305;
+    private const int Width = 400, Height = 225, Left = 95;
+    /// <summary>
+    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+    /// telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
+    /// kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü: telefon
+    /// açılıp ~1,1 sn içinde kapanıyor, sonraki aramaların çoğu hoparlör yarığında kalıyor; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const int ScanRight = 324;
+    private const int Right = ScanRight + 10;
+    /// <summary>Parlaklığın ölçüldüğü sütunlar (üst şeritte, <see cref="DarkGains"/>).</summary>
+    private const int LevelLeft = 95, LevelRight = 305;
     private readonly record struct Slot(double X, int Y, int Length, int Contrast);
 
     // Noktalar tam kareye göre 0..1; ekran düzleminin yönü hoparlörleri birleştiren eksenden alınabilir.
@@ -363,24 +380,72 @@ internal static class GamePhoneGeometry
         probe = Probe.Missed(Step.NoPicture);
         if (area.Width < Width || area.Height < Height || !Widescreen(area.Width, area.Height)) return false;
         Span<int> columns = stackalloc int[Width * 2];
-        var grid = new Samples(frame, columns, area);
-        if (Strict(grid, out pose, out probe)) return true;
-        return near is { } last && Confirm(grid, last, out pose);
+        var grid = new Samples(frame, columns, area, 256);
+        int level = grid.Level();
+        var located = Strict(grid, out pose, out probe);
+        probe = probe with { Level = level };
+        if (located) return true;
+        var gains = DarkGains(level);
+        foreach (var gain in gains)
+        {
+            var bright = grid.WithGain(gain);
+            if (Strict(bright, out pose, out var dark))
+            {
+                probe = dark with { Level = level, Gain = gain };
+                return true;
+            }
+            // Iskada en ileri geçilen ölçüt ve en iyi aday bütün aramalardan.
+            if (dark.Step > probe.Step) probe = probe with { Step = dark.Step, Gain = gain };
+            if (dark.Side > probe.Side) probe = probe with { Side = dark.Side, Candidate = dark.Candidate };
+        }
+        if (near is not { } last) return false;
+        if (Confirm(grid, last, out pose)) return true;
+        foreach (var gain in gains)
+            if (Confirm(grid.WithGain(gain), last, out pose)) return true;
+        return false;
     }
 
-    /// <summary>Gevşek doğrulamada yarıklar açık telefonun son yerinden en çok bu kadar (400×225 ızgarada) uzak olabilir.</summary>
-    internal const double ConfirmReach = 4.0;
+    /// <summary>Karanlık sahne: üst şeridin ortanca tonu bundan azsa (0–255) sıkı arama kazançla da yapılır (<see cref="DarkGains"/>).</summary>
+    internal const int DarkLevel = 56;
+    /// <summary>Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×).</summary>
+    internal const int DarkTarget = 96;
+    internal static readonly int[] GainSteps = [384, 640, 1024];
+
+    /// <summary>
+    /// Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi (X,
+    /// beta.104): "telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor". Gece ya da karanlık odada telefonun kasası
+    /// koyu, hoparlör yarığıyla kasa arasındaki fark mutlak eşiğin (14–20 ton) altında kalıyordu; sıkı arama hoparlör
+    /// yarığında kalıyor, telefon hiç açılmıyordu. Ölçütler aynı, yalnız ızgara aydınlatılır. Sahne karanlık ama telefon
+    /// aydınlıksa büyük kazanç kasayı doyurur: kazançlar küçükten denenir, üst şeridi <see cref="DarkTarget"/>'tan çok
+    /// aydınlatan kazanç denenmez (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static int[] DarkGains(int level)
+    {
+        if (level >= DarkLevel) return [];
+        int most = 256 * DarkTarget / Math.Max(8, level);
+        var steps = GainSteps.Where(gain => gain <= most).ToArray();
+        return steps.Length == 0 ? [GainSteps[0]] : steps;
+    }
+
+    /// <summary>
+    /// Gevşek doğrulamada yarıklar açık telefonun son yerinden yatayda ve dikeyde en çok bu kadar (400×225 ızgarada) uzak
+    /// olabilir: izleyicinin aynı telefon saydığı oynama kadar (<see cref="GamePhoneTracker.SameTolerance"/>, karenin %3,5'i).
+    /// Önceden her yönde 4'tü (yatayda %1, dikeyde %1,8): el titreyince ya da telefon kaldırılınca 330 ms'de %2 oynayan
+    /// telefon, sıkı arama da ıskalarsa ~1,1 sn sonra kapanıyordu (#1251, beta-104 günlüğü: "telefon kapandı (1141 ms
+    /// görülmedi, 3 ıska)", telefon ekranda; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const double ConfirmReachX = 14.0, ConfirmReachY = 8.0;
 
     /// <summary>
     /// Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
-    /// <see cref="ConfirmReach"/> kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
+    /// <see cref="ConfirmReachX"/>/<see cref="ConfirmReachY"/> kadar çevresinde, sıkı aramayla aynı boy ve oran kurallarıyla; yan kenarların ve çerçevenin
     /// gücüne bakılmaz (beyaz ekranda yanlar zemine karışır). Bulunmazsa false (Mac/iPhone ve Android ile aynı).
     /// </summary>
     private static bool Confirm(Samples grid, Pose near, out Pose pose)
     {
         pose = default;
         double topX = near.TopX * Width, topY = near.TopY * Height, bottomX = near.BottomX * Width, bottomY = near.BottomY * Height;
-        var reach = (int)ConfirmReach;
+        var reach = (int)ConfirmReachY;
         int upperFrom = Math.Max(17, (int)Math.Round(topY, MidpointRounding.AwayFromZero) - reach);
         int upperTo = Math.Min(75, (int)Math.Round(topY, MidpointRounding.AwayFromZero) + reach + 1);
         int lowerFrom = Math.Max(145, (int)Math.Round(bottomY, MidpointRounding.AwayFromZero) - reach);
@@ -395,10 +460,10 @@ internal static class GamePhoneGeometry
         var found = false;
         foreach (var top in upper[..tops])
         {
-            if (Math.Abs(top.X - topX) > ConfirmReach || !HasCamera(grid, top)) continue;
+            if (Math.Abs(top.X - topX) > ConfirmReachX || !HasCamera(grid, top)) continue;
             foreach (var bottom in lower[..bottoms])
             {
-                if (Math.Abs(bottom.X - bottomX) > ConfirmReach) continue;
+                if (Math.Abs(bottom.X - bottomX) > ConfirmReachX) continue;
                 int h = bottom.Y - top.Y;
                 double dx = bottom.X - top.X;
                 if (h is < 115 or > 179 || Math.Abs(dx) > h * .24 ||
@@ -460,7 +525,9 @@ internal static class GamePhoneGeometry
     /// en güçlü olanın zayıf yanı (yoksa -1); <see cref="Candidate"/> o aday (yarık, kamera, çentik, oran ve kasa tutuyor,
     /// yanları zayıf). Aday tek başına telefon açmaz.
     /// </summary>
-    internal readonly record struct Probe(Step Step, int Side, Pose? Candidate)
+    /// <para><see cref="Level"/>: üst şeridin ortanca tonu (0–255; -1: ölçülmedi); <see cref="Gain"/>: sonucu veren aramanın
+    /// kazancı (256 = 1×; <see cref="DarkGains"/>).</para>
+    internal readonly record struct Probe(Step Step, int Side, Pose? Candidate, int Level = -1, int Gain = 256)
     {
         internal static Probe Missed(Step step) => new(step, -1, null);
 
@@ -551,10 +618,10 @@ internal static class GamePhoneGeometry
             var rimAbove = band.Slice((y - from) * stride, stride);
             var rimBelow = band.Slice((y - from + 8) * stride, stride);
             int start = -1;
-            for (int x = 105 - Left; x <= 294 - Left; x++)
+            for (int x = 105 - Left; x <= ScanRight - Left; x++)
             {
                 int surround = Math.Min(above[x], below[x]);
-                if (x < 294 - Left && surround - row[x] >= Math.Clamp(surround / 3, 14, 25))
+                if (x < ScanRight - Left && surround - row[x] >= Math.Clamp(surround / 3, 14, 25))
                 {
                     if (start < 0) start = x;
                     continue;
@@ -658,9 +725,12 @@ internal static class GamePhoneGeometry
         private readonly Frame frame;
         private readonly Span<int> x1, x2;
         private readonly int top, height;
-        internal Samples(Frame frame, Span<int> columns, (int X, int Y, int Width, int Height) area)
+        /// <summary>Parlaklık kazancı (256 = 1×; <see cref="DarkGains"/>).</summary>
+        private readonly int gain;
+        internal Samples(Frame frame, Span<int> columns, (int X, int Y, int Width, int Height) area, int gain)
         {
             this.frame = frame;
+            this.gain = gain;
             top = area.Y;
             height = area.Height;
             x1 = columns[..Width];
@@ -670,6 +740,41 @@ internal static class GamePhoneGeometry
                 x1[x] = (area.X + (4 * x + 1) * area.Width / (4 * Width)) * 4;
                 x2[x] = (area.X + (4 * x + 3) * area.Width / (4 * Width)) * 4;
             }
+        }
+
+        private Samples(Samples source, int gain)
+        {
+            frame = source.frame;
+            x1 = source.x1;
+            x2 = source.x2;
+            top = source.top;
+            height = source.height;
+            this.gain = gain;
+        }
+
+        internal Samples WithGain(int gain) => new(this, gain);
+
+        /// <summary>Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek.</summary>
+        internal int Level()
+        {
+            Span<int> counts = stackalloc int[256];
+            int total = 0;
+            for (int y = 0; y < 90; y += 3)
+            {
+                (int a, int b) = Rows(y);
+                for (int x = LevelLeft; x <= LevelRight; x += 3)
+                {
+                    counts[Raw(x, a, b) >> 10]++;
+                    total++;
+                }
+            }
+            int sum = 0;
+            for (int tone = 0; tone < 256; tone++)
+            {
+                sum += counts[tone];
+                if (2 * sum >= total) return tone;
+            }
+            return 255;
         }
 
         internal void Row(int y, scoped Span<byte> dest)
@@ -691,8 +796,14 @@ internal static class GamePhoneGeometry
 
         private int Sample(int x, int row1, int row2)
         {
+            int sum = Raw(x, row1, row2);
+            return gain == 256 ? sum >> 10 : (int)Math.Min(255, ((long)sum * gain) >> 18);
+        }
+
+        private int Raw(int x, int row1, int row2)
+        {
             int a = x1[x], b = x2[x];
-            return (Tone(row1 + a) + Tone(row1 + b) + Tone(row2 + a) + Tone(row2 + b)) >> 10;
+            return Tone(row1 + a) + Tone(row1 + b) + Tone(row2 + a) + Tone(row2 + b);
         }
 
         private int Tone(int p) => frame.Pixels[p] * 29 + frame.Pixels[p + 1] * 150 + frame.Pixels[p + 2] * 77;

@@ -37,6 +37,8 @@ internal sealed class GamePhoneReader
                 Sample(frame, sx, sy, flat.Pixels, y * flat.Stride + x * 4);
         }
 
+        // Koyu ekran (koyu tema, gece, kısılmış ekran): gri, gerilmiş ve ters çevrilmiş okunur (PhoneDarkScreen).
+        PhoneDarkScreen.Prepare(flat);
         var reading = ReadMessages(flat, reader);
         if (reading.Lines.Count == 0) return Reading.Empty;
         TextBox Map(TextBox b)

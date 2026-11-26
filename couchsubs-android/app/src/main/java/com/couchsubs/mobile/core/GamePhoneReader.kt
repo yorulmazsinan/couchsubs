@@ -94,6 +94,8 @@ object GamePhoneReader {
             fun y(n: Double) = ((n / frame.height - region.top) / (region.bottom - region.top)).coerceIn(0.0, 1.0)
             return TextBox(x(q[0]), y(q[1]), x(q[2]), y(q[3]))
         }
+        // Koyu ekran (koyu tema, gece, kısılmış ekran): gerilmiş ve ters çevrilmiş okunur ([PhoneDarkScreen]).
+        PhoneDarkScreen.prepare(out, width * height)
         val flat = Flat(out, width, height)
         val reading = rescue?.read(flat, reader) ?: reader(flat)
         return Reading(reading.lines.map { original ->

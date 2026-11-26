@@ -184,7 +184,8 @@ final class GamePhoneReaderTests: XCTestCase {
     }
 
     func testDeskewInBothDirectionsMapsWordsAndIconsToOriginalPixels() throws {
-        let image = GamePhoneTestFrame.image(width: 800, height: 450) { x,y in (UInt8(x/4), UInt8(y/2), 0) }
+        // Mavi kanal dolu: aydınlık ekran, koyu ekran hazırlığı (`PhoneDarkScreen`) kodlanmış koordinatları değiştirmesin.
+        let image = GamePhoneTestFrame.image(width: 800, height: 450) { x,y in (UInt8(x/4), UInt8(y/2), 255) }
         for tilt in [-0.06, 0.06] {
             let reader = Probe()
             let pose = GamePhoneGeometry.Pose(topX: 0.50, topY: 0.16, bottomX: 0.50+tilt, bottomY: 0.82)
