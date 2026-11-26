@@ -158,7 +158,7 @@ final class TextStyleSamplerTests: XCTestCase {
                                         right: Double(right - 40) / 140, bottom: Double(top + 14 - 80) / 180))
         }
         let candidate = RegionWatcher.candidate(Reading(lines: lines), in: region, frame: crop, auto: true, menu: true,
-                                                styled: true, kind: .menu, screen: screen)
+                                                styled: true, kind: .menu, screen: RegionWatcher.ScreenFrame(screen))
         let paints = (candidate.blocks ?? []).compactMap(\.paint)
         XCTAssertEqual(paints.count, rows.count)
         for (paint, row) in zip(paints, rows) {
