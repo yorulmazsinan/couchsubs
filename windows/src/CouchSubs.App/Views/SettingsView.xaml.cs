@@ -488,11 +488,14 @@ public partial class SettingsView : UserControl
                                     MessageBoxImage.Question) == MessageBoxResult.Yes)
                     controller.DeleteAreaProfile(key);
             });
-            row.Children.Add(new TextBlock
+            var name = new TextBlock
             {
                 Text = key == active ? game + " · " + text["In use"] : game,
                 TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap,
-            });
+            };
+            // Profil adı gövde yazısı rengiyle (tema kaynağı); sekme öğesinden miras beklenmez (beta.104: koyu temada siyaha yakın).
+            name.SetResourceReference(TextBlock.ForegroundProperty, "textPrimaryBrush");
+            row.Children.Add(name);
             row.Children.Add(buttons);
             GameProfileList.Children.Add(row);
         }

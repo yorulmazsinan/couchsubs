@@ -1984,6 +1984,15 @@
 
     <!-- Ayarlar sayfaları: sekme başlıkları görünmez (gezinme soldaki kartta), seçili sayfa kendi içinde kayar. -->
     <Style x:Key="PageTabs" TargetType="TabControl">
+        <!-- Sekme öğesinin örtük stili: ItemContainerStyle ancak öğe kabı hazırlanınca uygulanır; sekme başlıklarının paneli
+             gizli (Collapsed, ölçülmez), buna güvenilemez: TabItem Windows'un stilindeki Foreground=Black'i
+             koruyordu (beta.104: "Bu oyunun alanları" satırı ve oyun profili adı koyu temada yine siyaha yakın). Örtük stil
+             TabItem yüklenirken uygulanır. -->
+        <Style.Resources>
+            <Style TargetType="TabItem">
+                <Setter Property="Foreground" Value="{DynamicResource textPrimaryBrush}" />
+            </Style>
+        </Style.Resources>
         <Setter Property="Foreground" Value="{DynamicResource textPrimaryBrush}" />
         <Setter Property="ItemContainerStyle">
             <Setter.Value>
@@ -2071,6 +2080,15 @@
     <!-- Ayarlar sayfaları (Perde): sekme başlıkları görünmez (gezinme soldaki kartta); seçili sayfa kendi içinde kayar ve cam
          üst çubuğun / reklam şeridinin arkasından geçer (boşluk shell.inset kayan içeriğin içinde). Başta bölüm başlığı (Tag). -->
     <Style x:Key="SettingsPageTabs" TargetType="TabControl">
+        <!-- Sekme öğesinin örtük stili: ItemContainerStyle ancak öğe kabı hazırlanınca uygulanır; sekme başlıklarının paneli
+             gizli (Collapsed, ölçülmez), buna güvenilemez: TabItem Windows'un stilindeki Foreground=Black'i
+             koruyordu (beta.104: "Bu oyunun alanları" satırı ve oyun profili adı koyu temada yine siyaha yakın). Örtük stil
+             TabItem yüklenirken uygulanır. -->
+        <Style.Resources>
+            <Style TargetType="TabItem">
+                <Setter Property="Foreground" Value="{DynamicResource textPrimaryBrush}" />
+            </Style>
+        </Style.Resources>
         <Setter Property="Foreground" Value="{DynamicResource textPrimaryBrush}" />
         <Setter Property="ItemContainerStyle">
             <Setter.Value>

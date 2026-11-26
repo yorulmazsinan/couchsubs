@@ -359,7 +359,7 @@
                         <c:Card Title="{t:T 'Areas for this game'}">
                             <c:SpacedStack>
                                 <StackPanel>
-                                    <TextBlock x:Name="AreaProfileText" />
+                                    <TextBlock x:Name="AreaProfileText" Foreground="{DynamicResource textPrimaryBrush}" />
                                     <TextBlock x:Name="AreaProfileHint" Style="{StaticResource HintText}" Margin="{t:Sp '0,titleBody,0,0'}" />
                                 </StackPanel>
                                 <c:SpacedStack x:Name="AreaProfileButtons" Orientation="Horizontal" Gap="xs">
@@ -712,9 +712,10 @@
                                 </c:Unit>
                             </c:SpacedStack>
                         </c:Card>
-                        <c:Card Visibility="{Binding ShowsOnTv, Converter={StaticResource VisibleIf}}">
-                            <s:TvAppCard />
-                        </c:Card>
+                        <!-- TV uygulamasının kurulum/durum kartları; yapılacak bir şey yoksa kendisi gizlenir. Kartın içine
+                             konmaz: beta.104'te kendi kartları gizliyken dış kart "Hızlı konuşmada…" ile "Yayın penceresi"
+                             arasında boş kalıyordu (Android TV, uygulama güncel). -->
+                        <s:TvAppCard Shown="{Binding ShowsOnTv}" />
                         <!-- Şeffaflık tanımayan yayın programları için düz zeminli altyazı penceresi (StreamWindow.cs). -->
                         <c:Card Title="{t:T 'Stream window'}">
                             <c:SpacedStack>

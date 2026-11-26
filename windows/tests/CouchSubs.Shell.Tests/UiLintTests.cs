@@ -171,10 +171,76 @@ public class UiLintTests
         foreach (var key in new[] { "SettingsPageTabs", "PageTabs" })
         {
             var style = styles.Descendants().Single(e => e.Name.LocalName == "Style" && (string?)e.Attribute(X + "Key") == key);
-            var tabItem = style.Descendants().Single(e => e.Name.LocalName == "Style" && (string?)e.Attribute("TargetType") == "TabItem");
+            var container = style.Elements().Single(e => (string?)e.Attribute("Property") == "ItemContainerStyle");
+            var tabItem = container.Descendants().Single(e => e.Name.LocalName == "Style" && (string?)e.Attribute("TargetType") == "TabItem");
             var foreground = tabItem.Elements().SingleOrDefault(e => (string?)e.Attribute("Property") == "Foreground")?.Attribute("Value")?.Value;
             Assert.True(foreground == "{DynamicResource textPrimaryBrush}", $"{key}: sekme öğesi Foreground tema rengi değil ({foreground ?? "yok"})");
         }
+    }
+
+    /// <summary>
+    /// beta.104: ItemContainerStyle'daki renk gizli sekme panelinde güvenilir uygulanmıyor; sekme stilleri TabItem'a örtük
+    /// stille (Style.Resources) de tema rengini verir. Ayarlar'da koddan kurulan oyun profili adı ve "Bu oyunun alanları"
+    /// satırı rengi açıkça alır.
+    /// </summary>
+    [Fact]
+    public void SettingsTabItemsGetTheThemeTextColorWithoutContainerGeneration()
+    {
+        var styles = XDocument.Load(Path.Combine(App, "Theme", "Styles.xaml"));
+        foreach (var key in new[] { "SettingsPageTabs", "PageTabs" })
+        {
+            var style = styles.Descendants().Single(e => e.Name.LocalName == "Style" && (string?)e.Attribute(X + "Key") == key);
+            var resources = style.Elements().SingleOrDefault(e => e.Name.LocalName == "Style.Resources");
+            Assert.True(resources is not null, $"{key}: Style.Resources yok");
+            var implicitTab = resources!.Elements().SingleOrDefault(e => e.Name.LocalName == "Style"
+                && (string?)e.Attribute("TargetType") == "TabItem" && e.Attribute(X + "Key") is null);
+            Assert.True(implicitTab is not null, $"{key}: TabItem için örtük stil yok");
+            var foreground = implicitTab!.Elements().SingleOrDefault(e => (string?)e.Attribute("Property") == "Foreground")?.Attribute("Value")?.Value;
+            Assert.Equal("{DynamicResource textPrimaryBrush}", foreground);
+        }
+        var settings = XDocument.Load(Path.Combine(App, "Views", "SettingsView.xaml"));
+        var areaText = settings.Descendants().Single(e => (string?)e.Attribute(X + "Name") == "AreaProfileText");
+        Assert.Equal("{DynamicResource textPrimaryBrush}", (string?)areaText.Attribute("Foreground"));
+        var code = File.ReadAllText(Path.Combine(App, "Views", "SettingsView.xaml.cs"));
+        var profileRow = code.IndexOf("game + \" · \" + text[\"In use\"]", StringComparison.Ordinal);
+        Assert.True(profileRow > 0, "oyun profili satırı bulunamadı");
+        var next = code.IndexOf("GameProfileList.Children.Add", profileRow, StringComparison.Ordinal);
+        Assert.Contains("SetResourceReference(TextBlock.ForegroundProperty, \"textPrimaryBrush\")", code[profileRow..next]);
+    }
+
+    /// <summary>
+    /// Boş kart yok (beta.104, Ayarlar › Çıkış Ekranları: "Hızlı konuşmada…" ile "Yayın penceresi" arasında boş kart): her
+    /// c:Card'ın içeriği vardır ve kart, yapacak işi yokken kendini gizleyen bir bileşeni (kök öğesi Visibility="Collapsed"
+    /// olan UserControl, ör. TvAppCard) tek başına sarmaz; o bileşen gizlenince kartın çerçevesi boş kalır.
+    /// </summary>
+    [Fact]
+    public void NoSettingsCardIsEmpty()
+    {
+        var files = Directory.EnumerateFiles(Path.Combine(App, "Views"), "*.xaml", SearchOption.AllDirectories).Where(IsSource).ToList();
+        var selfHiding = files.Select(f => XDocument.Load(f).Root!)
+            .Where(root => root.Name.LocalName == "UserControl" && (string?)root.Attribute("Visibility") == "Collapsed")
+            .Select(root => ((string?)root.Attribute(X + "Class") ?? "").Split('.').Last())
+            .Where(name => name.Length > 0)
+            .ToHashSet();
+        Assert.Contains("TvAppCard", selfHiding);
+        var problems = new List<string>();
+        foreach (var file in files)
+        {
+            var name = Path.GetFileName(file);
+            foreach (var card in XDocument.Load(file, LoadOptions.SetLineInfo).Descendants().Where(e => e.Name.LocalName == "Card"))
+            {
+                var line = ((System.Xml.IXmlLineInfo)card).LineNumber;
+                // Özellik öğeleri (c:Card.Trailing) içerik sayılmaz.
+                var content = card.Elements().Where(e => !e.Name.LocalName.Contains('.')).ToList();
+                if (content.Count == 0)
+                    problems.Add($"{name}:{line}: içeriği olmayan kart");
+                else if (content.Count == 1 && selfHiding.Contains(content[0].Name.LocalName))
+                    problems.Add($"{name}:{line}: kart yalnız kendini gizleyen {content[0].Name.LocalName}'ı sarıyor (gizlenince boş kart kalır)");
+            }
+        }
+        Assert.True(problems.Count == 0, "Boş kalabilen kart:\n" + string.Join("\n", problems));
+        var settings = File.ReadAllText(Path.Combine(App, "Views", "SettingsView.xaml"));
+        Assert.Contains("<s:TvAppCard Shown=\"{Binding ShowsOnTv}\" />", settings);
     }
 
     /// <summary>"Dosya: öğe adı" → gerekçe. Soluk (faint) renk okunacak yazıda kullanılmaz; yalnız bunlar.</summary>

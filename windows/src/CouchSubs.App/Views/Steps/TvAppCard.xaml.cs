@@ -75,6 +75,25 @@ public partial class TvAppCard : UserControl
 
     private TvBrand? fallbackBrand;
 
+    /// <summary>
+    /// Kart bu sayfada gösterilebilir mi (Ayarlar › Çıkış Ekranları: altyazı TV'de gösteriliyorsa). False ise yapılacak iş
+    /// olsa da görünmez. Kart başka bir kartın içine konmaz; gizlenince arkada boş kart kalmasın.
+    /// </summary>
+    public bool Shown
+    {
+        get => (bool)GetValue(ShownProperty);
+        set => SetValue(ShownProperty, value);
+    }
+
+    public static readonly DependencyProperty ShownProperty = DependencyProperty.Register(nameof(Shown), typeof(bool), typeof(TvAppCard),
+        new PropertyMetadata(true, (d, _) => ((TvAppCard)d).Refresh()));
+
+    private void Refresh()
+    {
+        if (controller is not null) Show(controller.TvApp);
+        else if (!Shown) Visibility = Visibility.Collapsed;
+    }
+
     private void Show(TvAppState state)
     {
         var text = Localizer.Current;
@@ -162,8 +181,8 @@ public partial class TvAppCard : UserControl
         ProblemBox.Title = state.Error is { } error ? text[ErrorTitle(error)] : null;
         ProblemBox.Message = TvAppMessages.Problem(state, brand, text, Services.LiveServices.TvInstallLogPath, controller?.ComputerAddress);
         ShowLog.Visibility = Visible(state.Error is not null);
-        Visibility = Visible(StatusCard.Visibility == Visibility.Visible || Checklist.Visibility == Visibility.Visible
-            || ProblemBox.Visibility == Visibility.Visible);
+        Visibility = Visible(Shown && (StatusCard.Visibility == Visibility.Visible || Checklist.Visibility == Visibility.Visible
+            || ProblemBox.Visibility == Visibility.Visible));
         // Host PC IP düzeltilip TV yeniden başlayınca da kendiliğinden devam eder.
         if (devModeOff || (brand == TvBrand.Samsung && state.Error == DevModeError.HostPcMismatch)) devModeWatch.Start();
         else devModeWatch.Stop();
