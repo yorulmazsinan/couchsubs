@@ -4,17 +4,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **İndir:** [Mac (DMG)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-macos.dmg) · [Windows (kurulum)](https://github.com/yorulmazsinan/couchsubs/releases/latest/download/CouchSubs-windows-Setup.exe) · [Android telefon (Google Play)](https://play.google.com/store/apps/details?id=com.couchsubs.mobile)
 
-**Bu sürümde yeni** (görsel güncelleme)
+**Bu sürümde yeni**
 
-- **Menüler örtülmüyor:** Soldaki menüler, üstteki sekmeler ve tuş listeleri (Ortala, 2B Görünüm, Hedef Belirle…) üstüne kutu çizilmeden, oyunun yazı stiliyle arka plansız olarak yanına Türkçe yazılıyor; bir gruptaki tüm Türkçeler aynı boy ve hizada. Ekrandaki tüm kart başlıkları birlikte çevriliyor.
-- **Kutular ikiz:** Görev kutuları, harita kartları, bildirimler ve ipucu kutuları örtülmüyor; Türkçesi özgün kutunun aynısı olarak yanındaki boş alana çiziliyor. Menü ve kutu çevirileri oyunun yazısına benzeyen dar-kalın bir yazı tipiyle.
-- **GTA 6 telefonu:** Mesajlar listesi telefondaki gibi satır kartlarıyla (avatar, ad, önizleme) telefonun boş tarafında; ana ekran kutuları da aynı biçimde. Sohbet ekranındaki üst ad başlığı kalktı; kesik önizlemeler uydurulmuyor.
-- **Görev yazısı altyazıya karışmıyor:** Türkçesi kehribar renkli ayrı kutuda.
-- **Duraklatma menüsündeki konuşma geçmişi** altyazı sanılmıyor; satırlar parçalanmadan bütün çevriliyor, liste kayınca eski çeviriler kalkıyor.
-- **Mac:** Yazı okuma takılınca uyarı saatlerce kalmıyor; okuma yedekte sürüyor, düzelince kendiliğinden dönüyor.
-- **Ayarlar:** "Deneysel" bölümü kalktı; ekran yazısı ve telefon ayarları Ayarlar › Gelişmiş › Ekran yazıları'nda, iki telefon ayarı tek "GTA 6 Telefonunu Çevir" oldu.
-- **Android:** Çeviri yeniden başlatılınca oluşan bellek hatası (#1282), Xbox'ta görüntü gelmemesi (#1252); Android TV'de bağlanmayan uygulama yeniden açılıyor (#1223).
-- **Windows:** Çeviri motoru işareti kaybolmuyor (#1298); koyu temada yazılar okunuyor.
+- **GTA 6 telefonunun diğer uygulamaları:** Sosyal akış, haberler, hava durumu, fitness ve ayarlar ekranları telefonun üstüne değil, yanına telefondaki yapının Türkçe kopyası olarak çiziliyor; yazı boyu telefonla orantılı, ekran değişince eski kutular kalkıyor. Telefon yazısı artık altyazıya karışmıyor.
+- **Üst üste binme yok:** Kalabalıkta aynı anda konuşanların altyazıları, görev kutusu ve ekran yazısı kutuları birbirinin üstüne binmiyor.
+- **Ürün ve ambalaj yazıları** (bira kutusu, süt kartonu gibi) çevrilmiyor; ürün ve marka adları olduğu gibi kalıyor.
+- **LG** (#1323, #1328): Bazı modellerde düşen görüntü artık kendiliğinden yeniden kuruluyor (TV uygulaması 0.9.113).
+- **Mac'te okuma takılması** (#1333, #1307): Yazı dolu ekranlarda takılan okuma artık iptal ediliyor, okuyucu kendine geliyor; yedek okuyucu düşük kalitede beklemiyor. Windows'ta da takılan okuma 10 sn'de bırakılıyor.
+
+**beta.101'de gelenler:** menülerin örtülmeden yanına yazılması, kutuların ikizi, telefon mesaj listesi kartları, görev yazısının ayrı kutuda gösterilmesi, menü geçmişi düzeltmesi, "Deneysel" bölümünün kalkması.
 
 **beta.100'de gelenler:** TV'de basık ya da küçük altyazı düzeltmesi, GTA 6 telefonunun hizalı balonları, Windows koyu tema ve motor işareti, Android Xbox ve bellek düzeltmeleri.
 
