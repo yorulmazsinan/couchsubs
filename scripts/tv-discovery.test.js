@@ -261,6 +261,17 @@ function startTv({ saved, alive, localIp, localMask, hasLocalAddress, consolePor
     relaunch(params) { relaunchCallback(params); },
     // Açık (kapatılmamış) bağlantılar.
     openStreams: () => streams.filter((s) => !s.closed),
+    // i. açılan akış (kapatılmış olsa da): tarayıcının sırada beklettiği geç geri çağrılar bunun üzerinden verilir.
+    stream(i) {
+      const s = streams[i];
+      return {
+        url: s.url,
+        closed: () => s.closed,
+        open: () => { if (s.onopen) s.onopen({}); },
+        fail: () => { if (s.onerror) s.onerror({}); },
+        emit(name, data) { for (const fn of s.listeners[name] || []) fn({ data: name === 'ping' ? '' : JSON.stringify(data) }); }
+      };
+    },
     // TV uygulamayı arka plana atar ya da öne getirir.
     setHidden(hidden) {
       document.hidden = hidden;
@@ -1271,4 +1282,45 @@ test('Tizen 2.3 şeridi: kumandayla altyazı şeridin dışına çıkmaz; şerit
   assert.ok(press(band) <= 10, band.element('subtitle').style.bottom);
   const free = startTv({ alive: new Set() });
   assert.ok(press(free) > 30, free.element('subtitle').style.bottom);
+});
+
+// PR #971'de anlatılan hata: TV başka bilgisayara/telefona geçince eski akış kapatılıyor, ama tarayıcının sırada beklettiği
+// geri çağrılar yine geliyordu. Eski akışın geç hatası o anki bağlantı numarasını okuyup 5 sn sonra eski adrese yeniden
+// bağlanıyor, geç gelen altyazısı yeni bilgisayarın altyazısının üstüne yazılıyordu.
+test('kapatılan eski akıştan geç gelen hata, ping ve olaylar yok sayılır; TV yeni kaynakta kalır', () => {
+  const oldServer = 'http://192.168.1.109:8787';
+  const newServer = 'http://192.168.1.39:8787';
+  const tv = startTv({ saved: oldServer, alive: new Set([oldServer, newServer]), hasLocalAddress: false });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), oldServer + '/events');
+  const first = tv.streamCount() - 1;
+  tv.relaunch({ server: newServer });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), newServer + '/events');
+  assert.ok(tv.stream(first).closed(), 'eski akış kapatılmadı');
+  tv.emit('subtitle', { text: 'Yeni kaynağın satırı.', duration: 8000 });
+  const opened = tv.streamCount();
+
+  const stale = tv.stream(first);
+  stale.fail();
+  stale.emit('subtitle', { text: 'Eski kaynağın satırı.', duration: 8000 });
+  stale.emit('clear', {});
+  stale.emit('ping');
+  stale.open();
+  assert.strictEqual(tv.element('subtitle-text').textContent, 'Yeni kaynağın satırı.');
+  assert.strictEqual(tv.element('subtitle').className, '');
+  assert.notStrictEqual(tv.element('st-conn').textContent, '', 'bağlantı durumu boş');
+  tv.clock.advance(6000);
+  // Eski adrese yeniden bağlanılmadı; yeni akış açık kaldı.
+  assert.strictEqual(tv.streamCount(), opened, 'eski akışın geç hatası yeniden bağlantı kurdu');
+  assert.strictEqual(tv.lastOpened(), newServer + '/events');
+  assert.strictEqual(tv.openStreams().length, 1);
+  assert.strictEqual(tv.server(), newServer);
+  assert.strictEqual(tv.saved(), newServer);
+
+  // Güncel akışın hatası yine yeniden bağlanır (koruma yalnız eski akışları susturur).
+  tv.failStream();
+  tv.clock.advance(6000);
+  assert.ok(tv.streamCount() > opened, 'güncel akışın hatası yeniden bağlanmadı');
+  assert.strictEqual(tv.lastOpened(), newServer + '/events');
 });

@@ -82,8 +82,11 @@ public sealed class LinuxServices : IAppServices
         new StreamSession(console, accountId, loginPasscode);
 
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
-                              Action<string> onKey)
+                              Action<string> onKey, Func<int?>? consolePort = null,
+                              Action<TvOpenProblem?>? onOpenResult = null)
     {
+        // IAppServices ile aynı imza (#759, #784): LG bekçisi gösterilen HDMI girişini bilir, her açma denemesinin sonucu
+        // ana ekrandaki satıra gider (Windows ile aynı).
         if (tv.Brand == TvBrand.AndroidTv) return new IdleKeeper();
         if (tv.Brand == TvBrand.Samsung)
         {
@@ -102,7 +105,8 @@ public sealed class LinuxServices : IAppServices
                     throw;
                 }
             }, () => SamsungDiscovery.SearchAsync(), onMoved);
-            return new Keeper(new TvKeeper(samsungLocator.ConnectAsync, SamsungClient.AppId, parameters, appConnected));
+            return new Keeper(new TvKeeper(samsungLocator.ConnectAsync, SamsungClient.AppId, parameters, appConnected,
+                                           onOpenResult: onOpenResult));
         }
         var locator = new TvLocator(tv, async target =>
         {
@@ -119,7 +123,8 @@ public sealed class LinuxServices : IAppServices
             }
         }, () => LgDiscovery.SearchAsync(), onMoved);
         // Açık ve bağlı TV uygulamasına yeni bağlantıda açma komutu gitmez (#1055; Windows ile aynı).
-        return new Keeper(new TvKeeper(locator.ConnectAsync, AppController.TvAppId, parameters, tvConnected: appConnected));
+        return new Keeper(new TvKeeper(locator.ConnectAsync, AppController.TvAppId, parameters, consolePort: consolePort,
+                                       onOpenResult: onOpenResult, tvConnected: appConnected));
     }
 
     // --- TV uygulamasını kurma ---

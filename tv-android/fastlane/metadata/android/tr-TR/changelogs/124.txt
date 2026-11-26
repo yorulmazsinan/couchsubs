@@ -1,0 +1,1 @@
+0.9.121: TV başka bilgisayara ya da telefona geçince eski bağlantıdan geç gelen ileti yeni altyazının üstüne yazılmıyor, TV'yi eski adrese yeniden bağlamıyor.

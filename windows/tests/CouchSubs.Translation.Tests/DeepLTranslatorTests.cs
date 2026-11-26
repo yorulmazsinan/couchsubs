@@ -184,6 +184,32 @@ public class DeepLTranslatorTests
         }
     }
 
+    /// <summary>
+    /// Sözlük açıkken sözlükteki adı ("Soul") içeren satır önbellekten geldiğinde dublaj kaybolmaz: önbellek çeviride
+    /// kullanılan sözlük anahtarıyla okunur (Mac ve iPhone'daki DeepLConnectionTests ile aynı).
+    /// </summary>
+    [Fact]
+    public async Task DubbingSurvivesGlossaryCacheHit()
+    {
+        const string text = "Soul, run. Stay close.";
+        var deepL = new FakeDeepL(Echo);
+        var cache = new TranslationCache();
+        var first = new DeepLTranslator("abc:fx", new FakeLocal(), new HttpClient(deepL), cache, glossary: new GlossaryStore(null));
+        var translated = await first.TranslateAsync(text);
+        var expected = first.SpokenLines(text);
+        Assert.Equal(2, expected.Count);
+        Assert.False(cache.TryGet(text, out _));
+
+        // Yeni oturum: konuşma belleği boş, çeviri önbellekten gelir.
+        var requests = deepL.Requests.Count;
+        var local = new FakeLocal();
+        var second = new DeepLTranslator("abc:fx", local, new HttpClient(deepL), cache, glossary: new GlossaryStore(null));
+        Assert.Equal(expected, second.SpokenLines(text));
+        Assert.Equal(translated, await second.TranslateAsync(text));
+        Assert.Equal(requests, deepL.Requests.Count);
+        Assert.Empty(local.Calls);
+    }
+
     /// <summary>DeepL düşünce yerel modelin çevirisi DeepL önbelleğine yazılmaz; DeepL dönünce satır DeepL ile çevrilir.</summary>
     [Fact]
     public async Task FallbackResultsAreNotCachedAsDeepL()

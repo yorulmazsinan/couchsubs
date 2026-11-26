@@ -231,7 +231,10 @@ public final class DeepLTranslator: TextTranslator, OnlineTranslating {
 
     public func spokenLines(for text: String) -> [SpokenLine] {
         if let lines = speech[text] { return lines }
-        let cached = SpeechScript.fromCache(text, cache: cache)
+        // Önbellek, çeviride kullanılan anahtarla okunur: sözlük açıkken sözlükteki adı içeren cümle sözlük parmak
+        // iziyle saklanır; çıplak cümleyle aranırsa bulunmaz ve dublaj önbellekten gelen satırda kaybolurdu.
+        let glossary = glossaryStore.glossary
+        let cached = SpeechScript.fromCache(text, cache: cache, cacheKey: { DeepLMarkup.cacheKey($0, glossary: glossary) })
         return cached.isEmpty ? fallback.spokenLines(for: text) : cached
     }
 

@@ -1,0 +1,1 @@
+0.9.121: When the TV switches to another computer or phone, a late message from the old connection no longer overwrites the new subtitle or reconnects the TV to the old address.

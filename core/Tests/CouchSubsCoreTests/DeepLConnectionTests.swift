@@ -69,6 +69,29 @@ final class DeepLConnectionTests: XCTestCase {
         DeepLTranslator(key: "abc:fx", fallback: local, session: FlakyDeepL.session())
     }
 
+    /// Sözlük açıkken sözlükteki adı ("Soul") içeren satır önbellekten geldiğinde dublaj kaybolmaz: önbellek çeviride
+    /// kullanılan sözlük anahtarıyla okunur (Windows'taki DeepLTranslatorTests ile aynı).
+    func testDubbingSurvivesGlossaryCacheHit() async throws {
+        let cache = TranslationCache()
+        let text = "Soul, run. Stay close."
+        let first = DeepLTranslator(key: "abc:fx", fallback: RecordingLocal(), session: FlakyDeepL.session(), cache: cache,
+                                    glossary: .builtInOnly())
+        let translated = try await first.translate(text)
+        let expected = first.spokenLines(for: text)
+        XCTAssertFalse(expected.isEmpty)
+        XCTAssertTrue(DeepLMarkup.cacheKey(text, glossary: .builtIn) != text, "satır sözlük anahtarıyla saklanmalı")
+        // Yeni oturum: konuşma belleği boş, çeviri önbellekten gelir.
+        let requests = FlakyDeepL.requests
+        let local = RecordingLocal()
+        let second = DeepLTranslator(key: "abc:fx", fallback: local, session: FlakyDeepL.session(), cache: cache,
+                                     glossary: .builtInOnly())
+        XCTAssertEqual(second.spokenLines(for: text), expected)
+        let again = try await second.translate(text)
+        XCTAssertEqual(again, translated)
+        XCTAssertEqual(FlakyDeepL.requests, requests)
+        XCTAssertTrue(local.calls.isEmpty)
+    }
+
     /// Açık tutulan bağlantıyı sunucu sessizce kapatmışsa satır yedek çeviriye düşmeden bir kez daha denenir.
     func testDroppedKeepAliveConnectionIsRetriedOnce() async throws {
         FlakyDeepL.firstError = .networkConnectionLost

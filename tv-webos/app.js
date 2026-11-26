@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.120';
+  var APP_VERSION = '0.9.121';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -3218,8 +3218,12 @@
 
   // --- Sunucu bağlantısı (Server-Sent Events) ---
 
+  // Kapatılan (yerine yenisi açılan ya da arka planda bırakılan) akıştan geç gelen olay yok sayılır: eski bilgisayarın
+  // altyazısı yeni bilgisayarınkinin üstüne yazılmaz.
   function onEvent(name, handler) {
-    eventSource.addEventListener(name, function (e) {
+    var source = eventSource;
+    source.addEventListener(name, function (e) {
+      if (source !== eventSource) return;
       lastActivity = Date.now();
       var data;
       try {
@@ -3423,7 +3427,11 @@
     // uygulamaları v göndermez; CouchSubs v'siz TV'yi eski sayar.
     eventSource = new EventSource(authenticatedUrl(address, '/events?v=' + APP_VERSION + (shownPort ? '&hdmi=' + shownPort : '')));
     lastActivity = Date.now();
+    // Bu bağlantının akışı. Kapatılmış eski akışın sırada bekleyen geri çağrıları (onopen, onerror, ping, olaylar) yok
+    // sayılır: eski akışın geç gelen hatası o anki bağlantı numarasını okuyup 5 sn sonra eski adrese yeniden bağlanıyordu.
+    var source = eventSource;
     eventSource.onopen = function () {
+      if (source !== eventSource) return;
       lastActivity = Date.now();
       failures = 0;
       clearTimeout(pairingTimer);
@@ -3436,6 +3444,7 @@
       flushTvLog();
     };
     eventSource.onerror = function () {
+      if (source !== eventSource) return;
       var failedGeneration = connectionGeneration;
       clearTimeout(pairingTimer);
       pairingTimer = setTimeout(function () { if (failedGeneration === connectionGeneration) connect(address); }, 5000);
@@ -3457,6 +3466,7 @@
     // Bilgisayar 15 sn'de bir "ping" gönderir; gelmezse bağlantı yarı kopmuştur (bkz. watchConnection).
     linkId = null;
     eventSource.addEventListener('ping', function () {
+      if (source !== eventSource) return;
       lastActivity = Date.now();
       pingSeen = true;
       sendAck();

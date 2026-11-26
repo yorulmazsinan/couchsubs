@@ -205,10 +205,15 @@ public sealed class DeepLTranslator : ITextTranslator, IOnlineTranslator
         }
     }
 
-    public IReadOnlyList<SpokenLine> SpokenLines(string text) =>
-        _speech.TryGetValue(text, out var lines) ? lines
-        : SpeechScript.FromCache(text, _cache) is { Count: > 0 } cached ? cached
-        : _fallback?.SpokenLines(text) ?? [];
+    public IReadOnlyList<SpokenLine> SpokenLines(string text)
+    {
+        if (_speech.TryGetValue(text, out var lines)) return lines;
+        // Önbellek, çeviride kullanılan anahtarla okunur: sözlük açıkken sözlükteki adı içeren cümle sözlük parmak
+        // iziyle saklanır; çıplak cümleyle aranırsa bulunmaz ve dublaj önbellekten gelen satırda kaybolurdu.
+        var glossary = _glossary.Current;
+        var cached = SpeechScript.FromCache(text, _cache, part => DeepLMarkup.CacheKey(part, glossary));
+        return cached.Count > 0 ? cached : _fallback?.SpokenLines(text) ?? [];
+    }
 
     /// <summary>Cihaz üstü çeviri; yoksa ya da hata verirse null.</summary>
     private async Task<string?> TryFallbackAsync(string text, CancellationToken cancellationToken)
