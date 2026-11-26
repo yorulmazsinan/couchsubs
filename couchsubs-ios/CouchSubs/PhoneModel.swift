@@ -1766,7 +1766,7 @@ final class PhoneModel: ObservableObject {
             return local
         }
         online.onFailureChanged = { [weak self] state in
-            if let state { SubtitleLog.write("çevrimiçi motor çeviremedi: \(engine.rawValue) \(state); yedek: \(Translator.isAvailable ? "ücretsiz çeviri" : "yok (iOS 26 öncesi), yalnız oyun paketleri")") }
+            if let state { SubtitleLog.write("çevrimiçi motor çeviremedi: \(engine.rawValue) \(state); yedek: \(Translator.isAvailable ? "ücretsiz çeviri" : "yok, yalnız oyun paketleri (Apple çevirisi bu sürümde yok)")") }
             Task { @MainActor in self?.onlineIssue = state }
         }
         return online
