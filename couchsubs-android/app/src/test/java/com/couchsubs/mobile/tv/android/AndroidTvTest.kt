@@ -135,7 +135,10 @@ class AndroidTvTest {
         assertFalse(AndroidTvInstaller.installExistingSucceeded("Failure [NameNotFoundException]"))
     }
 
-    /** Güncellemede TV'de çalışan eski uygulama önce kapatılır (am force-stop), sonra kurulur ve temiz açılır. */
+    /**
+     * Güncellemede TV'de çalışan eski uygulama önce kapatılır (kapanma isteği, durum denetimi, hâlâ çalışıyor ya da
+     * bilinmiyorsa am force-stop; #1221), sonra kurulur ve temiz açılır.
+     */
     @Test
     fun updateStopsTheRunningAppBeforeInstalling() {
         val key = tempKey()
@@ -149,10 +152,14 @@ class AndroidTvTest {
         }).start()
         val result = installer(adbd, key).ensureInstalled({ apk }, "0.9.104")
         assertEquals(AndroidTvInstaller.Result("0.9.104", true), result)
+        val exit = adbd.opened.indexOf(AndroidTvInstaller.EXIT_COMMAND)
+        val check = adbd.opened.indexOf(AndroidTvInstaller.RUNNING_COMMAND)
         val stop = adbd.opened.indexOf(AndroidTvInstaller.FORCE_STOP_COMMAND)
         val install = adbd.opened.indexOfFirst { it.startsWith("exec:cmd package install") }
-        val open = adbd.opened.indexOfFirst { it.startsWith("shell:am start -n") }
-        assertTrue(adbd.opened.joinToString(" | "), stop >= 0 && install > stop && open > install)
+        // Kapanma isteği de "am start -n" ile başlar: temiz açılış kurulumdan sonraki, çıkış bayrağı olmayan am start'tır.
+        val open = adbd.opened.indexOfLast { it.startsWith("shell:am start -n") && it != AndroidTvInstaller.EXIT_COMMAND }
+        assertTrue(adbd.opened.joinToString(" | "),
+            exit >= 0 && check > exit && stop > check && install > stop && open > install)
         adbd.join()
     }
 
