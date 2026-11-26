@@ -56,6 +56,52 @@ object UiCommands {
         "INVENTORY" to "Envanter", "OUTFITS" to "Kıyafetler", "OUTFIT" to "Kıyafet", "WEAPONS" to "Silahlar",
         "STATS" to "İstatistikler", "GAME" to "Oyun", "BRIEF" to "Özet", "PROGRESS" to "İlerleme", "VEHICLES" to "Araçlar",
         "ANIMALS" to "Hayvanlar",
+        // Ayarlar › Kumanda şeması önizlemesi (#1362): kısa arayüz komutları diyalog gibi çevriliyordu ("RUN" → "KAÇ!",
+        // "MOVE" → "ÇEKİL!", "DETONATE EXPLOSIVES" → "DETONATE EXPLOSIVES YAP"). Etiket olarak sabit karşılıklar.
+        "RUN" to "Koş", "MOVE" to "Hareket", "SPRINT" to "Depar", "WALK" to "Yürü", "JUMP" to "Zıpla", "CLIMB" to "Tırman",
+        "CROUCH" to "Eğil", "COVER" to "Siper", "SHOOT" to "Ateş et", "AIM" to "Nişan al", "MELEE" to "Yakın dövüş",
+        "RELOAD" to "Şarjör değiştir", "HOLSTER" to "Silahı kılıfa koy", "CELLPHONE" to "Cep telefonu", "PHONE" to "Telefon",
+        "RADIO CONTROLS" to "Radyo kontrolleri", "RADIO MENU" to "Radyo menüsü", "RADIO" to "Radyo", "OBJECTIVE" to "Hedef",
+        "MINIMAP" to "Mini harita", "DETONATE EXPLOSIVES" to "Patlayıcıları patlat", "DETONATE" to "Patlat",
+        "LOADOUT" to "Teçhizat", "QUICK NAVIGATION" to "Hızlı gezinme", "PARTNER MENU" to "Partner menüsü",
+        "PAUSE" to "Duraklat", "LOOK BEHIND" to "Arkana bak", "WEAPON WHEEL" to "Silah çarkı",
+        "INTERACTION MENU" to "Etkileşim menüsü", "ACCELERATE" to "Hızlan", "BRAKE" to "Fren", "REVERSE" to "Geri vites",
+        "HANDBRAKE" to "El freni", "HORN" to "Korna", "HEADLIGHTS" to "Farlar", "SWIM" to "Yüz", "TAKE COVER" to "Siper al",
+        "THROW" to "Fırlat", "SPECIAL ABILITY" to "Özel yetenek", "SWITCH CHARACTER" to "Karakter değiştir",
+        "SWITCH WEAPON" to "Silah değiştir", "CONTROLS" to "Kontroller",
+    )
+
+    /**
+     * Etiketin sonunda önündeki sözcüklerden ayrı duran tek harf (yazı tanımanın tuş simgesinden okuduğu harf, #1362:
+     * "RADIO CONTROLS f" → "RADYO KONTROLLERİ F", "RADIO MENU (I") atılır. Yalnız en az iki sözcüklü (iki harften uzun)
+     * etiketin sonunda ve şu durumlarda: harf parantezle okunmuş; BÜYÜK HARFLİ etiketin sonunda küçük harf; ya da BÜYÜK
+     * HARFLİ etiketin sonunda tuş yüzü harfi (A, B, X, Y, F, E, Q, R, L, I, O). Harfin sözcüğe ait olduğu etiket ("PRESS A",
+     * "PLAN B"; önündeki sözcük [glyphOwners]'da) dokunulmaz (Mac/Windows aynı).
+     */
+    fun withoutKeyGlyph(label: String): String {
+        val tokens = label.split(' ').filter { it.isNotEmpty() }
+        if (tokens.size < 3) return label
+        val last = tokens.last()
+        val core = last.trim('(', '[', '{', ')', ']', '}')
+        if (core.length != 1) return label
+        val letter = core[0]
+        if (!letter.isLetter() || letter.code >= 128) return label
+        val head = tokens.dropLast(1)
+        if (head.count { word -> word.count { it.isLetter() } >= 2 } < 2 ||
+            head.last().uppercase(Locale.ROOT) in glyphOwners
+        ) return label
+        val letters = head.joinToString("").filter { it.isLetter() }
+        val upperHead = letters.isNotEmpty() && letters.all { it.isUpperCase() }
+        val bracketed = last != core
+        val glyph = bracketed || (upperHead && (letter.isLowerCase() || letter in "ABXYFEQRLIO"))
+        return if (glyph) head.joinToString(" ") else label
+    }
+
+    /** Ardındaki tek harf kendisine ait olan sözcükler ("PRESS A", "PLAN B", "BUTTON X"). */
+    private val glyphOwners: Set<String> = setOf(
+        "PRESS", "HOLD", "TAP", "USE", "KEY", "BUTTON", "PLAN", "TYPE", "CLASS", "GRADE", "PART", "SIDE", "VITAMIN",
+        "ROUTE", "LEVEL", "ZONE", "AREA", "SECTOR", "GATE", "BLOCK", "TEAM", "GROUP", "OPTION", "CHAPTER", "ACT",
+        "STAGE", "SEASON", "EPISODE", "FLOOR", "ROOM", "SLOT", "PLAYER", "MODE", "SECTION",
     )
 
     private fun joined(parts: List<String>) =

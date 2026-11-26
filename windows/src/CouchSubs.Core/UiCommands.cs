@@ -54,6 +54,52 @@ public static class UiCommands
         ["INVENTORY"] = "Envanter", ["OUTFITS"] = "Kıyafetler", ["OUTFIT"] = "Kıyafet", ["WEAPONS"] = "Silahlar",
         ["STATS"] = "İstatistikler", ["GAME"] = "Oyun", ["BRIEF"] = "Özet", ["PROGRESS"] = "İlerleme", ["VEHICLES"] = "Araçlar",
         ["ANIMALS"] = "Hayvanlar",
+        // Ayarlar › Kumanda şeması önizlemesi (#1362): kısa arayüz komutları diyalog gibi çevriliyordu ("RUN" → "KAÇ!",
+        // "MOVE" → "ÇEKİL!", "DETONATE EXPLOSIVES" → "DETONATE EXPLOSIVES YAP"). Etiket olarak sabit karşılıklar.
+        ["RUN"] = "Koş", ["MOVE"] = "Hareket", ["SPRINT"] = "Depar", ["WALK"] = "Yürü", ["JUMP"] = "Zıpla", ["CLIMB"] = "Tırman",
+        ["CROUCH"] = "Eğil", ["COVER"] = "Siper", ["SHOOT"] = "Ateş et", ["AIM"] = "Nişan al", ["MELEE"] = "Yakın dövüş",
+        ["RELOAD"] = "Şarjör değiştir", ["HOLSTER"] = "Silahı kılıfa koy", ["CELLPHONE"] = "Cep telefonu", ["PHONE"] = "Telefon",
+        ["RADIO CONTROLS"] = "Radyo kontrolleri", ["RADIO MENU"] = "Radyo menüsü", ["RADIO"] = "Radyo", ["OBJECTIVE"] = "Hedef",
+        ["MINIMAP"] = "Mini harita", ["DETONATE EXPLOSIVES"] = "Patlayıcıları patlat", ["DETONATE"] = "Patlat",
+        ["LOADOUT"] = "Teçhizat", ["QUICK NAVIGATION"] = "Hızlı gezinme", ["PARTNER MENU"] = "Partner menüsü",
+        ["PAUSE"] = "Duraklat", ["LOOK BEHIND"] = "Arkana bak", ["WEAPON WHEEL"] = "Silah çarkı",
+        ["INTERACTION MENU"] = "Etkileşim menüsü", ["ACCELERATE"] = "Hızlan", ["BRAKE"] = "Fren", ["REVERSE"] = "Geri vites",
+        ["HANDBRAKE"] = "El freni", ["HORN"] = "Korna", ["HEADLIGHTS"] = "Farlar", ["SWIM"] = "Yüz", ["TAKE COVER"] = "Siper al",
+        ["THROW"] = "Fırlat", ["SPECIAL ABILITY"] = "Özel yetenek", ["SWITCH CHARACTER"] = "Karakter değiştir",
+        ["SWITCH WEAPON"] = "Silah değiştir", ["CONTROLS"] = "Kontroller",
+    };
+
+    /// <summary>
+    /// Etiketin sonunda önündeki sözcüklerden ayrı duran tek harf (yazı tanımanın tuş simgesinden okuduğu harf, #1362:
+    /// "RADIO CONTROLS f" → "RADYO KONTROLLERİ F", "RADIO MENU (I") atılır. Yalnız en az iki sözcüklü (iki harften uzun)
+    /// etiketin sonunda ve şu durumlarda: harf parantezle okunmuş; BÜYÜK HARFLİ etiketin sonunda küçük harf; ya da BÜYÜK
+    /// HARFLİ etiketin sonunda tuş yüzü harfi (A, B, X, Y, F, E, Q, R, L, I, O). Harfin sözcüğe ait olduğu etiket ("PRESS A",
+    /// "PLAN B"; önündeki sözcük <see cref="GlyphOwners"/>'da) dokunulmaz (Mac/Android aynı).
+    /// </summary>
+    public static string WithoutKeyGlyph(string label)
+    {
+        var tokens = label.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 3) return label;
+        var last = tokens[^1];
+        var core = last.Trim('(', '[', '{', ')', ']', '}');
+        if (core.Length != 1 || !char.IsLetter(core[0]) || core[0] > 127) return label;
+        var letter = core[0];
+        var head = tokens[..^1];
+        if (head.Count(token => token.Count(char.IsLetter) >= 2) < 2
+            || GlyphOwners.Contains(head[^1].ToUpperInvariant())) return label;
+        var letters = string.Concat(head).Where(char.IsLetter).ToList();
+        var upperHead = letters.Count > 0 && letters.All(char.IsUpper);
+        var bracketed = last != core;
+        var glyph = bracketed || (upperHead && (char.IsLower(letter) || "ABXYFEQRLIO".Contains(letter)));
+        return glyph ? string.Join(' ', head) : label;
+    }
+
+    /// <summary>Ardındaki tek harf kendisine ait olan sözcükler ("PRESS A", "PLAN B", "BUTTON X").</summary>
+    private static readonly HashSet<string> GlyphOwners = new(StringComparer.Ordinal)
+    {
+        "PRESS", "HOLD", "TAP", "USE", "KEY", "BUTTON", "PLAN", "TYPE", "CLASS", "GRADE", "PART", "SIDE", "VITAMIN",
+        "ROUTE", "LEVEL", "ZONE", "AREA", "SECTOR", "GATE", "BLOCK", "TEAM", "GROUP", "OPTION", "CHAPTER", "ACT",
+        "STAGE", "SEASON", "EPISODE", "FLOOR", "ROOM", "SLOT", "PLAYER", "MODE", "SECTION",
     };
 
     /// <summary>

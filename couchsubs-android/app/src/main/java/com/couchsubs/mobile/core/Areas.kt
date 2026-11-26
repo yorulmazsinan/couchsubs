@@ -497,10 +497,12 @@ class RegionWatcher(
             // Menüdeki tuş etiketleri ("HOLSTER (L1)", "SELECT ✕") menü durumunda çevrilir; başka yerde kısa ipucu atılır.
             // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
             // "Ekranı çevir" ile aynı). Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+            // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
             val lines = ScreenTranslation.withoutDuplicateLines((if (keepPrompts) marked else marked.withoutButtonPrompts()).withoutOcrNoise().lines
                 .flatMap { ScreenTranslation.menuPieces(it, aspect, frame) }
                 .map(ScreenTranslation::withoutEdgeMarks)
                 .map(ScreenTranslation::withoutEdgeIcons)
+                .map { if (auto) it.copy(text = UiCommands.withoutKeyGlyph(it.text)) else it }
                 .filter { ScreenText.isWords(it.text) }
                 .filter { !stylish || !ScreenTranslation.isClock(it.text) }
                 .sortedBy { it.box?.top ?: 0.0 })
@@ -703,7 +705,17 @@ class RegionWatcher(
                 val side = paints[k].iconSide
                 val style = aligned[i]
                 if (side != null && style != null) aligned[i] = style.copy(look = style.look.copy(align = side))
+                // Simgesi kutuya katılan kısa etiketin dar yazısı simgesiz harf genişliğiyle yeniden ölçülür (#1360).
+                val look = aligned[i]?.look
+                val cover = blocks[i].paint?.cover
+                if (side != null && look != null && !look.condensed && blocks[i].count == 1 && cover != null) {
+                    val pixels = (cover.right - cover.left) / maxOf(1e-9, width) * frame.width
+                    val characters = TextStyleSampler.characters(IconText.plain(candidate.paragraphs[blocks[i].start]))
+                    aligned[i] = aligned[i]!!.copy(look = look.copy(condensed = TextStyleSampler.isCondensed(
+                        pixels, blocks[i].lineHeight / height * frame.height, characters)))
+                }
             }
+            condensedTogether(blocks, aligned).forEachIndexed { i, style -> aligned[i] = style }
             // Görev/hedef satırı altyazıdan ve öbür ekran yazılarından ayrı görünür: koyu kehribar kutu, başında hedef imi
             // ([MissionLine.STYLE], [MissionLine.MARKER]). Yerinde birebir çizim (örtü/yanına yazma) uygulanmaz; kutu görevin
             // kendi yerindedir (#1273). TV ve dört platformun önizlemesi bunu öğenin zemininden çizer (Mac/Windows aynı).
@@ -813,6 +825,83 @@ class RegionWatcher(
                         !same(text, source)
                 }
             }
+        }
+
+        /**
+         * Aynı gruptaki ([TextPaint.group]: tuş çubuğu, menü sütunu) etiketlerden biri dar yazıysa hepsi dar yazıyla
+         * çizilir: tuş çubuğunda kimi etiket dar, kimi geniş yazı tipiyle çiziliyordu (#1360). [styles] bloklarla aynı
+         * sırada; Mac/iPhone ve Windows aynı.
+         */
+        internal fun condensedTogether(blocks: List<Block>, styles: List<TextStyleSampler.Style?>): List<TextStyleSampler.Style?> {
+            val narrow = blocks.indices.mapNotNull { i -> if (styles.getOrNull(i)?.look?.condensed == true) blocks[i].paint?.group else null }.toSet()
+            if (narrow.isEmpty()) return styles
+            return styles.mapIndexed { i, style ->
+                val group = blocks.getOrNull(i)?.paint?.group
+                if (style == null || group == null || group !in narrow) style
+                else style.copy(look = style.look.copy(condensed = true))
+            }
+        }
+
+        /**
+         * Satır farkı (#1359, #1362): seçim ya da liste kaydında gösterilen satırlardan hangileri kalır.
+         * - Yazısı yeni okumada da olan satır (okuma oynamaları aynı yazı sayılır) kalır; yeni yeri o bloktur (`current`).
+         *   Liste kaymadıysa blok satırın yerinde (satırının en az yarısı örtüşen) olmalı; kaydıysa aynı yazının en yakın yeri.
+         * - Yeni okumada olmayan satır (seçili satırın soluk yazısı o tur okunamadı) liste kaymadıysa ve yerinde başka yazı
+         *   yoksa yerinde kalır (`current` null); liste kaydıysa kalkar.
+         * [RowDiff.fresh]: gösterilen hiçbir satıra denk gelmeyen yeni bloklar. Mac/iPhone ve Windows aynı kuralı uygular.
+         */
+        internal fun carriedRows(rendered: List<ScreenTranslation.Item>, current: List<Pair<TextBox, String>>, listMoved: Boolean): RowDiff {
+            fun same(a: String, b: String): Boolean {
+                val x = IconText.plain(a).replace('\n', ' ')
+                val y = IconText.plain(b).replace('\n', ' ')
+                return matches(textKey(listOf(x)), textKey(listOf(y))) || isPartOf(x, y) || isPartOf(y, x)
+            }
+            fun rows(a: TextBox, b: TextBox) =
+                maxOf(0.0, minOf(a.bottom, b.bottom) - maxOf(a.top, b.top)) / maxOf(1e-9, minOf(a.bottom - a.top, b.bottom - b.top))
+            fun across(a: TextBox, b: TextBox) = minOf(a.right, b.right) > maxOf(a.left, b.left)
+            val taken = mutableSetOf<Int>()
+            val kept = mutableListOf<Pair<Int, Int?>>()
+            for ((r, item) in rendered.withIndex()) {
+                val source = item.source
+                val found = current.indices.filter { c ->
+                    c !in taken && same(current[c].second, source) && across(current[c].first, item.box) &&
+                        (listMoved || rows(current[c].first, item.box) >= 0.5)
+                }
+                val c = found.minByOrNull { abs(current[it].first.top - item.box.top) }
+                if (c != null) {
+                    taken.add(c)
+                    kept.add(r to c)
+                    continue
+                }
+                val occupied = current.any { rows(it.first, item.box) >= 0.5 && across(it.first, item.box) }
+                if (!listMoved && !occupied && source.any { it.isLetter() }) kept.add(r to null)
+            }
+            val fresh = current.indices.filter { c -> c !in taken && current[c].second.any { it.isLetter() } }
+            return RowDiff(kept, fresh)
+        }
+
+        /**
+         * Bu turda okunamayan (yerinde tutulan) satırın stili kendi yerinden, şimdiki kareden yeniden örneklenir: seçim
+         * satırdan ayrılınca çevirisi seçili satırın renginde kalıyordu (#1359). [frame] okunan alan, [region] onun karedeki
+         * yeri.
+         */
+        internal fun restyled(
+            item: ScreenTranslation.Item, frame: GrayFrame?, color: ((Int, Int) -> Int)?, region: CropRegion,
+        ): ScreenTranslation.Item {
+            if (item.surface == null || frame == null) return item
+            val w = maxOf(1e-9, region.right - region.left)
+            val h = maxOf(1e-9, region.bottom - region.top)
+            val box = item.box
+            val surface = TextStyleSampler.sample(
+                frame,
+                ((box.left - region.left) / w * frame.width).toInt(), ((box.top - region.top) / h * frame.height).toInt(),
+                kotlin.math.ceil((box.right - region.left) / w * frame.width).toInt(),
+                kotlin.math.ceil((box.bottom - region.top) / h * frame.height).toInt(),
+                item.lineHeight / h * frame.height, item.source, color = color,
+            )?.surface ?: return item
+            val paint = item.paint
+            return item.copy(surface = surface, paint = if (paint != null && paint.mode == TextPaint.MODE_COVER)
+                paint.copy(background = surface.background, background2 = null, direction = null) else paint)
         }
 
         /** Adayın blokları: karedeki yeri ve yazısı (bloğun parçaları birleşik). */
@@ -957,6 +1046,27 @@ class RegionWatcher(
                 }
             }
         }
+    }
+
+    /**
+     * [carriedRows] sonucu: kalan her satır için gösterilen sırası ve yeni okumadaki bloğun sırası (null: okunamadı, yerinde
+     * kalır), gösterilen sırasıyla; [fresh] gösterilen hiçbir satıra denk gelmeyen yeni blokların sırası.
+     */
+    data class RowDiff(val kept: List<Pair<Int, Int?>>, val fresh: List<Int>)
+
+    /**
+     * Satır farkında yeni beliren satır: çevirisi önbellekte (oturum terimi ya da arayüz sözlüğü) varsa hemen çizilir;
+     * yoksa null (okuma doğrulanınca çevrilir). Arayüz sözlüğü yalnız otomatik ekran yazısında ([Candidate.auto];
+     * [translateAuto] gibi; Mac'te `translatesUiCommands`).
+     */
+    private fun freshRow(block: Block, style: TextStyleSampler.Style?, text: String, auto: Boolean): ScreenTranslation.Item? {
+        if (text.contains(ButtonIcons.MARKER)) return null
+        val core = text.trim()
+        var translation = synchronized(sessionTerms) { sessionTerms[core] }
+            ?: (if (auto) UiCommands.translateLabelLoosely(core) else null) ?: return null
+        if (style?.look?.upper == true) translation = TextStyleSampler.upper(translation)
+        return ScreenTranslation.Item(core, translation, block.box, block.lineHeight, surface = style?.surface, look = style?.look,
+            rows = maxOf(1, block.rows), paint = block.paint)
     }
 
     /** Bir alanın karesi: okunacak gri görüntü ve izi; [frame] kumanda simgelerinin kesileceği aynı görüntü. */
@@ -1428,23 +1538,73 @@ class RegionWatcher(
             // Liste kaydı (Sinan Bey beta.100 3381, 3383): menüde liste kayınca eski kutular eski yerinde başka satırın
             // üstünde kalıyordu; yazının bir kısmı hâlâ göründüğü için kararsız okuma da kaldırmıyordu. Gösterilen bir satır
             // başka yerde okunuyor ya da yerinde başka yazı var: eski kutular hemen kalkar.
+            // Satır farkı (#1359, #1362): seçim çubuğu ya da liste oynayınca bütün kutular kalkıp ancak iki aynı okumayla
+            // geri geliyordu; kumandaya basıldıkça menü boş kalıyordu (GTA 6 duraklatma menüsü, kumanda şeması önizlemesi).
+            // Artık yalnız yazısı değişen satır kalkar: yazısı aynı kalan satırın çevirisi korunur, yeri ve stili bu okumadan
+            // (kendi satırının şimdiki zemininden) alınır; bu turda okunamayan satır (seçili satırın açık zemindeki soluk
+            // yazısı) yerinde kalır, stili kendi yerinden yeniden örneklenir. Yeni satır önbellekteki çevirisiyle hemen,
+            // yoksa okuma doğrulanınca çizilir. Mac/iPhone ve Windows aynı.
+            val rendered = state.renderedBlocks.orEmpty().map { it.second }
+            val texts = blockTexts(candidate)
+            val listShifted = area.menu && listMoved(rendered, texts)
+            // Satır farkından sonra gösterilen kutuların zemini kutuların kendisinden (Mac: gösterilen öğelerin stili).
+            val shownGrounds = if (state.renderedLayout == null) rendered.mapNotNull { item -> item.surface?.let { item.box to it.background } }
+                else grounds(state.renderedLayout, state.renderedStyles)
             if (!state.renderedText.isNullOrEmpty() &&
-                (selectionMoved(grounds(state.renderedLayout, state.renderedStyles), grounds(candidate.blocks, candidate.styles)) ||
-                    (area.menu && listMoved(state.renderedBlocks.orEmpty().map { it.second }, blockTexts(candidate))))
+                (listShifted || selectionMoved(shownGrounds, grounds(candidate.blocks, candidate.styles)))
             ) {
+                val diff = carriedRows(rendered, texts, listShifted)
+                val kept = mutableListOf<Pair<Int, ScreenTranslation.Item>>()
+                var unread = 0
+                for ((r, c) in diff.kept) {
+                    val item = rendered[r]
+                    val block = c?.let { candidate.blocks?.getOrNull(it) }
+                    if (c != null && block != null) {
+                        val style = candidate.styles?.getOrNull(c)
+                        kept.add(c to item.copy(box = block.box, lineHeight = block.lineHeight,
+                            surface = style?.surface ?: item.surface, look = style?.look ?: item.look,
+                            paint = block.paint ?: item.paint))
+                    } else {
+                        unread++
+                        kept.add(-1 to restyled(item, crop.frame, crop.color, area.region))
+                    }
+                }
+                var fresh = 0
+                for (c in diff.fresh) {
+                    val block = candidate.blocks?.getOrNull(c) ?: continue
+                    if (block.count != 1) continue
+                    val item = freshRow(block, candidate.styles?.getOrNull(c), texts[c].second, candidate.auto) ?: continue
+                    kept.add(c to item)
+                    fresh++
+                }
+                if (kept.isEmpty()) {
+                    synchronized(lock) { if (started == session) sender.sendRegion(area.id, "", null, null) }
+                    state.shownText = ""
+                    state.renderedText = null
+                    state.renderedBlocks = null
+                    onLog?.invoke("ek alan ${area.name}: seçim kaydı, eski kutular kaldırıldı")
+                } else {
+                    kept.sortWith(compareBy({ it.second.box.top }, { it.second.box.left }))
+                    val text = kept.joinToString("\n") { it.second.translation }
+                    synchronized(lock) {
+                        if (started == session) sender.sendRegion(area.id, text, candidate.box, candidate.lineHeight, null, kept.map { it.second })
+                    }
+                    state.shownText = candidate.text
+                    state.renderedText = text
+                    state.renderedBlocks = kept
+                    onLog?.invoke("ek alan ${area.name}: seçim kaydı, ${kept.size - unread - fresh} satır yerinde kaldı, " +
+                        "$unread okunamayan satır korundu, $fresh satır önbellekten, " +
+                        "${rendered.size - kept.size + fresh} satır kaldırıldı${if (listShifted) " (liste kaydı)" else ""}")
+                }
+                // Bütün çeviri yeni okuma doğrulanınca yeniden kurulur (önbellekten, motora gitmeden).
                 state.shown = ""
-                state.shownText = ""
                 state.shownIcons = 0
                 state.renderedKey = null
-                state.renderedText = null
                 state.renderedIcons = null
                 state.renderedBox = null
                 state.renderedLineHeight = null
                 state.renderedLayout = null
-                state.renderedBlocks = null
                 state.renderedStyles = null
-                synchronized(lock) { if (started == session) sender.sendRegion(area.id, "", null, null) }
-                onLog?.invoke("ek alan ${area.name}: seçim kaydı, eski kutular kaldırıldı")
             }
             state.lastRead = candidate.key
             state.held = null
@@ -1574,6 +1734,7 @@ class RegionWatcher(
             // Menüde seçim gezince (satırın zemini ve yazı rengi değişti) çeviri yeniden istenmez, yalnız renkler gider.
             val current = candidate.blocks
             val moved = if (current == null) null else state.renderedBlocks?.map { (group, item) ->
+                if (group !in current.indices) return@map group to item
                 val style = candidate.styles?.getOrNull(group)
                 group to item.copy(box = current[group].box, lineHeight = current[group].lineHeight,
                     surface = style?.surface ?: item.surface, look = style?.look ?: item.look,
@@ -1669,8 +1830,16 @@ class RegionWatcher(
         } else {
             val rendered = IconText.render(text.joinToString("\n"), slots)
             val icons = rendered.icons.takeIf { it.isNotEmpty() }
-            val blocks = candidate.blocks?.let { renderBlocks(candidate, it, text, similar, slots) }
+            var blocks = candidate.blocks?.let { renderBlocks(candidate, it, text, similar, slots) }
             candidate.blocks?.let { paintSummary(it) }?.let { onLog?.invoke("ek alan ${area.name}: çizim $it") }
+            // Satır farkıyla yerinde tutulan, bu okumada da okunamayan satır (seçili satırın soluk yazısı, #1359) kalkmaz:
+            // ekran durunca doğrulanan okumada o satır yoktu, çevirisi kayboluyordu. Yalnız satır farkından hemen sonraki
+            // çizimde ([State.renderedKey] null) ve yerinde başka yazı yoksa.
+            val carried = state.renderedBlocks
+            if (blocks != null && carried != null && state.renderedKey == null) {
+                val diff = carriedRows(carried.map { it.second }, blockTexts(candidate), listMoved = false)
+                blocks = blocks + diff.kept.filter { it.second == null }.map { -1 to carried[it.first].second }
+            }
             send { sender.sendRegion(area.id, rendered.text, candidate.box, candidate.lineHeight, icons, blocks?.map { it.second }) }
             state.renderedText = rendered.text
             state.renderedIcons = icons

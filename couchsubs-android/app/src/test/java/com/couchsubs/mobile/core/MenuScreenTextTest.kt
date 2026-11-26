@@ -308,6 +308,42 @@ class MenuScreenTextTest {
         assertEquals(first.map { it.translation }, second.map { it.translation })
     }
 
+    /**
+     * #1359: seçim çubuğu hareket edip yeni seçili satır o tur okunamayınca bütün kutular kalkıyor, ancak iki aynı okumayla
+     * geri geliyordu. Artık yazısı aynı kalan satırlar yerinde kalır (stili kendi satırının şimdiki zemininden), okunamayan
+     * satır yerinde tutulur ve stili kendi yerinden yeniden örneklenir; seçimin bıraktığı satır seçili rengi taşımaz.
+     */
+    @Test
+    fun movingSelectionKeepsUnchangedRowsWhenTheNewSelectionIsUnread() {
+        val recorder = Recorder()
+        val engine = Counting()
+        val area = ExtraArea("auto-1", ScreenTextDetector.NAME, CropRegion(top = 0.1, bottom = 0.9, left = 0.0, right = 0.4), auto = true)
+        var lines = pauseLines
+        val watcher = RegionWatcher({ Reading(lines) }, engine, recorder)
+        repeat(2) { watcher.pass(setOf(area.id), listOf(area to RegionWatcher.Crop(Unit, signature(1), pausePanel(2)))) }
+        assertEquals(recorder.blocks.map { b -> b?.map { it.source } }.toString(), 6, recorder.blocks.last()!!.size)
+        fun light(hex: String) = hex.substring(1, 3).toInt(16) > 128
+
+        // Seçim "Help"e geçti; açık şeritteki soluk "Help" bu tur okunamadı.
+        lines = pauseLines.filterIndexed { i, _ -> i != 3 }
+        watcher.pass(setOf(area.id), listOf(area to RegionWatcher.Crop(Unit, signature(100), pausePanel(3))))
+        val kept = recorder.blocks.last()
+        assertTrue("satırlar kalkmamalı", kept != null && recorder.sent.last().isNotEmpty())
+        assertEquals(kept!!.map { it.source }.toString(), 6, kept.size)
+        fun row(source: String) = kept.first { it.source == source }
+        assertEquals("Harita", row("Map").translation)
+        assertFalse("seçimin bıraktığı satır koyu zeminde", light(row("Store").surface!!.background))
+        assertTrue("yeni seçili satır açık zeminde", light(row("Help").surface!!.background))
+        assertEquals(0, engine.requests)
+
+        // Okuma doğrulanınca bütün menü yeniden kurulur, yine motorsuz.
+        lines = pauseLines
+        repeat(2) { watcher.pass(setOf(area.id), listOf(area to RegionWatcher.Crop(Unit, signature(101), pausePanel(3)))) }
+        assertEquals(recorder.blocks.map { b -> b?.map { it.source } }.toString(), 6, recorder.blocks.last()!!.size)
+        assertFalse("alan hiç boşalmadı", recorder.sent.any { it.isEmpty() })
+        assertEquals(0, engine.requests)
+    }
+
     @Test
     fun controlSchemeIsTranslatedInOneBatchAndCachedForTheSession() {
         val recorder = Recorder()
@@ -324,18 +360,21 @@ class MenuScreenTextTest {
         val frame = GrayFrame(ByteArray(400 * 400) { index -> (if (index % 7 == 0) 230 else 25).toByte() }, 400, 400)
         val watcher = RegionWatcher({ Reading(lines) }, engine, recorder)
         repeat(2) { watcher.pass(setOf(area.id), listOf(area to RegionWatcher.Crop(Unit, signature(1), frame))) }
-        // 20'den çok etiket tek toplu istekte.
+        // Sözlükte olmayan etiketler tek toplu istekte.
         assertEquals(1, engine.requests)
+        assertTrue(engine.texts.toString(), engine.texts.size >= 5)
         // Ayırıcıyla bölünen etiket parça parça; tuş adları ve sayaç dokunulmaz.
         // Satır ucundaki tuş adı çeviriye ve kutuya girmez, ekranda görünür kalır (#860).
-        assertTrue(engine.texts.toString(), "AIM" in engine.texts && "JUMP" in engine.texts && "CLIMB" in engine.texts)
+        assertTrue(engine.texts.toString(), "SPRINT FAST" in engine.texts && "RELOAD GUN" in engine.texts)
+        // Sözlükteki kumanda şeması komutları ("RUN", "HOLSTER", "MELEE", "AIM", "JUMP"; #1362) çeviriye gitmez.
+        assertFalse(engine.texts.toString(), engine.texts.any { it in listOf("RUN", "HOLSTER", "MELEE", "AIM", "JUMP", "CLIMB") })
         assertFalse(engine.texts.any { it.contains("(L1)") || it.contains("(✕)") })
         assertFalse(engine.texts.any { it.contains("5 / 9") || it == "5" })
         val items = recorder.blocks.last()!!
         val holster = items.first { it.source == "HOLSTER" }
         assertEquals("right", holster.look!!.align)
         assertTrue(holster.box.right < 0.40)
-        assertEquals("TR AIM / ETKİLEŞİM", items.first { it.source.startsWith("AIM") }.translation)
+        assertEquals("NİŞAN AL / ETKİLEŞİM", items.first { it.source.startsWith("AIM") }.translation)
         assertEquals("left", items.first { it.source.contains("JUMP") }.look!!.align)
         // Aynı ekrana dönüş: oturum terimleriyle istek gitmez.
         watcher.reset()

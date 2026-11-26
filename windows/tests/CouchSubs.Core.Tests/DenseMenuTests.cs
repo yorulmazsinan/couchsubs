@@ -100,6 +100,45 @@ public class DenseMenuTests
         Assert.Equal(first.Select(block => block.Translation), moved.Select(block => block.Translation));
     }
 
+    /// <summary>
+    /// #1359: seçim çubuğu hareket edip yeni seçili satır o tur okunamayınca bütün kutular kalkıyor, ancak iki aynı okumayla
+    /// geri geliyordu. Artık yazısı aynı kalan satırlar yerinde kalır (stili kendi satırının şimdiki zemininden), okunamayan
+    /// satır yerinde tutulur ve stili kendi yerinden yeniden örneklenir; seçimin bıraktığı satır seçili rengi taşımaz.
+    /// </summary>
+    [Fact]
+    public async Task MovingSelectionKeepsUnchangedRowsWhenTheNewSelectionIsUnread()
+    {
+        var reader = new Reader { Lines = PauseLines() };
+        var translator = new Batch();
+        var server = new Server();
+        var watcher = new RegionWatcher(reader, translator, server) { TranslatesUiCommands = true };
+        await watcher.PassAsync(Pause(2), [Area]);
+        await watcher.PassAsync(Pause(2), [Area]);
+        Assert.Equal(6, server.Blocks.Last()!.Count);
+        // "Online" sözlükte yok, ilk çizimde motora gitti; sonrası hep önbellekten.
+        var requests = translator.Requests;
+
+        // Seçim "Help"e geçti; açık şeritteki soluk "Help" bu tur okunamadı.
+        reader.Lines = [.. PauseRows.Select((text, index) => new TextLine(text, Row(index))).Where((_, index) => index != 3)];
+        await watcher.PassAsync(Pause(3), [Area]);
+        var kept = server.Blocks.Last();
+        Assert.True(kept is not null, "satırlar kalkmamalı");
+        Assert.True(kept!.Count == 6, $"{string.Join(", ", kept.Select(item => item.Source))} {server.Blocks.Count}");
+        ScreenTranslation.Item? Find(string source) => kept.FirstOrDefault(item => item.Source == source);
+        Assert.Equal("Harita", Find("Map")?.Translation);
+        Assert.False(Light(Find("Store")!.Style!.Background), "seçimin bıraktığı satır koyu zeminde");
+        Assert.True(Light(Find("Help")!.Style!.Background), "yeni seçili satır açık zeminde");
+        Assert.Equal(requests, translator.Requests);
+
+        // Okuma doğrulanınca bütün menü yeniden kurulur, yine motorsuz.
+        reader.Lines = PauseLines();
+        await watcher.PassAsync(Pause(3), [Area]);
+        await watcher.PassAsync(Pause(3), [Area]);
+        Assert.Equal(6, server.Blocks.Last()!.Count);
+        Assert.DoesNotContain(server.Blocks, blocks => blocks is null);
+        Assert.Equal(requests, translator.Requests);
+    }
+
     // --- (b) Kontrol şeması: sağa yaslı tuş etiketleri, sola yaslı simgeli etiketler, sayaçlar ---
 
     private static TextLine Label(string text, double left, double right, int row) =>
@@ -153,9 +192,11 @@ public class DenseMenuTests
         await watcher.PassAsync(Pause(-1), [Area]);
         await watcher.PassAsync(Pause(-1), [Area]);
         Assert.Equal(1, translator.Requests);
-        Assert.True(translator.Texts.Count >= 20);
-        // Tuş adları ve sayaçlar çeviriye gitmez, sözlükteki etiketler de ("SELECT", "BACK").
+        Assert.True(translator.Texts.Count >= 5);
+        // Tuş adları ve sayaçlar çeviriye gitmez, sözlükteki etiketler de ("SELECT", "BACK"; kumanda şeması komutları
+        // "RUN", "HOLSTER", "MELEE", #1362).
         Assert.DoesNotContain(translator.Texts, text => text.Contains("(L1)") || text.Contains("1 / 3") || text is "SELECT" or "BACK");
+        Assert.DoesNotContain(translator.Texts, text => text is "RUN" or "HOLSTER" or "MELEE" or "AIM" or "JUMP");
         var sent = server.Blocks.Last(blocks => blocks is not null)!;
         // Tuş adı kutunun dışında kalır (ekranda görünür, #860); etiket çevrilir.
         Assert.NotNull(sent.Single(block => block.Source == "HOLSTER").Translation);

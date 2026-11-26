@@ -22,6 +22,7 @@ public class UiCommandsTests
             ("translate", UiCommands.Translate),
             ("translateLabel", UiCommands.TranslateLabel),
             ("translateLabelLoosely", UiCommands.TranslateLabelLoosely),
+            ("withoutKeyGlyph", text => UiCommands.WithoutKeyGlyph(text)),
         };
         foreach (var (name, function) in checks)
         {

@@ -553,21 +553,78 @@ public sealed partial class RegionWatcher
             // Liste kaydı (Sinan Bey beta.100 3381, 3383): menüde liste kayınca eski kutular eski yerinde başka satırın
             // üstünde kalıyordu; yazının bir kısmı hâlâ göründüğü için kararsız okuma da kaldırmıyordu. Gösterilen bir satır
             // başka yerde okunuyor ya da yerinde başka yazı var: eski kutular hemen kalkar.
+            // Satır farkı (#1359, #1362): seçim çubuğu ya da liste oynayınca bütün kutular kalkıp ancak iki aynı okumayla
+            // geri geliyordu; kumandaya basıldıkça menü boş kalıyordu (GTA 6 duraklatma menüsü, kumanda şeması önizlemesi).
+            // Artık yalnız yazısı değişen satır kalkar: yazısı aynı kalan satırın çevirisi korunur, yeri ve stili bu okumadan
+            // (kendi satırının şimdiki zemininden) alınır; bu turda okunamayan satır (seçili satırın açık zemindeki soluk
+            // yazısı) yerinde kalır, stili kendi yerinden yeniden örneklenir. Yeni satır önbellekteki çevirisiyle hemen,
+            // yoksa okuma doğrulanınca çizilir. Mac ve Android aynı.
             var shownItems = (state.RenderedBlocks ?? []).Select(block => block.Item).ToList();
+            var texts = BlockTexts(candidate);
+            var listShifted = area.Menu && ListMoved(shownItems, texts);
             if (!string.IsNullOrEmpty(state.RenderedText)
-                && (SelectionMoved(shownItems, candidate.Blocks ?? [])
-                    || (area.Menu && ListMoved(shownItems, BlockTexts(candidate)))))
+                && (listShifted || SelectionMoved(shownItems, candidate.Blocks ?? [])))
             {
-                server.SendRegion(area.Id, "", null);
-                state.Shown = state.ShownText = "";
+                var diff = CarriedRows(shownItems, texts, listShifted);
+                var kept = new List<(int Group, ScreenTranslation.Item Item)>();
+                var unread = 0;
+                foreach (var (r, c) in diff.Kept)
+                {
+                    var item = shownItems[r];
+                    if (c is { } at && candidate.Blocks is { } current && at < current.Count)
+                    {
+                        var block = current[at];
+                        kept.Add((at, item with
+                        {
+                            Box = block.Box,
+                            LineHeight = block.LineHeight,
+                            Style = block.Style ?? item.Style,
+                            Look = block.Look ?? item.Look,
+                            Paint = block.Paint ?? item.Paint,
+                        }));
+                    }
+                    else
+                    {
+                        unread++;
+                        kept.Add((-1, Restyled(item, crop, area.Region)));
+                    }
+                }
+                var fresh = 0;
+                foreach (var c in diff.Fresh)
+                {
+                    if (candidate.Blocks is not { } current || c >= current.Count || current[c].Count != 1
+                        || FreshRow(current[c], texts[c].Text) is not { } item) continue;
+                    kept.Add((c, item));
+                    fresh++;
+                }
+                if (kept.Count == 0)
+                {
+                    server.SendRegion(area.Id, "", null);
+                    state.ShownText = "";
+                    state.RenderedText = null;
+                    state.RenderedBlocks = null;
+                    Log?.Invoke($"ek alan {area.Name}: seçim kaydı, eski kutular kaldırıldı");
+                }
+                else
+                {
+                    kept = [.. kept.OrderBy(row => row.Item.Box.Top).ThenBy(row => row.Item.Box.Left)];
+                    var text = string.Join("\n", kept.Select(row => row.Item.Translation));
+                    server.SendRegion(area.Id, text, candidate.Box, candidate.LineHeight, null, [.. kept.Select(row => row.Item)]);
+                    state.ShownText = candidate.Text;
+                    state.RenderedText = text;
+                    state.RenderedBlocks = kept;
+                    Log?.Invoke($"ek alan {area.Name}: seçim kaydı, {kept.Count - unread - fresh} satır yerinde kaldı, "
+                                + $"{unread} okunamayan satır korundu, {fresh} satır önbellekten, "
+                                + $"{shownItems.Count - kept.Count + fresh} satır kaldırıldı{(listShifted ? " (liste kaydı)" : "")}");
+                }
+                // Bütün çeviri yeni okuma doğrulanınca yeniden kurulur (önbellekten, motora gitmeden).
+                state.Shown = "";
                 state.ShownIcons = 0;
-                state.RenderedKey = state.RenderedText = null;
+                state.RenderedKey = null;
                 state.RenderedIcons = null;
                 state.RenderedBox = null;
                 state.RenderedLineHeight = null;
                 state.RenderedLayout = null;
-                state.RenderedBlocks = null;
-                Log?.Invoke($"ek alan {area.Name}: seçim kaydı, eski kutular kaldırıldı");
             }
             Stage(candidate, state);
             if (!string.IsNullOrEmpty(state.RenderedText)) ClearIfUnsteady(candidate, area, state, passSignature, signature);
@@ -893,9 +950,11 @@ public sealed partial class RegionWatcher
         // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827; "Ekranı
         // çevir" ile aynı). Telefon alanı girmez.
         // Kenardaki kumanda simgesi ("RECENTER L3") çeviriye girmez, görünür kalır (#860).
+        // Otomatik alanda etiketin sonuna tuş simgesinden okunan tek harf ("RADIO CONTROLS f") çeviriye girmez (#1362).
         if (!phone)
             lines = [.. ScreenTranslation.WithoutDuplicateLines([.. lines.Select(ScreenTranslation.WithoutEdgeMarks)
-                .Select(ScreenTranslation.WithoutEdgeIcons)])];
+                .Select(ScreenTranslation.WithoutEdgeIcons)
+                .Select(line => auto ? line with { Text = UiCommands.WithoutKeyGlyph(line.Text) } : line)])];
         var paragraphs = ScreenTranslation.Paragraphs(lines);
         var place = new TextBox(region.Left, region.Top, region.Right, region.Bottom);
         var boxes = lines.Where(line => line.Box is not null).Select(line => line.Box!.Value).ToList();
@@ -967,8 +1026,24 @@ public sealed partial class RegionWatcher
                     var block = list[painted[k]] with { Paint = screen is null ? paints[k].PlacedIn(place) : paints[k] };
                     // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
                     if (paints[k].IconSide is { } side && block.Look is { } look) block = block with { Look = look with { Align = side } };
+                    // Simgesi kutuya katılan kısa etiketin dar yazısı simgesiz harf genişliğiyle yeniden ölçülür (#1360).
+                    var own = groups[painted[k]];
+                    if (paints[k].IconSide is not null && block.Look is { Condensed: false } plain && own.Paragraphs.Count == 1
+                        && block.Paint?.Cover is { } cover)
+                    {
+                        var width = (cover.Right - cover.Left) / Math.Max(1e-9, region.Right - region.Left) * frame.Width;
+                        var characters = TextStyleSampler.Characters(IconText.Plain(own.Paragraphs[0]));
+                        block = block with
+                        {
+                            Look = plain with
+                            {
+                                Condensed = TextStyleSampler.IsCondensed(width, own.LineHeight * frame.Height, characters),
+                            },
+                        };
+                    }
                     list[painted[k]] = block;
                 }
+                list = CondensedTogether(list);
             }
             // Görev/hedef satırı altyazıdan ve öbür ekran yazılarından ayrı görünür: koyu kehribar kutu, başında hedef imi
             // (MissionLine.Style, MissionLine.Marker). Yerinde birebir çizim (örtü/yanına yazma) uygulanmaz; kutu görevin
@@ -1163,6 +1238,105 @@ public sealed partial class RegionWatcher
         return gap >= -0.5 * Math.Max(a, b) && gap <= PieceGap * Math.Max(a, b);
     }
 
+    /// <summary>
+    /// Aynı gruptaki (<see cref="TextPaint.Group"/>: tuş çubuğu, menü sütunu) etiketlerden biri dar yazıysa hepsi dar yazıyla
+    /// çizilir: tuş çubuğunda kimi etiket dar, kimi geniş yazı tipiyle çiziliyordu (#1360). Mac ve Android aynı.
+    /// </summary>
+    internal static List<Block> CondensedTogether(List<Block> blocks)
+    {
+        var narrow = blocks.Where(block => block.Look?.Condensed == true && block.Paint?.Group is not null)
+            .Select(block => block.Paint!.Group!.Value).ToHashSet();
+        if (narrow.Count == 0) return blocks;
+        return [.. blocks.Select(block =>
+            block.Paint?.Group is { } group && narrow.Contains(group) && block.Look is { } look
+                ? block with { Look = look with { Condensed = true } }
+                : block)];
+    }
+
+    /// <summary>
+    /// Satır farkı (#1359, #1362): seçim ya da liste kaydında gösterilen satırlardan hangileri kalır.
+    /// <list type="bullet">
+    /// <item>Yazısı yeni okumada da olan satır (okuma oynamaları aynı yazı sayılır) kalır; yeni yeri o bloktur (Current).
+    /// Liste kaymadıysa blok satırın yerinde (satırının en az yarısı örtüşen) olmalı; kaydıysa aynı yazının en yakın yeri.</item>
+    /// <item>Yeni okumada olmayan satır (seçili satırın soluk yazısı o tur okunamadı) liste kaymadıysa ve yerinde başka yazı
+    /// yoksa yerinde kalır (Current null); liste kaydıysa kalkar.</item>
+    /// </list>
+    /// Fresh: gösterilen hiçbir satıra denk gelmeyen yeni bloklar. Mac/iPhone ve Android aynı kuralı uygular.
+    /// </summary>
+    internal static (List<(int Rendered, int? Current)> Kept, List<int> Fresh) CarriedRows(
+        IReadOnlyList<ScreenTranslation.Item> rendered, IReadOnlyList<(TextBox Box, string Text)> current, bool listMoved)
+    {
+        static bool Same(string a, string b)
+        {
+            var (x, y) = (IconText.Plain(a).Replace('\n', ' '), IconText.Plain(b).Replace('\n', ' '));
+            return Matches(TextKey([x]), TextKey([y])) || IsPartOf(x, y) || IsPartOf(y, x);
+        }
+        static double Rows(TextBox a, TextBox b) =>
+            Math.Max(0, Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top)) / Math.Max(1e-9, Math.Min(a.Bottom - a.Top, b.Bottom - b.Top));
+        static bool Across(TextBox a, TextBox b) => Math.Min(a.Right, b.Right) > Math.Max(a.Left, b.Left);
+        var taken = new HashSet<int>();
+        var kept = new List<(int Rendered, int? Current)>();
+        for (var r = 0; r < rendered.Count; r++)
+        {
+            var item = rendered[r];
+            var source = item.Source;
+            var found = Enumerable.Range(0, current.Count).Where(c =>
+                !taken.Contains(c) && Same(current[c].Text, source) && Across(current[c].Box, item.Box)
+                && (listMoved || Rows(current[c].Box, item.Box) >= 0.5)).ToList();
+            if (found.Count > 0)
+            {
+                var nearest = found.MinBy(c => Math.Abs(current[c].Box.Top - item.Box.Top));
+                taken.Add(nearest);
+                kept.Add((r, nearest));
+                continue;
+            }
+            var occupied = current.Any(block => Rows(block.Box, item.Box) >= 0.5 && Across(block.Box, item.Box));
+            if (!listMoved && !occupied && source.Any(char.IsLetter)) kept.Add((r, null));
+        }
+        var fresh = Enumerable.Range(0, current.Count).Where(c => !taken.Contains(c) && current[c].Text.Any(char.IsLetter)).ToList();
+        return (kept, fresh);
+    }
+
+    /// <summary>
+    /// Bu turda okunamayan (yerinde tutulan) satırın stili kendi yerinden, şimdiki kareden yeniden örneklenir: seçim
+    /// satırdan ayrılınca çevirisi seçili satırın renginde kalıyordu (#1359). <paramref name="frame"/> okunan alan,
+    /// <paramref name="region"/> onun karedeki yeri.
+    /// </summary>
+    internal static ScreenTranslation.Item Restyled(ScreenTranslation.Item item, Frame frame, CropRegion region)
+    {
+        if (item.Style is null) return item;
+        double w = Math.Max(1e-9, region.Right - region.Left), h = Math.Max(1e-9, region.Bottom - region.Top);
+        var local = new TextBox((item.Box.Left - region.Left) / w, (item.Box.Top - region.Top) / h,
+                                (item.Box.Right - region.Left) / w, (item.Box.Bottom - region.Top) / h);
+        var (surface, _) = TextStyleSampler.Sample(frame, local, [], item.Source);
+        var result = item with { Style = surface };
+        if (result.Paint is { } paint && paint.Mode == PaintMode.Cover)
+            result = result with { Paint = paint with { Background = surface.Background, Background2 = null, Direction = null } };
+        return result;
+    }
+
+    /// <summary>
+    /// Satır farkında yeni beliren satır: çevirisi önbellekte (etiket sözlüğü ya da daha önce çevrilmiş etiket) varsa
+    /// hemen çizilir; yoksa null (okuma doğrulanınca çevrilir).
+    /// </summary>
+    private ScreenTranslation.Item? FreshRow(Block block, string text)
+    {
+        if (text.Contains(ButtonIcons.Marker)) return null;
+        var core = text.Trim();
+        string? translation;
+        lock (terms) terms.TryGetValue(core, out translation);
+        translation ??= TranslatesUiCommands ? UiCommands.TranslateLabelLoosely(core) : null;
+        if (translation is null) return null;
+        if (block.Look?.Upper == true) translation = TextStyleSampler.TurkishUpper(translation);
+        var item = new ScreenTranslation.Item(core, translation, block.Box, block.LineHeight)
+        {
+            Style = block.Style,
+            Look = block.Look,
+            Paint = block.Paint,
+        };
+        return item with { Rows = Math.Max(item.Rows, block.Rows) };
+    }
+
     /// <summary>Adayın blokları: karedeki yeri ve yazısı (bloğun parçaları birleşik).</summary>
     internal static IReadOnlyList<(TextBox Box, string Text)> BlockTexts(Candidate candidate) =>
         [.. (candidate.Blocks ?? []).Select(block =>
@@ -1319,7 +1493,7 @@ public sealed partial class RegionWatcher
                 && SameLayout(state.RenderedLayout, candidate.Blocks)) return;
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
             var moved = state.RenderedBlocks is { } rendered && candidate.Blocks is { } current
-                ? rendered.Select(block => (Group: block.Group, Item: block.Item with
+                ? rendered.Select(block => block.Group < 0 || block.Group >= current.Count ? block : (Group: block.Group, Item: block.Item with
                     {
                         Box = current[block.Group].Box, LineHeight = current[block.Group].LineHeight,
                         // Seçim gezince yalnız renkler değişir: çeviri yeniden istenmez, zemin/yazı rengi güncellenir.
@@ -1624,6 +1798,15 @@ public sealed partial class RegionWatcher
         if (candidate.Blocks is { } painted && PaintSummary(painted) is { } summary) Log?.Invoke($"ek alan {area.Name}: çizim {summary}");
         var (shown, icons) = IconText.Render(string.Join('\n', text), slots);
         var blocks = candidate.Blocks is { } layout ? RenderBlocks(candidate, layout, text, similar, slots, keepUnchanged) : null;
+        // Satır farkıyla yerinde tutulan, bu okumada da okunamayan satır (seçili satırın soluk yazısı, #1359) kalkmaz: ekran
+        // durunca doğrulanan okumada o satır yoktu, çevirisi kayboluyordu. Yalnız satır farkından hemen sonraki çizimde
+        // (RenderedKey null) ve yerinde başka yazı yoksa.
+        if (blocks is not null && state.RenderedBlocks is { } carried && state.RenderedKey is null)
+        {
+            var diff = CarriedRows([.. carried.Select(row => row.Item)], BlockTexts(candidate), listMoved: false);
+            foreach (var (r, c) in diff.Kept)
+                if (c is null) blocks.Add((-1, carried[r].Item));
+        }
         var box = candidate.Box;
         if (partialPhone && blocks is { Count: > 0 })
         {

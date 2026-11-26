@@ -96,12 +96,25 @@ object TextStyleSampler {
         }
         if (contrast(groundHex, inkHex) < 3) inkHex = if (shade < 128) "#FFFFFF" else "#000000"
         val ratio = inkCount.toDouble() / (inkCount + groundCount)
-        val longest = source.split('\n').maxOfOrNull { it.trim().length } ?: 0
-        val condensed = longest > 0 && lineHeight > 0 && (r - l).toDouble() / longest / lineHeight < CONDENSED
+        val longest = source.split('\n').maxOfOrNull { characters(it) } ?: 0
+        val condensed = isCondensed((r - l).toDouble(), lineHeight, longest)
         return Style(
             TextSurface(groundHex, inkHex, flat),
             TextLook(bold = ratio >= BOLD_INK, condensed = condensed, align = align(edges), upper = isUpper(source)),
         )
+    }
+
+    /** Dar yazı ölçüsündeki harf sayısı: baştaki/sondaki boşluklar ve tuş simgesi imleri sayılmaz (Mac/Windows aynı). */
+    fun characters(text: String): Int = text.filter { it != ButtonIcons.MARKER }.trim().length
+
+    /**
+     * Yazının yalnız harflerinin genişliği (piksel; kutunun ucundaki tuş simgesi çıkarılmış) ve satır yüksekliğiyle dar
+     * yazı mı. Tuş çubuğunda simgesi kutuya katılan kısa etiketin ("SELECT ✕", "BACK ○") harf başına genişliği şişip
+     * dar sayılmıyordu; Türkçesi geniş yazı tipinde çiziliyordu (#1360).
+     */
+    fun isCondensed(width: Double, height: Double, characters: Int): Boolean {
+        if (characters <= 0 || height <= 0 || width <= 0) return false
+        return width / characters / height < CONDENSED
     }
 
     /** Kutunun dışındaki şeridin kalınlığı: üstte ve altta yüksekliğin dörtte biri, yanlarda aynı genişlikte. */

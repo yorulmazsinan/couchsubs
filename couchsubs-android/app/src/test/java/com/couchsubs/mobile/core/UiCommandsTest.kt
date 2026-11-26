@@ -30,5 +30,6 @@ class UiCommandsTest {
         check("translate", UiCommands::translate)
         check("translateLabel", UiCommands::translateLabel)
         check("translateLabelLoosely", UiCommands::translateLabelLoosely)
+        check("withoutKeyGlyph", UiCommands::withoutKeyGlyph)
     }
 }

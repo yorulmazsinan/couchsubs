@@ -250,6 +250,8 @@ public static class TextPainter
     public const double GrowLines = 12.0;
     /// <summary>Aynı grup: satır yükseklikleri en çok bu oranda farklı (<see cref="ScreenFit.SameLine"/>).</summary>
     public const double SameLine = ScreenFit.SameLine;
+    /// <summary>Aynı satırdaki tuş istemlerinde (tuş çubuğu) satır yüksekliği farkı en çok bu oranda (simge kimi kutuya katılır, #1360).</summary>
+    public const double PromptLine = 0.35;
 
     private static int RoundHalfUp(double value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 
@@ -286,6 +288,8 @@ public static class TextPainter
     public const double BesideReachLines = 12.0;
     /// <summary>İkiz panel özgün panelle aynı boyda (Sinan Bey, beta.100: "AYNI punto, küçültme yok"; #1296'daki 0,58 kalktı).</summary>
     public const double TwinScale = 1.0;
+    /// <summary>Birden çok tek satırlık etiketin kutusunda yazıların kapladığı en küçük pay; altındaysa kutu değildir (#1362).</summary>
+    public const double TwinFill = 0.08;
     /// <summary>İkizdeki yazı özgün panelin genişliğini en çok bu katı kadar aşabilir (boş yer varsa; kutu içeriğe göre uzar).</summary>
     public const double TwinWiden = 0.5;
     /// <summary>Kenar çizgisi en çok bu kadar piksel kalın aranır.</summary>
@@ -488,9 +492,12 @@ public static class TextPainter
     /// <summary>
     /// Boş alan ölçümü. <paramref name="free"/>: null başka hedef ya da simge (alan orada biter), true yazı rengine yakın
     /// nokta, false boş zemin. Bir sütun/satır, yazı rengindeki noktaları <see cref="BesideShare"/>'den azsa boştur.
+    /// <paramref name="wall"/>: düz zeminli yazıda zemin de yazı rengi de olmayan nokta; sütununun en az <see cref="PanelShare"/>'i
+    /// böyleyse (dikey panel kenarı, ayırıcı çizgi, başka renkte panel) yana uzanan alan orada biter. <paramref name="walls"/>
+    /// false: desenli zemin, denetlenmez.
     /// </summary>
     internal static Room MeasureRoom(int l, int t, int r, int b, double line, int width, int height, bool iconLeft,
-                                     bool iconRight, Func<int, int, bool?> free)
+                                     bool iconRight, Func<int, int, bool?> free, bool walls = false, Func<int, int, bool>? wall = null)
     {
         int w = r - l, h = b - t;
         var room = new Room
@@ -500,8 +507,12 @@ public static class TextPainter
             Most = RoundHalfUp((BesideMax * Math.Max(0, w)) + line), IconLeft = iconLeft, IconRight = iconRight,
         };
         if (w <= 0 || h <= 0 || t < 0 || b > height) return room;
-        bool Column(int x, int y0, int y1) =>
-            x >= 0 && x < width && y0 >= 0 && y1 <= height && y1 > y0 && RoomOpen(y0, y1, y => free(x, y));
+        bool Column(int x, int y0, int y1)
+        {
+            if (x < 0 || x >= width || y0 < 0 || y1 > height || y1 <= y0) return false;
+            if (walls && wall is not null && ShareAtLeast(y0, y1, 1, PanelShare, y => wall(x, y))) return false;
+            return RoomOpen(y0, y1, y => free(x, y));
+        }
         bool Row(int y, int x0, int x1) =>
             y >= 0 && y < height && x0 >= 0 && x1 <= width && x1 > x0 && RoomOpen(x0, x1, x => free(x, y));
         int Run(int x, int step, int y0, int y1, int cap)
@@ -904,8 +915,17 @@ public static class TextPainter
                     : FindPanel(cl, ct, cr, cb, width, height, (x, y) =>
                         RectHit(x, y, self) || (x >= cl && x < cr && y >= ct && y < cb) || Distance(color(x, y), ground) <= PanelTolerance);
                 if (panel is { } found) panels[index] = found;
+                // Düz zeminde boş alan zeminin bittiği yerde (panel kenarı, ayırıcı çizgi, başka panel) biter: kumanda şeması
+                // önizlemesinde Türkçeler soldaki panele, seçicinin ve başlığın üstüne taşıyordu (#1362).
+                var flat = !paint.Patterned && paint.Background2 == null;
                 rooms.Add(MeasureRoom(cl, ct, cr, cb, line, width, height, iconLeft, iconRight,
-                                      (x, y) => Others(x, y) ? null : Distance(color(x, y), fg) <= BesideInk));
+                                      (x, y) => Others(x, y) ? null : Distance(color(x, y), fg) <= BesideInk,
+                                      walls: flat,
+                                      wall: (x, y) =>
+                                      {
+                                          var c = color(x, y);
+                                          return Distance(c, ground) > ScreenFit.InkDistance && Distance(c, fg) > BesideInk;
+                                      }));
             }
             else
             {
@@ -916,7 +936,8 @@ public static class TextPainter
         static bool Overlaps((int L, int T, int R, int B) a, (int L, int T, int R, int B) b) =>
             Math.Min(a.R, b.R) > Math.Max(a.L, b.L) && Math.Min(a.B, b.B) > Math.Max(a.T, b.T);
         // Listeler (Groups): aynı sütunda ya da aynı satırda duran, aynı boydaki tek satırlık etiketler.
-        var lists = Groups(targets);
+        var iconed = Enumerable.Range(0, result.Count).Where(i => result[i].IconSide != null).ToHashSet();
+        var lists = Groups(targets, iconed);
         var listOf = new Dictionary<int, int>();
         for (var k = 0; k < lists.Count; k++)
             foreach (var m in lists[k].Members) listOf[m] = k;
@@ -971,6 +992,15 @@ public static class TextPainter
         bool Hugs(List<int> members, int l, int t, int r, int b)
         {
             var prompt = members.All(m => targets[m].Prompt);
+            // Kendi kutusu olmayan düz etiketler (kumanda şeması önizlemesinde kolun çevresindeki "PARTNER MENU", "RUN",
+            // "MOVE") koyu zeminin büyük bir parçasını panel sanıp ekranın ~%24×%33'ü boyunda ikiz kutuya yazılıyordu
+            // (#1362). Hepsi tek satırlık birden çok etiketin kutusu, yazıları kutunun en az TwinFill'ini kaplamıyorsa
+            // kutu değildir; etiketler yanına yazılır.
+            if (members.Count >= 2 && members.All(m => targets[m].Rows <= 1))
+            {
+                var text = members.Sum(m => (covers[m].R - covers[m].L) * (covers[m].B - covers[m].T));
+                if ((double)text < TwinFill * Math.Max(1, (r - l) * (b - t))) return false;
+            }
             if (!members.All(m => targets[m].Rows <= 1) || !(prompt || members.Count == 1)) return true;
             int ul = members.Min(m => covers[m].L), ut = members.Min(m => covers[m].T);
             int ur = members.Max(m => covers[m].R), ub = members.Max(m => covers[m].B);
@@ -1254,6 +1284,42 @@ public static class TextPainter
         // yüksekliği aynı tek satırlık etiketler.
         foreach (var (members, id) in lists)
             foreach (var i in members) result[i] = result[i] with { Group = id };
+        // Aynı satırdaki tuş istemleri tek boyda ve tek taban çizgisinde (#1360): örtü kutusunun (ve yanına yazılan yerin)
+        // üstü/altı ve satır aralığı grubun ortancası olur; TV grubun yazı boyunu bunlardan ölçer.
+        static double Median(IEnumerable<double> values)
+        {
+            var s = values.Order().ToList();
+            return s[s.Count / 2];
+        }
+        foreach (var (members, _) in lists)
+        {
+            if (members.Count < 2 || !members.Any(m => targets[m].Prompt || iconed.Contains(m))) continue;
+            var groupCovers = members.Select(m => result[m].Cover).ToList();
+            if (!(groupCovers.Max(c => c.Top) < groupCovers.Min(c => c.Bottom))) continue;
+            var top = Median(groupCovers.Select(c => c.Top));
+            var bottom = Median(groupCovers.Select(c => c.Bottom));
+            var pitch = Median(members.Select(m => result[m].Pitch));
+            var spots = members.Where(m => result[m].Mode == PaintMode.Beside && result[m].Spot != null)
+                .Select(m => result[m].Spot!.Value).ToList();
+            var spotTop = spots.Count == 0 ? top : Median(spots.Select(s => s.Top));
+            foreach (var i in members)
+            {
+                var paint = result[i] with
+                {
+                    Cover = result[i].Cover with { Top = top, Bottom = bottom },
+                    Pitch = pitch,
+                };
+                if (paint.Grow is { } grow) paint = paint with { Grow = new TextBox(grow.Left, top, grow.Right, bottom) };
+                if (paint.Mode == PaintMode.Beside && paint.Spot is { } spot)
+                {
+                    var spotBottom = spotTop + (bottom - top);
+                    paint = paint with { Spot = new TextBox(spot.Left, spotTop, spot.Right, spotBottom) };
+                    if (paint.SpotRoom is { } room)
+                        paint = paint with { SpotRoom = new TextBox(room.Left, spotTop, room.Right, spotBottom) };
+                }
+                result[i] = paint;
+            }
+        }
         return result;
     }
 
@@ -1276,9 +1342,13 @@ public static class TextPainter
         return Math.Max(target.LineHeight, (height - target.LineHeight) / (target.Rows - 1));
     }
 
-    /// <summary>Grup üyeleri ve numarası (grubun en küçük sıra numarası); tek üyeli grup yok.</summary>
-    internal static List<(List<int> Members, int Id)> Groups(IReadOnlyList<Target> targets)
+    /// <summary>
+    /// Grup üyeleri ve numarası (grubun en küçük sıra numarası); tek üyeli grup yok. <paramref name="iconed"/>: kutusunun
+    /// ucunda tuş simgesi bulunan hedefler (<see cref="TextPaint.IconSide"/>); tuş istemi sayılır.
+    /// </summary>
+    internal static List<(List<int> Members, int Id)> Groups(IReadOnlyList<Target> targets, IReadOnlySet<int>? iconed = null)
     {
+        iconed ??= new HashSet<int>();
         var labels = Enumerable.Range(0, targets.Count).Where(i => targets[i].Rows <= 1).ToList();
         var parent = labels.ToDictionary(i => i, i => i);
         int Root(int i) { while (parent[i] != i) i = parent[i]; return i; }
@@ -1290,7 +1360,12 @@ public static class TextPainter
                 var x = targets[a];
                 var y = targets[b];
                 var line = Math.Max(x.LineHeight, y.LineHeight);
-                if (x.Upper != y.Upper || Math.Abs(x.LineHeight - y.LineHeight) > SameLine * line) continue;
+                // Aynı satırdaki tuş istemi tuş çubuğudur (#1360: "PHOTO STUDIO ▢ · SELECT ✕ · BACK ○"): simgesi kutuya
+                // katılmayan "SELECT" öbürlerinden ~%16 kısa okunup gruptan düşüyor, "SEÇ" öbürlerinden büyük ve aşağıda
+                // çiziliyordu. Birinde tuş simgesi varsa satır yükseklikleri PromptLine'a kadar farklı olabilir.
+                var prompt = x.Prompt || y.Prompt || iconed.Contains(a) || iconed.Contains(b);
+                var limit = prompt && Overlap(x.Box, y.Box) >= 0.5 ? PromptLine : SameLine;
+                if (x.Upper != y.Upper || Math.Abs(x.LineHeight - y.LineHeight) > limit * line) continue;
                 // Satır yüksekliği kareye oranla; yatay pay aynı piksele denk gelsin diye en-boy oranı bilinmez, yarım satır
                 // yüksekliğinin yarısı kadar (16:9'da ~0,28 satır) alınır.
                 var tolerance = 0.5 * line * 9 / 16;

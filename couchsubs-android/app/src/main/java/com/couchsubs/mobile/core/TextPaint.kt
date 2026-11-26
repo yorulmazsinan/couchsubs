@@ -164,6 +164,8 @@ object TextPainter {
     const val BESIDE_REACH_LINES = 12.0
     /** İkiz panel özgün panelle aynı boyda (Sinan Bey, beta.100: "AYNI punto, küçültme yok"; #1296'daki 0,58 kalktı). */
     const val TWIN_SCALE = 1.0
+    /** Birden çok tek satırlık etiketin kutusunda yazıların kapladığı en küçük pay; altındaysa kutu değildir (#1362). */
+    const val TWIN_FILL = 0.08
     /** İkizdeki yazı özgün panelin genişliğini en çok bu katı kadar aşabilir (boş yer varsa; kutu içeriğe göre uzar). */
     const val TWIN_WIDEN = 0.5
     /** Kenar çizgisi en çok bu kadar piksel kalın aranır. */
@@ -371,9 +373,13 @@ object TextPainter {
     /**
      * Boş alan ölçümü. [free]: null başka hedef ya da simge (alan orada biter), true yazı rengine yakın nokta, false boş
      * zemin. Bir sütun/satır, yazı rengindeki noktaları [BESIDE_SHARE]'den azsa boştur.
+     * [wall]: düz zeminli yazıda zemin de yazı rengi de olmayan nokta; sütununun en az [PANEL_SHARE]'i böyleyse (dikey
+     * panel kenarı, ayırıcı çizgi, başka renkte panel) yana uzanan alan orada biter. [walls] false: desenli zemin,
+     * denetlenmez.
      */
     internal fun measureRoom(l: Int, t: Int, r: Int, b: Int, line: Double, width: Int, height: Int, iconLeft: Boolean,
-                             iconRight: Boolean, free: (Int, Int) -> Boolean?): Room {
+                             iconRight: Boolean, walls: Boolean = false, wall: (Int, Int) -> Boolean = { _, _ -> false },
+                             free: (Int, Int) -> Boolean?): Room {
         val w = r - l
         val h = b - t
         val near = max(2, round(BESIDE_GAP_LINES * line))
@@ -383,6 +389,7 @@ object TextPainter {
         if (w <= 0 || h <= 0 || t < 0 || b > height) return base
         fun column(x: Int, y0: Int, y1: Int): Boolean {
             if (x < 0 || x >= width || y0 < 0 || y1 > height || y1 <= y0) return false
+            if (walls && shareAtLeast(y0, y1, 1, PANEL_SHARE) { wall(x, it) }) return false
             return roomOpen(y0, y1) { free(x, it) }
         }
         fun row(y: Int, x0: Int, x1: Int): Boolean {
@@ -533,6 +540,8 @@ object TextPainter {
     const val GROW_LINES = 12.0
     /** Aynı grup: satır yükseklikleri en çok bu oranda farklı ([ScreenFit.SAME_LINE]). */
     const val SAME_LINE = ScreenFit.SAME_LINE
+    /** Aynı satırdaki tuş istemlerinde (tuş çubuğu) satır yüksekliği farkı en çok bu oranda (simge kimi kutuya katılır, #1360). */
+    const val PROMPT_LINE = 0.35
 
     /**
      * Kutunun ucundaki simgeyi yazıdan ayıran en dar boşluk, satır yüksekliğinin katı (harf arası bundan dardır; GTA 6
@@ -867,7 +876,14 @@ object TextPainter {
                     else distance(color(px, py), ground) <= PANEL_TOLERANCE
                 }
                 if (panel != null) panels[index] = panel
-                rooms.add(measureRoom(cl, ct, cr, cb, line, width, height, iconLeft, iconRight) { px, py ->
+                // Düz zeminde boş alan zeminin bittiği yerde (panel kenarı, ayırıcı çizgi, başka panel) biter: kumanda şeması
+                // önizlemesinde Türkçeler soldaki panele, seçicinin ve başlığın üstüne taşıyordu (#1362).
+                val flat = !paint.patterned && paint.background2 == null
+                rooms.add(measureRoom(cl, ct, cr, cb, line, width, height, iconLeft, iconRight, walls = flat,
+                    wall = { px, py ->
+                        val c = color(px, py)
+                        distance(c, ground) > ScreenFit.INK_DISTANCE && distance(c, fg) > BESIDE_INK
+                    }) { px, py ->
                     if (others(px, py)) null else distance(color(px, py), fg) <= BESIDE_INK
                 })
             } else {
@@ -877,7 +893,8 @@ object TextPainter {
         }
         fun overlaps(a: Box, b: Box) = min(a.r, b.r) > max(a.l, b.l) && min(a.b, b.b) > max(a.t, b.t)
         // Listeler ([groups]): aynı sütunda ya da aynı satırda duran, aynı boydaki tek satırlık etiketler.
-        val lists = groups(targets)
+        val iconed = result.indices.filter { result[it].iconSide != null }.toSet()
+        val lists = groups(targets, iconed)
         val listIndex = mutableMapOf<Int, Int>()
         for ((k, list) in lists.withIndex()) for (m in list.first) listIndex[m] = k
 
@@ -918,6 +935,14 @@ object TextPainter {
         // bu sınırdan muaf. Sarmayan alan kutu değildir, satırlar yanına yazılır (Mac TextPainter, Windows TextPaint.cs aynı).
         fun hugs(members: List<Int>, l: Int, t: Int, r: Int, b: Int): Boolean {
             val prompt = members.all { targets[it].prompt }
+            // Kendi kutusu olmayan düz etiketler (kumanda şeması önizlemesinde kolun çevresindeki "PARTNER MENU", "RUN",
+            // "MOVE") koyu zeminin büyük bir parçasını panel sanıp ekranın ~%24×%33'ü boyunda ikiz kutuya yazılıyordu
+            // (#1362). Hepsi tek satırlık birden çok etiketin kutusu, yazıları kutunun en az [TWIN_FILL]'ini kaplamıyorsa
+            // kutu değildir; etiketler yanına yazılır.
+            if (members.size >= 2 && members.all { targets[it].rows <= 1 }) {
+                val text = members.sumOf { (covers[it].r - covers[it].l) * (covers[it].b - covers[it].t) }
+                if (text.toDouble() < TWIN_FILL * max(1, (r - l) * (b - t)).toDouble()) return false
+            }
             if (!members.all { targets[it].rows <= 1 } || !(prompt || members.size == 1)) return true
             val ul = members.minOf { covers[it].l }
             val ut = members.minOf { covers[it].t }
@@ -1169,6 +1194,31 @@ object TextPainter {
         // 4) Grup: aynı sütunda (ortak sol ya da sağ kenar, düzenli aralık) ya da aynı satırda duran, BÜYÜK HARF'i ve
         // satır yüksekliği aynı tek satırlık etiketler.
         for ((members, id) in lists) for (i in members) result[i] = result[i].copy(group = id)
+        // Aynı satırdaki tuş istemleri tek boyda ve tek taban çizgisinde (#1360): örtü kutusunun (ve yanına yazılan yerin)
+        // üstü/altı ve satır aralığı grubun ortancası olur; TV grubun yazı boyunu bunlardan ölçer.
+        fun median(values: List<Double>): Double = values.sorted()[values.size / 2]
+        for ((members, _) in lists) {
+            if (members.size < 2 || members.none { targets[it].prompt || it in iconed }) continue
+            val boxes = members.map { result[it].cover }
+            if (boxes.maxOf { it.top } >= boxes.minOf { it.bottom }) continue
+            val top = median(boxes.map { it.top })
+            val bottom = median(boxes.map { it.bottom })
+            val pitch = median(members.map { result[it].pitch })
+            val spots = members.mapNotNull { if (result[it].mode == TextPaint.MODE_BESIDE) result[it].spot else null }
+            val spotTop = if (spots.isEmpty()) top else median(spots.map { it.top })
+            for (i in members) {
+                var paint = result[i]
+                paint = paint.copy(cover = paint.cover.copy(top = top, bottom = bottom), pitch = pitch)
+                paint.grow?.let { grow -> paint = paint.copy(grow = TextBox(grow.left, top, grow.right, bottom)) }
+                val spot = paint.spot
+                if (paint.mode == TextPaint.MODE_BESIDE && spot != null) {
+                    val spotBottom = spotTop + (bottom - top)
+                    paint = paint.copy(spot = TextBox(spot.left, spotTop, spot.right, spotBottom))
+                    paint.spotRoom?.let { room -> paint = paint.copy(spotRoom = TextBox(room.left, spotTop, room.right, spotBottom)) }
+                }
+                result[i] = paint
+            }
+        }
         return result
     }
 
@@ -1185,8 +1235,11 @@ object TextPainter {
         return max(target.lineHeight, (height - target.lineHeight) / (target.rows - 1))
     }
 
-    /** Grup üyeleri ve numarası (grubun en küçük sıra numarası); tek üyeli grup yok. */
-    internal fun groups(targets: List<Target>): List<Pair<List<Int>, Int>> {
+    /**
+     * Grup üyeleri ve numarası (grubun en küçük sıra numarası); tek üyeli grup yok.
+     * [iconed]: kutusunun ucunda tuş simgesi bulunan hedefler ([TextPaint.iconSide]); tuş istemi sayılır.
+     */
+    internal fun groups(targets: List<Target>, iconed: Set<Int> = emptySet()): List<Pair<List<Int>, Int>> {
         val labels = targets.indices.filter { targets[it].rows <= 1 }
         val parent = labels.associateWith { it }.toMutableMap()
         fun root(start: Int): Int {
@@ -1201,7 +1254,12 @@ object TextPainter {
             val x = targets[a]
             val y = targets[b]
             val line = max(x.lineHeight, y.lineHeight)
-            if (x.upper != y.upper || abs(x.lineHeight - y.lineHeight) > SAME_LINE * line) continue
+            // Aynı satırdaki tuş istemi tuş çubuğudur (#1360: "PHOTO STUDIO ▢ · SELECT ✕ · BACK ○"): simgesi kutuya
+            // katılmayan "SELECT" öbürlerinden ~%16 kısa okunup gruptan düşüyor, "SEÇ" öbürlerinden büyük ve aşağıda
+            // çiziliyordu. Birinde tuş simgesi varsa satır yükseklikleri [PROMPT_LINE]'a kadar farklı olabilir.
+            val prompt = x.prompt || y.prompt || a in iconed || b in iconed
+            val limit = if (prompt && overlap(x.box, y.box) >= 0.5) PROMPT_LINE else SAME_LINE
+            if (x.upper != y.upper || abs(x.lineHeight - y.lineHeight) > limit * line) continue
             // Satır yüksekliği kareye oranla; yatay pay aynı piksele denk gelsin diye en-boy oranı bilinmez, yarım satır
             // yüksekliğinin yarısı kadar (16:9'da ~0,28 satır) alınır.
             val tolerance = 0.5 * line * 9 / 16

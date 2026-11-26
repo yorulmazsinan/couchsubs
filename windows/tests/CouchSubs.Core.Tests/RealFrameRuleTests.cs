@@ -20,7 +20,7 @@ public class RealFrameRuleTests
     [Theory]
     [InlineData("1 Мар", "Harita")]        // Kiril М/а/р ve simgenin "1" diye okunuşu
     [InlineData("pi Settings", "Ayarlar")]
-    [InlineData("R3 LOOK BEHIND", null)]
+    [InlineData("R3 LOOK BEHIND", "R3 ARKANA BAK")] // "LOOK BEHIND" etiket sözlüğünde (#1362); baştaki tuş adı kalır
     [InlineData("R3 ZOOM", "R3 YAKINLAŞTIR")]
     [InlineData("EXIT OR", "ÇIK OR")]
     [InlineData("ADD MARKER O", "İŞARET EKLE O")]

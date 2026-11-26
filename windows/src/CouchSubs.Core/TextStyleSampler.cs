@@ -201,15 +201,29 @@ public static class TextStyleSampler
     private static bool Condensed(Frame frame, IReadOnlyList<TextLine> lines)
     {
         var ratios = lines
-            .Where(line => line.Box is not null && line.Text.Trim().Length > 0)
+            .Where(line => line.Box is not null && Characters(line.Text) > 0)
             .Select(line =>
             {
                 var b = line.Box!.Value;
                 var height = Math.Max(1, (b.Bottom - b.Top) * frame.Height);
-                return (b.Right - b.Left) * frame.Width / line.Text.Trim().Length / height;
+                return (b.Right - b.Left) * frame.Width / Characters(line.Text) / height;
             })
             .ToList();
         return ratios.Count > 0 && ratios.Average() < CondensedWidth;
+    }
+
+    /// <summary>Dar yazı ölçüsündeki harf sayısı: baştaki/sondaki boşluklar ve tuş simgesi imleri sayılmaz (Mac/Android aynı).</summary>
+    public static int Characters(string text) => text.Replace(ButtonIcons.Marker.ToString(), "").Trim().Length;
+
+    /// <summary>
+    /// Yazının yalnız harflerinin genişliği (piksel; kutunun ucundaki tuş simgesi çıkarılmış) ve satır yüksekliğiyle dar
+    /// yazı mı. Tuş çubuğunda simgesi kutuya katılan kısa etiketin ("SELECT ✕", "BACK ○") harf başına genişliği şişip
+    /// dar sayılmıyordu; Türkçesi geniş yazı tipinde çiziliyordu (#1360).
+    /// </summary>
+    public static bool IsCondensed(double width, double height, int characters)
+    {
+        if (characters <= 0 || height <= 0 || width <= 0) return false;
+        return width / characters / height < CondensedWidth;
     }
 
     private static string Alignment(IReadOnlyList<TextBox> boxes)

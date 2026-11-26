@@ -116,6 +116,8 @@ class TextPaintTest {
                     got!!.zip(want).forEach { (a, b) -> near(a, b, tolerance, "$name $key $got") }
                 }
                 box("spot", px(paint.spot))
+                box("cover", px(paint.cover))
+                if (e.has("group") && !e.isNull("group")) assertEquals("$name grup", e.getInt("group"), paint.group)
                 box("room", px(paint.spotRoom)?.let { listOf(it[0], it[2]) })
                 box("twin", px(paint.twin))
                 box("portrait", px(paint.portrait))

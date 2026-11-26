@@ -103,6 +103,9 @@ public class TextPaintTests
                     for (var i = 0; i < values.Length; i++) Close(values[i], got![i], tolerance, $"{name} {key} [{string.Join(", ", got)}]");
                 }
                 Near(Px(paint.Spot), "spot");
+                Near(Px(paint.Cover), "cover");
+                if (e.TryGetProperty("group", out var group) && group.ValueKind == JsonValueKind.Number)
+                    Assert.True(paint.Group == group.GetInt32(), $"{name} grup {paint.Group}");
                 Near(Px(paint.SpotRoom) is { } room ? [room[0], room[2]] : null, "room");
                 Near(Px(paint.Twin), "twin");
                 Near(Px(paint.PortraitTwin), "portraitTwin");

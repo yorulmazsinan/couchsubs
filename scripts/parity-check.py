@@ -59,6 +59,14 @@ CAPABILITIES = {
         ("windows", _WIN_TESTS + "ScreenPhoneCardTests.cs", r"void StackedPanelInTheOverlayWindowKeepsTheAlignedLook"),
         ("android", _DROID_TESTS + "ScreenPhoneCardTest.kt", r"fun stackedPanelInTheOverlayWindowKeepsTheAlignedLook"),
     ],
+    "Menüde seçim/liste kaydında satır farkı, değişmeyen satır kalkmaz (carriedRows, #1359, #1362)": [
+        ("mac", _CORE + "RegionWatcher.swift", r"static func carriedRows\("),
+        ("windows", _WIN + "RegionWatcher.cs", r"CarriedRows\("),
+        ("android", _DROID + "Areas.kt", r"fun carriedRows\("),
+        ("mac", _CORE_TESTS + "MenuRowsTests.swift", r"func testSharedCarriedRows"),
+        ("windows", _WIN_TESTS + "MenuRowsTests.cs", r"void SharedCarriedRows"),
+        ("android", _DROID_TESTS + "MenuRowsTest.kt", r"fun sharedCarriedRows"),
+    ],
     "Görüntüden tuş simgesi bulma (markFree)": [
         ("mac", _CORE + "ButtonIcons.swift", r"static func markFree\("),
         ("windows", _WIN + "ButtonIcons.cs", r"public static TextLine MarkFree\("),
