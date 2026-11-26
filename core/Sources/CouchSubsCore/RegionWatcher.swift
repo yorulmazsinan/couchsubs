@@ -786,28 +786,40 @@ public final class RegionWatcher {
         let cleaned = (auto && kind != .phone ? PackageText.filter(unpacked, in: place, look: frame.map(PackageText.sampler)).kept
             : unpacked).lines
         // Otomatik alanda aynı satırın yan yana okunan parçaları (simgeden, renkli addan bölünen cümle) tek satırdır.
-        var read = (auto ? joinedPieces(cleaned, aspect: aspect) : cleaned)
-            // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
-            .map { screenText ? ScreenTranslation.withoutBadge($0) : $0 }
-            .flatMap { ScreenTranslation.menuPieces($0, aspect: aspect, frame: frame) }
-            // Bölünmeyen sekme şeridi arayüz sözlüğüyle bölünür ("JASON LUCIA MAP BRIEF PROGRESS", #1375).
-            .flatMap { auto ? ScreenTranslation.glossaryPieces($0) : [$0] }
-            .filter { ScreenTranslation.isWords($0.text) }
-            // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı"), karenin kenarında kesilmiş tek sözcük, menüde alanın
-            // kenarında kesilmiş satır ve bozuk okuma (düşük güven, tuhaf harfler) atılır.
-            .filter { !auto || !(ScreenTextNoise.isOverlay($0.text) || cutAtEdge($0)
-                || (menu && cutAtAreaEdge($0, region: region))) }
-            .filter { !screenText || !ScreenTextNoise.isGarbled($0) }
+        let joined: [TextLine] = auto ? joinedPieces(cleaned, aspect: aspect) : cleaned
+        // Menü satırının başındaki görev simgesi ("KM", "KK"; daire içinde harfler) yazı değildir (#1365).
+        let unbadged: [TextLine] = joined.map { (line: TextLine) -> TextLine in
+            screenText ? ScreenTranslation.withoutBadge(line) : line
+        }
+        let pieces: [TextLine] = unbadged.flatMap { (line: TextLine) -> [TextLine] in
+            ScreenTranslation.menuPieces(line, aspect: aspect, frame: frame)
+        }
+        // Bölünmeyen sekme şeridi arayüz sözlüğüyle bölünür ("JASON LUCIA MAP BRIEF PROGRESS", #1375).
+        let tabs: [TextLine] = pieces.flatMap { (line: TextLine) -> [TextLine] in
+            auto ? ScreenTranslation.glossaryPieces(line) : [line]
+        }
+        var read: [TextLine] = tabs.filter { (line: TextLine) -> Bool in
+            guard ScreenTranslation.isWords(line.text) else { return false }
+            // Otomatik alanda yayın katmanı (logo, alan adı, "Canlı"), karenin kenarında kesilmiş tek sözcük ve menüde
+            // alanın kenarında kesilmiş satır atılır.
+            if auto {
+                if ScreenTextNoise.isOverlay(line.text) || cutAtEdge(line) { return false }
+                if menu && cutAtAreaEdge(line, region: region) { return false }
+            }
+            // Ekran yazısında bozuk okuma (düşük güven, tuhaf harfler) atılır.
+            if screenText && ScreenTextNoise.isGarbled(line) { return false }
             // Hazır mesaj alanının sol kenarına değen satır alanın dışından taşan yazının kesik parçasıdır (#1391: harita
             // kartının "ctibles, like", "nd" parçaları tek başına çevriliyordu, "Hayır!"); çevrilmez.
-            .filter { auto || kind != .phone || !cutAtAreaLeftEdge($0, region: region) }
-            .filter { !styled || !ScreenTranslation.isClock($0.text) }
-            .sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
+            if !auto && kind == .phone && cutAtAreaLeftEdge(line, region: region) { return false }
+            if styled && ScreenTranslation.isClock(line.text) { return false }
+            return true
+        }
+        read.sort { (a: TextLine, b: TextLine) -> Bool in (a.box?.top ?? 0) < (b.box?.top ?? 0) }
         // Menüde güveni düşük okunan satır (bozuk okuma: "scarch rol the onuin Ape", "AUD MARNER") çeviri motoruna gitmez;
         // satır bu okumada yok sayılır, gösterilen çevirisi yerinde kalır, temiz okumada çevrilir (#1365).
         var unsure: [String] = []
         if screenText {
-            unsure = read.filter(ScreenTextNoise.isUnsure).map(\.text)
+            unsure = read.filter(ScreenTextNoise.isUnsure).map(\TextLine.text)
             read.removeAll(where: ScreenTextNoise.isUnsure)
         }
         // Aynı yazının iki okunuşu tek satır kalır; satırın başındaki/sonundaki simge kutunun dışında kalır (#827;
@@ -822,7 +834,7 @@ public final class RegionWatcher {
                 return line
             })
         var paragraphs = ScreenTranslation.paragraphs(lines)
-        let boxes = lines.compactMap(\.box)
+        let boxes: [TextBox] = lines.compactMap(\TextLine.box)
         let box = boxes.dropFirst().reduce(boxes.first) { $0?.union($1) }?.placed(in: place)
         let height = region.bottom - region.top
         let heights = boxes.map { ($0.bottom - $0.top) * height }.sorted()
@@ -841,7 +853,7 @@ public final class RegionWatcher {
             if styled {
                 groups = autoGroups(lines, menu: menu, cards: cards)
             } else {
-                let taken = Set(cards.flatMap(\.all))
+                let taken: Set<Int> = Set(cards.flatMap(\MissionCard.Card.all))
                 groups = (cards.flatMap { MissionCard.groups($0, lines) }
                     + ScreenTranslation.groups(from: lines.indices.filter { !taken.contains($0) }.map { lines[$0] }))
                     .sorted { $0.box.top < $1.box.top }
