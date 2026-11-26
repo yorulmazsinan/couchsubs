@@ -119,7 +119,13 @@ function render(screen, ratio, legacy, source, view, tight) {
         return out;
       };
     })();</script>`;
-    const probe = `<script>setTimeout(function () {
+    // platform.js'in bilgisayarın günlüğüne yazdığı satırlar (#1098: tanı satırı günlükte yoktu).
+    const tvlogTap = `<script>(function () {
+      var send = window.COUCHSUBS_TVLOG;
+      window.TVLOG_LINES = [];
+      window.COUCHSUBS_TVLOG = function (text) { window.TVLOG_LINES.push(text); if (send) send(text); };
+    })();</script>`;
+    const probe = `<script>var started = Date.now(); setTimeout(function () {
       var W = window.innerWidth, H = window.innerHeight;
       function rect(el) { var r = window.TRUE_RECT.call(el); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }
       function wait(ms, fn) { setTimeout(fn, ms); }
@@ -174,6 +180,9 @@ function render(screen, ratio, legacy, source, view, tight) {
         });
       });
       function finish() {
+        // Günlük satırı açılıştan 2 sn sonra yazılır.
+        if (Date.now() - started < 2600) { setTimeout(finish, 2600 - (Date.now() - started)); return; }
+        out.tvlog = window.TVLOG_LINES || [];
         var row = document.getElementById('st-platform');
         out.diag = row ? row.textContent : '';
         out.error = (document.getElementById('st-error') || {}).textContent || '';
@@ -184,7 +193,7 @@ function render(screen, ratio, legacy, source, view, tight) {
     }, 1500);</script>`;
     let html = fs.readFileSync(path.join(tvRoot, 'index.html'), 'utf8')
       .replace('<meta charset="utf-8">', '<meta charset="utf-8">' + prelude)
-      .replace('<script src="app.js"></script>', (legacy ? legacyShim : '') + '<script src="app.js"></script>' + probe);
+      .replace('<script src="app.js"></script>', (legacy ? legacyShim : '') + '<script src="app.js"></script>' + tvlogTap + probe);
     fs.writeFileSync(path.join(temp, 'index.html'), html);
     const run = spawnSync(browser, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run',
       '--no-default-browser-check', '--hide-scrollbars', '--force-device-scale-factor=' + ratio,
@@ -248,7 +257,9 @@ function problems(got) {
 }
 
 const cases = [
-  { name: '1280x720 oran 1, Chromium 38 (43LH590V)', screen: [1280, 720], ratio: 1, legacy: true },
+  // 43LH590V, 1280x720 paketle (appinfo resolution 1280x720; LgHdPackage): webOS görünümü 1280x720 açar, sayfa zoom ile
+  // 1920x1080 uzayına sığar; ekranın tamamı çizilir.
+  { name: '1280x720 oran 1, Chromium 38 (43LH590V, 1280x720 paket)', screen: [1280, 720], ratio: 1, legacy: true },
   { name: '1280x720 oran 2, Chromium 38', screen: [1280, 720], ratio: 2, legacy: true },
   { name: '1280x720 oran 1, yeni Chromium', screen: [1280, 720], ratio: 1, legacy: false },
   { name: '1280x720 oran 2, yeni Chromium', screen: [1280, 720], ratio: 2, legacy: false },
@@ -266,6 +277,12 @@ for (const c of cases) {
         // Tanı satırı sayfanın uzayını, görünümün sayfa açılırken alındığını, görünüm alanını ve sağ alt köşeyi yazar.
         assert.match(got.diag, new RegExp(`pg ${Math.round(got.W / 0.6667)}x${Math.round(got.H / 0.6667)} r `), got.diag);
         assert.match(got.diag, new RegExp(`early in ${got.W}x${got.H} br \\S+`), got.diag);
+        // Aynı satır bilgisayarın/telefonun günlüğüne de bir kez gider (TV'nin modeliyle).
+        const screenLines = got.tvlog.filter(line => /^screen /.test(line));
+        assert.equal(screenLines.length, 1, JSON.stringify(got.tvlog));
+        assert.match(screenLines[0], new RegExp(`^screen scr ${c.screen[0]}x${c.screen[1]} dpr ${c.ratio} vp device z 0\\.6667 iw \\d+x\\d+ early in ${got.W}x${got.H} br \\S+ · webOS 3\\.0\\.0 43LH590V-ZE`), screenLines[0]);
+      } else {
+        assert.deepEqual(got.tvlog.filter(line => /^screen /.test(line)), [], 'ölçeksiz LG günlüğe ekran satırı yazmaz');
       }
       assert.deepEqual(problems(got), [], JSON.stringify(got));
     });

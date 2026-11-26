@@ -432,7 +432,15 @@ struct LGInstaller {
     }
 
     /// Paketi TV'ye yükler ve ares-install gibi kurar; sürüm appinfo.json'dan doğrulanır.
-    func install(ipk: [UInt8], packageName: String, version: String) throws {
+    /// Full HD webOS 3.x TV'ye (#1098) paket 1280x720 çözünürlükle gider (`LgHdPackage`, core); diğer TV'lere olduğu gibi.
+    func install(ipk original: [UInt8], packageName: String, version: String) throws {
+        let screen = LgHdPackage.screen(reply: (try? shell.run(LgHdPackage.systemInfoCommand, input: nil).output) ?? "")
+        var ipk = original
+        var note = "LG paketi: \(screen.summary)"
+        if screen.hd {
+            if let adapted = LgHdPackage.adapt(original) { ipk = adapted } else { note += " (paket uyarlanamadı, 1920x1080 kuruluyor)" }
+        }
+        log.write(note)
         let remote = Self.remotePackage(packageName)
         // Önceki denemelerden kalan paketler TV'de yer kaplamasın.
         let upload = try shell.run("mkdir -p \(Self.tempDir) && rm -f \(Self.tempDir)/com.couchsubs.tv_*.ipk \(Self.tempDir)/couchsubs.ipk && cat > '\(remote)'", input: ipk)

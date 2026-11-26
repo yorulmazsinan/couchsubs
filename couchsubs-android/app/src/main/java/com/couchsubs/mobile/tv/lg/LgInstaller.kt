@@ -382,8 +382,18 @@ class LgInstaller(
     /**
      * Paketi TV'ye yükler ve ares-install gibi kurar: kurulum aboneliği TV "installed" ya da hata diyene kadar açık kalır,
      * paket ancak bundan sonra silinir. Sürüm appinfo.json'dan doğrulanır.
+     * Full HD webOS 3.x TV'ye (#1098) paket 1280x720 çözünürlükle gider ([LgHdPackage]); diğer TV'lere olduğu gibi.
      */
-    fun install(ipk: ByteArray, packageName: String, version: String) {
+    fun install(original: ByteArray, packageName: String, version: String) {
+        val reply = try { shell.run(LgHdPackage.SYSTEM_INFO_COMMAND, null).output } catch (error: IOException) { "" }
+        val screen = LgHdPackage.screen(reply)
+        var ipk = original
+        var note = "LG paketi: ${screen.summary}"
+        if (screen.hd) {
+            val adapted = LgHdPackage.adapt(original)
+            if (adapted != null) ipk = adapted else note += " (paket uyarlanamadı, 1920x1080 kuruluyor)"
+        }
+        log.write(note)
         val remote = remotePackage(packageName)
         // Önceki denemelerden kalan paketler TV'de yer kaplamasın.
         val upload = shell.run("mkdir -p $TEMP_DIR && rm -f $TEMP_DIR/com.couchsubs.tv_*.ipk $TEMP_DIR/couchsubs.ipk && cat > '$remote'", ipk)

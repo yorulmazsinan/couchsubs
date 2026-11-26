@@ -253,7 +253,8 @@ public sealed class LiveServices : IAppServices
                 // Kullanıcı "Kaldırıp Kur" dedi: CouchSubs'ın kimliğini kullanan başka uygulama önce kaldırılır.
                 if (replaceForeign)
                     WriteTvInstallLog($"LG: kullanıcı onayıyla TV'deki com.couchsubs.tv kaldırıldı: {await Installer(host, file).RemoveAppAsync()}");
-                await Installer(host, file).InstallAsync(package, version);
+                // TV'nin modeli ve paketin çözünürlüğü (#1098: Full HD webOS 3.x TV'ye 1280x720).
+                WriteTvInstallLog(await Installer(host, file).InstallAsync(package, version));
                 return null;
             }));
         }

@@ -188,7 +188,7 @@ class LgTest {
         assertEquals(LgInstaller.Result("0.9.18", true), result)
         assertArrayEquals(ipk, tv.uploaded)
         assertEquals("mkdir -p /media/developer/temp && rm -f /media/developer/temp/com.couchsubs.tv_*.ipk /media/developer/temp/couchsubs.ipk && " +
-            "cat > '/media/developer/temp/com.couchsubs.tv_0.9.18_all.ipk'", tv.commands[1])
+            "cat > '/media/developer/temp/com.couchsubs.tv_0.9.18_all.ipk'", tv.commands[2])
         assertTrue(tv.commands.contains("rm -f '/media/developer/temp/com.couchsubs.tv_0.9.18_all.ipk'"))
         assertEquals(LgInstaller.launchCommand(), tv.commands.last())
         assertTrue(tv.commands.last().contains("luna://com.webos.applicationManager/launch"))

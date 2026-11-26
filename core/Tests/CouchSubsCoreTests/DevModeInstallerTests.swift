@@ -143,12 +143,14 @@ final class DevModeInstallerTests: XCTestCase {
         try await installer(runner).install(package: package, version: "0.6.1")
 
         let remote = "/media/developer/temp/com.couchsubs.tv_0.6.1_all.ipk"
-        XCTAssertEqual(runner.calls[0].input, package)
+        // Önce TV'nin modeli ve UHD olup olmadığı sorulur (#1098; yanıt yoksa paket olduğu gibi gider).
+        XCTAssertEqual(runner.calls[0].arguments.last, LgHdPackage.systemInfoCommand)
+        XCTAssertEqual(runner.calls[1].input, package)
         // ares-install gibi: paket kendi adıyla yüklenir, eski CouchSubs paketleri önce silinir.
-        XCTAssertTrue(runner.calls[0].arguments.last!.contains("cat > '\(remote)'"))
-        XCTAssertTrue(runner.calls[0].arguments.last!.contains("rm -f /media/developer/temp/com.couchsubs.tv_*.ipk"))
-        XCTAssertTrue(runner.calls[1].arguments.last!.contains("luna://com.webos.appInstallService/dev/install"))
-        XCTAssertTrue(runner.calls[1].arguments.last!.contains("\"ipkUrl\":\"\(remote)\""))
+        XCTAssertTrue(runner.calls[1].arguments.last!.contains("cat > '\(remote)'"))
+        XCTAssertTrue(runner.calls[1].arguments.last!.contains("rm -f /media/developer/temp/com.couchsubs.tv_*.ipk"))
+        XCTAssertTrue(runner.calls[2].arguments.last!.contains("luna://com.webos.appInstallService/dev/install"))
+        XCTAssertTrue(runner.calls[2].arguments.last!.contains("\"ipkUrl\":\"\(remote)\""))
         XCTAssertTrue(runner.calls.dropLast().last!.arguments.last!.contains("rm -f '\(remote)'"))
         // Kurulum doğrulandıktan sonra açık (eski) uygulama kapatılır (beta.89: webOS eski süreci tutuyordu).
         XCTAssertEqual(runner.calls.last!.arguments.last!, DevModeInstaller.closeCommand)

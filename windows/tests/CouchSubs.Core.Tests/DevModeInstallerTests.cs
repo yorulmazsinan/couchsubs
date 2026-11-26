@@ -139,17 +139,19 @@ public class DevModeInstallerTests
         var package = Package();
         var remote = "/media/developer/temp/" + Path.GetFileName(package);
         await Installer(shell).InstallAsync(package, "0.6.1");
-        Assert.Equal(package, shell.Calls[0].Input);
+        // Önce TV'nin modeli ve UHD olup olmadığı sorulur (#1098; yanıt yoksa paket olduğu gibi gider).
+        Assert.Equal(LgHdPackage.SystemInfoCommand, shell.Calls[0].Command);
+        Assert.Equal(package, shell.Calls[1].Input);
         // ares-install gibi: paket kendi adıyla yüklenir, eski CouchSubs paketleri önce silinir.
-        Assert.Contains($"cat > '{remote}'", shell.Calls[0].Command);
-        Assert.Contains("rm -f /media/developer/temp/com.couchsubs.tv_*.ipk", shell.Calls[0].Command);
-        Assert.Contains($"wc -c < '{remote}'", shell.Calls[1].Command);
-        Assert.Contains("luna://com.webos.appInstallService/dev/install", shell.Calls[2].Command);
-        Assert.Contains($"\"ipkUrl\":\"{remote}\"", shell.Calls[2].Command);
+        Assert.Contains($"cat > '{remote}'", shell.Calls[1].Command);
+        Assert.Contains("rm -f /media/developer/temp/com.couchsubs.tv_*.ipk", shell.Calls[1].Command);
+        Assert.Contains($"wc -c < '{remote}'", shell.Calls[2].Command);
+        Assert.Contains("luna://com.webos.appInstallService/dev/install", shell.Calls[3].Command);
+        Assert.Contains($"\"ipkUrl\":\"{remote}\"", shell.Calls[3].Command);
         Assert.Contains($"rm -f '{remote}'", shell.Calls[^2].Command);
         // Kurulum doğrulandıktan sonra açık (eski) uygulama kapatılır (beta.89: webOS eski süreci tutuyordu).
         Assert.Equal(DevModeInstaller.CloseCommand, shell.Calls[^1].Command);
-        Assert.All(shell.Calls.Skip(1), call => Assert.Null(call.Input));
+        Assert.All(shell.Calls.Skip(2), call => Assert.Null(call.Input));
     }
 
     [Fact]

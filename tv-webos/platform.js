@@ -89,6 +89,18 @@
     }
   }
 
+  // #1098: tanı satırı yalnız TV'deki bilgi panelinde görünüyordu; 0.9.120'nin günlüğünde 43LH590V'nin "iw/in/br"
+  // değerleri yoktu. Sayfa ölçekliyse ya da görünüm 1920 değilse satır açılıştan 2 sn sonra bir kez bilgisayarın/telefonun
+  // günlüğüne de yazılır ("screen scr 1280x720 dpr 1 vp device z 0.6667 iw 1920x1080 early in 1280x720 br subtitle ·
+  // webOS 3.0.0 43LH590V-ZE cr38"). 1280x720 paketle (appinfo resolution, LgHdPackage) "in 1280x720" ve dolu br beklenir.
+  setTimeout(function () {
+    try {
+      var odd = screenFit.zoom !== 1 || window.COUCHSUBS_EARLY_VIEWPORT ||
+        (window.innerWidth > 0 && window.innerWidth !== PAGE_WIDTH);
+      if (odd) tvLog('screen ' + screenText() + ' · ' + systemText());
+    } catch (e) {}
+  }, 2000);
+
   // --- Konsolun girişi ---
   // luna://com.webos.service.eim/getAllInputStatus LG'nin TV belgelerinde yok (LG'nin geliştirici forumu: "giriş durumunu
   // veren bir API sağlanmıyor"); yanıtta yalnız bu uygulamanın 0.9'dan beri okuduğu alanlar kullanılır: id (HDMI_n),

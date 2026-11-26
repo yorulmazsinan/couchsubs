@@ -1,0 +1,1 @@
+0.9.122: On older LG Full HD TVs (2016-2017), screen translations and the bottom subtitle now cover the whole screen.

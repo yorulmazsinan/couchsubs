@@ -269,7 +269,48 @@ public sealed class DevModeInstaller(IRemoteShell shell, TimeSpan? pollInterval 
     /// açık kalır, paket ancak bundan sonra silinir. Eskiden <c>luna-send -n 1</c> ilk yanıttan sonra çıkıyordu; abonelik
     /// kapanınca bazı webOS sürümleri kurulumu yarıda bırakıyor, biz de sürüm görünmeyince "boş alan" hatası veriyorduk.
     /// </summary>
-    public async Task InstallAsync(string package, string version)
+    /// <remarks>Full HD webOS 3.x TV'ye (#1098) paket 1280x720 çözünürlükle gider (<see cref="LgHdPackage"/>).</remarks>
+    /// <returns>TV'nin ekran bilgisi ve seçilen çözünürlük (günlük için).</returns>
+    public async Task<string> InstallAsync(string package, string version)
+    {
+        string reply;
+        try { reply = (await SshAsync(LgHdPackage.SystemInfoCommand)).Output; }
+        catch (DevModeException) { reply = ""; }
+        var screen = LgHdPackage.ScreenOf(reply);
+        var note = $"LG paketi: {screen.Summary}";
+        string? staged = null;
+        try
+        {
+            if (screen.Hd)
+            {
+                if (LgHdPackage.Adapt(await File.ReadAllBytesAsync(package)) is { } adapted)
+                {
+                    staged = Path.Combine(Path.GetTempPath(), $"couchsubs-lg-hd-{Guid.NewGuid():N}");
+                    Directory.CreateDirectory(staged);
+                    var file = Path.Combine(staged, Path.GetFileName(package));
+                    await File.WriteAllBytesAsync(file, adapted);
+                    package = file;
+                }
+                else
+                {
+                    note += " (paket uyarlanamadı, 1920x1080 kuruluyor)";
+                }
+            }
+            await UploadAndInstallAsync(package, version);
+            return note;
+        }
+        finally
+        {
+            if (staged is not null)
+            {
+                try { Directory.Delete(staged, recursive: true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+    }
+
+    private async Task UploadAndInstallAsync(string package, string version)
     {
         var remote = RemotePackage(package);
         // Önceki denemelerden kalan paketler TV'de yer kaplamasın.

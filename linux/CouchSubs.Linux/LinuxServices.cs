@@ -157,7 +157,8 @@ public sealed class LinuxServices : IAppServices
             {
                 if (BundledTvPackage is not { } package || BundledTvAppVersion is not { } version)
                     throw new DevModeException(DevModeError.InstallFailed, "uygulamanın yanında LG paketi (tv-app/*.ipk) yok");
-                await Installer(host, file).InstallAsync(package, version);
+                // TV'nin modeli ve paketin çözünürlüğü (#1098: Full HD webOS 3.x TV'ye 1280x720).
+                Log.Write("tv", await Installer(host, file).InstallAsync(package, version));
                 return null;
             });
         }

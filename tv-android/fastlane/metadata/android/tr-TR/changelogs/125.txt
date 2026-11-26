@@ -1,0 +1,1 @@
+0.9.122: Eski LG Full HD TV'lerde (2016-2017) ekran çevirisi ve alttaki altyazı ekranın tamamında görünüyor.

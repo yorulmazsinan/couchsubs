@@ -1,0 +1,81 @@
+{
+  "_comment": "LG Full HD webOS 3.x (2016-2017) TV'ye 1280x720 paket (#1098). Mac/iPhone LgHdPackageTests.swift, Windows LgHdPackageTests.cs ve Android LgHdPackageTest.kt aynı dosyayı okur (Android kopyası: couchsubs-android/app/src/test/resources/fixtures). package: küçük bir .ipk (base64); adaptedAppInfo: 1280x720'ye çevrilmiş appinfo.json.",
+  "systemInfo": [
+    {
+      "note": "#1098 43LH590V, webOS 3.x FHD",
+      "reply": "{\"returnValue\":true,\"modelName\":\"43LH590V-ZE\",\"UHD\":\"false\",\"sdkVersion\":\"03.70.50\"}",
+      "hd": true,
+      "model": "43LH590V-ZE"
+    },
+    {
+      "note": "2017 FHD LJ",
+      "reply": "{\"returnValue\": true, \"modelName\": \"49LJ594V-ZA\", \"UHD\": \"false\", \"sdkVersion\": \"3.5.0\"}",
+      "hd": true,
+      "model": "49LJ594V-ZA"
+    },
+    {
+      "note": "webOS 3 FHD, model adı başka",
+      "reply": "{\"returnValue\":true,\"modelName\":\"WEBOS3\",\"UHD\":false,\"sdkVersion\":\"3.0.0\"}",
+      "hd": true,
+      "model": "WEBOS3"
+    },
+    {
+      "note": "model LH, UHD bilgisi yok",
+      "reply": "{\"returnValue\":true,\"modelName\":\"32LH604V\"}",
+      "hd": true,
+      "model": "32LH604V"
+    },
+    {
+      "note": "satır sonlu luna yanıtı",
+      "reply": "{\n\t\"returnValue\": true,\n\t\"UHD\": \"false\",\n\t\"modelName\": \"43LH5700-ZB\",\n\t\"sdkVersion\": \"3.0.0\"\n}\n",
+      "hd": true,
+      "model": "43LH5700-ZB"
+    },
+    {
+      "note": "2016 UHD",
+      "reply": "{\"returnValue\":true,\"modelName\":\"49UH650V-ZA\",\"UHD\":\"true\",\"sdkVersion\":\"3.0.0\"}",
+      "hd": false,
+      "model": "49UH650V-ZA"
+    },
+    {
+      "note": "LH ama UHD diyor: UHD üstün",
+      "reply": "{\"returnValue\":true,\"modelName\":\"43LH590V\",\"UHD\":\"true\"}",
+      "hd": false,
+      "model": "43LH590V"
+    },
+    {
+      "note": "2018+ FHD (webOS 4) değişmez",
+      "reply": "{\"returnValue\":true,\"modelName\":\"43LK5900PLA\",\"UHD\":\"false\",\"sdkVersion\":\"4.1.0\"}",
+      "hd": false,
+      "model": "43LK5900PLA"
+    },
+    {
+      "note": "webOS 2 FHD değişmez",
+      "reply": "{\"returnValue\":true,\"modelName\":\"42LF652V\",\"UHD\":\"false\",\"sdkVersion\":\"2.2.0\"}",
+      "hd": false,
+      "model": "42LF652V"
+    },
+    {
+      "note": "yeni OLED",
+      "reply": "{\"returnValue\":true,\"modelName\":\"OLED55C24LA\",\"UHD\":\"true\",\"sdkVersion\":\"7.2.0\"}",
+      "hd": false,
+      "model": "OLED55C24LA"
+    },
+    {
+      "note": "servis yok",
+      "reply": "{\"returnValue\":false,\"errorCode\":-1,\"errorText\":\"Unknown method\"}",
+      "hd": false,
+      "model": null
+    },
+    {
+      "note": "boş yanıt",
+      "reply": "",
+      "hd": false,
+      "model": null
+    }
+  ],
+  "package": "ITxhcmNoPgpkZWJpYW4tYmluYXJ5ICAgMTI2MjMwNDAwMCAgMCAgICAgMCAgICAgMTAwNjQ0ICA0ICAgICAgICAgYAoyLjAKY29udHJvbC50YXIuZ3ogIDEyNjIzMDQwMDAgIDAgICAgIDAgICAgIDEwMDY0NCAgMTY1ICAgICAgIGAKH4sIAAA7PUsA/+3OSw6CMBSFYcasghU0LRSJzNwBI+e1IUJEmvTh+m2II+eoif83OcnNTc6xbo3eLcWeZHbQesvsPaXs2kKpRnV10+rt3mnZFpXcddVLCtH4XPmJrh80GHsz17GvrLsL65KdQroEER/lefRhdmtfSXEUqq7Lk7fTHEcbk8//ZlnKb48HAAAAAAAAAAAAAAAAgD/2BGrfYZYAKAAACmRhdGEudGFyLmd6ICAgICAxMjYyMzA0MDAwICAwICAgICAwICAgICAxMDA2NDQgIDQ0NSAgICAgICBgCh+LCAAAOz1LAP/tlttOg0AQhnvNU2y4NpTltLbGCzUmemfiEyywtqucsgu1tfHd3aW1MYTGUgWbON8NZGbIAP/8A5UU41HP2ApCSH1UNI/1OcYuJo7re3U8CLA/Qn7fN6apZEmFajlErxOkUvoXNEn7HILu+hPfC0D/IdjpT4si4REteZ7JXx6Gzvpjx3E90H8I2vWP8tSK8iqayyqUVrn42UB019/3XAL6D8GB+qus9SyP7KEFDjxvr/4YOw39AzUAIzSIJv9c//EYKW159pQjUzCZJ5WeAHOKTDxx7CW2z20ThZWgMUUxm3GZsjdjQQVaosuvNRfGXz8JcAyH+1/PiNoBeda5x3f+d7HX8D8hgQ3+H4K1gZDJY234pujmmc4tmJDbjWBbE0v9mn3GszgXOnybpUzQTbRcFUzHXlm4CaSU19fyLGZLa16mybaQl0ldeaM7PqqOm/i+HVQnYy5pmLBrGr3ccVnmYnX1cK/qSlEx4x020BHs/F+ol0pnrMX720x//sc2afo/COD7PwhrU612c9pi/nortMV3G2G3EMB6AAAAAAAAAAAAAAAAAAAAJ8cH5xpEEwAoAAAK",
+  "appInfo": "{\n  \"id\": \"com.couchsubs.tv\",\n  \"version\": \"0.9.122\",\n  \"vendor\": \"Enmera\",\n  \"type\": \"web\",\n  \"main\": \"index.html\",\n  \"title\": \"CouchSubs\",\n  \"resolution\": \"1920x1080\",\n  \"disableBackHistoryAPI\": true\n}\n",
+  "adaptedAppInfo": "{\n  \"id\": \"com.couchsubs.tv\",\n  \"version\": \"0.9.122\",\n  \"vendor\": \"Enmera\",\n  \"type\": \"web\",\n  \"main\": \"index.html\",\n  \"title\": \"CouchSubs\",\n  \"resolution\": \"1280x720\" ,\n  \"disableBackHistoryAPI\": true\n}\n",
+  "appJs": "// appinfo \"resolution\": \"1920x1080\" burada degismez\nvar x = \"1920x1080\";\n"
+}

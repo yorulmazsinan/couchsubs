@@ -251,7 +251,36 @@ public struct DevModeInstaller: Sendable {
     /// açık kalır, paket ancak bundan sonra silinir. Eskiden `luna-send -n 1` ilk yanıttan sonra çıkıyordu; abonelik
     /// kapanınca bazı webOS sürümleri kurulumu yarıda bırakıyor, biz de sürüm görünmeyince "boş alan" hatası veriyorduk.
     /// Hata `DevModeFailure` olarak gelir; `detail` TV'nin verdiği sebeptir.
-    public func install(package: URL, version: String) async throws {
+    /// Full HD webOS 3.x TV'ye (#1098) paket 1280x720 çözünürlükle gider (`LgHdPackage`); diğer TV'lere olduğu gibi.
+    /// - Returns: TV'nin ekran bilgisi ve seçilen çözünürlük (günlük için).
+    @discardableResult
+    public func install(package original: URL, version: String) async throws -> String {
+        let screen = LgHdPackage.screen(reply: (try? await ssh(LgHdPackage.systemInfoCommand).output) ?? "")
+        var note = "LG paketi: \(screen.summary)"
+        var package = original
+        var staged: URL?
+        defer { if let staged { try? FileManager.default.removeItem(at: staged) } }
+        if screen.hd {
+            if let bytes = try? [UInt8](Data(contentsOf: original)), let adapted = LgHdPackage.adapt(bytes) {
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("couchsubs-lg-hd-\(UUID().uuidString)")
+                do {
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    staged = folder
+                    let file = folder.appendingPathComponent(original.lastPathComponent)
+                    try Data(adapted).write(to: file)
+                    package = file
+                } catch {
+                    note += " (paket yazılamadı, 1920x1080 kuruluyor)"
+                }
+            } else {
+                note += " (paket uyarlanamadı, 1920x1080 kuruluyor)"
+            }
+        }
+        try await upload(package: package, version: version)
+        return note
+    }
+
+    private func upload(package: URL, version: String) async throws {
         let remote = Self.remotePackage(package)
         // Önceki denemelerden kalan paketler TV'de yer kaplamasın.
         let upload = try await ssh(

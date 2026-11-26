@@ -410,7 +410,9 @@ final class LiveServices: AppServices {
                 TVInstallLog.write("LG: kullanıcı onayıyla TV'deki com.couchsubs.tv kaldırıldı: \(try await installer.removeApp())")
             }
             do {
-                try await installer.install(package: package, version: version)
+                // TV'nin modeli ve paketin çözünürlüğü (#1098: Full HD webOS 3.x TV'ye 1280x720).
+                let note = try await installer.install(package: package, version: version)
+                TVInstallLog.write(note)
             } catch let failure as DevModeFailure {
                 // TV'nin sebebi (luna yanıtı) ve -5'te TV'nin saati günlükte görünsün (iPhone, Android, Windows aynı).
                 TVInstallLog.write("LG kurulumu başarısız (\(failure.error)): \(failure.detail)")
