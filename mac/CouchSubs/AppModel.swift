@@ -3668,7 +3668,7 @@ final class AppModel: ObservableObject {
             case .abandonedFinished(let still):
                 SubtitleLog.write("bırakılan takılı okuma sonunda bitti (bitmeyen bırakılmış okuma: \(still))")
             case .abandoned(let ms, let rescued, let cancelled):
-                SubtitleLog.write("takılan okuma bırakıldı, okuyucu yeniden kuruldu: okuma \(ms) ms'dir dönmüyordu\(cancelled ? ", istek iptal edildi" : ""); \(rescued ? "yeni okuyucu sınanıyor, altyazı yedek okuyucudan sürüyor" : "okuma yeni okuyucuda sürüyor")")
+                SubtitleLog.write("takılan okuma bırakıldı, okuyucu yeniden kuruldu: okuma \(ms) ms'dir dönmüyordu\(cancelled ? " (istek iptal edildi)" : ""); \(rescued ? "yeni okuyucu sınanıyor, altyazı yedek okuyucudan sürüyor" : "okuma yeni okuyucuda sürüyor")")
             case .recoveredAfterRebuild(let reads):
                 SubtitleLog.write("okuma düzeldi (yeniden kurulumdan sonra): yeni okuyucu art arda \(reads) okumayı süresinde bitirdi; asıl okuyucuya dönüldü, yedek kapatıldı")
             case .parked(let still, _):
