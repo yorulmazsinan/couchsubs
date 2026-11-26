@@ -1141,7 +1141,33 @@ public sealed partial class RegionWatcher
             if (!menu && heights.Count >= 2 && heights.Max() > heights.Min() * (1.15 / 0.85)) continue;
             result.AddRange(body.Count == members.Count ? [group] : ScreenTranslation.GroupsFromLines(body, menuRows));
         }
-        return [.. result.OrderBy(group => group.Box.Top).ThenBy(group => group.Box.Left)];
+        return ReadingOrder(result);
+    }
+
+    /// <summary>
+    /// Grupların okuma sırası (#1372): tek satırlık gruplar dikeyde en az yarısı örtüşüyorsa aynı satırdadır, satır içi
+    /// soldan sağa, satırlar yukarıdan aşağı. Önceden yalnız üst kenara göre diziliyordu: sekme şeridinde üst kenar seçili
+    /// sekmenin rengi, uçtaki simge ve okuma oynamasıyla bir iki nokta oynuyor, sekmeler her karede başka sırada diziliyor;
+    /// anahtar değişip çeviri yeniden kuruluyor, şerit yanıp sönüyordu. Çok satırlı grup (paragraf) satıra katılmaz;
+    /// eşitlikte özgün sıra korunur. Mac ve Android aynı.
+    /// </summary>
+    internal static List<ScreenTranslation.Group> ReadingOrder(IReadOnlyList<ScreenTranslation.Group> groups)
+    {
+        static bool Single(ScreenTranslation.Group group) => group.Paragraphs.Count == 1 && group.Rows <= 1;
+        static bool SameRow(TextBox a, TextBox b) =>
+            Math.Max(0, Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top)) >= 0.5 * Math.Min(a.Bottom - a.Top, b.Bottom - b.Top);
+        var sorted = groups.Select((group, index) => (Group: group, Index: index))
+            .OrderBy(item => item.Group.Box.Top).ThenBy(item => item.Group.Box.Left).ThenBy(item => item.Index).ToList();
+        var rows = new List<List<(ScreenTranslation.Group Group, int Index)>>();
+        foreach (var item in sorted)
+        {
+            var row = Single(item.Group)
+                ? rows.FirstOrDefault(r => r.All(other => Single(other.Group)) && r.Any(other => SameRow(other.Group.Box, item.Group.Box)))
+                : null;
+            if (row is not null) row.Add(item);
+            else rows.Add([item]);
+        }
+        return [.. rows.SelectMany(row => row.OrderBy(item => item.Group.Box.Left).ThenBy(item => item.Index).Select(item => item.Group))];
     }
 
     /// <summary>Kullanıcının alanında görev kartının parçaları kendi gruplarıdır, kalan satırlar her zamanki gibi.</summary>

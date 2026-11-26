@@ -54,6 +54,8 @@ public static class UiCommands
         ["INVENTORY"] = "Envanter", ["OUTFITS"] = "Kıyafetler", ["OUTFIT"] = "Kıyafet", ["WEAPONS"] = "Silahlar",
         ["STATS"] = "İstatistikler", ["GAME"] = "Oyun", ["BRIEF"] = "Özet", ["PROGRESS"] = "İlerleme", ["VEHICLES"] = "Araçlar",
         ["ANIMALS"] = "Hayvanlar",
+        // Menü şeridinin sekmeleri (#1372): her sekme ayrı etiket olarak çevrilir.
+        ["GALLERY"] = "Galeri", ["STATISTICS"] = "İstatistikler", ["JOURNAL"] = "Günlük",
         // Ayarlar › Kumanda şeması önizlemesi (#1362): kısa arayüz komutları diyalog gibi çevriliyordu ("RUN" → "KAÇ!",
         // "MOVE" → "ÇEKİL!", "DETONATE EXPLOSIVES" → "DETONATE EXPLOSIVES YAP"). Etiket olarak sabit karşılıklar.
         ["RUN"] = "Koş", ["MOVE"] = "Hareket", ["SPRINT"] = "Depar", ["WALK"] = "Yürü", ["JUMP"] = "Zıpla", ["CLIMB"] = "Tırman",
@@ -250,6 +252,13 @@ public static class UiCommands
             {
                 output.AddRange(words[i..(i + 3)]);
                 i += 3;
+                continue;
+            }
+            // "&" okunmamış ad çifti ("JASON LUCIA MAP", #1372) de olduğu gibi kalır.
+            if (i + 1 < words.Length && ScreenTranslation.IsNamePair(words[i] + " " + words[i + 1]))
+            {
+                output.AddRange(words[i..(i + 2)]);
+                i += 2;
                 continue;
             }
             if (TranslateLabel(words[i]) is not { } word) return null;

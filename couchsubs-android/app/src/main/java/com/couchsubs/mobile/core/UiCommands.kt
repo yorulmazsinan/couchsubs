@@ -56,6 +56,8 @@ object UiCommands {
         "INVENTORY" to "Envanter", "OUTFITS" to "Kıyafetler", "OUTFIT" to "Kıyafet", "WEAPONS" to "Silahlar",
         "STATS" to "İstatistikler", "GAME" to "Oyun", "BRIEF" to "Özet", "PROGRESS" to "İlerleme", "VEHICLES" to "Araçlar",
         "ANIMALS" to "Hayvanlar",
+        // Menü şeridinin sekmeleri (#1372): her sekme ayrı etiket olarak çevrilir.
+        "GALLERY" to "Galeri", "STATISTICS" to "İstatistikler", "JOURNAL" to "Günlük",
         // Ayarlar › Kumanda şeması önizlemesi (#1362): kısa arayüz komutları diyalog gibi çevriliyordu ("RUN" → "KAÇ!",
         // "MOVE" → "ÇEKİL!", "DETONATE EXPLOSIVES" → "DETONATE EXPLOSIVES YAP"). Etiket olarak sabit karşılıklar.
         "RUN" to "Koş", "MOVE" to "Hareket", "SPRINT" to "Depar", "WALK" to "Yürü", "JUMP" to "Zıpla", "CLIMB" to "Tırman",
@@ -267,6 +269,12 @@ object UiCommands {
             if (i + 2 < words.size && words[i + 1] == "&") {
                 out += words.subList(i, i + 3)
                 i += 3
+                continue
+            }
+            // "&" okunmamış ad çifti ("JASON LUCIA MAP", #1372) de olduğu gibi kalır.
+            if (i + 1 < words.size && ScreenTranslation.isNamePair(words[i] + " " + words[i + 1])) {
+                out += words.subList(i, i + 2)
+                i += 2
                 continue
             }
             out += translateLabel(words[i]) ?: return null

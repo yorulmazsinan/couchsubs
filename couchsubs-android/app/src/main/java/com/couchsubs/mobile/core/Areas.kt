@@ -608,7 +608,29 @@ class RegionWatcher(
                 groups += titles.map(::single)
                 if (titles.isEmpty()) groups += group else groups += ScreenTranslation.groupLines(own.drop(titles.size))
             }
-            return groups.withIndex().sortedWith(compareBy({ it.value.box.top }, { it.value.box.left }, { it.index })).map { it.value }
+            return readingOrder(groups)
+        }
+
+        /**
+         * Grupların okuma sırası (#1372): tek satırlık gruplar dikeyde en az yarısı örtüşüyorsa aynı satırdadır, satır içi
+         * soldan sağa, satırlar yukarıdan aşağı. Önceden yalnız üst kenara göre diziliyordu: sekme şeridinde üst kenar seçili
+         * sekmenin rengi, uçtaki simge ve okuma oynamasıyla bir iki nokta oynuyor, sekmeler her karede başka sırada
+         * diziliyor; anahtar değişip çeviri yeniden kuruluyor, şerit yanıp sönüyordu. Çok satırlı grup (paragraf) satıra
+         * katılmaz; eşitlikte özgün sıra korunur. Mac ve Windows aynı.
+         */
+        internal fun readingOrder(groups: List<ScreenTranslation.Group>): List<ScreenTranslation.Group> {
+            fun single(group: ScreenTranslation.Group) = group.paragraphs.size == 1 && group.rows <= 1
+            fun sameRow(a: TextBox, b: TextBox) =
+                maxOf(0.0, minOf(a.bottom, b.bottom) - maxOf(a.top, b.top)) >= 0.5 * minOf(a.bottom - a.top, b.bottom - b.top)
+            val sorted = groups.withIndex().sortedWith(compareBy({ it.value.box.top }, { it.value.box.left }, { it.index }))
+            val rows = mutableListOf<MutableList<IndexedValue<ScreenTranslation.Group>>>()
+            for (item in sorted) {
+                val row = if (single(item.value)) {
+                    rows.firstOrNull { r -> r.all { single(it.value) } && r.any { sameRow(it.value.box, item.value.box) } }
+                } else null
+                if (row != null) row += item else rows += mutableListOf(item)
+            }
+            return rows.flatMap { row -> row.sortedWith(compareBy({ it.value.box.left }, { it.index })).map { it.value } }
         }
 
         /**

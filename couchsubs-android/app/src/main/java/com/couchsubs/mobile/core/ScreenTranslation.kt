@@ -539,14 +539,25 @@ object ScreenTranslation {
     /**
      * BÜYÜK HARFLİ satırdaki geniş boşluklar ([MENU_GAP]) ayrı sekmelerdir: her sekme kendi satırı, kutusu kendi yazısı.
      * Kare verilirse boşluklar görüntüden bulunur ([inkPieces]; yazı tanımanın sözcük kutuları boşluğu da kapsıyor), yoksa
-     * sözcük yerlerinden. Satırda simge varsa ya da satır büyük harf değilse dokunulmaz. [aspect]: kutuların oranlandığı
-     * görüntünün genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
+     * sözcük yerlerinden. Satır büyük harf değilse dokunulmaz. [aspect]: kutuların oranlandığı görüntünün
+     * genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
+     *
+     * Sekme şeridinin uçlarındaki geçiş simgeleri (L1/R1, #1372): yazı tanıma L1'i çoğu karede "JASON & LUCIA" ile aynı
+     * satıra katıyordu; simgeli satıra hiç dokunulmadığı için şerit tek cümle çevriliyordu ("JASON LUCIA HARİTASI ÖZET").
+     * Simgeler yalnız uçlardaysa önce ayrılır ([withoutEdgeIcons]), kalan yazı bölünür; bölünmezse satır simgeleriyle
+     * olduğu gibi kalır. Yazının arasında simge olan satıra dokunulmaz. Mac ve Windows aynı.
      */
     fun menuPieces(line: TextLine, aspect: Double = 16.0 / 9.0, frame: GrayFrame? = null): List<TextLine> {
+        if (!line.icons.isNullOrEmpty()) {
+            val trimmed = withoutEdgeIcons(line)
+            if (!trimmed.icons.isNullOrEmpty() || ButtonIcons.MARKER in trimmed.text || trimmed.text == line.text) return listOf(line)
+            val pieces = menuPieces(trimmed, aspect, frame)
+            return if (pieces.size >= 2) pieces else listOf(line)
+        }
         val box = line.box ?: return listOf(line)
-        if (!line.icons.isNullOrEmpty() || !TextStyleSampler.isUpper(line.text) ||
+        if (!TextStyleSampler.isUpper(line.text) ||
             line.text.split(Regex("\\s+")).count { it.isNotEmpty() } < 2) return listOf(line)
-        val limit = (box.bottom - box.top) * MENU_GAP / maxOf(0.1, aspect)
+        val limit = textHeight(line) * MENU_GAP / maxOf(0.1, aspect)
         if (frame != null) return inkPieces(line, frame, limit)
         val words = line.words
         if (words == null || words.size < 2) return listOf(line)
@@ -560,6 +571,17 @@ object ScreenTranslation {
             val span = run.drop(1).fold(run[0].box) { all, word -> all.union(word.box) }
             TextLine(run.joinToString(" ") { it.text }, TextBox(span.left, box.top, span.right, box.bottom), run, confidence = line.confidence)
         }
+    }
+
+    /**
+     * Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
+     * harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Mac ve Windows aynı.
+     */
+    internal fun textHeight(line: TextLine): Double {
+        val box = line.box ?: return 0.0
+        val full = box.bottom - box.top
+        val heights = (line.words ?: emptyList()).map { it.box.bottom - it.box.top }.filter { it > 0 }.sorted()
+        return if (heights.isEmpty()) full else minOf(full, heights[heights.size / 2])
     }
 
     /**
@@ -702,7 +724,7 @@ object ScreenTranslation {
 
     fun keepsNames(text: String): Boolean {
         val plain = IconText.plain(text).trim()
-        if (isTitleMark(plain) || isPlaceName(plain) || isProductName(plain)) return true
+        if (isTitleMark(plain) || isPlaceName(plain) || isProductName(plain) || isNamePair(plain)) return true
         val parts = plain.split(" & ")
         if (parts.size < 2) return false
         // BÜYÜK HARFLİ yazıda her ad tek sözcük: "JASON & LUCIA MAP" (sekmeler tek satır okununca) ad değildir.
@@ -716,6 +738,19 @@ object ScreenTranslation {
             }
         }
     }
+
+    /**
+     * "&" okunmamış karakter adı çifti ("JASON LUCIA", #1372): yazı tanıma sekme şeridindeki "&"yi çoğu karede okumuyor,
+     * ad çifti özel ad sayılmayıp motora gidiyordu. Tam iki sözcük, ikisi de bilinen karakter adı ([characterNames]);
+     * büyük/küçük harf fark etmez. Mac ve Windows aynı.
+     */
+    fun isNamePair(text: String): Boolean {
+        val words = text.split(' ').filter { it.isNotEmpty() }
+        return words.size == 2 && words.all { it.uppercase(java.util.Locale.ROOT) in characterNames }
+    }
+
+    /** Ad çifti olarak tanınan oyun karakterleri (GTA 6 ve GTA V'in oynanabilir karakterleri). */
+    private val characterNames = setOf("JASON", "LUCIA", "MICHAEL", "FRANKLIN", "TREVOR")
 
     private const val ICON_BRACKETS = " ()[]"
 

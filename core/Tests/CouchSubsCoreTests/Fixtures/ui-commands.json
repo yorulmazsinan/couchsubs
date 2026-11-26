@@ -38,6 +38,9 @@
     { "text": "RUN", "expected": "KOŞ" },
     { "text": "Run", "expected": "Koş" },
     { "text": "MOVE", "expected": "HAREKET" },
+    { "text": "GALLERY", "expected": "GALERİ" },
+    { "text": "BRIEF", "expected": "ÖZET" },
+    { "text": "Statistics", "expected": "İstatistikler" },
     { "text": "Detonate Explosives", "expected": "Patlayıcıları Patlat" },
     { "text": "DETONATE EXPLOSIVES", "expected": "PATLAYICILARI PATLAT" },
     { "text": "RADIO CONTROLS", "expected": "RADYO KONTROLLERİ" },
@@ -47,6 +50,8 @@
   "translateLabelLoosely": [
     { "text": "pi Settings", "expected": "Ayarlar" },
     { "text": "1 Map", "expected": "Harita" },
+    { "text": "JASON LUCIA MAP BRIEF", "expected": "JASON LUCIA HARİTA ÖZET" },
+    { "text": "JASON & LUCIA MAP GALLERY", "expected": "JASON & LUCIA HARİTA GALERİ" },
     { "text": "R3 SELECT", "expected": "R3 SEÇ" },
     { "text": "EXIT OR", "expected": "ÇIK OR" },
     { "text": "SELECT ￼", "expected": "SEÇ ￼" },

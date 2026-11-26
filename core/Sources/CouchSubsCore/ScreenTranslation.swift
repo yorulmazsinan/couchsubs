@@ -518,12 +518,24 @@ public enum ScreenTranslation {
 
     /// BÜYÜK HARFLİ satırdaki geniş boşluklar (`menuGap`) ayrı sekmelerdir: her sekme kendi satırı, kutusu kendi yazısı.
     /// Kare verilirse boşluklar görüntüden bulunur (`inkPieces`; yazı tanımanın sözcük kutuları boşluğu da kapsıyor),
-    /// yoksa sözcük yerlerinden. Satırda simge varsa ya da satır büyük harf değilse dokunulmaz. `aspect`: kutuların
-    /// oranlandığı görüntünün genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
+    /// yoksa sözcük yerlerinden. Satır büyük harf değilse dokunulmaz. `aspect`: kutuların oranlandığı görüntünün
+    /// genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
+    ///
+    /// Sekme şeridinin uçlarındaki geçiş simgeleri (L1/R1, #1372): yazı tanıma L1'i çoğu karede "JASON & LUCIA" ile aynı
+    /// satıra katıyordu; simgeli satıra hiç dokunulmadığı için şerit tek cümle çevriliyordu ("JASON LUCIA HARİTASI ÖZET").
+    /// Simgeler yalnız uçlardaysa önce ayrılır (`withoutEdgeIcons`), kalan yazı bölünür; bölünmezse satır simgeleriyle
+    /// olduğu gibi kalır. Yazının arasında simge olan satıra dokunulmaz. Windows ve Android aynı.
     public static func menuPieces(_ line: TextLine, aspect: Double = 16.0 / 9.0, frame: CGImage? = nil) -> [TextLine] {
-        guard let box = line.box, (line.icons ?? []).isEmpty, TextStyleSampler.isUpper(line.text),
+        if !(line.icons ?? []).isEmpty {
+            let trimmed = withoutEdgeIcons(line)
+            guard (trimmed.icons ?? []).isEmpty, !trimmed.text.contains(ButtonIcons.marker), trimmed.text != line.text
+            else { return [line] }
+            let pieces = menuPieces(trimmed, aspect: aspect, frame: frame)
+            return pieces.count >= 2 ? pieces : [line]
+        }
+        guard let box = line.box, TextStyleSampler.isUpper(line.text),
               line.text.split(whereSeparator: \.isWhitespace).count >= 2 else { return [line] }
-        let limit = (box.bottom - box.top) * menuGap / max(0.1, aspect)
+        let limit = textHeight(line) * menuGap / max(0.1, aspect)
         if let frame { return inkPieces(line, frame: frame, gap: limit) }
         guard let words = line.words, words.count >= 2 else { return [line] }
         var runs: [[TextWord]] = [[words[0]]]
@@ -538,6 +550,16 @@ public enum ScreenTranslation {
                             box: TextBox(left: span.left, top: box.top, right: span.right, bottom: box.bottom),
                             confidence: line.confidence, words: run)
         }
+    }
+
+    /// Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
+    /// harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Windows ve Android aynı.
+    static func textHeight(_ line: TextLine) -> Double {
+        guard let box = line.box else { return 0 }
+        let full = box.bottom - box.top
+        let heights = (line.words ?? []).map { $0.box.bottom - $0.box.top }.filter { $0 > 0 }.sorted()
+        guard !heights.isEmpty else { return full }
+        return min(full, heights[heights.count / 2])
     }
 
     /// Satırın yazı sütunları: kutudaki her sütunda zeminden (kutunun ortanca parlaklığı) belirgin ayrılan nokta var mı;
@@ -641,7 +663,7 @@ public enum ScreenTranslation {
     /// (BÜYÜK HARFLİ yazıda tek sözcüklük), büyük harfle başlayan adlar. Çevirmene gitmez; çevirisi aslıdır (kutusu çizilmez, özgün yazı görünür kalır).
     public static func keepsNames(_ text: String) -> Bool {
         let plain = IconText.plain(text).trimmingCharacters(in: .whitespacesAndNewlines)
-        if isTitleMark(plain) || isPlaceName(plain) || isProductName(plain) { return true }
+        if isTitleMark(plain) || isPlaceName(plain) || isProductName(plain) || isNamePair(plain) { return true }
         let parts = plain.components(separatedBy: " & ")
         guard parts.count >= 2 else { return false }
         // BÜYÜK HARFLİ yazıda her ad tek sözcük: "JASON & LUCIA MAP" (sekmeler tek satır okununca) ad değildir.
@@ -654,6 +676,17 @@ public enum ScreenTranslation {
             }
         }
     }
+
+    /// "&" okunmamış karakter adı çifti ("JASON LUCIA", #1372): yazı tanıma sekme şeridindeki "&"yi çoğu karede okumuyor,
+    /// ad çifti özel ad sayılmayıp motora gidiyordu. Tam iki sözcük, ikisi de bilinen karakter adı (`characterNames`);
+    /// büyük/küçük harf fark etmez. Windows ve Android aynı.
+    static func isNamePair(_ text: String) -> Bool {
+        let words = text.split(separator: " ").map { $0.uppercased(with: Locale(identifier: "en_US_POSIX")) }
+        return words.count == 2 && words.allSatisfy { characterNames.contains($0) }
+    }
+
+    /// Ad çifti olarak tanınan oyun karakterleri (GTA 6 ve GTA V'in oynanabilir karakterleri).
+    static let characterNames: Set<String> = ["JASON", "LUCIA", "MICHAEL", "FRANKLIN", "TREVOR"]
 
     /// Haritadaki yer adı ("Peregrine Bay", "Shoeless Keys", "Key Lento") ve soluk okunan parçası ("ne Bay"): bir-üç sözcük,
     /// yalnız harf, son ya da ilk sözcük yer türü (Bay, Key, Island…), BÜYÜK HARFLİ değil. Çevrilmez (beta.100 3408: "Peregrine

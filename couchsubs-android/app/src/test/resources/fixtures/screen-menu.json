@@ -11,7 +11,12 @@
     { "text": "Guards & Soldiers", "keep": false },
     { "text": "JASON & LUCIA MAP BRIEF", "keep": false },
     { "text": "JASON & LUCIA MAP", "keep": false },
-    { "text": "Meet Jason & Lucia at the dock", "keep": false }
+    { "text": "Meet Jason & Lucia at the dock", "keep": false },
+    { "text": "JASON LUCIA", "keep": true },
+    { "text": "Jason Lucia", "keep": true },
+    { "text": "MAP BRIEF", "keep": false },
+    { "text": "JASON MAP", "keep": false },
+    { "text": "JASON LUCIA MAP", "keep": false }
   ],
   "clocks": [
     { "text": "12:00 pm", "clock": true },

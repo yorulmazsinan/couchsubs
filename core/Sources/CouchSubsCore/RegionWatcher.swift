@@ -1118,9 +1118,35 @@ public final class RegionWatcher {
             if titles.isEmpty { groups.append(group) }
             else { groups += ScreenTranslation.groups(from: Array(own.dropFirst(titles.count))) }
         }
-        return groups.enumerated().sorted {
+        return readingOrder(groups)
+    }
+
+    /// Grupların okuma sırası (#1372): tek satırlık gruplar dikeyde en az yarısı örtüşüyorsa aynı satırdadır, satır içi
+    /// soldan sağa, satırlar yukarıdan aşağı. Önceden yalnız üst kenara göre diziliyordu: sekme şeridinde üst kenar
+    /// seçili sekmenin rengi, uçtaki simge ve okuma oynamasıyla bir iki nokta oynuyor, sekmeler her karede başka sırada
+    /// diziliyor; anahtar değişip çeviri yeniden kuruluyor, şerit yanıp sönüyordu. Çok satırlı grup (paragraf) satıra
+    /// katılmaz; eşitlikte özgün sıra korunur. Windows ve Android aynı.
+    static func readingOrder(_ groups: [ScreenTranslation.Group]) -> [ScreenTranslation.Group] {
+        func single(_ group: ScreenTranslation.Group) -> Bool { group.paragraphs.count == 1 && group.rows <= 1 }
+        func sameRow(_ a: TextBox, _ b: TextBox) -> Bool {
+            max(0, min(a.bottom, b.bottom) - max(a.top, b.top)) >= 0.5 * min(a.bottom - a.top, b.bottom - b.top)
+        }
+        let sorted = groups.enumerated().sorted {
             ($0.element.box.top, $0.element.box.left, $0.offset) < ($1.element.box.top, $1.element.box.left, $1.offset)
-        }.map(\.element)
+        }
+        var rows: [[(offset: Int, element: ScreenTranslation.Group)]] = []
+        for item in sorted {
+            if single(item.element), let r = rows.firstIndex(where: { row in
+                row.allSatisfy { single($0.element) } && row.contains { sameRow($0.element.box, item.element.box) }
+            }) {
+                rows[r].append(item)
+            } else {
+                rows.append([item])
+            }
+        }
+        return rows.flatMap { row in
+            row.sorted { ($0.element.box.left, $0.offset) < ($1.element.box.left, $1.offset) }.map(\.element)
+        }
     }
 
     /// Tek satırlık etiketin hizası komşularından: sağ kenarı başka etiketlerle hizalıysa (kol resminin solundaki tuş

@@ -577,14 +577,27 @@ public static class ScreenTranslation
     /// <summary>
     /// BÜYÜK HARFLİ satırdaki geniş boşluklar (<see cref="MenuGap"/>) ayrı sekmelerdir: her sekme kendi satırı, kutusu kendi
     /// yazısı. Kare verilirse boşluklar görüntüden bulunur (<see cref="InkPieces"/>; yazı tanımanın sözcük kutuları boşluğu
-    /// da kapsıyor), yoksa sözcük yerlerinden. Satırda simge varsa ya da satır büyük harf değilse dokunulmaz.
-    /// <paramref name="aspect"/>: kutuların oranlandığı görüntünün genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
+    /// da kapsıyor), yoksa sözcük yerlerinden. Satır büyük harf değilse dokunulmaz. <paramref name="aspect"/>: kutuların
+    /// oranlandığı görüntünün genişlik/yükseklik oranı. İki harfi olmayan parça atılır.
     /// </summary>
+    /// <remarks>
+    /// Sekme şeridinin uçlarındaki geçiş simgeleri (L1/R1, #1372): yazı tanıma L1'i çoğu karede "JASON &amp; LUCIA" ile aynı
+    /// satıra katıyordu; simgeli satıra hiç dokunulmadığı için şerit tek cümle çevriliyordu ("JASON LUCIA HARİTASI ÖZET").
+    /// Simgeler yalnız uçlardaysa önce ayrılır (<see cref="WithoutEdgeIcons"/>), kalan yazı bölünür; bölünmezse satır
+    /// simgeleriyle olduğu gibi kalır. Yazının arasında simge olan satıra dokunulmaz. Mac ve Android aynı.
+    /// </remarks>
     public static IReadOnlyList<TextLine> MenuPieces(TextLine line, double aspect = 16.0 / 9.0, Frame? frame = null)
     {
-        if (line.Box is not { } box || line.Icons is { Count: > 0 } || !TextStyleSampler.IsUpper(line.Text) || WordCount(line.Text) < 2)
+        if (line.Icons is { Count: > 0 })
+        {
+            var trimmed = WithoutEdgeIcons(line);
+            if (trimmed.Icons is { Count: > 0 } || trimmed.Text.Contains(ButtonIcons.Marker) || trimmed.Text == line.Text) return [line];
+            var pieces = MenuPieces(trimmed, aspect, frame);
+            return pieces.Count >= 2 ? pieces : [line];
+        }
+        if (line.Box is not { } box || !TextStyleSampler.IsUpper(line.Text) || WordCount(line.Text) < 2)
             return [line];
-        var limit = (box.Bottom - box.Top) * MenuGap / Math.Max(0.1, aspect);
+        var limit = TextHeight(line) * MenuGap / Math.Max(0.1, aspect);
         if (frame is not null) return InkPieces(line, frame, limit);
         if (line.Words is not { Count: >= 2 } words) return [line];
         var runs = new List<List<TextWord>> { new() { words[0] } };
@@ -600,6 +613,18 @@ public static class ScreenTranslation
             return new TextLine(string.Join(' ', run.Select(word => word.Text)), new TextBox(span.Left, box.Top, span.Right, box.Bottom),
                                 line.Confidence, run);
         })];
+    }
+
+    /// <summary>
+    /// Satırın yazı boyu: sözcük kutularının ortanca yüksekliği (satır kutusundan büyük değil). Satıra katılan simge
+    /// harflerden uzundur; satır kutusunu, onunla sekme boşluğu eşiğini de büyütüyordu (#1372). Mac ve Android aynı.
+    /// </summary>
+    internal static double TextHeight(TextLine line)
+    {
+        if (line.Box is not { } box) return 0;
+        var full = box.Bottom - box.Top;
+        var heights = (line.Words ?? []).Select(word => word.Box.Bottom - word.Box.Top).Where(h => h > 0).OrderBy(h => h).ToList();
+        return heights.Count == 0 ? full : Math.Min(full, heights[heights.Count / 2]);
     }
 
     /// <summary>
@@ -755,7 +780,7 @@ public static class ScreenTranslation
     public static bool KeepsNames(string text)
     {
         var plain = IconText.Plain(text).Trim();
-        if (IsTitleMark(plain) || IsPlaceName(plain) || IsProductName(plain)) return true;
+        if (IsTitleMark(plain) || IsPlaceName(plain) || IsProductName(plain) || IsNamePair(plain)) return true;
         var parts = plain.Split(" & ");
         if (parts.Length < 2) return false;
         // BÜYÜK HARFLİ yazıda her ad tek sözcük: "JASON & LUCIA MAP" (sekmeler tek satır okununca) ad değildir.
@@ -768,6 +793,20 @@ public static class ScreenTranslation
                 && char.IsUpper(word[0]) && !SpeakerNameGuard.NotNames.Contains(word.ToLowerInvariant()));
         });
     }
+
+    /// <summary>
+    /// "&amp;" okunmamış karakter adı çifti ("JASON LUCIA", #1372): yazı tanıma sekme şeridindeki "&amp;"yi çoğu karede
+    /// okumuyor, ad çifti özel ad sayılmayıp motora gidiyordu. Tam iki sözcük, ikisi de bilinen karakter adı
+    /// (<see cref="CharacterNames"/>); büyük/küçük harf fark etmez. Mac ve Android aynı.
+    /// </summary>
+    public static bool IsNamePair(string text)
+    {
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return words.Length == 2 && words.All(word => CharacterNames.Contains(word.ToUpperInvariant()));
+    }
+
+    /// <summary>Ad çifti olarak tanınan oyun karakterleri (GTA 6 ve GTA V'in oynanabilir karakterleri).</summary>
+    private static readonly HashSet<string> CharacterNames = ["JASON", "LUCIA", "MICHAEL", "FRANKLIN", "TREVOR"];
 
     private static readonly char[] IconBrackets = [' ', '(', ')', '[', ']'];
 

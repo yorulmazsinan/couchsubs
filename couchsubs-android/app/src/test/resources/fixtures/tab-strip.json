@@ -1,0 +1,566 @@
+{
+ "about": "Menü sekme şeridi (#1372): aynı şerit her karede başka biçimde ve sırada okunur (uçta L1/R1 simgesiyle tek satır, ayrı satırlar, yarı birleşik; seçili sekmenin üst kenarı oynar). Her karede sekmeler ayrı etiket, soldan sağa aynı sırada ve aday anahtarı aynı olmalı. Mac TabStripTests.swift, Windows TabStripTests.cs ve Android TabStripTest.kt aynı dosyayı okur. Kutular [sol, üst, sağ, alt], 16:9 bütün kareye oranla; 'icons' kareden tanınmış simgeler (yazıda U+FFFC).",
+ "expected": [
+  "JASON & LUCIA",
+  "MAP",
+  "BRIEF",
+  "PROGRESS",
+  "GALLERY",
+  "SETTINGS"
+ ],
+ "frames": [
+  {
+   "name": "şerit tek satır, uçlarda L1/R1 simgesi (simge kutuyu büyütüyor), MAP seçili",
+   "lines": [
+    {
+     "text": "SETTINGS",
+     "box": [
+      0.3,
+      0.905,
+      0.42,
+      0.945
+     ]
+    },
+    {
+     "text": "￼ JASON & LUCIA MAP BRIEF PROGRESS ￼",
+     "box": [
+      0.47,
+      0.05,
+      0.95,
+      0.11
+     ],
+     "icons": [
+      [
+       0.47,
+       0.05,
+       0.5,
+       0.11
+      ],
+      [
+       0.92,
+       0.05,
+       0.95,
+       0.11
+      ]
+     ],
+     "words": [
+      {
+       "text": "JASON",
+       "box": [
+        0.509,
+        0.06,
+        0.559,
+        0.102
+       ]
+      },
+      {
+       "text": "&",
+       "box": [
+        0.564,
+        0.06,
+        0.575,
+        0.102
+       ]
+      },
+      {
+       "text": "LUCIA",
+       "box": [
+        0.581,
+        0.06,
+        0.64,
+        0.102
+       ]
+      },
+      {
+       "text": "MAP",
+       "box": [
+        0.669,
+        0.057,
+        0.709,
+        0.099
+       ]
+      },
+      {
+       "text": "BRIEF",
+       "box": [
+        0.737,
+        0.059,
+        0.791,
+        0.101
+       ]
+      },
+      {
+       "text": "PROGRESS",
+       "box": [
+        0.818,
+        0.061,
+        0.911,
+        0.103
+       ]
+      }
+     ]
+    },
+    {
+     "text": "GALLERY",
+     "box": [
+      0.1,
+      0.9,
+      0.2,
+      0.94
+     ]
+    }
+   ]
+  },
+  {
+   "name": "sekmeler ayrı satır, üst kenarlar oynuyor (MAP seçili, en üstte)",
+   "lines": [
+    {
+     "text": "PROGRESS",
+     "box": [
+      0.818,
+      0.061,
+      0.911,
+      0.103
+     ],
+     "words": [
+      {
+       "text": "PROGRESS",
+       "box": [
+        0.818,
+        0.061,
+        0.911,
+        0.103
+       ]
+      }
+     ]
+    },
+    {
+     "text": "MAP",
+     "box": [
+      0.669,
+      0.055,
+      0.709,
+      0.097
+     ],
+     "words": [
+      {
+       "text": "MAP",
+       "box": [
+        0.669,
+        0.055,
+        0.709,
+        0.097
+       ]
+      }
+     ]
+    },
+    {
+     "text": "GALLERY",
+     "box": [
+      0.1,
+      0.9,
+      0.2,
+      0.94
+     ]
+    },
+    {
+     "text": "JASON & LUCIA",
+     "box": [
+      0.509,
+      0.06,
+      0.64,
+      0.102
+     ],
+     "words": [
+      {
+       "text": "JASON",
+       "box": [
+        0.509,
+        0.06,
+        0.559,
+        0.102
+       ]
+      },
+      {
+       "text": "&",
+       "box": [
+        0.564,
+        0.06,
+        0.575,
+        0.102
+       ]
+      },
+      {
+       "text": "LUCIA",
+       "box": [
+        0.581,
+        0.06,
+        0.64,
+        0.102
+       ]
+      }
+     ]
+    },
+    {
+     "text": "BRIEF",
+     "box": [
+      0.737,
+      0.058,
+      0.791,
+      0.1
+     ],
+     "words": [
+      {
+       "text": "BRIEF",
+       "box": [
+        0.737,
+        0.058,
+        0.791,
+        0.1
+       ]
+      }
+     ]
+    },
+    {
+     "text": "SETTINGS",
+     "box": [
+      0.3,
+      0.905,
+      0.42,
+      0.945
+     ]
+    }
+   ]
+  },
+  {
+   "name": "sekmeler ayrı satır, başka sırada okunuyor (BRIEF seçili, en üstte)",
+   "lines": [
+    {
+     "text": "SETTINGS",
+     "box": [
+      0.3,
+      0.903,
+      0.42,
+      0.943
+     ]
+    },
+    {
+     "text": "BRIEF",
+     "box": [
+      0.737,
+      0.054,
+      0.791,
+      0.096
+     ],
+     "words": [
+      {
+       "text": "BRIEF",
+       "box": [
+        0.737,
+        0.054,
+        0.791,
+        0.096
+       ]
+      }
+     ]
+    },
+    {
+     "text": "JASON & LUCIA",
+     "box": [
+      0.509,
+      0.062,
+      0.64,
+      0.104
+     ],
+     "words": [
+      {
+       "text": "JASON",
+       "box": [
+        0.509,
+        0.062,
+        0.559,
+        0.104
+       ]
+      },
+      {
+       "text": "&",
+       "box": [
+        0.564,
+        0.062,
+        0.575,
+        0.104
+       ]
+      },
+      {
+       "text": "LUCIA",
+       "box": [
+        0.581,
+        0.062,
+        0.64,
+        0.104
+       ]
+      }
+     ]
+    },
+    {
+     "text": "MAP",
+     "box": [
+      0.669,
+      0.059,
+      0.709,
+      0.101
+     ],
+     "words": [
+      {
+       "text": "MAP",
+       "box": [
+        0.669,
+        0.059,
+        0.709,
+        0.101
+       ]
+      }
+     ]
+    },
+    {
+     "text": "PROGRESS",
+     "box": [
+      0.818,
+      0.057,
+      0.911,
+      0.099
+     ],
+     "words": [
+      {
+       "text": "PROGRESS",
+       "box": [
+        0.818,
+        0.057,
+        0.911,
+        0.099
+       ]
+      }
+     ]
+    },
+    {
+     "text": "GALLERY",
+     "box": [
+      0.1,
+      0.902,
+      0.2,
+      0.942
+     ]
+    }
+   ]
+  },
+  {
+   "name": "şeridin yarısı tek satır, kalanı ayrı (PROGRESS seçili, en üstte)",
+   "lines": [
+    {
+     "text": "PROGRESS",
+     "box": [
+      0.818,
+      0.053,
+      0.911,
+      0.095
+     ],
+     "words": [
+      {
+       "text": "PROGRESS",
+       "box": [
+        0.818,
+        0.053,
+        0.911,
+        0.095
+       ]
+      }
+     ]
+    },
+    {
+     "text": "BRIEF",
+     "box": [
+      0.737,
+      0.06,
+      0.791,
+      0.102
+     ],
+     "words": [
+      {
+       "text": "BRIEF",
+       "box": [
+        0.737,
+        0.06,
+        0.791,
+        0.102
+       ]
+      }
+     ]
+    },
+    {
+     "text": "GALLERY",
+     "box": [
+      0.1,
+      0.9,
+      0.2,
+      0.94
+     ]
+    },
+    {
+     "text": "JASON & LUCIA MAP",
+     "box": [
+      0.509,
+      0.059,
+      0.709,
+      0.101
+     ],
+     "words": [
+      {
+       "text": "JASON",
+       "box": [
+        0.509,
+        0.059,
+        0.559,
+        0.101
+       ]
+      },
+      {
+       "text": "&",
+       "box": [
+        0.564,
+        0.059,
+        0.575,
+        0.101
+       ]
+      },
+      {
+       "text": "LUCIA",
+       "box": [
+        0.581,
+        0.059,
+        0.64,
+        0.101
+       ]
+      },
+      {
+       "text": "MAP",
+       "box": [
+        0.669,
+        0.059,
+        0.709,
+        0.101
+       ]
+      }
+     ]
+    },
+    {
+     "text": "SETTINGS",
+     "box": [
+      0.3,
+      0.9,
+      0.42,
+      0.94
+     ]
+    }
+   ]
+  }
+ ],
+ "carried": {
+  "id": "sekme şeridinde seçim kayınca bütün sekmeler yerinde kalır, sırası oynasa da (#1372)",
+  "listMoved": false,
+  "rendered": [
+   {
+    "text": "JASON & LUCIA",
+    "box": [
+     0.509,
+     0.059,
+     0.64,
+     0.101
+    ]
+   },
+   {
+    "text": "MAP",
+    "box": [
+     0.669,
+     0.059,
+     0.709,
+     0.101
+    ]
+   },
+   {
+    "text": "BRIEF",
+    "box": [
+     0.737,
+     0.059,
+     0.791,
+     0.101
+    ]
+   },
+   {
+    "text": "PROGRESS",
+    "box": [
+     0.818,
+     0.059,
+     0.911,
+     0.101
+    ]
+   }
+  ],
+  "current": [
+   {
+    "text": "BRIEF",
+    "box": [
+     0.737,
+     0.054,
+     0.791,
+     0.096
+    ]
+   },
+   {
+    "text": "JASON & LUCIA",
+    "box": [
+     0.509,
+     0.062,
+     0.64,
+     0.104
+    ]
+   },
+   {
+    "text": "MAP",
+    "box": [
+     0.669,
+     0.059,
+     0.709,
+     0.101
+    ]
+   },
+   {
+    "text": "PROGRESS",
+    "box": [
+     0.818,
+     0.057,
+     0.911,
+     0.099
+    ]
+   }
+  ],
+  "kept": [
+   [
+    0,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    3,
+    3
+   ]
+  ],
+  "fresh": []
+ }
+}
