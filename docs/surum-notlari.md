@@ -6,11 +6,15 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6 telefonunun diğer uygulamaları:** Sosyal akış, haberler, hava durumu, fitness ve ayarlar ekranları telefonun üstüne değil, yanına telefondaki yapının Türkçe kopyası olarak çiziliyor; yazı boyu telefonla orantılı, ekran değişince eski kutular kalkıyor. Telefon yazısı artık altyazıya karışmıyor.
-- **Üst üste binme yok:** Kalabalıkta aynı anda konuşanların altyazıları, görev kutusu ve ekran yazısı kutuları birbirinin üstüne binmiyor.
-- **Ürün ve ambalaj yazıları** (bira kutusu, süt kartonu gibi) çevrilmiyor; ürün ve marka adları olduğu gibi kalıyor.
-- **LG** (#1323, #1328): Bazı modellerde düşen görüntü artık kendiliğinden yeniden kuruluyor (TV uygulaması 0.9.113).
-- **Mac'te okuma takılması** (#1333, #1307): Yazı dolu ekranlarda takılan okuma artık iptal ediliyor, okuyucu kendine geliyor; yedek okuyucu düşük kalitede beklemiyor. Windows'ta da takılan okuma 10 sn'de bırakılıyor.
+- **Xbox** (#1308, #1314, #1252): Android, iPhone ve Mac'te uzun oturumda bellek şişip yayının düşmesi düzeltildi; Windows'ta ses cızırtısı ve yeniden bağlanma giderildi; telefonlar daha iyi görüntü biçimini teklif ediyor.
+- **GTA 6 telefonu** (#1253, #1326, #1334): "Ekranı çevir" çevirisi telefon elde sallanınca kaybolmuyor; telefon kapanınca çeviri yaklaşık 1 sn'de kalkıyor.
+- **Altyazıya karışan yazılar** (#1097, #1285, #1293): Gösterge sayıları ("88"), silah çarkı, dükkân ve menü yazıları altyazı sanılmıyor.
+- **Menüler** (#1339): Bir menü sütunundaki bütün satırlar aynı tarafa, kendi satırı hizasında yazılıyor; hiçbiri İngilizcenin üstüne binmiyor.
+- **Kendi eklediğiniz alanlar** (#1324): Yazı boyu zıplamıyor, düğme simgelerinin üstüne binmiyor.
+- **TV** (TV uygulaması 0.9.114+): Philips ve benzeri Google TV'lerde HDMI'nin siyah kalması (#1221), HDMI girişini uygulamaya açmayan projektörler (#1292), eski LG'lerde ekranın yarısının görünmesi (#1098). LG'de "ipk verified failed" kurulum hatası: paket TV saati geride olsa da kuruluyor; saat yanlışsa uygulama düzeltme adımlarını gösteriyor.
+- **Uyarılar**: DeepL veya yapay zekâ çevirisi çalışmadığında gerçek neden (anahtar, kota, internet) gösteriliyor (#1322); uygulama arka plandayken TV bağlantısı koparsa "CouchSubs'ı açık tutun" uyarısı (#1303); eski LG'de eşleşme 403 hatası (#1132).
+
+**beta.102'de gelenler:** telefonun sosyal akış, haber ve hava ekranları telefonun yanında kartlarla; telefon yazısı altyazıya karışmıyor; kalabalıkta üst üste binme yok; ürün yazıları çevrilmiyor; LG kararma; Mac'te okuma takılması.
 
 **beta.101'de gelenler:** menülerin örtülmeden yanına yazılması, kutuların ikizi, telefon mesaj listesi kartları, görev yazısının ayrı kutuda gösterilmesi, menü geçmişi düzeltmesi, "Deneysel" bölümünün kalkması.
 
