@@ -9,14 +9,65 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.util.UUID
 
-/** İçe aktarılacak dosyanın önizlemesi: kullanılabilir satırlar (anahtar → Türkçe) ve sayılar. */
+/** İçe aktarılan dosyada atlanan kaydın nedeni (Mac/iPhone, Windows ve günlükte aynı adlar). */
+enum class GamePackSkipReason(val rawValue: String, val logName: String) {
+    /** İngilizce satırda harf ya da rakam yok, ya da hazır paketteki anahtar 16 haneli onaltılık sayı değil. */
+    INVALID_KEY("invalidKey", "İngilizcesi ya da anahtarı geçersiz"),
+    /** Türkçesi boş ya da metin değil. */
+    EMPTY_TRANSLATION("emptyTranslation", "Türkçesi boş"),
+    /** SRT kaydı dört satır değil (numara, zaman, İngilizce, Türkçe), numara ya da zaman bozuk; TXT satırında ayraç yok. */
+    MALFORMED_RECORD("malformedRecord", "biçimi bozuk"),
+    /** Aynı İngilizce satır aynı Türkçeyle bir kez daha (kayıp değil, bir kez kurulur). */
+    DUPLICATE("duplicate", "tekrar"),
+    /** Aynı İngilizce satır farklı Türkçelerle: hangisinin doğru olduğu bilinmediğinden hiçbiri kurulmaz. */
+    CONFLICT("conflict", "çakışan"),
+}
+
+/**
+ * İçe aktarılacak dosyanın önizlemesi: kullanılabilir satırlar (anahtar → Türkçe), biçim 2 paketin parçaları ve OCR'a
+ * dayanıklı arama verisi, nedenine göre atlanan kayıtlar (#1355; Mac'teki GamePackImportPreview ile aynı).
+ */
 class GamePackImportPreview(
     val suggestedTitle: String?,
     val entries: Map<String, String>,
-    val invalidCount: Int,
-    val duplicateCount: Int,
-    val conflictCount: Int,
-)
+    val segments: Map<String, String> = emptyMap(),
+    skipped: Map<GamePackSkipReason, Int> = emptyMap(),
+    /** Hazır paketin "fuzzy" nesnesinin üyeleri; pakete olduğu gibi yazılır. */
+    val fuzzy: Map<String, Any?>? = null,
+    /** Dosyada OCR'a dayanıklı arama verisi vardı ama kurulmayacak: bazı satırlar atlandığı için artık tutmuyor. */
+    val fuzzyDropped: Boolean = false,
+) {
+    /** Atlanan kayıtlar, nedenine göre (sıfır olanlar yok). */
+    val skipped: Map<GamePackSkipReason, Int> = skipped.filterValues { it > 0 }
+    val invalidCount: Int = listOf(GamePackSkipReason.INVALID_KEY, GamePackSkipReason.EMPTY_TRANSLATION,
+        GamePackSkipReason.MALFORMED_RECORD).sumOf { skipped[it] ?: 0 }
+    val duplicateCount: Int = skipped[GamePackSkipReason.DUPLICATE] ?: 0
+    val conflictCount: Int = skipped[GamePackSkipReason.CONFLICT] ?: 0
+
+    /** Kurulacak satırlar (tam satırlar ve parçalar). */
+    val acceptedCount: Int get() = entries.size + segments.size
+
+    /** Atlanan kayıtların toplamı. */
+    val skippedCount: Int get() = skipped.values.sum()
+
+    /** Günlük satırı (Mac ve Windows ile aynı metin): kaç satır kabul edildi, kaçı neden atlandı. */
+    fun logLine(fileName: String): String {
+        val line = StringBuilder("Paket içe aktarma ($fileName): $acceptedCount satır kabul edildi")
+        if (segments.isNotEmpty()) line.append(" (${entries.size} tam satır, ${segments.size} parça)")
+        line.append(", $skippedCount kayıt atlandı")
+        val reasons = GamePackSkipReason.entries.mapNotNull { reason -> skipped[reason]?.let { "$it ${reason.logName}" } }
+        if (reasons.isNotEmpty()) line.append(" (").append(reasons.joinToString(", ")).append(")")
+        if (fuzzy != null) line.append("; OCR'a dayanıklı arama verisi var")
+        if (fuzzyDropped) line.append("; OCR'a dayanıklı arama verisi atlanan satırlar yüzünden kurulmadı")
+        return line.toString()
+    }
+
+    /** Paket kurulunca günlüğe yazılan satır (Mac ve Windows ile aynı metin). */
+    fun installLog(title: String): String {
+        val name = title.trim { it.isWhitespace() }
+        return "Paket kuruldu: $name (${GamePackImporter.makeId(name)}), $acceptedCount satır"
+    }
+}
 
 /**
  * Topluluk çeviri dosyasını (JSON, TXT ya da iki dilli SRT) oyun paketine çevirir. Mac'teki GamePackImporter.swift
@@ -48,14 +99,40 @@ object GamePackImporter {
             throw ImportException(Failure.INVALID_UTF8)
         }
         val pairs = Pairs()
-        var title: String? = null
         when (fileName.substringAfterLast('/').let { name -> if ('.' in name) name.substringAfterLast('.') else "" }.lowercase()) {
-            "json" -> title = parseJson(source, pairs)
+            "json" -> {
+                val segments = Pairs()
+                var fuzzy: JsonObject? = null
+                val title = parseJson(source, pairs, segments) { fuzzy = it }
+                val skipped = pairs.skipped().toMutableMap()
+                segments.skipped().forEach { (reason, count) -> skipped[reason] = (skipped[reason] ?: 0) + count }
+                // OCR'a dayanıklı arama verisi paketteki bütün anahtarların sırasına bağlı: satır atlandıysa tutmaz.
+                val kept = fuzzy?.takeIf { fuzzyFits(it, pairs.entries.keys + segments.entries.keys) }
+                    ?.let { value -> LinkedHashMap<String, Any?>().apply { value.members.forEach { (name, item) -> put(name, item) } } }
+                return GamePackImportPreview(title, pairs.entries.toMap(), segments.entries.toMap(), skipped, kept,
+                    fuzzy != null && kept == null)
+            }
             "txt" -> parseText(lines(source), pairs)
             "srt" -> parseSrt(lines(source), pairs)
             else -> throw ImportException(Failure.UNSUPPORTED_FILE_TYPE)
         }
-        return GamePackImportPreview(title, pairs.entries.toMap(), pairs.invalidCount, pairs.duplicateCount, pairs.conflicts.size)
+        return GamePackImportPreview(null, pairs.entries.toMap(), skipped = pairs.skipped())
+    }
+
+    /** "fuzzy" nesnesi kurulacak anahtarların (tam satır + parça, işaretsiz sayı sırasıyla) dizinine uyuyor mu. */
+    private fun fuzzyFits(fuzzy: JsonObject, keys: Set<String>): Boolean {
+        fun bytes(name: String): ByteArray? = (fuzzy[name] as? String)?.let {
+            try {
+                java.util.Base64.getDecoder().decode(it)
+            } catch (error: IllegalArgumentException) {
+                null
+            }
+        }
+        val order = keys.mapNotNull { PackKey.number(it) }.map { it xor Long.MIN_VALUE }.sorted()
+            .map { it xor Long.MIN_VALUE }.toLongArray()
+        val parsed = PackJson.Fuzzy(fuzzy["version"] as? Double, fuzzy["count"] as? Double, bytes("mask"), bytes("lengths"),
+            bytes("blooms"))
+        return PackFuzzyIndex.decode(parsed, order) != null
     }
 
     /** "community-<slug>": küçük ASCII harf ve rakamlar, aralarında tire, en çok 80 karakter; yoksa "game". */
@@ -95,7 +172,25 @@ object GamePackImporter {
         try {
             val entries = JSONObject()
             preview.entries.forEach { (key, value) -> entries.put(key, value) }
-            val pack = JSONObject().put("format", 1).put("id", id).put("title", name).put("entries", entries)
+            // Parça ya da OCR verisi yoksa biçim 1, varsa ikisini de taşıyan biçim 2 (GamePack.decode).
+            val extended = preview.segments.isNotEmpty() || preview.fuzzy != null
+            val pack = JSONObject().put("format", if (extended) 2 else 1).put("id", id).put("title", name).put("entries", entries)
+            if (preview.segments.isNotEmpty()) {
+                val segments = JSONObject()
+                preview.segments.forEach { (key, value) -> segments.put(key, value) }
+                pack.put("segments", segments)
+            }
+            preview.fuzzy?.let { fuzzy ->
+                val value = JSONObject()
+                fuzzy.forEach { (key, item) ->
+                    when (item) {
+                        is Double -> if (item == Math.floor(item) && !item.isInfinite()) value.put(key, item.toLong()) else value.put(key, item)
+                        is String, is Boolean -> value.put(key, item)
+                        else -> Unit
+                    }
+                }
+                pack.put("fuzzy", value)
+            }
             temporary.writeText(pack.toString(), Charsets.UTF_8)
             if (!replacing && destination.exists()) throw ImportException(Failure.DESTINATION_EXISTS)
             java.nio.file.Files.move(temporary.toPath(), destination.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
@@ -108,23 +203,25 @@ object GamePackImporter {
 
     private class Pairs {
         val entries = LinkedHashMap<String, String>()
-        var invalidCount = 0
-        var duplicateCount = 0
+        val counts = HashMap<GamePackSkipReason, Int>()
         /** Çakışan anahtarın gördüğü bütün Türkçeler: sonraki tekrarlar da sayılsın. */
         val conflicts = HashMap<String, MutableSet<String>>()
 
+        fun skipped(): Map<GamePackSkipReason, Int> = counts + (GamePackSkipReason.CONFLICT to conflicts.size)
+
+        fun skip(reason: GamePackSkipReason) {
+            counts[reason] = (counts[reason] ?: 0) + 1
+        }
+
         fun add(key: String?, target: String?) {
-            val text = nonblank(target)
-            if (key == null || text == null) {
-                invalidCount++
-                return
-            }
+            if (key == null) return skip(GamePackSkipReason.INVALID_KEY)
+            val text = nonblank(target) ?: return skip(GamePackSkipReason.EMPTY_TRANSLATION)
             val seen = conflicts[key]
             val earlier = entries[key]
             when {
-                seen != null -> if (!seen.add(text)) duplicateCount++
+                seen != null -> if (!seen.add(text)) skip(GamePackSkipReason.DUPLICATE)
                 earlier == null -> entries[key] = text
-                earlier == text -> duplicateCount++
+                earlier == text -> skip(GamePackSkipReason.DUPLICATE)
                 else -> {
                     conflicts[key] = mutableSetOf(earlier, text)
                     entries.remove(key)
@@ -136,13 +233,24 @@ object GamePackImporter {
     /** Swift'in `trimmingCharacters(in: .whitespacesAndNewlines)`'ı gibi; boşsa null. */
     private fun nonblank(text: String?): String? = text?.trim { it.isWhitespace() }?.takeIf { it.isNotEmpty() }
 
-    private fun parseJson(source: String, pairs: Pairs): String? {
+    /**
+     * Hazır paket (biçim 1 ya da uygulamanın kendi paketleri gibi parça ve OCR verisi taşıyan biçim 2), `subtitles`
+     * zarfı ya da düz `{İngilizce: Türkçe}` nesnesi. Biçim 2 reddediliyordu: paket betiğiyle yapılan topluluk paketi hiç
+     * kurulamıyordu (#1355).
+     */
+    private fun parseJson(source: String, pairs: Pairs, segments: Pairs, onFuzzy: (JsonObject) -> Unit): String? {
         val root = JsonReader(source).document()
         val format = root["format"]
         if (format is Double) {
-            if (format != 1.0) throw ImportException(Failure.UNSUPPORTED_PACK_FORMAT)
+            if (format != 1.0 && format != 2.0) throw ImportException(Failure.UNSUPPORTED_PACK_FORMAT)
             val entries = root["entries"] as? JsonObject ?: throw ImportException(Failure.INVALID_JSON)
             for ((key, target) in entries.members) pairs.add(hashedKey(key), target as? String)
+            if (format == 2.0) {
+                (root["segments"] as? JsonObject)?.let { parts ->
+                    for ((key, target) in parts.members) segments.add(hashedKey(key), target as? String)
+                }
+                (root["fuzzy"] as? JsonObject)?.let(onFuzzy)
+            }
             return nonblank(root["title"] as? String) ?: nonblank(root["game"] as? String)
         }
         if (root["entries"] is JsonObject) throw ImportException(Failure.UNSUPPORTED_PACK_FORMAT)
@@ -168,7 +276,7 @@ object GamePackImporter {
             when {
                 tabFields.size == 2 -> pairs.add(PackKey.key(tabFields[0]), tabFields[1])
                 tabFields.size == 1 && delimiter >= 0 -> pairs.add(PackKey.key(line.substring(0, delimiter)), line.substring(delimiter + 3))
-                else -> pairs.invalidCount++
+                else -> pairs.skip(GamePackSkipReason.MALFORMED_RECORD)
             }
         }
     }
@@ -186,7 +294,7 @@ object GamePackImporter {
         fun finishCue() {
             if (cue.isEmpty()) return
             if (cue.size == 4 && cue[0].all { it in '0'..'9' } && validTiming(cue[1])) pairs.add(PackKey.key(cue[2]), cue[3])
-            else pairs.invalidCount++
+            else pairs.skip(GamePackSkipReason.MALFORMED_RECORD)
             cue.clear()
         }
         for (line in lines) {

@@ -826,6 +826,8 @@ struct GamePacksPage: View {
                     guard size <= GamePackImporter.maxFileBytes else { throw GamePackImporter.ImportError.fileTooLarge }
                     let data = try GamePackImporter.read(fileAt: sourceURL)
                     let preview = try GamePackImporter.parse(data, fileName: sourceURL.lastPathComponent)
+                    // Kaç satır kabul edildi, kaçı neden atlandı (#1355).
+                    SubtitleLog.write(preview.logLine(fileName: sourceURL.lastPathComponent))
                     return GamePackImportSelection(sourceURL: sourceURL, preview: preview)
                 }.value
             } catch is GamePackImporter.ImportError {
@@ -862,6 +864,7 @@ struct GamePackImportSheet: View {
     }
 
     var body: some View {
+        let preview = selection.preview
         VStack(alignment: .leading, spacing: Theme.space("m")) {
             Text("Import game pack").font(.csTitle)
             VStack(alignment: .leading, spacing: Theme.space("xs")) {
@@ -871,11 +874,20 @@ struct GamePackImportSheet: View {
                     .labelsHidden()
                     .disabled(installing)
             }
+            // Kabul edilen ve nedenine göre atlanan kayıtlar (#1355; telefonlar ve Windows aynı satırlar).
             Grid(alignment: .leading, horizontalSpacing: Theme.space("gap"), verticalSpacing: Theme.space("xs")) {
-                countRow("Usable entries", selection.preview.entries.count)
-                countRow("Invalid records", selection.preview.invalidCount)
-                countRow("Duplicate pairs", selection.preview.duplicateCount)
-                countRow("Conflicting entries", selection.preview.conflictCount)
+                countRow("Usable entries", preview.acceptedCount)
+                if !preview.segments.isEmpty { countRow("Sentence segments", preview.segments.count) }
+                countRow("Skipped records", preview.skippedCount)
+                ForEach(PackImportReport.reasons(preview), id: \.label) { row in
+                    countRow(LocalizedStringKey(row.label), row.count)
+                }
+                countRow("Duplicate pairs", preview.duplicateCount)
+                countRow("Conflicting entries", preview.conflictCount)
+            }
+            if let note = PackImportReport.fuzzyNote(preview) {
+                Text(LocalizedStringKey(note)).font(.dsCaption).foregroundStyle(preview.fuzzyDropped ? Color.csWarning : Color.dsMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if selection.preview.entries.isEmpty {
                 Text("The file contains no usable translations.")
@@ -931,6 +943,7 @@ struct GamePackImportSheet: View {
                     defer { if access { sourceURL.stopAccessingSecurityScopedResource() } }
                     try GamePackImporter.install(selection.preview, title: title, directory: GamePackLibrary.userDirectory,
                                                  replacing: replacing, sourceURL: sourceURL)
+                    SubtitleLog.write(selection.preview.installLog(title: title))
                     packs.reload()
                     return packs.packs
                 }.value

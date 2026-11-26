@@ -20,16 +20,31 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <!-- Kabul edilen ve nedenine göre atlanan kayıtlar (#1355); sıfır olan neden satırları gizli. -->
             <TextBlock Grid.Row="0" Text="{t:T 'Usable entries'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
             <TextBlock Grid.Row="0" Grid.Column="1" x:Name="UsableEntries" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="1" Text="{t:T 'Invalid records'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
-            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="InvalidRecords" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="2" Text="{t:T 'Duplicate pairs'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
-            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DuplicatePairs" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
-            <TextBlock Grid.Row="3" Text="{t:T 'Conflicting entries'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,0'}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="ConflictingEntries" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
+            <TextBlock Grid.Row="1" x:Name="SegmentsLabel" Text="{t:T 'Sentence segments'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" Visibility="Collapsed" />
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="SentenceSegments" TextAlignment="Right" Typography.NumeralAlignment="Tabular" Visibility="Collapsed" />
+            <TextBlock Grid.Row="2" Text="{t:T 'Skipped records'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="SkippedRecords" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
+            <TextBlock Grid.Row="3" x:Name="InvalidKeyLabel" Text="{t:T 'Skipped: no usable English line or key'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" Visibility="Collapsed" />
+            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="InvalidKeys" TextAlignment="Right" Typography.NumeralAlignment="Tabular" Visibility="Collapsed" />
+            <TextBlock Grid.Row="4" x:Name="EmptyTranslationLabel" Text="{t:T 'Skipped: empty Turkish translation'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" Visibility="Collapsed" />
+            <TextBlock Grid.Row="4" Grid.Column="1" x:Name="EmptyTranslations" TextAlignment="Right" Typography.NumeralAlignment="Tabular" Visibility="Collapsed" />
+            <TextBlock Grid.Row="5" x:Name="MalformedLabel" Text="{t:T 'Skipped: malformed record'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" Visibility="Collapsed" />
+            <TextBlock Grid.Row="5" Grid.Column="1" x:Name="MalformedRecords" TextAlignment="Right" Typography.NumeralAlignment="Tabular" Visibility="Collapsed" />
+            <TextBlock Grid.Row="6" Text="{t:T 'Duplicate pairs'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,titleBody'}" />
+            <TextBlock Grid.Row="6" Grid.Column="1" x:Name="DuplicatePairs" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
+            <TextBlock Grid.Row="7" Text="{t:T 'Conflicting entries'}" Style="{StaticResource BodyText}" Margin="{t:Sp '0,0,s,0'}" />
+            <TextBlock Grid.Row="7" Grid.Column="1" x:Name="ConflictingEntries" TextAlignment="Right" Typography.NumeralAlignment="Tabular" />
         </Grid>
+
+        <TextBlock x:Name="FuzzyNote" Style="{StaticResource BodyText}" TextWrapping="Wrap" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed" />
 
         <TextBlock x:Name="InstallError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Margin="{t:Sp '0,s,0,0'}" Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Polite" />

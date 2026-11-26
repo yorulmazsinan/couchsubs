@@ -85,6 +85,8 @@ struct ImportedPacksSection: View {
                     guard size <= GamePackImporter.maxFileBytes else { throw GamePackImporter.ImportError.fileTooLarge }
                     let data = try GamePackImporter.read(fileAt: url)
                     let preview = try GamePackImporter.parse(data, fileName: url.lastPathComponent)
+                    // Kaç satır kabul edildi, kaçı neden atlandı (#1355).
+                    SubtitleLog.write(preview.logLine(fileName: url.lastPathComponent))
                     return PackImportSelection(fileName: url.lastPathComponent, preview: preview)
                 }.value
             } catch is GamePackImporter.ImportError {
@@ -204,11 +206,22 @@ private struct PackImportSheet: View {
                     .textFieldStyle(MobileFieldStyle())
                     .disabled(installing)
             }
+            // Kabul edilen ve nedenine göre atlanan kayıtlar (#1355; Mac, Windows ve Android aynı satırlar).
             VStack(spacing: Mobile.Space.hair) {
-                countRow("Usable entries", selection.preview.entries.count)
-                countRow("Invalid records", selection.preview.invalidCount)
-                countRow("Duplicate pairs", selection.preview.duplicateCount)
-                countRow("Conflicting entries", selection.preview.conflictCount)
+                let preview = selection.preview
+                countRow("Usable entries", preview.acceptedCount)
+                if !preview.segments.isEmpty { countRow("Sentence segments", preview.segments.count) }
+                countRow("Skipped records", preview.skippedCount)
+                ForEach(PackImportReport.reasons(preview), id: \.label) { row in
+                    countRow(LocalizedStringKey(row.label), row.count)
+                }
+                countRow("Duplicate pairs", preview.duplicateCount)
+                countRow("Conflicting entries", preview.conflictCount)
+            }
+            if let note = PackImportReport.fuzzyNote(selection.preview) {
+                Text(LocalizedStringKey(note)).font(Mobile.TypeScale.caption)
+                    .foregroundStyle(selection.preview.fuzzyDropped ? Mobile.Palette.danger : Mobile.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if selection.preview.entries.isEmpty {
                 MobileNote(text: String(localized: "The file contains no usable translations."))
@@ -251,6 +264,7 @@ private struct PackImportSheet: View {
             do {
                 try await Task.detached(priority: .userInitiated) {
                     try GamePackImporter.install(preview, title: title, directory: PackStore.importedDirectory, replacing: replacing)
+                    SubtitleLog.write(preview.installLog(title: title))
                     packs.reload()
                 }.value
                 model.reloadPackList()

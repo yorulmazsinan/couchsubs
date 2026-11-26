@@ -170,7 +170,13 @@
     <string name="packs_import_heading">Oyun paketini içe aktar</string>
     <string name="packs_import_game_title">Oyunun adı</string>
     <string name="packs_import_usable">Kullanılabilir satır</string>
-    <string name="packs_import_invalid">Geçersiz kayıt</string>
+    <string name="packs_import_segments">Cümle parçaları</string>
+    <string name="packs_import_skipped">Atlanan kayıtlar</string>
+    <string name="packs_import_skipped_key">Atlandı: İngilizcesi ya da anahtarı geçersiz</string>
+    <string name="packs_import_skipped_empty">Atlandı: Türkçesi boş</string>
+    <string name="packs_import_skipped_malformed">Atlandı: biçimi bozuk kayıt</string>
+    <string name="packs_import_fuzzy">OCR hatalarına dayanıklı arama verisi de kuruluyor.</string>
+    <string name="packs_import_fuzzy_dropped">Bazı satırlar atlandığı için OCR hatalarına dayanıklı arama verisi kurulamıyor; birebir aynı satırlar yine bulunur.</string>
     <string name="packs_import_duplicate">Yinelenen çeviri çifti</string>
     <string name="packs_import_conflict">Çakışan satır</string>
     <string name="packs_import_install">Paketi yükle</string>

@@ -259,8 +259,11 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
     private IReadOnlyList<Info> infos = [];
     /// <summary>Elle seçilen oyunun adı (<see cref="GameName.Key"/>); null ise bütün paketlerde aranır.</summary>
     private string? limitKey;
-    /// <summary>Elle seçilen oyunun paketi (<see cref="loadedPacks"/> sırası); -1 paketi yok, null henüz aranmadı.</summary>
-    private int? limited;
+    /// <summary>Elle seçilen oyunun paketleri (<see cref="loadedPacks"/> sırası, artan); boş paketi yok, null henüz aranmadı.</summary>
+    private int[]? limited;
+
+    /// <summary>İçe aktarılan topluluk paketlerinin kimlik öneki (<see cref="GamePackImporter.MakeId"/>).</summary>
+    public const string CommunityPrefix = "community-";
 
     /// <summary>Uygulamaya gömülü paketler (core/Sources/CouchSubsCore/Resources/packs, ad: "packs/x.json.gz").</summary>
     public static IEnumerable<(string Name, byte[] Data)> EmbeddedPacks()
@@ -307,9 +310,11 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
     }
 
     /// <summary>
-    /// Kullanıcının elle seçtiği oyun (<see cref="GameSense.PackLimit"/>). Verilirse satırlar yalnız o oyunun paketinde
-    /// aranır (tam ve bulanık), paketi yoksa hiç aranmaz: paketi olmayan oyunda "Let's go." gibi kısa, genel satırlar
-    /// başka oyunların paketinden yanlış çeviri getiriyor, oyunu da o pakete kaydırıyordu (#218). null: bütün paketler.
+    /// Kullanıcının elle seçtiği oyun (<see cref="GameSense.PackLimit"/>). Verilirse satırlar yalnız o oyunun paketinde ve
+    /// içe aktarılan topluluk paketlerinde aranır (tam ve bulanık), ikisi de yoksa hiç aranmaz: paketi olmayan oyunda
+    /// "Let's go." gibi kısa, genel satırlar başka oyunların paketinden yanlış çeviri getiriyor, oyunu da o pakete
+    /// kaydırıyordu (#218). İçe aktarılan paketin adı seçilen oyunla aynı olmak zorunda değil: adı farklı yazılınca oyun
+    /// seçiliyken hiç okunmuyordu (#1355). null: bütün paketler.
     /// </summary>
     public void LimitToGame(string? name)
     {
@@ -325,28 +330,62 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
         }
     }
 
-    /// <summary>Elle seçilen oyunun paketi: adı ya da kimliği aynı olan son paket. -1 paketi yok, null sınır yok.</summary>
-    private int? LimitedPack()
+    /// <summary>
+    /// Elle seçilen oyunda aranacak paketler (artan sıra): adı ya da kimliği seçilen oyunla aynı olan son paket ve içe
+    /// aktarılan bütün topluluk paketleri. Mac/iPhone ve Android aynı kural.
+    /// </summary>
+    internal static int[] LimitIndices(IReadOnlyList<(string Id, string Title)> packs, string key)
     {
-        if (limitKey is null) return null;
-        if (limited is { } known) return known;
-        var found = -1;
-        for (var index = loadedPacks.Count - 1; index >= 0; index--)
+        var named = -1;
+        for (var index = packs.Count - 1; index >= 0; index--)
         {
-            var pack = loadedPacks[index];
-            if (pack.Id != GameSense.GeneralPack && (GameName.Key(pack.Title) == limitKey || GameName.Key(pack.Id) == limitKey))
+            var (id, title) = packs[index];
+            if (id != GameSense.GeneralPack && (GameName.Key(title) == key || GameName.Key(id) == key))
             {
-                found = index;
+                named = index;
                 break;
             }
         }
-        limited = found;
-        return found;
+        return [.. Enumerable.Range(0, packs.Count).Where(i => i == named || packs[i].Id.StartsWith(CommunityPrefix, StringComparison.Ordinal))];
     }
 
-    /// <summary>Elle seçilen oyunun paketinde anahtarın Türkçesi: önce tam satır, sonra parça (yalnız o paketin kendisi).</summary>
-    private static string? Own(GamePack pack, ulong key) =>
-        pack.Entries.TryGetValue(key, out var turkish) ? turkish : pack.Segments.GetValueOrDefault(key);
+    /// <summary>
+    /// Oyun seçimi değişince günlüğe yazılacak satır (Mac/iPhone ve Android ile aynı metin): seçilen oyunda hangi
+    /// paketlerde aranacağı. Seçim yoksa null.
+    /// </summary>
+    public string? LimitLog(string? game)
+    {
+        if (game is null || GameName.Key(game) is not { Length: > 0 } key) return null;
+        var used = Packs;
+        var titles = LimitIndices([.. used.Select(p => (p.Id, p.Title))], key)
+            .Select(i => used[i].Id.StartsWith(CommunityPrefix, StringComparison.Ordinal) ? $"{used[i].Title} (içe aktarılan)" : used[i].Title)
+            .ToList();
+        if (titles.Count == 0)
+            return $"Paket araması seçilen oyunla sınırlı ({game}): bu oyunun paketi yok, satırlar çeviri motoruna gidiyor";
+        return $"Paket araması seçilen oyunla sınırlı ({game}): " + string.Join(", ", titles);
+    }
+
+    /// <summary>Elle seçilen oyunun paketleri (<see cref="LimitIndices"/>); boş paketi yok, null sınır yok.</summary>
+    private int[]? LimitedPacks()
+    {
+        if (limitKey is null) return null;
+        if (limited is { } known) return known;
+        limited = LimitIndices([.. loadedPacks.Select(p => (p.Id, p.Title))], limitKey);
+        return limited;
+    }
+
+    /// <summary>
+    /// Elle seçilen oyunun paketlerinde anahtarın Türkçesi ve sahibi: sonraki paket kazanır, tam satır parçadan önce
+    /// (yalnız bu paketlerin kendisi).
+    /// </summary>
+    private static (int Index, string Turkish)? Own(IReadOnlyList<GamePack> packs, int[] only, ulong key)
+    {
+        for (var i = only.Length - 1; i >= 0; i--)
+            if (packs[only[i]].Entries.TryGetValue(key, out var turkish)) return (only[i], turkish);
+        for (var i = only.Length - 1; i >= 0; i--)
+            if (packs[only[i]].Segments.TryGetValue(key, out var turkish)) return (only[i], turkish);
+        return null;
+    }
 
     /// <summary>
     /// Satırın tamamı için sözlükteki Türkçe (parçalara bölme yok; bkz. CouchSubs.Translation.PackLookup). Bulunursa
@@ -356,25 +395,25 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
     {
         Dictionary<ulong, string> current;
         IReadOnlyList<GamePack> packs;
-        int? only;
+        int[]? only;
         lock (gate)
         {
             LoadIfNeeded();
             current = entries;
             packs = loadedPacks;
-            only = LimitedPack();
+            only = LimitedPacks();
         }
         if (only is { } limit)
         {
-            if (limit < 0 || PackKey.Key(text) is not { } wanted || PackKey.Number(wanted) is not { } own
-                || Own(packs[limit], own) is not { } found) return null;
+            if (limit.Length == 0 || PackKey.Key(text) is not { } wanted || PackKey.Number(wanted) is not { } own
+                || Own(packs, limit, own) is not { } found) return null;
             lock (gate)
             {
-                if (loadedPacks != packs) return found;
-                distinctive = limit;
-                scope = limit;
+                if (loadedPacks != packs) return found.Turkish;
+                distinctive = found.Index;
+                scope = found.Index;
             }
-            return found;
+            return found.Turkish;
         }
         if (current.Count == 0 || PackKey.Key(text) is not { } key || PackKey.Number(key) is not { } number
             || !current.TryGetValue(number, out var turkish)) return null;
@@ -413,30 +452,33 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
     public string? Nearest(string text)
     {
         Dictionary<ulong, string> current;
-        GamePack? pack;
+        List<GamePack> searched;
         Func<ulong, string?> translation;
         lock (gate)
         {
             LoadIfNeeded();
             current = entries;
-            // Elle seçilen oyunda bulanık arama da hep onun paketinde, Türkçesi de o paketten; paketi yoksa yapılmaz.
-            if (LimitedPack() is { } limit)
+            // Elle seçilen oyunda bulanık arama da hep onun paketlerinde, Türkçesi de oradan; paketi yoksa yapılmaz.
+            if (LimitedPacks() is { } limit)
             {
-                pack = limit >= 0 ? loadedPacks[limit] : null;
-                var own = pack;
-                translation = key => own is null ? null : Own(own, key);
+                var packs = loadedPacks;
+                searched = [.. Enumerable.Reverse(limit).Select(i => packs[i])];
+                translation = key => Own(packs, limit, key)?.Turkish;
             }
             else
             {
-                pack = scope is { } chosen && chosen < loadedPacks.Count ? loadedPacks[chosen] : null;
+                searched = scope is { } chosen && chosen < loadedPacks.Count ? [loadedPacks[chosen]] : [];
                 translation = key => current.GetValueOrDefault(key);
             }
         }
-        if (pack is null) return null;
-        if (Corrected(text, pack, translation) is { } corrected) return corrected;
-        // GTA paketinde kısa satırlar da aranır (paket betiği GTA'ya kısa satır imzası da yazar).
-        var minimum = ScreenText.IsGta(pack.Title) ? PackFuzzy.ShortMinLength : PackFuzzy.MinLength;
-        return pack.Fuzzy?.Nearest(text, translation, minimum) is { } found ? translation(found) : null;
+        foreach (var pack in searched)
+        {
+            if (Corrected(text, pack, translation) is { } corrected) return corrected;
+            // GTA paketinde kısa satırlar da aranır (paket betiği GTA'ya kısa satır imzası da yazar).
+            var minimum = ScreenText.IsGta(pack.Title) ? PackFuzzy.ShortMinLength : PackFuzzy.MinLength;
+            if (pack.Fuzzy?.Nearest(text, translation, minimum) is { } found && translation(found) is { } turkish) return turkish;
+        }
+        return null;
     }
 
     /// <summary>

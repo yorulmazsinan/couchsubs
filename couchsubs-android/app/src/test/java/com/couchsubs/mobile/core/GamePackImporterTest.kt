@@ -116,7 +116,7 @@ class GamePackImporterTest {
         assertThrows(failure) { GamePackImporter.parse(byteArrayOf(0xff.toByte()), "file.txt") }
         assertThrows(failure) { parse("[1, 2]", "file.json") }
         assertThrows(failure) { parse("""{"oops",1}""", "file.json") }
-        assertThrows(failure) { parse("""{"format":2,"entries":{"0123456789ABCDEF":"Türkçe"}}""", "file.json") }
+        assertThrows(failure) { parse("""{"format":3,"entries":{"0123456789ABCDEF":"Türkçe"}}""", "file.json") }
         assertThrows(failure) { parse("""{"format":true,"entries":{"0123456789ABCDEF":"Türkçe"}}""", "file.json") }
         val tooLarge = assertThrows(failure) { GamePackImporter.parse(ByteArray(GamePackImporter.MAX_FILE_BYTES + 1), "big.txt") }
         assertEquals(GamePackImporter.Failure.FILE_TOO_LARGE, tooLarge.failure)
@@ -177,6 +177,86 @@ class GamePackImporterTest {
             assertEquals("Çök!", library.find("Get Down!"))
         } finally {
             downloaded.deleteRecursively()
+            imported.deleteRecursively()
+        }
+    }
+
+    /**
+     * Ortak deneme dosyası (fixtures/pack-import-report.json, core/Tests/CouchSubsCoreTests/Fixtures kopyası): her dosya
+     * türünde kabul edilen satırlar, nedenine göre atlananlar ve günlük satırı Mac ve Windows ile aynı; kurulan paketten
+     * satırlar ekrandaki gibi bulunur (#1355).
+     */
+    @Test
+    fun sharedImportReportCases() {
+        val cases = JSONObject(Fixtures.text("pack-import-report.json")).getJSONArray("cases")
+        for (index in 0 until cases.length()) {
+            val item = cases.getJSONObject(index)
+            val file = item.getString("file")
+            val preview = parse(item.getString("text"), file)
+            assertEquals(file, item.getInt("accepted"), preview.acceptedCount)
+            assertEquals(file, item.getInt("segments"), preview.segments.size)
+            val skipped = item.getJSONObject("skipped")
+            assertEquals(file, skipped.keys().asSequence().associateWith { skipped.getInt(it) },
+                preview.skipped.mapKeys { it.key.rawValue })
+            assertEquals(file, item.optBoolean("fuzzyDropped", false), preview.fuzzyDropped)
+            assertEquals(file, if (item.has("title")) item.getString("title") else null, preview.suggestedTitle)
+            assertEquals(item.getString("log"), preview.logLine(file))
+
+            val directory = Files.createTempDirectory("imported").toFile()
+            try {
+                GamePackImporter.install(preview, "Harbor", directory, false)
+                val library = GamePackLibrary(null, null, directory)
+                val lookups = item.getJSONObject("lookups")
+                for (screen in lookups.keys()) {
+                    val turkish = if (lookups.isNull(screen)) null else lookups.getString(screen)
+                    assertEquals("$file: $screen", turkish, PackLookup.match(library, screen)?.text)
+                }
+            } finally {
+                directory.deleteRecursively()
+            }
+        }
+    }
+
+    /**
+     * Paket betiğiyle yapılan biçim 2 paket (parçalar ve OCR verisiyle) içe aktarılabilir; oyunun adından farklı bir
+     * başlıkla kurulsa da oyun elle seçiliyken satırlar (OCR hatalı olanlar da) bu paketten bulunur. Başka oyunun paketi
+     * seçilen oyunda yine aranmaz (#218). Önceden biçim 2 reddediliyor, oyun seçiliyken içe aktarılan paket hiç
+     * okunmuyordu (#1355).
+     */
+    @Test
+    fun formatTwoCommunityPackServesTheChosenGameDespiteADifferentTitle() {
+        val community = JSONObject(Fixtures.text("pack-import-report.json")).getJSONObject("community")
+        val data = java.util.zip.GZIPInputStream(Fixtures.bytes("pack-fuzzy.json.gz").inputStream()).use { it.readBytes() }
+        val preview = GamePackImporter.parse(data, "harbor-fuzzy.json")
+        assertTrue(preview.fuzzy != null)
+        assertTrue(!preview.fuzzyDropped)
+        assertEquals(0, preview.skippedCount)
+        assertTrue(preview.acceptedCount > 10)
+
+        val bundledLine = community.getString("otherLine")
+        val other = """{"format":1,"id":"elsewhere","title":"${community.getString("otherPackTitle")}","entries":{"${PackKey.key(bundledLine)}":"Fener söndü."}}"""
+        val imported = Files.createTempDirectory("imported").toFile()
+        try {
+            val library = GamePackLibrary({ listOf("elsewhere.json" to { other.toByteArray() }) }, null, imported)
+            val game = community.getString("chosenGame")
+            assertEquals(community.getString("missingLog"), library.limitLog(game))
+
+            GamePackImporter.install(preview, community.getString("title"), imported, false)
+            assertEquals(community.getString("installLog"), preview.installLog(" ${community.getString("title")} "))
+            library.reload()
+            library.limitToGame(game)
+            assertEquals(community.getString("log"), library.limitLog(game))
+            assertNull(PackLookup.match(library, bundledLine))
+
+            val fuzzy = JSONObject(Fixtures.text("pack-fuzzy-cases.json"))
+            assertTrue(PackLookup.match(library, fuzzy.getString("warmUp")) != null)
+            val cases = fuzzy.getJSONArray("cases")
+            for (index in 0 until cases.length()) {
+                val item = cases.getJSONObject(index)
+                val screen = item.getString("screen")
+                assertEquals(screen, if (item.isNull("turkish")) null else item.getString("turkish"), PackLookup.match(library, screen)?.text)
+            }
+        } finally {
             imported.deleteRecursively()
         }
     }

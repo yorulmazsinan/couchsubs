@@ -9,23 +9,102 @@ using Microsoft.Win32.SafeHandles;
 
 namespace CouchSubs.Core;
 
+/// <summary>İçe aktarılan dosyada atlanan kaydın nedeni (Mac/iPhone, Android ve günlükte aynı adlar).</summary>
+public enum GamePackSkipReason
+{
+    /// <summary>İngilizce satırda harf ya da rakam yok, ya da hazır paketteki anahtar 16 haneli onaltılık sayı değil.</summary>
+    InvalidKey,
+    /// <summary>Türkçesi boş ya da metin değil.</summary>
+    EmptyTranslation,
+    /// <summary>SRT kaydı dört satır değil, numara ya da zaman bozuk; TXT satırında ayraç yok.</summary>
+    MalformedRecord,
+    /// <summary>Aynı İngilizce satır aynı Türkçeyle bir kez daha (bir kez kurulur).</summary>
+    Duplicate,
+    /// <summary>Aynı İngilizce satır farklı Türkçelerle: hiçbiri kurulmaz.</summary>
+    Conflict,
+}
+
+public static class GamePackSkipReasons
+{
+    /// <summary>Swift'teki ad (ortak deneme dosyası bu adları kullanır).</summary>
+    public static string Name(this GamePackSkipReason reason) => reason switch
+    {
+        GamePackSkipReason.InvalidKey => "invalidKey",
+        GamePackSkipReason.EmptyTranslation => "emptyTranslation",
+        GamePackSkipReason.MalformedRecord => "malformedRecord",
+        GamePackSkipReason.Duplicate => "duplicate",
+        _ => "conflict",
+    };
+
+    /// <summary>Günlükteki adı.</summary>
+    public static string LogName(this GamePackSkipReason reason) => reason switch
+    {
+        GamePackSkipReason.InvalidKey => "İngilizcesi ya da anahtarı geçersiz",
+        GamePackSkipReason.EmptyTranslation => "Türkçesi boş",
+        GamePackSkipReason.MalformedRecord => "biçimi bozuk",
+        GamePackSkipReason.Duplicate => "tekrar",
+        _ => "çakışan",
+    };
+}
+
 public sealed class GamePackImportPreview
 {
     internal GamePackImportPreview(string? suggestedTitle, IReadOnlyDictionary<string, string> entries,
-        int invalidCount, int duplicateCount, int conflictCount)
+        IReadOnlyDictionary<GamePackSkipReason, int> skipped, IReadOnlyDictionary<string, string>? segments = null,
+        string? fuzzy = null, bool fuzzyDropped = false)
     {
         SuggestedTitle = suggestedTitle;
         Entries = entries;
-        InvalidCount = invalidCount;
-        DuplicateCount = duplicateCount;
-        ConflictCount = conflictCount;
+        Segments = segments ?? new Dictionary<string, string>();
+        Skipped = skipped.Where(pair => pair.Value > 0).ToDictionary(pair => pair.Key, pair => pair.Value);
+        Fuzzy = fuzzy;
+        FuzzyDropped = fuzzyDropped;
+        InvalidCount = Count(GamePackSkipReason.InvalidKey) + Count(GamePackSkipReason.EmptyTranslation)
+            + Count(GamePackSkipReason.MalformedRecord);
+        DuplicateCount = Count(GamePackSkipReason.Duplicate);
+        ConflictCount = Count(GamePackSkipReason.Conflict);
     }
+
+    private int Count(GamePackSkipReason reason) => Skipped.GetValueOrDefault(reason);
 
     public string? SuggestedTitle { get; }
     public IReadOnlyDictionary<string, string> Entries { get; }
     public int InvalidCount { get; }
     public int DuplicateCount { get; }
     public int ConflictCount { get; }
+    /// <summary>Hazır paketin (biçim 2) cümle parçaları.</summary>
+    public IReadOnlyDictionary<string, string> Segments { get; }
+    /// <summary>Atlanan kayıtlar, nedenine göre (sıfır olanlar yok).</summary>
+    public IReadOnlyDictionary<GamePackSkipReason, int> Skipped { get; }
+    /// <summary>Hazır paketin OCR hatalarına dayanıklı arama verisi (<c>fuzzy</c> JSON nesnesi), pakete olduğu gibi yazılır.</summary>
+    public string? Fuzzy { get; }
+    /// <summary>Dosyada OCR verisi vardı ama bazı satırlar atlandığı için artık tutmuyor; kurulmaz.</summary>
+    public bool FuzzyDropped { get; }
+    /// <summary>Kurulacak satırlar (tam satırlar ve parçalar).</summary>
+    public int AcceptedCount => Entries.Count + Segments.Count;
+    /// <summary>Atlanan kayıtların toplamı.</summary>
+    public int SkippedCount => Skipped.Values.Sum();
+
+    /// <summary>Günlük satırı (Mac/iPhone ve Android ile aynı metin): kaç satır kabul edildi, kaçı neden atlandı.</summary>
+    public string LogLine(string fileName)
+    {
+        var line = new StringBuilder($"Paket içe aktarma ({fileName}): {AcceptedCount} satır kabul edildi");
+        if (Segments.Count > 0) line.Append($" ({Entries.Count} tam satır, {Segments.Count} parça)");
+        line.Append($", {SkippedCount} kayıt atlandı");
+        var reasons = Enum.GetValues<GamePackSkipReason>().Where(Skipped.ContainsKey)
+            .Select(reason => $"{Skipped[reason]} {reason.LogName()}").ToList();
+        if (reasons.Count > 0) line.Append(" (").Append(string.Join(", ", reasons)).Append(')');
+        if (Fuzzy is not null) line.Append("; OCR'a dayanıklı arama verisi var");
+        if (FuzzyDropped) line.Append("; OCR'a dayanıklı arama verisi atlanan satırlar yüzünden kurulmadı");
+        return line.ToString();
+    }
+
+    /// <summary>Paket kurulunca günlüğe yazılan satır (Mac/iPhone ve Android ile aynı metin).</summary>
+    public string InstallLog(string title)
+    {
+        title = title.Trim();
+        return $"Paket kuruldu: {title} ({GamePackImporter.MakeId(title)}), {AcceptedCount} satır";
+    }
 }
 
 public static partial class GamePackImporter
@@ -45,12 +124,10 @@ public static partial class GamePackImporter
         catch (DecoderFallbackException error) { throw new InvalidDataException("The file is not valid UTF-8.", error); }
 
         var pairs = new Pairs();
-        string? title = null;
         switch (Path.GetExtension(fileName).ToLowerInvariant())
         {
             case ".json":
-                title = ParseJson(bytes, pairs);
-                break;
+                return ParseJsonPreview(bytes, pairs);
             case ".txt":
                 ParseText(source, pairs);
                 break;
@@ -60,8 +137,26 @@ public static partial class GamePackImporter
             default:
                 throw new InvalidDataException("Unsupported translation file type.");
         }
-        return new GamePackImportPreview(title, pairs.Entries.AsReadOnly(), pairs.InvalidCount,
-            pairs.DuplicateCount, pairs.ConflictCount);
+        return new GamePackImportPreview(null, pairs.Entries.AsReadOnly(), pairs.Skipped);
+    }
+
+    private static GamePackImportPreview ParseJsonPreview(ReadOnlyMemory<byte> bytes, Pairs pairs)
+    {
+        var segments = new Pairs();
+        var title = ParseJson(bytes, pairs, segments, out var fuzzy);
+        var skipped = new Dictionary<GamePackSkipReason, int>(pairs.Skipped);
+        foreach (var (reason, count) in segments.Skipped) skipped[reason] = skipped.GetValueOrDefault(reason) + count;
+        // OCR'a dayanıklı arama verisi paketteki bütün anahtarların sırasına bağlı: satır atlandıysa tutmaz.
+        string? kept = null;
+        if (fuzzy is not null)
+        {
+            List<ulong> order = [.. pairs.Entries.Keys.Union(segments.Entries.Keys)
+                .Select(key => PackKey.Number(key)).OfType<ulong>().Order()];
+            using var document = JsonDocument.Parse(fuzzy);
+            if (PackFuzzyIndex.Decode(document.RootElement, order) is not null) kept = fuzzy;
+        }
+        return new GamePackImportPreview(title, pairs.Entries.AsReadOnly(), skipped, segments.Entries.AsReadOnly(),
+            kept, fuzzy is not null && kept is null);
     }
 
     public static string MakeId(string title)
@@ -107,7 +202,10 @@ public static partial class GamePackImporter
         {
             using (stream)
             {
-                JsonSerializer.Serialize(stream, new { format = 1, id, title, entries = preview.Entries });
+                if (preview.Segments.Count == 0 && preview.Fuzzy is null)
+                    JsonSerializer.Serialize(stream, new { format = 1, id, title, entries = preview.Entries });
+                else
+                    WriteFormatTwo(stream, preview, id, title);
             }
             Publish(temporary, destination, replacing);
         }
@@ -116,6 +214,30 @@ public static partial class GamePackImporter
             File.Delete(temporary);
         }
         return destination;
+    }
+
+    /// <summary>Parça ya da OCR verisi taşıyan paket: biçim 2 (<see cref="GamePack.Decode"/>).</summary>
+    private static void WriteFormatTwo(Stream stream, GamePackImportPreview preview, string id, string title)
+    {
+        using var writer = new Utf8JsonWriter(stream);
+        writer.WriteStartObject();
+        writer.WriteNumber("format", 2);
+        writer.WriteString("id", id);
+        writer.WriteString("title", title);
+        void Map(string name, IReadOnlyDictionary<string, string> map)
+        {
+            writer.WriteStartObject(name);
+            foreach (var (key, value) in map) writer.WriteString(key, value);
+            writer.WriteEndObject();
+        }
+        Map("entries", preview.Entries);
+        if (preview.Segments.Count > 0) Map("segments", preview.Segments);
+        if (preview.Fuzzy is not null)
+        {
+            writer.WritePropertyName("fuzzy");
+            writer.WriteRawValue(preview.Fuzzy);
+        }
+        writer.WriteEndObject();
     }
 
     private static string DestinationPath(string fullDirectory, string id) => Path.Combine(fullDirectory, id + ".json");
@@ -204,8 +326,13 @@ public static partial class GamePackImporter
     [LibraryImport("libc", EntryPoint = "free")]
     private static partial void Free(IntPtr buffer);
 
-    private static string? ParseJson(ReadOnlyMemory<byte> bytes, Pairs pairs)
+    /// <summary>
+    /// Hazır paket (biçim 1 ya da parça ve OCR verisi taşıyan biçim 2), <c>subtitles</c> zarfı ya da düz nesne. Biçim 2
+    /// reddediliyordu: paket betiğiyle yapılan topluluk paketi hiç kurulamıyordu (#1355).
+    /// </summary>
+    private static string? ParseJson(ReadOnlyMemory<byte> bytes, Pairs pairs, Pairs segments, out string? fuzzy)
     {
+        fuzzy = null;
         try
         {
             using var document = JsonDocument.Parse(bytes);
@@ -216,11 +343,19 @@ public static partial class GamePackImporter
             root.TryGetProperty("entries", out var entries);
             if (root.TryGetProperty("format", out var format) && format.ValueKind == JsonValueKind.Number)
             {
-                if (format.GetDouble() != 1) throw new InvalidDataException("Unsupported translation pack format.");
+                var number = format.GetDouble();
+                if (number is not (1 or 2)) throw new InvalidDataException("Unsupported translation pack format.");
                 if (entries.ValueKind != JsonValueKind.Object)
                     throw new InvalidDataException("The pack entries must be a JSON object.");
 
                 ReadPairs(entries, HashedKey, pairs);
+                if (number == 2)
+                {
+                    if (root.TryGetProperty("segments", out var parts) && parts.ValueKind == JsonValueKind.Object)
+                        ReadPairs(parts, HashedKey, segments);
+                    if (root.TryGetProperty("fuzzy", out var signatures) && signatures.ValueKind == JsonValueKind.Object)
+                        fuzzy = signatures.GetRawText();
+                }
                 return ReadTitle(root, "title") ?? ReadTitle(root, "game");
             }
 
@@ -279,12 +414,12 @@ public static partial class GamePackImporter
             }
             else if (index != line.LastIndexOf('\t'))
             {
-                pairs.InvalidCount++;
+                pairs.Skip(GamePackSkipReason.MalformedRecord);
                 continue;
             }
             if (index < 0)
             {
-                pairs.InvalidCount++;
+                pairs.Skip(GamePackSkipReason.MalformedRecord);
                 continue;
             }
 
@@ -302,7 +437,7 @@ public static partial class GamePackImporter
             if (cue.Count == 4 && cue[0].All(char.IsAsciiDigit) && ValidTiming(cue[1]))
                 pairs.Add(PackKey.Key(cue[2]), cue[3]);
             else
-                pairs.InvalidCount++;
+                pairs.Skip(GamePackSkipReason.MalformedRecord);
             cue.Clear();
         }
 
@@ -324,21 +459,29 @@ public static partial class GamePackImporter
     {
         // Keep every target of a conflicted key so later repeats still count.
         private readonly Dictionary<string, HashSet<string>> conflicts = [];
+        private readonly Dictionary<GamePackSkipReason, int> counts = [];
         public Dictionary<string, string> Entries { get; } = [];
-        public int InvalidCount { get; set; }
-        public int DuplicateCount { get; private set; }
-        public int ConflictCount => conflicts.Count;
+
+        public Dictionary<GamePackSkipReason, int> Skipped =>
+            new(counts) { [GamePackSkipReason.Conflict] = conflicts.Count };
+
+        public void Skip(GamePackSkipReason reason) => counts[reason] = counts.GetValueOrDefault(reason) + 1;
 
         public void Add(string? key, string? value)
         {
-            if (key is null || Nonblank(value) is not { } target)
+            if (key is null)
             {
-                InvalidCount++;
+                Skip(GamePackSkipReason.InvalidKey);
+                return;
+            }
+            if (Nonblank(value) is not { } target)
+            {
+                Skip(GamePackSkipReason.EmptyTranslation);
                 return;
             }
             if (conflicts.TryGetValue(key, out var targets))
             {
-                if (!targets.Add(target)) DuplicateCount++;
+                if (!targets.Add(target)) Skip(GamePackSkipReason.Duplicate);
                 return;
             }
             if (Entries.TryAdd(key, target)) return;
@@ -346,7 +489,7 @@ public static partial class GamePackImporter
             var previous = Entries[key];
             if (previous == target)
             {
-                DuplicateCount++;
+                Skip(GamePackSkipReason.Duplicate);
                 return;
             }
             conflicts.Add(key, [previous, target]);

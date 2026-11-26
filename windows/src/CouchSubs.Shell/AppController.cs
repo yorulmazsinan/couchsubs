@@ -3323,8 +3323,25 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         if (RunningGame.Named(game)?.Name is not { } clean) return;
         gameSense.Choose(clean);
-        services.GamePacks?.LimitToGame(gameSense.PackLimit);
+        ApplyPackLimit();
         PlayedGame = clean;
+    }
+
+    /// <summary>Günlüğe son yazılan paket sınırı (<see cref="GameName.Key"/>).</summary>
+    private string? loggedPackLimit;
+
+    /// <summary>
+    /// Paket aramasını seçilen oyuna sınırlar; sınır değişince hangi paketlerde aranacağı günlüğe bir kez yazılır
+    /// (#1355: içe aktarılan paket okunmuyor mu?). Mac/iPhone GameChoice ve Android ile aynı satır.
+    /// </summary>
+    private void ApplyPackLimit()
+    {
+        var limit = gameSense.PackLimit;
+        services.GamePacks?.LimitToGame(limit);
+        var key = limit is null ? null : GameName.Key(limit);
+        if (key == loggedPackLimit) return;
+        loggedPackLimit = key;
+        if (services.GamePacks?.LimitLog(limit) is { } line) SubtitleLog.Write(line);
     }
 
     /// <summary>Paketten tanınan oyunun kayıtlı alanları var; kullanıcıya sorulur. Kartta gösterilen oyun adı.</summary>
@@ -3413,8 +3430,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// <summary>Oyun değiştiyse havuza bildirilir; yeni oyunun (havuzdan otomatik) paketi sunucuda yeni çıkmış olabilir.</summary>
     private void PublishGame()
     {
-        // Elle seçilen oyunda satırlar yalnız o oyunun paketinde aranır, paketi yoksa hiç aranmaz (#218).
-        services.GamePacks?.LimitToGame(gameSense.PackLimit);
+        // Elle seçilen oyunda satırlar yalnız o oyunun ve içe aktarılan paketlerde aranır, ikisi de yoksa hiç (#218, #1355).
+        ApplyPackLimit();
         var current = gameSense.Current;
         PlayedGame = current?.Name;
         XboxNeedsGame = IsXbox && session is not null && !demoMode && current is null;

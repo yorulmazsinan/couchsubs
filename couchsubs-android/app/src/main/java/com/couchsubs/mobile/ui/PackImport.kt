@@ -8,6 +8,7 @@ package com.couchsubs.mobile.ui
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -46,10 +47,13 @@ import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.core.GamePackImportPreview
 import com.couchsubs.mobile.core.GamePackImporter
+import com.couchsubs.mobile.core.GamePackSkipReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+
+private const val LOG_TAG = "CouchSubsPacks"
 
 /** Seçilen dosya ve önizlemesi. */
 private class ImportSelection(val fileName: String, val preview: GamePackImportPreview)
@@ -149,7 +153,10 @@ private fun readSelection(context: Context, uri: Uri): ImportSelection {
         }
         buffer.toByteArray()
     } ?: throw IOException("cannot open $uri")
-    return ImportSelection(name, GamePackImporter.parse(data, name))
+    val preview = GamePackImporter.parse(data, name)
+    // Kaç satırın kabul edildiği, kaçının neden atlandığı günlükte de (Günlükleri paylaş; #1355).
+    Log.i(LOG_TAG, preview.logLine(name))
+    return ImportSelection(name, preview)
 }
 
 /** Önizleme: oyunun adı (JSON'dan ya da dosya adından), sayılar; onaylanınca kurulur, aynı kimlik varsa sorulur. */
@@ -175,6 +182,7 @@ private fun ImportPreviewDialog(selection: ImportSelection, onDone: () -> Unit) 
             try {
                 withContext(Dispatchers.IO) {
                     GamePackImporter.install(preview, title, Services.importedPacksDirectory, replacing)
+                    Log.i(LOG_TAG, preview.installLog(title))
                     Services.localPacksChanged()
                 }
                 installed = true
@@ -212,7 +220,7 @@ private fun ImportPreviewDialog(selection: ImportSelection, onDone: () -> Unit) 
                     Text(title, style = Tokens.Type.h3, color = Tokens.Color.text, textAlign = TextAlign.Center)
                     Row(horizontalArrangement = Arrangement.spacedBy(Tokens.Space.inline)) {
                         StatusChip(stringResource(R.string.perde_installed), ChipTone.OK, icon = Icons.Filled.Check)
-                        StatusChip(linesText(context, preview.entries.size), ChipTone.AMBER, dot = false)
+                        StatusChip(linesText(context, preview.acceptedCount), ChipTone.AMBER, dot = false)
                     }
                 }
             },
@@ -227,10 +235,17 @@ private fun ImportPreviewDialog(selection: ImportSelection, onDone: () -> Unit) 
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Tokens.Space.inline)) {
                 Field(title, { title = it }, stringResource(R.string.packs_import_game_title))
-                CountRow(stringResource(R.string.packs_import_usable), preview.entries.size)
-                CountRow(stringResource(R.string.packs_import_invalid), preview.invalidCount)
+                // Kabul edilen ve nedenine göre atlanan kayıtlar (#1355; Mac, iPhone ve Windows ile aynı satırlar).
+                CountRow(stringResource(R.string.packs_import_usable), preview.acceptedCount)
+                if (preview.segments.isNotEmpty()) CountRow(stringResource(R.string.packs_import_segments), preview.segments.size)
+                CountRow(stringResource(R.string.packs_import_skipped), preview.skippedCount)
+                preview.skipped[GamePackSkipReason.INVALID_KEY]?.let { CountRow(stringResource(R.string.packs_import_skipped_key), it) }
+                preview.skipped[GamePackSkipReason.EMPTY_TRANSLATION]?.let { CountRow(stringResource(R.string.packs_import_skipped_empty), it) }
+                preview.skipped[GamePackSkipReason.MALFORMED_RECORD]?.let { CountRow(stringResource(R.string.packs_import_skipped_malformed), it) }
                 CountRow(stringResource(R.string.packs_import_duplicate), preview.duplicateCount)
                 CountRow(stringResource(R.string.packs_import_conflict), preview.conflictCount)
+                if (preview.fuzzy != null) Text(stringResource(R.string.packs_import_fuzzy), style = Tokens.Type.caption, color = Tokens.Color.secondary)
+                if (preview.fuzzyDropped) Text(stringResource(R.string.packs_import_fuzzy_dropped), style = Tokens.Type.caption, color = Tokens.Color.warning)
                 if (preview.entries.isEmpty()) Text(stringResource(R.string.packs_import_empty), style = Tokens.Type.body, color = Tokens.Color.warning)
                 installError?.let { Text(it, style = Tokens.Type.body, color = Tokens.Color.danger) }
                 if (installing) Box(Modifier.align(Alignment.CenterHorizontally)) { BarsLoader() }

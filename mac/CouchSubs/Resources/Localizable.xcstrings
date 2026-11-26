@@ -15310,6 +15310,118 @@
         }
       }
     },
+    "Sentence segments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sentence segments"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cümle parçaları"
+          }
+        }
+      }
+    },
+    "Skipped records": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped records"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atlanan kayıtlar"
+          }
+        }
+      }
+    },
+    "Skipped: no usable English line or key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped: no usable English line or key"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atlandı: İngilizcesi ya da anahtarı geçersiz"
+          }
+        }
+      }
+    },
+    "Skipped: empty Turkish translation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped: empty Turkish translation"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atlandı: Türkçesi boş"
+          }
+        }
+      }
+    },
+    "Skipped: malformed record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped: malformed record"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atlandı: biçimi bozuk kayıt"
+          }
+        }
+      }
+    },
+    "Includes OCR-tolerant matching data.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Includes OCR-tolerant matching data."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OCR hatalarına dayanıklı arama verisi de kuruluyor."
+          }
+        }
+      }
+    },
+    "The OCR-tolerant matching data cannot be used because some lines were skipped; exact lines still work.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The OCR-tolerant matching data cannot be used because some lines were skipped; exact lines still work."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bazı satırlar atlandığı için OCR hatalarına dayanıklı arama verisi kurulamıyor; birebir aynı satırlar yine bulunur."
+          }
+        }
+      }
+    },
     "Conflicting entries": {
       "localizations": {
         "en": {

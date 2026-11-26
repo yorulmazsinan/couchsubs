@@ -357,9 +357,11 @@ class GamePackLibrary(
     }
 
     /**
-     * Kullanıcının elle seçtiği oyun ([GameSense.packLimit]). Verilirse satırlar yalnız o oyunun paketinde aranır (tam ve
-     * bulanık), paketi yoksa ya da kapalıysa hiç aranmaz: paketi olmayan oyunda "Let's go." gibi kısa, genel satırlar
-     * başka oyunların paketinden yanlış çeviri getiriyor, oyunu da o pakete kaydırıyordu (#218). null: bütün paketler.
+     * Kullanıcının elle seçtiği oyun ([GameSense.packLimit]). Verilirse satırlar yalnız o oyunun paketinde ve
+     * kullanıcının içe aktardığı topluluk paketlerinde aranır (tam ve bulanık), ikisi de yoksa ya da kapalıysa hiç
+     * aranmaz: paketi olmayan oyunda "Let's go." gibi kısa, genel satırlar başka oyunların paketinden yanlış çeviri
+     * getiriyor, oyunu da o pakete kaydırıyordu (#218). İçe aktarılan paketin adı seçilen oyunun adıyla aynı olmak
+     * zorunda değil: adı farklı yazılınca oyun seçiliyken hiç okunmuyordu (#1355). null: bütün paketler.
      */
     fun limitToGame(name: String?) {
         val key = name?.let { GameName.key(it) }?.takeIf { it.isNotEmpty() }
@@ -371,21 +373,38 @@ class GamePackLibrary(
         }
     }
 
-    /** Aramanın yapılacağı paketler: elle seçilen oyun varsa yalnız onun paketi (yoksa hiçbiri), sınırı yoksa hepsi. */
+    /**
+     * Aramanın yapılacağı paketler: elle seçilen oyun varsa onun paketi ve içe aktarılan topluluk paketleri (yoksa
+     * hiçbiri), sınırı yoksa hepsi.
+     */
     private fun searched(current: List<Pair<GamePack, Boolean>>, key: String?): Set<Int>? {
         if (key == null) return null
         val off = disabled
         synchronized(lock) {
             limitCache?.let { (list, of, result) -> if (list === current && of == key to off) return result }
         }
-        val index = current.indices.lastOrNull { index ->
-            val pack = current[index].first
-            pack.id != GameSense.GENERAL_PACK && pack.id !in off &&
-                (GameName.key(pack.title) == key || GameName.key(pack.id) == key)
-        }
-        val result = setOfNotNull(index)
+        val result = limitIndices(current.map { it.first.id to it.first.title }, key, off)
         synchronized(lock) { limitCache = Triple(current, key to off, result) }
         return result
+    }
+
+    /**
+     * Oyun seçimi değişince günlüğe yazılacak satır (Mac ve Windows ile aynı metin): seçilen oyunda hangi paketlerde
+     * aranacağı. Seçim yoksa null.
+     */
+    fun limitLog(game: String?): String? {
+        val name = game ?: return null
+        val key = GameName.key(name).takeIf { it.isNotEmpty() } ?: return null
+        val current = synchronized(lock) {
+            loadIfNeeded()
+            packs
+        }
+        val titles = limitIndices(current.map { it.first.id to it.first.title }, key, disabled).sorted().map { index ->
+            val pack = current[index].first
+            if (pack.id.startsWith(COMMUNITY_PREFIX)) "${pack.title} (içe aktarılan)" else pack.title
+        }
+        if (titles.isEmpty()) return "Paket araması seçilen oyunla sınırlı ($name): bu oyunun paketi yok, satırlar çeviri motoruna gidiyor"
+        return "Paket araması seçilen oyunla sınırlı ($name): " + titles.joinToString(", ")
     }
 
     /** Satırın tamamı için paketteki Türkçe ve paketin kimliği (parçalara bölme yok; bkz. [PackLookup]). */
@@ -414,11 +433,15 @@ class GamePackLibrary(
         }
         // Elle seçilen oyunda bulanık arama da hep onun paketinde (tam eşleşme beklenmez); paketi yoksa yapılmaz.
         val only = searched(current, limit)
-        val index = if (only != null) only.firstOrNull() else chosen
-        val pack = index?.let { current.getOrNull(it)?.first }?.takeIf { it.id !in disabled } ?: return null
-        corrected(text, pack, current, only)?.let { return it }
-        val key = pack.fuzzy?.nearest(text) { lookup(current, it, only)?.text } ?: return null
-        return lookup(current, key, only)
+        // Elle seçilen oyunda bütün paketlerine (sonraki önce) bakılır; seçim yoksa son tam eşleşmenin paketine.
+        val indices = only?.sortedDescending() ?: listOfNotNull(chosen)
+        for (index in indices) {
+            val pack = current.getOrNull(index)?.first?.takeIf { it.id !in disabled } ?: continue
+            corrected(text, pack, current, only)?.let { return it }
+            val key = pack.fuzzy?.nearest(text) { lookup(current, it, only)?.text } ?: continue
+            lookup(current, key, only)?.let { return it }
+        }
+        return null
     }
 
     /** Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa null. */
@@ -540,6 +563,24 @@ class GamePackLibrary(
     }
 
     companion object {
+        /** İçe aktarılan topluluk paketlerinin kimlik öneki ([GamePackImporter.makeId]). */
+        const val COMMUNITY_PREFIX = "community-"
+
+        /**
+         * Elle seçilen oyunda aranacak paketler ([packs] sırası; kimlik, başlık): adı ya da kimliği ([GameName.key])
+         * seçilen oyunla aynı olan son paket ve içe aktarılan bütün topluluk paketleri; kapalılar hariç. Mac ve Windows
+         * aynı kural.
+         */
+        internal fun limitIndices(packs: List<Pair<String, String>>, key: String, off: Set<String>): Set<Int> {
+            val named = packs.indices.lastOrNull { index ->
+                val (id, title) = packs[index]
+                id != GameSense.GENERAL_PACK && id !in off && (GameName.key(title) == key || GameName.key(id) == key)
+            }
+            return packs.indices.filter { index ->
+                packs[index].first !in off && (index == named || packs[index].first.startsWith(COMMUNITY_PREFIX))
+            }.toSet()
+        }
+
         fun isPackFile(name: String) = name.endsWith(".json.gz") || name.endsWith(".json")
 
         /** "mafia.json.gz" → "mafia" */

@@ -167,7 +167,13 @@
     <string name="packs_import_heading">Import game pack</string>
     <string name="packs_import_game_title">Game title</string>
     <string name="packs_import_usable">Usable entries</string>
-    <string name="packs_import_invalid">Invalid records</string>
+    <string name="packs_import_segments">Sentence segments</string>
+    <string name="packs_import_skipped">Skipped records</string>
+    <string name="packs_import_skipped_key">Skipped: no usable English line or key</string>
+    <string name="packs_import_skipped_empty">Skipped: empty Turkish translation</string>
+    <string name="packs_import_skipped_malformed">Skipped: malformed record</string>
+    <string name="packs_import_fuzzy">Includes OCR-tolerant matching data.</string>
+    <string name="packs_import_fuzzy_dropped">The OCR-tolerant matching data cannot be used because some lines were skipped; exact lines still work.</string>
     <string name="packs_import_duplicate">Duplicate pairs</string>
     <string name="packs_import_conflict">Conflicting entries</string>
     <string name="packs_import_install">Install pack</string>

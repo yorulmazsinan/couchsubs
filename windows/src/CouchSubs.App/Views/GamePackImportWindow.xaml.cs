@@ -21,10 +21,29 @@ public partial class GamePackImportWindow : Window
 
         GameTitle.Text = preview.SuggestedTitle ?? Path.GetFileNameWithoutExtension(sourcePath);
         var culture = CultureInfo.CurrentCulture;
-        UsableEntries.Text = preview.Entries.Count.ToString("N0", culture);
-        InvalidRecords.Text = preview.InvalidCount.ToString("N0", culture);
+        UsableEntries.Text = preview.AcceptedCount.ToString("N0", culture);
+        SkippedRecords.Text = preview.SkippedCount.ToString("N0", culture);
         DuplicatePairs.Text = preview.DuplicateCount.ToString("N0", culture);
         ConflictingEntries.Text = preview.ConflictCount.ToString("N0", culture);
+        // Sıfır olmayan nedenler ve parçalar ayrı satırda (#1355: neyin neden atlandığı görünsün).
+        void Row(TextBlock label, TextBlock value, int count)
+        {
+            if (count <= 0) return;
+            value.Text = count.ToString("N0", culture);
+            label.Visibility = value.Visibility = Visibility.Visible;
+        }
+        Row(SegmentsLabel, SentenceSegments, preview.Segments.Count);
+        Row(InvalidKeyLabel, InvalidKeys, preview.Skipped.GetValueOrDefault(GamePackSkipReason.InvalidKey));
+        Row(EmptyTranslationLabel, EmptyTranslations, preview.Skipped.GetValueOrDefault(GamePackSkipReason.EmptyTranslation));
+        Row(MalformedLabel, MalformedRecords, preview.Skipped.GetValueOrDefault(GamePackSkipReason.MalformedRecord));
+        var note = preview.Fuzzy is not null ? "Includes OCR-tolerant matching data."
+            : preview.FuzzyDropped ? "The OCR-tolerant matching data cannot be used because some lines were skipped; exact lines still work."
+            : null;
+        if (note is not null)
+        {
+            FuzzyNote.Text = Localizer.Current[note];
+            FuzzyNote.Visibility = Visibility.Visible;
+        }
         if (preview.Entries.Count == 0)
             ShowError("The file contains no usable translations.");
     }
@@ -63,6 +82,7 @@ public partial class GamePackImportWindow : Window
             }
 
             GamePackImporter.Install(preview, title, directory, replacing, sourcePath: sourcePath);
+            SubtitleLog.Write(preview.InstallLog(title));
             DialogResult = true;
         }
         catch (InvalidOperationException)

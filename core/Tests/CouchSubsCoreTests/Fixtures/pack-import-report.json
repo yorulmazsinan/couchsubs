@@ -1,0 +1,44 @@
+{
+ "about": "GamePackImporter: kabul edilen ve nedenine göre atlanan kayıtlar, günlük satırı (#1355). Mac/iPhone, Windows ve Android aynı sonucu verir. Satırlar uydurmadır.",
+ "cases": [
+  {
+   "file": "harbor.srt",
+   "text": "1\n00:00:01,000 --> 00:00:02,500\nThe tide turns at dawn.\nGelgit şafakta döner.\n\n2\n00:00:03,000 --> 00:00:04,000\n<i>Raise the black sails!</i>\n<i>Kara yelkenleri açın!</i>\n\n3\n00:00:05,000 --> 00:00:06,000\nThe tide turns at dawn!\nGelgit şafakta döner.\n\n4\n00:00:07,000 --> 00:00:08,000\nTwo English\nlines here\nTürkçe\n\n5\n00:00:09,000 --> 00:00:10,000\n...\nBoş İngilizce\n\n6\n00:00:11,000 --> 00:00:12,000\nWho holds the map?\nHaritayı kim tutuyor?\n\n7\n00:00:13,000 --> 00:00:14,000\nwho holds the map\nHarita kimde?\n",
+   "accepted": 2,
+   "segments": 0,
+   "skipped": {"invalidKey": 1, "malformedRecord": 1, "duplicate": 1, "conflict": 1},
+   "lookups": {"The tide turns at dawn.": "Gelgit şafakta döner.", "Raise the black sails!": "Kara yelkenleri açın!", "Who holds the map?": null},
+   "log": "Paket içe aktarma (harbor.srt): 2 satır kabul edildi, 4 kayıt atlandı (1 İngilizcesi ya da anahtarı geçersiz, 1 biçimi bozuk, 1 tekrar, 1 çakışan)"
+  },
+  {
+   "file": "harbor.txt",
+   "text": "﻿# yorum\r\nThe tide turns at dawn. = Gelgit şafakta döner.\r\nRaise the black sails!\tKara yelkenleri açın!\r\nNo separator here\r\nEmpty Turkish = \r\n",
+   "accepted": 2,
+   "segments": 0,
+   "skipped": {"emptyTranslation": 1, "malformedRecord": 1},
+   "lookups": {"The tide turns at dawn.": "Gelgit şafakta döner."},
+   "log": "Paket içe aktarma (harbor.txt): 2 satır kabul edildi, 2 kayıt atlandı (1 Türkçesi boş, 1 biçimi bozuk)"
+  },
+  {
+   "file": "harbor-pack.json",
+   "text": "{\"format\":2,\"id\":\"harbor\",\"title\":\"Harbor Tales\",\"entries\":{\"e320e9667fb416f1\":\"Gelgit şafakta döner. Kara yelkenleri açın!\",\"18d2c7a544e58bc8\":\"Haritayı kim tutuyor?\",\"not-a-key\":\"Bozuk\",\"f362c1f8a3b41953\":\"  \"},\"segments\":{\"0d646b890c3d60b2\":\"Gelgit şafakta döner.\",\"b5bceb3393776c5a\":\"Kara yelkenleri açın!\"},\"fuzzy\":{\"version\":1,\"count\":6,\"mask\":\"AA==\",\"lengths\":\"\",\"blooms\":\"\"}}",
+   "title": "Harbor Tales",
+   "accepted": 4,
+   "segments": 2,
+   "skipped": {"invalidKey": 1, "emptyTranslation": 1},
+   "fuzzyDropped": true,
+   "lookups": {"The tide turns at dawn. Raise the black sails!": "Gelgit şafakta döner. Kara yelkenleri açın!", "Raise the black sails!": "Kara yelkenleri açın!"},
+   "log": "Paket içe aktarma (harbor-pack.json): 4 satır kabul edildi (2 tam satır, 2 parça), 2 kayıt atlandı (1 İngilizcesi ya da anahtarı geçersiz, 1 Türkçesi boş); OCR'a dayanıklı arama verisi atlanan satırlar yüzünden kurulmadı"
+  }
+ ],
+ "community": {
+  "about": "pack-fuzzy.json.gz (biçim 2, OCR verili) içe aktarılır, oyunun adından farklı bir başlıkla kurulur; seçilen oyunun paketi yokken satırlar bu paketten (OCR hatalı olanlar da) bulunur.",
+  "title": "Harbor Tales Fuzzy",
+  "chosenGame": "Harbor Tales: Resynced",
+  "otherPackTitle": "Elsewhere Story",
+  "otherLine": "The lantern is out.",
+  "log": "Paket araması seçilen oyunla sınırlı (Harbor Tales: Resynced): Harbor Tales Fuzzy (içe aktarılan)",
+  "installLog": "Paket kuruldu: Harbor Tales Fuzzy (community-harbor-tales-fuzzy), 30 satır",
+  "missingLog": "Paket araması seçilen oyunla sınırlı (Harbor Tales: Resynced): bu oyunun paketi yok, satırlar çeviri motoruna gidiyor"
+ }
+}

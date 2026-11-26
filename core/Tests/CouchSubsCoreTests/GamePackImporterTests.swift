@@ -96,7 +96,7 @@ final class GamePackImporterTests: XCTestCase {
         XCTAssertThrowsError(try GamePackImporter.parse(Data([0xff]), fileName: "file.txt"))
         XCTAssertThrowsError(try parse("[1, 2]", "file.json"))
         XCTAssertThrowsError(try parse(#"{"oops",1}"#, "file.json"))
-        XCTAssertThrowsError(try parse(#"{"format":2,"entries":{"0123456789ABCDEF":"Türkçe"}}"#, "file.json"))
+        XCTAssertThrowsError(try parse(#"{"format":3,"entries":{"0123456789ABCDEF":"Türkçe"}}"#, "file.json"))
         XCTAssertThrowsError(try parse(#"{"format":true,"entries":{"0123456789ABCDEF":"Türkçe"}}"#, "file.json"))
     }
 
@@ -160,6 +160,145 @@ final class GamePackImporterTests: XCTestCase {
                                                                replacing: true, sourceURL: sourceURL))
             XCTAssertEqual(try Data(contentsOf: source), original)
         }
+    }
+
+    // MARK: - #1355: kabul/atlama raporu, biçim 2 paketler ve seçilen oyunda içe aktarılan paket
+
+    private struct Report: Decodable {
+        struct Case: Decodable {
+            let file: String
+            let text: String
+            let title: String?
+            let accepted: Int
+            let segments: Int
+            let skipped: [String: Int]
+            let fuzzyDropped: Bool?
+            let lookups: [String: String?]
+            let log: String
+        }
+        struct Community: Decodable {
+            let title: String
+            let chosenGame: String
+            let otherPackTitle: String
+            let otherLine: String
+            let log: String
+            let installLog: String
+            let missingLog: String
+        }
+        let cases: [Case]
+        let community: Community
+
+        static func load() throws -> Report {
+            let url = Bundle.module.url(forResource: "Fixtures", withExtension: nil)!.appendingPathComponent("pack-import-report.json")
+            return try JSONDecoder().decode(Report.self, from: Data(contentsOf: url))
+        }
+    }
+
+    private func temporaryDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("pack-import-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return directory
+    }
+
+    /// Ortak deneme dosyası (Fixtures/pack-import-report.json): her dosya türünde kabul edilen satırlar, nedenine göre
+    /// atlananlar ve günlük satırı Windows ve Android ile aynı; kurulan paketten satırlar ekrandaki gibi bulunur.
+    func testSharedImportReportCases() throws {
+        for item in try Report.load().cases {
+            let preview = try parse(item.text, item.file)
+            XCTAssertEqual(preview.acceptedCount, item.accepted, item.file)
+            XCTAssertEqual(preview.segments.count, item.segments, item.file)
+            XCTAssertEqual(Dictionary(uniqueKeysWithValues: preview.skipped.map { ($0.key.rawValue, $0.value) }), item.skipped, item.file)
+            XCTAssertEqual(preview.fuzzyDropped, item.fuzzyDropped ?? false, item.file)
+            XCTAssertEqual(preview.suggestedTitle, item.title, item.file)
+            XCTAssertEqual(preview.logLine(fileName: item.file), item.log)
+
+            let directory = temporaryDirectory()
+            try GamePackImporter.install(preview, title: "Harbor", directory: directory, replacing: false)
+            let library = GamePackLibrary(bundled: nil, user: nil, imported: directory)
+            for (screen, turkish) in item.lookups {
+                XCTAssertEqual(library.match(screen)?.text, turkish, "\(item.file): \(screen)")
+            }
+        }
+    }
+
+    /// Paket betiğiyle yapılan biçim 2 paket (parçalar ve OCR verisiyle) içe aktarılabilir; oyunun adından farklı bir
+    /// başlıkla kurulsa da oyun elle seçiliyken satırlar (OCR hatalı olanlar da) bu paketten bulunur. Başka oyunun
+    /// paketi seçilen oyunda yine aranmaz (#218). Önceden biçim 2 reddediliyor, oyun seçiliyken içe aktarılan paket hiç
+    /// okunmuyordu (#1355).
+    @MainActor
+    func testFormatTwoCommunityPackServesTheChosenGameDespiteADifferentTitle() throws {
+        let report = try Report.load()
+        let data = try Gzip.decompress(Data(contentsOf: Bundle.module.url(forResource: "Fixtures", withExtension: nil)!
+            .appendingPathComponent("pack-fuzzy.json.gz")))
+        let preview = try GamePackImporter.parse(data, fileName: "harbor-fuzzy.json")
+        XCTAssertNotNil(preview.fuzzy)
+        XCTAssertFalse(preview.fuzzyDropped)
+        XCTAssertEqual(preview.skippedCount, 0)
+        XCTAssertGreaterThan(preview.acceptedCount, 10)
+
+        let bundled = temporaryDirectory()
+        let other = "{\"format\":1,\"id\":\"elsewhere\",\"title\":\"\(report.community.otherPackTitle)\",\"entries\":{\"\(PackKey.key(report.community.otherLine)!)\":\"Fener söndü.\"}}"
+        try Data(other.utf8).write(to: bundled.appendingPathComponent("elsewhere.json"))
+        let imported = temporaryDirectory()
+        let library = GamePackLibrary(bundled: bundled, user: nil, imported: imported)
+        XCTAssertEqual(library.limitLog(forGame: report.community.chosenGame), report.community.missingLog)
+
+        try GamePackImporter.install(preview, title: report.community.title, directory: imported, replacing: false)
+        XCTAssertEqual(preview.installLog(title: " \(report.community.title) "), report.community.installLog)
+        library.reload()
+        var log: [String] = []
+        let choice = GameChoice(defaults: TestDefaults.make("pack-import"))
+        choice.onLog = { log.append($0) }
+        choice.packs = library
+        choice.start(console: nil) { false }
+        choice.choose(report.community.chosenGame)
+        XCTAssertEqual(log, [report.community.log])
+        XCTAssertNil(library.match(report.community.otherLine))
+
+        struct Cases: Decodable {
+            struct Case: Decodable { let screen: String; let turkish: String? }
+            let warmUp: String
+            let cases: [Case]
+        }
+        let fuzzy = try JSONDecoder().decode(Cases.self, from: Data(contentsOf: Bundle.module.url(forResource: "Fixtures", withExtension: nil)!
+            .appendingPathComponent("pack-fuzzy-cases.json")))
+        XCTAssertNotNil(library.match(fuzzy.warmUp))
+        for item in fuzzy.cases {
+            XCTAssertEqual(library.match(item.screen)?.text, item.turkish, item.screen)
+        }
+        choice.stop()
+    }
+
+    /// Kullanıcının gerçek dosyalarıyla (#1355) elle deneme: `COUCHSUBS_ISSUE_PACK_DIR` içinde paket JSON'u ve iki
+    /// dilli SRT varsa içe aktarılır, oyun seçiliyken SRT'deki İngilizce satırlar ekrandaki gibi aranır. Dosyalar depoya
+    /// girmez; değişken yoksa atlanır.
+    @MainActor
+    func testIssuePackFilesFromEnvironment() throws {
+        guard let path = ProcessInfo.processInfo.environment["COUCHSUBS_ISSUE_PACK_DIR"] else {
+            throw XCTSkip("COUCHSUBS_ISSUE_PACK_DIR yok")
+        }
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        let json = try XCTUnwrap(files.first { $0.pathExtension == "json" })
+        let srt = try XCTUnwrap(files.first { $0.pathExtension == "srt" })
+        let pack = try GamePackImporter.parse(GamePackImporter.read(fileAt: json), fileName: json.lastPathComponent)
+        let pairs = try GamePackImporter.parse(GamePackImporter.read(fileAt: srt), fileName: srt.lastPathComponent)
+        print(pack.logLine(fileName: json.lastPathComponent))
+        print(pairs.logLine(fileName: srt.lastPathComponent))
+        XCTAssertNotNil(pack.fuzzy)
+
+        let imported = temporaryDirectory()
+        try GamePackImporter.install(pack, title: pack.suggestedTitle ?? "Pack", directory: imported, replacing: false)
+        let library = GamePackLibrary(bundled: GamePackLibrary.bundledDirectory, user: nil, imported: imported)
+        library.limit(toGame: "Assassin's Creed IV Black Flag Resynced")
+        print(library.limitLog(forGame: "Assassin's Creed IV Black Flag Resynced") ?? "")
+        let source = try String(contentsOf: srt, encoding: .utf8)
+        let cues = source.components(separatedBy: "\n\n").map { $0.components(separatedBy: "\n") }.filter { $0.count >= 4 }
+        var found = 0
+        for cue in cues.prefix(400) where library.match(cue[2]) != nil { found += 1 }
+        print("SRT İngilizcesi bulunan: \(found)/\(min(cues.count, 400))")
+        XCTAssertGreaterThan(found, 300)
     }
 
     private func parse(_ source: String, _ name: String) throws -> GamePackImportPreview {

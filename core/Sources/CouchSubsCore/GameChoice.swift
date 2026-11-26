@@ -40,6 +40,8 @@ public final class GameChoice: ObservableObject {
     private var console: String?
     private var xbox = false
     private var timer: Task<Void, Never>?
+    /// Günlüğe son yazılan paket sınırı (`GameName.key`).
+    private var loggedLimit: String?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -133,7 +135,13 @@ public final class GameChoice: ObservableObject {
     }
 
     private func publish() {
-        packs?.limit(toGame: sense.packLimit)
+        let limit = sense.packLimit
+        packs?.limit(toGame: limit)
+        // Seçilen oyunda hangi paketlerde aranacağı günlüğe bir kez yazılır (#1355: içe aktarılan paket okunmuyor mu?).
+        if limit.map(GameName.key) != loggedLimit {
+            loggedLimit = limit.map(GameName.key)
+            if let line = packs?.limitLog(forGame: limit) { onLog(line) }
+        }
         let current = sense.current
         source = sense.source
         let needs = xbox && current == nil

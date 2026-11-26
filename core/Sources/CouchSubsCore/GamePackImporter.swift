@@ -8,12 +8,82 @@ import Darwin
 import Glibc
 #endif
 
+/// İçe aktarılan dosyada atlanan kaydın nedeni (Windows, Android ve günlükte aynı adlar).
+public enum GamePackSkipReason: String, CaseIterable, Sendable {
+    /// İngilizce satırda harf ya da rakam yok, ya da hazır paketteki anahtar 16 haneli onaltılık sayı değil.
+    case invalidKey
+    /// Türkçesi boş ya da metin değil.
+    case emptyTranslation
+    /// SRT kaydı dört satır değil (numara, zaman, İngilizce, Türkçe), numara ya da zaman bozuk; TXT satırında ayraç yok.
+    case malformedRecord
+    /// Aynı İngilizce satır aynı Türkçeyle bir kez daha (kayıp değil, bir kez kurulur).
+    case duplicate
+    /// Aynı İngilizce satır farklı Türkçelerle: hangisinin doğru olduğu bilinmediğinden hiçbiri kurulmaz.
+    case conflict
+
+    /// Günlükteki adı.
+    public var logName: String {
+        switch self {
+        case .invalidKey: "İngilizcesi ya da anahtarı geçersiz"
+        case .emptyTranslation: "Türkçesi boş"
+        case .malformedRecord: "biçimi bozuk"
+        case .duplicate: "tekrar"
+        case .conflict: "çakışan"
+        }
+    }
+}
+
 public struct GamePackImportPreview: Sendable {
     public let suggestedTitle: String?
     public let entries: [String: String]
     public let invalidCount: Int
     public let duplicateCount: Int
     public let conflictCount: Int
+    /// Hazır paketin (biçim 2) cümle parçaları: çok cümleli satırların cümleleri (`GamePack.segments`).
+    public let segments: [String: String]
+    /// Atlanan kayıtlar, nedenine göre (sıfır olanlar yok).
+    public let skipped: [GamePackSkipReason: Int]
+    /// Hazır paketin OCR hatalarına dayanıklı arama verisi (`fuzzy` JSON nesnesi), pakete olduğu gibi yazılır.
+    public let fuzzy: Data?
+    /// Dosyada OCR'a dayanıklı arama verisi vardı ama kurulmayacak: bazı satırlar atlandığı için artık tutmuyor.
+    public let fuzzyDropped: Bool
+
+    init(suggestedTitle: String?, entries: [String: String], segments: [String: String] = [:],
+         skipped: [GamePackSkipReason: Int], fuzzy: Data? = nil, fuzzyDropped: Bool = false) {
+        self.suggestedTitle = suggestedTitle
+        self.entries = entries
+        self.segments = segments
+        self.skipped = skipped.filter { $0.value > 0 }
+        self.fuzzy = fuzzy
+        self.fuzzyDropped = fuzzyDropped
+        invalidCount = [GamePackSkipReason.invalidKey, .emptyTranslation, .malformedRecord].reduce(0) { $0 + (skipped[$1] ?? 0) }
+        duplicateCount = skipped[.duplicate] ?? 0
+        conflictCount = skipped[.conflict] ?? 0
+    }
+
+    /// Kurulacak satırlar (tam satırlar ve parçalar).
+    public var acceptedCount: Int { entries.count + segments.count }
+
+    /// Atlanan kayıtların toplamı.
+    public var skippedCount: Int { skipped.values.reduce(0, +) }
+
+    /// Günlük satırı (Windows ve Android ile aynı metin): kaç satır kabul edildi, kaçı neden atlandı.
+    public func logLine(fileName: String) -> String {
+        var line = "Paket içe aktarma (\(fileName)): \(acceptedCount) satır kabul edildi"
+        if !segments.isEmpty { line += " (\(entries.count) tam satır, \(segments.count) parça)" }
+        line += ", \(skippedCount) kayıt atlandı"
+        let reasons = GamePackSkipReason.allCases.compactMap { reason in skipped[reason].map { "\($0) \(reason.logName)" } }
+        if !reasons.isEmpty { line += " (" + reasons.joined(separator: ", ") + ")" }
+        if fuzzy != nil { line += "; OCR'a dayanıklı arama verisi var" }
+        if fuzzyDropped { line += "; OCR'a dayanıklı arama verisi atlanan satırlar yüzünden kurulmadı" }
+        return line
+    }
+
+    /// Paket kurulunca günlüğe yazılan satır (Windows ve Android ile aynı metin).
+    public func installLog(title: String) -> String {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "Paket kuruldu: \(title) (\(GamePackImporter.makeID(title: title))), \(acceptedCount) satır"
+    }
 }
 
 public enum GamePackImporter {
@@ -47,10 +117,23 @@ public enum GamePackImporter {
         guard let source = String(data: bytes, encoding: .utf8) else { throw ImportError.invalidUTF8 }
 
         var pairs = Pairs()
-        var title: String?
         switch URL(fileURLWithPath: fileName).pathExtension.lowercased() {
         case "json":
-            title = try parseJSON(bytes, into: &pairs)
+            var segments = Pairs()
+            var fuzzy: [String: Any]?
+            let title = try parseJSON(bytes, into: &pairs, segments: &segments, fuzzy: &fuzzy)
+            var skipped = pairs.skipped
+            skipped.merge(segments.skipped, uniquingKeysWith: +)
+            // OCR'a dayanıklı arama verisi paketteki bütün anahtarların sırasına bağlı: satır atlandıysa tutmaz.
+            var kept: Data?
+            if let fuzzy {
+                let order = Set(pairs.entries.keys).union(segments.entries.keys).compactMap(PackKey.number).sorted()
+                if PackFuzzyIndex(json: fuzzy, order: order) != nil {
+                    kept = try? JSONSerialization.data(withJSONObject: fuzzy)
+                }
+            }
+            return GamePackImportPreview(suggestedTitle: title, entries: pairs.entries, segments: segments.entries,
+                                         skipped: skipped, fuzzy: kept, fuzzyDropped: fuzzy != nil && kept == nil)
         case "txt":
             parseText(lines(source), into: &pairs)
         case "srt":
@@ -58,8 +141,7 @@ public enum GamePackImporter {
         default:
             throw ImportError.unsupportedFileType
         }
-        return GamePackImportPreview(suggestedTitle: title, entries: pairs.entries, invalidCount: pairs.invalidCount,
-                                     duplicateCount: pairs.duplicateCount, conflictCount: pairs.conflicts.count)
+        return GamePackImportPreview(suggestedTitle: nil, entries: pairs.entries, skipped: pairs.skipped)
     }
 
     public static func makeID(title: String) -> String {
@@ -91,11 +173,10 @@ public enum GamePackImporter {
         let destination = directory.appendingPathComponent(id + ".json")
         if let sourceURL, sameFile(sourceURL, destination) { throw ImportError.sourceIsDestination }
         let temporary = directory.appendingPathComponent(".\(UUID().uuidString).tmp")
-        let pack = InstalledPack(id: id, title: title, entries: preview.entries)
         let manager = FileManager.default
         try manager.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? manager.removeItem(at: temporary) }
-        try JSONEncoder().encode(pack).write(to: temporary, options: .withoutOverwriting)
+        try encoded(preview, id: id, title: title).write(to: temporary, options: .withoutOverwriting)
         // A link publishes the complete file and fails if the name already exists.
         // rename publishes the complete file while replacing the old name atomically.
         let failure = temporary.withUnsafeFileSystemRepresentation { source in
@@ -129,23 +210,39 @@ public enum GamePackImporter {
         let entries: [String: String]
     }
 
+    /// Kurulacak paket dosyası: parça ya da OCR verisi yoksa biçim 1, varsa ikisini de taşıyan biçim 2 (`GamePack.decode`).
+    private static func encoded(_ preview: GamePackImportPreview, id: String, title: String) throws -> Data {
+        guard !preview.segments.isEmpty || preview.fuzzy != nil else {
+            return try JSONEncoder().encode(InstalledPack(id: id, title: title, entries: preview.entries))
+        }
+        var object: [String: Any] = ["format": 2, "id": id, "title": title, "entries": preview.entries]
+        if !preview.segments.isEmpty { object["segments"] = preview.segments }
+        if let fuzzy = preview.fuzzy, let value = try? JSONSerialization.jsonObject(with: fuzzy) { object["fuzzy"] = value }
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
     private struct Pairs {
         var entries: [String: String] = [:]
-        var invalidCount = 0
-        var duplicateCount = 0
+        var counts: [GamePackSkipReason: Int] = [:]
         // Retain every distinct target for conflicted keys to count subsequent repeats.
         var conflicts: [String: Set<Data>] = [:]
 
+        var skipped: [GamePackSkipReason: Int] {
+            var result = counts
+            result[.conflict] = conflicts.count
+            return result
+        }
+
+        mutating func skip(_ reason: GamePackSkipReason) { counts[reason, default: 0] += 1 }
+
         mutating func add(key: String?, target: String?) {
-            guard let key, let target = GamePackImporter.nonblank(target) else {
-                invalidCount += 1
-                return
-            }
+            guard let key else { return skip(.invalidKey) }
+            guard let target = GamePackImporter.nonblank(target) else { return skip(.emptyTranslation) }
             if conflicts[key] != nil {
-                if !conflicts[key, default: []].insert(Data(target.utf8)).inserted { duplicateCount += 1 }
+                if !conflicts[key, default: []].insert(Data(target.utf8)).inserted { skip(.duplicate) }
             } else if let earlier = entries[key] {
                 if earlier.utf8.elementsEqual(target.utf8) {
-                    duplicateCount += 1
+                    skip(.duplicate)
                 } else {
                     conflicts[key] = [Data(earlier.utf8), Data(target.utf8)]
                     entries[key] = nil
@@ -161,13 +258,25 @@ public enum GamePackImporter {
         return trimmed
     }
 
-    private static func parseJSON(_ data: Data, into pairs: inout Pairs) throws -> String? {
+    /// Hazır paket (biçim 1 ya da uygulamanın kendi paketleri gibi parça ve OCR verisi taşıyan biçim 2), `subtitles`
+    /// zarfı ya da düz `{İngilizce: Türkçe}` nesnesi. Biçim 2 reddediliyordu: paket betiğiyle yapılan topluluk paketi
+    /// hiç kurulamıyordu (#1355).
+    private static func parseJSON(_ data: Data, into pairs: inout Pairs, segments: inout Pairs,
+                                  fuzzy: inout [String: Any]?) throws -> String? {
         let object = try OrderedJSONObject.decode(data)
         let format = object["format"] as? NSNumber
         if let format, CFGetTypeID(format) != CFBooleanGetTypeID() {
-            guard format == 1 else { throw ImportError.unsupportedPackFormat }
+            guard format == 1 || format == 2 else { throw ImportError.unsupportedPackFormat }
             guard let entries = OrderedJSONObject(object["entries"]) else { throw ImportError.invalidJSON }
             for (key, target) in entries.members { pairs.add(key: hashedKey(key), target: target as? String) }
+            if format == 2 {
+                if let parts = OrderedJSONObject(object["segments"]) {
+                    for (key, target) in parts.members { segments.add(key: hashedKey(key), target: target as? String) }
+                }
+                if let value = OrderedJSONObject(object["fuzzy"]) {
+                    fuzzy = Dictionary(value.members.map { ($0.name, $0.value) }, uniquingKeysWith: { _, later in later })
+                }
+            }
             return nonblank(object["title"] as? String) ?? nonblank(object["game"] as? String)
         }
         if OrderedJSONObject(object["entries"]) != nil { throw ImportError.unsupportedPackFormat }
@@ -270,7 +379,7 @@ public enum GamePackImporter {
             } else if tabFields.count == 1, let delimiter = line.range(of: " = ") {
                 pairs.add(key: PackKey.key(String(line[..<delimiter.lowerBound])), target: String(line[delimiter.upperBound...]))
             } else {
-                pairs.invalidCount += 1
+                pairs.skip(.malformedRecord)
             }
         }
     }
@@ -291,7 +400,7 @@ public enum GamePackImporter {
             guard !cue.isEmpty else { return }
             defer { cue.removeAll(keepingCapacity: true) }
             guard cue.count == 4, cue[0].utf8.allSatisfy({ (48...57).contains($0) }), validTiming(cue[1]) else {
-                pairs.invalidCount += 1
+                pairs.skip(.malformedRecord)
                 return
             }
             pairs.add(key: PackKey.key(cue[2]), target: cue[3])
@@ -300,5 +409,32 @@ public enum GamePackImporter {
             if let text = nonblank(line) { cue.append(text) } else { finishCue() }
         }
         finishCue()
+    }
+}
+
+/// İçe aktarma önizlemesinde gösterilen atlama satırları ve OCR notu (Mac ve iPhone; metinler Localizable.xcstrings
+/// anahtarları, Windows aynı anahtarları, Android strings.xml'deki karşılıklarını gösterir).
+public enum PackImportReport {
+    public struct Row: Equatable, Sendable {
+        public let label: String
+        public let count: Int
+    }
+
+    /// Satırı kurulmayan nedenler (sıfır olanlar yok); tekrar ve çakışma ayrı satırlarda gösterilir.
+    public static func reasons(_ preview: GamePackImportPreview) -> [Row] {
+        let labels: [(GamePackSkipReason, String)] = [
+            (.invalidKey, "Skipped: no usable English line or key"),
+            (.emptyTranslation, "Skipped: empty Turkish translation"),
+            (.malformedRecord, "Skipped: malformed record"),
+        ]
+        return labels.compactMap { reason, label in preview.skipped[reason].map { Row(label: label, count: $0) } }
+    }
+
+    /// OCR'a dayanıklı arama verisi kuruluyorsa ya da atlanan satırlar yüzünden kurulamıyorsa not; yoksa nil.
+    public static func fuzzyNote(_ preview: GamePackImportPreview) -> String? {
+        if preview.fuzzyDropped {
+            return "The OCR-tolerant matching data cannot be used because some lines were skipped; exact lines still work."
+        }
+        return preview.fuzzy == nil ? nil : "Includes OCR-tolerant matching data."
     }
 }

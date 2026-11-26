@@ -3,6 +3,7 @@ package com.couchsubs.mobile.service
 
 import com.couchsubs.mobile.core.GameAreas
 import com.couchsubs.mobile.core.GameCatalog
+import com.couchsubs.mobile.core.GameName
 import com.couchsubs.mobile.core.GamePackLibrary
 import com.couchsubs.mobile.core.GameSense
 import com.couchsubs.mobile.core.RunningGame
@@ -24,6 +25,8 @@ object PlayedGame {
     @Volatile private var settings: AppSettings? = null
     @Volatile private var startedAt = 0L
     @Volatile private var last: RunningGame? = null
+    /** Günlüğe son yazılan paket sınırı ([GameName.key]). */
+    @Volatile private var loggedLimit: String? = null
     /** Oyun değişti (servis havuza ve paket sunucusuna bağlar); oturum yokken null. */
     @Volatile var onChange: ((RunningGame?) -> Unit)? = null
     /**
@@ -54,7 +57,20 @@ object PlayedGame {
         set(value) {
             field = value
             value?.limitToGame(sense.packLimit)
+            // Yeni kitaplık (yeni oturum): sınır yeniden yazılır.
+            loggedLimit = null
+            logLimit()
         }
+
+    /** Seçilen oyunda hangi paketlerde aranacağı, değişince günlüğe bir kez (#1355: içe aktarılan paket okunuyor mu?). */
+    private fun logLimit() {
+        val library = packs ?: return
+        val limit = sense.packLimit
+        val key = limit?.let { GameName.key(it) }
+        if (key == loggedLimit) return
+        loggedLimit = key
+        library.limitLog(limit)?.let { log(it) }
+    }
 
     /**
      * Çeviri başladı. [xbox]: Xbox oturumu; Xbox çalışan oyunu bildirmez, son oyun [GameSense.XBOX_CONSOLE] adıyla
@@ -142,6 +158,7 @@ object PlayedGame {
 
     private fun publish() {
         packs?.limitToGame(sense.packLimit)
+        logLimit()
         val current = sense.current
         val needs = xbox && current == null
         LiveState.update { it.copy(game = current?.name, xboxNeedsGame = needs) }

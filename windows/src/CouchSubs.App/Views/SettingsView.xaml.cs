@@ -918,8 +918,9 @@ public partial class SettingsView : UserControl
                 return GamePackImporter.Parse(File.ReadAllBytes(sourcePath), Path.GetFileName(sourcePath));
             });
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException error)
         {
+            SubtitleLog.Write($"Paket içe aktarılamadı ({Path.GetFileName(sourcePath)}): {error.Message}");
             if (IsLoaded)
                 MessageBox.Show(Host, text["The translation file could not be imported. Check its format and encoding."],
                     picker.Title, MessageBoxButton.OK, MessageBoxImage.Error);
@@ -937,6 +938,8 @@ public partial class SettingsView : UserControl
             ImportPack.IsEnabled = true;
         }
 
+        // Kaç satır kabul edildi, kaçı neden atlandı (#1355).
+        SubtitleLog.Write(preview.LogLine(Path.GetFileName(sourcePath)));
         if (IsLoaded && new GamePackImportWindow(preview, sourcePath) { Owner = Host }.ShowDialog() == true)
             controller.ReloadGamePacks();
     }

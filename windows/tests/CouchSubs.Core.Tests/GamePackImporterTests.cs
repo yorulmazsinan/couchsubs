@@ -68,7 +68,7 @@ public class GamePackImporterTests
     [InlineData("""{"format":1,"title":"Existing Game","entries":[true,"Get Down!","Yere yat!"]}""")]
     [InlineData("""{"format":1,"title":"Existing Game","subtitles":{"Get Down!":"Yere yat!"}}""")]
     [InlineData("""{"format":2,"title":"Existing Game","entries":null}""")]
-    [InlineData("""{"format":2,"entries":{"0123456789abcdef":"Türkçe"}}""")]
+    [InlineData("""{"format":3,"entries":{"0123456789abcdef":"Türkçe"}}""")]
     [InlineData("""{"format":true,"entries":{"0123456789abcdef":"Türkçe"}}""")]
     [InlineData("""{"oops",1}""")]
     [InlineData("""{"Get Down!":"\uD800"}""")]
