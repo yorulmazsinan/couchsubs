@@ -10,6 +10,7 @@ public enum AIProvider: String, Codable, CaseIterable, Sendable {
     case gemini
     case openAI = "openai"
     case claude
+    case deepSeek = "deepseek"
     case local
 
     /// Bulut hizmetleri: model listesi `ai-models.json`'dan gelir, anahtar gerekir.
@@ -33,6 +34,7 @@ public enum AIProvider: String, Codable, CaseIterable, Sendable {
         case .gemini: "Gemini"
         case .openAI: "OpenAI"
         case .claude: "Claude"
+        case .deepSeek: "DeepSeek"
         case .local: "Local model"
         }
     }
@@ -43,6 +45,7 @@ public enum AIProvider: String, Codable, CaseIterable, Sendable {
         case .gemini: URL(string: "https://aistudio.google.com/apikey")!
         case .openAI: URL(string: "https://platform.openai.com/api-keys")!
         case .claude: URL(string: "https://platform.claude.com/settings/keys")!
+        case .deepSeek: URL(string: "https://platform.deepseek.com/api_keys")!
         case .local: URL(string: "https://ollama.com/download")!
         }
     }
@@ -427,6 +430,19 @@ public enum AIRequest {
             ]
             if let effort = model.effort { body["output_config"] = ["effort": effort] }
             if let thinking = model.thinking { body["thinking"] = ["type": thinking] }
+        case .deepSeek:
+            // https://api-docs.deepseek.com/api/create-chat-completion (OpenAI uyumlu): POST /chat/completions,
+            // "Authorization: Bearer", "system" rolü ve "max_tokens". Düşünme varsayılan olarak açıktır; altyazı için
+            // hız önemli olduğundan listedeki modelle kapatılır ("thinking": {"type": "disabled"}).
+            request = URLRequest(url: URL(string: "https://api.deepseek.com/chat/completions")!)
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            body = [
+                "model": model.id,
+                "messages": [["role": "system", "content": system], ["role": "user", "content": user]],
+                "max_tokens": maxOutputTokens,
+                "stream": false,
+            ]
+            if let thinking = model.thinking { body["thinking"] = ["type": thinking] }
         case .local:
             // Ollama ve LM Studio'nun OpenAI uyumlu Chat Completions'ı: POST {adres}/chat/completions. Yalnız iki
             // sunucunun da tanıdığı alanlar gider ("developer" rolü, reasoning_effort, max_completion_tokens gitmez).
@@ -469,7 +485,7 @@ public enum AIRequest {
             let candidate = (root["candidates"] as? [[String: Any]])?.first
             let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
             text = parts.filter { ($0["thought"] as? Bool) != true }.compactMap { $0["text"] as? String }.joined()
-        case .openAI, .local:
+        case .openAI, .deepSeek, .local:
             let message = ((root["choices"] as? [[String: Any]])?.first?["message"]) as? [String: Any]
             text = message?["content"] as? String
         case .claude:
@@ -575,7 +591,9 @@ public enum AIRequest {
         if [code, detailCode].compactMap({ $0 }).contains(where: billingCodes.contains) {
             return false
         }
-        return type == "rate_limit_error" || code == "slow_down" || code == "rate_limit_exceeded"
+        // DeepSeek 429'u "rate_limit_reached" türüyle döner; bakiye bitmesi 402'dir (api-docs.deepseek.com/quick_start/error_codes).
+        return type == "rate_limit_error" || type?.contains("rate_limit") == true
+            || code == "slow_down" || code?.contains("rate_limit") == true
     }
 
     public static func failure(status: Int, body: Data) -> AIFailure {
@@ -588,7 +606,7 @@ public enum AIRequest {
             if message.contains("api_key_invalid") || message.contains("api key not valid") { return .invalidKey }
             if message.contains("credit balance") || message.contains("insufficient_quota") { return .quotaExceeded }
             return .modelRejected
-        case 404: return .modelRejected
+        case 404, 422: return .modelRejected
         // Hizmete ulaşıldı ama şu an yoğun ya da arızalı; internet çalışıyor.
         case 408, 500...599: return .busy
         default: return .unreachable

@@ -42,6 +42,7 @@ public class EngineOptionTests
     [InlineData(TranslationEngine.Gemini)]
     [InlineData(TranslationEngine.OpenAi)]
     [InlineData(TranslationEngine.Claude)]
+    [InlineData(TranslationEngine.DeepSeek)]
     [InlineData(TranslationEngine.Local)]
     public void SavedEngineChecksExactlyItsCard(TranslationEngine engine)
     {

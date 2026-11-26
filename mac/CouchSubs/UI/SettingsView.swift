@@ -1094,7 +1094,7 @@ struct SwitchRow: View {
     }
 }
 
-/// Çeviri motoru: ücretsiz cihaz üstü çeviri ya da kullanıcının kendi anahtarıyla DeepL, Gemini, OpenAI, Claude
+/// Çeviri motoru: ücretsiz cihaz üstü çeviri ya da kullanıcının kendi anahtarıyla DeepL, Gemini, OpenAI, Claude, DeepSeek
 /// (Windows'taki ayarlarla aynı düzen).
 /// Android TV'de PS5 görüntüsünün nasıl gösterileceği; bazı TV'lerde (ör. TCL) uygulama içindeki görüntü siyah kalıyor.
 struct AndroidDisplayModePicker: View {
@@ -1133,7 +1133,7 @@ struct TranslationCard: View {
                     .buttonStyle(.secondary)
                 }
             case .deepL: DeepLKeySection()
-            case .gemini, .openAI, .claude:
+            case .gemini, .openAI, .claude, .deepSeek:
                 if let provider = engine.aiProvider { AIKeySection(provider: provider).id(provider) }
             case .local: LocalAISection()
             }
@@ -1172,6 +1172,7 @@ struct TranslationCard: View {
         case .gemini: "Google's AI translates with the game's tone and keeps names as they are. Subtitle text is sent to Google with your own key, and any cost is billed to your Google account. When Gemini cannot be reached, the free translation takes over."
         case .openAI: "OpenAI's AI translates with the game's tone and keeps names as they are. Subtitle text is sent to OpenAI with your own key, and any cost is billed to your OpenAI account. When OpenAI cannot be reached, the free translation takes over."
         case .claude: "Anthropic's Claude translates with the game's tone and keeps names as they are. Subtitle text is sent to Anthropic with your own key, and any cost is billed to your Anthropic account. When Claude cannot be reached, the free translation takes over."
+        case .deepSeek: "DeepSeek translates with the game's tone and keeps names as they are. Subtitle text is sent to DeepSeek with your own key, and any cost is billed to your DeepSeek account. When DeepSeek cannot be reached, the free translation takes over."
         case .local: "Free, with no quota. An AI model on this computer (Ollama or LM Studio) translates; subtitle text never leaves it. Speed depends on your computer. When the model cannot be reached, the free translation takes over."
         }
     }
@@ -1189,7 +1190,7 @@ struct TranslationCard: View {
     }
 }
 
-/// Çeviri motoru seçimi: altı karo (iki sıra), seçili olan sarı çerçeveli ve parlak.
+/// Çeviri motoru seçimi: yedi karo (iki sıra), seçili olan sarı çerçeveli ve parlak.
 struct EngineTiles: View {
     @Binding var engine: TranslationEngine
     private let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.space("m"), alignment: .top), count: 3)
@@ -1234,7 +1235,7 @@ struct EngineTile: View {
         switch option {
         case .free: "On this computer, offline"
         case .deepL, .gemini: "With a free key"
-        case .openAI, .claude: "With your own key"
+        case .openAI, .claude, .deepSeek: "With your own key"
         case .local: "Ollama or LM Studio, no quota"
         }
     }

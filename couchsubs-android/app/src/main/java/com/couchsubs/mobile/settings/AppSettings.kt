@@ -48,7 +48,7 @@ enum class SubtitleTarget {
 
 /** Çeviri motoru: ücretsiz cihaz üstü (ML Kit) ya da kullanıcının anahtarıyla çevrimiçi hizmet. */
 /** LOCAL: aynı ağdaki bilgisayarda Ollama / LM Studio (Mac ve Windows'taki "Yerel model"). */
-enum class EngineChoice { FREE, DEEPL, GEMINI, OPENAI, CLAUDE, LOCAL }
+enum class EngineChoice { FREE, DEEPL, GEMINI, OPENAI, CLAUDE, DEEPSEEK, LOCAL }
 
 /**
  * "Ekran yazılarını otomatik çevir" bir kerelik göçü (Windows AutoScreenTextMigration, Mac/iPhone
@@ -183,7 +183,7 @@ class AppSettings(context: Context) : AreaStore {
 
     /**
      * Hizmetin seçili yapay zekâ modeli (ai-models.json'daki kimlik); kayıt yoksa ya da listede yoksa listenin ilki
-     * (varsayılan) kullanılır. Adlar Mac/iPhone UserSettings ile aynı: geminiModel, openAIModel, claudeModel.
+     * (varsayılan) kullanılır. Adlar Mac/iPhone UserSettings ile aynı: geminiModel, openAIModel, claudeModel, deepSeekModel.
      */
     fun aiModel(provider: AiProvider): String? = prefs.getString(modelKey(provider), null)
     fun setAiModel(provider: AiProvider, id: String) = prefs.edit().putString(modelKey(provider), id).apply()
@@ -200,6 +200,7 @@ class AppSettings(context: Context) : AreaStore {
         AiProvider.GEMINI -> "geminiModel"
         AiProvider.OPENAI -> "openAIModel"
         AiProvider.CLAUDE -> "claudeModel"
+        AiProvider.DEEPSEEK -> "deepSeekModel"
         AiProvider.LOCAL -> "localAIModel"
     }
 

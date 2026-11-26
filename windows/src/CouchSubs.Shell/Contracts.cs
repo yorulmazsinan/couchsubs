@@ -33,6 +33,7 @@ public static class StoreKeys
     public const string GeminiKey = "geminiKey";
     public const string OpenAiKey = "openAIKey";
     public const string ClaudeKey = "claudeKey";
+    public const string DeepSeekKey = "deepSeekKey";
     /// <summary>Yerel model sunucusunun (Ollama, LM Studio) isteğe bağlı anahtarı.</summary>
     public const string LocalAiKey = "localAIKey";
     /// <summary>Kurulum sihirbazı bitti. TV'siz kurulumda (altyazı bilgisayar ekranında) ana ekranı bu açar.</summary>
@@ -111,7 +112,7 @@ public readonly record struct DisplayArea(string Name, ScreenArea Area);
 /// TranslationEngine ile aynı).
 /// </summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<TranslationEngine>))]
-public enum TranslationEngine { Free, DeepL, Gemini, OpenAi, Claude, Local }
+public enum TranslationEngine { Free, DeepL, Gemini, OpenAi, Claude, DeepSeek, Local }
 
 /// <summary>Windows'taki ücretsiz OPUS-MT çevirisinin çalışacağı aygıt.</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<TranslationDevice>))]
@@ -136,6 +137,7 @@ public static class TranslationEngines
         TranslationEngine.Gemini => AiProvider.Gemini,
         TranslationEngine.OpenAi => AiProvider.OpenAi,
         TranslationEngine.Claude => AiProvider.Claude,
+        TranslationEngine.DeepSeek => AiProvider.DeepSeek,
         TranslationEngine.Local => AiProvider.Local,
         _ => null,
     };
@@ -144,6 +146,8 @@ public static class TranslationEngines
     {
         AiProvider.Gemini => TranslationEngine.Gemini,
         AiProvider.OpenAi => TranslationEngine.OpenAi,
+        AiProvider.Claude => TranslationEngine.Claude,
+        AiProvider.DeepSeek => TranslationEngine.DeepSeek,
         AiProvider.Local => TranslationEngine.Local,
         _ => TranslationEngine.Claude,
     };
@@ -200,6 +204,7 @@ public static class TranslationEngines
         TranslationEngine.Gemini => StoreKeys.GeminiKey,
         TranslationEngine.OpenAi => StoreKeys.OpenAiKey,
         TranslationEngine.Claude => StoreKeys.ClaudeKey,
+        TranslationEngine.DeepSeek => StoreKeys.DeepSeekKey,
         TranslationEngine.Local => StoreKeys.LocalAiKey,
         _ => null,
     };
@@ -452,6 +457,7 @@ public sealed record UserSettings
     public bool GeminiPaidTier { get; init; }
     public string OpenAiModel { get; init; } = AiProvider.OpenAi.DefaultModel().Id;
     public string ClaudeModel { get; init; } = AiProvider.Claude.DefaultModel().Id;
+    public string DeepSeekModel { get; init; } = AiProvider.DeepSeek.DefaultModel().Id;
     /// <summary>
     /// Yerel model sunucusunun adresi (Ollama: http://127.0.0.1:11434/v1, LM Studio: http://localhost:1234/v1) ve
     /// kullanıcının yazdığı model adı.
@@ -523,16 +529,18 @@ public sealed record UserSettings
     {
         AiProvider.Gemini => GeminiModel,
         AiProvider.OpenAi => OpenAiModel,
-        AiProvider.Local => LocalAiModel,
-        _ => ClaudeModel,
+        AiProvider.Claude => ClaudeModel,
+        AiProvider.DeepSeek => DeepSeekModel,
+        _ => LocalAiModel,
     };
 
     public UserSettings WithModel(AiProvider provider, string id) => provider switch
     {
         AiProvider.Gemini => this with { GeminiModel = id },
         AiProvider.OpenAi => this with { OpenAiModel = id },
-        AiProvider.Local => this with { LocalAiModel = id },
-        _ => this with { ClaudeModel = id },
+        AiProvider.Claude => this with { ClaudeModel = id },
+        AiProvider.DeepSeek => this with { DeepSeekModel = id },
+        _ => this with { LocalAiModel = id },
     };
 
     /// <summary>Yerel model sunucusu; adres geçersizse null.</summary>

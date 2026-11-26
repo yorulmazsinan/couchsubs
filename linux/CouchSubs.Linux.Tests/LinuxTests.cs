@@ -14,6 +14,10 @@ public sealed class ClaudeTranslatorTests
     {
         Assert.True(ClaudeTranslator.IsClaudeKey(" sk-ant-api03-abc "));
         Assert.False(ClaudeTranslator.IsClaudeKey("0f1e2d3c-aaaa-bbbb-cccc-123456789abc:fx"));
+        // DeepSeek anahtarı "sk-…" ile başlar; Claude'unkiyle karışmaz, DeepL anahtarı da DeepSeek sayılmaz.
+        Assert.True(LinuxServices.IsDeepSeekKey(" sk-deepseek-abc "));
+        Assert.False(LinuxServices.IsDeepSeekKey("sk-ant-api03-abc"));
+        Assert.False(LinuxServices.IsDeepSeekKey("0f1e2d3c-aaaa-bbbb-cccc-123456789abc:fx"));
     }
 
     [Fact]

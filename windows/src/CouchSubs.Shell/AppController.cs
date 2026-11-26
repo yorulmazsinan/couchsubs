@@ -958,6 +958,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                                      || old.GeminiModel != value.GeminiModel || old.GeminiPaidTier != value.GeminiPaidTier
                                      || old.OpenAiModel != value.OpenAiModel
                                      || old.ClaudeModel != value.ClaudeModel
+                                     || old.DeepSeekModel != value.DeepSeekModel
                                      || old.LocalAiBaseUrl != value.LocalAiBaseUrl || old.LocalAiModel != value.LocalAiModel
                                      || old.AiInstruction != value.AiInstruction
                                      || old.TranslationDevice != value.TranslationDevice

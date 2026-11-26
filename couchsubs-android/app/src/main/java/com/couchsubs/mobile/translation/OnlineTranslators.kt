@@ -54,7 +54,7 @@ class AiRateLimitedException(val limit: AiRateLimit) : IOException("rate limited
 
 /** Yapay zekâ hizmetleri (Windows: AiProvider, Mac: AIProvider). */
 enum class AiProvider(val id: String, val displayName: String) {
-    GEMINI("gemini", "Gemini"), OPENAI("openai", "OpenAI"), CLAUDE("claude", "Claude"),
+    GEMINI("gemini", "Gemini"), OPENAI("openai", "OpenAI"), CLAUDE("claude", "Claude"), DEEPSEEK("deepseek", "DeepSeek"),
     /** Aynı ağdaki bilgisayarda Ollama, LM Studio ya da başka OpenAI uyumlu sunucu (bkz. [LocalAiServer]). */
     LOCAL("local", "Local model");
 }
@@ -65,6 +65,7 @@ val com.couchsubs.mobile.settings.EngineChoice.aiProvider: AiProvider?
         com.couchsubs.mobile.settings.EngineChoice.GEMINI -> AiProvider.GEMINI
         com.couchsubs.mobile.settings.EngineChoice.OPENAI -> AiProvider.OPENAI
         com.couchsubs.mobile.settings.EngineChoice.CLAUDE -> AiProvider.CLAUDE
+        com.couchsubs.mobile.settings.EngineChoice.DEEPSEEK -> AiProvider.DEEPSEEK
         com.couchsubs.mobile.settings.EngineChoice.LOCAL -> AiProvider.LOCAL
         else -> null
     }
@@ -821,6 +822,21 @@ object AiRequest {
                 AiHttpRequest("https://api.openai.com/v1/chat/completions",
                     mapOf("Authorization" to "Bearer $trimmed", "Content-Type" to "application/json"), body.toString())
             }
+            AiProvider.DEEPSEEK -> {
+                // https://api-docs.deepseek.com/api/create-chat-completion (OpenAI uyumlu): POST /chat/completions,
+                // "Authorization: Bearer", "system" rolü ve "max_tokens". Düşünme varsayılan olarak açıktır; altyazı
+                // hızı için listedeki modelle kapatılır ("thinking": {"type": "disabled"}).
+                val body = JSONObject()
+                    .put("model", model.id)
+                    .put("messages", JSONArray()
+                        .put(JSONObject().put("role", "system").put("content", system))
+                        .put(JSONObject().put("role", "user").put("content", user)))
+                    .put("max_tokens", maxOutputTokens)
+                    .put("stream", false)
+                model.thinking?.let { body.put("thinking", JSONObject().put("type", it)) }
+                AiHttpRequest("https://api.deepseek.com/chat/completions",
+                    mapOf("Authorization" to "Bearer $trimmed", "Content-Type" to "application/json"), body.toString())
+            }
             AiProvider.CLAUDE -> {
                 val body = JSONObject()
                     .put("model", model.id)
@@ -864,7 +880,7 @@ object AiRequest {
             AiProvider.GEMINI -> root.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
                 ?.let { parts -> (0 until parts.length()).mapNotNull { parts.optJSONObject(it) }.filter { !it.optBoolean("thought", false) }
                     .joinToString("") { it.optString("text") } }
-            AiProvider.OPENAI, AiProvider.LOCAL -> root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
+            AiProvider.OPENAI, AiProvider.DEEPSEEK, AiProvider.LOCAL -> root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
             AiProvider.CLAUDE -> root.optJSONArray("content")?.let { blocks ->
                 (0 until blocks.length()).mapNotNull { blocks.optJSONObject(it) }.filter { it.optString("type") == "text" }
                     .joinToString("") { it.optString("text") }
@@ -974,7 +990,8 @@ object AiRequest {
             "project_spend_limit_exceeded", "organization_usage_limit_exceeded", "enforced_spend_limit_reached"
         )
         if (code in billingCodes || detailCode != null && detailCode in billingCodes) return false
-        return type == "rate_limit_error" || code == "slow_down" || code == "rate_limit_exceeded"
+        // DeepSeek 429'u "rate_limit_reached" türüyle döner; bakiye bitmesi 402'dir (api-docs.deepseek.com/quick_start/error_codes).
+        return type == "rate_limit_error" || "rate_limit" in type || code == "slow_down" || "rate_limit" in code
     }
 
     fun rateLimit(status: Int, body: String): AiRateLimit? {
@@ -1017,7 +1034,7 @@ object AiRequest {
             status == 402 || status == 429 -> OnlineKeyState.QUOTA_EXCEEDED
             status == 400 && ("api_key_invalid" in message || "api key not valid" in message) -> OnlineKeyState.INVALID
             status == 400 && ("credit balance" in message || "insufficient_quota" in message) -> OnlineKeyState.QUOTA_EXCEEDED
-            status == 400 || status == 404 -> OnlineKeyState.MODEL_REJECTED
+            status == 400 || status == 404 || status == 422 -> OnlineKeyState.MODEL_REJECTED
             // Hizmete ulaşıldı ama şu an yoğun ya da arızalı (Gemini 503 "overloaded", Claude 529); internet çalışıyor.
             status == 408 || status in 500..599 -> OnlineKeyState.BUSY
             else -> OnlineKeyState.UNREACHABLE
@@ -1025,7 +1042,7 @@ object AiRequest {
     }
 }
 
-/** Kullanıcının Gemini, OpenAI ya da Claude anahtarıyla çeviri; son 3 satır ve çevirileri bağlam olarak gider. */
+/** Kullanıcının Gemini, OpenAI, Claude ya da DeepSeek anahtarıyla çeviri; son 3 satır ve çevirileri bağlam olarak gider. */
 class AiTranslator(
     private val provider: AiProvider,
     key: String,

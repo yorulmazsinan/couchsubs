@@ -7599,6 +7599,22 @@
         }
       }
     },
+    "DeepSeek translates with the game's tone and keeps names as they are. Subtitle text is sent to DeepSeek with your own key, and any cost is billed to your DeepSeek account. When DeepSeek cannot be reached, the free translation takes over.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek translates with the game's tone and keeps names as they are. Subtitle text is sent to DeepSeek with your own key, and any cost is billed to your DeepSeek account. When DeepSeek cannot be reached, the free translation takes over."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek oyunun havasına uygun çevirir, adları olduğu gibi bırakır. Altyazı metni kendi anahtarınızla DeepSeek'e gönderilir; ücret çıkarsa DeepSeek hesabınıza yansır. DeepSeek'e ulaşılamazsa ücretsiz çeviri devreye girer."
+          }
+        }
+      }
+    },
     "Online engines translate English games only. For other game languages the free translation is used.": {
       "localizations": {
         "en": {

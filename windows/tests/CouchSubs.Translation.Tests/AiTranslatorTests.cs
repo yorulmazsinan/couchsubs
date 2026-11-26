@@ -290,7 +290,7 @@ public class AiTranslatorTests
                 }),
             },
             // Yerel model sunucuları (Ollama, LM Studio) OpenAI biçimiyle yanıt verir.
-            "api.openai.com" or "localhost" or "127.0.0.1" or "192.168.1.20" => new JsonObject
+            "api.openai.com" or "api.deepseek.com" or "localhost" or "127.0.0.1" or "192.168.1.20" => new JsonObject
             {
                 ["choices"] = new JsonArray(new JsonObject
                 {
@@ -397,6 +397,31 @@ public class AiTranslatorTests
         Assert.Equal("disabled", json["thinking"]!["type"]!.GetValue<string>());
     }
 
+    /// <summary>DeepSeek OpenAI uyumlu Chat Completions kullanır; düşünme altyazı hızı için kapalı gider.</summary>
+    [Fact]
+    public async Task DeepSeekRequest()
+    {
+        var fake = new FakeAi();
+        await Make(AiProvider.DeepSeek, fake).TranslateAsync("Run!");
+        var (request, body) = fake.Requests[0];
+        Assert.Equal("https://api.deepseek.com/chat/completions", request.RequestUri!.AbsoluteUri);
+        Assert.Equal($"Bearer {Secret}", Assert.Single(request.Headers.GetValues("Authorization")));
+        Assert.False(request.Headers.Contains("x-api-key"));
+        var json = JsonNode.Parse(body)!;
+        Assert.Equal("deepseek-flash", json["model"]!.GetValue<string>());
+        Assert.Equal(AiRequest.MaxOutputTokens, json["max_tokens"]!.GetValue<int>());
+        Assert.False(json["stream"]!.GetValue<bool>());
+        Assert.Equal("disabled", json["thinking"]!["type"]!.GetValue<string>());
+        var messages = json["messages"]!.AsArray();
+        Assert.Equal(["system", "user"], messages.Select(m => m!["role"]!.GetValue<string>()));
+        Assert.Equal(AiRequest.SystemPrompt, messages[0]!["content"]!.GetValue<string>());
+
+        await Make(AiProvider.DeepSeek, fake, model: "deepseek-v4-pro").TranslateAsync("Stay close.");
+        var second = JsonNode.Parse(fake.Requests[1].Body)!;
+        Assert.Equal("deepseek-v4-pro", second["model"]!.GetValue<string>());
+        Assert.Equal("disabled", second["thinking"]!["type"]!.GetValue<string>());
+    }
+
     /// <summary>Effort ve düşünme ayarı listedeki modelden gelir, adından tahmin edilmez.</summary>
     [Fact]
     public async Task PerModelParametersAreSent()
@@ -427,6 +452,7 @@ public class AiTranslatorTests
         Assert.Equal("gpt-6-luna", JsonNode.Parse(fake.Requests[0].Body)!["model"]!.GetValue<string>());
         Assert.Equal("gemini-3.5-flash-lite", AiProvider.Gemini.Model("").Id);
         Assert.Equal("claude-haiku-5-5", AiProvider.Claude.Model(null).Id);
+        Assert.Equal("deepseek-flash", AiProvider.DeepSeek.Model(null).Id);
         Assert.Equal("gemini:gemini-3.5-flash-lite", AiProvider.Gemini.EngineId("gemini-3.5-flash-lite"));
         Assert.Equal("openai:gpt-6-luna", AiProvider.OpenAi.EngineId(AiProvider.OpenAi.DefaultModel().Id));
     }
@@ -440,7 +466,7 @@ public class AiTranslatorTests
     {
         var file = Path.Combine(RepoRoot(), "core", "Sources", "CouchSubsCore", "Resources", "ai-models.json");
         var parsed = AiModel.Parse(File.ReadAllText(file));
-        Assert.Equal(["claude", "gemini", "openai"], parsed.Keys.Order());
+        Assert.Equal(["claude", "deepseek", "gemini", "openai"], parsed.Keys.Order());
         Assert.Equal(parsed.Keys.Order(), AiProviders.Cloud.Select(p => p.Id()).Order());
         // Yerel modelin listesi yoktur; model adını kullanıcı yazar.
         Assert.Empty(AiProvider.Local.Models());

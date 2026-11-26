@@ -199,7 +199,10 @@ internal static class Panel
     /// <summary>Kayıtlı çevrimiçi çeviri anahtarı (anahtarın kendisi panele hiç dönmez).</summary>
     private static string? OnlineKey() => FileAppStore.Default.Load<string>(StoreKeys.DeepLKey) is { Length: > 0 } key ? key : null;
 
-    private static string? OnlineEngine(string? key) => key is null ? null : ClaudeTranslator.IsClaudeKey(key) ? "Claude" : "DeepL";
+    private static string? OnlineEngine(string? key) => key is null ? null
+        : ClaudeTranslator.IsClaudeKey(key) ? "Claude"
+        : LinuxServices.IsDeepSeekKey(key) ? "DeepSeek"
+        : "DeepL";
 
     private static bool Valid(CropRegion region) =>
         region is { Top: >= 0, Left: >= 0, Bottom: <= 1, Right: <= 1 } && region.Bottom - region.Top >= 0.05 && region.Right - region.Left >= 0.1;

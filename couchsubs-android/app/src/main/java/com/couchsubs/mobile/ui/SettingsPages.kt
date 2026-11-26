@@ -454,7 +454,7 @@ private fun AdvancedPage() {
     }
 }
 
-/** Çeviri motoru: Ücretsiz, DeepL, Gemini, Diğer (OpenAI / Claude / yerel model); anahtar denenip kaydedilir (iPhone ile aynı). */
+/** Çeviri motoru: Ücretsiz, DeepL, Gemini, Diğer (OpenAI / Claude / DeepSeek / yerel model); anahtar denenip kaydedilir (iPhone ile aynı). */
 @Composable
 private fun EngineTile(settings: AppSettings) {
     val context = LocalContext.current
@@ -486,13 +486,13 @@ private fun EngineTile(settings: AppSettings) {
                 0 -> EngineChoice.FREE
                 1 -> EngineChoice.DEEPL
                 2 -> EngineChoice.GEMINI
-                else -> if (engine == EngineChoice.CLAUDE || engine == EngineChoice.LOCAL) engine else EngineChoice.OPENAI
+                else -> if (engine == EngineChoice.CLAUDE || engine == EngineChoice.DEEPSEEK || engine == EngineChoice.LOCAL) engine else EngineChoice.OPENAI
             })
         }
-        // Diğer: OpenAI, Claude ya da yerel model (aynı ağdaki bilgisayarda Ollama / LM Studio; iPhone ile aynı).
-        if (segment == 3) Segmented(listOf("OpenAI", "Claude", stringResource(R.string.engine_local)),
-            when (engine) { EngineChoice.CLAUDE -> 1; EngineChoice.LOCAL -> 2; else -> 0 }) {
-            choose(when (it) { 1 -> EngineChoice.CLAUDE; 2 -> EngineChoice.LOCAL; else -> EngineChoice.OPENAI })
+        // Diğer: OpenAI, Claude, DeepSeek ya da yerel model (aynı ağdaki bilgisayarda Ollama / LM Studio; iPhone ile aynı).
+        if (segment == 3) Segmented(listOf("OpenAI", "Claude", "DeepSeek", stringResource(R.string.engine_local)),
+            when (engine) { EngineChoice.CLAUDE -> 1; EngineChoice.DEEPSEEK -> 2; EngineChoice.LOCAL -> 3; else -> 0 }) {
+            choose(when (it) { 1 -> EngineChoice.CLAUDE; 2 -> EngineChoice.DEEPSEEK; 3 -> EngineChoice.LOCAL; else -> EngineChoice.OPENAI })
         }
         // Ücretsiz çeviri zayıf kalıyor; ücretsiz Gemini anahtarı en kolay iyileştirme (Mac ve iPhone ile aynı öneri).
         if (engine == EngineChoice.FREE) {

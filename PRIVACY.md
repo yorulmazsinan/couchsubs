@@ -96,8 +96,8 @@ TV uygulaması altyazıları yalnız ev ağındaki CouchSubs bilgisayarından al
 - **Ücretsiz çeviri** telefonun içinde Google ML Kit ile yapılır; Türkçe dil modeli ilk kullanımda Google'dan bir kez
   indirilir. Google ML Kit, kendi çalışmasıyla ilgili performans ve kullanım ölçümlerini Google'a gönderebilir; altyazı
   metni ya da görüntü bunlara dahil değildir.
-- **Çevrimiçi çeviri (yalnız siz seçerseniz):** kendi anahtarınızla DeepL, Gemini (Google), OpenAI ya da Claude
-  (Anthropic) seçerseniz okunan İngilizce satır ve bağlam için son birkaç satır doğrudan o servise gönderilir. Görüntü,
+- **Çevrimiçi çeviri (yalnız siz seçerseniz):** kendi anahtarınızla DeepL, Gemini (Google), OpenAI, Claude
+  (Anthropic) ya da DeepSeek seçerseniz okunan İngilizce satır ve bağlam için son birkaç satır doğrudan o servise gönderilir. Görüntü,
   ses ve hesap bilgisi gönderilmez; o servisin kendi gizlilik koşulları geçerlidir.
 - **Kullanım istatistikleri (Profil › Kullanım verisi'nden kapatılabilir, varsayılan açık):** Google Firebase Analytics
   ve Meta App Events uygulamanın nasıl kullanıldığını, kimliğinize bağlanmadan ölçer; çökmeler Firebase Crashlytics ile
@@ -193,8 +193,8 @@ account ID is requested from Sony and no session token is kept. The account ID, 
 translation keys you enter are stored only on the phone, encrypted with an Android Keystore key; they are removed with
 the app and are not backed up. Free translation runs on the phone with Google ML Kit; the Turkish language model is
 downloaded once from Google on first use, and ML Kit may send Google performance and usage metrics about its own
-operation, which do not include subtitle text or pictures. If you choose DeepL, Gemini (Google), OpenAI or Claude
-(Anthropic) with your own key, the English line that was read and the last few lines for context are sent directly to
+operation, which do not include subtitle text or pictures. If you choose DeepL, Gemini (Google), OpenAI, Claude
+(Anthropic) or DeepSeek with your own key, the English line that was read and the last few lines for context are sent directly to
 that service; no picture, audio or account data, and that service's own privacy terms apply. Usage statistics (on by
 default, turn off in Profile › Usage data) are measured with Google Firebase Analytics and Meta App Events without being
 linked to you, and crashes are reported with Firebase Crashlytics. What is sent: opened screens, finishing setup and the

@@ -316,19 +316,19 @@ function home(s) {
     pairingOpen() +
     '<div class="card"><details id="logBox"' + (extra.logOpen ? ' open' : '') + '><summary>' + t('Günlük', 'Log') + '</summary><pre id="log"></pre></details></div>';
 }
-// Çevrimiçi çeviri: Claude (sk-ant-…) ya da DeepL anahtarı. Ulaşılamazsa satır yerel modelle çevrilir.
+// Çevrimiçi çeviri: Claude (sk-ant-…), DeepSeek (sk-…) ya da DeepL anahtarı. Ulaşılamazsa satır yerel modelle çevrilir.
 function online(s) {
   var on = s.settings.onlineTranslation, engine = s.onlineEngine;
   var body = engine
-    ? '<p class="' + (on ? 'ok' : 'muted') + '">' + (on ? t('Açık: ', 'On: ') : t('Kapalı: ', 'Off: ')) + esc(engine === 'Claude' ? 'Claude Haiku' : 'DeepL') + '</p>' +
+    ? '<p class="' + (on ? 'ok' : 'muted') + '">' + (on ? t('Açık: ', 'On: ') : t('Kapalı: ', 'Off: ')) + esc(engine === 'Claude' ? 'Claude Haiku' : engine === 'DeepSeek' ? 'DeepSeek' : 'DeepL') + '</p>' +
       '<div class="row">' + btn('onlineToggle', on ? t('Çevrimiçi çeviriyi kapat', 'Turn online translation off') : t('Çevrimiçi çeviriyi aç', 'Turn online translation on')) +
       btn('onlineRemove', t('Anahtarı sil', 'Remove the key')) + '</div>'
-    : '<label for="onlineKey">' + t('Claude API anahtarı (sk-ant-…) ya da DeepL anahtarı', 'Claude API key (sk-ant-…) or DeepL key') + '</label>' +
+    : '<label for="onlineKey">' + t('Claude API anahtarı (sk-ant-…), DeepSeek anahtarı (sk-…) ya da DeepL anahtarı', 'Claude API key (sk-ant-…), DeepSeek key (sk-…) or DeepL key') + '</label>' +
       '<input type="password" id="onlineKey" autocomplete="off" value="' + esc(form.onlineKey || '') + '">' +
       '<div class="row" style="margin-top:12px">' + btn('onlineSave', t('Kaydet ve dene', 'Save and check'), 'primary') + '</div>';
   return '<div class="card"><h2>' + t('Çevrimiçi çeviri', 'Online translation') + '</h2>' +
-    '<p class="muted">' + t('Daha doğal ve genelde daha hızlı çeviri. Altyazı metinleri çeviri için Anthropic\'e (ya da DeepL\'e) gönderilir; internet yoksa ya da yanıt 3 sn içinde gelmezse o satırı sunucudaki model çevirir.',
-      'More natural and usually faster translation. Subtitle text is sent to Anthropic (or DeepL) for translation; without internet, or if no answer comes within 3 s, the model on this server translates that line.') + '</p>' +
+    '<p class="muted">' + t('Daha doğal ve genelde daha hızlı çeviri. Altyazı metinleri çeviri için Anthropic\'e, DeepSeek\'e (ya da DeepL\'e) gönderilir; internet yoksa ya da yanıt 3 sn içinde gelmezse o satırı sunucudaki model çevirir.',
+      'More natural and usually faster translation. Subtitle text is sent to Anthropic, DeepSeek (or DeepL) for translation; without internet, or if no answer comes within 3 s, the model on this server translates that line.') + '</p>' +
     body + err('onlineSave') + err('onlineToggle') + err('onlineRemove') +
     (extra.onlineCheck ? '<p class="error" role="alert">' + esc(extra.onlineCheck) + '</p>' : '') + '</div>';
 }

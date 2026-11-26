@@ -135,7 +135,7 @@ struct SettingsScreen: View {
     }
 }
 
-/// Ayarlar › Gelişmiş › Çeviri motoru: Ücretsiz, DeepL, Gemini, Diğer (OpenAI, Claude, yerel model); anahtar, model, ek
+/// Ayarlar › Gelişmiş › Çeviri motoru: Ücretsiz, DeepL, Gemini, Diğer (OpenAI, Claude, DeepSeek, yerel model); anahtar, model, ek
 /// talimat ve Gemini'de ücretli anahtar seçimi (Mac ile aynı).
 struct EngineTile: View {
     @EnvironmentObject private var model: PhoneModel
@@ -144,7 +144,7 @@ struct EngineTile: View {
     @State private var checking = false
     @State private var keyResult: String?
 
-    /// Segmentteki seçim: Ücretsiz, DeepL, Gemini, Diğer (OpenAI, Claude).
+    /// Segmentteki seçim: Ücretsiz, DeepL, Gemini, Diğer (OpenAI, Claude, DeepSeek).
     private enum Choice: Hashable { case free, deepL, gemini, other }
     private static let choices: KeyValuePairs<Choice, LocalizedStringKey> = [.free: "Free", .deepL: "DeepL", .gemini: "Gemini", .other: "Other"]
 
@@ -157,8 +157,8 @@ struct EngineTile: View {
                     if choice == .other {
                         // Yerel model: aynı ağdaki bilgisayarda çalışan Ollama, LM Studio ya da başka OpenAI uyumlu sunucu
                         // (Mac ve Windows'taki "Yerel model (Ollama, LM Studio)" motoru; Android ile aynı).
-                        SegmentedTabs(options: [TranslationEngine.openAI: "OpenAI", .claude: "Claude", .local: "Local model"],
-                                      selection: Binding(get: { [.claude, .local].contains(model.settings.translationEngine) ? model.settings.translationEngine : .openAI },
+                        SegmentedTabs(options: [TranslationEngine.openAI: "OpenAI", .claude: "Claude", .deepSeek: "DeepSeek", .local: "Local model"],
+                                      selection: Binding(get: { [.claude, .deepSeek, .local].contains(model.settings.translationEngine) ? model.settings.translationEngine : .openAI },
                                                          set: { keyResult = nil; key = ""; model.settings.translationEngine = $0 }))
                     }
                 }
@@ -225,7 +225,7 @@ struct EngineTile: View {
         case .free: .free
         case .deepL: .deepL
         case .gemini: .gemini
-        case .openAI, .claude, .local: .other
+        case .openAI, .claude, .deepSeek, .local: .other
         }
     }
 
@@ -238,7 +238,7 @@ struct EngineTile: View {
         case .gemini: model.settings.translationEngine = .gemini
         case .other:
             let current = model.settings.translationEngine
-            model.settings.translationEngine = current == .claude || current == .local ? current : .openAI
+            model.settings.translationEngine = current == .claude || current == .deepSeek || current == .local ? current : .openAI
         }
     }
 
@@ -385,8 +385,8 @@ private struct DeepLUsageRow: View {
     }
 }
 
-/// Yapay zekâ modeli: Gemini, OpenAI ve Claude (Mac ve Windows'taki Model seçimi, Android ile aynı). Seçenekler ortak
-/// `ai-models.json`'dan gelir, ilki varsayılandır. Kayıt `UserSettings.geminiModel` / `openAIModel` / `claudeModel`;
+/// Yapay zekâ modeli: Gemini, OpenAI, Claude ve DeepSeek (Mac ve Windows'taki Model seçimi, Android ile aynı). Seçenekler ortak
+/// `ai-models.json`'dan gelir, ilki varsayılandır. Kayıt `UserSettings.geminiModel` / `openAIModel` / `claudeModel` / `deepSeekModel`;
 /// Gemini'de dakikalık istek hakkı seçilen modelin sınırıdır (`RequestBudget.shared`).
 private struct AIModelChoice: View {
     @EnvironmentObject private var model: PhoneModel

@@ -181,6 +181,26 @@ class OnlineTranslationTest {
         assertTrue(json.getJSONArray("messages").getJSONObject(0).getString("content").endsWith("[\"Run!\"]"))
     }
 
+    /** DeepSeek OpenAI uyumlu Chat Completions kullanır; düşünme altyazı hızı için kapalı gider. */
+    @Test
+    fun deepSeekRequestShapeAndReply() {
+        val http = FakeHttp(200, "{\"choices\":[{\"message\":{\"content\":\"[\\\"Koş!\\\"]\"}}]}")
+        val translator = AiTranslator(AiProvider.DEEPSEEK, "sk", AiModel("deepseek-flash", "Hızlı", thinking = "disabled"), null, http)
+        assertEquals("Koş!", translator.translate("Run!"))
+        val (url, headers, body) = http.requests.single()
+        assertEquals("https://api.deepseek.com/chat/completions", url)
+        assertEquals("Bearer sk", headers["Authorization"])
+        val json = JSONObject(body!!)
+        assertEquals("deepseek-flash", json.getString("model"))
+        assertEquals(AiRequest.MAX_OUTPUT_TOKENS, json.getInt("max_tokens"))
+        assertFalse(json.getBoolean("stream"))
+        assertEquals("disabled", json.getJSONObject("thinking").getString("type"))
+        val messages = json.getJSONArray("messages")
+        assertEquals("system", messages.getJSONObject(0).getString("role"))
+        assertEquals(AiRequest.SYSTEM_PROMPT, messages.getJSONObject(0).getString("content"))
+        assertEquals("user", messages.getJSONObject(1).getString("role"))
+    }
+
     @Test
     fun aiCacheIsScopedByTheGameAndTheGameGoesToTheModel() {
         val http = FakeHttp(200, "{\"content\":[{\"type\":\"text\",\"text\":\"[\\\"Banka kapalı.\\\"]\"}]}")
@@ -211,7 +231,7 @@ class OnlineTranslationTest {
             return when (provider) {
                 AiProvider.GEMINI -> json.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).getString("text")
                 AiProvider.CLAUDE -> json.getString("system")
-                AiProvider.OPENAI, AiProvider.LOCAL -> json.getJSONArray("messages").getJSONObject(0).getString("content")
+                AiProvider.OPENAI, AiProvider.DEEPSEEK, AiProvider.LOCAL -> json.getJSONArray("messages").getJSONObject(0).getString("content")
             }
         }
         for (provider in AiProvider.entries) {
@@ -363,7 +383,7 @@ class OnlineTranslationTest {
     }
 
     /**
-     * Ayarlar'daki model seçimi OpenAI ve Claude'da da var (Mac ve Windows ile aynı liste): her hizmette en az iki model,
+     * Ayarlar'daki model seçimi OpenAI, Claude ve DeepSeek'te de var (Mac ve Windows ile aynı liste): her hizmette en az iki model,
      * kayıt yoksa ya da listede yoksa ilki (varsayılan), seçilen model kimliğiyle bulunur.
      */
     @Test

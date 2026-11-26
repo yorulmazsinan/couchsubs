@@ -10,7 +10,7 @@ namespace CouchSubs.Core;
 /// gider, anahtar isteğe bağlıdır, model adını kullanıcı yazar.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<AiProvider>))]
-public enum AiProvider { Gemini, OpenAi, Claude, Local }
+public enum AiProvider { Gemini, OpenAi, Claude, DeepSeek, Local }
 
 public static class AiProviders
 {
@@ -37,8 +37,9 @@ public static class AiProviders
     {
         AiProvider.Gemini => "Gemini",
         AiProvider.OpenAi => "OpenAI",
-        AiProvider.Local => "Local model",
-        _ => "Claude",
+        AiProvider.Claude => "Claude",
+        AiProvider.DeepSeek => "DeepSeek",
+        _ => "Local model",
     };
 
     /// <summary>Anahtarın alındığı resmî sayfa (yerel modelde Ollama'nın indirme sayfası).</summary>
@@ -46,17 +47,19 @@ public static class AiProviders
     {
         AiProvider.Gemini => "https://aistudio.google.com/apikey",
         AiProvider.OpenAi => "https://platform.openai.com/api-keys",
-        AiProvider.Local => "https://ollama.com/download",
-        _ => "https://platform.claude.com/settings/keys",
+        AiProvider.Claude => "https://platform.claude.com/settings/keys",
+        AiProvider.DeepSeek => "https://platform.deepseek.com/api_keys",
+        _ => "https://ollama.com/download",
     });
 
-    /// <summary>Kalıcı önbellek dosyasındaki ve Mac'teki ad: "gemini", "openai", "claude", "local".</summary>
+    /// <summary>Kalıcı önbellek dosyasındaki ve Mac'teki ad: "gemini", "openai", "claude", "deepseek", "local".</summary>
     public static string Id(this AiProvider provider) => provider switch
     {
         AiProvider.Gemini => "gemini",
         AiProvider.OpenAi => "openai",
-        AiProvider.Local => "local",
-        _ => "claude",
+        AiProvider.Claude => "claude",
+        AiProvider.DeepSeek => "deepseek",
+        _ => "local",
     };
 
     /// <summary>

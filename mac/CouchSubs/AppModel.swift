@@ -768,6 +768,7 @@ final class AppModel: ObservableObject {
                 || settings.onlineEngine != oldValue.onlineEngine || settings.geminiModel != oldValue.geminiModel
                 || settings.geminiPaidTier != oldValue.geminiPaidTier
                 || settings.openAIModel != oldValue.openAIModel || settings.claudeModel != oldValue.claudeModel
+                || settings.deepSeekModel != oldValue.deepSeekModel
                 || settings.localAIBaseURL != oldValue.localAIBaseURL || settings.localAIModel != oldValue.localAIModel
                 || settings.aiInstruction != oldValue.aiInstruction
             if translationChanged { Task { await refreshTranslatorStatus() } }

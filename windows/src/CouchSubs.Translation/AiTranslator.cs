@@ -190,6 +190,23 @@ public static class AiRequest
                 };
                 if (model.Effort is { } effort) body["reasoning_effort"] = effort;
                 break;
+            case AiProvider.DeepSeek:
+                // https://api-docs.deepseek.com/api/create-chat-completion (OpenAI uyumlu): POST /chat/completions,
+                // "Authorization: Bearer", "system" rolü ve "max_tokens". Düşünme varsayılan olarak açıktır; altyazı için
+                // hız önemli olduğundan listedeki modelle kapatılır ("thinking": {"type": "disabled"}).
+                request = new HttpRequestMessage(HttpMethod.Post, "https://api.deepseek.com/chat/completions");
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+                body = new JsonObject
+                {
+                    ["model"] = model.Id,
+                    ["messages"] = new JsonArray(
+                        new JsonObject { ["role"] = "system", ["content"] = system },
+                        new JsonObject { ["role"] = "user", ["content"] = user }),
+                    ["max_tokens"] = maxOutputTokens,
+                    ["stream"] = false,
+                };
+                if (model.Thinking is { } deepSeekThinking) body["thinking"] = new JsonObject { ["type"] = deepSeekThinking };
+                break;
             case AiProvider.Local:
                 // Ollama ve LM Studio'nun OpenAI uyumlu Chat Completions'ı: POST {adres}/chat/completions. Yalnız iki
                 // sunucunun da tanıdığı alanlar gider ("developer" rolü, reasoning_effort, max_completion_tokens gitmez).
@@ -260,7 +277,7 @@ public static class AiRequest
                         .Where(p => p?["thought"]?.GetValueKind() is not JsonValueKind.True)
                         .Select(p => p?["text"]?.GetValue<string>() ?? ""));
                     break;
-                case AiProvider.OpenAi or AiProvider.Local:
+                case AiProvider.OpenAi or AiProvider.DeepSeek or AiProvider.Local:
                     text = root?["choices"]?.AsArray().FirstOrDefault()?["message"]?["content"]?.GetValue<string>();
                     break;
                 default:
@@ -395,7 +412,9 @@ public static class AiRequest
             or "project_spend_limit_exceeded" or "organization_usage_limit_exceeded" or "enforced_spend_limit_reached"
             || detailCode is "insufficient_quota" or "billing_hard_limit_reached" or "credit_balance_exhausted" or "organization_spend_limit_exceeded"
                 or "project_spend_limit_exceeded" or "organization_usage_limit_exceeded" or "enforced_spend_limit_reached") return false;
-        return type == "rate_limit_error" || code is "slow_down" or "rate_limit_exceeded";
+        // DeepSeek 429'u "rate_limit_reached" türüyle döner; bakiye bitmesi 402'dir (api-docs.deepseek.com/quick_start/error_codes).
+        return type == "rate_limit_error" || type?.Contains("rate_limit") == true
+            || code is "slow_down" or "rate_limit_exceeded" || code?.Contains("rate_limit") == true;
     }
 
     public static OnlineKeyState Failure(HttpStatusCode status, string body)
@@ -408,7 +427,7 @@ public static class AiRequest
             402 or 429 => OnlineKeyState.QuotaExceeded,
             400 when message.Contains("api_key_invalid") || message.Contains("api key not valid") => OnlineKeyState.Invalid,
             400 when message.Contains("credit balance") || message.Contains("insufficient_quota") => OnlineKeyState.QuotaExceeded,
-            400 or 404 => OnlineKeyState.ModelRejected,
+            400 or 404 or 422 => OnlineKeyState.ModelRejected,
             // Hizmete ulaşıldı ama şu an yoğun ya da arızalı (Gemini 503 "overloaded", Claude 529); internet çalışıyor.
             408 or (>= 500 and <= 599) => OnlineKeyState.Busy,
             _ => OnlineKeyState.Unreachable,

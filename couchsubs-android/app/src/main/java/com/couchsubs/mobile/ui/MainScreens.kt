@@ -321,6 +321,7 @@ fun engineName(context: Context): String = when (Services.settings.engine) {
     com.couchsubs.mobile.settings.EngineChoice.GEMINI -> "Gemini"
     com.couchsubs.mobile.settings.EngineChoice.OPENAI -> "OpenAI"
     com.couchsubs.mobile.settings.EngineChoice.CLAUDE -> "Claude"
+    com.couchsubs.mobile.settings.EngineChoice.DEEPSEEK -> "DeepSeek"
     com.couchsubs.mobile.settings.EngineChoice.LOCAL -> context.getString(R.string.engine_local)
 }
 

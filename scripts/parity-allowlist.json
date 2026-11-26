@@ -185,6 +185,7 @@
       "geminiModel": "Android'de aiModel(provider)/setAiModel ile aynı prefs anahtarında (geminiModel).",
       "openAIModel": "Android'de aiModel(provider)/setAiModel ile aynı prefs anahtarında (openAIModel).",
       "claudeModel": "Android'de aiModel(provider)/setAiModel ile aynı prefs anahtarında (claudeModel).",
+      "deepSeekModel": "Android'de aiModel(provider)/setAiModel ile aynı prefs anahtarında (deepSeekModel).",
       "localAIServer": "Hesaplanan (localAIBaseURL + localAIModel); Android'de val localAiServer.",
       "onlineEngine": "Android tek alanda saklar (engine); iPhone'da translationEngine onlineTranslation + onlineEngine'den hesaplanır.",
       "onlineTranslation": "Android tek alanda saklar (engine); iPhone'da translationEngine onlineTranslation + onlineEngine'den hesaplanır.",

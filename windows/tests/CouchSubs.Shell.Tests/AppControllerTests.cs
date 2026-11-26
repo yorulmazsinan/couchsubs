@@ -2115,6 +2115,24 @@ public class AppControllerRunTests
         controller.Dispose();
     }
 
+    /// DeepSeek kendi anahtarını ve modelini kullanır; başka hizmetlerin anahtarıyla karışmaz.
+    [Fact]
+    public async Task DeepSeekKeyUsesItsOwnModelAndEngine()
+    {
+        var services = new FakeServices { AiTest = new AiTestResult(OnlineKeyState.Valid, "KRATOS: Şimdi gidiyoruz.") };
+        var (controller, _, _) = Ready(services);
+        controller.Settings = controller.Settings.WithModel(AiProvider.DeepSeek, "deepseek-v4-pro");
+        await controller.SetAiKeyAsync(AiProvider.DeepSeek, "sk-deep");
+        Assert.True(controller.HasKey(TranslationEngine.DeepSeek));
+        Assert.False(controller.HasKey(TranslationEngine.Claude));
+        Assert.Equal(TranslationEngine.DeepSeek, controller.Settings.Engine);
+        Assert.Equal((AiProvider.DeepSeek, "sk-deep", "deepseek-v4-pro"), Assert.Single(services.AiTests));
+
+        await controller.StartAsync();
+        Assert.Equal((AiProvider.DeepSeek, "sk-deep", "deepseek-v4-pro"), Assert.Single(services.AiTranslators));
+        controller.Dispose();
+    }
+
     /// Yerel model anahtarsız hazırdır; "Bağlantıyı dene" ayardaki adres ve modelle gider, yazılan anahtarı yalnız sunucu
     /// kabul ederse saklar; çevirmene sunucu ve anahtar gider; anahtar kaldırılınca yerel model seçili kalır.
     [Fact]
@@ -2165,11 +2183,12 @@ public class AppControllerRunTests
     public void UnknownSavedModelFallsBackToDefaultAndIsSaved()
     {
         var settingsStore = new MemorySettings();
-        settingsStore.Save(new UserSettings { OpenAiModel = "gpt-4o", GeminiModel = "", ClaudeModel = "claude-sonnet-5-5" });
+        settingsStore.Save(new UserSettings { OpenAiModel = "gpt-4o", GeminiModel = "", ClaudeModel = "claude-sonnet-5-5", DeepSeekModel = "deepseek-chat" });
         var controller = AppControllerTests.Make(settings: settingsStore);
         Assert.Equal("gpt-6-luna", controller.Settings.OpenAiModel);
         Assert.Equal("gemini-3.5-flash-lite", controller.Settings.GeminiModel);
         Assert.Equal("claude-sonnet-5-5", controller.Settings.ClaudeModel);
+        Assert.Equal("deepseek-flash", controller.Settings.DeepSeekModel);
         Assert.Equal(controller.Settings, settingsStore.Saved);
         controller.Dispose();
     }

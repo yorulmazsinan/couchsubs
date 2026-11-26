@@ -70,6 +70,7 @@ final class PhoneModel: ObservableObject {
             let translationChanged = settings.onlineTranslation != oldValue.onlineTranslation
                 || settings.onlineEngine != oldValue.onlineEngine || settings.geminiModel != oldValue.geminiModel
                 || settings.openAIModel != oldValue.openAIModel || settings.claudeModel != oldValue.claudeModel
+                || settings.deepSeekModel != oldValue.deepSeekModel
                 || settings.localAIBaseURL != oldValue.localAIBaseURL || settings.localAIModel != oldValue.localAIModel
                 || settings.aiInstruction != oldValue.aiInstruction || settings.geminiPaidTier != oldValue.geminiPaidTier
             if translationChanged { Task { await refreshTranslatorStatus() } }

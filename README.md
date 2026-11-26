@@ -181,7 +181,7 @@ bellekte tutar (`keep_alive`); oyunda uzun süre altyazı çıkmasa da ilk satı
 Modeli daha erken boşaltmak isterseniz `ollama stop <model>` yazın. LM Studio'da modelin bellekte kalma süresi LM
 Studio'nun kendi ayarlarındadır.
 
-**Ek talimat:** Yapay zekâ motorlarında (Gemini, OpenAI, Claude, yerel model) Ayarlar'daki çeviri motoru bölümünde bulunan
+**Ek talimat:** Yapay zekâ motorlarında (Gemini, OpenAI, Claude, DeepSeek, yerel model) Ayarlar'daki çeviri motoru bölümünde bulunan
 **Ek talimat** kutusuna yazdığınız metin çevirmenin talimatının sonuna eklenir (en çok 1000 karakter). Örneğin
 "Küfürleri yumuşatmadan çevir." yazabilirsiniz. Boş bırakılırsa hiçbir şey değişmez; talimatı değiştirince önceki
 talimatla yapılmış çeviriler yeniden kullanılmaz.

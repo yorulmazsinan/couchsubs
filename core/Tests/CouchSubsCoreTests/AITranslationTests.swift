@@ -81,8 +81,8 @@ private final class FakeAI: URLProtocol {
         switch url.host {
         case "generativelanguage.googleapis.com":
             ["candidates": [["content": ["role": "model", "parts": [["text": "thinking…", "thought": true], ["text": text]]]]]]
-        // Yerel model sunucuları (Ollama, LM Studio) OpenAI biçimiyle yanıt verir.
-        case "api.openai.com", "localhost", "127.0.0.1", "192.168.1.20":
+        // Yerel model sunucuları (Ollama, LM Studio) ve DeepSeek OpenAI biçimiyle yanıt verir.
+        case "api.openai.com", "api.deepseek.com", "localhost", "127.0.0.1", "192.168.1.20":
             ["choices": [["index": 0, "message": ["role": "assistant", "content": text], "finish_reason": "stop"]]]
         default:
             ["content": [["type": "thinking", "thinking": "…"], ["type": "text", "text": text]], "stop_reason": "end_turn"]
@@ -421,9 +421,28 @@ final class AITranslationTests: XCTestCase {
         XCTAssertEqual((body["thinking"] as? [String: Any])?["type"] as? String, "disabled")
     }
 
+    /// DeepSeek OpenAI uyumlu Chat Completions kullanır; düşünme altyazı hızı için kapalı gider.
+    func testDeepSeekRequest() async throws {
+        _ = try await make(.deepSeek).translate("Run!", fallback: local)
+        let (request, body) = FakeAI.requests[0]
+        XCTAssertEqual(request.url?.absoluteString, "https://api.deepseek.com/chat/completions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(secret)")
+        XCTAssertNil(request.value(forHTTPHeaderField: "x-api-key"))
+        XCTAssertEqual(body["model"] as? String, "deepseek-flash")
+        XCTAssertEqual(body["max_tokens"] as? Int, AIRequest.maxOutputTokens)
+        XCTAssertEqual(body["stream"] as? Bool, false)
+        XCTAssertEqual((body["thinking"] as? [String: Any])?["type"] as? String, "disabled")
+        let messages = body["messages"] as? [[String: Any]] ?? []
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["system", "user"])
+        XCTAssertEqual(messages[0]["content"] as? String, AIRequest.systemPrompt)
+
+        _ = try await make(.deepSeek, model: "deepseek-v4-pro").translate("Stay close.", fallback: local)
+        XCTAssertEqual(FakeAI.requests[1].body["model"] as? String, "deepseek-v4-pro")
+        XCTAssertEqual((FakeAI.requests[1].body["thinking"] as? [String: Any])?["type"] as? String, "disabled")
+    }
+
     /// Effort ve düşünme ayarı listedeki modelden gelir, adından tahmin edilmez.
-    func testPerModelParametersAreSent() async throws {
-        _ = try await make(.openAI, model: "gpt-6.1-terra").translate("Run!", fallback: local)
+    func testPerModelParametersAreSent() async throws {        _ = try await make(.openAI, model: "gpt-6.1-terra").translate("Run!", fallback: local)
         XCTAssertEqual(FakeAI.requests[0].body["model"] as? String, "gpt-6.1-terra")
         XCTAssertEqual(FakeAI.requests[0].body["reasoning_effort"] as? String, "none")
 
@@ -444,6 +463,7 @@ final class AITranslationTests: XCTestCase {
         XCTAssertEqual(FakeAI.requests[0].body["model"] as? String, "gpt-6-luna")
         XCTAssertEqual(AIProvider.gemini.model("").id, "gemini-3.5-flash-lite")
         XCTAssertEqual(AIProvider.claude.model(nil).id, "claude-haiku-5-5")
+        XCTAssertEqual(AIProvider.deepSeek.model(nil).id, "deepseek-flash")
         XCTAssertEqual(AIProvider.gemini.engineID(model: "gemini-3.5-flash-lite"), "gemini:gemini-3.5-flash-lite")
         XCTAssertEqual(AIProvider.openAI.engineID(model: AIProvider.openAI.defaultModel.id), "openai:gpt-6-luna")
     }
@@ -546,7 +566,7 @@ final class AITranslationTests: XCTestCase {
             case .gemini:
                 return (((json["systemInstruction"] as? [String: Any])?["parts"] as? [[String: Any]])?.first?["text"]) as? String
             case .claude: return json["system"] as? String
-            case .openAI, .local: return (json["messages"] as? [[String: Any]])?.first?["content"] as? String
+            case .openAI, .deepSeek, .local: return (json["messages"] as? [[String: Any]])?.first?["content"] as? String
             }
         }
         for provider in AIProvider.allCases {

@@ -29,6 +29,7 @@ public enum StoreKey {
     public static let geminiKey = "geminiKey"
     public static let openAIKey = "openAIKey"
     public static let claudeKey = "claudeKey"
+    public static let deepSeekKey = "deepSeekKey"
     /// Yerel model sunucusunun (Ollama, LM Studio) isteğe bağlı anahtarı.
     public static let localAIKey = "localAIKey"
     /// "Yayın penceresi"nin zemin rengi (`StreamBackground`).
@@ -39,13 +40,14 @@ public enum StoreKey {
 /// çalışır; yerel model (Ollama, LM Studio) kullanıcının bilgisayarında çalışır, anahtarı isteğe bağlıdır (Windows'taki
 /// `TranslationEngine` ile aynı).
 public enum TranslationEngine: String, Codable, CaseIterable {
-    case free, deepL = "deepl", gemini, openAI = "openai", claude, local
+    case free, deepL = "deepl", gemini, openAI = "openai", claude, deepSeek = "deepseek", local
 
     public var aiProvider: AIProvider? {
         switch self {
         case .gemini: .gemini
         case .openAI: .openAI
         case .claude: .claude
+        case .deepSeek: .deepSeek
         case .local: .local
         case .free, .deepL: nil
         }
@@ -56,6 +58,7 @@ public enum TranslationEngine: String, Codable, CaseIterable {
         case .gemini: self = .gemini
         case .openAI: self = .openAI
         case .claude: self = .claude
+        case .deepSeek: self = .deepSeek
         case .local: self = .local
         }
     }
@@ -73,6 +76,7 @@ public enum TranslationEngine: String, Codable, CaseIterable {
         case .gemini: StoreKey.geminiKey
         case .openAI: StoreKey.openAIKey
         case .claude: StoreKey.claudeKey
+        case .deepSeek: StoreKey.deepSeekKey
         case .local: StoreKey.localAIKey
         }
     }
@@ -150,6 +154,7 @@ public struct UserSettings: Codable, Equatable {
     public var geminiPaidTier = false
     public var openAIModel = AIProvider.openAI.defaultModel.id
     public var claudeModel = AIProvider.claude.defaultModel.id
+    public var deepSeekModel = AIProvider.deepSeek.defaultModel.id
     /// Yerel model sunucusunun adresi (Ollama: http://127.0.0.1:11434/v1, LM Studio: http://localhost:1234/v1) ve
     /// kullanıcının yazdığı model adı.
     public var localAIBaseURL = LocalAIServer.ollamaURL
@@ -272,6 +277,7 @@ public struct UserSettings: Codable, Equatable {
         geminiPaidTier = try values.decodeIfPresent(Bool.self, forKey: .geminiPaidTier) ?? defaults.geminiPaidTier
         openAIModel = try values.decodeIfPresent(String.self, forKey: .openAIModel) ?? defaults.openAIModel
         claudeModel = try values.decodeIfPresent(String.self, forKey: .claudeModel) ?? defaults.claudeModel
+        deepSeekModel = try values.decodeIfPresent(String.self, forKey: .deepSeekModel) ?? defaults.deepSeekModel
         localAIBaseURL = try values.decodeIfPresent(String.self, forKey: .localAIBaseURL) ?? defaults.localAIBaseURL
         localAIModel = try values.decodeIfPresent(String.self, forKey: .localAIModel) ?? defaults.localAIModel
         aiInstruction = (try? values.decodeIfPresent(String.self, forKey: .aiInstruction)) ?? defaults.aiInstruction
@@ -345,6 +351,7 @@ public struct UserSettings: Codable, Equatable {
         case .gemini: geminiModel
         case .openAI: openAIModel
         case .claude: claudeModel
+        case .deepSeek: deepSeekModel
         case .local: localAIModel
         }
     }
@@ -354,6 +361,7 @@ public struct UserSettings: Codable, Equatable {
         case .gemini: geminiModel = id
         case .openAI: openAIModel = id
         case .claude: claudeModel = id
+        case .deepSeek: deepSeekModel = id
         case .local: localAIModel = id
         }
     }

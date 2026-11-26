@@ -19,12 +19,27 @@ public sealed class LinuxServices : IAppServices
 {
     public ITranslationModel Translation { get; } = new MarianModel();
 
-    // Paneldeki çevrimiçi çeviri anahtarı Claude (sk-ant-…) ya da DeepL olabilir.
+    // Paneldeki çevrimiçi çeviri anahtarı Claude (sk-ant-…), DeepSeek (sk-…) ya da DeepL olabilir.
     public ITextTranslator? MakeOnlineTranslator(string key, ITextTranslator? fallback) =>
-        ClaudeTranslator.IsClaudeKey(key) ? new ClaudeTranslator(key, fallback) : new DeepLTranslator(key, fallback);
+        ClaudeTranslator.IsClaudeKey(key) ? new ClaudeTranslator(key, fallback)
+        : IsDeepSeekKey(key) ? new AiTranslator(AiProvider.DeepSeek, key, null, fallback)
+        : new DeepLTranslator(key, fallback);
 
     public Task<OnlineKeyCheck> CheckOnlineKeyAsync(string key) =>
-        ClaudeTranslator.IsClaudeKey(key) ? ClaudeTranslator.CheckAsync(key) : DeepLTranslator.CheckAsync(key);
+        ClaudeTranslator.IsClaudeKey(key) ? ClaudeTranslator.CheckAsync(key)
+        : IsDeepSeekKey(key) ? CheckDeepSeekAsync(key)
+        : DeepLTranslator.CheckAsync(key);
+
+    /// <summary>DeepSeek anahtarları "sk-" ile başlar; Claude'unki "sk-ant-" (bu yüzden önce Claude denenir).</summary>
+    public static bool IsDeepSeekKey(string key)
+    {
+        key = key.Trim();
+        return key.StartsWith("sk-", StringComparison.Ordinal) && !ClaudeTranslator.IsClaudeKey(key);
+    }
+
+    /// <summary>DeepSeek anahtarı örnek bir satırla denenir; sonuç paneldeki anahtar durumuna çevrilir.</summary>
+    private static async Task<OnlineKeyCheck> CheckDeepSeekAsync(string key) =>
+        new OnlineKeyCheck((await AiTranslator.TestAsync(AiProvider.DeepSeek, key, null)).State);
 
     public Task<IReadOnlyList<ConsoleInfo>> DiscoverConsolesAsync() => ConsoleDiscovery.DiscoverAsync();
 
@@ -82,7 +97,8 @@ public sealed class LinuxServices : IAppServices
         new StreamSession(console, accountId, loginPasscode);
 
     public IKeeper MakeKeeper(LgTv tv, string? key, IReadOnlyDictionary<string, string> parameters, Func<bool> appConnected, Action<LgTv> onMoved,
-                              Action<string> onKey)
+                              Action<string> onKey, Func<int?>? consolePort = null,
+                              Action<TvOpenProblem?>? onOpenResult = null)
     {
         if (tv.Brand == TvBrand.AndroidTv) return new IdleKeeper();
         if (tv.Brand == TvBrand.Samsung)
@@ -102,7 +118,8 @@ public sealed class LinuxServices : IAppServices
                     throw;
                 }
             }, () => SamsungDiscovery.SearchAsync(), onMoved);
-            return new Keeper(new TvKeeper(samsungLocator.ConnectAsync, SamsungClient.AppId, parameters, appConnected));
+            return new Keeper(new TvKeeper(samsungLocator.ConnectAsync, SamsungClient.AppId, parameters, appConnected,
+                consolePort: consolePort, onOpenResult: onOpenResult));
         }
         var locator = new TvLocator(tv, async target =>
         {
@@ -119,7 +136,8 @@ public sealed class LinuxServices : IAppServices
             }
         }, () => LgDiscovery.SearchAsync(), onMoved);
         // Açık ve bağlı TV uygulamasına yeni bağlantıda açma komutu gitmez (#1055; Windows ile aynı).
-        return new Keeper(new TvKeeper(locator.ConnectAsync, AppController.TvAppId, parameters, tvConnected: appConnected));
+        return new Keeper(new TvKeeper(locator.ConnectAsync, AppController.TvAppId, parameters, tvConnected: appConnected,
+            consolePort: consolePort, onOpenResult: onOpenResult));
     }
 
     // --- TV uygulamasını kurma ---
