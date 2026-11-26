@@ -111,6 +111,46 @@ class TextStyleSamplerTest {
     }
 
     /**
+     * GTA 6 duraklatma menüsü (#1339): otomatik alan sütunun yazısından yalnız bir karo geniştir. Yanına yazmanın boş alanı
+     * alanın karesinde ölçülünce en uzun satır ("Photo Studio") sağa sığmıyor, liste dağılıp satır örtülüyordu. Boş alan
+     * bütün karede ölçülür: sütunun bütün satırları aynı yanda, Türkçeleri tek hizada (Mac ve Windows aynı).
+     */
+    @Test
+    fun menuColumnIsMeasuredOnTheWholeFrame() {
+        // Mavi zeminde (gri tonda 51) solda simgeli dikey menü (simge 40..52, yazı 60'tan başlar); sağı boş.
+        val rows = listOf(Triple("Game", 100, 104), Triple("Store", 130, 106), Triple("Help", 160, 92),
+            Triple("Photo Studio", 190, 150), Triple("Settings", 220, 122))
+        val width = 640
+        val height = 360
+        val luma = ByteArray(width * height) { index ->
+            val x = index % width
+            val y = index / width
+            val ink = rows.any { (_, top, right) -> y in top until top + 14 && (x in 40 until 52 || (x in 60 until right && x % 6 < 2)) }
+            (if (ink) 240 else 51).toByte()
+        }
+        val screen = GrayFrame(luma, width, height)
+        // Bulucunun alanı: sütunun karolarından solda ve sağda bir karo (640 piksellik karede karo 20 piksel).
+        val region = CropRegion(80.0 / 360, 260.0 / 360, 40.0 / 640, 180.0 / 640)
+        val crop = GrayFrame(ByteArray(140 * 180) { index -> luma[(80 + index / 140) * width + 40 + index % 140] }, 140, 180)
+        val reading = Reading(rows.map { (text, top, right) ->
+            TextLine(text, TextBox((60.0 - 40) / 140, (top - 80) / 180.0, (right - 40) / 140.0, (top + 14 - 80) / 180.0))
+        })
+        val candidate = RegionWatcher.styled(RegionWatcher.candidate(reading, region, crop, keepPrompts = true, auto = true),
+            reading, region, crop, modes = true, kind = ScreenTextKind.MENU, screen = screen)
+        val paints = candidate.blocks!!.mapNotNull { it.paint }
+        assertEquals(rows.size, paints.size)
+        val left = paints[0].spot!!.left
+        for ((paint, row) in paints.zip(rows)) {
+            assertEquals(row.first, TextPaint.MODE_BESIDE, paint.mode)
+            val spot = paint.spot!!
+            // Sağda, kendi satırının hizasında, ortak hizada.
+            assertTrue(row.first, spot.left >= row.third / 640.0)
+            assertEquals(row.first, paint.cover.top, spot.top, 1e-9)
+            assertEquals(row.first, left, spot.left, 1e-9)
+        }
+    }
+
+    /**
      * Kullanıcının ek alanı ve hazır alan (otomatik değil), otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş
      * simgelerini örtmez, yazı boyu özgünden ölçülür (Mac ve Windows aynı).
      */

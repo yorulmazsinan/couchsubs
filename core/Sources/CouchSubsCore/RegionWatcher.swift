@@ -416,7 +416,7 @@ public final class RegionWatcher {
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.
         let candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
-                                       styled: true, kind: ScreenTextKind.of(area))
+                                       styled: true, kind: ScreenTextKind.of(area), screen: frame)
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma
         // kararı `clearIfUnsteady`'de (özgün yazının izi ya da süre).
         let emptyWhileShown = candidate.key.isEmpty && !(state.renderedText ?? "").isEmpty
@@ -613,8 +613,10 @@ public final class RegionWatcher {
     /// `styled`: ek alan (oyunun hazır alanı `GameAreaPresets` ya da kullanıcının alanı, #1324): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// `kind`: alanın yerinden belli türü (`ScreenTextKind.of(area)`); otomatik alanda grupların çizim kipini seçer.
+    /// `screen`: bütün kare (verilirse çizim kipi ve boş alan onda ölçülür; `frame` yalnız okunan alandır).
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
-                          menu: Bool = false, styled: Bool = false, kind: ScreenTextKind? = nil) -> Candidate {
+                          menu: Bool = false, styled: Bool = false, kind: ScreenTextKind? = nil,
+                          screen: CGImage? = nil) -> Candidate {
         let styled = auto || styled
         // Otomatik alanda (menü, kontrol şeması) tuşlu etiketler ("HOLSTER (L1)", "SELECT (✕)") yazının kendisidir, atılmaz.
         let marked = reading.withButtonIcons(frame: frame, monochrome: auto)
@@ -687,27 +689,33 @@ public final class RegionWatcher {
                 start += group.paragraphs.count
             }
             list = styled ? alignByNeighbours(list) : list
-            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup okunan alanın karesinden
-            // (alan koordinatında) ölçülür, sonra karedeki yere taşınır. Okuma turunda bir kez (her karede değil).
+            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup bütün karede ölçülür
+            // (`screen`; yoksa okunan alanın karesinde, alan koordinatında, sonra karedeki yere taşınır). Okuma turunda bir
+            // kez (her karede değil). Okunan alan yazının karolarından yalnız bir karo geniştir: yanına yazmanın boş alanı
+            // alanın kenarında bitiyordu; GTA 6 duraklatma menüsünde en uzun satır ("Photo Studio") sağa sığmayıp örtülüyor,
+            // ayrı alana düşen "Settings" altına yazılıyordu (#1339). Ortak deneme kareleri de bütün karede ölçer.
             if styled, let frame {
+                let whole = screen
                 let painted = list.indices.filter { list[$0].style != nil && list[$0].look != nil }
                 let targets = painted.map { i -> TextPainter.Target in
                     let group = groups[i], block = list[i]
                     let rows = group.paragraphs.count > 1 ? max(2, group.rows) : group.rows
                     let joined = group.paragraphs.joined(separator: " ")
-                    return TextPainter.Target(box: group.box, lineHeight: group.lineHeight, rows: rows,
+                    return TextPainter.Target(box: whole == nil ? group.box : group.box.placed(in: place),
+                                              lineHeight: whole == nil ? group.lineHeight : group.lineHeight * height, rows: rows,
                                               background: block.style!.background, foreground: block.style!.foreground,
                                               upper: block.look!.upper, align: block.look!.align,
                                               words: TextPainter.words(joined),
                                               kind: Self.paintKind(group, lines: lines, cards: cards, area: kind),
                                               prompt: joined.contains(ButtonIcons.marker) || ButtonPrompts.isPrompt(IconText.plain(joined)))
                 }
-                var paints = TextPainter.paints(targets, frame: frame)
+                let measured = whole ?? frame
+                var paints = TextPainter.paints(targets, frame: measured)
                 for k in paints.indices {
-                    if let face = paints[k].portrait { paints[k].portraitImage = TextPainter.portraitImage(face, frame: frame) }
+                    if let face = paints[k].portrait { paints[k].portraitImage = TextPainter.portraitImage(face, frame: measured) }
                 }
                 for (k, i) in painted.enumerated() where k < paints.count {
-                    list[i].paint = paints[k].placed(in: place)
+                    list[i].paint = whole == nil ? paints[k].placed(in: place) : paints[k]
                     // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
                     if let side = paints[k].iconSide { list[i].look?.align = side }
                 }

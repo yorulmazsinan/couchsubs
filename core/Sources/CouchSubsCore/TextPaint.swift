@@ -776,8 +776,12 @@ public enum TextPainter {
 
         // 7) Satırlar (yanına yazma): listede bütün satırlar aynı yana (sağa yaslı sütunda sol, sola yaslı sütunda sağ;
         // satırdaki sekme/kart başlıklarında hizanın açık yanı, sonra alt, sonra üst), sütunda Türkçeler tek hizada (sağa
-        // yaslı listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Liste birlikte
-        // yerleşemezse her satır kendi başına (sol › sağ › alt › üst).
+        // yaslı listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Bir yan ancak listenin
+        // bütün satırlarına yer varsa ve hiçbiri önceden yerleşen Türkçeye ya da ikiz kutuya binmiyorsa seçilir; değilse
+        // sıradaki yan denenir (çakışma örtmeye döndürmez). Hiçbir yana birlikte sığmazsa en çok satırın sığdığı yan seçilir;
+        // sığmayan satır kendi başına önce listenin yanlarını, sonra alt › üst dener (#1339: GTA 6 duraklatma menüsünde en uzun
+        // satır "Photo Studio" sağa sığmayınca bütün liste dağılıyor, satırlar tek tek yerleşiyor, "Photo Studio" örtülüyordu).
+        // Listede olmayan tek satır sol › sağ › alt › üst.
         func assign(_ i: Int, _ spot: Spot) {
             result[i].mode = .beside
             result[i].spot = TextBox(left: Double(spot.l) / fw, top: Double(spot.t) / fh, right: Double(spot.r) / fw,
@@ -785,7 +789,11 @@ public enum TextPainter {
             result[i].spotRoom = TextBox(left: Double(spot.roomL) / fw, top: Double(spot.t) / fh,
                                          right: Double(spot.roomR) / fw, bottom: Double(spot.b) / fh)
         }
+        // Yerleşen Türkçelerin ve ikiz kutuların yeri (piksel): sonraki yerleşim bunlara binmez.
+        var used: [(l: Int, t: Int, r: Int, b: Int)] = twins
+        func collides(_ s: Spot) -> Bool { used.contains { overlaps($0, (s.l, s.t, s.r, s.b)) } }
         var placed = Set<Int>()
+        var listSides: [Int: [Side]] = [:]
         for list in lists {
             let members = list.0.filter { rooms[$0] != nil && !boxed.contains($0) }
             guard members.count >= 2 else { continue }
@@ -805,6 +813,8 @@ public enum TextPainter {
                     : majority == .left ? false : nil
                 sides = right == false ? [.right, .left] : [.left, .right]
             }
+            for m in members { listSides[m] = sides }
+            var best: (side: Side, spots: [Spot?])? = nil
             for side in sides {
                 var edge: Int? = nil
                 switch side {
@@ -814,8 +824,7 @@ public enum TextPainter {
                 case .above: edge = ms.map { $0.t - $0.near }.min()!
                 }
                 var spots = ms.map { spot($0, side, edge: edge) }
-                guard spots.allSatisfy({ $0 != nil }) else { continue }
-                if side == .below || side == .above {
+                if side == .below || side == .above, spots.allSatisfy({ $0 != nil }) {
                     // Satırdaki komşular arasında Türkçeler ortadaki çizgiyi geçmez.
                     let order = spots.indices.sorted { spots[$0]!.l < spots[$1]!.l }
                     for (a, b) in zip(order, order.dropFirst()) {
@@ -824,32 +833,64 @@ public enum TextPainter {
                         spots[b]!.roomL = min(spots[b]!.l, max(spots[b]!.roomL, middle))
                     }
                 }
-                for (m, s) in zip(members, spots) { assign(m, s!) }
-                placed.formUnion(members)
-                break
+                spots = spots.map { s in s.flatMap { collides($0) ? nil : $0 } }
+                let fit = spots.filter { $0 != nil }.count
+                if fit > (best.map { b in b.spots.filter { $0 != nil }.count } ?? 0) { best = (side, spots) }
+                if fit == spots.count { break }
             }
+            guard let best else { continue }
+            for (m, s) in zip(members, best.spots) {
+                guard let s else { continue }
+                assign(m, s)
+                used.append((s.l, s.t, s.r, s.b))
+                placed.insert(m)
+            }
+            listSides[members[0]] = [best.side] + sides.filter { $0 != best.side }
+            for m in members { listSides[m] = listSides[members[0]] }
         }
         for i in targets.indices where rooms[i] != nil && !boxed.contains(i) && !placed.contains(i) {
-            for side in [Side.left, .right, .below, .above] {
-                if let s = spot(rooms[i]!, side, edge: nil) {
+            var order = listSides[i] ?? [.left, .right]
+            for side in [Side.left, .right, .below, .above] where !order.contains(side) { order.append(side) }
+            for side in order {
+                if let s = spot(rooms[i]!, side, edge: nil), !collides(s) {
                     assign(i, s)
+                    used.append((s.l, s.t, s.r, s.b))
                     break
                 }
             }
         }
-        // Çakışma: yanına yazılan Türkçe başka bir hedefin Türkçesine (önceki yanına yazma alanı ya da ikiz panel) binerse
-        // örtmeye döner.
+        // Çakışma: yanına yazılan Türkçenin uzayabileceği alan (spotRoom) başka bir Türkçenin alanına ya da ikiz kutuya
+        // binerse alan aradaki çizgide kesilir (Türkçeler birbirine yaslanmaz). Türkçenin kendi yeri binerse (yerleşim
+        // çakışmayı önlediği için seyrek) listede olmayan yazı örtmeye döner; menü/liste satırı hiç örtülmez (#1339).
         func overlaps(_ a: TextBox, _ b: TextBox) -> Bool {
             min(a.right, b.right) > max(a.left, b.left) && min(a.bottom, b.bottom) > max(a.top, b.top)
         }
+        let eps = 1e-9
         for i in result.indices where result[i].mode == .beside {
-            guard let mine = result[i].spotRoom else { continue }
-            let hit = result.indices.contains { j in
-                guard j != i else { return false }
-                if result[j].mode == .twin, let twin = result[j].twin { return overlaps(mine, twin) }
-                return j < i && result[j].mode == .beside && result[j].spotRoom.map { overlaps(mine, $0) } == true
+            guard var mine = result[i].spotRoom, let spot = result[i].spot else { continue }
+            var hit = false
+            for j in result.indices where j != i {
+                let other: TextBox?
+                if result[j].mode == .twin { other = result[j].twin }
+                else if result[j].mode == .beside { other = result[j].spot }
+                else { other = nil }
+                guard let other, overlaps(mine, other) else { continue }
+                if overlaps(spot, other) {
+                    if result[j].mode == .twin || j < i { hit = true }
+                    continue
+                }
+                // Öbür Türkçe sağdaysa alan onun solunda, soldaysa sağında biter (ikizde kutunun kenarı; yanına yazmada iki
+                // Türkçenin ortası).
+                if other.left >= spot.right - eps {
+                    let end = result[j].mode == .twin ? other.left : (spot.right + other.left) / 2
+                    mine.right = max(spot.right, min(mine.right, end))
+                } else if other.right <= spot.left + eps {
+                    let end = result[j].mode == .twin ? other.right : (other.right + spot.left) / 2
+                    mine.left = min(spot.left, max(mine.left, end))
+                }
             }
-            if hit {
+            result[i].spotRoom = mine
+            if hit && listOf[i] == nil {
                 result[i].mode = .cover
                 result[i].spot = nil
                 result[i].spotRoom = nil

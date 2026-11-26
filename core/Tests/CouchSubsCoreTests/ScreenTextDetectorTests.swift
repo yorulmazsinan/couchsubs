@@ -167,6 +167,27 @@ final class ScreenTextDetectorTests: XCTestCase {
         XCTAssertEqual(wheel.count, 2)
     }
 
+    /// Menüde aynı sütundaki alt alta bileşenler arada bir boş karo satırı olsa da tek alandır (#1339: GTA 6 duraklatma
+    /// menüsünün "Settings" satırı ayrı alana düşüp kendi başına altına yazılıyordu); iki boş satır ya da başka sütun ayrı
+    /// kalır (Windows ve Android aynı).
+    func testMenuColumnMergesAcrossOneEmptyRow() {
+        typealias Cells = ScreenTextDetector.Cells
+        let column = ScreenTextDetector.menuColumns([(Cells(left: 3, top: 5, right: 7, bottom: 11), [5 * 32 + 3]),
+                                                     (Cells(left: 3, top: 13, right: 6, bottom: 13), [13 * 32 + 3])])
+        XCTAssertEqual(column.count, 1)
+        XCTAssertEqual(column.first?.cells, Cells(left: 3, top: 5, right: 7, bottom: 13))
+        let far = ScreenTextDetector.menuColumns([(Cells(left: 3, top: 5, right: 7, bottom: 11), [5 * 32 + 3]),
+                                                  (Cells(left: 3, top: 14, right: 6, bottom: 14), [14 * 32 + 3])])
+        XCTAssertEqual(far.count, 2)
+        let other = ScreenTextDetector.menuColumns([(Cells(left: 3, top: 5, right: 7, bottom: 11), [5 * 32 + 3]),
+                                                    (Cells(left: 12, top: 13, right: 16, bottom: 13), [13 * 32 + 12])])
+        XCTAssertEqual(other.count, 2)
+        // Ortalı başlık ve alt başlığı (tek satırlık iki bileşen, sol kenarları bir karo farklı) ayrı kalır.
+        let titles = ScreenTextDetector.menuColumns([(Cells(left: 13, top: 8, right: 18, bottom: 8), [8 * 32 + 13]),
+                                                     (Cells(left: 14, top: 10, right: 17, bottom: 10), [10 * 32 + 14])])
+        XCTAssertEqual(titles.count, 2)
+    }
+
     func testResetForgetsAreas() {
         let detector = ScreenTextDetector()
         run(detector, 0, 700) { Self.scene($0, box: self.topLeft) }

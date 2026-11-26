@@ -139,6 +139,47 @@ public class TextStyleSamplerTests
     }
 
     /// <summary>
+    /// GTA 6 duraklatma menüsü (#1339): otomatik alan sütunun yazısından yalnız bir karo geniştir. Yanına yazmanın boş alanı
+    /// alanın karesinde ölçülünce en uzun satır ("Photo Studio") sağa sığmıyor, liste dağılıp satır örtülüyordu. Boş alan
+    /// bütün karede ölçülür: sütunun bütün satırları aynı yanda, Türkçeleri tek hizada (Mac ve Android aynı).
+    /// </summary>
+    [Fact]
+    public void MenuColumnIsMeasuredOnTheWholeFrame()
+    {
+        // Mavi zeminde solda simgeli dikey menü (simge 40..52, yazı 60'tan başlar); sağı boş.
+        (string Text, int Top, int Right)[] rows = [("Game", 100, 104), ("Store", 130, 106), ("Help", 160, 92),
+                                                     ("Photo Studio", 190, 150), ("Settings", 220, 122)];
+        var screen = Frame.Blank(640, 360);
+        for (var y = 0; y < 360; y++)
+            for (var x = 0; x < 640; x++)
+            {
+                var ink = rows.Any(row => y >= row.Top && y < row.Top + 14 && ((x >= 40 && x < 52) || (x >= 60 && x < row.Right && x % 6 < 2)));
+                var p = y * screen.Stride + x * 4;
+                (screen.Pixels[p + 2], screen.Pixels[p + 1], screen.Pixels[p]) = ink ? ((byte)240, (byte)240, (byte)240) : ((byte)30, (byte)42, (byte)156);
+                screen.Pixels[p + 3] = 255;
+            }
+        // Bulucunun alanı: sütunun karolarından solda ve sağda bir karo (640 piksellik karede karo 20 piksel).
+        var region = new CropRegion(80.0 / 360, 260.0 / 360, 40.0 / 640, 180.0 / 640);
+        var crop = RegionCropper.Crop(screen, region);
+        var reading = new Reading([.. rows.Select(row => new TextLine(row.Text, new TextBox((60.0 - 40) / 140, (row.Top - 80) / 180.0,
+                                                                                            (row.Right - 40) / 140.0, (row.Top + 14 - 80) / 180.0)))]);
+        var candidate = RegionWatcher.MakeCandidate(reading, region, crop, auto: true, menu: true, styled: true,
+                                                    kind: ScreenTextKind.Menu, screen: screen);
+        var paints = candidate.Blocks!.Select(block => block.Paint).OfType<TextPaint>().ToList();
+        Assert.Equal(rows.Length, paints.Count);
+        var left = paints[0].Spot!.Value.Left;
+        for (var k = 0; k < rows.Length; k++)
+        {
+            Assert.Equal(PaintMode.Beside, paints[k].Mode);
+            var spot = paints[k].Spot!.Value;
+            // Sağda, kendi satırının hizasında, ortak hizada.
+            Assert.True(spot.Left >= rows[k].Right / 640.0, rows[k].Text);
+            Assert.Equal(paints[k].Cover.Top, spot.Top, 9);
+            Assert.Equal(left, spot.Left, 9);
+        }
+    }
+
+    /// <summary>
     /// Kullanıcının ek alanı ve hazır alan, otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş simgelerini örtmez,
     /// yazı boyu özgünden ölçülür (Mac ve Android aynı).
     /// </summary>

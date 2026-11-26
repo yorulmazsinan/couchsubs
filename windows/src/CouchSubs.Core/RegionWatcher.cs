@@ -762,7 +762,7 @@ public sealed partial class RegionWatcher
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Android aynı.
         return MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
-                             styled: true, kind: ScreenTextKinds.Of(area));
+                             styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
     }
 
     private static int IconCount(Candidate candidate) =>
@@ -832,8 +832,11 @@ public sealed partial class RegionWatcher
     /// Ek alan (oyunun hazır alanı <see cref="GameAreaPresets"/> ya da kullanıcının alanı, #1324): otomatik alan gibi her grup kendi bloğu, özgün stilinde; saat ve
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// </param>
+    /// <param name="screen">Bütün kare: verilirse çizim kipi ve boş alan onda ölçülür (<paramref name="frame"/> yalnız okunan
+    /// alandır; #1339).</param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
-                                            bool auto = false, bool menu = false, bool styled = false, ScreenTextKind? kind = null)
+                                            bool auto = false, bool menu = false, bool styled = false, ScreenTextKind? kind = null,
+                                            Frame? screen = null)
     {
         styled = (auto || styled) && !phone;
         var marked = frame is null || phone ? reading.WithButtonIcons() : reading.WithButtonIcons(frame, monochrome: auto);
@@ -906,10 +909,14 @@ public sealed partial class RegionWatcher
                 start += group.Paragraphs.Count;
             }
             if (styled) list = AlignByNeighbours(list);
-            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup okunan alanın karesinden
-            // (alan koordinatında) ölçülür, sonra karedeki yere taşınır. Okuma turunda bir kez (her karede değil).
+            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup bütün karede ölçülür
+            // (screen; yoksa okunan alanın karesinde, alan koordinatında, sonra karedeki yere taşınır). Okuma turunda bir kez
+            // (her karede değil). Okunan alan yazının karolarından yalnız bir karo geniştir: yanına yazmanın boş alanı alanın
+            // kenarında bitiyordu; GTA 6 duraklatma menüsünde en uzun satır ("Photo Studio") sağa sığmayıp örtülüyor, ayrı
+            // alana düşen "Settings" altına yazılıyordu (#1339). Ortak deneme kareleri de bütün karede ölçer. Mac ve Android aynı.
             if (styled && frame is not null)
             {
+                var measured = screen ?? frame;
                 var painted = Enumerable.Range(0, list.Count).Where(i => list[i].Style is not null && list[i].Look is not null).ToList();
                 var targets = painted.Select(i =>
                 {
@@ -917,17 +924,19 @@ public sealed partial class RegionWatcher
                     var block = list[i];
                     var rows = group.Paragraphs.Count > 1 ? Math.Max(2, group.Rows) : group.Rows;
                     var joined = string.Join(' ', group.Paragraphs);
-                    return new TextPainter.Target(group.Box, group.LineHeight, rows, block.Style!.Background, block.Style.Foreground,
+                    return new TextPainter.Target(screen is null ? group.Box : group.Box.PlacedIn(place),
+                                                  screen is null ? group.LineHeight : group.LineHeight * height, rows,
+                                                  block.Style!.Background, block.Style.Foreground,
                                                   block.Look!.Upper, block.Look.Align, TextPainter.WordCount(joined),
                                                   PaintKind(group, lines, cards, kind),
                                                   joined.Contains(ButtonIcons.Marker) || ButtonPrompts.IsPrompt(IconText.Plain(joined)));
                 }).ToList();
-                var paints = TextPainter.Paints(targets, frame)
-                    .Select(paint => paint.Portrait is { } face ? paint with { PortraitImage = TextPainter.PortraitImage(face, frame) } : paint)
+                var paints = TextPainter.Paints(targets, measured)
+                    .Select(paint => paint.Portrait is { } face ? paint with { PortraitImage = TextPainter.PortraitImage(face, measured) } : paint)
                     .ToList();
                 for (var k = 0; k < painted.Count && k < paints.Count; k++)
                 {
-                    var block = list[painted[k]] with { Paint = paints[k].PlacedIn(place) };
+                    var block = list[painted[k]] with { Paint = screen is null ? paints[k].PlacedIn(place) : paints[k] };
                     // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
                     if (paints[k].IconSide is { } side && block.Look is { } look) block = block with { Look = look with { Align = side } };
                     list[painted[k]] = block;

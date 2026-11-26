@@ -202,7 +202,7 @@ public sealed class ScreenTextDetector
             // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
             // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez.
             List<(Cells Cells, List<int> Tiles)> components;
-            if (inMenu) components = all;
+            if (inMenu) components = MenuColumns(all);
             else
             {
                 // Bölgeleri kesişen bileşenler tek alan (tuş çubuğu iki alana bölünüp kesik okunuyordu); sütunda hizalı en az üç
@@ -558,6 +558,37 @@ public sealed class ScreenTextDetector
         return true;
     }
 
+    /// <summary>
+    /// Menüde aynı sütunda (sol kenarları en çok <see cref="ColumnSlack"/> karo farklı; iki tek satırlık bileşende aynı karo)
+    /// alt alta duran bileşenler arada bir boş karo satırı olsa da birleşir: dikey menünün satırları tek alanda okunur,
+    /// Türkçeleri tek grupta aynı yana yazılır. Satır aralığı karo boyuna denk gelince bir satır ("Settings") ayrı alana düşüp
+    /// kendi başına yerleşiyordu (#1339). Mac ve Android aynı.
+    /// </summary>
+    internal const int ColumnSlack = 1;
+
+    internal static List<(Cells Cells, List<int> Tiles)> MenuColumns(List<(Cells Cells, List<int> Tiles)> input)
+    {
+        var items = input.Select(item => (item.Cells, Tiles: new List<int>(item.Tiles))).ToList();
+        for (var changed = true; changed;)
+        {
+            changed = false;
+            for (var i = 0; i < items.Count && !changed; i++)
+                for (var j = i + 1; j < items.Count && !changed; j++)
+                {
+                    var (a, b) = (items[i].Cells, items[j].Cells);
+                    // Tek satırlık iki bileşende (ortalı başlık ve alt başlığı) sol kenar aynı karoda olmalı.
+                    var slack = a.Bottom > a.Top || b.Bottom > b.Top ? ColumnSlack : 0;
+                    if (Math.Abs(a.Left - b.Left) > slack || a.Top > b.Bottom + 2 || b.Top > a.Bottom + 2) continue;
+                    var union = new Cells(Math.Min(a.Left, b.Left), Math.Min(a.Top, b.Top), Math.Max(a.Right, b.Right), Math.Max(a.Bottom, b.Bottom));
+                    if (union.Area > MaxShare * Columns * Rows) continue;
+                    items[i] = (union, [.. items[i].Tiles, .. items[j].Tiles]);
+                    items.RemoveAt(j);
+                    changed = true;
+                }
+        }
+        return [.. items.Select(item => (item.Cells, item.Tiles))];
+    }
+
     private void Update(List<(Cells Cells, List<int> Tiles)> components, bool[] candidate, long now, bool inMenu)
     {
         var closed = menu && !inMenu;
@@ -585,6 +616,8 @@ public sealed class ScreenTextDetector
             existing.Menu = inMenu;
             matched.Add(existing);
         }
+        // Bileşenlerden birinin içinde kalan eşleşmemiş alan (birleşen menü sütununun eski parçası) ikinci kez okunmaz.
+        tracked.RemoveAll(item => !matched.Contains(item) && components.Any(component => component.Cells.Overlap(item.Cells) >= 1));
         foreach (var item in tracked)
             if (!matched.Contains(item) && item.Tiles.Any(index => candidate[index])) item.Seen = now;
         tracked.RemoveAll(item => now - item.Seen >= ExpireMs);

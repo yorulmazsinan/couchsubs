@@ -1033,9 +1033,12 @@ class TranslationService : Service() {
             // Oyun telefonu açıkken telefonun yazıları telefon okuyucusundadır; kenar bildirimi sayılmaz (telefon çevirisi
             // kapalıyken de: görünen telefon, [phoneSeen]).
             val notices = if (phoneOpen || phoneSeen) emptyList() else noticeAreas
+            // Bütün kare turda bir kez kopyalanır: ekran yazısının çizim kipi ve yanına yazmanın boş alanı onda ölçülür (#1339).
+            val screen by lazy { SubtitleReader.copyRegion(frame, com.couchsubs.mobile.core.CropRegion(0.0, 1.0, 0.0, 1.0)) }
             regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + autoAreas, { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
-                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)
+                    com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color,
+                        screen?.gray, screen?.color)
                 }
             }) { task -> regionWork.execute(task) }
             FramePreview.offer(frame, now)

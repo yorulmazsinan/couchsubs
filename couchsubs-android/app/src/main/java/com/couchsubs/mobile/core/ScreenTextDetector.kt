@@ -41,6 +41,8 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         const val ROW_REACH = 3
         /** İki bileşen de en az iki karo genişse aynı satırda en çok bu kadar sütun arayla birleşir. */
         const val WIDE_ROW_REACH = 4
+        /** Menü sütununun bileşenleri sol kenarları en çok bu kadar karo farklıysa birleşir ([menuColumns], #1339). */
+        const val COLUMN_SLACK = 1
         const val NAME = "Screen text"
         /** Menü durumu: en az bu kadar bileşen aynı 300 ms içinde belirip duruyor. */
         const val MENU_COMPONENTS = 3
@@ -301,7 +303,7 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         // çevirisi ekranda kalıyordu (#1198; Mac/iPhone, Windows ile aynı).
         autos.removeAll { now - it.seen >= GONE_MS || (it.menu && !menu && (expired || it.seen != now)) }
         // Menüde tek karoluk kısa etiketler ("OFF", "ON") de alan olur.
-        var components = all
+        var components = (if (menu) menuColumns(all) else all)
             .filter { it.size >= if (menu) 1 else 2 }
             .mapNotNull { tilesOf -> regionOf(tilesOf)?.let { tilesOf to it } }
             .sortedByDescending { it.first.size }
@@ -338,6 +340,8 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
             autos.filter { it !in matched && overlap(it.region, region) >= 0.30 }
                 .maxByOrNull { overlap(it.region, region) }?.let { matched.add(it); owner[members] = it }
         }
+        // Bileşenlerden birinin içinde kalan eşleşmemiş alan (birleşen menü sütununun eski parçası) ikinci kez okunmaz.
+        autos.removeAll { auto -> auto !in matched && components.any { (_, region) -> overlap(region, auto.region) >= 1 - 1e-9 } }
         for ((members, region) in components) {
             val match = owner[members]
             if (match != null) {
@@ -478,6 +482,36 @@ class ScreenTextDetector(private val clock: () -> Long = monotonicClock) {
         val edge = ring.isNotEmpty() && ring.count { kotlin.math.abs(sample.mean[it] - ground) > 25 } >= 0.6 * ring.size
         debug?.invoke("panel ${members.size}k zemin %.0f sapma %.1f aynıTon %d/%d kenar $edge".format(ground, deviation, same.size, grounds.size))
         return sameTone && deviation <= if (edge) PANEL_EDGE_DEVIATION else PANEL_DEVIATION
+    }
+
+    /**
+     * Menüde aynı sütunda (sol kenarları en çok [COLUMN_SLACK] karo farklı; iki tek satırlık bileşende aynı karo) alt alta
+     * duran bileşenler arada bir boş karo satırı olsa da birleşir: dikey menünün satırları tek alanda okunur, Türkçeleri tek
+     * grupta aynı yana yazılır. Satır aralığı karo boyuna denk gelince bir satır ("Settings") ayrı alana düşüp kendi başına
+     * yerleşiyordu (#1339). Mac/iPhone ve Windows aynı.
+     */
+    internal fun menuColumns(list: List<List<Int>>): List<List<Int>> {
+        val groups = list.map { it.toMutableList() }.toMutableList()
+        var changed = true
+        while (changed) {
+            changed = false
+            loop@ for (i in groups.indices) for (j in i + 1 until groups.size) {
+                val aRows = groups[i].map { it / COLUMNS }
+                val bRows = groups[j].map { it / COLUMNS }
+                val aLeft = groups[i].minOf { it % COLUMNS }
+                val bLeft = groups[j].minOf { it % COLUMNS }
+                // Tek satırlık iki bileşende (ortalı başlık ve alt başlığı) sol kenar aynı karoda olmalı.
+                val slack = if (aRows.max() > aRows.min() || bRows.max() > bRows.min()) COLUMN_SLACK else 0
+                if (kotlin.math.abs(aLeft - bLeft) > slack || aRows.min() > bRows.max() + 2 || bRows.min() > aRows.max() + 2) continue
+                val union = groups[i] + groups[j]
+                if (regionOf(union) == null) continue
+                groups[i] = union.toMutableList()
+                groups.removeAt(j)
+                changed = true
+                break@loop
+            }
+        }
+        return groups
     }
 
     /** Genişletilmiş bölgeleri kesişen bileşenler birleşir; birleşimi çok büyük olan ayrı kalır. */

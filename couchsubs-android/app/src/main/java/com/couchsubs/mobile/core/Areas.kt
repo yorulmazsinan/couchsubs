@@ -605,6 +605,7 @@ class RegionWatcher(
         internal fun styled(
             candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?, color: ((Int, Int) -> Int)? = null,
             modes: Boolean = false, kind: ScreenTextKind? = null,
+            screen: GrayFrame? = null, screenColor: ((Int, Int) -> Int)? = null,
         ): Candidate {
             if (frame == null) return candidate
             val groups = candidate.blocks ?: run {
@@ -654,18 +655,23 @@ class RegionWatcher(
                     block.lineHeight / height * frame.height, source, edges, color,
                 )?.let { style -> aligns[index]?.let { style.copy(look = style.look.copy(align = it)) } ?: style }
             }
-            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup okunan alanın karesinden
-            // (alan koordinatında) ölçülür, sonra karedeki yere taşınır. Okuma turunda bir kez (her karede değil; Mac
-            // RegionWatcher ve Windows ile aynı).
+            // Yerinde birebir çizim: örtü kutusu, zemin/degrade, satır aralığı, boş alan ve grup bütün karede ölçülür
+            // ([screen]; yoksa okunan alanın karesinde, alan koordinatında, sonra karedeki yere taşınır). Okuma turunda bir
+            // kez (her karede değil). Okunan alan yazının karolarından yalnız bir karo geniştir: yanına yazmanın boş alanı
+            // alanın kenarında bitiyordu; GTA 6 duraklatma menüsünde en uzun satır ("Photo Studio") sağa sığmayıp örtülüyor,
+            // ayrı alana düşen "Settings" altına yazılıyordu (#1339). Ortak deneme kareleri de bütün karede ölçer. Mac
+            // RegionWatcher ve Windows ile aynı.
+            val whole = screen?.takeIf { it.isValid }
             val painted = blocks.indices.filter { styles[it] != null }
             val targets = painted.map { i ->
                 val block = blocks[i]
                 val style = styles[i]!!
                 val box = block.box
                 TextPainter.Target(
-                    TextBox((box.left - region.left) / width, (box.top - region.top) / height,
+                    if (whole != null) box else TextBox((box.left - region.left) / width, (box.top - region.top) / height,
                         (box.right - region.left) / width, (box.bottom - region.top) / height),
-                    block.lineHeight / height, if (block.count > 1) maxOf(2, block.rows) else block.rows,
+                    if (whole != null) block.lineHeight else block.lineHeight / height,
+                    if (block.count > 1) maxOf(2, block.rows) else block.rows,
                     style.surface.background, style.surface.foreground, style.look.upper, style.look.align,
                     TextPainter.words((block.start until block.start + block.count).joinToString(" ") { candidate.paragraphs[it] }),
                     if (modes) paintKind(candidate.paragraphs.subList(block.start, block.start + block.count), block.card, kind) else null,
@@ -673,16 +679,18 @@ class RegionWatcher(
                         it.contains(ButtonIcons.MARKER) || ButtonPrompts.isPrompt(IconText.plain(it))
                     })
             }
-            val paints = (if (targets.isEmpty()) emptyList() else TextPainter.paints(targets, frame, color)).map { paint ->
-                // Kişi resmi (ikiz panelde gösterilir) okunan alanın karesinden, karedeki yere taşınmadan önce kesilir.
+            val measured = whole ?: frame
+            val measuredColor = if (whole != null) screenColor else color
+            val paints = (if (targets.isEmpty()) emptyList() else TextPainter.paints(targets, measured, measuredColor)).map { paint ->
+                // Kişi resmi (ikiz panelde gösterilir) ölçülen kareden, karedeki yere taşınmadan önce kesilir.
                 val face = paint.portrait ?: return@map paint
-                paint.copy(portraitImage = TextPainter.portraitImage(face, frame.width, frame.height,
-                    color ?: { x, y -> frame.at(x, y).let { (it shl 16) or (it shl 8) or it } }))
+                paint.copy(portraitImage = TextPainter.portraitImage(face, measured.width, measured.height,
+                    measuredColor ?: { x, y -> measured.at(x, y).let { (it shl 16) or (it shl 8) or it } }))
             }
             val aligned = styles.toMutableList()
             for ((k, i) in painted.withIndex()) {
                 if (k >= paints.size) continue
-                blocks[i] = blocks[i].copy(paint = paints[k].placedIn(region.box))
+                blocks[i] = blocks[i].copy(paint = if (whole != null) paints[k] else paints[k].placedIn(region.box))
                 // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
                 val side = paints[k].iconSide
                 val style = aligned[i]
@@ -928,6 +936,9 @@ class RegionWatcher(
         val pixels: Any, val signature: ByteArray, val frame: GrayFrame? = null,
         /** Okunan alanın (x, y) noktasının rengi (0xRRGGBB); kare renk taşımıyorsa null (stil gri tonda). */
         val color: ((Int, Int) -> Int)? = null,
+        /** Bütün kare ve rengi: çizim kipi ve yanına yazmanın boş alanı onda ölçülür (#1339); null: okunan alanda. */
+        val screen: GrayFrame? = null,
+        val screenColor: ((Int, Int) -> Int)? = null,
     )
 
     /**
@@ -1333,11 +1344,12 @@ class RegionWatcher(
                 return
             }
             candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true,
-                kind = ScreenTextKind.of(area)).copy(auto = true)
+                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor).copy(auto = true)
         } else {
             // Oyunun hazır alanı ve kullanıcının alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda, çizim
             // kipiyle çizilir (siyah kutu değil, #856; tuş simgesini örtmez, yazı boyu sabit, #1324).
-            candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true, kind = ScreenTextKind.of(area))
+            candidate = styled(candidate, text, area.region, crop.frame, crop.color, modes = true, kind = ScreenTextKind.of(area),
+                screen = crop.screen, screenColor = crop.screenColor)
         }
         state.rejectPending = false
         // Çevirisi gösterilen alanda art arda boş okuma (görüntü değişirken) yazının gittiğini tek başına kanıtlamaz: kaldırma

@@ -251,4 +251,23 @@ class ScreenTextDetectorTest {
         // Tek karoluk tekerlek etiketleri (üç boş karo arayla) ayrı kalır.
         assertEquals(2, detector.joined(listOf(listOf(columns + 4), listOf(columns + 8))).size)
     }
+
+    /**
+     * Menüde aynı sütundaki alt alta bileşenler arada bir boş karo satırı olsa da tek alandır (#1339: GTA 6 duraklatma
+     * menüsünün "Settings" satırı ayrı alana düşüp kendi başına altına yazılıyordu); iki boş satır ya da başka sütun ayrı
+     * kalır (Mac ve Windows aynı).
+     */
+    @Test
+    fun menuColumnMergesAcrossOneEmptyRow() {
+        val columns = ScreenTextDetector.COLUMNS
+        val detector = ScreenTextDetector()
+        fun tiles(left: Int, top: Int, right: Int, bottom: Int) = (top..bottom).flatMap { row -> (left..right).map { row * columns + it } }
+        val column = detector.menuColumns(listOf(tiles(3, 5, 7, 11), tiles(3, 13, 6, 13)))
+        assertEquals(1, column.size)
+        assertEquals(tiles(3, 5, 7, 11).size + tiles(3, 13, 6, 13).size, column.single().size)
+        assertEquals(2, detector.menuColumns(listOf(tiles(3, 5, 7, 11), tiles(3, 14, 6, 14))).size)
+        assertEquals(2, detector.menuColumns(listOf(tiles(3, 5, 7, 11), tiles(12, 13, 16, 13))).size)
+        // Ortalı başlık ve alt başlığı (tek satırlık iki bileşen, sol kenarları bir karo farklı) ayrı kalır.
+        assertEquals(2, detector.menuColumns(listOf(tiles(13, 8, 18, 8), tiles(14, 10, 17, 10))).size)
+    }
 }

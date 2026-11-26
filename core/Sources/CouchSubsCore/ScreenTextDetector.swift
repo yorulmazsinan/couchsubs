@@ -168,7 +168,7 @@ public final class ScreenTextDetector: @unchecked Sendable {
             // Menü dışında tek karoluk bileşen (kısa etiket, simge) alan olmaz.
             // Menü dışında yalnız arayüz kanıtı olan bileşen alan olur: düz panel zemini ve yerinde sabitlik. Oyun dünyasındaki
             // yazı (poster, plaka, tabela) dokulu zeminde ya da kamerayla kayarak durur, çevrilmez (Windows ile aynı).
-            let components = inMenu ? all : all.filter { $0.tiles.count >= 2 && isInterface($0.cells, $0.tiles, now: now) }
+            let components = inMenu ? Self.menuColumns(all) : all.filter { $0.tiles.count >= 2 && isInterface($0.cells, $0.tiles, now: now) }
             let ranked = components.enumerated()
                 .sorted { ($0.element.tiles.count, -$0.offset) > ($1.element.tiles.count, -$1.offset) }
                 .map(\.element).prefix(inMenu ? Self.menuMaxAreas : Self.maxAreas)
@@ -371,6 +371,35 @@ public final class ScreenTextDetector: @unchecked Sendable {
         return result
     }
 
+    /// Menüde aynı sütunda (sol kenarları en çok `columnSlack` karo farklı; iki tek satırlık bileşende aynı karo) alt alta duran bileşenler arada bir boş karo
+    /// satırı olsa da birleşir: dikey menünün satırları tek alanda okunur, Türkçeleri tek grupta aynı yana yazılır. Satır
+    /// aralığı karo boyuna denk gelince bir satır ("Settings") ayrı alana düşüp kendi başına yerleşiyordu (#1339).
+    static let columnSlack = 1
+
+    static func menuColumns(_ components: [(cells: Cells, tiles: [Int])]) -> [(cells: Cells, tiles: [Int])] {
+        var result = components
+        var changed = true
+        while changed {
+            changed = false
+            outer: for i in result.indices {
+                for j in result.indices where j > i {
+                    let a = result[i].cells, b = result[j].cells
+                    // Tek satırlık iki bileşende (ortalı başlık ve alt başlığı) sol kenar aynı karoda olmalı.
+                    let slack = a.bottom > a.top || b.bottom > b.top ? columnSlack : 0
+                    guard abs(a.left - b.left) <= slack, a.top <= b.bottom + 2, b.top <= a.bottom + 2 else { continue }
+                    let union = Cells(left: min(a.left, b.left), top: min(a.top, b.top),
+                                      right: max(a.right, b.right), bottom: max(a.bottom, b.bottom))
+                    guard Double(union.area) <= maxShare * Double(columns * rows) else { continue }
+                    result[i] = (union, result[i].tiles + result[j].tiles)
+                    result.remove(at: j)
+                    changed = true
+                    break outer
+                }
+            }
+        }
+        return result
+    }
+
     /// Menü durumu: en az üç ayrı bileşen var ve bileşenlerin dışındaki karoların çoğu düşük kenar enerjili (bulanık ya
     /// da karartılmış zemin). Menüye ilk girişte bileşenlerin en çok 300 ms arayla birlikte belirmiş olması da gerekir;
     /// menüde gezinirken (seçim çerçevesi değişince) durum, menüye girildiğindeki bileşenlerden biri (karolarının en az
@@ -476,6 +505,10 @@ public final class ScreenTextDetector: @unchecked Sendable {
             area.seen = now
             area.menu = inMenu
             matched.insert(ObjectIdentifier(area))
+        }
+        // Bileşenlerden birinin içinde kalan eşleşmemiş alan (birleşen menü sütununun eski parçası) ikinci kez okunmaz.
+        tracked.removeAll { area in
+            !matched.contains(ObjectIdentifier(area)) && components.contains { $0.cells.overlap(area.cells) >= 1 }
         }
         for area in tracked where !matched.contains(ObjectIdentifier(area)) && area.tiles.contains(where: { candidate[$0] }) {
             area.seen = now

@@ -2376,6 +2376,288 @@
           ]
         }
       ]
+    },
+    {
+      "id": "menu-sutunu-tek-yan-carpisma-ortmez",
+      "width": 640,
+      "height": 360,
+      "background": {
+        "kind": "solid",
+        "from": "#1E2A9C"
+      },
+      "rects": [
+        {
+          "box": [
+            300,
+            190,
+            390,
+            204
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            40,
+            100,
+            52,
+            114
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            60,
+            100,
+            104,
+            114
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            40,
+            130,
+            52,
+            144
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            60,
+            130,
+            106,
+            144
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            40,
+            160,
+            52,
+            174
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            60,
+            160,
+            92,
+            174
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            40,
+            190,
+            52,
+            204
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            60,
+            190,
+            150,
+            204
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            40,
+            220,
+            52,
+            234
+          ],
+          "color": "#FFFFFF"
+        },
+        {
+          "box": [
+            60,
+            220,
+            122,
+            234
+          ],
+          "color": "#FFFFFF"
+        }
+      ],
+      "targets": [
+        {
+          "box": [
+            300,
+            190,
+            390,
+            204
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": true,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            60,
+            100,
+            104,
+            114
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": false,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            60,
+            130,
+            106,
+            144
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": false,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            60,
+            160,
+            92,
+            174
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": false,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            60,
+            190,
+            150,
+            204
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": false,
+          "align": "left",
+          "kind": "menu"
+        },
+        {
+          "box": [
+            60,
+            220,
+            122,
+            234
+          ],
+          "line": 14,
+          "rows": 1,
+          "bg": "#1E2A9C",
+          "fg": "#FFFFFF",
+          "upper": false,
+          "align": "left",
+          "kind": "menu"
+        }
+      ],
+      "expect": [
+        {
+          "mode": "beside",
+          "room": [
+            398,
+            559
+          ],
+          "spot": [
+            398,
+            189,
+            490,
+            205
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            158,
+            246
+          ],
+          "spot": [
+            158,
+            99,
+            204,
+            115
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            158,
+            249
+          ],
+          "spot": [
+            158,
+            129,
+            206,
+            145
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            158,
+            226
+          ],
+          "spot": [
+            158,
+            159,
+            192,
+            175
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            158,
+            296
+          ],
+          "spot": [
+            158,
+            189,
+            250,
+            205
+          ]
+        },
+        {
+          "mode": "beside",
+          "room": [
+            158,
+            274
+          ],
+          "spot": [
+            158,
+            219,
+            222,
+            235
+          ]
+        }
+      ]
     }
   ]
 }

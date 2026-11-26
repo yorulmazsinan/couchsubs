@@ -130,6 +130,47 @@ final class TextStyleSamplerTests: XCTestCase {
         XCTAssertEqual(preset.blocks?.first?.style?.background, "#14161E")
     }
 
+    /// GTA 6 duraklatma menüsü (#1339): otomatik alan sütunun yazısından yalnız bir karo geniştir. Yanına yazmanın boş alanı
+    /// alanın karesinde ölçülünce en uzun satır ("Photo Studio") sağa sığmıyor, liste dağılıp satır örtülüyordu. Boş alan
+    /// bütün karede ölçülür: sütunun bütün satırları aynı yanda, Türkçeleri tek hizada (Windows ve Android aynı).
+    @MainActor
+    func testMenuColumnIsMeasuredOnTheWholeFrame() throws {
+        // Mavi zeminde solda simgeli dikey menü (simge 40..52, yazı 60'tan başlar); sağı boş.
+        let width = 640, height = 360
+        let rows: [(String, Int, Int)] = [("Game", 100, 104), ("Store", 130, 106), ("Help", 160, 92),
+                                          ("Photo Studio", 190, 150), ("Settings", 220, 122)]
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let ink = rows.contains { _, top, right in
+                    (top..<top + 14).contains(y) && ((x >= 40 && x < 52) || (x >= 60 && x < right && x % 6 < 2))
+                }
+                let p = (y * width + x) * 4
+                (pixels[p], pixels[p + 1], pixels[p + 2]) = ink ? (240, 240, 240) : (30, 42, 156)
+            }
+        }
+        let screen = ScreenTextDetectorTests.image(pixels, width: width, height: height)
+        // Bulucunun alanı: sütunun karolarından solda ve sağda bir karo (640 piksellik karede karo 20 piksel).
+        let region = CropRegion(top: 80.0 / 360, bottom: 260.0 / 360, left: 40.0 / 640, right: 180.0 / 640)
+        let crop = try XCTUnwrap(screen.cropping(to: CGRect(x: 40, y: 80, width: 140, height: 180)))
+        let lines = rows.map { text, top, right in
+            TextLine(text, box: TextBox(left: (60.0 - 40) / 140, top: Double(top - 80) / 180,
+                                        right: Double(right - 40) / 140, bottom: Double(top + 14 - 80) / 180))
+        }
+        let candidate = RegionWatcher.candidate(Reading(lines: lines), in: region, frame: crop, auto: true, menu: true,
+                                                styled: true, kind: .menu, screen: screen)
+        let paints = (candidate.blocks ?? []).compactMap(\.paint)
+        XCTAssertEqual(paints.count, rows.count)
+        for (paint, row) in zip(paints, rows) {
+            XCTAssertEqual(paint.mode, .beside, row.0)
+            let spot = try XCTUnwrap(paint.spot, row.0)
+            // Sağda, kendi satırının hizasında.
+            XCTAssertGreaterThanOrEqual(spot.left, Double(row.2) / 640, row.0)
+            XCTAssertEqual(spot.top, paint.cover.top, accuracy: 1e-9, row.0)
+            XCTAssertEqual(spot.left, try XCTUnwrap(paints[0].spot).left, accuracy: 1e-9, "\(row.0) ortak hiza")
+        }
+    }
+
     /// Kullanıcının ek alanı ve hazır alan, otomatik alanla aynı çizim kipini alır (#1324): tek kutu tuş simgelerini örtmez,
     /// yazı boyu özgünden ölçülür (Windows ve Android aynı).
     @MainActor

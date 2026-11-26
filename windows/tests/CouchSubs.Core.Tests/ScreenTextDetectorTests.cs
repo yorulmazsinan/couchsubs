@@ -182,6 +182,29 @@ public class ScreenTextDetectorTests(ITestOutputHelper output)
     public void NoiseRules(string text, bool noise) => Assert.Equal(noise, ScreenTextNoise.IsNoise(text));
 
     /// <summary>
+    /// Menüde aynı sütundaki alt alta bileşenler arada bir boş karo satırı olsa da tek alandır (#1339: GTA 6 duraklatma
+    /// menüsünün "Settings" satırı ayrı alana düşüp kendi başına altına yazılıyordu); iki boş satır ya da başka sütun ayrı
+    /// kalır (Mac ve Android aynı).
+    /// </summary>
+    [Fact]
+    public void MenuColumnMergesAcrossOneEmptyRow()
+    {
+        var column = ScreenTextDetector.MenuColumns([(new ScreenTextDetector.Cells(3, 5, 7, 11), [5 * 32 + 3]),
+                                                     (new ScreenTextDetector.Cells(3, 13, 6, 13), [13 * 32 + 3])]);
+        Assert.Equal(new ScreenTextDetector.Cells(3, 5, 7, 13), Assert.Single(column).Cells);
+        var far = ScreenTextDetector.MenuColumns([(new ScreenTextDetector.Cells(3, 5, 7, 11), [5 * 32 + 3]),
+                                                  (new ScreenTextDetector.Cells(3, 14, 6, 14), [14 * 32 + 3])]);
+        Assert.Equal(2, far.Count);
+        var other = ScreenTextDetector.MenuColumns([(new ScreenTextDetector.Cells(3, 5, 7, 11), [5 * 32 + 3]),
+                                                    (new ScreenTextDetector.Cells(12, 13, 16, 13), [13 * 32 + 12])]);
+        Assert.Equal(2, other.Count);
+        // Ortalı başlık ve alt başlığı (tek satırlık iki bileşen, sol kenarları bir karo farklı) ayrı kalır.
+        var titles = ScreenTextDetector.MenuColumns([(new ScreenTextDetector.Cells(13, 8, 18, 8), [8 * 32 + 13]),
+                                                     (new ScreenTextDetector.Cells(14, 10, 17, 10), [10 * 32 + 14])]);
+        Assert.Equal(2, titles.Count);
+    }
+
+    /// <summary>
     /// Menü şeridinin sekmeleri arasındaki seçili (renkli, aday olmayan) sekme alanı ortadan bölmez: aynı karo satırında
     /// iki boş karoya kadar aralıklı bileşenler birleşir (#859); başka satırdaki bileşen ayrı kalır.
     /// </summary>

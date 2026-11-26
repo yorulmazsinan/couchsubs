@@ -1002,13 +1002,21 @@ object TextPainter {
 
         // 7) Satırlar (yanına yazma): listede bütün satırlar aynı yana (sağa yaslı sütunda sol, sola yaslı sütunda sağ;
         // satırdaki sekme/kart başlıklarında hizanın açık yanı, sonra alt, sonra üst), sütunda Türkçeler tek hizada (sağa
-        // yaslı listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Liste birlikte
-        // yerleşemezse her satır kendi başına (sol › sağ › alt › üst).
+        // yaslı listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Bir yan ancak listenin
+        // bütün satırlarına yer varsa ve hiçbiri önceden yerleşen Türkçeye ya da ikiz kutuya binmiyorsa seçilir; değilse
+        // sıradaki yan denenir (çakışma örtmeye döndürmez). Hiçbir yana birlikte sığmazsa en çok satırın sığdığı yan seçilir;
+        // sığmayan satır kendi başına önce listenin yanlarını, sonra alt › üst dener (#1339: GTA 6 duraklatma menüsünde en uzun
+        // satır "Photo Studio" sağa sığmayınca bütün liste dağılıyor, satırlar tek tek yerleşiyor, "Photo Studio" örtülüyordu).
+        // Listede olmayan tek satır sol › sağ › alt › üst. Mac TextPaint.swift ve Windows TextPaint.cs aynı.
         fun assign(i: Int, spot: Spot) {
             result[i] = result[i].copy(mode = TextPaint.MODE_BESIDE, spot = TextBox(spot.l / fw, spot.t / fh, spot.r / fw, spot.b / fh),
                 spotRoom = TextBox(spot.roomL / fw, spot.t / fh, spot.roomR / fw, spot.b / fh))
         }
+        // Yerleşen Türkçelerin ve ikiz kutuların yeri (piksel): sonraki yerleşim bunlara binmez.
+        val used = twins.toMutableList()
+        fun collides(s: Spot) = used.any { overlaps(it, Box(s.l, s.t, s.r, s.b)) }
         val placed = mutableSetOf<Int>()
+        val listSides = mutableMapOf<Int, List<Side>>()
         for (list in lists) {
             val members = list.first.filter { rooms[it] != null && it !in boxed }
             if (members.size < 2) continue
@@ -1027,6 +1035,10 @@ object TextPainter {
                 else if (majority == "right") true else if (majority == "left") false else null
                 if (right == false) listOf(Side.RIGHT, Side.LEFT) else listOf(Side.LEFT, Side.RIGHT)
             }
+            for (m in members) listSides[m] = sides
+            var bestSide: Side? = null
+            var bestSpots: List<Spot?> = emptyList()
+            var bestFit = 0
             for (side in sides) {
                 val edge = when (side) {
                     Side.LEFT -> if (sameRow) null else ms.minOf { it.l - it.near }
@@ -1034,44 +1046,81 @@ object TextPainter {
                     Side.BELOW -> ms.maxOf { it.b + it.near }
                     Side.ABOVE -> ms.minOf { it.t - it.near }
                 }
-                val found = ms.map { spot(it, side, edge) }
-                if (found.any { it == null }) continue
-                val spots = found.map { it!! }.toMutableList()
-                if (side == Side.BELOW || side == Side.ABOVE) {
+                val spots: MutableList<Spot?> = ms.map { spot(it, side, edge) }.toMutableList()
+                if ((side == Side.BELOW || side == Side.ABOVE) && spots.all { it != null }) {
                     // Satırdaki komşular arasında Türkçeler ortadaki çizgiyi geçmez.
-                    val order = spots.indices.sortedBy { spots[it].l }
+                    val order = spots.indices.sortedBy { spots[it]!!.l }
                     for ((a, b) in order.zipWithNext()) {
                         val middle = (ms[a].r + ms[b].l) / 2
-                        spots[a] = spots[a].copy(roomR = max(spots[a].r, min(spots[a].roomR, middle)))
-                        spots[b] = spots[b].copy(roomL = min(spots[b].l, max(spots[b].roomL, middle)))
+                        val sa = spots[a]!!
+                        val sb = spots[b]!!
+                        spots[a] = sa.copy(roomR = max(sa.r, min(sa.roomR, middle)))
+                        spots[b] = sb.copy(roomL = min(sb.l, max(sb.roomL, middle)))
                     }
                 }
-                for ((m, s) in members.zip(spots)) assign(m, s)
-                placed.addAll(members)
-                break
+                val free = spots.map { s -> s?.takeIf { !collides(it) } }
+                val fit = free.count { it != null }
+                if (fit > bestFit) {
+                    bestFit = fit
+                    bestSide = side
+                    bestSpots = free
+                }
+                if (fit == free.size) break
             }
+            val chosen = bestSide ?: continue
+            for ((m, s) in members.zip(bestSpots)) {
+                if (s == null) continue
+                assign(m, s)
+                used.add(Box(s.l, s.t, s.r, s.b))
+                placed.add(m)
+            }
+            val preferred = listOf(chosen) + sides.filter { it != chosen }
+            for (m in members) listSides[m] = preferred
         }
         for (i in targets.indices) {
             val room = rooms[i] ?: continue
             if (i in boxed || i in placed) continue
-            for (side in listOf(Side.LEFT, Side.RIGHT, Side.BELOW, Side.ABOVE)) {
+            val order = (listSides[i] ?: listOf(Side.LEFT, Side.RIGHT)).toMutableList()
+            for (side in listOf(Side.LEFT, Side.RIGHT, Side.BELOW, Side.ABOVE)) if (side !in order) order.add(side)
+            for (side in order) {
                 val s = spot(room, side, null) ?: continue
+                if (collides(s)) continue
                 assign(i, s)
+                used.add(Box(s.l, s.t, s.r, s.b))
                 break
             }
         }
-        // Çakışma: yanına yazılan Türkçe başka bir hedefin Türkçesine (önceki yanına yazma alanı ya da ikiz panel) binerse
-        // örtmeye döner.
+        // Çakışma: yanına yazılan Türkçenin uzayabileceği alan (spotRoom) başka bir Türkçenin alanına ya da ikiz kutuya
+        // binerse alan aradaki çizgide kesilir (Türkçeler birbirine yaslanmaz). Türkçenin kendi yeri binerse (yerleşim
+        // çakışmayı önlediği için seyrek) listede olmayan yazı örtmeye döner; menü/liste satırı hiç örtülmez (#1339).
         fun overlapsBox(a: TextBox, b: TextBox) = min(a.right, b.right) > max(a.left, b.left) && min(a.bottom, b.bottom) > max(a.top, b.top)
+        val eps = 1e-9
         for (i in result.indices) {
             if (result[i].mode != TextPaint.MODE_BESIDE) continue
-            val mine = result[i].spotRoom ?: continue
-            val hit = result.indices.any { j ->
-                if (j == i) false
-                else if (result[j].mode == TextPaint.MODE_TWIN && result[j].twin != null) overlapsBox(mine, result[j].twin!!)
-                else j < i && result[j].mode == TextPaint.MODE_BESIDE && result[j].spotRoom?.let { overlapsBox(mine, it) } == true
+            var mine = result[i].spotRoom ?: continue
+            val spot = result[i].spot ?: continue
+            var hit = false
+            for (j in result.indices) {
+                if (j == i) continue
+                val twin = result[j].mode == TextPaint.MODE_TWIN
+                val other = (if (twin) result[j].twin else if (result[j].mode == TextPaint.MODE_BESIDE) result[j].spot else null) ?: continue
+                if (!overlapsBox(mine, other)) continue
+                if (overlapsBox(spot, other)) {
+                    if (twin || j < i) hit = true
+                    continue
+                }
+                // Öbür Türkçe sağdaysa alan onun solunda, soldaysa sağında biter (ikizde kutunun kenarı; yanına yazmada iki
+                // Türkçenin ortası).
+                if (other.left >= spot.right - eps) {
+                    val end = if (twin) other.left else (spot.right + other.left) / 2
+                    mine = mine.copy(right = max(spot.right, min(mine.right, end)))
+                } else if (other.right <= spot.left + eps) {
+                    val end = if (twin) other.right else (other.right + spot.left) / 2
+                    mine = mine.copy(left = min(spot.left, max(mine.left, end)))
+                }
             }
-            if (hit) result[i] = result[i].copy(mode = TextPaint.MODE_COVER, spot = null, spotRoom = null)
+            result[i] = result[i].copy(spotRoom = mine)
+            if (hit && i !in listIndex) result[i] = result[i].copy(mode = TextPaint.MODE_COVER, spot = null, spotRoom = null)
         }
         // 4) Grup: aynı sütunda (ortak sol ya da sağ kenar, düzenli aralık) ya da aynı satırda duran, BÜYÜK HARF'i ve
         // satır yüksekliği aynı tek satırlık etiketler.

@@ -1056,15 +1056,23 @@ public static class TextPainter
 
         // 7) Satırlar (yanına yazma): listede bütün satırlar aynı yana (sağa yaslı sütunda sol, sola yaslı sütunda sağ;
         // satırdaki sekme/kart başlıklarında hizanın açık yanı, sonra alt, sonra üst), sütunda Türkçeler tek hizada (sağa yaslı
-        // listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Liste birlikte yerleşemezse
-        // her satır kendi başına (sol › sağ › alt › üst).
+        // listede sağ kenarları, sola yaslıda sol kenarları aynı), satırda aynı taban çizgisinde. Bir yan ancak listenin bütün
+        // satırlarına yer varsa ve hiçbiri önceden yerleşen Türkçeye ya da ikiz kutuya binmiyorsa seçilir; değilse sıradaki yan
+        // denenir (çakışma örtmeye döndürmez). Hiçbir yana birlikte sığmazsa en çok satırın sığdığı yan seçilir; sığmayan satır
+        // kendi başına önce listenin yanlarını, sonra alt › üst dener (#1339: GTA 6 duraklatma menüsünde en uzun satır "Photo
+        // Studio" sağa sığmayınca bütün liste dağılıyor, satırlar tek tek yerleşiyor, "Photo Studio" örtülüyordu). Listede
+        // olmayan tek satır sol › sağ › alt › üst. Mac TextPaint.swift ve Android TextPaint.kt aynı.
         void Assign(int i, Spot spot) => result[i] = result[i] with
         {
             Mode = PaintMode.Beside,
             Spot = new TextBox(spot.L / fw, spot.T / fh, spot.R / fw, spot.B / fh),
             SpotRoom = new TextBox(spot.RoomL / fw, spot.T / fh, spot.RoomR / fw, spot.B / fh),
         };
+        // Yerleşen Türkçelerin ve ikiz kutuların yeri (piksel): sonraki yerleşim bunlara binmez.
+        var used = new List<(int L, int T, int R, int B)>(twins);
+        bool Collides(Spot s) => used.Any(o => Overlaps(o, (s.L, s.T, s.R, s.B)));
         var placed = new HashSet<int>();
+        var listSides = new Dictionary<int, List<Side>>();
         foreach (var list in lists)
         {
             var members = list.Members.Where(m => rooms[m] != null && !boxed.Contains(m)).ToList();
@@ -1099,6 +1107,10 @@ public static class TextPainter
                     : majority == "left" ? false : null;
                 sides.AddRange(right == false ? [Side.Right, Side.Left] : [Side.Left, Side.Right]);
             }
+            foreach (var m in members) listSides[m] = sides;
+            Side? bestSide = null;
+            List<Spot?>? bestSpots = null;
+            var bestFit = 0;
             foreach (var side in sides)
             {
                 int? edge = side switch
@@ -1108,51 +1120,93 @@ public static class TextPainter
                     Side.Below => ms.Max(m => m.B + m.Near),
                     _ => ms.Min(m => m.T - m.Near),
                 };
-                var found = ms.Select(m => PlaceSpot(m, side, edge)).ToList();
-                if (found.Any(s => s == null)) continue;
-                var spots = found.Select(s => s!.Value).ToList();
-                if (side is Side.Below or Side.Above)
+                var spots = ms.Select(m => PlaceSpot(m, side, edge)).ToList();
+                if (side is Side.Below or Side.Above && spots.All(s => s != null))
                 {
                     // Satırdaki komşular arasında Türkçeler ortadaki çizgiyi geçmez.
-                    var order = Enumerable.Range(0, spots.Count).OrderBy(k => spots[k].L).ToList();
+                    var order = Enumerable.Range(0, spots.Count).OrderBy(k => spots[k]!.Value.L).ToList();
                     for (var k = 0; k + 1 < order.Count; k++)
                     {
                         int a = order[k], b = order[k + 1];
                         var middle = (ms[a].R + ms[b].L) / 2;
-                        spots[a] = spots[a] with { RoomR = Math.Max(spots[a].R, Math.Min(spots[a].RoomR, middle)) };
-                        spots[b] = spots[b] with { RoomL = Math.Min(spots[b].L, Math.Max(spots[b].RoomL, middle)) };
+                        var sa = spots[a]!.Value;
+                        var sb = spots[b]!.Value;
+                        spots[a] = sa with { RoomR = Math.Max(sa.R, Math.Min(sa.RoomR, middle)) };
+                        spots[b] = sb with { RoomL = Math.Min(sb.L, Math.Max(sb.RoomL, middle)) };
                     }
                 }
-                for (var k = 0; k < members.Count; k++) Assign(members[k], spots[k]);
-                placed.UnionWith(members);
-                break;
+                spots = [.. spots.Select(s => s is { } v && !Collides(v) ? s : null)];
+                var fit = spots.Count(s => s != null);
+                if (fit > bestFit)
+                {
+                    bestFit = fit;
+                    bestSide = side;
+                    bestSpots = spots;
+                }
+                if (fit == spots.Count) break;
             }
+            if (bestSide is not { } chosen || bestSpots is null) continue;
+            for (var k = 0; k < members.Count; k++)
+            {
+                if (bestSpots[k] is not { } s) continue;
+                Assign(members[k], s);
+                used.Add((s.L, s.T, s.R, s.B));
+                placed.Add(members[k]);
+            }
+            var preferred = new List<Side> { chosen };
+            preferred.AddRange(sides.Where(s => s != chosen));
+            foreach (var m in members) listSides[m] = preferred;
         }
         for (var i = 0; i < targets.Count; i++)
         {
             if (rooms[i] is not { } room || boxed.Contains(i) || placed.Contains(i)) continue;
+            var order = listSides.TryGetValue(i, out var own) ? new List<Side>(own) : [Side.Left, Side.Right];
             foreach (var side in new[] { Side.Left, Side.Right, Side.Below, Side.Above })
+                if (!order.Contains(side)) order.Add(side);
+            foreach (var side in order)
             {
-                if (PlaceSpot(room, side, null) is not { } spot) continue;
+                if (PlaceSpot(room, side, null) is not { } spot || Collides(spot)) continue;
                 Assign(i, spot);
+                used.Add((spot.L, spot.T, spot.R, spot.B));
                 break;
             }
         }
-        // Çakışma: yanına yazılan Türkçe başka bir hedefin Türkçesine (önceki yanına yazma alanı ya da ikiz panel) binerse
-        // örtmeye döner.
+        // Çakışma: yanına yazılan Türkçenin uzayabileceği alan (spotRoom) başka bir Türkçenin alanına ya da ikiz kutuya binerse
+        // alan aradaki çizgide kesilir (Türkçeler birbirine yaslanmaz). Türkçenin kendi yeri binerse (yerleşim çakışmayı
+        // önlediği için seyrek) listede olmayan yazı örtmeye döner; menü/liste satırı hiç örtülmez (#1339).
         static bool BoxesOverlap(TextBox a, TextBox b) =>
             Math.Min(a.Right, b.Right) > Math.Max(a.Left, b.Left) && Math.Min(a.Bottom, b.Bottom) > Math.Max(a.Top, b.Top);
+        const double eps = 1e-9;
         for (var i = 0; i < result.Count; i++)
         {
-            if (result[i].Mode != PaintMode.Beside || result[i].SpotRoom is not { } mine) continue;
+            if (result[i].Mode != PaintMode.Beside || result[i].SpotRoom is not { } mine || result[i].Spot is not { } spot) continue;
             var hit = false;
-            for (var j = 0; j < result.Count && !hit; j++)
+            for (var j = 0; j < result.Count; j++)
             {
                 if (j == i) continue;
-                if (result[j].Mode == PaintMode.Twin && result[j].Twin is { } twin) hit = BoxesOverlap(mine, twin);
-                else hit = j < i && result[j].Mode == PaintMode.Beside && result[j].SpotRoom is { } other && BoxesOverlap(mine, other);
+                var twin = result[j].Mode == PaintMode.Twin;
+                TextBox? found = twin ? result[j].Twin : result[j].Mode == PaintMode.Beside ? result[j].Spot : null;
+                if (found is not { } other || !BoxesOverlap(mine, other)) continue;
+                if (BoxesOverlap(spot, other))
+                {
+                    if (twin || j < i) hit = true;
+                    continue;
+                }
+                // Öbür Türkçe sağdaysa alan onun solunda, soldaysa sağında biter (ikizde kutunun kenarı; yanına yazmada iki
+                // Türkçenin ortası).
+                if (other.Left >= spot.Right - eps)
+                {
+                    var end = twin ? other.Left : (spot.Right + other.Left) / 2;
+                    mine = mine with { Right = Math.Max(spot.Right, Math.Min(mine.Right, end)) };
+                }
+                else if (other.Right <= spot.Left + eps)
+                {
+                    var end = twin ? other.Right : (other.Right + spot.Left) / 2;
+                    mine = mine with { Left = Math.Min(spot.Left, Math.Max(mine.Left, end)) };
+                }
             }
-            if (hit) result[i] = result[i] with { Mode = PaintMode.Cover, Spot = null, SpotRoom = null };
+            result[i] = result[i] with { SpotRoom = mine };
+            if (hit && !listOf.ContainsKey(i)) result[i] = result[i] with { Mode = PaintMode.Cover, Spot = null, SpotRoom = null };
         }
         // 4) Grup: aynı sütunda (ortak sol ya da sağ kenar, düzenli aralık) ya da aynı satırda duran, BÜYÜK HARF'i ve satır
         // yüksekliği aynı tek satırlık etiketler.
