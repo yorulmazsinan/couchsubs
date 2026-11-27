@@ -390,6 +390,12 @@ public sealed record UserSettings
     public bool ScreenTextHelp { get; init; } = true;
     public bool ScreenTextMenus { get; init; }
     public bool ScreenTextOther { get; init; }
+    /// <summary>
+    /// "Menülerde Türkçeyi yanına yaz" (varsayılan kapalı): kapalıyken menü, görev kutusu, kart ve istem Türkçesi özgün
+    /// yazının kendi dikdörtgenine, o kutunun ölçülen zemin renginde örtülerek çizilir (RegionWatcher.WritesBeside). Eski
+    /// ayar dosyalarında yoktur (kapalı). Mac/iPhone (screenTextBeside) ve Android aynı.
+    /// </summary>
+    public bool ScreenTextBeside { get; init; }
 
     /// <summary>
     /// Bu tür ekran yazısı çevrilir mi. "Ekran yazılarını otomatik çevir" kapalıyken türler uygulanmaz (hazır alanlar ve

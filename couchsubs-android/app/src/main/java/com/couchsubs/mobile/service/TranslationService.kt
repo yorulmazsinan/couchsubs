@@ -1090,6 +1090,8 @@ class TranslationService : Service() {
             // turda yeni ~4 MB kopya alınıyordu).
             var screenTaken: RegionPixels? = null
             val screenText = com.couchsubs.mobile.core.ScreenTextDetector.outsidePhone(autoAreas, if (phoneSeen) phoneBounds else null)
+            // "Menülerde Türkçeyi yanına yaz" kapalıyken (varsayılan) arayüz yazısı yerinde örtülür (Mac/iPhone ve Windows aynı).
+            regionWatcher?.writesBeside = settings.screenTextBeside
             regionWatcher?.offer(extraAreas + presetAreas + missionAreas + notices + screenText, crop = { r ->
                 SubtitleReader.copyRegion(frame, r)?.let {
                     com.couchsubs.mobile.core.RegionWatcher.Crop(it, com.couchsubs.mobile.core.RegionSignature.of(it.nv21, it.width, it.height), it.gray, it.color)

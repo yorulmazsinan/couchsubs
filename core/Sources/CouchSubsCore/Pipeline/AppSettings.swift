@@ -226,6 +226,11 @@ public struct UserSettings: Codable, Equatable {
     public var screenTextHelp = true
     public var screenTextMenus = false
     public var screenTextOther = false
+    /// "Menülerde Türkçeyi yanına yaz" (varsayılan kapalı): kapalıyken menü, görev kutusu, kart ve istem Türkçesi özgün
+    /// yazının kendi dikdörtgenine, o kutunun ölçülen zemin renginde örtülerek çizilir (`RegionWatcher.writesBeside`).
+    /// Sinan Bey: #1300/#1320'den beri yanına yazma ve ikiz kutu ekranda kararlı durmuyordu; yanına yazma yalnız isteğe bağlı.
+    /// Eski kayıtlarda yoktur (kapalı).
+    public var screenTextBeside = false
     /// iPhone Xbox ev yayınında oyun sesi telefonda çalınır. Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
     /// susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir, bu yüzden varsayılan açık. PS5'i etkilemez.
     public var xboxAudioOnDevice = true
@@ -304,6 +309,7 @@ public struct UserSettings: Codable, Equatable {
         screenTextHelp = try values.decodeIfPresent(Bool.self, forKey: .screenTextHelp) ?? defaults.screenTextHelp
         screenTextMenus = try values.decodeIfPresent(Bool.self, forKey: .screenTextMenus) ?? defaults.screenTextMenus
         screenTextOther = try values.decodeIfPresent(Bool.self, forKey: .screenTextOther) ?? defaults.screenTextOther
+        screenTextBeside = (try? values.decodeIfPresent(Bool.self, forKey: .screenTextBeside)) ?? defaults.screenTextBeside
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         startupSound = (try? values.decodeIfPresent(Bool.self, forKey: .startupSound)) ?? defaults.startupSound

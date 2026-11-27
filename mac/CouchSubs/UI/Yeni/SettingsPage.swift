@@ -661,6 +661,7 @@ private struct AdvancedSettings: View {
         model.settings.screenTextHelp = defaults.screenTextHelp
         model.settings.screenTextMenus = defaults.screenTextMenus
         model.settings.screenTextOther = defaults.screenTextOther
+        model.settings.screenTextBeside = defaults.screenTextBeside
     }
 
     /// Altyazı okuma kartı varsayılana döner.

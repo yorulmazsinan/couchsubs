@@ -58,7 +58,7 @@ class MissionLineTest {
         assertFalse(mission.observe(removed, area, 0))
         assertTrue(mission.observe(removed, area, MissionLine.SETTLE_MS))
         assertNotNull(mission.region)
-        assertTrue(mission.observe(emptyList(), area, MissionLine.SETTLE_MS + MissionLine.FORGET_MS + 1))
+        assertTrue(mission.observe(emptyList(), area, MissionLine.SETTLE_MS + MissionLine.HOLD_MS + 1))
         assertNull(mission.region)
         // Konuşan adlı satır görev sayılmaz.
         assertFalse(mission.observe(listOf(line("Lucia: Go to the docks.", 0.30)), area, 0))

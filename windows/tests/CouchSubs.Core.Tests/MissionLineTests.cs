@@ -41,7 +41,7 @@ public class MissionLineTests
     public async Task ObjectiveLeavingRemovesItsArea()
     {
         var frames = ObjectiveWithDialogueTests.Frames(true, 1.5, 4);
-        frames.AddRange(Enumerable.Repeat(Reading.Empty, 6));
+        frames.AddRange(Enumerable.Repeat(Reading.Empty, 10));
         long clock = 0;
         var pipeline = new SubtitlePipeline(new SequenceReader(frames), new FakeTranslator(), new FakeSender(), clock: () => clock)
         { PackWait = 0, CleanWait = 0 };
@@ -65,7 +65,7 @@ public class MissionLineTests
     public async Task ObjectiveBelowDialogueIsSentAsClearanceOnce()
     {
         var frames = ObjectiveWithDialogueTests.Frames(true, 0.1, 4);
-        frames.AddRange(Enumerable.Repeat(Reading.Empty, 6));
+        frames.AddRange(Enumerable.Repeat(Reading.Empty, 10));
         long clock = 0;
         var sender = new FakeSender();
         var pipeline = new SubtitlePipeline(new SequenceReader(frames), new FakeTranslator(), sender, clock: () => clock)

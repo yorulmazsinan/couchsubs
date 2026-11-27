@@ -341,6 +341,7 @@
     <string name="settings_screen_text_mission">Mission and objective text</string>
     <string name="settings_screen_text_help">Help boxes and actions (button prompts)</string>
     <string name="settings_screen_text_menus">Menus (pause, map, settings)</string>
+    <string name="settings_screen_text_beside">Write the translation beside menu text</string>
     <string name="settings_screen_text_other">Other on-screen text</string>
     <string name="settings_screen_text_manual">Translate the screen always translates everything.</string>
     <string name="settings_set_text_apart_short">On-screen text keeps its own colours and place, and never looks like the subtitle box.</string>

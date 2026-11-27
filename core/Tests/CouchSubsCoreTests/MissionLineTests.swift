@@ -63,7 +63,7 @@ final class MissionLineTests: XCTestCase {
     }
 
     func testObjectiveLeavingRemovesItsArea() async {
-        let frames = ObjectiveWithDialogueTests.frames(below: true, gap: 1.5, objectiveFirst: 4) + Array(repeating: .empty, count: 6)
+        let frames = ObjectiveWithDialogueTests.frames(below: true, gap: 1.5, objectiveFirst: 4) + Array(repeating: .empty, count: 10)
         let (regions, _) = await run(frames)
         XCTAssertNotNil(regions.first ?? nil)
         XCTAssertNil(regions.last ?? CropRegion())
@@ -73,7 +73,7 @@ final class MissionLineTests: XCTestCase {
     /// (`settleMs`) beklemeden TV'ye bildirilir; konuşma değişse de yeniden gönderilmez, görev kalkınca nil gider.
     func testObjectiveBelowDialogueIsSentAsClearanceOnce() async throws {
         let sender = Sender()
-        let frames = ObjectiveWithDialogueTests.frames(below: true, gap: 0.1, objectiveFirst: 4) + Array(repeating: .empty, count: 6)
+        let frames = ObjectiveWithDialogueTests.frames(below: true, gap: 0.1, objectiveFirst: 4) + Array(repeating: .empty, count: 10)
         let (regions, _) = await run(frames, sender: sender)
         let first = try XCTUnwrap(sender.objectives.first ?? nil)
         XCTAssertEqual(first.top, 0.8, accuracy: 0.001)

@@ -18,6 +18,11 @@ class MissionLine {
         /** Bu kadar görülmeyen satır ekrandan kalkmış sayılır. */
         const val FORGET_MS = 1500L
         /**
+         * Görev sayılmış (kendi kutusunda gösterilen) satır ancak bu kadar görülmezse kalkar (histerezis): tek okumada ya da
+         * kamera geçişinde kaçan görev satırının kutusu kalkıp gelmez (Sinan Bey, GTA 6 beta.105; Mac/iPhone ve Windows aynı).
+         */
+        const val HOLD_MS = 4000L
+        /**
          * Görev çevirisinin kutusu: koyu kehribar zemin, beyaz yazı. Kullanıcı bildirimi (beta.100): görev yazısının
          * Türkçesi altyazıyla ve öbür ekran yazılarıyla aynı görünüyor, hangisinin görev olduğu anlaşılmıyordu. TV ve
          * önizlemeler bu zemini öğenin yüzeyinden çizer (Mac/iPhone: MissionLine.style, Windows: MissionLine.Style).
@@ -46,7 +51,9 @@ class MissionLine {
                 abs(a.left - b.left) <= tolerance * 2 && abs(a.right - b.right) <= tolerance * 2
     }
 
-    private class Track(val text: String, val source: String, val since: Long, var lastSeen: Long, var box: TextBox)
+    /** [settled]: görev sayıldı ([SETTLE_MS] doldu); [HOLD_MS] histerezisi ve [claim] uygulanır. */
+    private class Track(val text: String, val source: String, val since: Long, var lastSeen: Long, var box: TextBox,
+                        var settled: Boolean = false)
 
     private val tracks = mutableListOf<Track>()
 
@@ -87,12 +94,14 @@ class MissionLine {
                 tracks.add(Track(text, line.text, time, time, placed))
             }
         }
-        dropped = tracks.filter { time - it.lastSeen > FORGET_MS && it.lastSeen - it.since < SETTLE_MS }.map { it.source }
-        tracks.removeAll { time - it.lastSeen > FORGET_MS }
+        dropped = tracks.filter { !it.settled && time - it.lastSeen > FORGET_MS && it.lastSeen - it.since < SETTLE_MS }
+            .map { it.source }
+        tracks.removeAll { time - it.lastSeen > (if (it.settled) HOLD_MS else FORGET_MS) }
+        for (track in tracks) if (time - track.since >= SETTLE_MS) track.settled = true
         val shown = tracks.firstOrNull()?.let { first -> tracks.drop(1).fold(first.box) { total, track -> total.union(track.box) } }
         val current = clearance
         if (shown == null || current == null || !near(shown, current)) clearance = shown
-        val settled = tracks.filter { time - it.since >= SETTLE_MS }
+        val settled = tracks.filter { it.settled }
         var next: CropRegion? = null
         if (settled.isNotEmpty()) {
             val union = settled.drop(1).fold(settled[0].box) { total, track -> total.union(track.box) }
@@ -108,6 +117,32 @@ class MissionLine {
         if (next == region) return false
         region = next
         return true
+    }
+
+    /**
+     * Görev sayılmış satırın okumadaki yeni okunuşları okumadan çıkarılır (first) ve görev satırı olarak [observe]a verilir
+     * (second): görev tek başına kaldığında ya da ıskadan sonra döndüğünde altyazı kutusunda çevrilmez, sabit satır süzgeci de
+     * konuşmayı görev saymaz. Aynı yazı ([TextMatch.isSimilar]), görevin yerinde (dikeyde örtüşür); konuşan adlı satır
+     * alınmaz (Mac/iPhone: MissionLine.claim, Windows aynı).
+     */
+    fun claim(reading: Reading, area: TextBox): Pair<Reading, List<TextLine>> {
+        val shown = tracks.filter { it.settled }
+        if (shown.isEmpty()) return reading to emptyList()
+        val kept = mutableListOf<TextLine>()
+        val claimed = mutableListOf<TextLine>()
+        for (line in reading.lines) {
+            val box = line.box
+            if (box == null || SpeakerPrefix.split(line.text) != null) { kept.add(line); continue }
+            val placed = box.placedIn(area)
+            val text = TextMatch.normalize(line.text)
+            val ours = text.length >= 3 && shown.any { track ->
+                val height = minOf(placed.bottom - placed.top, track.box.bottom - track.box.top)
+                val overlap = minOf(placed.bottom, track.box.bottom) - maxOf(placed.top, track.box.top)
+                overlap >= 0.5 * height && TextMatch.isSimilar(track.text, text)
+            }
+            if (ours) claimed.add(line) else kept.add(line)
+        }
+        return if (claimed.isEmpty()) reading to emptyList() else Reading(kept) to claimed
     }
 
     fun reset() {

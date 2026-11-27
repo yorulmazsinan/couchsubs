@@ -479,6 +479,7 @@ private struct AdvancedPage: View {
                     SettingSwitch(title: "Mission and objective text", isOn: $model.settings.screenTextMission)
                     SettingSwitch(title: "Help boxes and actions (button prompts)", isOn: $model.settings.screenTextHelp)
                     SettingSwitch(title: "Menus (pause, map, settings)", isOn: $model.settings.screenTextMenus)
+                    SettingSwitch(title: "Write the translation beside menu text", isOn: $model.settings.screenTextBeside)
                     SettingSwitch(title: "Other on-screen text", isOn: $model.settings.screenTextOther)
                     Text("Translate the screen always translates everything.").dsMuted()
                 }
@@ -517,6 +518,7 @@ private struct AdvancedPage: View {
         model.settings.screenTextHelp = defaults.screenTextHelp
         model.settings.screenTextMenus = defaults.screenTextMenus
         model.settings.screenTextOther = defaults.screenTextOther
+        model.settings.screenTextBeside = defaults.screenTextBeside
     }
 
     /// Altyazı okuma kartı varsayılana döner.

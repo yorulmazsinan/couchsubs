@@ -1673,6 +1673,8 @@ final class PhoneModel: ObservableObject {
         if seen == nil { areas += noticeAreas }
         areas += screenTextAreas(frame, capturedAt: capturedAt, watched: areas, phone: seen?.bounds)
         if regionWatcher == nil, !areas.isEmpty || pose != nil { regionWatcher = makeRegionWatcher(packLookup: current.packLookup) }
+        // "Menülerde Türkçeyi yanına yaz" kapalıyken (varsayılan) arayüz yazısı yerinde örtülür (Windows ve Android aynı).
+        regionWatcher?.writesBeside = settings.screenTextBeside
         regionWatcher?.offer(frame, areas: areas, phone: pose)
         // Ekranda menü açık (otomatik ekran yazısı menü durumunda): altyazı okunur ama gönderilmez, bekletilir; menü
         // kapanınca bekletilen konuşma satırı gönderilir (MenuHeldSender, #1240). Eskiden menüde altyazı hiç okunmuyordu;

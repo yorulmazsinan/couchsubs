@@ -221,6 +221,13 @@ public final class RegionWatcher {
     private var yieldLogged = Set<String>()
     /// Satırların bir kez seçilen çizim kipi (`steadyPaints`); satırın yazısıyla anılır.
     private var rowPaints: [String: RowPaint] = [:]
+    /// "Menülerde Türkçeyi yanına yaz" (`UserSettings.screenTextBeside`, varsayılan kapalı). Kapalıyken menü, görev, kart,
+    /// yardım ve tuş istemi Türkçesi özgün yazının kendi dikdörtgenine, o kutunun ölçülen zemininde örtülerek çizilir
+    /// (`inPlaceKind`, `coveredInPlace`); yer özgün yazıdan geldiği için her okumada yeniden karar verilmez. Oyun dünyasındaki
+    /// tabela ve sahne yazısı (#1300) eskisi gibi kalır. Değişince satırların saklı kipi unutulur. Windows ve Android aynı.
+    public var writesBeside = false {
+        didSet { if writesBeside != oldValue { rowPaints.removeAll() } }
+    }
 
     /// Oyun paketi: satırın hazır Türkçesi (ana altyazıyla aynı arama).
     public var packLookup: ((String) -> PackMatch?)?
@@ -501,7 +508,7 @@ public final class RegionWatcher {
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.
         let painting = DispatchTime.now().uptimeNanoseconds
         var candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
-                                       styled: true, kind: ScreenTextKind.of(area), screen: screen)
+                                       styled: true, kind: ScreenTextKind.of(area), screen: screen, beside: writesBeside)
         if let blocks = candidate.blocks {
             let before = blocks.map { $0.paint?.mode }
             candidate.blocks = Self.steadyPaints(blocks, texts: Self.blockTexts(candidate).map(\.text), memory: &rowPaints,
@@ -621,6 +628,10 @@ public final class RegionWatcher {
     /// yazının çevirisi kalkıp geri gelmez.
     private func clearIfUnsteady(_ candidate: Candidate, area: ExtraArea, state: inout State, before: [UInt8]?,
                                  signature: [UInt8]) {
+        // Görev kutusunun ömrü görev satırınındır (`MissionLine.holdMs` histerezisi): satır ekrandan kalkınca alan listeden
+        // çıkar ve kutu o turda kalkar. Alanın boş ya da kararsız okuması (görev satırı bir okumada kaçtı, kamera geçişi)
+        // kutuyu kaldırmaz; gerçek kare okumalarında görev kutusu üç kez kalkıp geliyordu (Windows ve Android aynı).
+        if area.id == MissionLine.areaId { return }
         if Self.partlyVisible(candidate.text, state.shownText) {
             state.unsteady = 0
             state.unsteadySince = nil
@@ -768,9 +779,10 @@ public final class RegionWatcher {
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// `kind`: alanın yerinden belli türü (`ScreenTextKind.of(area)`); otomatik alanda grupların çizim kipini seçer.
     /// `screen`: bütün kare (verilirse çizim kipi ve boş alan onda ölçülür; `frame` yalnız okunan alandır).
+    /// `beside`: "Menülerde Türkçeyi yanına yaz" (`writesBeside`); false: arayüz yazısı yerinde örtülür (`inPlaceKind`).
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
                           menu: Bool = false, styled: Bool = false, kind: ScreenTextKind? = nil,
-                          screen: ScreenFrame? = nil) -> Candidate {
+                          screen: ScreenFrame? = nil, beside: Bool = true) -> Candidate {
         let styled = auto || styled
         // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı): simge ve bozuk okuma süzgeçleri menü durumundan
         // bağımsız (#1365 beta.105: menü düşünce "KM Collect…", "ocdich for the onurn Ape" geçip motora gidiyordu).
@@ -897,7 +909,8 @@ public final class RegionWatcher {
                                               background: block.style!.background, foreground: block.style!.foreground,
                                               upper: block.look!.upper, align: block.look!.align,
                                               words: TextPainter.words(joined),
-                                              kind: Self.paintKind(group, lines: lines, cards: cards, area: kind),
+                                              kind: Self.inPlaceKind(Self.paintKind(group, lines: lines, cards: cards, area: kind),
+                                                                     beside: beside),
                                               prompt: joined.contains(ButtonIcons.marker) || ButtonPrompts.isPrompt(IconText.plain(joined)))
                 }
                 // Kare bir kez çizilir (ölçüm ve kişi resmi aynı noktalardan; bütün kare turda bir kez, `ScreenFrame`).
@@ -906,6 +919,7 @@ public final class RegionWatcher {
                 for k in paints.indices {
                     if let face = paints[k].portrait, let pixels { paints[k].portraitImage = TextPainter.portraitImage(face, pixels: pixels) }
                 }
+                if !beside { paints = paints.map(Self.coveredInPlace) }
                 for (k, i) in painted.enumerated() where k < paints.count {
                     list[i].paint = whole == nil ? paints[k].placed(in: place) : paints[k]
                     // Kutunun ucunda simge varsa yazı simgeye yaslanır (#1266: "SEÇ" tuş simgesinin yanında).
@@ -1011,6 +1025,20 @@ public final class RegionWatcher {
     /// Otomatik alandaki grubun çizim kipini seçen türü (`TextPainter.Target.kind`): alanın yerinden belli türü (menü,
     /// telefon, yardım köşesi, görev satırı), haritanın görev kartının parçası görev/hedef, kalanı okunan yazıdan
     /// (`ScreenTextKind.of(paragraphs:)`). Windows (RegionWatcher.PaintKind) ve Android (paintKind) aynı.
+    /// Yanına yazma kapalıyken (`writesBeside`) çizim kipine verilen tür: arayüz yazısı (menü, görev/kart, yardım ve tuş
+    /// istemi) nil olur, `TextPainter` onu yerinde örter (zemin o kutudan ölçülür; simge ve kişi resmi örtüye girmez).
+    /// Diğer yazı (oyun dünyasındaki tabela, sahne yazısı; #1300) türünü korur. Windows ve Android aynı.
+    static func inPlaceKind(_ kind: ScreenTextKind, beside: Bool) -> ScreenTextKind? {
+        if beside { return kind }
+        return kind == .other ? .other : nil
+    }
+
+    /// Yanına yazma kapalıyken ikiz kutu çizilmez: kutunun (kart, bildirim, panel) yazısı kendi dikdörtgenine, kutunun
+    /// ölçülen zemin renginde örtülür. Yanına yazılan sahne yazısı (#1300) olduğu gibi kalır. Windows ve Android aynı.
+    static func coveredInPlace(_ paint: TextPaint) -> TextPaint {
+        paint.mode == .twin ? coverOnly(paint) : paint
+    }
+
     static func paintKind(_ group: ScreenTranslation.Group, lines: [TextLine], cards: [MissionCard.Card],
                           area: ScreenTextKind?) -> ScreenTextKind {
         if let area { return area }
@@ -1343,6 +1371,12 @@ public final class RegionWatcher {
     /// Kararlı yazı: öncekinden farklıysa çevrilip gönderilir, boşsa kutu kalkar.
     private func commit(_ candidate: Candidate, area: ExtraArea) async {
         guard var state = states[area.id] else { return }
+        // Görev kutusu boş ya da gürültü okumayla kalkmaz (`clearIfUnsteady`): görev satırı ekrandan kalkınca alan listeden
+        // çıkar (`MissionLine.holdMs`). Windows ve Android aynı.
+        if area.id == MissionLine.areaId, !state.shown.isEmpty,
+           candidate.key.isEmpty || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: false) {
+            return
+        }
         // Menü dışındaki otomatik alanın türü okunan yazıdan çıkar (yardım/eylem ya da diğer); kapalı tür gürültü gibi
         // çizilmez, dedektöre bildirilir.
         if area.auto, area.menu, !candidate.missionCard, ScreenTextKind.isHud(candidate.paragraphs) { onAutoHud?(area.id) }
@@ -1373,6 +1407,12 @@ public final class RegionWatcher {
                   let renderedText = state.renderedText, !renderedText.isEmpty else { return }
             guard state.renderedBox != candidate.box || state.renderedLineHeight != candidate.lineHeight
                     || state.renderedLayout != candidate.blocks else { return }
+            // Görev kutusu okuma kutusunun küçük oynamasıyla (satır yüksekliğinin çeyreğinden az) yer ve boy değiştirmez
+            // (`MissionLine.near`): pencere karelerinde görev satırı her okumada bir iki piksel oynuyor, kutu yeniden
+            // gönderilip titriyordu. Windows ve Android aynı.
+            if area.id == MissionLine.areaId, let before = state.renderedBox, let now = candidate.box, MissionLine.near(before, now) {
+                return
+            }
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
             var moved: [(group: Int, item: ScreenTranslation.Item)]?
             if let rendered = state.renderedBlocks, let current = candidate.blocks {

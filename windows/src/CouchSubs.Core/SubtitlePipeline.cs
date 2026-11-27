@@ -266,6 +266,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     public event Action<CropRegion?>? MissionChanged;
 
     private readonly MissionLine mission = new();
+    /// <summary>Görev kutusunda tutulan satır günlüğe bir kez yazıldı (görev kalkınca yeniden).</summary>
+    private bool missionClaimLogged;
     /// <summary>TV'ye son bildirilen görev satırı yeri (<see cref="MissionLine.Clearance"/>).</summary>
     private TextBox? sentClearance;
     /// <summary>Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (<see cref="DropLog"/>).</summary>
@@ -575,11 +577,21 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         var listed = rows.IsHistoryList;
         if (listed) ListRead?.Invoke();
         bool missionMoved;
+        IReadOnlyList<TextLine> claimed;
         CropRegion? missionRegion;
         TextBox? clearance;
         bool clearanceChanged;
         lock (gate)
         {
+            // Görev sayılmış satır (kendi kutusunda gösteriliyor) tek başına kalsa ya da ıskadan sonra dönse de altyazı olmaz
+            // (MissionLine.Claim); görev satırı olarak görülmüş sayılır.
+            (rows, claimed) = mission.Claim(rows, area);
+            if (claimed.Count > 0 && !missionClaimLogged)
+            {
+                missionClaimLogged = true;
+                Write($"görev satırı: {SubtitleLog.Excerpt(string.Join(" ", claimed.Select(line => line.Text)))} görev kutusunda kalıyor, altyazı sayılmadı");
+            }
+            else if (claimed.Count == 0 && mission.Region is null) missionClaimLogged = false;
             rows = stickyRows.Filter(rows, now());
             foreach (var row in stickyRows.NewlySticky)
                 Write($"sabit satır: {SubtitleLog.Excerpt(row)} görev/HUD yazısı sayıldı, çevrilmiyor");
@@ -593,7 +605,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (SceneTextMemory, #1411).
             rows = sceneMemory.Filter(rows, now());
             foreach (var (line, first) in sceneMemory.Removed) LogSceneText(line.Text, $"{SceneTextMemory.Reason} ({first})");
-            missionMoved = mission.Observe(stickyRows.Removed, area, now());
+            missionMoved = mission.Observe([.. stickyRows.Removed, .. claimed], area, now());
             missionRegion = mission.Region;
             clearance = mission.Clearance;
             clearanceChanged = clearance != sentClearance;
@@ -1630,6 +1642,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             settled.Reset();
             loggedStale = "";
             mission.Reset();
+            missionClaimLogged = false;
             if (sentClearance is not null)
             {
                 sentClearance = null;

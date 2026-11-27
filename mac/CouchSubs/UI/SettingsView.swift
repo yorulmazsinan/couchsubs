@@ -1069,6 +1069,7 @@ struct ScreenTextKindRows: View {
             SwitchRow(title: "Mission and objective text", isOn: $settings.screenTextMission)
             SwitchRow(title: "Help boxes and actions (button prompts)", isOn: $settings.screenTextHelp)
             SwitchRow(title: "Menus (pause, map, settings)", isOn: $settings.screenTextMenus)
+            SwitchRow(title: "Write the translation beside menu text", isOn: $settings.screenTextBeside)
             SwitchRow(title: "Other on-screen text", isOn: $settings.screenTextOther)
             HintText(text: "Translate the screen always translates everything.")
         }

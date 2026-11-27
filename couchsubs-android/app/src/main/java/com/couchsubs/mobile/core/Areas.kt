@@ -654,7 +654,7 @@ class RegionWatcher(
         internal fun styled(
             candidate: Candidate, reading: Reading, region: CropRegion, frame: GrayFrame?, color: ((Int, Int) -> Int)? = null,
             modes: Boolean = false, kind: ScreenTextKind? = null,
-            screen: GrayFrame? = null, screenColor: ((Int, Int) -> Int)? = null,
+            screen: GrayFrame? = null, screenColor: ((Int, Int) -> Int)? = null, beside: Boolean = true,
         ): Candidate {
             if (frame == null) return candidate
             val groups = candidate.blocks ?: run {
@@ -723,14 +723,15 @@ class RegionWatcher(
                     if (block.count > 1) maxOf(2, block.rows) else block.rows,
                     style.surface.background, style.surface.foreground, style.look.upper, style.look.align,
                     TextPainter.words((block.start until block.start + block.count).joinToString(" ") { candidate.paragraphs[it] }),
-                    if (modes) paintKind(candidate.paragraphs.subList(block.start, block.start + block.count), block.card, kind) else null,
+                    if (modes) inPlaceKind(paintKind(candidate.paragraphs.subList(block.start, block.start + block.count), block.card, kind), beside) else null,
                     (block.start until block.start + block.count).joinToString(" ") { candidate.paragraphs[it] }.let {
                         it.contains(ButtonIcons.MARKER) || ButtonPrompts.isPrompt(IconText.plain(it))
                     })
             }
             val measured = whole ?: frame
             val measuredColor = if (whole != null) screenColor else color
-            val paints = (if (targets.isEmpty()) emptyList() else TextPainter.paints(targets, measured, measuredColor)).map { paint ->
+            val paints = (if (targets.isEmpty()) emptyList() else TextPainter.paints(targets, measured, measuredColor))
+                .map { if (beside) it else coveredInPlace(it) }.map { paint ->
                 // Kişi resmi (ikiz panelde gösterilir) ölçülen kareden, karedeki yere taşınmadan önce kesilir.
                 val face = paint.portrait ?: return@map paint
                 paint.copy(portraitImage = TextPainter.portraitImage(face, measured.width, measured.height,
@@ -770,6 +771,21 @@ class RegionWatcher(
          * telefon, yardım köşesi, görev satırı), haritanın görev kartının parçası görev/hedef, kalanı okunan yazıdan
          * ([ScreenTextKind.ofParagraphs]). Mac/iPhone (RegionWatcher.paintKind) ve Windows aynı.
          */
+        /**
+         * Yanına yazma kapalıyken ([writesBeside]) çizim kipine verilen tür: arayüz yazısı (menü, görev/kart, yardım ve tuş
+         * istemi) null olur, [TextPainter] onu yerinde örter; diğer yazı (oyun dünyasındaki tabela, sahne yazısı; #1300)
+         * türünü korur. Mac/iPhone (inPlaceKind) ve Windows aynı.
+         */
+        internal fun inPlaceKind(kind: ScreenTextKind, beside: Boolean): ScreenTextKind? =
+            if (beside || kind == ScreenTextKind.OTHER) kind else null
+
+        /**
+         * Yanına yazma kapalıyken ikiz kutu çizilmez: kutunun yazısı kendi dikdörtgenine, kutunun ölçülen zemin renginde
+         * örtülür. Yanına yazılan sahne yazısı (#1300) olduğu gibi kalır. Mac/iPhone (coveredInPlace) ve Windows aynı.
+         */
+        internal fun coveredInPlace(paint: TextPaint): TextPaint =
+            if (paint.mode != TextPaint.MODE_TWIN) paint else coverOnly(paint)
+
         internal fun paintKind(paragraphs: List<String>, card: Boolean, area: ScreenTextKind?): ScreenTextKind =
             area ?: if (card) ScreenTextKind.MISSION else ScreenTextKind.ofParagraphs(paragraphs)
 
@@ -1388,6 +1404,18 @@ class RegionWatcher(
     private val phoneMemory = PhoneMemory()
     /** Telefon mesajları İngilizce: kısaltmalar çevirmene açık yazılır ([GamePhoneText.englishModelInput]). */
     @Volatile var englishPhoneMessages = true
+    /**
+     * "Menülerde Türkçeyi yanına yaz" ([com.couchsubs.mobile.settings.AppSettings.screenTextBeside], varsayılan kapalı).
+     * Kapalıyken menü, görev, kart, yardım ve tuş istemi Türkçesi özgün yazının kendi dikdörtgenine, o kutunun ölçülen
+     * zemininde örtülerek çizilir ([inPlaceKind], [coveredInPlace]); oyun dünyasındaki tabela ve sahne yazısı (#1300) eskisi
+     * gibi kalır. Değişince satırların saklı kipi unutulur. Mac/iPhone (writesBeside) ve Windows aynı.
+     */
+    @Volatile var writesBeside = false
+        set(value) {
+            if (field == value) return
+            field = value
+            synchronized(rowPaints) { rowPaints.clear() }
+        }
     /** "GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde" ve panelin yazı boyu; her gönderide okunur (Mac ile aynı). */
     @Volatile var phonePanel: () -> PhonePanelOptions = { PhonePanelOptions() }
 
@@ -1696,13 +1724,13 @@ class RegionWatcher(
             }
             val plain = candidate
             candidate = timing.measure(STAGE_PAINT) { styled(plain, text, area.region, crop.frame, crop.color, modes = true,
-                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor) }.copy(auto = true)
+                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor, beside = writesBeside) }.copy(auto = true)
         } else {
             // Oyunun hazır alanı ve kullanıcının alanı otomatik alan gibi özgün stilinde, her grup kendi bloğunda, çizim
             // kipiyle çizilir (siyah kutu değil, #856; tuş simgesini örtmez, yazı boyu sabit, #1324).
             val plain = candidate
             candidate = timing.measure(STAGE_PAINT) { styled(plain, text, area.region, crop.frame, crop.color, modes = true,
-                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor) }
+                kind = ScreenTextKind.of(area), screen = crop.screen, screenColor = crop.screenColor, beside = writesBeside) }
         }
         // Satırın çizim kipi bir kez seçilir ([steadyPaints]); harita düzeninde ikiz kutu yok.
         candidate.blocks?.let { blocks ->
@@ -1818,6 +1846,9 @@ class RegionWatcher(
      * yazının çevirisi kalkıp geri gelmez.
      */
     private fun clearIfUnsteady(candidate: Candidate, area: ExtraArea, state: State, before: ByteArray?, signature: ByteArray, started: Int) {
+        // Görev kutusunun ömrü görev satırınındır ([MissionLine.HOLD_MS] histerezisi): satır ekrandan kalkınca alan listeden
+        // çıkar ve kutu o turda kalkar. Alanın boş ya da kararsız okuması kutuyu kaldırmaz (Mac/iPhone ve Windows aynı).
+        if (area.id == MissionLine.AREA_ID) return
         if (partlyVisible(candidate.text, state.shownText)) {
             state.unsteady = 0
             state.unsteadySince = null
@@ -1937,11 +1968,20 @@ class RegionWatcher(
     private fun commit(candidate: Candidate, area: ExtraArea, state: State, started: Int) {
         // reset() ve TV'ye gönderim sıralı kalmalı: eski tur yeni oyunun üstüne yazmasın.
         fun send(action: () -> Unit): Unit = synchronized(lock) { if (started == session) action() }
+        // Görev kutusu boş ya da gürültü okumayla kalkmaz ([clearIfUnsteady]): görev satırı ekrandan kalkınca alan listeden
+        // çıkar ([MissionLine.HOLD_MS]). Mac/iPhone ve Windows aynı.
+        if (area.id == MissionLine.AREA_ID && state.shown.isNotEmpty() && (candidate.key.isEmpty() ||
+                ScreenTextNoise.isNoise(candidate.paragraphs.joinToString(" ") { IconText.plain(it) }, false))) return
         if (state.shown == candidate.key) {
             val text = state.renderedText
             if (state.renderedKey != candidate.key || text.isNullOrEmpty()) return
             if (state.renderedBox == candidate.box && state.renderedLineHeight == candidate.lineHeight &&
                 state.renderedLayout == candidate.blocks && state.renderedStyles == candidate.styles) return
+            // Görev kutusu okuma kutusunun küçük oynamasıyla (satır yüksekliğinin çeyreğinden az) yer ve boy değiştirmez
+            // ([MissionLine.near]; Mac/iPhone ve Windows aynı).
+            val before = state.renderedBox
+            val now = candidate.box
+            if (area.id == MissionLine.AREA_ID && before != null && now != null && MissionLine.near(before, now)) return
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
             // Menüde seçim gezince (satırın zemini ve yazı rengi değişti) çeviri yeniden istenmez, yalnız renkler gider.
             val current = candidate.blocks

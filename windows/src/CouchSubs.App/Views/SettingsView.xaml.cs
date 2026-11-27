@@ -126,6 +126,7 @@ public partial class SettingsView : UserControl
         ScreenTextHelp.IsChecked = settings.ScreenTextHelp;
         ScreenTextMenus.IsChecked = settings.ScreenTextMenus;
         ScreenTextOther.IsChecked = settings.ScreenTextOther;
+        ScreenTextBeside.IsChecked = settings.ScreenTextBeside;
         ScreenTextKindsPanel.Visibility = settings.AutoScreenText ? Visibility.Visible : Visibility.Collapsed;
         SetTextApart.IsChecked = settings.SetTextApart;
         GameAreaPresets.IsChecked = settings.GameAreaPresets;
@@ -973,6 +974,7 @@ public partial class SettingsView : UserControl
         ScreenTextHelp = ScreenTextHelp.IsChecked == true,
         ScreenTextMenus = ScreenTextMenus.IsChecked == true,
         ScreenTextOther = ScreenTextOther.IsChecked == true,
+        ScreenTextBeside = ScreenTextBeside.IsChecked == true,
     });
 
     private void OnSetTextApart(object sender, RoutedEventArgs e) => Update(s => s with { SetTextApart = SetTextApart.IsChecked == true });
@@ -1490,6 +1492,7 @@ public partial class SettingsView : UserControl
         ScreenTextHelp.IsChecked = defaults.ScreenTextHelp;
         ScreenTextMenus.IsChecked = defaults.ScreenTextMenus;
         ScreenTextOther.IsChecked = defaults.ScreenTextOther;
+        ScreenTextBeside.IsChecked = defaults.ScreenTextBeside;
     }
 
     /// <summary>TV durumu noktası: bağlı yeşil, yeniden bağlanıyor amber, bekliyor gri.</summary>

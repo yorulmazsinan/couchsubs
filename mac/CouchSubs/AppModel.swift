@@ -3964,6 +3964,8 @@ final class AppModel: ObservableObject {
         // Yapışık çeviri: pencere yakalaması her kareyi çapaya kendisi verir (okuma sıklığından bağımsız, saniyede 30);
         // konsoldan okunurken kare burada verilir.
         if let anchor = phoneAnchor, capturedWindow?.trackAnchor !== anchor { anchor.feed(frame, at: capturedAt) }
+        // "Menülerde Türkçeyi yanına yaz" kapalıyken (varsayılan) arayüz yazısı yerinde örtülür (Windows ve Android aynı).
+        regionWatcher?.writesBeside = settings.screenTextBeside
         regionWatcher?.offer(frame, areas: areas, phone: pose, capturedAt: capturedAt)
         // Ekranda menü açık (otomatik ekran yazısı menü durumunda): altyazı okunur ama gönderilmez, bekletilir; menü
         // kapanınca bekletilen konuşma satırı gönderilir (MenuHeldSender, #1240). Eskiden menüde altyazı hiç okunmuyordu;

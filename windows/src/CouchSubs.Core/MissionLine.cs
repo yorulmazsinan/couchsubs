@@ -17,6 +17,11 @@ public sealed class MissionLine
     /// <summary>Bu kadar görülmeyen satır ekrandan kalkmış sayılır.</summary>
     public const int ForgetMs = 1500;
     /// <summary>
+    /// Görev sayılmış (kendi kutusunda gösterilen) satır ancak bu kadar görülmezse kalkar (histerezis): tek okumada ya da
+    /// kamera geçişinde kaçan görev satırının kutusu kalkıp gelmez (Sinan Bey, GTA 6 beta.105; Mac/iPhone ve Android aynı).
+    /// </summary>
+    public const int HoldMs = 4000;
+    /// <summary>
     /// Görev çevirisinin kutusu: koyu kehribar zemin, beyaz yazı. Kullanıcı bildirimi (beta.100): görev yazısının Türkçesi
     /// altyazıyla ve öbür ekran yazılarıyla aynı görünüyor, hangisinin görev olduğu anlaşılmıyordu. TV ve önizlemeler bu
     /// zemini öğenin Style'ından çizer (Mac/iPhone: MissionLine.style, Android: MissionLine.STYLE).
@@ -32,6 +37,8 @@ public sealed class MissionLine
         public long Since { get; } = since;
         public long LastSeen { get; set; } = since;
         public TextBox Box { get; set; } = box;
+        /// <summary>Görev sayıldı (SettleMs doldu): HoldMs histerezisi ve Claim uygulanır.</summary>
+        public bool Settled { get; set; }
     }
 
     private readonly List<Track> tracks = [];
@@ -70,12 +77,13 @@ public sealed class MissionLine
             track.LastSeen = time;
             track.Box = placed;
         }
-        var gone = tracks.Where(item => time - item.LastSeen > ForgetMs).ToList();
-        Dropped = [.. gone.Where(item => item.LastSeen - item.Since < SettleMs).Select(item => item.Source)];
+        var gone = tracks.Where(item => time - item.LastSeen > (item.Settled ? HoldMs : ForgetMs)).ToList();
+        Dropped = [.. gone.Where(item => !item.Settled && item.LastSeen - item.Since < SettleMs).Select(item => item.Source)];
         tracks.RemoveAll(gone.Contains);
+        foreach (var item in tracks.Where(item => time - item.Since >= SettleMs)) item.Settled = true;
         TextBox? shown = tracks.Count == 0 ? null : tracks.Select(item => item.Box).Aggregate((a, b) => a.Union(b));
         if (shown is not { } visible || Clearance is not { } kept || !Near(visible, kept)) Clearance = shown;
-        var settled = tracks.Where(item => time - item.Since >= SettleMs).ToList();
+        var settled = tracks.Where(item => item.Settled).ToList();
         CropRegion? next = null;
         if (settled.Count > 0)
         {
@@ -98,6 +106,34 @@ public sealed class MissionLine
     /// GTA 6): telefon araması sürerken arama kartının yanında "kulaklı ar." diye küçük bir çeviri kutusu çıkıyordu.
     /// </summary>
     public static bool IsCandidate(string text, TextBox box) => !ScreenNotices.IsNotice(box) && !OcrNoise.IsCrumb(text);
+
+    /// <summary>
+    /// Görev sayılmış satırın okumadaki yeni okunuşları okumadan çıkarılır (Kept) ve görev satırı olarak Observe'a verilir
+    /// (Claimed): görev tek başına kaldığında ya da ıskadan sonra döndüğünde altyazı kutusunda çevrilmez, sabit satır
+    /// süzgeci de konuşmayı görev saymaz. Aynı yazı (TextMatch.IsSimilar), görevin yerinde (dikeyde örtüşür); konuşan adlı
+    /// satır alınmaz (Mac/iPhone: MissionLine.claim, Android aynı).
+    /// </summary>
+    public (Reading Kept, IReadOnlyList<TextLine> Claimed) Claim(Reading reading, TextBox area)
+    {
+        var shown = tracks.Where(item => item.Settled).ToList();
+        if (shown.Count == 0) return (reading, []);
+        var kept = new List<TextLine>();
+        var claimed = new List<TextLine>();
+        foreach (var line in reading.Lines)
+        {
+            if (line.Box is not { } box || SpeakerPrefix.Parse(line.Text) is not null) { kept.Add(line); continue; }
+            var placed = box.PlacedIn(area);
+            var text = TextMatch.Normalize(line.Text);
+            var ours = text.Length >= 3 && shown.Any(track =>
+            {
+                var height = Math.Min(placed.Bottom - placed.Top, track.Box.Bottom - track.Box.Top);
+                var overlap = Math.Min(placed.Bottom, track.Box.Bottom) - Math.Max(placed.Top, track.Box.Top);
+                return overlap >= 0.5 * height && TextMatch.IsSimilar(track.Text, text);
+            });
+            (ours ? claimed : kept).Add(line);
+        }
+        return claimed.Count == 0 ? (reading, []) : (new Reading(kept), claimed);
+    }
 
     public void Reset()
     {

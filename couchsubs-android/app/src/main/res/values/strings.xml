@@ -348,6 +348,7 @@
     <string name="settings_screen_text_mission">Görev ve hedef yazısı</string>
     <string name="settings_screen_text_help">Yardım kutuları ve eylemler (tuş ipuçları)</string>
     <string name="settings_screen_text_menus">Menüler (duraklatma, harita, ayarlar)</string>
+    <string name="settings_screen_text_beside">Menülerde Türkçeyi yanına yaz</string>
     <string name="settings_screen_text_other">Diğer ekran yazıları</string>
     <string name="settings_screen_text_manual">Ekranı çevir her zaman her şeyi çevirir.</string>
     <string name="settings_set_text_apart_short">Ekran yazıları kendi rengini ve yerini korur, altyazı kutusuna benzemez.</string>

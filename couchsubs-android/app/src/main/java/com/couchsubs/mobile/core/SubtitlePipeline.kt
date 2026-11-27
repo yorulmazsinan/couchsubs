@@ -309,6 +309,8 @@ class SubtitlePipeline(
     /** Altyazı sayılmayan satırların neden başına sayacı ([RejectTally]; beta.103 kaçan altyazı). */
     private val rejects = RejectTally()
     private val mission = MissionLine()
+    /** Görev kutusunda tutulan satır günlüğe bir kez yazıldı (görev kalkınca yeniden). */
+    private var missionClaimLogged = false
     /** TV'ye son bildirilen görev satırı yeri ([MissionLine.clearance]). */
     private var sentClearance: TextBox? = null
     /** Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız ([DropLog]). */
@@ -504,8 +506,17 @@ class SubtitlePipeline(
         var noticeAreas: List<ExtraArea> = emptyList()
         var filteredRows = Reading(emptyList())
         val reading = synchronized(lock) {
+            // Görev sayılmış satır (kendi kutusunda gösteriliyor) tek başına kalsa ya da ıskadan sonra dönse de altyazı olmaz
+            // ([MissionLine.claim]); görev satırı olarak görülmüş sayılır.
+            val (unclaimed, claimed) = mission.claim(rows, area)
+            if (claimed.isNotEmpty() && !missionClaimLogged) {
+                missionClaimLogged = true
+                onLog?.invoke("görev satırı: \"${excerpt(claimed.joinToString(" ") { it.text })}\" görev kutusunda kalıyor, altyazı sayılmadı")
+            } else if (claimed.isEmpty() && mission.region == null) {
+                missionClaimLogged = false
+            }
             // Kamerayla kayan yazı (plaka, tabela, dükkân adı) altyazı değildir ([SceneMotion], GitHub #1259).
-            val moving = sceneMotion.filter(stickyRows.filter(rows, now()), area, now())
+            val moving = sceneMotion.filter(stickyRows.filter(unclaimed, now()), area, now())
             for (line in sceneMotion.removed) logSceneText(line.text, SceneMotion.REASON)
             // Hareketsiz ürün/ambalaj yazısı (bira kutusu, süt kartonu) altyazı değildir ([PackageText], Sinan Bey beta.101).
             val (filtered, packaged) = PackageText.filter(moving, area, packageLook)
@@ -514,7 +525,7 @@ class SubtitlePipeline(
             val remembered = sceneMemory.filter(filtered, now())
             for ((line, first) in sceneMemory.removed) logSceneText(line.text, "${SceneTextMemory.REASON} ($first)")
             filteredRows = filtered
-            if (mission.observe(stickyRows.removed, area, now())) {
+            if (mission.observe(stickyRows.removed + claimed, area, now())) {
                 missionChanged = true
                 missionRegion = mission.region
             }
@@ -1155,6 +1166,7 @@ class SubtitlePipeline(
         settled.reset()
         loggedStale = ""
         mission.reset()
+        missionClaimLogged = false
         if (sentClearance != null) {
             sentClearance = null
             sender.sendObjective(null)

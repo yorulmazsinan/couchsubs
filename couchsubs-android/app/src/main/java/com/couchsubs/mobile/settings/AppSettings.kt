@@ -284,6 +284,14 @@ class AppSettings(context: Context) : AreaStore {
     var screenTextOther: Boolean
         get() = prefs.getBoolean("screenTextOther", false)
         set(value) = prefs.edit().putBoolean("screenTextOther", value).apply()
+    /**
+     * "Menülerde Türkçeyi yanına yaz" (varsayılan kapalı): kapalıyken menü, görev kutusu, kart ve istem Türkçesi özgün
+     * yazının kendi dikdörtgenine, o kutunun ölçülen zemin renginde örtülerek çizilir ([com.couchsubs.mobile.core.RegionWatcher.writesBeside]).
+     * Mac/iPhone (screenTextBeside) ve Windows (ScreenTextBeside) aynı.
+     */
+    var screenTextBeside: Boolean
+        get() = prefs.getBoolean("screenTextBeside", false)
+        set(value) = prefs.edit().putBoolean("screenTextBeside", value).apply()
 
     /** Türlerin şu anki hali. */
     val screenTextKinds: com.couchsubs.mobile.core.ScreenTextKinds

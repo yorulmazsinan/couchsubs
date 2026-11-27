@@ -4107,6 +4107,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 if (region is not null && regionWatcher is null && !watcherRequested)
                     requestWatcher = watcherRequested = true;
             }
+            // "Menülerde Türkçeyi yanına yaz" kapalıyken (varsayılan) arayüz yazısı yerinde örtülür (Mac/iPhone ve Android aynı).
+            if (regionWatcher is { } watching) watching.WritesBeside = settings.ScreenTextBeside;
             regionWatcher?.Offer(frame, watchedAreas);
             if (screenText is { } detector && detector.Due(arrived) && Interlocked.CompareExchange(ref screenTextBusy, 1, 0) == 0)
             {

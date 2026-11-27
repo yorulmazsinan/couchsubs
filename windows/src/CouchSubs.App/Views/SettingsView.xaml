@@ -269,6 +269,7 @@
                                         <CheckBox x:Name="ScreenTextMission" Content="{t:T 'Mission and objective text'}" Checked="OnScreenTextKind" Unchecked="OnScreenTextKind" />
                                         <CheckBox x:Name="ScreenTextHelp" Content="{t:T 'Help boxes and actions (button prompts)'}" Checked="OnScreenTextKind" Unchecked="OnScreenTextKind" />
                                         <CheckBox x:Name="ScreenTextMenus" Content="{t:T 'Menus (pause, map, settings)'}" Checked="OnScreenTextKind" Unchecked="OnScreenTextKind" />
+                                        <CheckBox x:Name="ScreenTextBeside" Content="{t:T 'Write the translation beside menu text'}" Checked="OnScreenTextKind" Unchecked="OnScreenTextKind" />
                                         <CheckBox x:Name="ScreenTextOther" Content="{t:T 'Other on-screen text'}" Checked="OnScreenTextKind" Unchecked="OnScreenTextKind" />
                                     </c:SpacedStack>
                                 </c:Unit>

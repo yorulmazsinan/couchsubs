@@ -239,6 +239,23 @@ public sealed partial class RegionWatcher
     public bool SkipsTurkish { get; set; } = true;
     /// <summary>İngilizceden Türkçeye çeviride tuş çubuğu komutları, simgeleriyle birlikte, sözlükten gelir.</summary>
     public bool TranslatesUiCommands { get; set; }
+    /// <summary>
+    /// "Menülerde Türkçeyi yanına yaz" (ScreenTextBeside, varsayılan kapalı). Kapalıyken menü, görev, kart, yardım ve tuş
+    /// istemi Türkçesi özgün yazının kendi dikdörtgenine, o kutunun ölçülen zemininde örtülerek çizilir (InPlaceKind,
+    /// CoveredInPlace); oyun dünyasındaki tabela ve sahne yazısı (#1300) eskisi gibi kalır. Değişince satırların saklı kipi
+    /// unutulur. Mac/iPhone (RegionWatcher.writesBeside) ve Android aynı.
+    /// </summary>
+    public bool WritesBeside
+    {
+        get => writesBeside;
+        set
+        {
+            if (writesBeside == value) return;
+            writesBeside = value;
+            lock (rowPaints) rowPaints.Clear();
+        }
+    }
+    private volatile bool writesBeside;
     public bool EnglishPhoneMessages { get; set; }
     /// <summary>"GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde" ve panelin yazı boyu; her gönderide okunur (Mac ile aynı).</summary>
     public Func<PhonePanelOptions> PhonePanel { get; set; } = () => new PhonePanelOptions();
@@ -753,6 +770,9 @@ public sealed partial class RegionWatcher
     /// </summary>
     private void ClearIfUnsteady(Candidate candidate, WatchedArea area, State state, byte[]? before, byte[] signature)
     {
+        // Görev kutusunun ömrü görev satırınındır (MissionLine.HoldMs histerezisi): satır ekrandan kalkınca alan listeden çıkar
+        // ve kutu o turda kalkar. Alanın boş ya da kararsız okuması kutuyu kaldırmaz (Mac/iPhone ve Android aynı).
+        if (area.Id == MissionLine.AreaId) return;
         if (PartlyVisible(candidate.Text, state.ShownText))
         {
             (state.Unsteady, state.UnsteadySince) = (0, null);
@@ -927,7 +947,7 @@ public sealed partial class RegionWatcher
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Android aynı.
         var paintBegun = System.Diagnostics.Stopwatch.GetTimestamp();
         var made = MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
-                                 styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
+                                 styled: true, kind: ScreenTextKinds.Of(area), screen: frame, beside: WritesBeside);
         if (made.Blocks is { } blocks)
         {
             IReadOnlyList<Block> steady;
@@ -1011,7 +1031,7 @@ public sealed partial class RegionWatcher
     /// alandır; #1339).</param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
                                             bool auto = false, bool menu = false, bool styled = false, ScreenTextKind? kind = null,
-                                            Frame? screen = null)
+                                            Frame? screen = null, bool beside = true)
     {
         styled = (auto || styled) && !phone;
         // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı): simge ve bozuk okuma süzgeçleri menü durumundan
@@ -1123,10 +1143,11 @@ public sealed partial class RegionWatcher
                                                   screen is null ? group.LineHeight : group.LineHeight * height, rows,
                                                   block.Style!.Background, block.Style.Foreground,
                                                   block.Look!.Upper, block.Look.Align, TextPainter.WordCount(joined),
-                                                  PaintKind(group, lines, cards, kind),
+                                                  InPlaceKind(PaintKind(group, lines, cards, kind), beside),
                                                   joined.Contains(ButtonIcons.Marker) || ButtonPrompts.IsPrompt(IconText.Plain(joined)));
                 }).ToList();
                 var paints = TextPainter.Paints(targets, measured)
+                    .Select(paint => beside ? paint : CoveredInPlace(paint))
                     .Select(paint => paint.Portrait is { } face ? paint with { PortraitImage = TextPainter.PortraitImage(face, measured) } : paint)
                     .ToList();
                 for (var k = 0; k < painted.Count && k < paints.Count; k++)
@@ -1563,6 +1584,20 @@ public sealed partial class RegionWatcher
     /// (menü, telefon, yardım köşesi, görev satırı), haritanın görev kartının parçası görev/hedef, kalanı okunan yazıdan
     /// (<see cref="ScreenTextKinds.Of(IReadOnlyList{string})"/>). Mac (RegionWatcher.paintKind) ve Android (paintKind) aynı.
     /// </summary>
+    /// <summary>
+    /// Yanına yazma kapalıyken (WritesBeside) çizim kipine verilen tür: arayüz yazısı (menü, görev/kart, yardım ve tuş
+    /// istemi) null olur, TextPainter onu yerinde örter; diğer yazı (oyun dünyasındaki tabela, sahne yazısı; #1300) türünü
+    /// korur. Mac/iPhone (inPlaceKind) ve Android aynı.
+    /// </summary>
+    internal static ScreenTextKind? InPlaceKind(ScreenTextKind kind, bool beside) =>
+        beside || kind == ScreenTextKind.Other ? kind : null;
+
+    /// <summary>
+    /// Yanına yazma kapalıyken ikiz kutu çizilmez: kutunun yazısı kendi dikdörtgenine, kutunun ölçülen zemin renginde örtülür.
+    /// Yanına yazılan sahne yazısı (#1300) olduğu gibi kalır. Mac/iPhone (coveredInPlace) ve Android aynı.
+    /// </summary>
+    internal static TextPaint CoveredInPlace(TextPaint paint) => paint.Mode != PaintMode.Twin ? paint : CoverOnly(paint);
+
     internal static ScreenTextKind PaintKind(ScreenTranslation.Group group, IReadOnlyList<TextLine> lines,
                                              IReadOnlyList<CouchSubs.Core.MissionCard.Card> cards, ScreenTextKind? area)
     {
@@ -1605,6 +1640,11 @@ public sealed partial class RegionWatcher
 
     private async Task CommitAsync(Candidate candidate, WatchedArea area, State state, int started)
     {
+        // Görev kutusu boş ya da gürültü okumayla kalkmaz (ClearIfUnsteady): görev satırı ekrandan kalkınca alan listeden
+        // çıkar (MissionLine.HoldMs). Mac/iPhone ve Android aynı.
+        if (area.Id == MissionLine.AreaId && state.Shown.Length > 0
+            && (candidate.Key.Length == 0 || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs), false)))
+            return;
         // Menü dışındaki otomatik alanın türü okunan yazıdan çıkar (yardım/eylem ya da diğer); kapalı tür gürültü gibi
         // çizilmez, dedektöre bildirilir.
         if (area.Auto && area.Menu && !candidate.MissionCard && ScreenTextKinds.IsHud(candidate.Paragraphs)
@@ -1635,6 +1675,10 @@ public sealed partial class RegionWatcher
             if (state.RenderedKey != candidate.Key || string.IsNullOrEmpty(state.RenderedText)) return;
             if (state.RenderedBox == candidate.Box && state.RenderedLineHeight == candidate.LineHeight
                 && SameLayout(state.RenderedLayout, candidate.Blocks)) return;
+            // Görev kutusu okuma kutusunun küçük oynamasıyla (satır yüksekliğinin çeyreğinden az) yer ve boy değiştirmez
+            // (MissionLine.Near; Mac/iPhone ve Android aynı).
+            if (area.Id == MissionLine.AreaId && state.RenderedBox is { } before && candidate.Box is { } now
+                && MissionLine.Near(before, now)) return;
             // Aynı yazı kaydı: çeviriler korunur, bloklar yeni yerlerine taşınır (anahtar aynıysa grup sayısı da aynıdır).
             var moved = state.RenderedBlocks is { } rendered && candidate.Blocks is { } current
                 ? rendered.Select(block => block.Group < 0 || block.Group >= current.Count ? block : (Group: block.Group, Item: block.Item with

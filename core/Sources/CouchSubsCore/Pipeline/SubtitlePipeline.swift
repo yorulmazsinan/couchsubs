@@ -185,6 +185,8 @@ public final class SubtitlePipeline {
     /// bloğun bozuk okunmuş parçası çevrilmez, aynı satır değişmeyen ekranda yeniden işlenmez.
     private var settled = SettledText()
     private var mission = MissionLine()
+    /// Görev kutusunda tutulan satır günlüğe bir kez yazıldı (görev kalkınca yeniden).
+    private var missionClaimLogged = false
     /// TV'ye son bildirilen görev satırı yeri (`MissionLine.clearance`).
     private var sentClearance: TextBox?
     /// Düşürülen ya da bekletilen satırın nedeni, sınırlı ve tekrarsız (`DropLog`).
@@ -459,7 +461,16 @@ public final class SubtitlePipeline {
             log("kendi altyazısı: \(SubtitleLog.excerpt(ownLines.map(\.text).joined(separator: " "))) karede okundu, yok "
                 + "sayıldı (görüntü kaynağı CouchSubs'ın OBS katmanını da içeriyor; OBS'te Kaynak projektörünü seçin)")
         }
-        let cleaned = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        let joined = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        // Görev sayılmış satır (kendi kutusunda gösteriliyor) tek başına kalsa ya da ıskadan sonra dönse de altyazı olmaz
+        // (`MissionLine.claim`); görev satırı olarak görülmüş sayılır.
+        let (cleaned, claimed) = mission.claim(joined, area: place)
+        if !claimed.isEmpty, !missionClaimLogged {
+            missionClaimLogged = true
+            log("görev satırı: \(SubtitleLog.excerpt(claimed.map(\.text).joined(separator: " "))) görev kutusunda kalıyor, altyazı sayılmadı")
+        } else if mission.region == nil {
+            missionClaimLogged = false
+        }
         // Kamerayla kayan yazı (plaka, tabela, dükkân adı) altyazı değildir (`SceneMotion`, GitHub #1259).
         let moving = sceneMotion.filter(stickyRows.filter(cleaned, at: now()), in: place, at: now())
         for row in stickyRows.newlySticky { log("sabit satır: \(SubtitleLog.excerpt(row)) görev/HUD yazısı sayıldı, çevrilmiyor") }
@@ -470,7 +481,7 @@ public final class SubtitlePipeline {
         // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (`SceneTextMemory`, #1411).
         let rows = sceneMemory.filter(packaged.kept, at: now())
         for (line, first) in sceneMemory.removed { logSceneText(line.text, "\(SceneTextMemory.reason) (\(first))") }
-        if mission.observe(stickyRows.removed, area: place, at: now()) {
+        if mission.observe(stickyRows.removed + claimed, area: place, at: now()) {
             log(mission.region == nil ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor")
             onMissionChanged?(mission.region)
         }
@@ -1298,6 +1309,7 @@ public final class SubtitlePipeline {
         rejects.reset()
         settled.reset()
         mission.reset()
+        missionClaimLogged = false
         if sentClearance != nil {
             sentClearance = nil
             server.sendObjective(nil)
