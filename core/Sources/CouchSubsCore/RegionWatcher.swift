@@ -77,6 +77,8 @@ public final class RegionWatcher {
 
     private struct State {
         var signature: [UInt8]?
+        /// Son okumadaki menü biçimi (`menuCovers`; menü dışı alanda nil): ayar değişince görüntü durgun olsa da yeniden okunur.
+        var menuCover: Bool?
         /// Günlüğe son yazılan, güveni düşük olduğu için çevrilmeyen satırlar (aynı satırlar her turda yeniden yazılmaz).
         var unsureLogged: [String] = []
         /// Son okumanın sadeleştirilmiş yazısı; bir sonraki okuma aynıysa yazı kararlıdır.
@@ -284,6 +286,9 @@ public final class RegionWatcher {
     private let phoneTrace: DropLog
     /// Bu tür ekran yazısı çevrilir mi (Ayarlar'daki türler, `UserSettings.screenTextAllows`); varsayılan hepsi.
     public var allows: (ScreenTextKind) -> Bool = { _ in true }
+    /// Menüde İngilizcenin üstü örtülür mü (Ayarlar › Ekran yazıları › "Menülerde İngilizcenin üstünü ört",
+    /// `UserSettings.screenTextMenuCover`; `MenuLayout`): false (varsayılan) Türkçe yanına, koyu etikete yazılır.
+    public var menuCovers: () -> Bool = { false }
     /// Altyazı hattının son satırları ve alanı (bkz. `SubtitleEcho`); uygulama `SubtitleEcho.shared` verir.
     public var subtitleEcho: SubtitleEcho?
     /// Otomatik alan okundu ama yazı yok ya da gürültü (`ScreenTextNoise`): alanın kimliği (`ScreenTextDetector.reject`).
@@ -418,10 +423,13 @@ public final class RegionWatcher {
         guard session == self.session else { return }
         var state = states[area.id] ?? State()
         let before = state.signature
-        let changed = state.signature.map {
+        // Menüde biçim ayarı (üstünü ört / yanına yaz) değişince görüntü durgun olsa da yeniden okunur ve çizilir.
+        let cover: Bool? = area.auto && area.menu ? menuCovers() : nil
+        let changed = (state.signature.map {
             ReadScheduler.changed($0, signature, threshold: ReadScheduler.defaultChangeThreshold)
-        } ?? true
+        } ?? true) || state.menuCover != cover
         state.signature = signature
+        state.menuCover = cover
         guard changed else {
             // İz bir tur değişmedi: okunan yazı kararlıdır.
             state.unsteady = 0
@@ -501,11 +509,12 @@ public final class RegionWatcher {
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.
         let painting = DispatchTime.now().uptimeNanoseconds
         var candidate = Self.candidate(own, in: region, frame: crop, auto: area.auto, menu: area.menu,
-                                       styled: true, kind: ScreenTextKind.of(area), screen: screen)
+                                       styled: true, kind: ScreenTextKind.of(area), screen: screen, menuCover: cover)
         if let blocks = candidate.blocks {
             let before = blocks.map { $0.paint?.mode }
+            // Menüde biçim ayardan gelir (`MenuLayout`, `steadyPaints` menuCover): kip ayara göre saklanır.
             candidate.blocks = Self.steadyPaints(blocks, texts: Self.blockTexts(candidate).map(\.text), memory: &rowPaints,
-                                                 map: area.map)
+                                                 map: area.map, menuCover: cover)
             let kept = zip(before, candidate.blocks ?? []).filter { $0.0 != $0.1.paint?.mode }.count
             if kept > 0 { onLog?("ek alan \(area.name): \(kept) satırın çizim kipi korundu\(area.map ? " (harita düzeni)" : "")") }
         }
@@ -768,9 +777,11 @@ public final class RegionWatcher {
     /// sayaç ("12:00 pm") çevrilmez. Önceden hazır alanın çevirisi tek siyah kutuda görev resminin de üstünü örtüyordu (#856).
     /// `kind`: alanın yerinden belli türü (`ScreenTextKind.of(area)`); otomatik alanda grupların çizim kipini seçer.
     /// `screen`: bütün kare (verilirse çizim kipi ve boş alan onda ölçülür; `frame` yalnız okunan alandır).
+    /// `menuCover`: menüdeki otomatik alanın biçimi (`MenuLayout`; true: üstünü ört, false: yanına yaz); nil: her yazının
+    /// kipini `TextPainter` seçer.
     static func candidate(_ reading: Reading, in region: CropRegion, frame: CGImage? = nil, auto: Bool = false,
                           menu: Bool = false, styled: Bool = false, kind: ScreenTextKind? = nil,
-                          screen: ScreenFrame? = nil) -> Candidate {
+                          screen: ScreenFrame? = nil, menuCover: Bool? = nil) -> Candidate {
         let styled = auto || styled
         // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı): simge ve bozuk okuma süzgeçleri menü durumundan
         // bağımsız (#1365 beta.105: menü düşünce "KM Collect…", "ocdich for the onurn Ape" geçip motora gidiyordu).
@@ -905,6 +916,30 @@ public final class RegionWatcher {
                 var paints = pixels.map { TextPainter.paints(targets, pixels: $0) } ?? []
                 for k in paints.indices {
                     if let face = paints[k].portrait, let pixels { paints[k].portraitImage = TextPainter.portraitImage(face, pixels: pixels) }
+                }
+                // Menüde biçim ayardan gelir, her okumada yeniden seçilmez (#1365): üstünü ört ya da yanına yaz.
+                if auto && menu, let cover = menuCover, paints.count == targets.count {
+                    let cardParts = cards.map { card in
+                        painted.indices.filter { k in
+                            card.all.contains { lines[$0].box.map { inside($0, groups[painted[k]].box) } ?? false }
+                        }
+                    }.filter { !$0.isEmpty }
+                    let shape = whole.map { Double($0.image.width) / Double(max(1, $0.image.height)) }
+                        ?? Double(frame.width) / Double(max(1, frame.height))
+                    // İkiz kartın kişi resmi ölçümde bulunmadıysa kareden aranır (ikiz kart resimsiz kalmasın).
+                    var findPortrait: (([Int], String) -> (box: TextBox, image: String?)?)?
+                    if let pixels {
+                        let covers = paints.map(\.cover)
+                        findPortrait = { card, fill in
+                            let heights = card.map { targets[$0].lineHeight }.sorted()
+                            guard !heights.isEmpty, let face = TextPainter.cardPortrait(
+                                covers: covers, card: card, background: fill, line: heights[heights.count / 2], pixels: pixels)
+                            else { return nil }
+                            return (box: face, image: TextPainter.portraitImage(face, pixels: pixels))
+                        }
+                    }
+                    paints = MenuLayout.locked(paints, targets: targets, cards: cardParts, cover: cover, aspect: shape,
+                                               portrait: findPortrait)
                 }
                 for (k, i) in painted.enumerated() where k < paints.count {
                     list[i].paint = whole == nil ? paints[k].placed(in: place) : paints[k]
@@ -1564,24 +1599,32 @@ public final class RegionWatcher {
     ///   ölçüler satırın yeni yerine taşınır. Satır yana kaydıysa (`rowPaintShift`) eski ölçüler taşınamaz; satır örtülür ve
     ///   bundan sonra hep örtülür (kip en çok bir kez, örtüye döner).
     /// - `map`: harita düzeninde ikiz kutu çizilmez (haritanın üstünde yüzen kutular); ikiz seçilen blok örtülür.
+    /// - `menuCover`: menüde biçim ayardan gelir (`MenuLayout`; nil: menü dışı). Yerleşim yazıların kutularından çıkar ve aynı
+    ///   ekranda her okumada aynıdır: bir kez örtülen satır örtülü kalmaz (şeridin ve sütunun kuralı bozulmasın), harita
+    ///   düzeninin ikiz yasağı uygulanmaz (görev kartının ikizi kartın altına bitişik, haritada yüzmez). Saklı kip biçime göre
+    ///   ayrı tutulur: ayar değişince eski biçim kalmaz, menü dışı okumanın kipi menüye geçmez.
     /// Windows (RegionWatcher.SteadyPaints) ve Android (steadyPaints) aynı.
-    static func steadyPaints(_ blocks: [Block], texts: [String], memory: inout [String: RowPaint], map: Bool) -> [Block] {
+    static func steadyPaints(_ blocks: [Block], texts: [String], memory: inout [String: RowPaint], map: Bool,
+                             menuCover: Bool? = nil) -> [Block] {
+        let locked = menuCover != nil
+        let scope = menuCover.map { $0 ? "B\u{1F}" : "A\u{1F}" } ?? ""
         var result = blocks
         var seen = Set<String>()
         for i in result.indices {
             guard var paint = result[i].paint else { continue }
-            if map, paint.mode == .twin { paint = coverOnly(paint) }
-            let key = i < texts.count ? textKey([IconText.plain(texts[i])]) : ""
-            guard !key.isEmpty else {
+            if map, !locked, paint.mode == .twin { paint = coverOnly(paint) }
+            let text = i < texts.count ? textKey([IconText.plain(texts[i])]) : ""
+            guard !text.isEmpty else {
                 result[i].paint = paint
                 continue
             }
+            let key = scope + text
             seen.insert(key)
             let box = result[i].box
             if let kept = memory[key], kept.mode != paint.mode {
                 let dx = box.left - kept.box.left, dy = box.top - kept.box.top
                 if kept.mode == .cover || abs(dx) > rowPaintShift {
-                    paint = coverOnly(paint)
+                    if !locked { paint = coverOnly(paint) }
                 } else {
                     paint = shifted(kept.paint, dx: dx, dy: dy)
                 }

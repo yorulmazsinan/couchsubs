@@ -1,0 +1,49 @@
+{
+  "about": "Menüde biçim ayardan gelince satırın saklı çizim kipi (RegionWatcher.steadyPaints, menuCover). Her okuma: menuCover (null: menü dışı, false: A yanına yaz, true: B üstünü ört), map (harita düzeni), satırlar (yazı, kutu, ölçülen kip) ve beklenen kipler. Mac MenuLayoutTests.swift, Windows MenuLayoutTests.cs, Android MenuLayoutTest.kt aynı.",
+  "sequences": [
+    {
+      "name": "ayar değişince eski biçim kalmaz (B → A → B)",
+      "reads": [
+        { "menuCover": true, "map": true, "rows": [
+          { "text": "MAP", "box": [0.40, 0.05, 0.44, 0.08], "mode": "cover" },
+          { "text": "RECENTER", "box": [0.80, 0.70, 0.86, 0.73], "mode": "cover" } ], "expected": ["cover", "cover"] },
+        { "menuCover": false, "map": true, "rows": [
+          { "text": "MAP", "box": [0.40, 0.05, 0.44, 0.08], "mode": "beside" },
+          { "text": "RECENTER", "box": [0.80, 0.70, 0.86, 0.73], "mode": "beside" } ], "expected": ["beside", "beside"] },
+        { "menuCover": true, "map": true, "rows": [
+          { "text": "MAP", "box": [0.40, 0.05, 0.44, 0.08], "mode": "cover" },
+          { "text": "RECENTER", "box": [0.80, 0.70, 0.86, 0.73], "mode": "cover" } ], "expected": ["cover", "cover"] }
+      ]
+    },
+    {
+      "name": "A'da bir kez örtülen satır örtülü kalmaz; yanına yazılan satır yanında kalır",
+      "reads": [
+        { "menuCover": false, "map": true, "rows": [ { "text": "BRIEF", "box": [0.46, 0.05, 0.50, 0.08], "mode": "cover" } ], "expected": ["cover"] },
+        { "menuCover": false, "map": true, "rows": [ { "text": "BRIEF", "box": [0.46, 0.05, 0.50, 0.08], "mode": "beside" } ], "expected": ["beside"] },
+        { "menuCover": false, "map": true, "rows": [ { "text": "BRIEF", "box": [0.46, 0.06, 0.50, 0.09], "mode": "cover" } ], "expected": ["beside"] }
+      ]
+    },
+    {
+      "name": "menüde görev kartının ikizi harita düzeninde de kalır",
+      "reads": [
+        { "menuCover": false, "map": true, "rows": [ { "text": "ISLAND DREAMS", "box": [0.10, 0.30, 0.30, 0.34], "mode": "twin" } ], "expected": ["twin"] },
+        { "menuCover": false, "map": true, "rows": [ { "text": "ISLAND DREAMS", "box": [0.10, 0.31, 0.30, 0.35], "mode": "twin" } ], "expected": ["twin"] }
+      ]
+    },
+    {
+      "name": "menü dışı okumanın kipi menüye geçmez",
+      "reads": [
+        { "menuCover": null, "map": false, "rows": [ { "text": "Pay 'N' Spray", "box": [0.60, 0.30, 0.74, 0.34], "mode": "twin" } ], "expected": ["twin"] },
+        { "menuCover": false, "map": true, "rows": [ { "text": "Pay 'N' Spray", "box": [0.60, 0.30, 0.74, 0.34], "mode": "beside" } ], "expected": ["beside"] },
+        { "menuCover": true, "map": true, "rows": [ { "text": "Pay 'N' Spray", "box": [0.60, 0.30, 0.74, 0.34], "mode": "cover" } ], "expected": ["cover"] }
+      ]
+    },
+    {
+      "name": "menü dışında kural aynı: harita düzeninde ikiz örtülür, örtülen satır örtülü kalır",
+      "reads": [
+        { "menuCover": null, "map": true, "rows": [ { "text": "Meet Bret", "box": [0.02, 0.22, 0.14, 0.26], "mode": "twin" } ], "expected": ["cover"] },
+        { "menuCover": null, "map": true, "rows": [ { "text": "Meet Bret", "box": [0.02, 0.22, 0.14, 0.26], "mode": "beside" } ], "expected": ["cover"] }
+      ]
+    }
+  ]
+}

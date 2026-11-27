@@ -1,0 +1,1 @@
+0.9.124: Menülerde Türkçe, İngilizcenin yanına koyu zeminli okunaklı bir etikete yazılıyor (bilgisayarda "Menülerde İngilizcenin üstünü ört" kapalıyken); liste satırları tek sütunda, görev kartının Türkçesi kişi resmiyle kartın hemen altında.

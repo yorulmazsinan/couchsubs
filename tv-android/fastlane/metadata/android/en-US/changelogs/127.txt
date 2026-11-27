@@ -1,0 +1,1 @@
+0.9.124: In menus the Turkish is written next to the English on a readable dark label (when "Cover the English in menus" is off on the computer); list rows line up in one column, and the mission card's Turkish appears right below the card with its portrait.

@@ -226,6 +226,9 @@ public struct UserSettings: Codable, Equatable {
     public var screenTextHelp = true
     public var screenTextMenus = false
     public var screenTextOther = false
+    /// Menülerde çevirinin biçimi (`MenuLayout`, #1365): açıkken İngilizce kendi zemin rengiyle örtülür (B); kapalıyken
+    /// (varsayılan) Türkçe İngilizcenin yanına, koyu zeminli etikete yazılır (A). Eski kayıtlarda yoktur; kapalı.
+    public var screenTextMenuCover = false
     /// iPhone Xbox ev yayınında oyun sesi telefonda çalınır. Xbox uzaktan oynatma sürerken sesi istemciye verip TV'yi
     /// susturabilir; kapalıyken ses hiçbir yerden gelmeyebilir, bu yüzden varsayılan açık. PS5'i etkilemez.
     public var xboxAudioOnDevice = true
@@ -304,6 +307,7 @@ public struct UserSettings: Codable, Equatable {
         screenTextHelp = try values.decodeIfPresent(Bool.self, forKey: .screenTextHelp) ?? defaults.screenTextHelp
         screenTextMenus = try values.decodeIfPresent(Bool.self, forKey: .screenTextMenus) ?? defaults.screenTextMenus
         screenTextOther = try values.decodeIfPresent(Bool.self, forKey: .screenTextOther) ?? defaults.screenTextOther
+        screenTextMenuCover = (try? values.decodeIfPresent(Bool.self, forKey: .screenTextMenuCover)) ?? defaults.screenTextMenuCover
         xboxAudioOnDevice = try values.decodeIfPresent(Bool.self, forKey: .xboxAudioOnDevice) ?? defaults.xboxAudioOnDevice
         appearance = (try? values.decodeIfPresent(AppAppearance.self, forKey: .appearance)) ?? defaults.appearance
         startupSound = (try? values.decodeIfPresent(Bool.self, forKey: .startupSound)) ?? defaults.startupSound

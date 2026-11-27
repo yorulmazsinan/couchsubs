@@ -479,6 +479,12 @@ private struct AdvancedPage: View {
                     SettingSwitch(title: "Mission and objective text", isOn: $model.settings.screenTextMission)
                     SettingSwitch(title: "Help boxes and actions (button prompts)", isOn: $model.settings.screenTextHelp)
                     SettingSwitch(title: "Menus (pause, map, settings)", isOn: $model.settings.screenTextMenus)
+                    // Menülerde çevirinin biçimi (`MenuLayout`, #1365): yanına koyu etikette ya da üstünü örterek.
+                    if model.settings.screenTextMenus {
+                        SettingSwitch(title: "Cover the English in menus",
+                                      subtitle: "When off, the Turkish is written next to the English on a dark label. When on, the English is covered in its own background colour; icons stay visible.",
+                                      isOn: $model.settings.screenTextMenuCover)
+                    }
                     SettingSwitch(title: "Other on-screen text", isOn: $model.settings.screenTextOther)
                     Text("Translate the screen always translates everything.").dsMuted()
                 }
@@ -516,6 +522,7 @@ private struct AdvancedPage: View {
         model.settings.screenTextMission = defaults.screenTextMission
         model.settings.screenTextHelp = defaults.screenTextHelp
         model.settings.screenTextMenus = defaults.screenTextMenus
+        model.settings.screenTextMenuCover = defaults.screenTextMenuCover
         model.settings.screenTextOther = defaults.screenTextOther
     }
 

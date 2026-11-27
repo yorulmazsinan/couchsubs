@@ -68,11 +68,19 @@ data class TextPaint(
     val portraitTwin: TextBox? = null,
     /** Kesilmiş resim (PNG data: adresi, en çok [TextPainter.PORTRAIT_MAX] piksel); çağıran keser. TV'ye `icon`. */
     val portraitImage: String? = null,
+    /** Resim köşeli kare (menüdeki görev kartının resmi, [MenuLayout]); false: yuvarlak (telefon bildiriminin kişi resmi). TV'ye `icon.square`. */
+    val portraitSquare: Boolean = false,
     /**
      * twin: özgün panelin kenar çizgisi (panelin hemen dışındaki düz renkli ince şerit; GTA 6 kartının üstündeki renkli
      * çizgi): ikiz de aynı çizgiyle çizilir. null: çizgi yok. TV'ye `edge` ({color, top, right, bottom, left}).
      */
     val edge: Edge? = null,
+    /**
+     * beside: Türkçenin etiket zemini (menüde "yanına yaz" biçimi, [MenuLayout.LABEL_COLOR]): TV yazıyı bu renkte yarı
+     * saydam, köşeleri yuvarlak etikete açık renkle yazar (kontursuz). null: zeminsiz, özgün stilde konturla. TV'ye `label`;
+     * eski TV yok sayıp zeminsiz yazar.
+     */
+    val label: String? = null,
 ) {
     /** Kenar çizgisi: rengi ve her yandaki kalınlığı (kare yüksekliğine oranla; 0: o yanda çizgi yok). */
     data class Edge(val color: String, val top: Double, val right: Double, val bottom: Double, val left: Double)
@@ -344,6 +352,83 @@ object TextPainter {
         if (w < least || h < least || w > 4 * line || h > 4 * line || w < 0.75 * h || w > 1.33 * h ||
             maxX + 1 + max(2, round(ScreenFit.GAP_LINES * line)) > l) return null
         return Box(minX, minY, maxX + 1, maxY + 1)
+    }
+
+    /** Menüde kartın ikizine kişi resmi aranırken başlığın solunda en çok bu kadar satır yüksekliği bakılır. */
+    const val CARD_PORTRAIT_LINES = 4.5
+    /** Kartın kişi resmi başlıktan en az bu kadar (satır yüksekliğinin katı) ayrık olmalı; GTA 6 görev kartında ≈0,15. */
+    const val CARD_PORTRAIT_GAP_LINES = 0.1
+    /** Resmin çevresindeki (iki nokta dışı) noktaların en az bu payı kartın zemini olmalı. */
+    const val CARD_PORTRAIT_RING = 0.6
+
+    /**
+     * Menüde kartın ikizine kişi resmi ([MenuLayout], #1365): kartın başlığının solunda, kartın zemininden belirgin ayrılan
+     * kare resim. [paints] resmi yalnız ikizi kendisi kurduğunda ve resim yazıdan en az [ScreenFit.GAP_LINES] satır uzaksa
+     * buluyordu; GTA 6 görev kartında resim başlığa daha yakın, ikiz kart resimsiz kalıyordu. Arama başlığın satırlarında
+     * başlıktan sola: önce kartın zemini (en çok bir satır), sonra resim, sonra yine zemin; resim satırlardan yukarı/aşağı
+     * zemine kadar büyütülür. Resim kartın içinde olmalı (sola [CARD_PORTRAIT_LINES] satırda zemine dönmeyen ya da çevresi
+     * zemin olmayan leke harita/simgedir). Boyu ve oranı [portrait] ile aynı ölçütlerde. [color]: 0xRRGGBB. Mac ve Windows aynı.
+     */
+    fun cardPortrait(covers: List<TextBox>, card: List<Int>, background: String, line: Double, width: Int, height: Int,
+                     color: (Int, Int) -> Int): TextBox? {
+        val parts = card.filter { it >= 0 && it < covers.size }
+        if (width <= 0 || height <= 0 || parts.isEmpty()) return null
+        val title = parts.minByOrNull { covers[it].top }!!
+        val fw = width.toDouble()
+        val fh = height.toDouble()
+        val rects = covers.map { c ->
+            Box(floor(c.left * fw).toInt(), floor(c.top * fh).toInt(), ceil(c.right * fw).toInt(), ceil(c.bottom * fh).toInt())
+        }
+        val lineH = max(1.0, line * fh)
+        val ground = rgb(background)
+        val head = rects[title]
+        val band0 = max(0, head.t)
+        val band1 = min(height, head.b)
+        if (band1 <= band0 || head.l <= 0 || head.l > width) return null
+        fun text(x: Int, y: Int) = rects.any { x >= it.l && x < it.r && y >= it.t && y < it.b }
+        fun off(x: Int, y: Int) = !text(x, y) && distance(color(x, y), ground) > 2 * PANEL_TOLERANCE
+        fun column(x: Int, top: Int, bottom: Int) = (top until bottom).any { off(x, it) }
+        fun row(y: Int, left: Int, right: Int) = (left until right).any { off(it, y) }
+        val limit = max(0, head.l - round(CARD_PORTRAIT_LINES * lineH))
+        val gapEnd = max(limit, head.l - round(lineH))
+        // Başlıkla resim arası kartın zemini (en çok bir satır), sonra resim, sonra yine zemin.
+        var x = head.l - 1
+        while (x >= gapEnd && !column(x, band0, band1)) x--
+        if (x < gapEnd) return null
+        var right = x + 1
+        while (x >= limit && column(x, band0, band1)) x--
+        if (x < limit) return null
+        var left = x + 1
+        // Resim başlığın satırlarından yukarı ve aşağı zemine kadar.
+        var top = (band0 until band1).firstOrNull { row(it, left, right) } ?: return null
+        var bottom = (band0 until band1).last { row(it, left, right) }
+        val reach = round(3 * lineH)
+        while (top - 1 >= max(0, head.t - reach) && row(top - 1, left, right)) top--
+        while (bottom + 1 < min(height, head.b + reach) && row(bottom + 1, left, right)) bottom++
+        if (top - 1 < max(0, head.t - reach) || bottom + 1 >= min(height, head.b + reach)) return null
+        while (left - 1 >= limit && column(left - 1, top, bottom + 1)) left--
+        if (left - 1 < limit) return null
+        while (right < head.l && column(right, top, bottom + 1)) right++
+        val w = right - left
+        val h = bottom - top + 1
+        val least = max(6, round(0.8 * lineH))
+        if (w < least || h < least || w > 4 * lineH || h > 4 * lineH || w < 0.75 * h || w > 1.33 * h ||
+            right + max(1, round(CARD_PORTRAIT_GAP_LINES * lineH)) > head.l) return null
+        // Çevresi kartın zemini: solu, üstü ve altı (iki nokta dışı; sağı başlığa yakın, sayılmaz).
+        var ring = 0
+        var matched = 0
+        fun probe(px: Int, py: Int) {
+            if (px < 0 || py < 0 || px >= width || py >= height || text(px, py)) return
+            ring++
+            if (distance(color(px, py), ground) <= PANEL_TOLERANCE) matched++
+        }
+        for (y in top..bottom) probe(left - 2, y)
+        for (px in left until right) {
+            probe(px, top - 2)
+            probe(px, bottom + 2)
+        }
+        if (ring == 0 || matched < CARD_PORTRAIT_RING * ring) return null
+        return TextBox(left / fw, top / fh, right / fw, (bottom + 1) / fh)
     }
 
     /**

@@ -91,12 +91,13 @@ function render(list) {
           var r = range.getBoundingClientRect(), rb = row.getBoundingClientRect();
           return { text: row.textContent, left: r.left, right: r.right, top: rb.top, bottom: rb.bottom };
         });
-        var img = el.querySelector('img'), tail = el.querySelector('.exact-tail');
+        var img = el.querySelector('img'), tail = el.querySelector('.exact-tail'), chip = el.querySelector('.exact-label');
         return { text: el.textContent, cls: el.className, left: b.left, top: b.top, right: b.right, bottom: b.bottom,
           bg: cs.backgroundColor, radius: cs.borderTopLeftRadius, bottomLeft: cs.borderBottomLeftRadius,
-          shadow: cs.textShadow, font: parseFloat(cs.fontSize), lines: lines,
+          shadow: cs.textShadow, font: parseFloat(cs.fontSize), lines: lines, color: cs.color, boxShadow: cs.boxShadow,
           img: img ? Object.assign({ radius: getComputedStyle(img).borderTopLeftRadius }, JSON.parse(JSON.stringify(img.getBoundingClientRect()))) : null,
-          tail: !!tail };
+          tail: !!tail,
+          chip: chip ? Object.assign({ bg: getComputedStyle(chip).backgroundColor }, JSON.parse(JSON.stringify(chip.getBoundingClientRect()))) : null };
       });
       $('result').textContent = btoa(unescape(encodeURIComponent(JSON.stringify(out))));
       </script>`;
@@ -210,4 +211,82 @@ test('tek satırlık istemin dev ikizi yazının çevresine kırpılır; aynı s
   drawn = render(items.slice(1, 3));
   panel = drawn.find(el => / twin/.test(el.cls) && !el.lines.length);
   assert.ok(Math.abs(panel.top - (800 - 4)) <= 1 && panel.bottom > 960, 'bildirim ikizi değişmez: ' + panel.top + '-' + panel.bottom);
+});
+
+// Menüde "yanına yaz" (TV 0.9.124, bilgisayar MenuLayout, #1365): beta.105'te haritanın üstüne zeminsiz yazılan Türkçe
+// desenli zeminde okunmuyordu. label gelince Türkçe koyu, yarı saydam, yuvarlak köşeli etikette, açık renkle ve kontursuz
+// yazılır; özgün yazı açık kalır, etiket (öğenin ilk çocuğu) yazıyı sarar ve çevresine payla taşar. Özgün yazı açık renkse
+// (gri liste, sarı vurgu) o renk kalır, koyuysa açık gri olur; seçili (ters renkli) satırın etiketi de ters renkli.
+// label'sız beside (eski bilgisayar) zeminsiz, konturlu kalır.
+test('menüde yanına yazılan Türkçe koyu etikette, açık renkle; seçili satır ters renkli; label yoksa eskisi gibi', { skip: !browser && 'tarayıcı yok' }, () => {
+  const row = (text, top, bg, fg, label) => ({ text, box: px(100, top, 400, top + 36), line: 36 / H, lineH: 36 / H,
+    cover: px(98, top - 2, 402, top + 38), bg, bgPat: true, fg, weight: 400, upper: false, align: 'left',
+    mode: 'beside', spot: px(420, top - 2, 724, top + 38), spotRoom: px(420, top - 2, 1100, top + 38), label,
+    surface: { background: bg, foreground: fg, flat: false }, style: { align: 'left', bold: false, condensed: true, upper: false } });
+  const drawn = render([row('Vicki\'nin Patronunu Soy', 300, '#2A2E33', '#5A5F66', '#121419'),
+    row('Kyle İçin Kimyasalları Topla', 360, '#2A2E33', '#FFD34D', '#121419'),
+    row('Bret ile Buluş', 420, '#2A2E33', '#9AA0A6', undefined), row('Geleceğe Biriktir', 480, '#2A2E33', '#9AA0A6', 'koyu'),
+    row('Kingpin Bowling\'i Soy', 540, '#E8E8E8', '#101010', '#121419')]);
+  const dim = drawn.find(el => el.text.indexOf('Vicki') === 0), lit = drawn.find(el => el.text.indexOf('Kyle') === 0);
+  const plain = drawn.find(el => el.text === 'Bret ile Buluş'), bad = drawn.find(el => el.text === 'Geleceğe Biriktir');
+  const selected = drawn.find(el => el.text.indexOf('Kingpin') === 0);
+  for (const el of [dim, lit, selected]) {
+    assert.equal(el.bg, 'rgba(0, 0, 0, 0)', el.text + ': öğenin kendi zemini yok (etiket çocukta)');
+    assert.ok(el.chip, el.text + ': etiket çizildi');
+    assert.match(el.cls, /\blabel\b/, el.text + ': etiket sınıfı');
+    assert.equal(el.shadow, 'none', el.text + ': etikette kontur yok');
+    assert.ok(el.chip.left < el.left && el.chip.right > el.right && el.chip.top < el.top && el.chip.bottom > el.bottom,
+      el.text + ': etiket yazının çevresine taşar: ' + JSON.stringify(el.chip));
+    assert.ok(el.chip.top - (el.top - 36 * 0.95 * 0.06) >= -1.5, el.text + ': alta/üste ince pay (alt alta etiketler değmez)');
+    assert.ok(el.left >= 420 - 1, el.text + ': özgün yazı açık kalır: ' + el.left);
+    assert.ok(Math.abs(el.lines[0].left - 420) <= 2, el.text + ': özgüne yaslı (solda): ' + el.lines[0].left);
+    assert.ok(el.right - Math.max.apply(null, el.lines.map(l => l.right)) <= 3, el.text + ': etiket yazıyı sarar: ' + el.right);
+  }
+  for (const el of [dim, lit]) assert.equal(el.chip.bg, 'rgba(18, 20, 25, 0.86)', el.text + ': koyu yarı saydam etiket: ' + el.chip.bg);
+  assert.equal(dim.color, 'rgb(242, 242, 242)', 'koyu özgün yazı: etikette açık gri');
+  assert.equal(lit.color, 'rgb(255, 211, 77)', 'açık özgün yazı (vurgu): kendi rengi');
+  assert.equal(selected.chip.bg, 'rgba(232, 232, 232, 0.86)', 'seçili satırın etiketi açık zemin: ' + selected.chip.bg);
+  assert.equal(selected.color, 'rgb(16, 16, 16)', 'seçili satırın yazısı koyu');
+  for (const el of [plain, bad]) {
+    assert.equal(el.bg, 'rgba(0, 0, 0, 0)', el.text + ': label yok/bozuk: zeminsiz');
+    assert.equal(el.chip, null, el.text + ': etiket yok');
+    assert.notEqual(el.shadow, 'none', el.text + ': konturlu');
+    assert.doesNotMatch(el.cls, /\blabel\b/, el.text + ': etiket sınıfı yok');
+  }
+});
+
+// Etiket kenarları (TV 0.9.124): satırdaki kumanda simgesi de etiketin içinde kalır; sıkışık listede alt alta etiketler
+// birbirine binmez; zemine yakın tonda yazı (açık gri zeminde orta gri) seçili sayılıp ters çevrilmez.
+test('etiket simgeyi de sarar, sıkışık listede etiketler binmez, yakın tonlar ters çevrilmez', { skip: !browser && 'tarayıcı yok' }, () => {
+  const row = (text, top, bg, fg, extra) => Object.assign({ text, box: px(100, top, 400, top + 36), line: 36 / H, lineH: 36 / H,
+    cover: px(98, top, 402, top + 36), bg, bgPat: true, fg, weight: 400, upper: false, align: 'left',
+    mode: 'beside', spot: px(420, top, 900, top + 36), spotRoom: px(420, top, 1100, top + 36), label: '#121419',
+    surface: { background: bg, foreground: fg, flat: false }, style: { align: 'left', bold: false, condensed: true, upper: false } }, extra);
+  const drawn = render([row('Seçmek için  bas', 300, '#2A2E33', '#5A5F66', { icons: [{ at: 12, src: PNG }] }),
+    row('Haritayı Ortala', 600, '#2A2E33', '#5A5F66'), row('Hedef Belirle', 636, '#2A2E33', '#5A5F66'),
+    row('Çık', 800, '#E0E0E0', '#9C9C9C')]);
+  const icon = drawn.find(el => el.text.indexOf('Seçmek') === 0);
+  const textRight = Math.max.apply(null, icon.lines.map(l => l.right));
+  assert.ok(icon.img, 'simge çizildi');
+  assert.ok(icon.right >= textRight - 1 && icon.chip.right >= textRight, 'etiket simgeli satırı sarar: ' + icon.right + ' ' + textRight);
+  const upper = drawn.find(el => el.text === 'Haritayı Ortala'), lower = drawn.find(el => el.text === 'Hedef Belirle');
+  assert.ok(upper.chip.bottom <= lower.chip.top + 0.5, 'alt alta etiketler binmez: ' + upper.chip.bottom + ' ' + lower.chip.top);
+  const near = drawn.find(el => el.text === 'Çık');
+  assert.equal(near.chip.bg, 'rgba(18, 20, 25, 0.86)', 'yakın tonlu satır ters çevrilmez: ' + near.chip.bg);
+});
+
+// Menüdeki görev kartının ikizi (TV 0.9.124, bilgisayar MenuLayout, #1365): kartın kişi resmi ikizde de köşeli kare
+// (icon.square); telefon bildiriminin kişi resmi eskisi gibi yuvarlak.
+test('görev kartının ikizindeki resim köşeli kare, telefon bildiriminin resmi yuvarlak', { skip: !browser && 'tarayıcı yok' }, () => {
+  const card = (square) => ({ text: 'ADA HAYALLERİ', box: px(372, 196, 662, 244), line: 48 / H, lineH: 48 / H,
+    cover: px(370, 194, 664, 246), bg: '#14285A', fg: '#FFFFFF', weight: 700, upper: true, align: 'left', mode: 'twin',
+    scale: 1, radius: 0, twinBox: px(250, 480, 920, 760), spot: px(370, 494, 664, 546), spotRoom: px(370, 494, 900, 546),
+    icon: Object.assign({ src: PNG, box: px(282, 496, 354, 570) }, square ? { square: true } : {}),
+    surface: { background: '#14285A', foreground: '#FFFFFF', flat: true }, style: { align: 'left', bold: true, condensed: false, upper: true } });
+  const square = render([card(true)]).find(el => el.img);
+  const round = render([card(false)]).find(el => el.img);
+  assert.ok(square && round, 'resim çizildi');
+  assert.equal(square.img.radius, '0px', 'kartın resmi köşeli: ' + square.img.radius);
+  assert.equal(round.img.radius, '50%', 'bildirimin resmi yuvarlak: ' + round.img.radius);
+  assert.ok(Math.abs(square.img.left - 282) <= 1 && Math.abs(square.img.top - 496) <= 1, 'resim ikizde kendi yerinde');
 });

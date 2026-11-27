@@ -1,0 +1,278 @@
+{
+ "about": "Menüde kartın ikizine kişi resmi (TextPainter.cardPortrait, #1365). Mac MenuLayoutTests.swift, Windows MenuLayoutTests.cs ve Android MenuLayoutTest.kt aynı dosyayı okur. Kare: 'base' renginde, 'rects' sırayla üstüne boyanır (sonraki öndedir). Kutular ve satır yüksekliği piksel; 'expect' resmin kutusu, null: resim yok.",
+ "cases": [
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     154,
+     64,
+     300,
+     90
+    ],
+    [
+     112,
+     112,
+     390,
+     170
+    ]
+   ],
+   "expect": [
+    112,
+    66,
+    150,
+    104
+   ],
+   "id": "GTA 6 görev kartı: resim başlığa yakın (≈0,15 satır), kartın üstünde renkli kenar çizgisi",
+   "line": 26,
+   "rects": [
+    {
+     "box": [
+      100,
+      52,
+      400,
+      56
+     ],
+     "color": "#E040A0"
+    },
+    {
+     "box": [
+      100,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    },
+    {
+     "box": [
+      112,
+      66,
+      150,
+      104
+     ],
+     "color": "#C83C78"
+    }
+   ]
+  },
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     166,
+     70,
+     300,
+     94
+    ],
+    [
+     112,
+     116,
+     390,
+     170
+    ]
+   ],
+   "expect": [
+    112,
+    60,
+    160,
+    108
+   ],
+   "id": "resim başlıktan uzun: başlığın satırlarından yukarı ve aşağı zemine kadar",
+   "line": 24,
+   "rects": [
+    {
+     "box": [
+      100,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    },
+    {
+     "box": [
+      112,
+      60,
+      160,
+      108
+     ],
+     "color": "#C83C78"
+    }
+   ]
+  },
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     112,
+     64,
+     300,
+     90
+    ],
+    [
+     112,
+     112,
+     390,
+     170
+    ]
+   ],
+   "expect": null,
+   "id": "resim yok, başlık kartın kenarına yakın: soldaki harita resim sayılmaz",
+   "line": 26,
+   "rects": [
+    {
+     "box": [
+      100,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    }
+   ]
+  },
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     112,
+     64,
+     300,
+     90
+    ],
+    [
+     112,
+     112,
+     390,
+     170
+    ]
+   ],
+   "expect": null,
+   "id": "resim yok, başlığın solunda bir satırdan geniş zemin",
+   "line": 26,
+   "rects": [
+    {
+     "box": [
+      40,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    }
+   ]
+  },
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     154,
+     64,
+     300,
+     90
+    ],
+    [
+     112,
+     112,
+     390,
+     170
+    ]
+   ],
+   "expect": null,
+   "id": "başlığa yapışık leke (harf taşması) resim sayılmaz",
+   "line": 26,
+   "rects": [
+    {
+     "box": [
+      100,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    },
+    {
+     "box": [
+      120,
+      66,
+      154,
+      100
+     ],
+     "color": "#C83C78"
+    }
+   ]
+  },
+  {
+   "background": "#1E2A5A",
+   "base": "#3C8CDC",
+   "card": [
+    0,
+    1
+   ],
+   "covers": [
+    [
+     140,
+     64,
+     300,
+     90
+    ],
+    [
+     140,
+     112,
+     390,
+     170
+    ]
+   ],
+   "expect": null,
+   "id": "kartın dışındaki harita simgesi resim sayılmaz",
+   "line": 26,
+   "rects": [
+    {
+     "box": [
+      130,
+      56,
+      400,
+      200
+     ],
+     "color": "#1E2A5A"
+    },
+    {
+     "box": [
+      96,
+      62,
+      124,
+      92
+     ],
+     "color": "#C83C78"
+    }
+   ]
+  }
+ ],
+ "height": 360,
+ "width": 640
+}

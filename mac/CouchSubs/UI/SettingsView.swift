@@ -1069,6 +1069,11 @@ struct ScreenTextKindRows: View {
             SwitchRow(title: "Mission and objective text", isOn: $settings.screenTextMission)
             SwitchRow(title: "Help boxes and actions (button prompts)", isOn: $settings.screenTextHelp)
             SwitchRow(title: "Menus (pause, map, settings)", isOn: $settings.screenTextMenus)
+            // Menülerde çevirinin biçimi (`MenuLayout`, #1365): yanına koyu etikette ya da üstünü örterek.
+            if settings.screenTextMenus {
+                SwitchRow(title: "Cover the English in menus", isOn: $settings.screenTextMenuCover,
+                          hint: "When off, the Turkish is written next to the English on a dark label. When on, the English is covered in its own background colour; icons stay visible.")
+            }
             SwitchRow(title: "Other on-screen text", isOn: $settings.screenTextOther)
             HintText(text: "Translate the screen always translates everything.")
         }

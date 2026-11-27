@@ -1582,6 +1582,7 @@ final class PhoneModel: ObservableObject {
         watcher.subtitleEcho = .shared
         // Ayarlar'daki ekran yazısı türleri (telefon, görev, yardım/eylemler, menüler, diğer).
         watcher.allows = { [weak self] kind in self?.settings.screenTextAllows(kind) ?? true }
+        watcher.menuCovers = { [weak self] in self?.settings.screenTextMenuCover ?? false }
         // "GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde"; panelin yazısı altyazı boyutuyla (Windows, Android ile aynı).
         watcher.phonePanel = { [weak self] in
             guard let self else { return PhonePanelOptions() }

@@ -96,6 +96,8 @@ public sealed partial class RegionWatcher
     private sealed class State
     {
         public byte[]? Signature;
+        /// <summary>Son okumadaki menü biçimi (<see cref="MenuCovers"/>; menü dışı alanda null): ayar değişince görüntü durgun olsa da yeniden okunur.</summary>
+        public bool? MenuCover;
         /// <summary>Günlüğe son yazılan, güveni düşük olduğu için çevrilmeyen satırlar (aynı satırlar her turda yeniden yazılmaz).</summary>
         public IReadOnlyList<string> UnsureLogged = [];
         public CropRegion? ReadRegion;
@@ -270,6 +272,12 @@ public sealed partial class RegionWatcher
     /// Bu tür ekran yazısı çevrilir mi (Ayarlar'daki türler, <see cref="ScreenTextKind"/>); verilmezse hepsi.
     /// </summary>
     public Func<ScreenTextKind, bool>? Allows { get; set; }
+    /// <summary>
+    /// Menüde İngilizcenin üstü örtülür mü (Ayarlar › Ekran yazıları › "Menülerde İngilizcenin üstünü ört",
+    /// <c>UserSettings.ScreenTextMenuCover</c>; <see cref="MenuLayout"/>); verilmezse ya da false: Türkçe yanına, koyu
+    /// etikete yazılır.
+    /// </summary>
+    public Func<bool>? MenuCovers { get; set; }
     /// <summary>Otomatik alan okundu ama yazı yok ya da gürültü (<see cref="ScreenTextNoise"/>): alanın kimliği.</summary>
     public Action<string>? Rejected { get; set; }
     /// <summary>
@@ -552,7 +560,10 @@ public sealed partial class RegionWatcher
         var signature = RegionCropper.Signature(crop);
         var passSignature = state.PassSignature;
         state.PassSignature = signature;
-        var changed = PixelsChanged(state, crop, signature);
+        // Menüde biçim ayarı (üstünü ört / yanına yaz) değişince görüntü durgun olsa da yeniden okunur ve çizilir.
+        bool? cover = area.Auto && area.Menu ? MenuCovers?.Invoke() ?? false : null;
+        var changed = PixelsChanged(state, crop, signature) || state.MenuCover != cover;
+        state.MenuCover = cover;
         // Örneklerin arasına düşen ya da eski satır kutusunun dışında beliren bir yazıyı da yakala.
         // Birebir aynı görüntüde süre dolsa bile OCR çalışmaz.
         var time = now();
@@ -926,12 +937,15 @@ public sealed partial class RegionWatcher
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Mac ve Android aynı.
         var paintBegun = System.Diagnostics.Stopwatch.GetTimestamp();
+        // Turun başında okunan menü biçimi (ayar OCR sürerken değişse de tur tek biçimle çizilir).
+        var menuCover = state.MenuCover;
         var made = MakeCandidate(reading, area.Region, image, SplitsMenuRows(Game?.Invoke()), auto: area.Auto, menu: area.Menu,
-                                 styled: true, kind: ScreenTextKinds.Of(area), screen: frame);
+                                 styled: true, kind: ScreenTextKinds.Of(area), screen: frame, menuCover: menuCover);
         if (made.Blocks is { } blocks)
         {
+            // Menüde biçim ayardan gelir (MenuLayout, SteadyPaints menuCover): kip ayara göre saklanır.
             IReadOnlyList<Block> steady;
-            lock (rowPaints) steady = SteadyPaints(blocks, [.. BlockTexts(made).Select(row => row.Text)], rowPaints, area.Map);
+            lock (rowPaints) steady = SteadyPaints(blocks, [.. BlockTexts(made).Select(row => row.Text)], rowPaints, area.Map, menuCover);
             var kept = blocks.Zip(steady).Count(pair => pair.First.Paint?.Mode != pair.Second.Paint?.Mode);
             made = made with { Blocks = steady };
             if (kept > 0) Log?.Invoke($"ek alan {area.Name}: {kept} satırın çizim kipi korundu{(area.Map ? " (harita düzeni)" : "")}");
@@ -1011,7 +1025,7 @@ public sealed partial class RegionWatcher
     /// alandır; #1339).</param>
     internal static Candidate MakeCandidate(Reading reading, CropRegion region, Frame? frame = null, bool menuRows = false, bool phone = false,
                                             bool auto = false, bool menu = false, bool styled = false, ScreenTextKind? kind = null,
-                                            Frame? screen = null)
+                                            Frame? screen = null, bool? menuCover = null)
     {
         styled = (auto || styled) && !phone;
         // Ekran yazısı (otomatik alan, oyunun hazır yardım/mesaj alanı): simge ve bozuk okuma süzgeçleri menü durumundan
@@ -1129,6 +1143,26 @@ public sealed partial class RegionWatcher
                 var paints = TextPainter.Paints(targets, measured)
                     .Select(paint => paint.Portrait is { } face ? paint with { PortraitImage = TextPainter.PortraitImage(face, measured) } : paint)
                     .ToList();
+                // Menüde biçim ayardan gelir, her okumada yeniden seçilmez (#1365): üstünü ört ya da yanına yaz.
+                if (auto && menu && menuCover is { } coversMenus && paints.Count == targets.Count)
+                {
+                    var cardParts = cards
+                        .Select(card => (IReadOnlyList<int>)Enumerable.Range(0, painted.Count)
+                            .Where(k => card.All.Any(n => lines[n].Box is { } b && Inside(b, groups[painted[k]].Box))).ToList())
+                        .Where(parts => parts.Count > 0).ToList();
+                    // İkiz kartın kişi resmi ölçümde bulunmadıysa kareden aranır (ikiz kart resimsiz kalmasın).
+                    var covers = paints.Select(x => x.Cover).ToList();
+                    Func<IReadOnlyList<int>, string, (TextBox Box, string? Image)?> findPortrait = (card, fill) =>
+                    {
+                        var cardHeights = card.Select(m => targets[m].LineHeight).Order().ToList();
+                        if (cardHeights.Count == 0
+                            || TextPainter.CardPortrait(covers, card, fill, cardHeights[cardHeights.Count / 2], measured) is not { } picture)
+                            return null;
+                        return (picture, TextPainter.PortraitImage(picture, measured));
+                    };
+                    paints = MenuLayout.Locked(paints, targets, cardParts, coversMenus, (double)measured.Width / Math.Max(1, measured.Height),
+                                               findPortrait);
+                }
                 for (var k = 0; k < painted.Count && k < paints.Count; k++)
                 {
                     var block = list[painted[k]] with { Paint = screen is null ? paints[k].PlacedIn(place) : paints[k] };
@@ -1902,30 +1936,39 @@ public sealed partial class RegionWatcher
     /// örtülür ve bundan sonra hep örtülür (kip en çok bir kez, örtüye döner).</item>
     /// <item><paramref name="map"/>: harita düzeninde ikiz kutu çizilmez (haritanın üstünde yüzen kutular); ikiz seçilen blok
     /// örtülür.</item>
+    /// <item><paramref name="menuCover"/>: menüde biçim ayardan gelir (<see cref="MenuLayout"/>; null: menü dışı). Yerleşim
+    /// yazıların kutularından çıkar ve aynı ekranda her okumada aynıdır: bir kez örtülen satır örtülü kalmaz (şeridin ve
+    /// sütunun kuralı bozulmasın), harita düzeninin ikiz yasağı uygulanmaz (görev kartının ikizi kartın altına bitişik,
+    /// haritada yüzmez). Saklı kip biçime göre ayrı tutulur: ayar değişince eski biçim kalmaz, menü dışı okumanın kipi
+    /// menüye geçmez.</item>
     /// </list>
     /// Mac (RegionWatcher.steadyPaints) ve Android (steadyPaints) aynı.
     /// </summary>
     internal static IReadOnlyList<Block> SteadyPaints(IReadOnlyList<Block> blocks, IReadOnlyList<string> texts,
-                                                      Dictionary<string, RowPaint> memory, bool map)
+                                                      Dictionary<string, RowPaint> memory, bool map, bool? menuCover = null)
     {
+        var locked = menuCover is not null;
+        var scope = menuCover switch { true => "B\u001F", false => "A\u001F", null => "" };
         var result = blocks.ToList();
         var seen = new HashSet<string>();
         for (var i = 0; i < result.Count; i++)
         {
             if (result[i].Paint is not { } paint) continue;
-            if (map && paint.Mode == PaintMode.Twin) paint = CoverOnly(paint);
-            var key = i < texts.Count ? TextKey([IconText.Plain(texts[i])]) : "";
-            if (key.Length == 0)
+            if (map && !locked && paint.Mode == PaintMode.Twin) paint = CoverOnly(paint);
+            var text = i < texts.Count ? TextKey([IconText.Plain(texts[i])]) : "";
+            if (text.Length == 0)
             {
                 result[i] = result[i] with { Paint = paint };
                 continue;
             }
+            var key = scope + text;
             seen.Add(key);
             var box = result[i].Box;
             if (memory.TryGetValue(key, out var kept) && kept.Mode != paint.Mode)
             {
                 double dx = box.Left - kept.Box.Left, dy = box.Top - kept.Box.Top;
-                paint = kept.Mode == PaintMode.Cover || Math.Abs(dx) > RowPaintShift ? CoverOnly(paint) : Shifted(kept.Paint, dx, dy);
+                if (kept.Mode != PaintMode.Cover && Math.Abs(dx) <= RowPaintShift) paint = Shifted(kept.Paint, dx, dy);
+                else if (!locked) paint = CoverOnly(paint);
             }
             memory[key] = new RowPaint(paint.Mode, paint, box);
             result[i] = result[i] with { Paint = paint };

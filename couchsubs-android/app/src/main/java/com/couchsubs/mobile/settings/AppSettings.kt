@@ -285,6 +285,15 @@ class AppSettings(context: Context) : AreaStore {
         get() = prefs.getBoolean("screenTextOther", false)
         set(value) = prefs.edit().putBoolean("screenTextOther", value).apply()
 
+    /**
+     * Menülerde çevirinin biçimi ([com.couchsubs.mobile.core.MenuLayout], #1365): açıkken İngilizce kendi zemin rengiyle
+     * örtülür (B); kapalıyken (varsayılan) Türkçe İngilizcenin yanına, koyu zeminli etikete yazılır (A). Mac/iPhone
+     * `UserSettings.screenTextMenuCover`, Windows `ScreenTextMenuCover` ile aynı.
+     */
+    var screenTextMenuCover: Boolean
+        get() = prefs.getBoolean("screenTextMenuCover", false)
+        set(value) = prefs.edit().putBoolean("screenTextMenuCover", value).apply()
+
     /** Türlerin şu anki hali. */
     val screenTextKinds: com.couchsubs.mobile.core.ScreenTextKinds
         get() = com.couchsubs.mobile.core.ScreenTextKinds(screenTextPhone, screenTextMission, screenTextHelp, screenTextMenus, screenTextOther)

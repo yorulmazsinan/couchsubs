@@ -390,6 +390,12 @@ public sealed record UserSettings
     public bool ScreenTextHelp { get; init; } = true;
     public bool ScreenTextMenus { get; init; }
     public bool ScreenTextOther { get; init; }
+    /// <summary>
+    /// Menülerde çevirinin biçimi (<see cref="MenuLayout"/>, #1365): açıkken İngilizce kendi zemin rengiyle örtülür (B);
+    /// kapalıyken (varsayılan) Türkçe İngilizcenin yanına, koyu zeminli etikete yazılır (A). Eski ayar dosyalarında yoktur;
+    /// kapalı. Mac/iPhone <c>UserSettings.screenTextMenuCover</c>, Android <c>AppSettings.screenTextMenuCover</c> ile aynı.
+    /// </summary>
+    public bool ScreenTextMenuCover { get; init; }
 
     /// <summary>
     /// Bu tür ekran yazısı çevrilir mi. "Ekran yazılarını otomatik çevir" kapalıyken türler uygulanmaz (hazır alanlar ve

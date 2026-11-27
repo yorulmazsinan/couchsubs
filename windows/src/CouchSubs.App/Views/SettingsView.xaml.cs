@@ -125,6 +125,8 @@ public partial class SettingsView : UserControl
         ScreenTextMission.IsChecked = settings.ScreenTextMission;
         ScreenTextHelp.IsChecked = settings.ScreenTextHelp;
         ScreenTextMenus.IsChecked = settings.ScreenTextMenus;
+        ScreenTextMenuCover.IsChecked = settings.ScreenTextMenuCover;
+        ScreenTextMenuCoverPanel.Visibility = settings.ScreenTextMenus ? Visibility.Visible : Visibility.Collapsed;
         ScreenTextOther.IsChecked = settings.ScreenTextOther;
         ScreenTextKindsPanel.Visibility = settings.AutoScreenText ? Visibility.Visible : Visibility.Collapsed;
         SetTextApart.IsChecked = settings.SetTextApart;
@@ -979,13 +981,18 @@ public partial class SettingsView : UserControl
     }
 
     /// <summary>Otomatik ekran yazısının türleri (bkz. <see cref="ScreenTextKind"/>).</summary>
-    private void OnScreenTextKind(object sender, RoutedEventArgs e) => Update(s => s with
+    private void OnScreenTextKind(object sender, RoutedEventArgs e)
     {
-        ScreenTextMission = ScreenTextMission.IsChecked == true,
-        ScreenTextHelp = ScreenTextHelp.IsChecked == true,
-        ScreenTextMenus = ScreenTextMenus.IsChecked == true,
-        ScreenTextOther = ScreenTextOther.IsChecked == true,
-    });
+        ScreenTextMenuCoverPanel.Visibility = ScreenTextMenus.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        Update(s => s with
+        {
+            ScreenTextMission = ScreenTextMission.IsChecked == true,
+            ScreenTextHelp = ScreenTextHelp.IsChecked == true,
+            ScreenTextMenus = ScreenTextMenus.IsChecked == true,
+            ScreenTextMenuCover = ScreenTextMenuCover.IsChecked == true,
+            ScreenTextOther = ScreenTextOther.IsChecked == true,
+        });
+    }
 
     private void OnSetTextApart(object sender, RoutedEventArgs e) => Update(s => s with { SetTextApart = SetTextApart.IsChecked == true });
 
@@ -1501,6 +1508,7 @@ public partial class SettingsView : UserControl
         ScreenTextMission.IsChecked = defaults.ScreenTextMission;
         ScreenTextHelp.IsChecked = defaults.ScreenTextHelp;
         ScreenTextMenus.IsChecked = defaults.ScreenTextMenus;
+        ScreenTextMenuCover.IsChecked = defaults.ScreenTextMenuCover;
         ScreenTextOther.IsChecked = defaults.ScreenTextOther;
     }
 

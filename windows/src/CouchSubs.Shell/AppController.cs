@@ -4046,6 +4046,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             regionWatcher.Game = () => gameSense.Current?.Name;
             // Ayarlar'daki ekran yazısı türleri (telefon, görev, yardım/eylemler, menüler, diğer).
             regionWatcher.Allows = kind => Volatile.Read(ref settings).ScreenTextAllows(kind);
+            regionWatcher.MenuCovers = () => Volatile.Read(ref settings).ScreenTextMenuCover;
             // "GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde"; panelin yazısı altyazı boyutuyla (Mac ile aynı).
             regionWatcher.PhonePanel = () =>
             {

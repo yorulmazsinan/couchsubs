@@ -963,6 +963,7 @@ class TranslationService : Service() {
             onLog = { Log.i(TAG, it) }
             // Ayarlar'daki ekran yazısı türleri (telefon, görev, yardım/eylemler, menüler, diğer).
             allows = { kind -> settings.screenTextAllows(kind) }
+            menuCovers = { settings.screenTextMenuCover }
             // "GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde"; panelin yazısı altyazı boyutuyla (Mac ile aynı).
             phonePanel = {
                 com.couchsubs.mobile.core.PhonePanelOptions(settings.phoneMessagesPanel,

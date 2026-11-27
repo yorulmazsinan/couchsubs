@@ -616,6 +616,8 @@ public final class SubtitleServer: @unchecked Sendable {
                 result["mode"] = paint.mode.rawValue
                 result["spot"] = Self.json(spot)
                 result["spotRoom"] = Self.json(room)
+                // Menüde yanına yazılan Türkçenin etiket zemini (TV uygulaması 0.9.124; eski TV zeminsiz yazar).
+                if paint.mode == .beside, let label = paint.label, isRGB(label) { result["label"] = label }
                 if paint.mode == .twin, let twin = paint.twin {
                     result["twinBox"] = Self.json(twin)
                     result["radius"] = unitNumber(paint.radius)
@@ -627,7 +629,10 @@ public final class SubtitleServer: @unchecked Sendable {
                                           "bottom": unitNumber(edge.bottom), "left": unitNumber(edge.left)] as [String: Any]
                     }
                     if let image = paint.portraitImage, let at = paint.portraitTwin {
-                        result["icon"] = ["src": image, "box": Self.json(at)] as [String: Any]
+                        var icon: [String: Any] = ["src": image, "box": Self.json(at)]
+                        // Görev kartının resmi köşeli kare (TV uygulaması 0.9.124; eski TV yuvarlak çizer).
+                        if paint.portraitSquare { icon["square"] = true }
+                        result["icon"] = icon
                     }
                 }
             }

@@ -385,6 +385,9 @@ class SubtitleServer(
                     json["mode"] = paint.mode
                     json["spot"] = boxJson(spot)
                     json["spotRoom"] = boxJson(room)
+                    // Menüde yanına yazılan Türkçenin etiket zemini (TV uygulaması 0.9.124; eski TV zeminsiz yazar).
+                    val label = paint.label
+                    if (paint.mode == TextPaint.MODE_BESIDE && label != null && isRgb(label)) json["label"] = label
                     val twin = paint.twin
                     if (paint.mode == TextPaint.MODE_TWIN && twin != null) {
                         json["twinBox"] = boxJson(twin)
@@ -400,7 +403,11 @@ class SubtitleServer(
                         }
                         val image = paint.portraitImage
                         val at = paint.portraitTwin
-                        if (image != null && at != null) json["icon"] = mapOf("src" to image, "box" to boxJson(at))
+                        // Görev kartının resmi köşeli kare (TV uygulaması 0.9.124; eski TV yuvarlak çizer).
+                        if (image != null && at != null) {
+                            json["icon"] = if (paint.portraitSquare) mapOf("src" to image, "box" to boxJson(at), "square" to true)
+                                else mapOf("src" to image, "box" to boxJson(at))
+                        }
                     }
                 }
             }

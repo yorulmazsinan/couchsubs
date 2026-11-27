@@ -6,7 +6,7 @@ import Foundation
 /// Bir ekran yazısının yerinde, arayüz Türkçe yapılmış gibi çizilmesi için göndericinin kareden ölçtükleri (TV pikselleri
 /// okuyamaz). Yalnız yazı değişince ölçülür (Windows: TextPaint.cs, Android: TextPaint.kt; aynı kurallar ve eşikler).
 /// TV'ye öğenin `bg`, `bg2`, `bgDir`, `bgPat`, `fg`, `weight`, `upper`, `align`, `lineH`, `cover`, `grow`, `group`
-/// alanlarıyla (çizim kipi: `mode`, `spot`, `spotRoom`, `twinBox`, `radius`, `scale`, `tail`, `icon`) gider; eski TV
+/// alanlarıyla (çizim kipi: `mode`, `spot`, `spotRoom`, `twinBox`, `radius`, `scale`, `tail`, `icon`, `label`) gider; eski TV
 /// bunları yok sayıp eski çizimi sürdürür.
 public struct TextPaint: Equatable, Sendable {
     public enum Direction: String, Sendable { case horizontal = "h", vertical = "v" }
@@ -55,9 +55,16 @@ public struct TextPaint: Equatable, Sendable {
     /// Kesilmiş resim (PNG, data: adresi; en çok `TextPainter.portraitMax` piksel); çağıran keser
     /// (`TextPainter.portraitImage`). TV'ye `icon` ({src, box}).
     public var portraitImage: String? = nil
+    /// Resim köşeli kare (menüdeki görev kartının resmi, `MenuLayout`); false: yuvarlak (telefon bildiriminin kişi resmi).
+    /// TV'ye `icon.square`; eski TV yuvarlak çizer.
+    public var portraitSquare = false
     /// `twin`: özgün panelin kenar çizgisi (panelin hemen dışındaki düz renkli ince şerit; GTA 6 kartının üstündeki renkli
     /// çizgi): ikiz de aynı çizgiyle çizilir. nil: çizgi yok. TV'ye `edge` ({color, top, right, bottom, left}).
     public var edge: Edge? = nil
+    /// `beside`: Türkçenin etiket zemini (menüde "yanına yaz" biçimi, `MenuLayout.labelColor`): TV yazıyı bu renkte yarı
+    /// saydam, köşeleri yuvarlak etikete açık renkle yazar (kontursuz). nil: zeminsiz, özgün stilde konturla. TV'ye `label`;
+    /// eski TV yok sayıp zeminsiz yazar.
+    public var label: String? = nil
 
     /// Kenar çizgisi: rengi ve her yandaki kalınlığı (kare yüksekliğine oranla; 0: o yanda çizgi yok).
     public struct Edge: Equatable, Sendable {
@@ -418,6 +425,87 @@ public enum TextPainter {
               Double(w) >= 0.75 * Double(h), Double(w) <= 1.33 * Double(h),
               maxX + 1 + max(2, Int((ScreenFit.gapLines * line).rounded())) <= l else { return nil }
         return (minX, minY, maxX + 1, maxY + 1)
+    }
+
+    /// Menüde kartın ikizine kişi resmi aranırken başlığın solunda en çok bu kadar satır yüksekliği bakılır.
+    public static let cardPortraitLines = 4.5
+    /// Kartın kişi resmi başlıktan en az bu kadar (satır yüksekliğinin katı) ayrık olmalı; GTA 6 görev kartında ≈0,15.
+    public static let cardPortraitGapLines = 0.1
+    /// Resmin çevresindeki (iki nokta dışı) noktaların en az bu payı kartın zemini olmalı.
+    public static let cardPortraitRing = 0.6
+
+    /// Menüde kartın ikizine kişi resmi (`MenuLayout`, #1365): kartın başlığının solunda, kartın zemininden belirgin ayrılan
+    /// kare resim. `paints` resmi yalnız ikizi kendisi kurduğunda ve resim yazıdan en az `ScreenFit.gapLines` satır uzaksa
+    /// buluyordu; GTA 6 görev kartında resim başlığa daha yakın, ikiz kart resimsiz kalıyordu. Arama başlığın satırlarında
+    /// başlıktan sola: önce kartın zemini (en çok bir satır), sonra resim, sonra yine zemin; resim satırlardan yukarı/aşağı
+    /// zemine kadar büyütülür. Resim kartın içinde olmalı (sola `cardPortraitLines` satırda zemine dönmeyen ya da çevresi
+    /// zemin olmayan leke harita/simgedir, resim sayılmaz). Boyu ve oranı `portrait` ile aynı ölçütlerde. `covers`: bütün
+    /// yazıların örtü kutuları (kareye oranla); `card`: kartın parçaları; `background`: kartın zemini. Windows ve Android aynı.
+    static func cardPortrait(covers: [TextBox], card: [Int], background: String, line: Double, width: Int, height: Int,
+                             color: (Int, Int) -> RGB) -> TextBox? {
+        guard width > 0, height > 0, let title = card.filter({ covers.indices.contains($0) })
+            .min(by: { covers[$0].top < covers[$1].top }) else { return nil }
+        let fw = Double(width), fh = Double(height)
+        let rects = covers.map { c in
+            (l: Int((c.left * fw).rounded(.down)), t: Int((c.top * fh).rounded(.down)),
+             r: Int((c.right * fw).rounded(.up)), b: Int((c.bottom * fh).rounded(.up)))
+        }
+        let lineH = max(1, line * fh), ground = rgb(background), head = rects[title]
+        let band = (max(0, head.t), min(height, head.b))
+        guard band.1 > band.0, head.l > 0, head.l <= width else { return nil }
+        func text(_ x: Int, _ y: Int) -> Bool { rects.contains { x >= $0.l && x < $0.r && y >= $0.t && y < $0.b } }
+        func off(_ x: Int, _ y: Int) -> Bool { !text(x, y) && distance(color(x, y), ground) > 2 * panelTolerance }
+        func column(_ x: Int, _ top: Int, _ bottom: Int) -> Bool { (top..<bottom).contains { off(x, $0) } }
+        func row(_ y: Int, _ left: Int, _ right: Int) -> Bool { (left..<right).contains { off($0, y) } }
+        let limit = max(0, head.l - Int((cardPortraitLines * lineH).rounded()))
+        let gapEnd = max(limit, head.l - Int(lineH.rounded()))
+        // Başlıkla resim arası kartın zemini (en çok bir satır), sonra resim, sonra yine zemin.
+        var x = head.l - 1
+        while x >= gapEnd, !column(x, band.0, band.1) { x -= 1 }
+        guard x >= gapEnd else { return nil }
+        var right = x + 1
+        while x >= limit, column(x, band.0, band.1) { x -= 1 }
+        guard x >= limit else { return nil }
+        var left = x + 1
+        // Resim başlığın satırlarından yukarı ve aşağı zemine kadar.
+        guard var top = (band.0..<band.1).first(where: { row($0, left, right) }),
+              var bottom = (band.0..<band.1).last(where: { row($0, left, right) }) else { return nil }
+        let reach = Int((3 * lineH).rounded())
+        while top - 1 >= max(0, head.t - reach), row(top - 1, left, right) { top -= 1 }
+        while bottom + 1 < min(height, head.b + reach), row(bottom + 1, left, right) { bottom += 1 }
+        guard top - 1 >= max(0, head.t - reach), bottom + 1 < min(height, head.b + reach) else { return nil }
+        while left - 1 >= limit, column(left - 1, top, bottom + 1) { left -= 1 }
+        guard left - 1 >= limit else { return nil }
+        while right < head.l, column(right, top, bottom + 1) { right += 1 }
+        let w = right - left, h = bottom - top + 1
+        let least = max(6, Int((0.8 * lineH).rounded()))
+        guard w >= least, h >= least, Double(w) <= 4 * lineH, Double(h) <= 4 * lineH,
+              Double(w) >= 0.75 * Double(h), Double(w) <= 1.33 * Double(h),
+              right + max(1, Int((cardPortraitGapLines * lineH).rounded())) <= head.l else { return nil }
+        // Çevresi kartın zemini: solu, üstü ve altı (iki nokta dışı; sağı başlığa yakın, sayılmaz).
+        var ring = 0, matched = 0
+        func probe(_ px: Int, _ py: Int) {
+            guard px >= 0, py >= 0, px < width, py < height, !text(px, py) else { return }
+            ring += 1
+            if distance(color(px, py), ground) <= panelTolerance { matched += 1 }
+        }
+        for y in top...bottom { probe(left - 2, y) }
+        for px in left..<right {
+            probe(px, top - 2)
+            probe(px, bottom + 2)
+        }
+        guard ring > 0, Double(matched) >= cardPortraitRing * Double(ring) else { return nil }
+        return TextBox(left: Double(left) / fw, top: Double(top) / fh, right: Double(right) / fw, bottom: Double(bottom + 1) / fh)
+    }
+
+    /// Önceden çizilmiş kare üzerinden kartın kişi resmi (`cardPortrait`).
+    static func cardPortrait(covers: [TextBox], card: [Int], background: String, line: Double,
+                             pixels: GamePhonePixels) -> TextBox? {
+        cardPortrait(covers: covers, card: card, background: background, line: line, width: pixels.width,
+                     height: pixels.height) { x, y in
+            let p = pixels.offset(x, y)
+            return (Int(pixels.bytes[p]), Int(pixels.bytes[p + 1]), Int(pixels.bytes[p + 2]))
+        }
     }
 
     /// Kişi resmini kareden keser: en çok `portraitMax` piksel kenarlı (en yakın nokta örneklemesi), opak PNG data: adresi.

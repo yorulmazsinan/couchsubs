@@ -402,6 +402,7 @@ private fun AdvancedPage() {
     var kindMission by remember { mutableStateOf(settings.screenTextMission) }
     var kindHelp by remember { mutableStateOf(settings.screenTextHelp) }
     var kindMenus by remember { mutableStateOf(settings.screenTextMenus) }
+    var menuCover by remember { mutableStateOf(settings.screenTextMenuCover) }
     var kindOther by remember { mutableStateOf(settings.screenTextOther) }
     var gamePhone by remember { mutableStateOf(settings.readsGamePhone) }
     var setTextApart by remember { mutableStateOf(settings.setTextApart) }
@@ -421,6 +422,11 @@ private fun AdvancedPage() {
             SwitchRow(stringResource(R.string.settings_screen_text_mission), checked = kindMission) { kindMission = it; settings.screenTextMission = it }
             SwitchRow(stringResource(R.string.settings_screen_text_help), checked = kindHelp) { kindHelp = it; settings.screenTextHelp = it }
             SwitchRow(stringResource(R.string.settings_screen_text_menus), checked = kindMenus) { kindMenus = it; settings.screenTextMenus = it }
+            // Menülerde çevirinin biçimi (MenuLayout, #1365): yanına koyu etikette ya da üstünü örterek.
+            if (kindMenus) {
+                SwitchRow(stringResource(R.string.settings_screen_text_menu_cover), stringResource(R.string.settings_screen_text_menu_cover_note),
+                    menuCover) { menuCover = it; settings.screenTextMenuCover = it }
+            }
             SwitchRow(stringResource(R.string.settings_screen_text_other), checked = kindOther) { kindOther = it; settings.screenTextOther = it }
             Text(stringResource(R.string.settings_screen_text_manual), style = Tokens.Type.caption, color = Tokens.Color.secondary)
         }
@@ -433,10 +439,10 @@ private fun AdvancedPage() {
         // Varsayılana Dön: bu karttaki ayarlar (Mac, Windows, iPhone ile aynı küme).
         SecondaryButton(stringResource(R.string.set_restore)) {
             autoScreenText = false; gamePhone = true; setTextApart = true
-            kindMission = true; kindHelp = true; kindMenus = false; kindOther = false
+            kindMission = true; kindHelp = true; kindMenus = false; menuCover = false; kindOther = false
             settings.autoScreenText = false; settings.setGamePhone(true); settings.setTextApart = true
             settings.screenTextMission = true; settings.screenTextHelp = true
-            settings.screenTextMenus = false; settings.screenTextOther = false
+            settings.screenTextMenus = false; settings.screenTextMenuCover = false; settings.screenTextOther = false
             TranslationService.setTextApart(true)
         }
     }

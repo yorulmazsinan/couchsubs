@@ -7,7 +7,7 @@ namespace CouchSubs.Core;
 /// okuyamaz). Yalnız yazı değişince ölçülür (Mac: CouchSubsCore/TextPaint.swift, Android: TextPaint.kt; aynı kurallar ve
 /// eşikler). TV'ye öğenin <c>bg</c>, <c>bg2</c>, <c>bgDir</c>, <c>bgPat</c>, <c>fg</c>, <c>weight</c>, <c>upper</c>,
 /// <c>align</c>, <c>lineH</c>, <c>cover</c>, <c>grow</c>, <c>group</c> alanlarıyla (çizim kipi: <c>mode</c>, <c>spot</c>,
-/// <c>spotRoom</c>, <c>twinBox</c>, <c>radius</c>, <c>scale</c>, <c>tail</c>, <c>icon</c>, <c>edge</c>) gider; eski TV
+/// <c>spotRoom</c>, <c>twinBox</c>, <c>radius</c>, <c>scale</c>, <c>tail</c>, <c>icon</c>, <c>edge</c>, <c>label</c>) gider; eski TV
 /// bunları yok sayıp eski çizimi sürdürür.
 /// </summary>
 /// <param name="Background">Kutunun zemini (degradede başlangıç ucu: sol ya da üst). Opak çizilir.</param>
@@ -80,10 +80,21 @@ public sealed record TextPaint(string Background, double Pitch, TextBox Cover)
     /// </summary>
     public string? PortraitImage { get; init; }
     /// <summary>
+    /// Resim köşeli kare (menüdeki görev kartının resmi, <see cref="MenuLayout"/>); false: yuvarlak (telefon bildiriminin kişi
+    /// resmi). TV'ye <c>icon.square</c>; eski TV yuvarlak çizer.
+    /// </summary>
+    public bool PortraitSquare { get; init; }
+    /// <summary>
     /// twin: özgün panelin kenar çizgisi (panelin hemen dışındaki düz renkli ince şerit; GTA 6 kartının üstündeki renkli
     /// çizgi): ikiz de aynı çizgiyle çizilir. null: çizgi yok. TV'ye <c>edge</c> ({color, top, right, bottom, left}).
     /// </summary>
     public EdgeLine? Edge { get; init; }
+    /// <summary>
+    /// beside: Türkçenin etiket zemini (menüde "yanına yaz" biçimi, <see cref="MenuLayout.LabelColor"/>): TV yazıyı bu renkte
+    /// yarı saydam, köşeleri yuvarlak etikete açık renkle yazar (kontursuz). null: zeminsiz, özgün stilde konturla. TV'ye
+    /// <c>label</c>; eski TV yok sayıp zeminsiz yazar.
+    /// </summary>
+    public string? Label { get; init; }
 
     /// <summary>Kenar çizgisi: rengi ve her yandaki kalınlığı (kare yüksekliğine oranla; 0: o yanda çizgi yok).</summary>
     public sealed record EdgeLine(string Color, double Top, double Right, double Bottom, double Left);
@@ -442,6 +453,99 @@ public static class TextPainter
         if (w < least || h < least || w > 4 * line || h > 4 * line || w < 0.75 * h || w > 1.33 * h
             || maxX + 1 + Math.Max(2, RoundHalfUp(ScreenFit.GapLines * line)) > l) return null;
         return (minX, minY, maxX + 1, maxY + 1);
+    }
+
+    /// <summary>Menüde kartın ikizine kişi resmi aranırken başlığın solunda en çok bu kadar satır yüksekliği bakılır.</summary>
+    public const double CardPortraitLines = 4.5;
+    /// <summary>Kartın kişi resmi başlıktan en az bu kadar (satır yüksekliğinin katı) ayrık olmalı; GTA 6 görev kartında ≈0,15.</summary>
+    public const double CardPortraitGapLines = 0.1;
+    /// <summary>Resmin çevresindeki (iki nokta dışı) noktaların en az bu payı kartın zemini olmalı.</summary>
+    public const double CardPortraitRing = 0.6;
+
+    /// <summary>
+    /// Menüde kartın ikizine kişi resmi (<see cref="MenuLayout"/>, #1365): kartın başlığının solunda, kartın zemininden
+    /// belirgin ayrılan kare resim. <c>Paints</c> resmi yalnız ikizi kendisi kurduğunda
+    /// ve resim yazıdan en az <see cref="ScreenFit.GapLines"/> satır uzaksa buluyordu; GTA 6 görev kartında resim başlığa daha
+    /// yakın, ikiz kart resimsiz kalıyordu. Arama başlığın satırlarında başlıktan sola: önce kartın zemini (en çok bir satır),
+    /// sonra resim, sonra yine zemin; resim satırlardan yukarı/aşağı zemine kadar büyütülür. Resim kartın içinde olmalı (sola
+    /// <see cref="CardPortraitLines"/> satırda zemine dönmeyen ya da çevresi zemin olmayan leke harita/simgedir). Boyu ve
+    /// oranı <see cref="Portrait"/> ile aynı ölçütlerde. Mac ve Android aynı.
+    /// </summary>
+    public static TextBox? CardPortrait(IReadOnlyList<TextBox> covers, IReadOnlyList<int> card, string background, double line,
+                                        int width, int height, Func<int, int, (int R, int G, int B)> color)
+    {
+        var parts = card.Where(m => m >= 0 && m < covers.Count).ToList();
+        if (width <= 0 || height <= 0 || parts.Count == 0) return null;
+        var title = parts.Aggregate((a, b) => covers[b].Top < covers[a].Top ? b : a);
+        double fw = width, fh = height;
+        var rects = covers.Select(c => (L: (int)Math.Floor(c.Left * fw), T: (int)Math.Floor(c.Top * fh),
+                                        R: (int)Math.Ceiling(c.Right * fw), B: (int)Math.Ceiling(c.Bottom * fh))).ToList();
+        var lineH = Math.Max(1, line * fh);
+        var ground = Rgb(background);
+        var head = rects[title];
+        int band0 = Math.Max(0, head.T), band1 = Math.Min(height, head.B);
+        if (band1 <= band0 || head.L <= 0 || head.L > width) return null;
+        bool Text(int x, int y) => rects.Any(r => x >= r.L && x < r.R && y >= r.T && y < r.B);
+        bool Off(int x, int y) => !Text(x, y) && Distance(color(x, y), ground) > 2 * PanelTolerance;
+        bool Column(int x, int top, int bottom) { for (var y = top; y < bottom; y++) if (Off(x, y)) return true; return false; }
+        bool Row(int y, int left, int right) { for (var x = left; x < right; x++) if (Off(x, y)) return true; return false; }
+        var limit = Math.Max(0, head.L - RoundHalfUp(CardPortraitLines * lineH));
+        var gapEnd = Math.Max(limit, head.L - RoundHalfUp(lineH));
+        // Başlıkla resim arası kartın zemini (en çok bir satır), sonra resim, sonra yine zemin.
+        var x0 = head.L - 1;
+        while (x0 >= gapEnd && !Column(x0, band0, band1)) x0--;
+        if (x0 < gapEnd) return null;
+        var right = x0 + 1;
+        while (x0 >= limit && Column(x0, band0, band1)) x0--;
+        if (x0 < limit) return null;
+        var left = x0 + 1;
+        // Resim başlığın satırlarından yukarı ve aşağı zemine kadar.
+        int top = -1, bottom = -1;
+        for (var y = band0; y < band1; y++)
+        {
+            if (!Row(y, left, right)) continue;
+            if (top < 0) top = y;
+            bottom = y;
+        }
+        if (top < 0) return null;
+        var reach = RoundHalfUp(3 * lineH);
+        while (top - 1 >= Math.Max(0, head.T - reach) && Row(top - 1, left, right)) top--;
+        while (bottom + 1 < Math.Min(height, head.B + reach) && Row(bottom + 1, left, right)) bottom++;
+        if (top - 1 < Math.Max(0, head.T - reach) || bottom + 1 >= Math.Min(height, head.B + reach)) return null;
+        while (left - 1 >= limit && Column(left - 1, top, bottom + 1)) left--;
+        if (left - 1 < limit) return null;
+        while (right < head.L && Column(right, top, bottom + 1)) right++;
+        int w = right - left, h = bottom - top + 1;
+        var least = Math.Max(6, RoundHalfUp(0.8 * lineH));
+        if (w < least || h < least || w > 4 * lineH || h > 4 * lineH || w < 0.75 * h || w > 1.33 * h
+            || right + Math.Max(1, RoundHalfUp(CardPortraitGapLines * lineH)) > head.L) return null;
+        // Çevresi kartın zemini: solu, üstü ve altı (iki nokta dışı; sağı başlığa yakın, sayılmaz).
+        int ring = 0, matched = 0;
+        void Probe(int px, int py)
+        {
+            if (px < 0 || py < 0 || px >= width || py >= height || Text(px, py)) return;
+            ring++;
+            if (Distance(color(px, py), ground) <= PanelTolerance) matched++;
+        }
+        for (var y = top; y <= bottom; y++) Probe(left - 2, y);
+        for (var px = left; px < right; px++)
+        {
+            Probe(px, top - 2);
+            Probe(px, bottom + 2);
+        }
+        if (ring == 0 || matched < CardPortraitRing * ring) return null;
+        return new TextBox(left / fw, top / fh, right / fw, (bottom + 1) / fh);
+    }
+
+    /// <summary>Kare üzerinden kartın kişi resmi (yukarıdaki <c>CardPortrait</c>; BGRA noktalar).</summary>
+    public static TextBox? CardPortrait(IReadOnlyList<TextBox> covers, IReadOnlyList<int> card, string background, double line, Frame frame)
+    {
+        if (!frame.IsConsistent || frame.Width <= 0 || frame.Height <= 0) return null;
+        return CardPortrait(covers, card, background, line, frame.Width, frame.Height, (x, y) =>
+        {
+            var p = (y * frame.Stride) + (x * 4);
+            return (frame.Pixels[p + 2], frame.Pixels[p + 1], frame.Pixels[p]);
+        });
     }
 
     /// <summary>

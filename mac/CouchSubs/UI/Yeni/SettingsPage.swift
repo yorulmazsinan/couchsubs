@@ -660,6 +660,7 @@ private struct AdvancedSettings: View {
         model.settings.screenTextMission = defaults.screenTextMission
         model.settings.screenTextHelp = defaults.screenTextHelp
         model.settings.screenTextMenus = defaults.screenTextMenus
+        model.settings.screenTextMenuCover = defaults.screenTextMenuCover
         model.settings.screenTextOther = defaults.screenTextOther
     }
 

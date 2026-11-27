@@ -182,7 +182,44 @@ internal sealed class ScreenTextCanvas : Canvas
             var item = painted[i];
             var paint = item.Paint!;
             var place = placements[i];
-            var foreground = new SolidColorBrush(Parse(item.Style?.Foreground, Colors.White));
+            // Menüde yanına yazılan Türkçenin etiketi (TextPaint.Label, MenuLayout; TV 0.9.124 ile aynı): koyu, yarı saydam,
+            // yuvarlak köşeli; yazının çevresine taşar, yazı etikette açık renkle ve kontursuz.
+            var label = paint.Mode == PaintMode.Beside && Parse(paint.Label, Colors.Transparent) is var chip && chip != Colors.Transparent
+                ? chip : (Color?)null;
+            var ink = Parse(item.Style?.Foreground, Colors.White);
+            // Seçili (ters renkli: açık zemin, koyu ve zeminden belirgin biçimde ayrışan yazı) satırın etiketi de ters renkli
+            // (TV labelSelected ile aynı).
+            static double LabelLuma(Color c) => 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
+            var ground = Parse(paint.Background, Colors.Black);
+            var selected = label is not null && LabelLuma(ground) > 160 && LabelLuma(ink) <= 160 && LabelLuma(ground) - LabelLuma(ink) >= 80;
+            if (selected) label = ground;
+            var foreground = new SolidColorBrush(label is null || selected || 0.299 * ink.R + 0.587 * ink.G + 0.114 * ink.B > 150
+                ? ink : Color.FromRgb(0xF2, 0xF2, 0xF2));
+            if (label is { } fill)
+            {
+                // Etiket yazıyı sarar: genişliği en uzun satır kadar, özgüne yaslı kenarı yerinde.
+                var pad = Math.Max(2, Math.Round(place.FontSize * 0.2, MidpointRounding.AwayFromZero));
+                var padY = Math.Max(1, Math.Round(place.FontSize * 0.06, MidpointRounding.AwayFromZero));
+                var tight = Math.Min(place.Width, place.Lines.Count == 0 ? place.Width : place.Lines.Max(line =>
+                    new FormattedText(line, Turkish, FlowDirection.LeftToRight, typefaces[i], Math.Max(0.1, place.FontSize), Brushes.White, dpi)
+                        .WidthIncludingTrailingWhitespace));
+                var chipLeft = inputs[i].Align switch
+                {
+                    "right" => place.Left + place.Width - tight,
+                    "center" => place.Left + (place.Width - tight) / 2,
+                    _ => place.Left,
+                };
+                var chipBox = new Border
+                {
+                    Width = Math.Max(1, tight + 2 * pad),
+                    Height = Math.Max(1, place.Height + 2 * padY),
+                    Background = new SolidColorBrush(Color.FromArgb(219, fill.R, fill.G, fill.B)),
+                    CornerRadius = new CornerRadius(Math.Max(2, Math.Round(pad * 0.8, MidpointRounding.AwayFromZero))),
+                };
+                SetLeft(chipBox, chipLeft - pad);
+                SetTop(chipBox, place.Top - padY);
+                Children.Add(chipBox);
+            }
             if (paint.Mode == PaintMode.Cover)
             {
                 var box = new Border
@@ -197,7 +234,7 @@ internal sealed class ScreenTextCanvas : Canvas
                 Children.Add(box);
             }
             // Yanına yazma: oyun dünyasının üstünde kutusuz; yazı rengine zıt yumuşak gölge okunurluğu sağlar.
-            var glow = paint.Mode == PaintMode.Beside
+            var glow = paint.Mode == PaintMode.Beside && label is null
                 ? new DropShadowEffect { ShadowDepth = 0, BlurRadius = Math.Max(3, place.FontSize * 0.25), Opacity = 0.9,
                                          Color = Light(Parse(item.Style?.Foreground, Colors.White)) ? Colors.Black : Colors.White }
                 : null;
@@ -289,7 +326,8 @@ internal sealed class ScreenTextCanvas : Canvas
             var picture = new Image
             {
                 Source = image, Width = w, Height = h, Stretch = Stretch.Fill,
-                Clip = new EllipseGeometry(new Point(w / 2, h / 2), w / 2, h / 2),
+                // Görev kartının resmi köşeli kare (TV ile aynı), telefon bildiriminin kişi resmi yuvarlak.
+                Clip = face.PortraitSquare ? null : new EllipseGeometry(new Point(w / 2, h / 2), w / 2, h / 2),
             };
             SetLeft(picture, box.Left * width);
             SetTop(picture, box.Top * height);
