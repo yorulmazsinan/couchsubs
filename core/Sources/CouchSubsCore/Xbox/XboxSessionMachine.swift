@@ -150,6 +150,8 @@ public struct XboxSessionMachine {
         streamingSince = 0
         failures += 1
         if kind == .noFirstFrame { noPictureConnections += 1 }
+        // Xbox ses gönderip görüntü göndermediyse (#1432) yeniden denemek aynı sonucu verir; her deneme Xbox'ta bildirim çıkarır.
+        if kind == .noFirstFrame && XboxStop.isAudioOnly(message) { noPictureConnections = max(noPictureConnections, Self.maxNoPictureAttempts) }
         // Xbox uzaktan oynatma hizmetini başlatamadı (HTTP hatası olarak gelse de): yeniden denemek işe yaramaz (#871).
         let refused = permanent || XboxStop.isPermanent(message)
         // Görüntü gelmiş yayın koptuktan hemen sonra Xbox eski oturumu bırakmadan yenisini reddedebiliyor ("bir kez

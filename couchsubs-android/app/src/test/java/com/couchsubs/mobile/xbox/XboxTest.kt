@@ -584,6 +584,23 @@ class XboxSessionMachineTest {
             XboxSessionMachine.stopKind(XboxError.NO_FIRST_FRAME, "Xbox WebRTC bağlantısı kesildi (CLOSED)"))
     }
 
+    /** #1432: ses gelip görüntü gelmeyen bağlantı yeniden denenmez; ekranda "Xbox'u tam kapatıp açın" (Windows, Mac ve iPhone'la aynı). */
+    @Test fun audioWithoutPictureIsNotRetriedAndAsksForAFullRestart() {
+        val reason = XboxFirstFrameWatch.noPictureReason(true)
+        assertEquals("Xbox'tan 30 sn içinde görüntü gelmedi (ses geliyor, görüntü 0 bayt)", reason)
+        assertEquals("Xbox'tan 30 sn içinde görüntü gelmedi", XboxFirstFrameWatch.noPictureReason(false))
+        assertTrue(XboxSessionMachine.isAudioOnly(reason))
+        assertEquals(XboxSessionMachine.StopKind.STUCK_PICTURE, XboxSessionMachine.stopKind(XboxError.NO_FIRST_FRAME, reason))
+        assertEquals(XboxSessionMachine.StopKind.NO_PICTURE,
+            XboxSessionMachine.stopKind(XboxError.NO_FIRST_FRAME, XboxFirstFrameWatch.noPictureReason(false)))
+        val m = XboxSessionMachine()
+        assertEquals(XboxSessionMachine.Action.Retry(null), m.fail(XboxError.NO_FIRST_FRAME, reason))
+        assertFalse((m.phase as XboxSessionMachine.Phase.Failed).willRetry)
+        assertFalse(m.dropLimitReached)
+        assertEquals(XboxSessionMachine.Action.Retry(5000),
+            XboxSessionMachine().fail(XboxError.NO_FIRST_FRAME, XboxFirstFrameWatch.noPictureReason(false)))
+    }
+
     @Test fun pictureResetsTheNoPictureStreak() {
         var now = 1_000L
         val m = XboxSessionMachine(clock = { now })

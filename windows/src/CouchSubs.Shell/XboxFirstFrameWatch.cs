@@ -60,6 +60,19 @@ public sealed class XboxFirstFrameWatch
     }
 
     private bool limitReached;
+
+    /// <summary>Bundan küçük kare görüntü sayılmaz: oynatıcı kapanırken video öğesi 2x2'lik boş kare verir (#1432).</summary>
+    public const int MinFrameSide = 16;
+
+    public static bool IsRealFrame(int width, int height) => width >= MinFrameSide && height >= MinFrameSide;
+
+    /// <summary>
+    /// İlk kare sınırı dolunca bağlantıyı bitiren neden. <paramref name="audioOnly"/>: son tanıda ses geliyordu, görüntü
+    /// 0 bayttı (<see cref="XboxStreamStats.AudioOnly"/>); nedene <see cref="XboxStop.AudioOnlyNote"/> eklenir ve ekranda
+    /// "Xbox'u tam kapatıp açın" metni çıkar, yeniden denenmez (#1432, #1416).
+    /// </summary>
+    public static string NoPictureReason(bool audioOnly) =>
+        $"Xbox'tan {(long)FirstFrameLimit.TotalSeconds} sn içinde görüntü gelmedi" + (audioOnly ? $" ({XboxStop.AudioOnlyNote})" : "");
 }
 
 /// <summary>WebRTC getStats özetini tek günlük satırına çevirir. Android'deki XboxStreamStats ile aynı biçim.</summary>
@@ -115,6 +128,26 @@ public static class XboxStreamStats
         else line.Append("aday seçilmedi; ");
         line.Append(picture);
         return line.ToString();
+    }
+
+    /// <summary>
+    /// Xbox ses gönderiyor ama görüntü göndermiyor (#1432, #1416): ses verisi var (bayt &gt; 0), görüntü parçası yok ya da
+    /// yalnız boş (dolgu) paketleri geliyor (bayt 0). Aynı Xbox'ta aynı SDP yanıtıyla (H264 42002a) birkaç dakika önce
+    /// görüntü gelen oturumlar vardı; ağ kopması ve kapatılamayan oturumdan sonra her bağlantı böyle kaldı: kodek ya da
+    /// çözünürlük değil, Xbox'ın görüntü yayını takılı kalmış.
+    /// </summary>
+    public static bool AudioOnly(JsonElement stats)
+    {
+        if (stats.ValueKind != JsonValueKind.Array) return false;
+        var entries = stats.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object).ToList();
+        JsonElement Inbound(string kind) =>
+            entries.FirstOrDefault(e => Text(e, "type") == "inbound-rtp" && (Text(e, "kind") ?? Text(e, "mediaType")) == kind);
+        static double Bytes(JsonElement entry) =>
+            entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("bytesReceived", out var value) && value.ValueKind == JsonValueKind.Number
+                ? value.GetDouble() : -1;
+        var video = Inbound("video");
+        var audio = Inbound("audio");
+        return Bytes(audio) > 0 && (video.ValueKind != JsonValueKind.Object || Bytes(video) == 0);
     }
 
     private static JsonElement SelectedPair(List<JsonElement> entries)

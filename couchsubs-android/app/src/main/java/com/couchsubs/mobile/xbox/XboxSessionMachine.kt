@@ -60,7 +60,8 @@ class XboxSessionMachine(
      * ready", 0x8007139F); START_FAILED: Xbox bilinmeyen bir hata koduyla yayını reddetti (#871); DROPPED: oynanan yayın
      * koptu ve sessiz yeniden bağlanma sınırı doldu ([dropLimitReached], #1252).
      */
-    enum class StopKind { BUSY, CONSOLE_UNAVAILABLE, NO_PICTURE, SERVICE_NOT_READY, START_FAILED, DROPPED, OTHER }
+    /** STUCK_PICTURE: Xbox'tan görüntü gelmedi ama ses geldi; Xbox'ın görüntü yayını takılı (#1432, #1416). */
+    enum class StopKind { BUSY, CONSOLE_UNAVAILABLE, NO_PICTURE, STUCK_PICTURE, SERVICE_NOT_READY, START_FAILED, DROPPED, OTHER }
 
     @Volatile var phase: Phase = Phase.Idle
         private set
@@ -154,6 +155,8 @@ class XboxSessionMachine(
         streamingSince = 0
         failures++
         if (kind == XboxError.NO_FIRST_FRAME) noPictureConnections++
+        // Xbox ses gönderip görüntü göndermediyse (#1432) yeniden denemek aynı sonucu verir; her deneme Xbox'ta bildirim çıkarır.
+        if (kind == XboxError.NO_FIRST_FRAME && isAudioOnly(message)) noPictureConnections = maxOf(noPictureConnections, MAX_NO_PICTURE_ATTEMPTS)
         // Xbox uzaktan oynatma hizmetini başlatamadı (HTTP hatası olarak gelse de): yeniden denemek işe yaramaz (#871).
         val refused = permanent || isPermanent(message)
         // Görüntü gelmiş yayın koptuktan hemen sonra Xbox eski oturumu bırakmadan yenisini reddedebiliyor ("bir kez
@@ -226,7 +229,7 @@ class XboxSessionMachine(
         fun stopKind(kind: XboxError, detail: String?): StopKind {
             val text = detail.orEmpty()
             return when {
-                kind == XboxError.NO_FIRST_FRAME -> StopKind.NO_PICTURE
+                kind == XboxError.NO_FIRST_FRAME -> if (isAudioOnly(detail)) StopKind.STUCK_PICTURE else StopKind.NO_PICTURE
                 kind == XboxError.BUSY || text.contains("InUse", true) || text.contains("Busy", true) ||
                     text.contains("AlreadyStreaming", true) -> StopKind.BUSY
                 text.contains("Cloud Streaming Service", true) || errorCode(text) == SERVICE_NOT_READY_CODE -> StopKind.SERVICE_NOT_READY
@@ -248,6 +251,16 @@ class XboxSessionMachine(
          * başlatıldı / durduruldu" bildirimini tekrarlar; Xbox'ı kullanıcının yeniden başlatması gerekir.
          */
         fun isPermanent(reason: String?): Boolean = stopKind(XboxError.SERVICE, reason) == StopKind.SERVICE_NOT_READY
+
+        /** İlk kare sınırı nedenine eklenen not: son tanıda ses geliyordu, görüntü 0 bayttı ([XboxStreamStats.audioOnly]). */
+        const val AUDIO_ONLY_NOTE = "ses geliyor, görüntü 0 bayt"
+
+        /** Bağlantı Xbox'ın yalnız ses gönderdiği bir bağlantıydı: yeniden denemek işe yaramaz, Xbox tam kapatılıp açılmalı. */
+        fun isAudioOnly(reason: String?): Boolean = reason?.contains(AUDIO_ONLY_NOTE) == true
+
+        /** Ses gelip görüntü gelmeyen bağlantıdan sonra günlüğe yazılan açıklama (Windows, Mac ve iPhone'da aynı metin). */
+        const val AUDIO_ONLY_LINE = "Xbox ses gönderiyor ama görüntü kodlamıyor (görüntü paketleri boş): Xbox'ın görüntü yayını takılı kalmış; " +
+            "kodek, çözünürlük ya da ağ değil. Xbox güç düğmesine 10 sn basılı tutularak tam kapatılıp açılmalı; yeniden denenmiyor"
 
         private val AGENT_CODE = Regex("""Agent\s*:\s*(-?\d+)""")
         private val HEX_CODE = Regex("""\b0[xX]([0-9A-Fa-f]{8})\b""")

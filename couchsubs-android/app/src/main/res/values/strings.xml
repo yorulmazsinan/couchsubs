@@ -632,6 +632,7 @@
     <string name="xbox_error_no_first_frame">Xbox\'tan görüntü gelmedi. Bir kez daha deneniyor…</string>
     <string name="xbox_error_server_closed">Xbox yayını kapattı. Yeniden bağlanılıyor…</string>
     <string name="xbox_stopped_no_picture">Xbox\'tan görüntü gelmedi, çeviri durdu. Xbox\'ta Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler\'de uzaktan oynatmanın açık olduğunu denetleyin, olabiliyorsa Xbox\'u ağa kabloyla bağlayın (ya da yeniden başlatın), sonra çeviriyi yeniden başlatın.</string>
+    <string name="xbox_stopped_stuck_picture">Xbox ses gönderdi ama görüntü göndermedi: Xbox\'un görüntü yayını takılı kalmış. Xbox\'u güç düğmesine 10 sn basılı tutarak tamamen kapatıp açın (uykudan uyandırmak yetmez), sonra çeviriyi yeniden başlatın.</string>
     <string name="xbox_stopped_dropped">Xbox bağlantısı koptu. Yeniden bağlan\'a basın; sık kopuyorsa Xbox\'ı ağa kabloyla bağlayın ya da yeniden başlatın.</string>
     <string name="xbox_connection_lost">Xbox yayını durdu (%1$s). Çeviriyi yeniden başlatın; sürekli duruyorsa Xbox\'ı yeniden başlatın.</string>
     <string name="xbox_stopped_service">Xbox uzaktan oynatma hizmetini başlatamadı. Xbox\'ı güç düğmesine 10 sn basılı tutarak tam kapatıp açın, Uzak özelliklerin açık olduğunu denetleyin, sonra yeniden deneyin.</string>

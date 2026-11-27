@@ -34,6 +34,8 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     private DispatcherTimer? watchTimer;
     private long connectedAt;
     private bool keyframeReady;
+    /// <summary>Son tanıda ses geliyordu, görüntü 0 bayttı (<see cref="XboxStreamStats.AudioOnly"/>, #1432); ilk kare sınırının nedenine girer.</summary>
+    private bool lastAudioOnly;
     /// <summary>Xbox'ın SDP yanıtında seçtiği görüntü kodeği (tanı satırı için, #1252); her yeni SDP'de yenilenir.</summary>
     private string? negotiatedCodec;
     /// <summary>Bu WebRTC bağlantısında okumaya giden kare sayısı ve ilk karenin anı (bağlantı bitince özet satırı).</summary>
@@ -209,7 +211,9 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             endReason = null;
             endCause = null;
             var delay = retries.Failed(permanent, noFirstFrame, since == 0 ? null : Environment.TickCount64 - since, reason);
-            if (noFirstFrame)
+            if (noFirstFrame && XboxStop.IsAudioOnly(reason))
+                Log(XboxStop.AudioOnlyLine);
+            else if (noFirstFrame)
                 Log($"Xbox görüntü göndermedi: bağlantı kuruldu ama tek kare gelmedi ({retries.Failures}. bağlantı; neden: {XboxStop.Shorten(reason)}). " +
                     "Xbox'ta Ayarlar › Cihazlar ve bağlantılar › Uzak özellikler açık mı, Xbox kablolu mu? Tanı satırlarında video bayt 0 ise Xbox hiç görüntü kodlamıyor");
             if (delay is null)
@@ -477,6 +481,15 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     Log("oynatıcı: " + XboxStop.Shorten(message.TryGetProperty("text", out var logText) ? logText.GetString() : null, 300));
                     break;
                 case "firstFrame":
+                    // Bağlantı bittikten sonra oynatıcı kapanırken video öğesi 2x2'lik boş kare verir (#1432): eskiden bu
+                    // "ilk kare" sayılıyor, ekranda bir an "bağlandı" görünüyor, sonraki bağlantı görüntü gelmiş sayılıyordu
+                    // ("ilk kareden sonra 41 sn") ve görüntüsüz bağlantı sınırı işlemiyordu.
+                    if (browserEnded is null || browserEnded.Task.IsCompleted || cancel.IsCancellationRequested
+                        || !XboxFirstFrameWatch.IsRealFrame(message.GetProperty("width").GetInt32(), message.GetProperty("height").GetInt32()))
+                    {
+                        Log($"oynatıcı: kapanırken gelen {message.GetProperty("width").GetInt32()}x{message.GetProperty("height").GetInt32()} kare ilk kare sayılmadı");
+                        break;
+                    }
                     streamSize = $"{message.GetProperty("width").GetInt32()}×{message.GetProperty("height").GetInt32()}";
                     if (Interlocked.CompareExchange(ref firstFrameAt, Environment.TickCount64, 0) == 0)
                     {
@@ -502,6 +515,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                 case "stats":
                     // İlk kare beklenirken saat sorar; görüntü geldikten sonra bağlantı takılınca oynatıcı kendisi gönderir.
                     if (connectedAt == 0) break;
+                    if (watch is { FrameSeen: false }) lastAudioOnly = XboxStreamStats.AudioOnly(message.GetProperty("stats"));
                     var video = message.GetProperty("video");
                     var picture = XboxStreamStats.Picture(video.GetProperty("readyState").GetInt32(), video.GetProperty("width").GetInt32(),
                         video.GetProperty("height").GetInt32(), video.TryGetProperty("visibility", out var visibility) ? visibility.GetString() : null,
@@ -558,6 +572,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     {
         StopWatch();
         watch = new XboxFirstFrameWatch();
+        lastAudioOnly = false;
         connectedAt = Environment.TickCount64;
         var view = browser;
         watchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -579,7 +594,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
             {
                 // Xbox ~60 sn sonra kendisi kapatır; beklemeden kapatılır, neden günlükte ve ekranda net olur.
                 // Gerekçe yalnız günlüğe girer; ekranda XboxStop.NoPictureRetrying / NoPictureStopped görünür.
-                var limit = $"Xbox'tan {(long)XboxFirstFrameWatch.FirstFrameLimit.TotalSeconds} sn içinde görüntü gelmedi";
+                var limit = XboxFirstFrameWatch.NoPictureReason(lastAudioOnly);
                 Log($"ilk kare sınırı: {limit}; bağlantı kapatılıyor");
                 StopWatch();
                 End(limit, XboxEndCause.Timeout);

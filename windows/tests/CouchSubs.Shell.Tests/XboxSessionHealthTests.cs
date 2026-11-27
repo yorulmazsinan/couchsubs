@@ -109,6 +109,25 @@ public class XboxSessionHealthTests
     }
 
     [Fact]
+    public void AudioWithoutPictureAsksForAFullXboxRestartAndIsNotRetried()
+    {
+        // #1432: ses geliyor, görüntü 0 bayt; Xbox'ın görüntü yayını takılı, yeniden denemek aynı sonucu veriyordu.
+        var reason = XboxFirstFrameWatch.NoPictureReason(audioOnly: true);
+        Assert.Equal("Xbox'tan 30 sn içinde görüntü gelmedi (ses geliyor, görüntü 0 bayt)", reason);
+        Assert.True(XboxStop.IsAudioOnly(reason));
+        Assert.False(XboxStop.IsAudioOnly(XboxFirstFrameWatch.NoPictureReason(audioOnly: false)));
+        Assert.Equal(XboxStopKind.StuckPicture, XboxStop.Classify(reason, noFirstFrame: true));
+        Assert.Equal(XboxStopKind.NoPicture, XboxStop.Classify(XboxFirstFrameWatch.NoPictureReason(false), noFirstFrame: true));
+        var tr = XboxStop.Message(Localizer.ForLanguage("tr"), reason, noFirstFrame: true);
+        Assert.StartsWith("Xbox ses gönderdi ama görüntü göndermedi", tr);
+        Assert.Contains("10 sn", tr);
+        Assert.Contains("10 seconds", XboxStop.Message(Localizer.ForLanguage("en"), reason, noFirstFrame: true));
+        Assert.Null(new XboxRetryPlan().Failed(permanent: false, noFirstFrame: true, streamedMs: null, reason));
+        // Sesi de olmayan görüntüsüz bağlantı eskisi gibi bir kez daha denenir.
+        Assert.Equal(5000, new XboxRetryPlan().Failed(false, true, null, XboxFirstFrameWatch.NoPictureReason(false)));
+    }
+
+    [Fact]
     public void ConnectionsWithoutPictureStopAfterTwoAttempts()
     {
         // Eskiden görüntüsüz her bağlantı ~60 sn sürüp dört kez açılıp kapanıyordu (Xbox'ta "uzaktan oynatma başlatıldı / durduruldu").

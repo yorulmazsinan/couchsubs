@@ -289,6 +289,8 @@ class XboxStreamSession(
     }
 
     @Volatile private var lastError: String? = null
+    /** Son tanıda ses geliyordu, görüntü 0 bayttı ([XboxStreamStats.audioOnly], #1432); ilk kare sınırının nedenine girer. */
+    @Volatile private var lastAudioOnly = false
 
     private fun report(kind: XboxError, detail: String?, retryDelayMs: Long?) {
         lastError = "$kind: $detail"
@@ -298,7 +300,9 @@ class XboxStreamSession(
         if (retryDelayMs == null) gaveUp = true
         log("kopma ($kind): $detail")
         log(XboxEndCause.line(kind, detail))
-        if (kind == XboxError.NO_FIRST_FRAME) {
+        if (kind == XboxError.NO_FIRST_FRAME && XboxSessionMachine.isAudioOnly(detail)) {
+            log(XboxSessionMachine.AUDIO_ONLY_LINE)
+        } else if (kind == XboxError.NO_FIRST_FRAME) {
             log("Xbox görüntü göndermedi: bağlantı kuruldu ama tek kare gelmedi. Xbox'ta Ayarlar › Cihazlar ve bağlantılar › " +
                 "Uzak özellikler açık mı, Xbox kablolu mu? Tanı satırlarında video bayt 0 ise Xbox hiç görüntü kodlamıyor")
         }
@@ -321,6 +325,7 @@ class XboxStreamSession(
                     XboxSessionMachine.StopKind.BUSY -> appContext.getString(R.string.xbox_stopped_busy)
                     XboxSessionMachine.StopKind.CONSOLE_UNAVAILABLE -> appContext.getString(R.string.xbox_stopped_console)
                     XboxSessionMachine.StopKind.NO_PICTURE -> appContext.getString(R.string.xbox_stopped_no_picture)
+                    XboxSessionMachine.StopKind.STUCK_PICTURE -> appContext.getString(R.string.xbox_stopped_stuck_picture)
                     XboxSessionMachine.StopKind.SERVICE_NOT_READY -> appContext.getString(R.string.xbox_stopped_service)
                     XboxSessionMachine.StopKind.DROPPED -> appContext.getString(R.string.xbox_stopped_dropped)
                     XboxSessionMachine.StopKind.START_FAILED ->
@@ -551,7 +556,7 @@ class XboxStreamSession(
                 throw XboxException(XboxError.TIMEOUT, reason)
             }
             if (frameCounter.framesInSession(negotiatedFrames) == 0L && connected > 0L && now - connected > FIRST_FRAME_MS) {
-                val reason = "Xbox'tan ${FIRST_FRAME_MS / 1000} sn içinde görüntü gelmedi"
+                val reason = XboxFirstFrameWatch.noPictureReason(lastAudioOnly)
                 end(reason, XboxError.NO_FIRST_FRAME)
                 throw XboxException(XboxError.NO_FIRST_FRAME, reason)
             }
@@ -666,6 +671,7 @@ class XboxStreamSession(
             watchTask?.cancel(false)
             val current = XboxFirstFrameWatch()
             watch = current
+            lastAudioOnly = false
             connectedAt = SystemClock.elapsedRealtime()
             watchTask = timers.scheduleWithFixedDelay({ watchTick(current) }, 0, WATCH_TICK_MS, TimeUnit.MILLISECONDS)
         }
@@ -703,6 +709,7 @@ class XboxStreamSession(
             try {
                 val stats = report.statsMap.values.filter { it.type in XboxStreamStats.TYPES }
                     .map { XboxStat(it.type, it.id, it.members) }
+                if (!current.frameSeen && watch === current) lastAudioOnly = XboxStreamStats.audioOnly(stats)
                 log(XboxStreamStats.describe(since, current.frameSeen, current.keyframesRequested, stats, picture,
                     negotiatedCodec, decoderNote.describe()))
             } catch (error: Exception) {

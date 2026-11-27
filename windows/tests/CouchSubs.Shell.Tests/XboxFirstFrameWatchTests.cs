@@ -91,6 +91,39 @@ public class XboxFirstFrameWatchTests
     }
 
     [Fact]
+    public void AudioOnlyMeansAudioBytesWithEmptyVideoPackets()
+    {
+        // #1432 günlüğü: video paket 151, bayt 0; ses paket 625, bayt 203391.
+        using var stuck = JsonDocument.Parse("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":151,"bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":625,"bytesReceived":203391}]
+            """);
+        Assert.True(XboxStreamStats.AudioOnly(stuck.RootElement));
+        using var noVideo = JsonDocument.Parse("""[{"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":8623}]""");
+        Assert.True(XboxStreamStats.AudioOnly(noVideo.RootElement));
+        using var flowing = JsonDocument.Parse("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","bytesReceived":5000},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":8623}]
+            """);
+        Assert.False(XboxStreamStats.AudioOnly(flowing.RootElement));
+        using var silent = JsonDocument.Parse("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":0}]
+            """);
+        Assert.False(XboxStreamStats.AudioOnly(silent.RootElement));
+        using var empty = JsonDocument.Parse("[]");
+        Assert.False(XboxStreamStats.AudioOnly(empty.RootElement));
+    }
+
+    [Fact]
+    public void TwoByTwoFrameFromAClosingPlayerIsNotAFirstFrame()
+    {
+        Assert.False(XboxFirstFrameWatch.IsRealFrame(2, 2));
+        Assert.True(XboxFirstFrameWatch.IsRealFrame(2560, 1440));
+        Assert.True(XboxFirstFrameWatch.IsRealFrame(1280, 720));
+    }
+
+    [Fact]
     public void StalledClockDoesNotWriteMissedStatsTwice()
     {
         var watch = new XboxFirstFrameWatch();

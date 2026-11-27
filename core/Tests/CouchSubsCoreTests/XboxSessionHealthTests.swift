@@ -167,6 +167,26 @@ final class XboxFirstFrameWatchTests: XCTestCase {
         XCTAssertTrue(line.contains("; ses paket 480, bayt 61234; aday seçilmedi; görüntü"), line)
     }
 
+    /// #1432: ses geliyor, görüntü 0 bayt; Xbox'ın görüntü yayını takılı (Windows ve Android'deki AudioOnly ile aynı).
+    func testAudioOnlyMeansAudioBytesWithEmptyVideoPackets() throws {
+        XCTAssertTrue(XboxStreamStats.audioOnly(try report("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":151,"bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":625,"bytesReceived":203391}]
+            """)))
+        XCTAssertTrue(XboxStreamStats.audioOnly(try report("""
+            [{"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":8623}]
+            """)))
+        XCTAssertFalse(XboxStreamStats.audioOnly(try report("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","bytesReceived":5000},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":8623}]
+            """)))
+        XCTAssertFalse(XboxStreamStats.audioOnly(try report("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","kind":"audio","bytesReceived":0}]
+            """)))
+        XCTAssertFalse(XboxStreamStats.audioOnly([]))
+    }
+
     /// #1416: input kanalının ServerMetadata iletisi baytlarıyla yazılır; titreşim (128) yazılmaz.
     func testInputMessageLine() {
         let metadata = Data([0x10, 0x00, 0x80, 0x07, 0x00, 0x00, 0x38, 0x04, 0x00, 0x00])

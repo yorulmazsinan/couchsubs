@@ -623,6 +623,7 @@
     <string name="xbox_error_no_first_frame">No picture came from the Xbox. Trying once more…</string>
     <string name="xbox_error_server_closed">The Xbox closed the stream. Reconnecting…</string>
     <string name="xbox_stopped_no_picture">No picture came from the Xbox, so translation stopped. On the Xbox, check that remote play is on in Settings › Devices &amp; connections › Remote features, connect the Xbox with a network cable if you can (or restart it), then start translation again.</string>
+    <string name="xbox_stopped_stuck_picture">The Xbox sent sound but no picture: its picture stream is stuck. Turn the Xbox fully off by holding the power button for 10 seconds (waking it from sleep isn\'t enough), turn it back on, then start translation again.</string>
     <string name="xbox_stopped_dropped">The Xbox connection dropped. Press Reconnect; if it keeps dropping, connect the Xbox with a network cable or restart it.</string>
     <string name="xbox_connection_lost">The Xbox stream stopped (%1$s). Start translation again; if it keeps stopping, restart the Xbox.</string>
     <string name="xbox_stopped_service">Your Xbox couldn\'t start its remote play service. Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again.</string>

@@ -1359,6 +1359,22 @@
         }
       }
     },
+    "The Xbox sent sound but no picture: its picture stream is stuck. Turn the Xbox fully off by holding the power button for 10 seconds (waking it from sleep isn't enough), turn it back on, then start translation again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Xbox sent sound but no picture: its picture stream is stuck. Turn the Xbox fully off by holding the power button for 10 seconds (waking it from sleep isn't enough), turn it back on, then start translation again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xbox ses gönderdi ama görüntü göndermedi: Xbox'un görüntü yayını takılı kalmış. Xbox'u güç düğmesine 10 sn basılı tutarak tamamen kapatıp açın (uykudan uyandırmak yetmez), sonra çeviriyi yeniden başlatın."
+          }
+        }
+      }
+    },
     "The Xbox service sent an unexpected reply. Retrying…": {
       "localizations": {
         "en": {

@@ -159,6 +159,8 @@
   function watchFrames(video) {
     if (!video.requestVideoFrameCallback) return;
     const onFrame = (_, metadata) => {
+      // Oynatıcı kapandı (stop): video öğesinin verdiği 2x2'lik boş kare ilk kare sayılmaz (#1432).
+      if (!player) return;
       frameCallbacks++;
       if (!firstFrameSent) {
         firstFrameSent = true;

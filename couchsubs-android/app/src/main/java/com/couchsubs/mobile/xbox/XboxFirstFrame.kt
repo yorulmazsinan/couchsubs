@@ -23,6 +23,15 @@ class XboxFirstFrameWatch {
         const val STATS_INTERVAL_MS = 10_000L
         /** Kontrol kanalı iletisi (Control.ts `requestKeyframeRequest`). */
         const val KEYFRAME_REQUEST = "{\"message\":\"videoKeyframeRequested\",\"ifrRequested\":true}"
+
+        /**
+         * İlk kare sınırı dolunca bağlantıyı bitiren neden. [audioOnly]: son tanıda ses geliyordu, görüntü 0 bayttı
+         * ([XboxStreamStats.audioOnly]); nedene [XboxSessionMachine.AUDIO_ONLY_NOTE] eklenir, ekranda "Xbox'u tam kapatıp
+         * açın" çıkar ve yeniden denenmez (#1432, #1416).
+         */
+        fun noPictureReason(audioOnly: Boolean): String =
+            "Xbox'tan ${FIRST_FRAME_LIMIT_MS / 1000} sn içinde görüntü gelmedi" +
+                if (audioOnly) " (${XboxSessionMachine.AUDIO_ONLY_NOTE})" else ""
     }
 
     private var lastKeyframe: Long? = null
@@ -114,6 +123,22 @@ object XboxStreamStats {
             append("aday seçilmedi; ")
         }
         append(picture)
+    }
+
+    /**
+     * Xbox ses gönderiyor ama görüntü göndermiyor (#1432, #1416): ses verisi var (bayt > 0), görüntü parçası yok ya da
+     * yalnız boş (dolgu) paketleri geliyor (bayt 0). Aynı Xbox'ta aynı SDP yanıtıyla birkaç dakika önce görüntü gelen
+     * oturumlar vardı: kodek ya da çözünürlük değil, Xbox'ın görüntü yayını takılı kalmış.
+     */
+    fun audioOnly(stats: List<XboxStat>): Boolean {
+        fun bytes(kind: String): Double? {
+            val entry = stats.firstOrNull { it.type == "inbound-rtp" && (text(it, "kind") ?: text(it, "mediaType")) == kind } ?: return null
+            return (entry.members["bytesReceived"] as? Number)?.toDouble() ?: -1.0
+        }
+        val audio = bytes("audio") ?: return false
+        if (audio <= 0) return false
+        val video = bytes("video") ?: return true
+        return video == 0.0
     }
 
     private fun selectedPair(stats: List<XboxStat>): XboxStat? {

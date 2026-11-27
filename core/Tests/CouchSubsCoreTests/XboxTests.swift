@@ -459,6 +459,22 @@ final class XboxSessionMachineTests: XCTestCase {
         XCTAssertEqual(XboxStop.classify("Xbox WebRTC bağlantısı kesildi", kind: .noFirstFrame), .noPicture)
     }
 
+    /// #1432: ses gelip görüntü gelmeyen bağlantı yeniden denenmez; ekranda "Xbox'u tam kapatıp açın" (Windows ve Android'le aynı).
+    func testAudioWithoutPictureIsNotRetriedAndAsksForAFullRestart() {
+        let reason = XboxFirstFrameWatch.noPictureReason(audioOnly: true)
+        XCTAssertEqual(reason, "Xbox'tan 30 sn içinde görüntü gelmedi (ses geliyor, görüntü 0 bayt)")
+        XCTAssertEqual(XboxFirstFrameWatch.noPictureReason(audioOnly: false), "Xbox'tan 30 sn içinde görüntü gelmedi")
+        XCTAssertTrue(XboxStop.isAudioOnly(reason))
+        XCTAssertEqual(XboxStop.classify(reason, kind: .noFirstFrame), .stuckPicture)
+        XCTAssertEqual(XboxStop.classify(XboxFirstFrameWatch.noPictureReason(audioOnly: false), kind: .noFirstFrame), .noPicture)
+        var m = XboxSessionMachine()
+        XCTAssertEqual(m.fail(.noFirstFrame, reason), .retry(delayMs: nil))
+        if case let .failed(kind, _, willRetry, _) = m.phase { XCTAssertEqual(kind, .noFirstFrame); XCTAssertFalse(willRetry) } else { XCTFail() }
+        XCTAssertFalse(m.dropLimitReached)
+        var plain = XboxSessionMachine()
+        XCTAssertEqual(plain.fail(.noFirstFrame, XboxFirstFrameWatch.noPictureReason(audioOnly: false)), .retry(delayMs: 5000))
+    }
+
     /// #871: Xbox kartında Xbox'ın JSON hata nesnesi olduğu gibi görünüyordu.
     static let cloudServiceTimeout = #"{"message":"Agent : -2147019873 : Timed out waiting for Cloud Streaming Service to be ready. at xbox\\streaming\\manager"}"#
 

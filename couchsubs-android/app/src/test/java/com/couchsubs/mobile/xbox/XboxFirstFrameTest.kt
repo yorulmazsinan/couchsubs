@@ -123,6 +123,26 @@ class XboxFirstFrameTest {
         assertTrue(line, line.contains("; ses paket 480, bayt 61234; aday seçilmedi; görüntü"))
     }
 
+    /** #1432: ses geliyor, görüntü 0 bayt; Xbox'ın görüntü yayını takılı (Windows ve iPhone/Mac'teki audioOnly ile aynı). */
+    @Test fun audioOnlyMeansAudioBytesWithEmptyVideoPackets() {
+        assertTrue(XboxStreamStats.audioOnly(listOf(
+            XboxStat("inbound-rtp", "IV", mapOf("kind" to "video", "packetsReceived" to 151L, "bytesReceived" to BigInteger.ZERO)),
+            XboxStat("inbound-rtp", "IA", mapOf("kind" to "audio", "packetsReceived" to 625L, "bytesReceived" to BigInteger.valueOf(203391))),
+        )))
+        assertTrue(XboxStreamStats.audioOnly(listOf(
+            XboxStat("inbound-rtp", "IA", mapOf("kind" to "audio", "bytesReceived" to BigInteger.valueOf(8623))),
+        )))
+        assertFalse(XboxStreamStats.audioOnly(listOf(
+            XboxStat("inbound-rtp", "IV", mapOf("kind" to "video", "bytesReceived" to BigInteger.valueOf(5000))),
+            XboxStat("inbound-rtp", "IA", mapOf("kind" to "audio", "bytesReceived" to BigInteger.valueOf(8623))),
+        )))
+        assertFalse(XboxStreamStats.audioOnly(listOf(
+            XboxStat("inbound-rtp", "IV", mapOf("kind" to "video", "bytesReceived" to BigInteger.ZERO)),
+            XboxStat("inbound-rtp", "IA", mapOf("kind" to "audio", "bytesReceived" to BigInteger.ZERO)),
+        )))
+        assertFalse(XboxStreamStats.audioOnly(emptyList()))
+    }
+
     /** #1416: input kanalının ServerMetadata iletisi baytlarıyla yazılır; titreşim (128) yazılmaz. */
     @Test fun inputMessageLine() {
         val metadata = byteArrayOf(0x10, 0x00, 0x80.toByte(), 0x07, 0x00, 0x00, 0x38, 0x04, 0x00, 0x00)

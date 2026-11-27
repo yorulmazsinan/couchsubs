@@ -26,6 +26,8 @@ enum XboxText {
             return String(localized: "Can't reach your Xbox. Make sure it's on and remote play is enabled in Settings › Devices & connections › Remote features, then start translation again.")
         case .noPicture:
             return String(localized: "No picture came from the Xbox, so translation stopped. On the Xbox, check that remote play is on in Settings › Devices & connections › Remote features, connect the Xbox with a network cable if you can (or restart it), then start translation again.")
+        case .stuckPicture:
+            return String(localized: "The Xbox sent sound but no picture: its picture stream is stuck. Turn the Xbox fully off by holding the power button for 10 seconds (waking it from sleep isn't enough), turn it back on, then start translation again.")
         case .serviceNotReady:
             return String(localized: "Your Xbox couldn't start its remote play service. Turn the Xbox fully off by holding the power button for 10 seconds, turn it back on, check that Remote features are on, then try again.")
         case .startFailed:

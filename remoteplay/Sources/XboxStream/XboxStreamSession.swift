@@ -286,6 +286,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
 
     private var lastError: String?
     private var lastKind: XboxErrorKind?
+    /// Son tanıda ses geliyordu, görüntü 0 bayttı (`XboxStreamStats.audioOnly`, #1432); ilk kare sınırının nedenine girer.
+    private var lastAudioOnly = false
 
     private func report(_ kind: XboxErrorKind, _ detail: String, retryDelayMs: Int?) {
         locked {
@@ -297,7 +299,9 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         if retryDelayMs == nil { locked { gaveUp = true } }
         log("kopma (\(kind.rawValue)): \(detail)")
         log(XboxEndCause.line(kind, detail))
-        if kind == .noFirstFrame {
+        if kind == .noFirstFrame && XboxStop.isAudioOnly(detail) {
+            log(XboxStop.audioOnlyLine)
+        } else if kind == .noFirstFrame {
             log("Xbox görüntü göndermedi: bağlantı kuruldu ama tek kare gelmedi. Xbox'ta Ayarlar › Cihazlar ve bağlantılar › "
                 + "Uzak özellikler açık mı, Xbox kablolu mu? Tanı satırlarında video bayt 0 ise Xbox hiç görüntü kodlamıyor")
         }
@@ -473,7 +477,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
                 throw XboxError(.timeout, "Xbox ile görüntü bağlantısı \(Int(Self.connectSeconds)) sn içinde kurulamadı (ICE)")
             }
             if frames == 0 && connected > 0 && now - connected > Self.firstFrameSeconds {
-                throw XboxError(.noFirstFrame, "Xbox'tan \(Int(Self.firstFrameSeconds)) sn içinde görüntü gelmedi")
+                throw XboxError(.noFirstFrame, XboxFirstFrameWatch.noPictureReason(audioOnly: locked { lastAudioOnly }))
             }
             try checkPicture()
             try await Task.sleep(nanoseconds: 1_000_000_000)
@@ -667,6 +671,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         let started = ProcessInfo.processInfo.systemUptime
         locked {
             watch = XboxFirstFrameWatch()
+            lastAudioOnly = false
             connectedAt = started
         }
         watchTask = Task.detached { [weak self] in
@@ -699,7 +704,12 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             guard let self else { return }
             let stats = report.statistics.values.filter { XboxStreamStats.types.contains($0.type) }
                 .map { XboxStat(type: $0.type, id: $0.id, members: $0.values) }
-            let (seen, codec) = self.locked { (self.watch?.frameSeen ?? true, self.negotiatedCodec) }
+            let audioOnly = XboxStreamStats.audioOnly(stats)
+            let (seen, codec) = self.locked { () -> (Bool, String?) in
+                let seen = self.watch?.frameSeen ?? true
+                if !seen { self.lastAudioOnly = audioOnly }
+                return (seen, self.negotiatedCodec)
+            }
             self.log(XboxStreamStats.describe(sinceConnectedMs: sinceMs, frameSeen: seen, keyframes: keyframes, stats: stats, picture: picture,
                                               negotiatedCodec: codec, decoder: Self.decoders.note))
         }

@@ -94,8 +94,9 @@ public enum XboxStopKind: Equatable, Sendable {
     /// `noPicture`: son bağlantılarda Xbox tek kare göndermedi (Windows XboxStopKind.NoPicture, Android NO_PICTURE).
     /// `serviceNotReady`: Xbox uzaktan oynatma hizmetini başlatamadı ("Timed out waiting for Cloud Streaming Service to be
     /// ready", 0x8007139F); `startFailed`: Xbox bilinmeyen bir hata koduyla yayını reddetti (#871); `dropped`: oynanan yayın
-    /// koptu ve sessiz yeniden bağlanma sınırı doldu (`XboxSessionMachine.dropLimitReached`, #1252).
-    case busy, consoleUnavailable, noPicture, serviceNotReady, startFailed, dropped, other
+    /// koptu ve sessiz yeniden bağlanma sınırı doldu (`XboxSessionMachine.dropLimitReached`, #1252). `stuckPicture`: Xbox'tan
+    /// görüntü gelmedi ama ses geldi; Xbox'ın görüntü yayını takılı (#1432, #1416; Windows StuckPicture, Android STUCK_PICTURE).
+    case busy, consoleUnavailable, noPicture, stuckPicture, serviceNotReady, startFailed, dropped, other
 }
 
 /// Xbox yayını durunca günlük satırı ve kullanıcıya gösterilen metnin türü.
@@ -106,7 +107,7 @@ public enum XboxStop {
     /// Ham nedene bakılır: ilk kare gelmeyince de hata türü `consoleUnavailable` olur ama o durumda "Xbox'a ulaşılamadı"
     /// yanlış olur (Android'deki `stopKind` ile aynı).
     public static func classify(_ reason: String?, kind: XboxErrorKind? = nil) -> XboxStopKind {
-        if kind == .noFirstFrame { return .noPicture }
+        if kind == .noFirstFrame { return isAudioOnly(reason) ? .stuckPicture : .noPicture }
         let text = reason ?? ""
         func has(_ word: String) -> Bool { text.range(of: word, options: .caseInsensitive) != nil }
         if kind == .busy || has("InUse") || has("Busy") || has("AlreadyStreaming") { return .busy }
@@ -123,6 +124,16 @@ public enum XboxStop {
     /// Bu neden yeniden denenmez: Xbox kendi hizmetini başlatamıyor, yeniden denemek yalnız Xbox'ta "uzaktan oynatma
     /// başlatıldı / durduruldu" bildirimini tekrarlar; Xbox'ı kullanıcının yeniden başlatması gerekir.
     public static func isPermanent(_ reason: String?) -> Bool { classify(reason) == .serviceNotReady }
+
+    /// İlk kare sınırı nedenine eklenen not: son tanıda ses geliyordu, görüntü 0 bayttı (`XboxStreamStats.audioOnly`).
+    public static let audioOnlyNote = "ses geliyor, görüntü 0 bayt"
+
+    /// Bağlantı Xbox'ın yalnız ses gönderdiği bir bağlantıydı: yeniden denemek işe yaramaz, Xbox tam kapatılıp açılmalı.
+    public static func isAudioOnly(_ reason: String?) -> Bool { reason?.contains(audioOnlyNote) ?? false }
+
+    /// Ses gelip görüntü gelmeyen bağlantıdan sonra günlüğe yazılan açıklama (Windows ve Android'de aynı metin).
+    public static let audioOnlyLine = "Xbox ses gönderiyor ama görüntü kodlamıyor (görüntü paketleri boş): Xbox'ın görüntü yayını takılı kalmış; "
+        + "kodek, çözünürlük ya da ağ değil. Xbox güç düğmesine 10 sn basılı tutularak tam kapatılıp açılmalı; yeniden denenmiyor"
 
     /// Xbox hizmetinin hata nesnesindeki (errorDetails ya da HTTP gövdesi) kod. `Agent : -2147019873 : …` ve 0x… biçimi
     /// HRESULT olarak (0x8007139F), yoksa `"code"` alanı olduğu gibi; bulunamazsa nil.
@@ -214,6 +225,13 @@ public struct XboxFirstFrameWatch {
     public static let tickMs = 500
     /// Kontrol kanalı iletisi (Control.ts `requestKeyframeRequest`).
     public static let keyframeRequest = "{\"message\":\"videoKeyframeRequested\",\"ifrRequested\":true}"
+
+    /// İlk kare sınırı dolunca bağlantıyı bitiren neden. `audioOnly`: son tanıda ses geliyordu, görüntü 0 bayttı
+    /// (`XboxStreamStats.audioOnly`); nedene `XboxStop.audioOnlyNote` eklenir, ekranda "Xbox'u tam kapatıp açın" çıkar ve
+    /// yeniden denenmez (#1432, #1416).
+    public static func noPictureReason(audioOnly: Bool) -> String {
+        "Xbox'tan \(firstFrameLimitMs / 1000) sn içinde görüntü gelmedi" + (audioOnly ? " (\(XboxStop.audioOnlyNote))" : "")
+    }
 
     private var lastKeyframe: Int?
     private var nextStats = XboxFirstFrameWatch.statsDelayMs
@@ -389,6 +407,20 @@ public enum XboxStreamStats {
             line += "aday seçilmedi; "
         }
         return line + picture
+    }
+
+    /// Xbox ses gönderiyor ama görüntü göndermiyor (#1432, #1416): ses verisi var (bayt > 0), görüntü parçası yok ya da
+    /// yalnız boş (dolgu) paketleri geliyor (bayt 0). Aynı Xbox'ta aynı SDP yanıtıyla birkaç dakika önce görüntü gelen
+    /// oturumlar vardı: kodek ya da çözünürlük değil, Xbox'ın görüntü yayını takılı kalmış.
+    public static func audioOnly(_ stats: [XboxStat]) -> Bool {
+        func bytes(_ kind: String) -> Double? {
+            guard let entry = stats.first(where: { $0.type == "inbound-rtp" && (text($0, "kind") ?? text($0, "mediaType")) == kind }) else { return nil }
+            guard let number = entry.members["bytesReceived"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return -1 }
+            return number.doubleValue
+        }
+        guard let audio = bytes("audio"), audio > 0 else { return false }
+        guard let video = bytes("video") else { return true }
+        return video == 0
     }
 
     private static func selectedPair(_ stats: [XboxStat]) -> XboxStat? {

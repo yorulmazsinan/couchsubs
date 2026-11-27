@@ -172,6 +172,8 @@ public sealed class XboxRetryPlan
         if (streamedMs >= HealthyStreamMs) Failures = 0;
         Failures++;
         if (noFirstFrame) noPicture++;
+        // Xbox ses gönderip görüntü göndermediyse (#1432) yeniden denemek aynı sonucu verir; her deneme Xbox'ta bildirim çıkarır.
+        if (noFirstFrame && XboxStop.IsAudioOnly(reason)) noPicture = Math.Max(noPicture, MaxNoPictureAttempts);
         var refused = permanent || XboxStop.IsPermanent(reason);
         // Görüntü gelmiş yayın koptuktan hemen sonra Xbox eski oturumu bırakmadan yenisini reddedebiliyor ("bir kez
         // kopunca Xbox yeniden başlatılmadan bağlanmıyor"): bu ret bir kez, eski oturum kapansın diye uzun beklenip denenir.
@@ -202,7 +204,8 @@ public sealed class XboxRetryPlan
 /// ready", 0x8007139F); <c>StartFailed</c>: Xbox bilinmeyen bir hata koduyla yayını reddetti (#871).
 /// </remarks>
 /// <c>Dropped</c>: oynanan yayın koptu ve sessiz yeniden bağlanma sınırı doldu (<see cref="XboxRetryPlan.DropLimitReached"/>, #1252).
-public enum XboxStopKind { Busy, ConsoleUnavailable, NoPicture, ServiceNotReady, StartFailed, Dropped, Other }
+/// <c>StuckPicture</c>: Xbox'tan görüntü gelmedi ama ses geldi; Xbox'ın görüntü yayını takılı (#1432, #1416).
+public enum XboxStopKind { Busy, ConsoleUnavailable, NoPicture, StuckPicture, ServiceNotReady, StartFailed, Dropped, Other }
 
 /// <summary>Xbox yayını durunca günlük satırı ve kullanıcıya gösterilen metin. Android'deki XboxSessionMachine.classifyFailure ile aynı kurallar.</summary>
 public static partial class XboxStop
@@ -213,7 +216,7 @@ public static partial class XboxStop
     /// <param name="noFirstFrame">Son bağlantı Xbox'tan tek kare gelmeden bitti.</param>
     public static XboxStopKind Classify(string? reason, bool noFirstFrame = false)
     {
-        if (noFirstFrame) return XboxStopKind.NoPicture;
+        if (noFirstFrame) return IsAudioOnly(reason) ? XboxStopKind.StuckPicture : XboxStopKind.NoPicture;
         var text = reason ?? "";
         bool Has(string word) => text.Contains(word, StringComparison.OrdinalIgnoreCase);
         if (Has("InUse") || Has("Busy") || Has("AlreadyStreaming")) return XboxStopKind.Busy;
@@ -235,6 +238,16 @@ public static partial class XboxStop
     /// başlatıldı / durduruldu" bildirimini tekrarlar; Xbox'ı kullanıcının yeniden başlatması gerekir.
     /// </summary>
     public static bool IsPermanent(string? reason) => Classify(reason) == XboxStopKind.ServiceNotReady;
+
+    /// <summary>İlk kare sınırı nedenine eklenen not: son tanıda ses geliyordu, görüntü 0 bayttı (bkz. <see cref="XboxStreamStats.AudioOnly"/>).</summary>
+    public const string AudioOnlyNote = "ses geliyor, görüntü 0 bayt";
+
+    /// <summary>Bağlantı Xbox'ın yalnız ses gönderdiği bir bağlantıydı: yeniden denemek işe yaramaz, Xbox tam kapatılıp açılmalı.</summary>
+    public static bool IsAudioOnly(string? reason) => reason?.Contains(AudioOnlyNote, StringComparison.Ordinal) == true;
+
+    /// <summary>Ses gelip görüntü gelmeyen bağlantıdan sonra günlüğe yazılan açıklama (Mac/iPhone ve Android'de aynı metin).</summary>
+    public const string AudioOnlyLine = "Xbox ses gönderiyor ama görüntü kodlamıyor (görüntü paketleri boş): Xbox'ın görüntü yayını takılı kalmış; " +
+        "kodek, çözünürlük ya da ağ değil. Xbox güç düğmesine 10 sn basılı tutularak tam kapatılıp açılmalı; yeniden denenmiyor";
 
     /// <summary>
     /// Xbox hizmetinin hata nesnesindeki (errorDetails ya da HTTP gövdesi) kod. <c>Agent : -2147019873 : …</c> ve 0x… biçimi
@@ -294,6 +307,7 @@ public static partial class XboxStop
         return kind switch
         {
             XboxStopKind.NoPicture => text[NoPictureStopped],
+            XboxStopKind.StuckPicture => text[StuckPictureStopped],
             XboxStopKind.Dropped => text[DroppedStopped],
             XboxStopKind.Busy => text["Your Xbox is streaming to another device (the Xbox app, a phone or a PC). Close that session, then start translation again."],
             XboxStopKind.ConsoleUnavailable => text["Can't reach your Xbox. Make sure it's on and remote play is enabled in Settings › Devices & connections › Remote features, then start translation again."],
@@ -311,6 +325,9 @@ public static partial class XboxStop
 
     /// <summary>Xbox'tan görüntü hiç gelmedi, denemeler bitti (Mac/iPhone XboxText.stopped, Android xbox_stopped_no_picture).</summary>
     public const string NoPictureStopped = "No picture came from the Xbox, so translation stopped. On the Xbox, check that remote play is on in Settings › Devices & connections › Remote features, connect the Xbox with a network cable if you can (or restart it), then start translation again.";
+
+    /// <summary>Xbox ses gönderdi, görüntü göndermedi (Mac/iPhone XboxText.stopped, Android xbox_stopped_stuck_picture).</summary>
+    public const string StuckPictureStopped = "The Xbox sent sound but no picture: its picture stream is stuck. Turn the Xbox fully off by holding the power button for 10 seconds (waking it from sleep isn't enough), turn it back on, then start translation again.";
 
     /// <summary>Oynanan yayın koptu, sessiz yeniden bağlanma sınırı doldu (Mac/iPhone XboxText.stopped, Android xbox_stopped_dropped).</summary>
     public const string DroppedStopped = "The Xbox connection dropped. Press Reconnect; if it keeps dropping, connect the Xbox with a network cable or restart it.";
