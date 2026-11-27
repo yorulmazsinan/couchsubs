@@ -6,11 +6,14 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6 menü ve görev kutuları** (#1415): Menü, görev kartı, yardım ve tuş ipucu yazılarının Türkçesi yine yazının tam üstüne, kutunun kendi renginde yazılıyor; simgeler ve kişi resimleri açık kalıyor. Görev kutusu bir okuma kaçınca kaybolmuyor, yer değiştirmiyor, görev satırı altyazıya dönmüyor. Eski yanına yazma düzeni isteyenler için Ayarlar'da "Menülerde Türkçeyi yanına yaz" (varsayılan kapalı). TV uygulaması 0.9.124.
-- **Telefon, görev ve ekran yazıları** (#1415): Aynı yere çizilen kutular her okumada birbirini gizlemiyor; telefon açılınca görev kutusu silinmiyor.
-- **GTA 6 telefon paneli** (#1419): Telefonun yanındaki çeviri altyazı boyunda okunuyor; panel genişledi, ekranın kenarına sıkışmıyor.
-- **Tabela, plaka ve telefon yazısı sızması** (#1411, #1414): Bir kez tabela/plaka/telefon yazısı sayılan satır biraz farklı okununca altyazı olarak çevrilmiyor; plaka numaraları ayıklanıyor.
-- **PSN'den çıkış bilgisayarda** (#1417): Windows ve Mac'te Ayarlar › Konsol › PlayStation 5'te "PSN'den çıkış yap ve hesabı sıfırla"; başka PSN hesabıyla girmek için kurulumu baştan almak gerekmiyor.
+- **Ekran yazısı kilidi** (#1423): Menü, harita kartı, görev kutusu ve ekran yazısı çevirisi ekran değişmedikçe sabit kalıyor; kutular titremiyor, yer değiştirmiyor, kaybolup gelmiyor. Aynı menüye dönünce çeviri bekletmeden geliyor. TV uygulaması 0.9.126.
+- **Tabela ve kitap kapağı** (#1428): Tabela, kitap kapağı ya da telefon sohbetinden arta kalan tek satır ayrıca çevrilmiyor.
+- **TV kurulumunda klavye** (#1422): iPhone ve Mac'te IP ve port kutusunun her yerine dokununca klavye açılıyor.
+- **Mac'te tekrarlayan güncelleme** (#1424): Güncelleme penceresi yeniden çıkıyorsa ana ekranda nedeni (başka kopya, disk görüntüsünden çalışma) ve çözümü gösteriliyor.
+- **LG** (#1427): Ekranını 1920 ya da daha geniş bildiren LG'lerde sayfa gereksiz yere yeniden ölçeklenmiyor; TV günlüğüne webOS sürümü, model ve HDMI görüntü durumu yazılıyor.
+- **PS Remote Play** (#1426): Remote Play penceresi kapanınca günlükte nedeni (uygulama kendisi mi kapandı, çöktü mü) görünüyor.
+
+**beta.107'de gelenler:** GTA 6 menü ve görev kutularında Türkçe yazının üstünde, telefon/görev/ekran yazılarının birbirinin yerine geçmemesi, tabela/plaka sızması, bilgisayarda PSN çıkışı, büyük telefon paneli.
 
 **beta.106'da gelenler:** Mac donması, GTA 6 haritası, Wi-Fi kopması, LG eşleşme kodu, eski Full HD LG, "Zeminsiz"de gri kutu, iki TV'li evlerde "kur" uyarısı, GTA 6 telefonu sol elde.
 
