@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.123';
+  var APP_VERSION = '0.9.124';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -2510,6 +2510,10 @@
       el.couchsubsSeen = now;
       return;
     }
+    // Alan yerinde güncellenince katman sırası korunur (resolveLayers): yalnız yeni gelen alan eskisinin önüne geçer.
+    // Önceden her güncelleme sırayı yeniliyordu; aynı yeri çizen iki alan (görev kartı, ekran yazısı, hazır alan) her
+    // okumada birbirinin yerine geçip gidip geliyordu (beta.106).
+    var stamp = el && el.couchsubsStamp ? el.couchsubsStamp : 0;
     // Bloklar her olayda baştan dizilir; tek kutudan bloklara (ya da tersine) geçen alanın eski kutusu kalkar.
     if (el && (el.className !== kind || (kind === 'region-blocks' && !phoneBlocks))) {
       hideRegion(id);
@@ -2524,8 +2528,8 @@
     $('regions').className = '';
     el.couchsubsRaw = raw;
     el.couchsubsSeen = now;
-    // En son gelen alan, kendisiyle aynı yeri çizen eski alanın önüne geçer (resolveLayers).
-    el.couchsubsStamp = ++regionStamp;
+    // En son gelen alan, kendisiyle aynı yeri çizen eski alanın önüne geçer (resolveLayers); güncellenen alan yerini korur.
+    el.couchsubsStamp = stamp || ++regionStamp;
     el.couchsubsBox = box;
     if (kind === 'region-blocks') {
       el.couchsubsPayload = payload;

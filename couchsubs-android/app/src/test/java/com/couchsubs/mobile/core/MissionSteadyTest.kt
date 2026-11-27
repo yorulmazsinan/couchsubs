@@ -28,9 +28,13 @@ class MissionSteadyTest {
 
     private fun box(array: JSONArray) = TextBox(array.getDouble(0), array.getDouble(1), array.getDouble(2), array.getDouble(3))
 
-    /** "kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı; "-" boş okuma. */
+    /**
+     * "kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı; "-" boş okuma; "a+b" iki okumanın satırları birlikte
+     * (aynı karede görev satırı ve açık telefon).
+     */
     private fun reading(id: String): Reading {
         if (id == "-") return Reading.Empty
+        if (id.contains('+')) return Reading(id.split('+').flatMap { reading(it).lines })
         val parts = id.split('@')
         val fixture = JSONObject(File(directory, "ocr/${parts[0]}.json").readText())
         val region = fixture.getJSONArray("region")
@@ -75,6 +79,13 @@ class MissionSteadyTest {
      */
     private fun run(ids: List<String>): Run {
         val frames = ids.map(::reading)
+        // Telefonlu okumada telefon karede (kayıttaki yeri; Android'de telefonu kare okuyucusu bulup hatta verir).
+        val handsets = ids.map { id ->
+            id.split('+').firstOrNull { it.startsWith("gta6-telefon") }?.let { phone ->
+                val p = JSONObject(File(directory, "ocr/${phone.substringBefore('@')}.json").readText()).getJSONArray("phone")
+                ScreenPhoneCard.Handset(GamePhoneGeometry.Pose(p.getDouble(0), p.getDouble(1), p.getDouble(2), p.getDouble(3)), p.getDouble(4))
+            }
+        }
         val executor = Executors.newSingleThreadExecutor { Thread(it, "test translate").apply { isDaemon = true } }
         try {
             var now = 0L
@@ -103,7 +114,7 @@ class MissionSteadyTest {
             for (i in ids.indices) {
                 index = i
                 val shade = shades.getOrPut(ids[i]) { (40 + 20 * shades.size).toByte() }
-                pipeline.process(frames[i], place)
+                pipeline.process(frames[i], place, phone = handsets[i])
                 executor.submit {}.get()
                 if (region != null && before == null) before = sender.sent.size
                 if (i % 2 == 0) {
@@ -155,6 +166,29 @@ class MissionSteadyTest {
 
     @Test
     fun planeObjectiveBoxStaysSteadyAcrossReads() = assertSteady(plane, "Follow the plane", "Okay.")
+
+    /**
+     * Beta.106 (3 kullanıcı): telefon, görev ve hedef çevirileri birbirinin yerine geçiyordu. Görev kutusu kurulduktan sonra
+     * telefon açılır (gerçek telefon karesi gta6-telefon-sohbet-1) ve görev satırı görünmeye devam eder; sonra telefon kapanır.
+     * Görev kutusu telefon yüzünden kalkmaz, yer değiştirmez; telefonun mesajları altyazıya da görev kutusuna da girmez
+     * (Mac/iPhone ve Windows aynı).
+     */
+    @Test
+    fun phoneAndObjectiveStayIndependent() {
+        val phone = "gta6-854-gorev-2+gta6-telefon-sohbet-1"
+        val run = run(rep("gta6-854-gorev-2", 12) + rep("gta6-854-gorev-3", 16) + rep(phone, 24) + rep("gta6-854-gorev-3", 12) +
+            rep(phone, 8) + rep("gta6-854-gorev-3", 8) + rep("-", 28))
+        assertEquals("${run.regions}", 2, run.regions.size)
+        assertNull(run.regions[1])
+        assertEquals(2, run.sender.objectives.size)
+        val messages = listOf("amigo", "ANYTHING", "bring it")
+        assertFalse("${run.sender.sent}", run.sender.sent.any { text -> messages.any { text.contains(it) } })
+        assertFalse(run.sender.sent.drop(run.subtitlesBeforeMission ?: 0).any { it.contains("Speedboat") })
+        val drawn = run.overlay.sent.filter { it.first.isNotEmpty() }
+        assertEquals("${run.overlay.sent}", 1, drawn.size)
+        assertFalse(drawn.any { d -> messages.any { d.first.contains(it) } })
+        assertEquals(1, run.overlay.sent.count { it.first.isEmpty() })
+    }
 
     /** Geçmişi olmayan tek başına görev (gta6-20-gorev) altyazı olarak çevrilmeye devam eder. */
     @Test

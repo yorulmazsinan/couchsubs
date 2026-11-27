@@ -4,6 +4,7 @@ import XCTest
 
 #if canImport(CoreGraphics)
 import CoreGraphics
+import ImageIO
 
 /// Sinan Bey (GTA 6, beta.105): görev kutusu ekranda kararsızdı: yanıp sönüyor, biçim değiştiriyor, yer değiştiriyor,
 /// bazen altyazı olarak çevriliyordu. Gerçek kare okumalarıyla (testdata/frames/ocr: gta6-854-gorev-1/2/3,
@@ -27,9 +28,13 @@ final class MissionSteadyTests: XCTestCase {
     static func box(_ v: [Double]) -> TextBox { TextBox(left: v[0], top: v[1], right: v[2], bottom: v[3]) }
     static let subtitleArea = CropRegion(top: 0.62, bottom: 0.97, left: 0.14, right: 0.86)
 
-    /// "kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı (bu okumada görev satırı kaçtı); "-" boş okuma.
+    /// "kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı (bu okumada görev satırı kaçtı); "-" boş okuma;
+    /// "a+b" iki okumanın satırları birlikte (aynı karede görev satırı ve açık telefon).
     static func reading(_ id: String) throws -> Reading {
         if id == "-" { return .empty }
+        if id.contains("+") {
+            return Reading(lines: try id.split(separator: "+").flatMap { try reading(String($0)).lines })
+        }
         let parts = id.split(separator: "@")
         let f = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: directory.appendingPathComponent("ocr/\(parts[0]).json")))
         XCTAssertEqual(f.region, [subtitleArea.left, subtitleArea.top, subtitleArea.right, subtitleArea.bottom])
@@ -73,17 +78,28 @@ final class MissionSteadyTests: XCTestCase {
         var requested: [String] = []
         var watcherRequested: [String] = []
         var overlay = Overlay()
+        /// Altyazı hattının günlüğü.
+        var log: [String] = []
     }
 
     /// Altyazı hattı 250 ms'de bir okur; görev kutusunun alanı (varsa) 500 ms'de bir okunur ve alanın içindeki satırlar
     /// (aynı karenin okuması) alana oranla verilir.
     func run(_ ids: [String]) async throws -> Run {
         let frames = try ids.map { try Self.reading($0) }
+        // Telefonlu okumada kare telefonun gerçek karesidir: altyazı hattı telefonu piksellerden bulur (`ScreenPhoneCard.search`).
+        var photos: [String: CGImage] = [:]
+        for id in Set(ids) {
+            guard let phone = id.split(separator: "+").map(String.init).first(where: { $0.hasPrefix("gta6-telefon") }) else { continue }
+            let url = Self.directory.appendingPathComponent(phone.split(separator: "@")[0] + ".jpg")
+            let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
+            photos[id] = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        }
         var time = 0, index = 0
         var result = Run()
         let translator = Translator()
         let pipeline = SubtitlePipeline(reader: Reader { frames[index] }, translator: translator, server: result.sender, clock: { time })
         pipeline.packWait = 0; pipeline.cleanWait = 0
+        pipeline.onLog = { result.log.append($0) }
         var region: CropRegion?
         pipeline.onMissionChanged = { region = $0; result.regions.append($0) }
         let area = Self.subtitleArea
@@ -115,7 +131,7 @@ final class MissionSteadyTests: XCTestCase {
             index = i
             let shade = shades[id] ?? UInt8(40 + 20 * shades.count)
             shades[id] = shade
-            let frame = image(shade)
+            let frame = photos[id] ?? image(shade)
             await pipeline.process(frame, region: area)
             await pipeline.waitForTranslations()
             if region != nil, result.subtitlesBeforeMission == nil { result.subtitlesBeforeMission = result.sender.subtitles.count }
@@ -178,6 +194,30 @@ final class MissionSteadyTests: XCTestCase {
 
     func testPlaneObjectiveBoxStaysSteadyAcrossReads() async throws {
         try await assertSteady(Self.plane, objective: "Follow the plane", dialogue: "Okay.")
+    }
+
+    /// Beta.106 (3 kullanıcı): telefon, görev ve hedef çevirileri birbirinin yerine geçiyordu. Görev kutusu kurulduktan sonra
+    /// telefon açılır (gerçek telefon karesi `gta6-telefon-sohbet-1`, telefonu altyazı hattı piksellerden bulur) ve görev satırı
+    /// telefonun yanında görünmeye devam eder; sonra telefon kapanır. Görev kutusu telefon yüzünden kalkmaz, yer değiştirmez;
+    /// telefonun mesajları altyazıya da görev kutusuna da girmez.
+    func testPhoneAndObjectiveStayIndependent() async throws {
+        let g3 = "gta6-854-gorev-3", phone = "gta6-854-gorev-2+gta6-telefon-sohbet-1"
+        let ids = Self.rep("gta6-854-gorev-2", 12) + Self.rep(g3, 16) + Self.rep(phone, 24) + Self.rep(g3, 12)
+            + Self.rep(phone, 8) + Self.rep(g3, 8) + Self.rep("-", 28)
+        let run = try await run(ids)
+        // Telefon gerçek kareden bulundu (telefonun mesajları bu yüzden altyazı sayılmadı).
+        XCTAssertTrue(run.log.contains { $0.hasPrefix("telefon bulundu") }, "\(run.log)")
+        XCTAssertEqual(run.regions.count, 2, "görev bölgesi: \(run.regions)")
+        XCTAssertNil(run.regions.last ?? CropRegion())
+        XCTAssertEqual(run.sender.objectives.count, 2, "\(run.sender.objectives)")
+        let messages = ["amigo", "ANYTHING", "bring it"]
+        XCTAssertFalse(run.sender.subtitles.contains { s in messages.contains { s.contains($0) } }, "\(run.sender.subtitles)")
+        XCTAssertFalse(run.sender.subtitles.dropFirst(run.subtitlesBeforeMission ?? 0).contains { $0.contains("Speedboat") },
+                       "\(run.sender.subtitles)")
+        let drawn = run.overlay.sent.filter { !$0.text.isEmpty }
+        XCTAssertEqual(drawn.count, 1, "görev kutusu: \(run.overlay.sent.map(\.text))")
+        XCTAssertFalse(drawn.contains { d in messages.contains { d.text.contains($0) } })
+        XCTAssertEqual(run.overlay.sent.filter { $0.text.isEmpty }.count, 1)
     }
 
     /// Görev tek başına, geçmişi yokken (gta6-20-gorev) altyazı olarak çevrilmeye devam eder: yalnız görev sayılmış satır

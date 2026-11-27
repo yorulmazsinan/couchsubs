@@ -343,7 +343,8 @@
     var auto = setApart && (id.indexOf('auto-') === 0 || (Array.isArray(blocks) && blocks.some(function (b) {
       return b && b.style && typeof b.style === 'object';
     })));
-    node.stamp = ++regionStamp;
+    // Alan yerinde güncellenince katman sırası korunur; yalnız yeni gelen alan eskisinin önüne geçer (TV ile aynı).
+    if (!node.stamp) node.stamp = ++regionStamp;
     if ((id === 'game-phone' || auto) && Array.isArray(blocks) && blocks.length) {
       node.textContent = '';
       node.style.cssText = '';

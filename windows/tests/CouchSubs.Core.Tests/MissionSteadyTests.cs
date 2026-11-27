@@ -24,10 +24,14 @@ public class MissionSteadyTests
         return new TextBox(b[0], b[1], b[2], b[3]);
     }
 
-    /// <summary>"kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı; "-" boş okuma.</summary>
+    /// <summary>
+    /// "kare" kaydı olduğu gibi; "kare@0" karenin yalnız 0. satırı; "-" boş okuma; "a+b" iki okumanın satırları birlikte
+    /// (aynı karede görev satırı ve açık telefon).
+    /// </summary>
     private static Reading ReadingOf(string id)
     {
         if (id == "-") return Reading.Empty;
+        if (id.Contains('+')) return new Reading(id.Split('+').SelectMany(part => ReadingOf(part).Lines).ToList());
         var parts = id.Split('@');
         using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(Directory(), "ocr", parts[0] + ".json")));
         var region = fixture.RootElement.GetProperty("region").EnumerateArray().Select(v => v.GetDouble()).ToArray();
@@ -62,7 +66,7 @@ public class MissionSteadyTests
     }
 
     private sealed record Run(List<CropRegion?> Regions, int? SubtitlesBeforeMission, FakeSender Sender, List<string> Requested,
-                              List<string> WatcherRequested, Overlay Overlay);
+                              List<string> WatcherRequested, Overlay Overlay, List<string> Log);
 
     private static Frame Shade(byte shade)
     {
@@ -78,6 +82,12 @@ public class MissionSteadyTests
     private static async Task<Run> RunAsync(IReadOnlyList<string> ids)
     {
         var frames = ids.Select(ReadingOf).ToList();
+        // Telefonlu okumada kare telefonun gerçek karesidir: altyazı hattı telefonu piksellerden bulur.
+        var photos = new Dictionary<string, Frame>();
+        foreach (var id in ids.Distinct())
+            if (id.Split('+').FirstOrDefault(part => part.StartsWith("gta6-telefon")) is { } phone)
+                photos[id] = Jpeg.Load(Path.Combine(Directory(), phone.Split('@')[0] + ".jpg"));
+        var log = new List<string>();
         long clock = 0;
         var index = 0;
         var sender = new FakeSender();
@@ -87,6 +97,8 @@ public class MissionSteadyTests
         CropRegion? region = null;
         var regions = new List<CropRegion?>();
         pipeline.MissionChanged += next => { region = next; regions.Add(next); };
+        pipeline.Log = line => { lock (log) log.Add(line); };
+        pipeline.PhoneLooked += found => { if (found) lock (log) log.Add("telefon bulundu"); };
         var place = new TextBox(SubtitleArea.Left, SubtitleArea.Top, SubtitleArea.Right, SubtitleArea.Bottom);
         var watchTranslator = new FakeTranslator();
         var overlay = new Overlay();
@@ -109,7 +121,7 @@ public class MissionSteadyTests
         {
             index = i;
             if (!shades.TryGetValue(ids[i], out var shade)) shades[ids[i]] = shade = (byte)(40 + 20 * shades.Count);
-            var frame = Shade(shade);
+            var frame = photos.TryGetValue(ids[i], out var photo) ? photo : Shade(shade);
             await pipeline.ProcessAsync(frame, SubtitleArea);
             await pipeline.WaitForTranslationsAsync();
             if (region is not null && before is null) before = sender.Sent.Count;
@@ -117,7 +129,7 @@ public class MissionSteadyTests
                 await watcher.PassAsync(frame, region is { } r ? [new WatchedArea(MissionLine.AreaId, "Mission", r) { Auto = true }] : []);
             clock += 250;
         }
-        return new Run(regions, before, sender, translator.Requested, watchTranslator.Requested, overlay);
+        return new Run(regions, before, sender, translator.Requested, watchTranslator.Requested, overlay, log);
     }
 
     private static IEnumerable<string> Rep(string id, int count) => Enumerable.Repeat(id, count);
@@ -158,6 +170,31 @@ public class MissionSteadyTests
         Assert.Single(drawn);
         Assert.Single(run.WatcherRequested);
         Assert.Equal("", run.Overlay.Sent[^1].Text);
+        Assert.Single(run.Overlay.Sent, item => item.Text.Length == 0);
+    }
+
+    /// <summary>
+    /// Beta.106 (3 kullanıcı): telefon, görev ve hedef çevirileri birbirinin yerine geçiyordu. Görev kutusu kurulduktan sonra
+    /// telefon açılır (gerçek telefon karesi gta6-telefon-sohbet-1, telefonu altyazı hattı piksellerden bulur) ve görev satırı
+    /// görünmeye devam eder; sonra telefon kapanır. Görev kutusu telefon yüzünden kalkmaz, yer değiştirmez; telefonun mesajları
+    /// altyazıya da görev kutusuna da girmez (Mac/iPhone ve Android aynı).
+    /// </summary>
+    [Fact]
+    public async Task PhoneAndObjectiveStayIndependent()
+    {
+        const string phone = "gta6-854-gorev-2+gta6-telefon-sohbet-1";
+        var run = await RunAsync([.. Rep("gta6-854-gorev-2", 12), .. Rep("gta6-854-gorev-3", 16), .. Rep(phone, 24),
+                                  .. Rep("gta6-854-gorev-3", 12), .. Rep(phone, 8), .. Rep("gta6-854-gorev-3", 8), .. Rep("-", 28)]);
+        Assert.Contains(run.Log, line => line.StartsWith("telefon bulundu"));
+        Assert.Equal(2, run.Regions.Count);
+        Assert.Null(run.Regions[1]);
+        Assert.Equal(2, run.Sender.Objectives.Count);
+        string[] messages = ["amigo", "ANYTHING", "bring it"];
+        Assert.DoesNotContain(run.Sender.Sent, text => messages.Any(text.Contains));
+        Assert.DoesNotContain(run.Sender.Sent.Skip(run.SubtitlesBeforeMission ?? 0), text => text.Contains("Speedboat"));
+        var drawn = run.Overlay.Sent.Where(item => item.Text.Length > 0).ToList();
+        Assert.Single(drawn);
+        Assert.DoesNotContain(drawn, item => messages.Any(item.Text.Contains));
         Assert.Single(run.Overlay.Sent, item => item.Text.Length == 0);
     }
 

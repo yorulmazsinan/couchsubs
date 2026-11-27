@@ -1,0 +1,1 @@
+0.9.124: Aynı yeri çizen ekran yazıları (görev kartı, ekran yazısı, hazır alan) her okumada birbirinin yerine geçip gidip gelmiyor.

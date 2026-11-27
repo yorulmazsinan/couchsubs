@@ -65,6 +65,14 @@ function render() {
       showRegion({ id: 'auto-1', text: 'x', box: older.box, blocks: [older, piece, far] });
       showRegion({ id: 'auto-2', text: 'y', box: list.box, blocks: [list] });
       result.afterNewRegion = blocks('auto-1');
+      // Eski alan yerinde güncellenir (aynı yazı yeniden okundu, kutusu bir piksel oynadı): katman sırası değişmez, yeni alan
+      // üstte kalır; iki alan her okumada birbirinin yerine geçmez (beta.106: telefon, görev ve ekran yazısı gidip geliyordu).
+      for (var k = 0; k < 3; k++) {
+        showRegion({ id: 'auto-1', text: 'x' + k, box: older.box, blocks: [older, piece, far] });
+        showRegion({ id: 'auto-2', text: 'y' + k, box: list.box, blocks: [list] });
+        showRegion({ id: 'auto-1', text: 'z' + k, box: older.box, blocks: [older, piece, far] });
+      }
+      result.afterUpdates = { auto1: blocks('auto-1'), auto2: blocks('auto-2') };
       // "Ekranı çevir" kartın yerini çizer: alttaki otomatik yazı gizlenir, başka yerdeki kalır.
       showScreen([card], 20000);
       result.withScreen = { auto1: blocks('auto-1'), auto2: blocks('auto-2') };
@@ -105,6 +113,9 @@ test('aynı yazıyı çizen katmanlardan yalnız biri görünür; kutu tam opak'
   const r = render();
   // Yeni alan eskisinin yerine geçer: satırın parçası ("Bulur") gizlenir, kart ve uzaktaki satır kalır.
   assert.deepEqual(r.afterNewRegion, ["Kenton'la tanıştın mı?:true", 'Bulur:false', 'Para Kazan:true']);
+  // Yerinde güncellenen eski alan yenisinin önüne geçmez (sıra sabit, gidip gelme yok).
+  assert.deepEqual(r.afterUpdates.auto1, ["Kenton'la tanıştın mı?:true", 'Bulur:false', 'Para Kazan:true']);
+  assert.deepEqual(r.afterUpdates.auto2, ["Donnie'nin Paketini Bul:true"]);
   // "Ekranı çevir" kartın yerini çizer: eski kart çevirisi gizlenir, uzaktaki satır ve yeni alan kalır.
   assert.deepEqual(r.withScreen.auto1, ["Kenton'la tanıştın mı?:false", 'Bulur:false', 'Para Kazan:true']);
   assert.deepEqual(r.withScreen.auto2, ["Donnie'nin Paketini Bul:true"]);

@@ -158,7 +158,7 @@ struct StreamWindowView: View {
                     PhoneTwinLayer(feed: model.phoneAnchorFeed)
                 } else if !model.overlayPhoneItems.isEmpty { GamePhoneBlocks(items: model.overlayPhoneItems) }
                 // Aynı yazıyı çizen iki kutudan yalnız biri: "Ekranı çevir" otomatik ekran yazısının üstüne geçer (#827).
-                let screenText = ScreenTranslation.layered(model.overlayRegions.flatMap { $0.items ?? [] } + model.overlayScreenItems)
+                let screenText = model.layeredItems
                 if !screenText.isEmpty { ScreenTextBlocks(items: screenText, avoiding: subtitleFrame) }
             }
         }

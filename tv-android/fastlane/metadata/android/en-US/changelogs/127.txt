@@ -1,0 +1,1 @@
+0.9.124: On-screen translations drawn at the same place (mission card, screen text, preset areas) no longer swap with each other on every read.

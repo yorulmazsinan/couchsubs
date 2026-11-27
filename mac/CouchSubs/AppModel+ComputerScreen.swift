@@ -11,6 +11,10 @@ struct OverlayRegion: Equatable, Identifiable {
     let box: TextBox?
     /// Kendiliğinden bulunan ekran yazısının blokları, özgün yazının yeri ve stiliyle (`TextLook`); diğerlerinde nil.
     var items: [ScreenTranslation.Item]? = nil
+    /// Alanın ilk geliş sırası: aynı yeri çizen iki alandan yenisi üstte (`layeredItems`). Alan yerinde güncellenince sıra
+    /// değişmez; önceden liste kutunun yerine göre sıralanıp katman sırası her okumada değişebiliyor, telefon, görev ve
+    /// ekran yazısı birbirinin yerine geçip gidip geliyordu (beta.106; TV resolveLayers ile aynı).
+    var order = 0
 
     /// Ekranın solundaki alan sola, sağındaki sağa, ortadaki ortaya.
     var side: HorizontalPlacement {
@@ -80,7 +84,9 @@ extension AppModel {
             var regions = overlayRegions.filter { $0.id != id }
             // Kenar bildirimi (`ScreenNotices`) bu pencerede altyazının yanında gösterilmez: kendi yerinde (yayın penceresi,
             // TV) çizilir ya da hiç (Windows'ta kendiliğinden bulunan alanlar gibi).
-            if !text.isEmpty, !ScreenNotices.isNotice(id: id) { regions.append(OverlayRegion(id: id, text: text, box: box)) }
+            if !text.isEmpty, !ScreenNotices.isNotice(id: id) {
+                regions.append(OverlayRegion(id: id, text: text, box: box, order: regionOrder(id)))
+            }
             overlayRegions = regions.sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
             return
         // Kendiliğinden bulunan ekran yazısı: bloklar özgün yazının stilinde çizilir (yayın penceresinde kendi yerinde).
@@ -88,7 +94,8 @@ extension AppModel {
             var regions = overlayRegions.filter { $0.id != id }
             let boxes = items.map(\.box)
             let box = boxes.dropFirst().reduce(boxes.first) { $0?.union($1) }
-            regions.append(OverlayRegion(id: id, text: items.map(\.translation).joined(separator: "\n"), box: box, items: items))
+            regions.append(OverlayRegion(id: id, text: items.map(\.translation).joined(separator: "\n"), box: box, items: items,
+                                         order: regionOrder(id)))
             overlayRegions = regions.sorted { ($0.box?.top ?? 0) < ($1.box?.top ?? 0) }
             return
         case .gamePhone(let items):
@@ -140,5 +147,22 @@ extension AppModel {
     /// Kısayol (varsayılan Num 7 / ⌃⇧7) ve menü çubuğundaki seçenek: tıklamaların geçmesini açar/kapatır.
     func toggleClickThrough() {
         settings.overlayClickThrough.toggle()
+    }
+}
+
+extension AppModel {
+    /// Alanın katman sırası: gösterilen alan sırasını korur, yeni alan en üste (`OverlayRegion.order`).
+    func regionOrder(_ id: String) -> Int {
+        overlayRegions.first { $0.id == id }?.order ?? ((overlayRegions.map(\.order).max() ?? 0) + 1)
+    }
+
+    /// Yayın penceresinde çizilecek ekran yazısı öğeleri, sabit katman sırasıyla: görev satırı otomatik ekran yazısının
+    /// üstünde, diğer alanlar ilk geliş sırasıyla, "Ekranı çevir" en üstte (TV resolveLayers ile aynı kural).
+    var layeredItems: [ScreenTranslation.Item] {
+        let ordered = overlayRegions.sorted { a, b in
+            func rank(_ r: OverlayRegion) -> Int { r.id == MissionLine.areaId ? Int.max : r.order }
+            return rank(a) < rank(b)
+        }
+        return ScreenTranslation.layered(ordered.flatMap { $0.items ?? [] } + overlayScreenItems)
     }
 }
