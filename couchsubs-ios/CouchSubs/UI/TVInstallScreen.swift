@@ -25,13 +25,15 @@ struct TVInstallScreen: View {
         } content: {
             if let brand {
                 if !working {
-                    SegmentedTabs(options: [TVBrand.samsung: "Samsung", .lg: "LG", .androidTV: "Android TV"], selection: Binding(
+                    SegmentedTabs(options: [TVBrand.samsung: "Samsung", .lg: "LG", .androidTV: "Android TV", .vestelLinux: "Vestel"], selection: Binding(
                         get: { brand }, set: { self.brand = $0 }))
                 }
                 switch brand {
                 case .samsung: SamsungInstallSection(update: update?.brand == .samsung ? update : nil, working: $working, onDone: finish)
                 case .androidTV: AndroidTVInstallSection(update: update?.brand == .androidTV ? update : nil, working: $working, onDone: finish)
                 case .lg: LGInstallSection(update: update?.brand == .lg ? update : nil, working: $working, onDone: finish)
+                // Vestel Linux TV (deneysel): istemci bu telefondan kurulur (Mac'teki tek tuşla kurulumun aynısı).
+                case .vestelLinux: VestelInstallSection(working: $working, onDone: finish)
                 }
             } else {
                 InstallSearching()

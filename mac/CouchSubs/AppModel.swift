@@ -270,8 +270,8 @@ final class LiveServices: AppServices {
 
     func pairTV(_ tv: LGTV, key: String?, server: String, accessKey: String) async throws -> TVPairing {
         switch tv.brand {
-        case .androidTV:
-            // Bilgisayar bu TV'yi denetlemez; TV uygulaması bilgisayarı kendisi bulur.
+        case .androidTV, .vestelLinux:
+            // Bilgisayar bu TV'yi denetlemez; TV uygulaması bilgisayarı kendisi bulur (Vestel'de istemci adresle başlatılır).
             return TVPairing(key: "", launched: true)
         case .samsung:
             SamsungAppKnowledge.installLog = { TVInstallLog.write($0) }
@@ -330,6 +330,8 @@ final class LiveServices: AppServices {
             let locator = AndroidTVLocator(tv: tv, onMoved: { moved in DispatchQueue.main.async { onMoved(moved) } },
                                            log: { TVInstallLog.write($0) })
             return AndroidTVKeeper(host: tv.host, server: server, appConnected: appConnected, locator: locator, onOpenResult: onOpenResult)
+        case .vestelLinux:
+            return IdleKeeper()
         case .samsung:
             SamsungAppKnowledge.installLog = { TVInstallLog.write($0) }
             let token = SamsungTokenHolder(token: key, onChange: onKey)
@@ -438,12 +440,14 @@ final class LiveServices: AppServices {
     // MARK: Samsung ve Android TV (gömülü yardımcıyla)
 
     func bundledApp(for brand: TVBrand) -> BundledTVApp? {
-        let ext = switch brand {
-        case .samsung: "wgt"
-        case .androidTV: "apk"
-        case .lg: "ipk"
+        let ext: String
+        switch brand {
+        case .samsung: ext = "wgt"
+        case .androidTV: ext = "apk"
+        // LG paketi kendi yolundan kurulur; Vestel Linux'ta bilgisayarın kurduğu bir paket yok (istemci elle kopyalanır).
+        case .lg, .vestelLinux: return nil
         }
-        guard brand != .lg, TVHelper.executable != nil,
+        guard TVHelper.executable != nil,
               let url = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: "tv-app")?.first,
               let version = BundledTVApp.version(ofFile: url.lastPathComponent) else { return nil }
         return BundledTVApp(url: url, version: version)
@@ -1506,7 +1510,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Kurulumda TV girişi (HDMI) adımı gösterilir mi (Android TV girişi kendi seçer; görüntü modu ayrı).
-    var asksTVInput: Bool { hasTV && settings.output.showsOnTV && tv?.brand != .androidTV }
+    var asksTVInput: Bool { hasTV && settings.output.showsOnTV && !(tv?.brand.connectsByItself ?? false) }
 
     // MARK: - Xbox (Beta)
 
@@ -1881,6 +1885,8 @@ final class AppModel: ObservableObject {
         case .lg: await refreshLGApp(tv)
         case .samsung: await refreshSamsungApp(tv)
         case .androidTV: await refreshAndroidApp(tv)
+        // Vestel Linux: kurulacak ya da açılacak bir şey yok; durum istemcinin bağlanmasından (tvClients) okunur.
+        case .vestelLinux: break
         }
     }
 
@@ -2242,6 +2248,78 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Vestel Linux TV (deneysel)
+
+    /// Uygulamayla gelen Vestel TV istemcisi (ARM Linux programı; yalnız TV'de çalışır, bu Mac'te çalıştırılmaz).
+    var vestelClientURL: URL? {
+        Bundle.main.url(forResource: Self.vestelClientName, withExtension: nil, subdirectory: "tv-app")
+    }
+    static let vestelClientName = "couchsubs-vestel-tv"
+
+    /// TV'de istemciyi başlatan komut: bu Mac'in TV'ye en yakın adresi ve altyazı sunucusunun portu. Erişim anahtarı
+    /// komuta yazılmaz; istemci eşleştirmeyle (`/pair`) alır.
+    var vestelClientCommand: String? {
+        guard let address = computerAddress else { return nil }
+        return "./\(Self.vestelClientName) \(address) \(serverPort)"
+    }
+
+    func revealVestelClient() {
+        guard let url = vestelClientURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func copyVestelCommand() {
+        guard let command = vestelClientCommand else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+    }
+
+    // MARK: Tek tuşla kurulum (deneysel)
+
+    /// Tek tuş kurulumunun ilerlemesi (UI); nil = çalışmıyor.
+    @Published var vestelInstallStep: VestelInstall.Step?
+    /// Tek tuş kurulumu başarısızsa kısa açıklama; UI elle kuruluma yönlendirir.
+    @Published var vestelInstallError: String?
+
+    /// TV IP'siyle, uygulama TV'ye bağlanıp istemciyi kendi kopyalar ve başlatır (1986 test soketi → 2323 kabuk →
+    /// `http://<mac>:<port>/vestel-tv-client` indirme). Erişim anahtarı protokolü değişmez; istemci bağlanınca eşleşir.
+    func installVestelClientOneTap() async {
+        vestelInstallError = nil
+        guard let tv, tv.brand == .vestelLinux, !tv.host.isEmpty else { return }
+        guard let url = vestelClientURL, let data = try? Data(contentsOf: url) else {
+            vestelInstallError = String(localized: "This build of CouchSubs does not include the Vestel TV client.")
+            return
+        }
+        guard let address = computerAddress, VestelInstall.safeIPv4(address) else {
+            vestelInstallError = String(localized: "This Mac's network address could not be found. Check that the Mac and the TV are on the same network.")
+            return
+        }
+        do {
+            try await startServer()                 // /hello + indirme yolu + eşleşme için sunucu açık olmalı
+            server.publishPublic(data, at: VestelInstall.downloadPath)
+            try await VestelInstall.run(host: tv.host, macAddress: address, serverPort: Int(serverPort)) { [weak self] step in
+                Task { @MainActor in self?.vestelInstallStep = step }
+            }
+            // İstemci çalıştı; eşleşme isteği birazdan gelir. Adımı kısa süre sonra temizle.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            vestelInstallStep = nil
+        } catch {
+            vestelInstallStep = nil
+            vestelInstallError = Self.vestelInstallMessage(for: error)
+        }
+    }
+
+    private static func vestelInstallMessage(for error: Error) -> String {
+        switch error {
+        case VestelInstall.Failure.testToolUnreachable:
+            return String(localized: "Could not reach the TV. Check the IP address, that the TV is on, and that its test-tool socket is open.")
+        case VestelInstall.Failure.shellUnreachable:
+            return String(localized: "The TV did not open a shell. Try again, or use the manual steps below.")
+        default:
+            return String(localized: "One-tap install failed. Use the manual steps below.")
+        }
+    }
+
     /// Samsung'da geliştirici modunda "Host PC IP" olarak yazılacak bu Mac'in adresi.
     var computerAddress: String? {
         Self.localAddress(near: tv?.host.isEmpty == false ? tv!.host : nil)
@@ -2384,7 +2462,8 @@ final class AppModel: ObservableObject {
     /// TV uygulamasını açar (Android TV'de uygulama bilgisayarı kendisi bulur, eşleştirme onayı da gerekebilir) ve
     /// bağlanmasını bekler. Bekleme süresince `openingTVAppForTest` açıktır (düğme ve TV kartı "TV'de açılıyor…" der).
     private func waitForTVApp(_ tv: LGTV) async {
-        if tv.brand != .androidTV {
+        // Kendisi bağlanan TV'ler (Android TV, Vestel Linux) bilgisayarı kendisi bulur; açılmaz, bağlanması beklenir.
+        if !tv.brand.connectsByItself {
             await openTVAppForTest(tv)
             return
         }

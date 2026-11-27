@@ -17,6 +17,8 @@ public enum TVReach {
         case .lg: [3000, 3001, 9922, 9991, 1990]
         case .samsung: [8001, 8002, 26101, 9197]
         case .androidTV: [5555, 6466, 6467, 8008, 8009]
+        // Vestel Linux (MB130): SmartCenter/DIAL her zaman açık; 1986 test aracı soketi DevProfile ile açıldıysa.
+        case .vestelLinux: [56789, 1986]
         }
     }
 

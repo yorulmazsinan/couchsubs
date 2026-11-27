@@ -14,6 +14,8 @@ struct TVStep: View {
     /// Aramada çıkmayan TV'nin elle yazılan adresi (webOS 3.x gibi, #498).
     @State private var manualHost = ""
     @State private var adding = false
+    /// Vestel Linux TV'nin elle yazılan adresi (otomatik arama yok).
+    @State private var vestelHost = ""
 
     var body: some View {
         StepLayout(title: "Connect your TV",
@@ -58,6 +60,22 @@ struct TVStep: View {
                     }
                     HintText(text: "Vestel, Arçelik, Beko, Grundig, Philips and other TVs running Android TV.")
                 }
+                // Vestel'in kendi Linux'u (Android olmayan Vestel TV'ler): TV'deki yerel istemci bu Mac'e bağlanır. Deneysel.
+                Card {
+                    HStack(spacing: Theme.space("s")) {
+                        Text(verbatim: "Vestel Linux TV")
+                        Text("Experimental").font(.csCaption).foregroundStyle(Color.csWarning)
+                        Spacer()
+                    }
+                    HintText(text: "Vestel TVs that run Vestel's own system instead of Android TV (for example 2017 models). A small client on the TV connects to this Mac.")
+                    HStack {
+                        TextField("TV IP address, e.g. 192.168.1.54", text: $vestelHost)
+                            .textFieldStyle(CSTextFieldStyle())
+                            .onSubmit { Task { await chooseVestel() } }
+                        Button("Select") { Task { await chooseVestel() } }.buttonStyle(.secondary).disabled(working)
+                    }
+                    HintText(text: "Automatic search is not available for these TVs yet. You can find the IP address in the TV's network settings.")
+                }
                 // TV'si olmayanlar (PS5 monitörde ya da PS Remote Play bilgisayarda): TV kurulumu atlanır.
                 Card {
                     HStack {
@@ -81,8 +99,9 @@ struct TVStep: View {
                 }
                 ErrorText(error: error)
                 TVAppCard()
-                // Uygulamayla TV paketi gelmediyse (geliştirici derlemesi) rehber gösterilir.
-                if let tv = model.tv, tv.brand != .lg, !model.canInstallTVApp {
+                VestelTVCard()
+                // Uygulamayla TV paketi gelmediyse (geliştirici derlemesi) rehber gösterilir. Vestel Linux'un kendi kartı var.
+                if let tv = model.tv, tv.brand != .lg, tv.brand != .vestelLinux, !model.canInstallTVApp {
                     Card(title: "CouchSubs TV app") {
                         Text("Install the CouchSubs TV app on this TV using the guide and open it. It finds this computer by itself.")
                         Link("Open the guide", destination: AppIdentity.tvGuideURL)
@@ -123,6 +142,17 @@ struct TVStep: View {
         adding = false
     }
 
+    /// Vestel Linux TV: adres doğrulanır ve TV seçilir. Bilgisayar TV'ye bağlanmaz; adres bu Mac'in TV'ye bakan ağ
+    /// adresini bulmak (TV'deki komut) ve kullanıcıya göstermek içindir.
+    private func chooseVestel() async {
+        error = nil
+        guard let host = ManualAddress.normalize(vestelHost) else {
+            error = String(localized: "This is not a valid IP address. Type it like 192.168.1.20, without http:// or a port number.")
+            return
+        }
+        await pair(LGTV(name: "Vestel Linux TV", host: host, brand: .vestelLinux))
+    }
+
     private func pair(_ tv: LGTV) async {
         working = true
         pairingBrand = tv.brand
@@ -144,6 +174,10 @@ struct TVStep: View {
             case .notInstalled:
                 break
             }
+        }
+        // Vestel Linux'ta bilgisayar TV'ye bağlanmaz; burada yalnız altyazı sunucusu açılamamış olabilir.
+        if brand == .vestelLinux {
+            return String(localized: "CouchSubs could not start its subtitle server. Close other apps that may use the same port and try again.")
         }
         return String(localized: "The TV did not respond. Make sure it is on and on the same network.")
     }

@@ -213,6 +213,9 @@ public final class SubtitleServer: @unchecked Sendable {
     public static let regionAliveMs = 20_000
     /// `GET` ile verilen dosyalar: dublaj sesleri ve seslendirme modelinin ses örnekleri.
     private var files: [String: (data: Data, type: String)] = [:]
+    /// Anahtarsız sunulan genel dosyalar (yalnız Vestel TV istemcisinin indirilmesi için; herkese açık AGPL ikilisi).
+    /// Erişim anahtarı protokolü değişmez: bu yol /events, /pair ve anahtar doğrulamasından bağımsızdır.
+    private var publicFiles: [String: (data: Data, type: String)] = [:]
     private var speechPaths: [String] = []
     private var speechNumber = 0
     private var key: String
@@ -978,6 +981,11 @@ public final class SubtitleServer: @unchecked Sendable {
         queue.async { self.files[path] = (data, type) }
     }
 
+    /// Genel (anahtarsız) dosya: yalnız Vestel TV istemcisinin TV'den indirilmesi için. `nil` kaldırır.
+    public func publishPublic(_ data: Data?, at path: String, type: String = "application/octet-stream") {
+        queue.async { if let data { self.publicFiles[path] = (data, type) } else { self.publicFiles[path] = nil } }
+    }
+
     /// Dublaj sesini TV'ye gönderir: ses `/speech/<n>.wav` adresinden verilir, `speech` olayı adresi bildirir.
     /// Son 16 ses tutulur; TV kopup bağlanınca eskisini istemez.
     public func sendSpeech(_ wav: Data, durationMs: Int) {
@@ -1035,6 +1043,11 @@ public final class SubtitleServer: @unchecked Sendable {
     private func route(_ connection: NWConnection, requestLine: String) {
         guard let request = SubtitleAccess.parse(requestLine) else {
             respondAndClose(connection, status: "400 Bad Request")
+            return
+        }
+        // Genel (anahtarsız) dosya: Vestel TV istemcisinin indirilmesi. Anahtar/eşleşme akışından önce, onu değiştirmeden.
+        if request.method == "GET", let file = publicFiles[request.path] {
+            respondAndClose(connection, status: "200 OK", data: file.data, type: file.type, cors: SubtitleAccess.cors(request))
             return
         }
         let access = SubtitleAccess.authorize(request, key: key, allowLegacy: allowLegacy)

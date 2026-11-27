@@ -27,3 +27,7 @@ core/Sources/CouchSubsCore/Resources/packs/*.json.gz
 core/Sources/CouchSubsCore/Resources/packs/*.json
 tools/packs/katki/*.json.gz
 tools/packs/katki/GTA_HAVUZ_KATKI.md
+
+# Vestel Linux TV istemcisi derleme çıktıları
+tv-vestel/out/
+tv-vestel/test/out/

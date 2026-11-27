@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<project name="mb130" bigEndian="false" readOnly="false" excludeNames="false" baseAddress="0">
+   <profile name="devprofile" base="0">
+      <section name="TesttoolSocket">
+         <dword name="TesttoolSocket" type="bool" class="" min="0" max="0">False</dword>
+      </section>
+   </profile>
+</project>

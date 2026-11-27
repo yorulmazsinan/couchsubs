@@ -6,6 +6,13 @@ public enum TVBrand: String, Codable, Sendable {
     case lg, samsung
     /// Android TV: bilgisayar TV'yi denetlemez, TV uygulaması bilgisayarı kendisi bulur.
     case androidTV
+    /// Vestel'in kendi Linux'u (Android değil; ör. MB130 anakartlı 2017 modelleri); deneysel. TV'de çalışan yerel
+    /// DirectFB istemcisi (`tv-vestel/`) bu bilgisayara kendisi bağlanır ve TV uygulamaları gibi eşleşir (`/pair`).
+    /// Bilgisayar TV'ye bir şey kurmaz ve TV'yi denetlemez; istemci şimdilik TV'ye elle kopyalanır.
+    case vestelLinux
+
+    /// TV uygulaması bilgisayara kendisi bağlanır; bilgisayar TV'de uygulama açamaz (Android TV, Vestel Linux).
+    public var connectsByItself: Bool { self == .androidTV || self == .vestelLinux }
 }
 
 public struct LGTV: Codable, Hashable, Sendable {

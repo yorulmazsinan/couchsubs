@@ -847,7 +847,7 @@ private struct OutputSettings: View {
                 }
             }
             if model.settings.output.showsOnTV || model.settings.output == .obs { AppearanceCard() }
-            if model.settings.output.showsOnTV { TVAppCard() }
+            if model.settings.output.showsOnTV { TVAppCard(); VestelTVCard() }
         } right: {
             SecondScreenCard()
             OBSCard()

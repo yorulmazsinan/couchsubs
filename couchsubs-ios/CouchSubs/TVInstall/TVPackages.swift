@@ -47,6 +47,7 @@ enum TVPackages {
         case .samsung: samsungVersion
         case .androidTV: androidVersion
         case .lg: lgVersion
+        case .vestelLinux: nil
         }
     }
 }
@@ -110,6 +111,8 @@ enum TVAppVersionCheck {
                 return .version(version)
             case .lg:
                 return LGPhoneInstall.installedVersion(host: host).map(Outcome.version) ?? .unknown
+            case .vestelLinux:
+                return .unknown
             }
         }.value
     }

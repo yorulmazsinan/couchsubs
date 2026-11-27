@@ -2481,6 +2481,7 @@ final class PhoneModel: ObservableObject {
             case .androidTV: "Android TV"
             case .lg: "LG TV"
             case .samsung: "Samsung TV"
+            case .vestelLinux: "Vestel Linux TV"
             }
             try? await pair(LGTV(name: name, host: host, brand: brand))
             if keeper != nil, tv?.host == host, previousHost != host {
@@ -2648,6 +2649,30 @@ final class PhoneModel: ObservableObject {
         try? await startServer()
         guard serverStarted else { return nil }
         return AndroidTvInstaller.launchParams(server: serverAddress(for: LGTV(name: "", host: host, brand: .androidTV)))
+    }
+
+    // MARK: - Vestel Linux TV (deneysel; Mac'teki tek tuşla kurulumun aynısı)
+
+    /// Uygulamayla gelen Vestel TV istemcisi (ARM Linux; scripts/ios-tv-packages.sh `tv/`'ye koyar). Derlemede yoksa nil.
+    var vestelClientURL: URL? { Bundle.main.url(forResource: "couchsubs-vestel-tv", withExtension: nil, subdirectory: "tv") }
+
+    enum VestelPhoneError: Error { case noClient, noAddress }
+
+    /// Vestel TV'ye istemciyi kurar ve başlatır: 1986 test soketi → 2323 kabuk → `http://<telefon>:<port>/vestel-tv-client`
+    /// (anahtarsız, yalnız bu yol). İstemci bu telefona bağlanıp TV uygulamaları gibi eşleşir; anahtar protokolü değişmez.
+    /// Kurulumun sürmekte olan adımı (arayüz); nil = çalışmıyor.
+    @Published private(set) var vestelInstallStep: VestelInstall.Step?
+
+    func installVestelClient(host: String) async throws {
+        defer { vestelInstallStep = nil }
+        guard let url = vestelClientURL, let data = try? Data(contentsOf: url) else { throw VestelPhoneError.noClient }
+        guard let address = NetworkAddress.near(host), VestelInstall.safeIPv4(address) else { throw VestelPhoneError.noAddress }
+        try await startServer()                 // /hello, indirme yolu ve eşleşme için sunucu açık olmalı
+        server.publishPublic(data, at: VestelInstall.downloadPath)
+        InstallLog.shared.write("Vestel: \(host) üzerine istemci kuruluyor (telefon \(address):\(serverPort))")
+        try await VestelInstall.run(host: host, macAddress: address, serverPort: Int(serverPort)) { [weak self] step in
+            Task { @MainActor in self?.vestelInstallStep = step }
+        }
     }
 
     /// TV ile aynı ağdaki telefon adresi.

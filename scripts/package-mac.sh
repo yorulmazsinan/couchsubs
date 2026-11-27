@@ -24,6 +24,8 @@ python3 scripts/fetch-packs.py --require
 
 ./scripts/package-tv.sh
 ./scripts/package-tizen.sh
+# Vestel Linux TV istemcisi (deneysel, ARM Linux): Docker ya da VESTEL_TV_CLIENT yoksa atlanır.
+./scripts/package-vestel.sh
 # Android TV APK'sı verilirse (CI: tv-android iş akışının çıktısı) uygulamaya gömülür.
 [[ -n "$ANDROID_APK" ]] && ./scripts/bundle-android-apk.sh "$ANDROID_APK"
 # Kaynağı değiştiyse (ya da damgasız eski bir derlemeyse) yeniden derlenir: dist'te kalan eski yardımcı pakete girmesin.
@@ -60,7 +62,10 @@ else
   echo "Uyarı: PACKS_APP_SECRET verilmedi; bu pakette paket indirme kapalı."
 fi
 
-SIGN_ARGS=(CODE_SIGN_IDENTITY="-")
+# İmzasız (ad-hoc) pakette sıkılaştırılmış çalışma kapatılır: açıkken kütüphane doğrulaması gömülü ad-hoc
+# WebRTC.framework'ü "farklı Team ID" diye reddediyor, uygulama açılışta dyld'de duruyordu. Sıkılaştırma yalnız Apple
+# onayı için gerekir; Developer ID'li yolda aşağıda yeniden açılır.
+SIGN_ARGS=(CODE_SIGN_IDENTITY="-" ENABLE_HARDENED_RUNTIME=NO)
 if [[ -n "$DEVELOPER_ID" ]]; then
   TEAM="${DEVELOPER_ID##*\(}"; TEAM="${TEAM%\)}"
   # Xcode'un eklediği get-task-allow yetkisi olursa Apple onayı reddedilir.

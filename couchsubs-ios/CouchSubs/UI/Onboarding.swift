@@ -582,7 +582,7 @@ struct TargetScreen: View {
             }
             // TV uygulaması yoksa ya da eskiyse bu telefondan kurulur (ilk kurulumda da).
             Button { showInstall = true } label: {
-                InfoTile(symbol: "arrow.down.app", title: "Install the TV app from this phone", caption: "Samsung · LG · Android TV",
+                InfoTile(symbol: "arrow.down.app", title: "Install the TV app from this phone", caption: "Samsung · LG · Android TV · Vestel",
                          emphasis: model.tvAppMissing ? .warning : .none, chevron: true)
             }
             .buttonStyle(.plain)
@@ -648,6 +648,7 @@ struct TargetScreen: View {
         case .lg: "LG"
         case .samsung: "Samsung"
         case .androidTV: "Android TV"
+        case .vestelLinux: "Vestel Linux"
         }
     }
 
@@ -655,7 +656,7 @@ struct TargetScreen: View {
         VStack(alignment: .leading, spacing: Mobile.Space.gap) {
             ScreenTitle(title: "My TV is not listed",
                         message: "CouchSubs works with LG (webOS 4+), Samsung (Tizen, 2019+) and Android TV / Google TV. Type the TV's IP address, or choose Android TV: its CouchSubs app finds this phone by itself.")
-            SegmentedTabs(options: [TVBrand.lg: "LG", .samsung: "Samsung", .androidTV: "Android TV"], selection: $manualBrand)
+            SegmentedTabs(options: [TVBrand.lg: "LG", .samsung: "Samsung", .androidTV: "Android TV", .vestelLinux: "Vestel"], selection: $manualBrand)
             if manualBrand != .androidTV {
                 TextField("IP address, e.g. 192.168.1.20", text: $manualHost)
                     .textFieldStyle(MobileFieldStyle())
@@ -679,7 +680,11 @@ struct TargetScreen: View {
                 }
                 manualError = nil
                 showManual = false
-                Task { await pair(LGTV(name: manualBrand == .androidTV ? "Android TV" : host, host: host, brand: manualBrand)) }
+                Task {
+                    await pair(LGTV(name: manualBrand == .androidTV ? "Android TV" : host, host: host, brand: manualBrand))
+                    // Vestel Linux'ta TV'de kurulu uygulama yok: istemci bu telefondan kurulur (adres dolu açılır).
+                    if manualBrand == .vestelLinux, model.tv?.brand == .vestelLinux { showInstall = true }
+                }
             }
             .buttonStyle(.mobilePrimary)
             .disabled(manualBrand != .androidTV && manualHost.isEmpty)

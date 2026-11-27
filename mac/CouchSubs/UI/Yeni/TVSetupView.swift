@@ -38,6 +38,8 @@ struct TVSetupStep: View {
                 if showsProgress { TVProgressCard(brand: brand, pairing: currentPairingHost != nil) }
                 errorBox
                 interactiveCard
+                // Vestel Linux (deneysel): TV'ye bilgisayar bağlanmaz; tek tuşla kurulum ve eşleştirme kendi kartında.
+                if model.tv?.brand == .vestelLinux { DSCard(scrolls: false) { VestelTVCard() } }
                 if needsChecklist { TVChecklistCard(brand: brand) }
                 PairingCodeCard()
             }
@@ -206,7 +208,7 @@ struct TVSetupStep: View {
     private func status(of tv: LGTV) -> RowStatus {
         if currentPairingHost == tv.host {
             // LG ve Samsung bağlanırken TV'de izin sorulur.
-            return tv.brand == .androidTV ? .connecting : .approveOnTV
+            return tv.brand.connectsByItself ? .connecting : .approveOnTV
         }
         if pairError != nil, lastPaired?.host == tv.host { return .failed }
         guard model.tv?.host == tv.host else { return .found }
@@ -278,6 +280,7 @@ struct TVBrandMark: View {
         case .lg: "LG"
         case .samsung: "Samsung"
         case .androidTV: "Android TV"
+        case .vestelLinux: "Vestel Linux"
         }
     }
 
@@ -286,6 +289,7 @@ struct TVBrandMark: View {
         case .lg: "LG"
         case .samsung: "SAMSUNG"
         case .androidTV: "Android"
+        case .vestelLinux: "VESTEL"
         }
         Text(verbatim: short)
             .font(.system(size: brand == .lg ? 14 : 9, weight: .heavy))
@@ -311,7 +315,7 @@ struct TVManualAddCard: View {
         DSCard(scrolls: false) {
             DSCardHeader("TV Not in the List?")
             DSUnit(title: "Brand") {
-                DSTabs(selection: $brand, items: [(TVBrand.lg, "LG"), (.samsung, "Samsung"), (.androidTV, "Android TV")])
+                DSTabs(selection: $brand, items: [(TVBrand.lg, "LG"), (.samsung, "Samsung"), (.androidTV, "Android TV"), (.vestelLinux, "Vestel Linux")])
             }
             DSUnit(title: "TV's IP Address", hint: hint) {
                 DSFieldChrome(mono: true) {
@@ -331,8 +335,11 @@ struct TVManualAddCard: View {
     }
 
     private var hint: LocalizedStringKey {
-        brand == .androidTV ? "You can see the TV's address on the TV in Settings › Network & Internet."
-            : "TV not in the list? Enter its IP address (on the TV under Settings › Network)."
+        switch brand {
+        case .androidTV: "You can see the TV's address on the TV in Settings › Network & Internet."
+        case .vestelLinux: "Vestel TVs with Vestel's own system (not Android TV), experimental. Automatic search is not available; the address is in the TV's network settings."
+        default: "TV not in the list? Enter its IP address (on the TV under Settings › Network)."
+        }
     }
 
     private func add() {
@@ -372,8 +379,8 @@ struct TVProgressCard: View {
         }()
         let installed: Bool = { if case .upToDate = app { true } else { false } }()
         let failed: Bool = { if case .failed = app { true } else { false } }()
-        let approveActive = (pairing && brand != .androidTV) || app == .approveOnTV
-        let approveDone = paired && app != .approveOnTV && (brand != .androidTV || installing || installed)
+        let approveActive = (pairing && !brand.connectsByItself) || app == .approveOnTV
+        let approveDone = paired && app != .approveOnTV && (!brand.connectsByItself || installing || installed)
         return [
             ("Connecting", pairing ? .active : paired ? .done : .pending, nil),
             ("Approve on the TV", approveActive ? .active : approveDone ? .done : .pending,
@@ -485,6 +492,10 @@ struct TVChecklistCard: View {
              ("2. Press OK on Build 7 times until it says you are a developer.", nil),
              ("3. Go back to Device Preferences (Google TV: System) › Developer options and turn on USB debugging. Turn on Network debugging too if you see it.",
               "Menu names differ a little by brand. If the app is already on the TV, you can skip this step.")]
+        case .vestelLinux:
+            [("1. Once: turn on the TV's test-tool socket with a DevProfile file on a USB stick (service menu 4725 › USB Diagnostic), then turn the TV off and on after a minute.",
+              "Tested on a Vestel 55UD8400 (MB130). Without this step one-tap install cannot reach the TV."),
+             ("2. Add the TV with its IP address above, press Connect, then Install and start on the TV.", nil)]
         }
     }
 }

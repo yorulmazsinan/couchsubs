@@ -163,6 +163,12 @@ PYEOF
 for name in couchsubs-androidtv.apk couchsubs-lg.ipk; do
   [ -f "$CACHE/$name" ] && cp "$CACHE/$name" "$OUT/$name"
 done
+# Vestel Linux TV istemcisi (deneysel, ARM Linux; package-vestel.sh üretir): varsa telefondan kurulum için eklenir.
+VESTEL="${VESTEL_TV_CLIENT:-}"
+[ -z "$VESTEL" ] && for c in "$ROOT/dist/tv-app/couchsubs-vestel-tv" "$ROOT/tv-vestel/out/couchsubs-vestel-tv"; do
+  [ -f "$c" ] && { VESTEL="$c"; break; }
+done
+if [ -n "$VESTEL" ] && [ -f "$VESTEL" ]; then cp "$VESTEL" "$OUT/couchsubs-vestel-tv"; else rm -f "$OUT/couchsubs-vestel-tv"; fi
 echo "TV paketleri uygulamada: $OUT"
 cat "$OUT/tv-packages.properties"
 

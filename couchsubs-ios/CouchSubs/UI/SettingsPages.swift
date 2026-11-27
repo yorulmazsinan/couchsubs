@@ -768,6 +768,7 @@ private struct OutputsPage: View {
         case .lg: "LG"
         case .samsung: "Samsung"
         case .androidTV: "Android TV"
+        case .vestelLinux: "Vestel Linux"
         }
     }
 

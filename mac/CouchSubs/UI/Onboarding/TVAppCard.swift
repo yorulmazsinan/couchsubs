@@ -197,6 +197,9 @@ struct TVAppCard: View {
     @ViewBuilder
     private var devModeSteps: some View {
         switch brand {
+        // Vestel Linux'ta bilgisayar TV'ye kurulum yapmaz; elle kurulum adımları kendi kartında (VestelTVCard).
+        case .vestelLinux:
+            EmptyView()
         case .lg:
             Card(title: "CouchSubs TV app") {
                 Text("The TV app is not installed. CouchSubs can install it once Developer Mode is on.")
