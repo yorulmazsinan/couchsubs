@@ -11,6 +11,12 @@ public sealed class Frame(byte[] pixels, int width, int height, int stride)
     public int Stride { get; } = stride;
 
     /// <summary>
+    /// Karenin kaynaktaki biçimi (tanı, telefon aramasının durum satırı; #1385): Xbox'ta oynatıcının gönderdiği JPEG'in
+    /// boyutu, akışın boyutu ve piksel düzeni. PS5 karesinde null.
+    /// </summary>
+    public string? Source { get; init; }
+
+    /// <summary>
     /// Boyutlar diziye uyuyor mu: genişlik, yükseklik ve satır aralığı negatif değil, satır en az <c>genişlik × 4</c> bayt
     /// ve dizi son satırın sonuna kadar yetiyor. Kurulurken bir kez hesaplanır (kare değiştirilemez). Tutarsız kare
     /// okunmaz (<c>WindowsOcrReader</c>), piksel döngüleri ona girmez; dizinin dışına taşan okuma olmaz (GitHub #587).

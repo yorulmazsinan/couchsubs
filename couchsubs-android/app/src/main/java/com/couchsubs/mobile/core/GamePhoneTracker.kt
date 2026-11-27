@@ -266,7 +266,8 @@ class GamePhoneTracker internal constructor(
         /**
          * Telefon kutusu akla yatkın mı: alanı karenin %4–%35'i, piksel olarak dikey (yükseklik/genişlik 0,9–2,6; eğik
          * telefonun sınır kutusu dikey telefondan geniştir), yüksekliği karenin en çok %85'i, genişliği en çok yarısı,
-         * merkezi karenin sol kenarında ya da üst üçte birinde değil.
+         * merkezi karenin sol kenarında ([GamePhoneGeometry.MIN_CENTER_X]'in solu; sol eldeki telefon geçer) ya da üst üçte
+         * birinde değil.
          */
         fun plausible(region: CropRegion, width: Int, height: Int): Boolean {
             val w = region.right - region.left
@@ -278,7 +279,7 @@ class GamePhoneTracker internal constructor(
                 val aspect = h * maxOf(1, height) / (w * maxOf(1, width))
                 if (aspect < 0.9 || aspect > 2.6) return false
             }
-            return (region.left + region.right) / 2 >= 0.35 && (region.top + region.bottom) / 2 >= 1.0 / 3
+            return (region.left + region.right) / 2 >= GamePhoneGeometry.MIN_CENTER_X && (region.top + region.bottom) / 2 >= 1.0 / 3
         }
     }
 }
@@ -536,12 +537,26 @@ object GamePhoneGeometry {
     const val CONFIRM_REACH_Y = 8.0
 
     /**
-     * Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+     * Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama [SCAN_LEFT]'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
      * telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
      * kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü; Mac/iPhone
      * ve Windows ile aynı).
      */
     const val SCAN_RIGHT = 324
+
+    /**
+     * Yarıkların arandığı en sol sütun: [SCAN_RIGHT]'ın aynası (400 − 324). Telefon sol elde tutulunca (#1385, beta-105)
+     * görüntü aynalanır, hoparlör yarığı karenin ~%30'unda durur; arama önceden 105'ten (%26) başlıyordu, telefon biraz sola
+     * oynayınca yarık kesiliyordu (Mac/iPhone ve Windows ile aynı).
+     */
+    const val SCAN_LEFT = 400 - SCAN_RIGHT
+
+    /**
+     * Telefon kutusunun merkezi bu sınırın solundaysa akla yatkın değil (karenin sol kenarındaki HUD, harita). Önceden 0,35'ti:
+     * sol eldeki telefonun merkezi ~0,30'da kaldığından izleyici onu hiç açmıyordu, telefon ne okunuyor ne de ekran yazısından
+     * dışlanıyordu (#1385; Mac/iPhone ve Windows ile aynı).
+     */
+    const val MIN_CENTER_X = 0.2
 
     /**
      * Açık telefonun son yerinde gevşek doğrulama: üstte kameralı hoparlör yarığı ve altta alt çentik, son yerin
@@ -652,7 +667,7 @@ object GamePhoneGeometry {
     /** Şeritteki yarıklar; [maximum]'dan çoksa hiçbiri (crowded: menü ya da yazı satırları, telefon aranmaz). */
     private fun scan(grid: Grid, rows: IntRange, lengths: IntRange, maximum: Int): Scan {
         if (rows.isEmpty() || rows.first < 4 || rows.last > 220) return Scan(emptyList(), false)
-        val left = 95
+        val left = SCAN_LEFT - 10
         val width = SCAN_RIGHT + 11 - left
         val count = rows.last - rows.first + 1
         val band = IntArray((count + 8) * width)
@@ -664,7 +679,7 @@ object GamePhoneGeometry {
         for (y in rows) {
             val row = (y - rows.first + 4) * width
             var start: Int? = null
-            for (x in (105 - left)..(SCAN_RIGHT - left)) {
+            for (x in (SCAN_LEFT - left)..(SCAN_RIGHT - left)) {
                 val p = row + x
                 val surround = minOf(band[p - 3 * width], band[p + 3 * width])
                 if (x < SCAN_RIGHT - left && surround - band[p] >= limit(surround / 3, 14, 25)) {

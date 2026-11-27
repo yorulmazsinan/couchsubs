@@ -18,6 +18,14 @@ public static class XboxPlayerPipe
     public const int FrameBufferBytes = 4 * 1024 * 1024;
 
     /// <summary>
+    /// Telefon aramasının durum satırındaki Xbox kare biçimi (#1385): sayfanın JPEG'i (en çok 1280 genişlik, 0,8 kalite,
+    /// player.html MAX_FRAME_WIDTH ve JPEG_QUALITY), akışın boyutu ve BGRA adımı. Renk aralığını tarayıcı çevirir (video
+    /// öğesi → RGB), uygulama tam aralıklı BGRA alır.
+    /// </summary>
+    public static string FrameFormat(int width, int height, string stream, int stride) =>
+        string.Create(CultureInfo.InvariantCulture, $"Xbox JPEG {width}×{height} (akış {stream}, kalite %80), BGRA adım {stride}");
+
+    /// <summary>
     /// Arabellekteki <paramref name="length"/> baytlık JPEG'i kopyalar; uzunluk geçersizse (0, arabellekten büyük) null.
     /// Kopya iletinin geldiği anda alınır: sayfa bir sonraki kareyi ancak "frameDone"dan sonra yazar.
     /// </summary>

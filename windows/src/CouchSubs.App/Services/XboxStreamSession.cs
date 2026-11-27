@@ -39,6 +39,8 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
     /// <summary>Bu WebRTC bağlantısında okumaya giden kare sayısı ve ilk karenin anı (bağlantı bitince özet satırı).</summary>
     private long connectionFrames;
     private long firstFrameAt;
+    /// <summary>Akışın (video öğesinin) boyutu, ilk kare iletisinden; kare biçimi satırı için (#1385).</summary>
+    private volatile string streamSize = "?";
     private CancellationTokenSource? keepaliveCancel;
     /// <summary>
     /// İlk kareden sonra görüntü kesilirse uyarı ve yeniden kurma (bkz. <see cref="XboxPictureWatch"/>). Oynatıcı saniyede
@@ -466,6 +468,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                     Log("oynatıcı: " + XboxStop.Shorten(message.TryGetProperty("text", out var logText) ? logText.GetString() : null, 300));
                     break;
                 case "firstFrame":
+                    streamSize = $"{message.GetProperty("width").GetInt32()}×{message.GetProperty("height").GetInt32()}";
                     if (Interlocked.CompareExchange(ref firstFrameAt, Environment.TickCount64, 0) == 0)
                     {
                         Interlocked.CompareExchange(ref streamingSince, Environment.TickCount64, 0);
@@ -648,7 +651,7 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                 }
                 if (bytes != null)
                 {
-                    var frame = DecodeJpeg(bytes);
+                    var frame = DecodeJpeg(bytes, streamSize);
                     Interlocked.Increment(ref connectionFrames);
                     FrameReceived?.Invoke(frame);
                 }
@@ -671,7 +674,11 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         });
     }
 
-    private static Frame DecodeJpeg(byte[] bytes)
+    /// <summary>
+    /// Oynatıcının JPEG karesi BGRA'ya çözülür. Kare biçimi (JPEG boyutu, akışın boyutu, BGRA adımı) telefon aramasının
+    /// durum satırına gider (#1385; Android ve Mac/iPhone'da libwebrtc karesinin düzlem adımları).
+    /// </summary>
+    private static Frame DecodeJpeg(byte[] bytes, string stream)
     {
         using var input = new MemoryStream(bytes);
         var source = new JpegBitmapDecoder(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
@@ -679,7 +686,10 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
         var stride = converted.PixelWidth * 4;
         var pixels = new byte[stride * converted.PixelHeight];
         converted.CopyPixels(pixels, stride, 0);
-        return new Frame(pixels, converted.PixelWidth, converted.PixelHeight, stride);
+        return new Frame(pixels, converted.PixelWidth, converted.PixelHeight, stride)
+        {
+            Source = XboxPlayerPipe.FrameFormat(converted.PixelWidth, converted.PixelHeight, stream, stride),
+        };
     }
 
     /// <summary>

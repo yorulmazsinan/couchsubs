@@ -34,6 +34,7 @@ final class GamePhoneFirstSightingTests: XCTestCase {
             case "scale1440": image = scaled(image, width: 2560, height: 1440)
             case "scale720": image = scaled(image, width: 1280, height: 720)
             case "letterbox", "pillarbox", "titlebar": image = framed(image, part)
+            case "mirror": image = mirrored(image)
             default: image = transformed(image, part)
             }
         }
@@ -41,6 +42,17 @@ final class GamePhoneFirstSightingTests: XCTestCase {
         let result = cover == nil ? image : transformed(image, "none", cover: cover)
         loaded[key] = result
         return result
+    }
+
+    /// Telefon sol elde (#1385): görüntü yatayda aynalanır.
+    static func mirrored(_ image: CGImage) -> CGImage {
+        let width = image.width, height = image.height
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.translateBy(x: CGFloat(width), y: 0)
+        context.scaleBy(x: -1, y: 1)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
     }
 
     /// Kare çift doğrusal büyütülür (1440p akış).

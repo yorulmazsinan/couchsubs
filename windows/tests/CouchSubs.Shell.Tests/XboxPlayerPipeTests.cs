@@ -15,6 +15,12 @@ public class XboxPlayerPipeTests
         Assert.Equal(new byte[] { 0, 1, 2, 3, 4 }, XboxPlayerPipe.ReadFrame(new MemoryStream(shared), 5, shared.Length));
     }
 
+    /// <summary>Telefon aramasının durum satırındaki Xbox kare biçimi (#1385): JPEG boyutu, akış boyutu, BGRA adımı.</summary>
+    [Fact]
+    public void FrameFormatNamesJpegStreamAndStride() =>
+        Assert.Equal("Xbox JPEG 1280×720 (akış 1920×1080, kalite %80), BGRA adım 5120",
+            XboxPlayerPipe.FrameFormat(1280, 720, "1920×1080", 5120));
+
     [Fact]
     public void InvalidLengthIsRejected()
     {

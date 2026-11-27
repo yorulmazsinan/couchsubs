@@ -145,6 +145,10 @@ class GamePhoneFirstSightingTest {
         if (transform == "scale1440") return resized(source, 2560, 1440)
         if (transform == "scale720") return resized(source, 1280, 720)
         if (transform in setOf("letterbox", "pillarbox", "titlebar")) return framed(source, transform)
+        // Telefon sol elde (#1385): görüntü yatayda aynalanır.
+        if (transform == "mirror") return Picture(source.width, source.height, IntArray(source.pixels.size) { i ->
+            source.pixels[(i / source.width) * source.width + source.width - 1 - i % source.width]
+        })
         val width = source.width
         val height = source.height
         val out = when (transform) {
@@ -327,7 +331,7 @@ class GamePhoneFirstSightingTest {
         assertFalse(SubtitlePipeline.holdsCandidate(null, 0L, 10L))
     }
 
-    private companion object {
+    internal companion object {
         val cache = mutableMapOf<String, Picture>()
     }
 }

@@ -228,6 +228,13 @@ final class PhoneSearchStatus {
         levels = 0
     }
 
+    /// Kare biçimi: Xbox oturumunda önce kaynak karenin düzeni (boyut, düzlem adımları, aralık; #1385), sonra CGImage'ın
+    /// renk uzayı.
+    static func frame(_ image: CGImage) -> String {
+        let color = FrameColor.describe(image)
+        return XboxFrameFormat.current.map { "\($0), \(color)" } ?? color
+    }
+
     /// Tonların (0–255) ortancası; boşsa 0.
     static func median(_ tones: [Int]) -> Int {
         guard !tones.isEmpty else { return 0 }

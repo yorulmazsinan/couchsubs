@@ -82,7 +82,8 @@ object PhoneFrames {
         val mid = values[(values.size - 1) / 2]
         val high = values[values.size * 98 / 100]
         val range = if (low < 12 || high > 240) "sınırlı aralık dışı değer var, kare tam aralıklı olabilir" else "sınırlı aralıkta"
-        return "çözücü biçimi 0x${Integer.toHexString(frame.colorFormat)}, renk ${if (frame.chroma != null) "var" else "yok"}, " +
+        val format = frame.source ?: "çözücü biçimi 0x${Integer.toHexString(frame.colorFormat)}"
+        return "$format, renk ${if (frame.chroma != null) "var" else "yok"}, " +
             "ham Y %2 $low, ortanca $mid, %98 $high ($range)"
     }
 

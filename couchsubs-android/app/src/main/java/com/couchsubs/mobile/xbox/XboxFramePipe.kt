@@ -32,6 +32,9 @@ internal class XboxFrameHandoff(
         var v: ByteBuffer = ByteBuffer.allocateDirect(0); private set
         var width = 0; private set
         var height = 0; private set
+        /** Kaynak karenin düzeni ([XboxFrameHandoff.describeSource]); düzen değişmedikçe aynı metin. */
+        var source = ""; private set
+        private var sourceKey = 0L
 
         fun fill(width: Int, height: Int, srcY: ByteBuffer, strideY: Int, srcU: ByteBuffer, strideU: Int, srcV: ByteBuffer, strideV: Int) {
             val cw = (width + 1) / 2
@@ -41,12 +44,39 @@ internal class XboxFrameHandoff(
             if (v.capacity() != cw * ch) v = ByteBuffer.allocateDirect(cw * ch)
             this.width = width
             this.height = height
+            val key = (width.toLong() shl 48) xor (height.toLong() shl 32) xor (strideY.toLong() shl 20) xor (strideU.toLong() shl 10) xor strideV.toLong()
+            if (key != sourceKey || source.isEmpty()) {
+                sourceKey = key
+                source = describeSource(width, height, strideY, strideU, strideV)
+            }
             copyPlane(srcY, strideY, width, height, y)
             copyPlane(srcU, strideU, cw, ch, u)
             copyPlane(srcV, strideV, cw, ch, v)
         }
 
-        fun frame(): VideoFrame = VideoFrame(y, width, height, width, chroma = ChromaPlanes(u, v, (width + 1) / 2))
+        fun frame(range: String): VideoFrame =
+            VideoFrame(y, width, height, width, chroma = ChromaPlanes(u, v, (width + 1) / 2), source = "$source, $range")
+
+        private var scratch = ByteArray(0)
+
+        /** Tam aralıklı kare sınırlı aralığa çevrilir (Y 16–235, U/V 16–240; yerel çözücünün limit_range'iyle aynı tablo). */
+        fun limitRange() {
+            mapPlane(y, XboxLumaRange.LUMA)
+            mapPlane(u, XboxLumaRange.CHROMA)
+            mapPlane(v, XboxLumaRange.CHROMA)
+        }
+
+        private fun mapPlane(plane: ByteBuffer, table: ByteArray) {
+            val size = plane.capacity()
+            if (scratch.size < size) scratch = ByteArray(size)
+            val bytes = scratch
+            plane.clear()
+            plane.get(bytes, 0, size)
+            for (i in 0 until size) bytes[i] = table[bytes[i].toInt() and 0xff]
+            plane.clear()
+            plane.put(bytes, 0, size)
+            plane.clear()
+        }
 
         private fun copyPlane(src: ByteBuffer, stride: Int, width: Int, height: Int, dst: ByteBuffer) {
             dst.clear()
@@ -65,6 +95,20 @@ internal class XboxFrameHandoff(
             dst.clear()
         }
     }
+
+    internal companion object {
+        /**
+         * libwebrtc karesinin düzeni, telefon aramasının durum satırında (#1385): boyut, Y ve U/V adımları; kopya sıkı
+         * paketlenmiş ayrı Y, U, V düzlemleridir (NV21 gibi iç içe değil).
+         */
+        fun describeSource(width: Int, height: Int, strideY: Int, strideU: Int, strideV: Int): String {
+            val chroma = if (strideU == strideV) "$strideU" else "$strideU/$strideV"
+            return "Xbox I420 $width×$height, Y adımı $strideY, U/V adımı $chroma (ayrı düzlemler, sıkı kopya)"
+        }
+    }
+
+    /** Akışın parlaklık aralığı (libwebrtc bildirmez; karelerden ölçülür, #1385). Yalnız okuma hattında güncellenir. */
+    private val range = XboxLumaRange()
 
     private val lock = Any()
     private val free = ArrayDeque<Slot>()
@@ -114,7 +158,10 @@ internal class XboxFrameHandoff(
             }
             val started = System.nanoTime()
             try {
-                process(slot.frame())
+                // Okuma hattı (telefon araması, ekran yazısı, renkler) PS5'teki gibi sınırlı aralıklı kare bekler.
+                range.observe(slot.y, slot.width, slot.height, slot.width)
+                if (range.full) slot.limitRange()
+                process(slot.frame(range.describe()))
             } catch (error: Exception) {
                 // Tek karenin hatası okumayı durdurmaz; sonraki kare işlenir.
             } finally {
@@ -126,6 +173,7 @@ internal class XboxFrameHandoff(
 
     /** Bağlantı bitti: bekleyen kare atılır (yeni bağlantının ilk karesinden önce eski kare işlenmez). */
     fun clear() {
+        range.reset()
         synchronized(lock) {
             pending?.let(free::addLast)
             pending = null
@@ -143,6 +191,62 @@ internal class XboxFrameHandoff(
 
     /** Ayrılmış kare arabelleği sayısı (test: en çok üç). */
     internal fun slotsAllocated(): Int = synchronized(lock) { free.size + (if (pending != null) 1 else 0) }
+}
+
+/**
+ * Xbox akışının parlaklık aralığı (#1385). PS5'te yerel çözücü MediaCodec'in "color-range" bilgisiyle tam aralıklı kareyi
+ * sınırlıya çevirir (video-decoder.c limit_range); libwebrtc ise kareyi olduğu gibi verir ve aralığı bildirmez. Okuma hattı
+ * (telefon araması [com.couchsubs.mobile.ocr.phoneTone], ekran yazısı, renkler) sınırlı aralık (Y 16–235) varsayar: tam
+ * aralıklı akışta 16'nın altındaki koyu tonlar kırpılır, karanlık sahnede telefonun hoparlör yarığı ve kamerası kasaya
+ * karışır (gerçek telefon karelerinde ölçüldü: karanlık ana ekran tam aralıkta bulunmuyor). Aralık karelerden ölçülür:
+ * [COLUMNS]×[ROWS] noktanın en az [SHARE_PERCENT]'i sınırlı aralığın belirgin dışındaysa ([LOW] altı ya da [HIGH] üstü; sınırlı
+ * akışta kodlayıcının taşması bu kadar uzağa gitmez) kare bir oy alır; [VOTES] oyda akış tam aralıklı sayılır (bağlantı
+ * boyunca). iPhone/Mac'in yazılım çözücüsü yolunda aynı ölçüm (XboxLumaRange.swift); VideoToolbox aralığı kendisi bilir.
+ */
+internal class XboxLumaRange {
+    @Volatile var full = false
+        private set
+    @Volatile private var votes = 0
+    /** Son ölçülen karede aralık dışı noktaların binde oranı (tanı). */
+    @Volatile var outsidePerMille = 0
+        private set
+
+    fun observe(plane: ByteBuffer, width: Int, height: Int, stride: Int) {
+        if (full || width <= 0 || height <= 0) return
+        var outside = 0
+        for (row in 0 until ROWS) {
+            val y = ((row + 0.5) * height / ROWS).toInt().coerceIn(0, height - 1)
+            for (column in 0 until COLUMNS) {
+                val x = ((column + 0.5) * width / COLUMNS).toInt().coerceIn(0, width - 1)
+                val value = plane.get(y * stride + x).toInt() and 0xff
+                if (value < LOW || value > HIGH) outside++
+            }
+        }
+        outsidePerMille = outside * 1000 / (COLUMNS * ROWS)
+        if (outside * 100 >= SHARE_PERCENT * COLUMNS * ROWS && ++votes >= VOTES) full = true
+    }
+
+    fun reset() {
+        full = false
+        votes = 0
+        outsidePerMille = 0
+    }
+
+    /** Durum satırının aralık kısmı. */
+    fun describe(): String = if (full) "aralık tam, sınırlıya çevriliyor" else "aralık sınırlı"
+
+    companion object {
+        const val COLUMNS = 64
+        const val ROWS = 36
+        const val LOW = 12
+        const val HIGH = 247
+        const val SHARE_PERCENT = 2
+        const val VOTES = 3
+
+        /** Tam → sınırlı aralık tabloları (video-decoder.c limit_range ile aynı yuvarlama). */
+        val LUMA = ByteArray(256) { (16 + (it * 219 + 127) / 255).toByte() }
+        val CHROMA = ByteArray(256) { (16 + (it * 224 + 127) / 255).toByte() }
+    }
 }
 
 /**

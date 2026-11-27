@@ -149,7 +149,7 @@ public final class GamePhoneTracker {
         // Arama durumu 30 sn'de bir (telefon hiç bulunamasa da): ıska ölçütü, parlaklık, kare biçimi (Android ve Windows aynı).
         if status.note(probe, seen: found != nil, now: now) {
             note(status.line(open: shown != nil, width: image.width, height: image.height,
-                             median: PhoneSearchStatus.median(image), frame: FrameColor.describe(image)))
+                             median: PhoneSearchStatus.median(image), frame: PhoneSearchStatus.frame(image)))
         }
         return (true, shown)
     }
@@ -204,7 +204,7 @@ public final class GamePhoneTracker {
             let aspect = h * Double(max(1, height)) / (w * Double(max(1, width)))
             guard aspect >= 0.9, aspect <= 2.6 else { return false }
         }
-        return (region.left + region.right) / 2 >= 0.35 && (region.top + region.bottom) / 2 >= 1.0 / 3
+        return (region.left + region.right) / 2 >= GamePhoneGeometry.minCenterX && (region.top + region.bottom) / 2 >= 1.0 / 3
     }
 
     public func reset() {
@@ -579,17 +579,27 @@ public enum GamePhoneGeometry {
         scan(grid, rows: rows, lengths: lengths, maximum: maximum).slots
     }
 
-    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama `scanLeft`'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
     /// telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
     /// kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü: telefon
     /// açılıp ~1,1 sn içinde kapanıyor, sonraki aramaların çoğu hoparlör yarığında kalıyor). Kamera, kasa ve yan kenar
     /// örnekleri için ızgara karenin tamamı okunur (Windows ve Android ile aynı).
     static let scanRight = 324
 
+    /// Yarıkların arandığı en sol sütun: `scanRight`'ın aynası (400 − 324). Telefon sol elde tutulunca (#1385, beta-105)
+    /// görüntü aynalanır, hoparlör yarığı karenin ~%30'unda durur; arama önceden 105'ten (%26) başlıyordu, telefon biraz sola
+    /// oynayınca yarık kesiliyordu (Windows ve Android ile aynı).
+    static let scanLeft = 400 - scanRight
+
+    /// Telefon kutusunun merkezi bu sınırın solundaysa akla yatkın değil (karenin sol kenarındaki HUD, harita). Önceden 0,35'ti:
+    /// sol eldeki telefonun merkezi ~0,30'da kaldığından izleyici onu hiç açmıyordu, telefon ne okunuyor ne de ekran yazısından
+    /// dışlanıyordu (#1385; Windows ve Android ile aynı).
+    static let minCenterX = 0.2
+
     /// Şeritteki yarıklar; `maximum`'dan çoksa hiçbiri (`crowded`: menü ya da yazı satırları, telefon aranmaz).
     private static func scan(_ grid: Grid, rows: Range<Int>, lengths: ClosedRange<Int>, maximum: Int) -> (slots: [Slot], crowded: Bool) {
         guard !rows.isEmpty, rows.lowerBound >= 4, rows.upperBound <= 221 else { return ([], false) }
-        let left = 95, width = scanRight + 11 - left
+        let left = scanLeft - 10, width = scanRight + 11 - left
         var band = [UInt8](repeating: 0, count: (rows.count + 8) * width)
         for y in (rows.lowerBound - 4)..<(rows.upperBound + 4) {
             let row = (y - rows.lowerBound + 4) * width
@@ -599,7 +609,7 @@ public enum GamePhoneGeometry {
         for y in rows {
             let row = (y - rows.lowerBound + 4) * width
             var start: Int?
-            for x in (105 - left)...(scanRight - left) {
+            for x in (scanLeft - left)...(scanRight - left) {
                 let p = row + x
                 let surround = Int(min(band[p - 3 * width], band[p + 3 * width]))
                 if x < scanRight - left, surround - Int(band[p]) >= limit(surround / 3, 14, 25) {

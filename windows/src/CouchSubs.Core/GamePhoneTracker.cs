@@ -189,7 +189,7 @@ public sealed class GamePhoneTracker
         else if (probe is { } missed) missLog.Note(missed, now, Trace);
         // Arama durumu 30 sn'de bir (telefon hiç bulunamasa da): ıska ölçütü, parlaklık, kare (Mac/iPhone ve Android aynı).
         if (status.Note(probe, candidate is not null, now))
-            Trace(status.Line(shown is not null, frame.Width, frame.Height, PhoneSearchStatus.Median(frame), null));
+            Trace(status.Line(shown is not null, frame.Width, frame.Height, PhoneSearchStatus.Median(frame), frame.Source));
         visible = shown;
         return true;
     }
@@ -238,7 +238,7 @@ public sealed class GamePhoneTracker
 
     /// <summary>
     /// Telefon kutusu akla yatkın mı: alanı karenin %4–%35'i, piksel olarak dikey (yükseklik/genişlik 0,9–2,6; eğik
-    /// telefonun sınır kutusu dikey telefondan geniştir), yüksekliği karenin en çok %85'i, genişliği en çok yarısı, merkezi karenin sol kenarında ya da üst üçte birinde değil.
+    /// telefonun sınır kutusu dikey telefondan geniştir), yüksekliği karenin en çok %85'i, genişliği en çok yarısı, merkezi karenin sol kenarında (<see cref="GamePhoneGeometry.MinCenterX"/>'in solu; sol eldeki telefon geçer) ya da üst üçte birinde değil.
     /// </summary>
     internal static bool Plausible(CropRegion region, Frame frame)
     {
@@ -250,7 +250,7 @@ public sealed class GamePhoneTracker
         // Test karelerinde (2x2) en-boy anlamsız; gerçek kare 16:9'dur.
         if (frame.Width >= 64 && (aspect < 0.9 || aspect > 2.6)) return false;
         double centerX = (region.Left + region.Right) / 2, centerY = (region.Top + region.Bottom) / 2;
-        return centerX >= 0.35 && centerY >= 1.0 / 3;
+        return centerX >= GamePhoneGeometry.MinCenterX && centerY >= 1.0 / 3;
     }
 
     public void Reset()
@@ -268,14 +268,26 @@ public sealed class GamePhoneTracker
 
 internal static class GamePhoneGeometry
 {
-    private const int Width = 400, Height = 225, Left = 95;
+    private const int Width = 400, Height = 225, Left = ScanLeft - 10;
     /// <summary>
-    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama 105'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
+    /// Yarıkların arandığı en sağ sütun (400×225 ızgarada; arama <see cref="ScanLeft"/>'ten başlar). Önceden 294'tü (karenin %73,5'i): GTA 6
     /// telefonu sağ elde ~%70'te durur, hoparlör yarığının sağ ucu sınıra değiyordu; telefon %1,5 sağa oynayınca yarık
     /// kesiliyor, sıkı arama da gevşek doğrulama da "hoparlör yarığı yok"ta kalıyordu (#1251, beta-104 günlüğü: telefon
     /// açılıp ~1,1 sn içinde kapanıyor, sonraki aramaların çoğu hoparlör yarığında kalıyor; Mac/iPhone ve Android ile aynı).
     /// </summary>
     internal const int ScanRight = 324;
+    /// <summary>
+    /// Yarıkların arandığı en sol sütun: <see cref="ScanRight"/>'ın aynası (400 − 324). Telefon sol elde tutulunca (#1385,
+    /// beta-105) görüntü aynalanır, hoparlör yarığı karenin ~%30'unda durur; arama önceden 105'ten (%26) başlıyordu, telefon
+    /// biraz sola oynayınca yarık kesiliyordu (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const int ScanLeft = Width - ScanRight;
+    /// <summary>
+    /// Telefon kutusunun merkezi bu sınırın solundaysa akla yatkın değil (karenin sol kenarındaki HUD, harita). Önceden
+    /// 0,35'ti: sol eldeki telefonun merkezi ~0,30'da kaldığından izleyici onu hiç açmıyordu, telefon ne okunuyor ne de ekran
+    /// yazısından dışlanıyordu (#1385; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const double MinCenterX = 0.2;
     private const int Right = ScanRight + 10;
     /// <summary>Parlaklığın ölçüldüğü sütunlar (üst şeritte, <see cref="DarkGains"/>).</summary>
     private const int LevelLeft = 95, LevelRight = 305;
@@ -636,7 +648,7 @@ internal static class GamePhoneGeometry
             var rimAbove = band.Slice((y - from) * stride, stride);
             var rimBelow = band.Slice((y - from + 8) * stride, stride);
             int start = -1;
-            for (int x = 105 - Left; x <= ScanRight - Left; x++)
+            for (int x = ScanLeft - Left; x <= ScanRight - Left; x++)
             {
                 int surround = Math.Min(above[x], below[x]);
                 if (x < ScanRight - Left && surround - row[x] >= Math.Clamp(surround / 3, 14, 25))

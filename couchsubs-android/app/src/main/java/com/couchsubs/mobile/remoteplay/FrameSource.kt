@@ -13,6 +13,11 @@ class VideoFrame(
     val buffer: ByteBuffer, val width: Int, val height: Int, val rowStride: Int, val colorFormat: Int = 0,
     /** Renk düzlemleri (yarım çözünürlük); çözücü biçimi bilinmiyorsa null (stil gri tonla bulunur). */
     val chroma: ChromaPlanes? = null,
+    /**
+     * Karenin kaynaktaki düzeni (tanı, telefon aramasının durum satırı; #1385): Xbox'ta libwebrtc karesinin boyutu, düzlem
+     * adımları ve düzlem düzeni. Yerel çözücüde null ([colorFormat] yazılır).
+     */
+    val source: String? = null,
 )
 
 /**

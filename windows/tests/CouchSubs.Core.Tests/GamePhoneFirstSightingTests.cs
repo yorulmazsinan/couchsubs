@@ -121,6 +121,15 @@ public class GamePhoneFirstSightingTests
         if (transform == "scale1440") return source.Resized(2560, 1440);
         if (transform == "scale720") return source.Resized(1280, 720);
         if (transform is "letterbox" or "pillarbox" or "titlebar") return Framed(source, transform);
+        if (transform == "mirror")
+        {
+            // Telefon sol elde (#1385): görüntü yatayda aynalanır.
+            var mirrored = Frame.Blank(source.Width, source.Height);
+            for (var y = 0; y < source.Height; y++)
+                for (var x = 0; x < source.Width; x++)
+                    Buffer.BlockCopy(source.Pixels, y * source.Stride + (source.Width - 1 - x) * 4, mirrored.Pixels, y * mirrored.Stride + x * 4, 4);
+            return mirrored;
+        }
         var frame = Frame.Blank(source.Width, source.Height);
         if (transform == "shiftUp")
         {

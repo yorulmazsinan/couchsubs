@@ -84,6 +84,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
     /// bırakıp döner; kareyi resme çevirme ve okuma hattına verme ayrı bir sırada, yalnız en son kareyle yapılır.
     /// Eskiden çevirme ve `onFrame` alıcıda çalışıyordu; alıcı yavaşlayınca WebRTC'nin kare kuyruğu büyüyordu.
     private let frameBox = FrameMailbox<RTCVideoFrameBuffer>()
+    /// Yazılım çözücüsünün I420 karesinin parlaklık aralığı (aralık bildirilmez, karelerden ölçülür; #1385).
+    private let lumaRange = XboxLumaRange()
     private let frameQueue = DispatchQueue(label: "CouchSubs Xbox kare", qos: .userInitiated, autoreleaseFrequency: .workItem)
     private var pipeStats = XboxFramePipeStats()
     private var pipeTask: Task<Void, Never>?
@@ -323,6 +325,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
         pipeTask?.cancel()
         pipeTask = nil
         frameBox.clear()
+        lumaRange.reset()
+        XboxFrameFormat.update(nil)
         locked {
             acking = false
             pendingAcks = []
@@ -385,6 +389,7 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
             lastAckAtMs = 0
             pipeStats = XboxFramePipeStats()
         }
+        lumaRange.reset()
         Self.decoders.reset()
         startPipeLog()
         let config = RTCConfiguration()
@@ -756,26 +761,37 @@ extension XboxStreamSession: RTCVideoRenderer {
             guard !stopped else { continue }
             autoreleasepool {
                 let started = DispatchTime.now().uptimeNanoseconds
-                if let image = Self.image(from: buffer) { onFrame?(image) }
+                if let image = Self.image(from: buffer, range: lumaRange) { onFrame?(image) }
                 let spent = DispatchTime.now().uptimeNanoseconds &- started
                 locked { pipeStats.processed(nanos: spent) }
             }
         }
     }
 
-    /// VideoToolbox karesi doğrudan CGImage olur; yazılım çözücüsünün I420 karesinden gri (Y düzlemi) resim. WebRTC'nin
-    /// I420'si sınırlı aralıklıdır (16–235): gri resim tam aralığa açılır (`VideoRange.expandLuma`), telefon araması
-    /// VideoToolbox karesiyle ve dosyadaki kareyle aynı parlaklığı görür.
-    public static func image(from buffer: RTCVideoFrameBuffer) -> CGImage? {
+    /// VideoToolbox karesi doğrudan CGImage olur (aralığı piksel biçiminden: 420v sınırlı, 420f tam); yazılım çözücüsünün
+    /// I420 karesinden gri (Y düzlemi) resim. I420 aralık bildirmez: sınırlı aralıklıysa (16–235) gri resim tam aralığa
+    /// açılır (`VideoRange.expandLuma`), tam aralıklı ölçülen akış (`XboxLumaRange`, #1385) olduğu gibi okunur; telefon
+    /// araması VideoToolbox karesiyle ve dosyadaki kareyle aynı parlaklığı görür. Kare biçimi telefon aramasının durum
+    /// satırına (`XboxFrameFormat`).
+    public static func image(from buffer: RTCVideoFrameBuffer, range: XboxLumaRange? = nil) -> CGImage? {
         if let pixel = buffer as? RTCCVPixelBuffer {
+            let pb = pixel.pixelBuffer
+            let planes = CVPixelBufferGetPlaneCount(pb)
+            let strides = planes == 0 ? [CVPixelBufferGetBytesPerRow(pb)] : (0..<planes).map { CVPixelBufferGetBytesPerRowOfPlane(pb, $0) }
+            XboxFrameFormat.update(XboxFrameFormat.pixelBuffer(fourCC: CVPixelBufferGetPixelFormatType(pb), width: CVPixelBufferGetWidth(pb),
+                                                               height: CVPixelBufferGetHeight(pb), strides: strides))
             var image: CGImage?
-            VTCreateCGImageFromCVPixelBuffer(pixel.pixelBuffer, options: nil, imageOut: &image)
+            VTCreateCGImageFromCVPixelBuffer(pb, options: nil, imageOut: &image)
             return image
         }
         let i420 = buffer.toI420()
         let width = Int(i420.width), height = Int(i420.height), stride = Int(i420.strideY)
         var data = Data(bytes: i420.dataY, count: stride * height)
-        VideoRange.expandLuma(&data)
+        data.withUnsafeBytes { range?.observe($0, width: width, height: height, stride: stride) }
+        let full = range?.full ?? false
+        XboxFrameFormat.update(XboxFrameFormat.i420(width: width, height: height, strideY: stride, strideU: Int(i420.strideU),
+                                                    strideV: Int(i420.strideV), full: full))
+        if !full { VideoRange.expandLuma(&data) }
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: stride,
                        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
