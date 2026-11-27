@@ -28,7 +28,9 @@ struct CouchSubsApp: App {
     /// Sparkle: her açılışta ve uygulama açıkken saatte bir GitHub'daki son sürüme bakar; testlerde başlamaz.
     private let updater = SPUStandardUpdaterController(
         startingUpdater: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
-        updaterDelegate: nil, userDriverDelegate: nil)
+        updaterDelegate: Self.updateRecorder, userDriverDelegate: nil)
+    /// Kurulmak üzere olan güncellemeyi kaydeder (Sparkle temsilciyi zayıf tutar; burada yaşar).
+    private static let updateRecorder = AppUpdateRecorder()
     #endif
 
     /// Hakkında'daki "Güncellemeleri Denetle…" (Mac App Store sürümünde yok).
@@ -59,6 +61,7 @@ struct CouchSubsApp: App {
                     stream.attach(model)
                     phoneTwin.attach(model)
                     CrashNotice.shared.checkOnce()
+                    AppUpdateNotice.shared.checkOnce()
                     #if !APP_STORE
                     guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                     updater.updater.checkForUpdatesInBackground()

@@ -205,6 +205,8 @@ struct HomeNotices: View {
     @EnvironmentObject private var model: AppModel
     /// Xbox'ta oyun seçilmediyse "oyunu seçin" notu (seçilince kalkar).
     @ObservedObject var choice: GameChoice
+    /// Uygulanamayan güncelleme ya da güncellenemeyen kopya (AppUpdateNotice).
+    @ObservedObject private var updateNotice = AppUpdateNotice.shared
 
     var body: some View {
         let items = notices
@@ -220,13 +222,14 @@ struct HomeNotices: View {
     }
 
     private enum Notice: Hashable {
-        case crash, tvUpdate, tvOutdated, tvReinstall, testNotConnected, mainAccount, xboxGame, autoScreenText, gamePhone, usage, online,
+        case crash, appUpdate, tvUpdate, tvOutdated, tvReinstall, testNotConnected, mainAccount, xboxGame, autoScreenText, gamePhone, usage, online,
              areas, setup
     }
 
     private var notices: [Notice] {
         var list: [Notice] = []
         if CrashNotice.shared.report != nil { list.append(.crash) }
+        if updateNotice.issue != nil { list.append(.appUpdate) }
         if model.tvAppUpdating && model.settings.output.showsOnTV { list.append(.tvUpdate) }
         else if model.hasTV, model.tvAppOutdated != nil, model.settings.output.showsOnTV { list.append(.tvOutdated) }
         else if model.hasTV, model.canReinstallTVApp, !model.isRunning, model.settings.output.showsOnTV { list.append(.tvReinstall) }
@@ -248,6 +251,18 @@ struct HomeNotices: View {
     @ViewBuilder private func notice(_ notice: Notice) -> some View {
         switch notice {
         case .crash: CrashReportCard()
+        case .appUpdate:
+            if let issue = updateNotice.issue {
+                let notice = AppUpdateNoticeText(issue: issue, currentPath: Bundle.main.bundlePath)
+                NoticeCard(text: notice.text) {
+                    if let other = notice.otherCopy {
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([other]) }.buttonStyle(.dsSecondary)
+                    } else {
+                        Button("Download CouchSubs") { NSWorkspace.shared.open(AppUpdateNotice.downloadPage) }.buttonStyle(.dsSecondary)
+                    }
+                    Button("OK") { updateNotice.dismiss() }.buttonStyle(.dsSecondary)
+                }
+            }
         case .tvUpdate:
             VStack(alignment: .leading, spacing: DS.space("xs")) {
                 TVAppCard()
