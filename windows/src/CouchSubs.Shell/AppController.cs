@@ -2687,6 +2687,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             else if (readsWindow)
             {
                 RemotePlayLog.Note($"Çeviri başladı; görüntü bu bilgisayardaki Remote Play penceresinden ({settings.RemotePlayApp})");
+                RemotePlayLog.Note(RemotePlayCoexistence.WindowModeLine(RemotePlayAppName(settings.RemotePlayApp)));
                 stream = services.MakeWindowStream(settings.RemotePlayApp);
             }
             else if (readsCapture)
@@ -2698,6 +2699,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             else
             {
                 RemotePlayLog.Note($"Çeviri başladı; PS5'e bağlanılıyor: {console!.Name} {console.Host}");
+                NoteRunningRemotePlay(null);
                 stream = MakeConsoleStream();
             }
             sessionIsConsole = !demoMode && !readsWindow && !readsCapture;
@@ -3001,6 +3003,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         }
         else session?.ReconnectNow();
         keeper?.Reconnect();
+    }
+
+    /// <summary>Günlükteki Remote Play uygulaması adı.</summary>
+    private static string RemotePlayAppName(RemotePlayApp app) => app switch
+    {
+        RemotePlayApp.Sony => "PS Remote Play",
+        RemotePlayApp.Chiaki => "chiaki-ng",
+        _ => "PS Remote Play / chiaki-ng",
+    };
+
+    /// <summary>PS5 modunda bu bilgisayarda bir Remote Play uygulaması da açıksa günlüğe yazar (yalnız bakılır, dokunulmaz).</summary>
+    private void NoteRunningRemotePlay(string? reason)
+    {
+        string? running;
+        try { running = services.RunningRemotePlayApp(); }
+        catch (Exception) { running = null; }
+        if (running is not null) RemotePlayLog.Note(RemotePlayCoexistence.ConsoleConflictLine(running, reason));
     }
 
     /// <summary>Konsola (PS5 ya da Xbox) bağlanan oturumu kurar; başlatmaz. "Çeviriyi başlat" ve "Yeniden bağlan" kullanır.</summary>
@@ -4454,6 +4473,11 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         // PS5'in kendi tarafındaki çökme ayrıca yazılır: kullanıcının günlüğünde nedeni görünsün (GitHub #519).
         if (state.Reason?.Kind == DisconnectKind.ConsoleRemotePlayCrashed && SessionState.Reason?.Kind != DisconnectKind.ConsoleRemotePlayCrashed)
             SubtitleLog.Write("PS5: Uzaktan Oynatma PS5'te çöktü (Remote Play on Console has crashed); PS5 tamamen kapatılıp açılmalı");
+        // Kendi PS5 oturumumuz başka bir Uzaktan Oynatma yüzünden bittiyse ve bu bilgisayarda resmi uygulama açıksa yazılır:
+        // iki bağlantı PS5'te çakışıyor (resmi uygulamanın "kendiliğinden kapanması" bundan olabilir).
+        if (sessionIsConsole && !IsXbox && state.Reason?.Kind is DisconnectKind.InUse or DisconnectKind.ConsoleClosed or DisconnectKind.ConsoleClosedRepeatedly
+            && state.Reason?.Kind != SessionState.Reason?.Kind)
+            NoteRunningRemotePlay(state.Reason!.Kind.ToString());
         SessionState = state;
         reconnectOffer.Update(live: state.Phase == SessionPhase.Streaming, Clock());
         UpdateReconnectOffer();

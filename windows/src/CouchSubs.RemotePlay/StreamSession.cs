@@ -548,7 +548,7 @@ public sealed class StreamSession : IStreamSession
     public void Stop()
     {
         Bump(running: false);
-        queue.Post(CloseBox);
+        queue.Post(() => CloseBox("çeviri durdu"));
     }
 
     /// <summary>Bilgisayar uykudan uyandığında ya da ağ değiştiğinde uygulama tarafından çağrılır.</summary>
@@ -558,7 +558,7 @@ public sealed class StreamSession : IStreamSession
         var current = Bump(running: true);
         queue.Post(() =>
         {
-            CloseBox();
+            CloseBox("uyku ya da ağ değişti; yeniden bağlanılıyor");
             policy.Reset();
             crashLimit.Reset();
             retryLimit.Reset();
@@ -705,15 +705,21 @@ public sealed class StreamSession : IStreamSession
         box = started;
     }
 
-    /// <summary>Geçerli oturumu kapatır. Kapatma join içerdiği için kuyruğu bekletmemek adına arka planda yapılır.</summary>
-    private void CloseBox()
+    /// <summary>Geçerli oturumu kapatır. Kapatma join içerdiği için kuyruğu bekletmemek adına arka planda yapılır.
+    /// Kapatılan her oturum nedeniyle günlüğe yazılır (Mac/iPhone ve Android'deki closingLine ile aynı).</summary>
+    private void CloseBox(string why)
     {
         streaming = false;
         watchdog.Ended();
         if (box is not { } closing) return;
         box = null;
+        RemotePlayLog.Note(ClosingLine(why));
         Task.Run(closing.TearDown);
     }
+
+    /// <summary>CouchSubs'ın kendi PS5 oturumunu kapattığı satır. Yalnız kendi bağlantımız kapanır; başka bir Remote Play
+    /// uygulamasına (PS Remote Play) dokunulmaz.</summary>
+    internal static string ClosingLine(string why) => $"PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor ({why})";
 
     /// <summary>Yerel kütüphanenin iş parçacığından çağrılır.</summary>
     private void Handle(int eventType, int quitReason, string? text, int eventGeneration, DisconnectReason? sessionRequestHint)
@@ -749,7 +755,7 @@ public sealed class StreamSession : IStreamSession
                     }
                     // Şifre yok ya da yanlış: yeniden denemek aynı yere çıkar.
                     GiveUp();
-                    CloseBox();
+                    CloseBox("PS5 giriş şifresi yok ya da yanlış");
                     Emit(SessionState.Disconnected(stop ?? DisconnectKind.LoginPasscode));
                 });
                 break;
@@ -766,7 +772,7 @@ public sealed class StreamSession : IStreamSession
                     // Bekçi değil libchiaki kapattı (PS5 ya da ağ); görüntünün son ana kadar gelip gelmediği nedeni ayırır.
                     if (watchdog.Summary(Environment.TickCount64) is { } summary)
                         RemotePlayLog.Note($"PS5 oturumunu libchiaki kapattı ({reason.Kind}); {summary}");
-                    CloseBox();
+                    CloseBox("PS5 ya da ağ oturumu kapattı");
                     policy.Ended(Environment.TickCount64);
                     if (wasStreaming && QualityFallback.CountsAsDrop(reason.Kind)) NoteDrop();
                     if (reason.Kind == DisconnectKind.RegistrationInvalid)
@@ -815,7 +821,7 @@ public sealed class StreamSession : IStreamSession
             }
             RemotePlayLog.Note($"PS5'ten {(int)gap.TotalSeconds} sn'dir görüntü gelmiyor (bağlantı açık); oturumu görüntü bekçisi yeniden kuruyor; "
                                + watchdog.Summary(Environment.TickCount64));
-            CloseBox();
+            CloseBox("görüntü gelmiyor; oturum yeniden kuruluyor");
             policy.Ended(Environment.TickCount64);
             NoteDrop();
             ScheduleReconnect(boxGeneration, new DisconnectReason(DisconnectKind.Other, PictureWatchdog.Reason));

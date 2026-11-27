@@ -246,6 +246,14 @@ internal sealed class FakeServices : IAppServices
         Streams.Add(stream);
         return stream;
     }
+    /// <summary>Bu bilgisayarda açık "resmi" Remote Play uygulaması (yalnız günlük için sorulur).</summary>
+    public string? RunningRemotePlay { get; set; }
+    public int RunningRemotePlayAsked { get; private set; }
+    public string? RunningRemotePlayApp()
+    {
+        RunningRemotePlayAsked++;
+        return RunningRemotePlay;
+    }
     public List<WindowCaptureTarget> CaptureWindowStreams { get; } = [];
     public IStreamSession MakeCaptureWindowStream(WindowCaptureTarget target)
     {

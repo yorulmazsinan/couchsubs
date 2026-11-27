@@ -97,7 +97,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
             running = false;
             generation++;
         }
-        TearDown();
+        TearDown("çeviri durdu");
         Report(SessionState.Disconnected(DisconnectKind.Stopped));
     }
 
@@ -110,7 +110,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
             if (!running) return;
             current = ++generation;
         }
-        TearDown();
+        TearDown("uyku ya da ağ değişti; yakalama yeniden kuruluyor");
         Report(SessionState.Connecting);
         StartSearch(current);
     }
@@ -133,7 +133,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
         StateChanged?.Invoke(state);
     }
 
-    private void TearDown()
+    private void TearDown(string why)
     {
         CancellationTokenSource? oldSearch;
         Capture? oldCapture;
@@ -145,6 +145,8 @@ public sealed class RemotePlayWindowStream : IStreamSession
             capture = null;
         }
         oldSearch?.Cancel();
+        if (oldCapture is not null)
+            RemotePlayLog.Note($"{oldCapture.Name} penceresinin okunması bırakılıyor ({why}); uygulama açık bırakılıyor, ona dokunulmuyor");
         oldCapture?.Dispose();
     }
 
@@ -218,8 +220,15 @@ public sealed class RemotePlayWindowStream : IStreamSession
             capture = null;
             current = ++generation;
         }
+        var probe = ended.TakeProbe();
         ended.Dispose();
         RemotePlayLog.Note($"Remote Play penceresi kapandı: {why}");
+        // Uygulama kapandı mı, çıkış kodu ne: "PS Remote Play kendiliğinden kapanıyor" bildirimlerinde günlükte görünsün.
+        if (probe is not null)
+            _ = Task.Run(() =>
+            {
+                using (probe) RemotePlayLog.Note(probe.GoneLine(why));
+            });
         Report(SessionState.Connecting);
         StartSearch(current);
     }
@@ -322,6 +331,21 @@ public sealed class RemotePlayWindowStream : IStreamSession
         }
     }
 
+    /// <summary>Bu bilgisayarda açık Remote Play uygulamasının adı (önce Sony'ninki); yoksa null. Yalnız süreç listesine
+    /// bakılır, uygulamaya dokunulmaz (PS5 modunda iki bağlantının çakıştığı günlükte görünsün).</summary>
+    public static string? RunningApp()
+    {
+        static bool Running(string[] names) => names.Any(name =>
+        {
+            var found = Process.GetProcessesByName(name);
+            foreach (var process in found) process.Dispose();
+            return found.Length > 0;
+        });
+        if (Running(SonyProcesses)) return "PS Remote Play";
+        if (Running(ChiakiProcesses)) return "chiaki-ng";
+        return null;
+    }
+
     /// <summary>Seçilen Remote Play uygulaması bu bilgisayarda kurulu mu ("hangisi açıksa"da ikisinden biri yeter).</summary>
     public static bool IsInstalled(RemotePlayApp app) => InstalledPath(app) is not null;
 
@@ -392,6 +416,12 @@ public sealed class RemotePlayWindowStream : IStreamSession
         private bool fallbackFailureNoted;
 
         public string Name { get; }
+        /// <summary>Pencerenin sürecine salt sorgu tutamacı (pencere kaybolunca durumu günlüğe yazılır).</summary>
+        private ProcessProbe? probe;
+
+        /// <summary>Süreç yoklayıcısını alır (kaybolma satırını yazan sahiplenir ve kapatır).</summary>
+        public ProcessProbe? TakeProbe() => Interlocked.Exchange(ref probe, null);
+
         public int Width => size.Width;
         public int Height => size.Height;
 
@@ -415,6 +445,8 @@ public sealed class RemotePlayWindowStream : IStreamSession
             session = pool.CreateCaptureSession(item);
             session.IsCursorCaptureEnabled = false;
             HideCaptureBorder(session);
+            // Yakalama kurulduktan sonra açılır: kurulum hata verirse tutamaç açık kalmaz.
+            probe = new ProcessProbe(Name, pid);
             item.Closed += (_, _) => owner.CaptureEnded(this, number, "pencere kapandı");
             pool.FrameArrived += OnFrameArrived;
             session.StartCapture();
@@ -701,6 +733,7 @@ public sealed class RemotePlayWindowStream : IStreamSession
         {
             if (disposed) return;
             disposed = true;
+            TakeProbe()?.Dispose();
             try { watchTimer.Dispose(); } catch (Exception) { }
             try { minuteTimer.Dispose(); } catch (Exception) { }
             try { trailingTimer.Dispose(); } catch (Exception) { }
@@ -941,5 +974,61 @@ public sealed class RemotePlayWindowStream : IStreamSession
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr window);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder text, int maxCount);
+
+        /// <summary>Yalnız sorgu ve bekleme hakkı: sürece dokunulamaz (kapatma, yazma yok).</summary>
+        public const uint ProcessQueryLimitedInformation = 0x1000, Synchronize = 0x00100000;
+        public const uint StillActive = 259;
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+        [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll")] public static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
+        [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr handle);
+    }
+
+    /// <summary>
+    /// Okunan pencerenin sürecine salt sorgu tutamacı: pencere kaybolunca uygulama kapandı mı, çıkış kodu ne (0: kendisi
+    /// kapandı, 0xC…: çöktü) günlüğe yazılır. Tutamaç yalnız sorgu ve bekleme hakkıyla açılır; sürece hiçbir şey yapılmaz.
+    /// </summary>
+    private sealed class ProcessProbe : IDisposable
+    {
+        private IntPtr handle;
+        public string App { get; }
+        public int Pid { get; }
+
+        public ProcessProbe(string app, uint pid)
+        {
+            App = app;
+            Pid = (int)pid;
+            handle = pid == 0 ? IntPtr.Zero : Native.OpenProcess(Native.ProcessQueryLimitedInformation | Native.Synchronize, false, pid);
+        }
+
+        /// <summary>Pencere kayboldu: süreç kapanıyorsa en çok iki saniye beklenir, sonra durum yazılır.</summary>
+        public string GoneLine(string why)
+        {
+            bool? exited = null;
+            long? code = null;
+            if (handle != IntPtr.Zero)
+            {
+                exited = Native.WaitForSingleObject(handle, 2000) == 0;
+                if (exited == true && Native.GetExitCodeProcess(handle, out var value) && value != Native.StillActive) code = value;
+            }
+            else if (Pid != 0)
+            {
+                try
+                {
+                    using var process = Process.GetProcessById(Pid);
+                    exited = process.HasExited;
+                }
+                catch (ArgumentException) { exited = true; }
+                catch (Exception) { exited = null; }
+            }
+            return RemotePlayCoexistence.WindowGoneLine(App, Pid, why, exited, code);
+        }
+
+        public void Dispose()
+        {
+            var old = handle;
+            handle = IntPtr.Zero;
+            if (old != IntPtr.Zero) Native.CloseHandle(old);
+        }
     }
 }

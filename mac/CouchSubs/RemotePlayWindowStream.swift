@@ -32,6 +32,14 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
         bundleIdentifiers(for: app).contains { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }
     }
 
+    /// Bu Mac'te açık Remote Play uygulamasının adı (önce Sony'ninki); yoksa nil. Yalnız çalışan uygulamalar listesine
+    /// bakılır, uygulamaya dokunulmaz (PS5 modunda iki bağlantının çakıştığı günlükte görünsün).
+    static func runningAppName() -> String? {
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: sonyBundleIdentifier).isEmpty { return "PS Remote Play" }
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: chiakiBundleIdentifier).isEmpty { return "chiaki-ng" }
+        return nil
+    }
+
     /// Resmi indirme sayfaları: Sony PS Remote Play (Mac ve Windows sürümleri) ve chiaki-ng'nin son sürümü.
     static let sonyDownloadURL = URL(string: "https://remoteplay.dl.playstation.net/remoteplay/")!
     static let chiakiDownloadURL = URL(string: "https://github.com/chiaki-ng/chiaki-ng/releases/latest")!
@@ -66,6 +74,8 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
     private var running = false
     private(set) var stream: SCStream?
     private(set) var window: (id: CGWindowID, size: CGSize)?
+    /// Okunan pencerenin uygulaması: pencere kaybolunca kapanıp kapanmadığı günlüğe yazılır (`lock` altında).
+    private var owner: (name: String, pid: pid_t)?
     /// Pencere arama ve izleme görevleri; yalnız ana iş parçacığında kurulur ve kaldırılır (`start`, `stop`,
     /// `reconnectNow` uygulama modelinden ana iş parçacığında çağrılır).
     private var search: Task<Void, Never>?
@@ -167,7 +177,7 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
             running = false
             generation += 1
         }
-        tearDown()
+        tearDown(why: "çeviri durdu")
         report(.disconnected(.stopped))
     }
 
@@ -179,7 +189,7 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
             return generation
         }
         guard let current else { return }
-        tearDown()
+        tearDown(why: "uyku, pencere değişimi ya da yeniden arama; yakalama yeniden kuruluyor")
         report(.connecting)
         startSearch(current)
     }
@@ -191,18 +201,21 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
         lock.withLock { running && generation == number }
     }
 
-    private func tearDown() {
+    private func tearDown(why: String) {
         search?.cancel()
         search = nil
         sizeWatch?.cancel()
         sizeWatch = nil
         frameWatch?.cancel()
         frameWatch = nil
-        let old = lock.withLock { () -> SCStream? in
-            defer { stream = nil; window = nil; selectedCapture = nil }
-            return stream
+        let (old, app) = lock.withLock { () -> (SCStream?, String?) in
+            defer { stream = nil; window = nil; selectedCapture = nil; owner = nil }
+            return (stream, owner?.name)
         }
-        if let old { Task { try? await old.stopCapture() } }
+        if let old {
+            RemotePlayLog.write("\(app ?? "Remote Play") penceresinin okunması bırakılıyor (\(why)); uygulama açık bırakılıyor, ona dokunulmuyor")
+            Task { try? await old.stopCapture() }
+        }
     }
 
     // MARK: - Pencereyi bulma
@@ -278,6 +291,7 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
             guard running, generation == number else { return false }
             self.stream = stream
             window = (target.windowID, target.frame.size)
+            owner = target.owningApplication.map { ($0.applicationName, $0.processID) }
             if selected != nil { selectedCapture = SelectedCapture(filter: filter) }
             return true
         }
@@ -491,16 +505,28 @@ final class RemotePlayWindowStream: NSObject, StreamControlling, SCStreamOutput,
 
     /// Pencere kapandı ya da Remote Play çıktı: pencere yeniden aranır (çeviri durmaz).
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        let current = lock.withLock { () -> Int? in
+        let ended = lock.withLock { () -> (Int, (name: String, pid: pid_t)?)? in
             guard running, self.stream === stream else { return nil }
             self.stream = nil
             window = nil
             selectedCapture = nil
+            defer { owner = nil }
             generation += 1
-            return generation
+            return (generation, owner)
         }
-        guard let current else { return }
+        guard let ended else { return }
+        let (current, app) = ended
         RemotePlayLog.write("\(selected == nil ? "Remote Play penceresi" : "Seçilen pencere") kapandı: \(error.localizedDescription)")
+        // Uygulama kapandı mı: "PS Remote Play kendiliğinden kapanıyor" bildirimlerinde günlükte görünsün (Windows'ta çıkış
+        // kodu da yazılır; Mac'te bilinmez). Kapanmakta olan uygulamaya iki saniye verilir.
+        if let app {
+            let why = error.localizedDescription
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                let exited = NSRunningApplication(processIdentifier: app.pid).map(\.isTerminated) ?? true
+                RemotePlayLog.write(RemotePlayCoexistence.windowGoneLine(app: app.name, pid: Int(app.pid), why: why,
+                                                                         exited: exited, exitCode: nil))
+            }
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrent(current) else { return }
             self.sizeWatch?.cancel()

@@ -24,6 +24,7 @@ extension AppServices {
     /// Bu Mac'teki Remote Play penceresinden (PS Remote Play ya da chiaki-ng) okuyan görüntü kaynağı (bkz. `RemotePlayWindowStream`).
     func makeWindowStream(app: RemotePlayApp) -> StreamControlling { RemotePlayWindowStream(app: app) }
     func remotePlayInstalled(_ app: RemotePlayApp) -> Bool { RemotePlayWindowStream.isInstalled(app) }
+    func runningRemotePlayApp() -> String? { RemotePlayWindowStream.runningAppName() }
     /// Kullanıcının seçtiği OBS projektörü ya da oyun penceresini okuyan kaynak; aynı ScreenCaptureKit hattı.
     func makeCaptureWindowStream(target: WindowCaptureTarget) -> StreamControlling { RemotePlayWindowStream(target: target) }
     func captureWindows() async -> [WindowCaptureTarget] { await RemotePlayWindowStream.captureWindows() }
@@ -78,6 +79,9 @@ protocol AppServices: AnyObject {
     func makeWindowStream(app: RemotePlayApp) -> StreamControlling
     /// Seçilen Remote Play uygulaması (PS Remote Play ya da chiaki-ng) bu Mac'te kurulu mu.
     func remotePlayInstalled(_ app: RemotePlayApp) -> Bool
+    /// Bu Mac'te açık Remote Play uygulamasının adı (PS Remote Play ya da chiaki-ng); yoksa nil. Yalnız günlük için
+    /// sorulur: CouchSubs o uygulamaya dokunmaz (varsayılanı yukarıda; testlerde sahtesi).
+    func runningRemotePlayApp() -> String?
     /// Seçilen pencereden okuma (`UserSettings.captureWindow`): kaynak, seçilebilir pencereler ve ekran kaydı izni
     /// (varsayılanları yukarıda; testlerde sahtesi).
     func makeCaptureWindowStream(target: WindowCaptureTarget) -> StreamControlling
@@ -2545,6 +2549,7 @@ final class AppModel: ObservableObject {
             session = DemoStream()
         } else if readsWindow {
             RemotePlayLog.write("Çeviri başladı; görüntü bu Mac'teki Remote Play penceresinden (\(settings.remotePlayApp.rawValue))")
+            RemotePlayLog.write(RemotePlayCoexistence.windowModeLine(app: Self.remotePlayAppName(settings.remotePlayApp)))
             session = services.makeWindowStream(app: settings.remotePlayApp)
         } else if let captureTarget {
             RemotePlayLog.write("Çeviri başladı; seçilen pencere: \(captureTarget.processName) / \(captureTarget.title)")
@@ -2555,6 +2560,7 @@ final class AppModel: ObservableObject {
             session = made
         } else if console != nil, accountId != nil {
             if let console { RemotePlayLog.write("Çeviri başladı; PS5'e bağlanılıyor: \(console.name) \(console.host)") }
+            noteRunningRemotePlay(reason: nil)
             guard let made = makeConsoleSession(xbox: nil) else { return }
             session = made
         } else {
@@ -2604,6 +2610,21 @@ final class AppModel: ObservableObject {
                                        packs: settings.gamePacks, console: usageConsole))
         }
         applyHotkeys()
+    }
+
+    /// Günlükteki Remote Play uygulaması adı.
+    static func remotePlayAppName(_ app: RemotePlayApp) -> String {
+        switch app {
+        case .sony: "PS Remote Play"
+        case .chiaki: "chiaki-ng"
+        case .automatic: "PS Remote Play / chiaki-ng"
+        }
+    }
+
+    /// PS5 modunda bu Mac'te bir Remote Play uygulaması da açıksa günlüğe yazar (yalnız bakılır, dokunulmaz).
+    private func noteRunningRemotePlay(reason: String?) {
+        guard let running = services.runningRemotePlayApp() else { return }
+        RemotePlayLog.write(RemotePlayCoexistence.consoleConflictLine(app: running, reason: reason))
     }
 
     /// Konsola (PS5 ya da Xbox) bağlanan oturumu kurar; başlatmaz. "Çeviriyi başlat" ve "Yeniden bağlan" kullanır.
@@ -3700,6 +3721,14 @@ final class AppModel: ObservableObject {
             // PS5'in kendi tarafındaki çökme ayrıca yazılır: kullanıcının günlüğünde nedeni görünsün (GitHub #519).
             if state == .disconnected(.consoleRemotePlayCrashed) {
                 SubtitleLog.write("PS5: Uzaktan Oynatma PS5'te çöktü (Remote Play on Console has crashed); PS5 tamamen kapatılıp açılmalı")
+            }
+            // Kendi PS5 oturumumuz başka bir Uzaktan Oynatma yüzünden bittiyse ve bu Mac'te resmi uygulama açıksa yazılır:
+            // iki bağlantı PS5'te çakışıyor (resmi uygulamanın "kendiliğinden kapanması" bundan olabilir; Windows ile aynı).
+            if sessionIsConsole, !isXbox, case .disconnected(let reason) = state {
+                switch reason {
+                case .inUse, .consoleClosed, .consoleClosedRepeatedly: noteRunningRemotePlay(reason: reason.logName)
+                default: break
+                }
             }
         }
         sessionState = state

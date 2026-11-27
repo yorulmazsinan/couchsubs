@@ -882,6 +882,9 @@ public interface IAppServices
     IReadOnlyList<WindowCaptureTarget> CaptureWindows() => [];
     /// <summary>Seçilen Remote Play uygulaması (PS Remote Play ya da chiaki-ng) bu bilgisayarda kurulu mu.</summary>
     bool RemotePlayInstalled(RemotePlayApp app) => true;
+    /// <summary>Bu bilgisayarda açık olan Remote Play uygulamasının adı (PS Remote Play ya da chiaki-ng); yoksa null. Yalnız
+    /// günlük için sorulur: CouchSubs o uygulamaya dokunmaz.</summary>
+    string? RunningRemotePlayApp() => null;
     /// <param name="appConnected">TV uygulaması bilgisayara bağlı mı (Samsung'da bağlıyken TV'ye dokunulmaz).</param>
     /// <param name="onMoved">TV ağda yeni bir adreste bulununca çağrılır.</param>
     /// <param name="onKey">TV bağlantıda yeni jeton verdi (Samsung); saklanır.</param>

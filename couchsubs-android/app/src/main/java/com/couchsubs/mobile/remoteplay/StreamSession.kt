@@ -560,8 +560,12 @@ class StreamSession(
     /** PS5 bu hesap için giriş şifresi isterse gönderilecek 4 hane (Ayarlar'da kayıtlıysa). */
     private val loginPasscode: String? = null,
 ) : FrameSource {
-    private companion object {
+    internal companion object {
         const val TAG = "CouchSubsSession"
+
+        /** CouchSubs'ın kendi PS5 oturumunu kapattığı satır. Yalnız kendi bağlantımız kapanır; başka bir Remote Play
+         *  uygulamasına (PS Remote Play) dokunulmaz. */
+        fun closingLine(why: String) = "PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor ($why)"
     }
 
     /**
@@ -610,7 +614,7 @@ class StreamSession(
     /** Bloklamaz: oturum arka planda kapatılır. */
     fun stop() {
         bump(false)
-        queue.execute(::closeNative)
+        queue.execute { closeNative("çeviri durdu") }
     }
 
     override fun dispose() {
@@ -623,7 +627,7 @@ class StreamSession(
         if (!isRunning) return
         val current = bump(true)
         queue.execute {
-            closeNative()
+            closeNative("uyku ya da ağ değişti; yeniden bağlanılıyor")
             policy.reset()
             watchdog.reset()
             crashLimit.reset()
@@ -766,12 +770,18 @@ class StreamSession(
         nativeGeneration = current
     }
 
-    /** Oturumu kapatır (join içerir; yalnız kuyrukta, asla yerel geri çağrıdan değil). */
-    private fun closeNative() {
+    /**
+     * Oturumu kapatır (join içerir; yalnız kuyrukta, asla yerel geri çağrıdan değil). Kapatılan her oturum nedeniyle
+     * günlüğe yazılır (Windows ve Mac/iPhone'daki closingLine ile aynı).
+     */
+    private fun closeNative(why: String) {
         streaming = false
         val ptr = native
         if (ptr != 0L) {
             native = 0L
+            val line = closingLine(why)
+            Log.i(TAG, line)
+            Backend.breadcrumb(line)
             // Çözücünün çıkış iş parçacığını da bekler: dönünce [onFrame] bir daha çağrılmaz.
             NativeBridge.sessionStop(ptr)
         }
@@ -807,7 +817,7 @@ class StreamSession(
                         // Şifre yok ya da yanlış: yeniden denemek aynı yere çıkar.
                         is LoginPasscode.Reply.Stop -> {
                             giveUp()
-                            closeNative()
+                            closeNative("PS5 giriş şifresi yok ya da yanlış")
                             emit(SessionState.Disconnected(reply.kind))
                         }
                     }
@@ -841,7 +851,7 @@ class StreamSession(
                         Backend.breadcrumb(note)
                     }
                     val wasStreaming = streaming
-                    closeNative()
+                    closeNative("PS5 ya da ağ oturumu kapattı")
                     policy.ended(SystemClock.elapsedRealtime())
                     if (wasStreaming && QualityFallback.countsAsDrop(kind)) noteDrop()
                     if (kind == DisconnectKind.REGISTRATION_INVALID) {
@@ -894,7 +904,7 @@ class StreamSession(
                 Log.w(TAG, text)
                 Backend.breadcrumb(text)
                 Telemetry.event("no_picture", "next" to next.name.lowercase(), "streak" to streak, "frames" to framesReceived)
-                closeNative()
+                closeNative("görüntü gelmiyor; oturum yeniden kuruluyor")
                 policy.ended(SystemClock.elapsedRealtime())
                 noteDrop()
                 if (next == PictureWatchdog.Next.GIVE_UP) {

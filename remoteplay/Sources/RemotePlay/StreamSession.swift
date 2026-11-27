@@ -681,7 +681,7 @@ public final class StreamSession: @unchecked Sendable {
     /// Bloklamaz: oturum arka planda kapatılır.
     public func stop() {
         _ = bump(running: false)
-        queue.async { [weak self] in self?.closeBox() }
+        queue.async { [weak self] in self?.closeBox(why: "çeviri durdu") }
     }
 
     /// Mac uykudan uyandığında ya da ağ değiştiğinde uygulama tarafından çağrılır.
@@ -690,7 +690,7 @@ public final class StreamSession: @unchecked Sendable {
         let current = bump(running: true)
         queue.async { [weak self] in
             guard let self else { return }
-            self.closeBox()
+            self.closeBox(why: "uyku ya da ağ değişti; yeniden bağlanılıyor")
             self.policy.reset()
             self.crashLimit.reset()
             self.retryLimit.reset()
@@ -852,13 +852,19 @@ public final class StreamSession: @unchecked Sendable {
     }
 
     /// Geçerli oturumu kapatır. Kapatma join içerdiği için kuyruğu bekletmemek adına arka planda yapılır.
-    private func closeBox() {
+    /// Kapatılan her oturum nedeniyle günlüğe yazılır (Windows ve Android'deki ClosingLine ile aynı).
+    private func closeBox(why: String) {
         streaming = false
         watch { $0.ended() }
         guard let box else { return }
         self.box = nil
+        RemotePlayLog.write(Self.closingLine(why))
         DispatchQueue.global().async { box.tearDown() }
     }
+
+    /// CouchSubs'ın kendi PS5 oturumunu kapattığı satır. Yalnız kendi bağlantımız kapanır; başka bir Remote Play
+    /// uygulamasına (PS Remote Play) dokunulmaz.
+    static func closingLine(_ why: String) -> String { "PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor (\(why))" }
 
     /// libchiaki iş parçacığından çağrılır.
     fileprivate func handle(_ event: ChiakiEvent, generation eventGeneration: Int, sessionRequestHint: DisconnectReason?) {
@@ -890,7 +896,7 @@ public final class StreamSession: @unchecked Sendable {
                 case .stop(let reason):
                     // Şifre yok ya da yanlış: yeniden denemek aynı yere çıkar, oturum kapatılır.
                     self.giveUp()
-                    self.closeBox()
+                    self.closeBox(why: "PS5 giriş şifresi yok ya da yanlış")
                     self.emit(.disconnected(reason))
                 }
             }
@@ -909,7 +915,7 @@ public final class StreamSession: @unchecked Sendable {
                     RemotePlayLog.write("PS5 Uzaktan Oynatma'yı kendisi kapattı (PS5'in nedeni: \"\(text)\"); ağ kopması değil, "
                         + "çoğunlukla PS5'te kullanıcı değişince olur")
                 }
-                self.closeBox()
+                self.closeBox(why: "PS5 ya da ağ oturumu kapattı")
                 self.policy.ended()
                 if wasStreaming, QualityFallback.countsAsDrop(reason) { self.noteDrop() }
                 if reason == .registrationInvalid {
@@ -955,7 +961,7 @@ public final class StreamSession: @unchecked Sendable {
             let summary = self.watch { $0.summary() } ?? ""
             RemotePlayLog.write("PS5'ten \(Int(gap)) sn'dir görüntü gelmiyor (bağlantı açık, art arda görüntüsüz oturum \(streak)); "
                 + "oturumu görüntü bekçisi kapatıyor: \(next); \(summary)")
-            self.closeBox()
+            self.closeBox(why: "görüntü gelmiyor; oturum yeniden kuruluyor")
             self.policy.ended()
             self.noteDrop()
             if next == .giveUp {

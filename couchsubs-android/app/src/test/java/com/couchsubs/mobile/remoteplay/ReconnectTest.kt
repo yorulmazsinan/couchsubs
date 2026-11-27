@@ -192,4 +192,13 @@ class ReconnectTest {
         limit.reset()
         assertNull(limit.ended(DisconnectKind.CONSOLE_CLOSED, 0))
     }
+
+    /** CouchSubs kendi PS5 oturumunu kapatınca günlükte nedeniyle görünür (Windows ve Mac/iPhone ile aynı metin). */
+    @Test
+    fun closingLineNamesOurOwnConnectionAndTheReason() {
+        assertEquals(
+            "PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor (çeviri durdu)",
+            StreamSession.closingLine("çeviri durdu"),
+        )
+    }
 }

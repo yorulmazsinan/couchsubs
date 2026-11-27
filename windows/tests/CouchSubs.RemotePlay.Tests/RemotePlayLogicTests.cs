@@ -724,3 +724,11 @@ public class CrashRetryLimitTests
         Assert.True(limit.Crashed());
     }
 }
+
+public class SessionClosingLineTests
+{
+    /// <summary>CouchSubs kendi PS5 oturumunu kapatınca günlükte nedeniyle görünür (Mac/iPhone ve Android ile aynı metin).</summary>
+    [Fact]
+    public void ClosingLineNamesOurOwnConnectionAndTheReason() =>
+        Assert.Equal("PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor (çeviri durdu)", StreamSession.ClosingLine("çeviri durdu"));
+}

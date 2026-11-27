@@ -705,3 +705,10 @@ final class NoRestModeRequestTests: XCTestCase {
         XCTAssertGreaterThan(scanned, 50)
     }
 }
+
+/// CouchSubs kendi PS5 oturumunu kapatınca günlükte nedeniyle görünür (Windows ve Android ile aynı metin).
+final class SessionClosingLineTests: XCTestCase {
+    func testClosingLineNamesOurOwnConnectionAndTheReason() {
+        XCTAssertEqual(StreamSession.closingLine("çeviri durdu"), "PS5 oturumu: CouchSubs kendi PS5 bağlantısını kapatıyor (çeviri durdu)")
+    }
+}

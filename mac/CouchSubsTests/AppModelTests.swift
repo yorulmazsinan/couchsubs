@@ -32,6 +32,21 @@ final class FakeServices: AppServices {
     /// PS Remote Play / chiaki-ng bu Mac'te kurulu mu (Ayarlar'daki indirme satırları, ana ekran uyarısı).
     var remotePlayInstalledResult = true
     func remotePlayInstalled(_ app: RemotePlayApp) -> Bool { remotePlayInstalledResult }
+    /// Remote Play penceresi kaynağı: gerçek ScreenCaptureKit'e gidilmez.
+    var windowStreams: [RemotePlayApp] = []
+    func makeWindowStream(app: RemotePlayApp) -> StreamControlling {
+        windowStreams.append(app)
+        let stream = FakeStream()
+        streams.append(stream)
+        return stream
+    }
+    /// Bu Mac'te açık "resmi" Remote Play uygulaması (yalnız günlük için sorulur).
+    var runningRemotePlay: String?
+    var runningRemotePlayAsked = 0
+    func runningRemotePlayApp() -> String? {
+        runningRemotePlayAsked += 1
+        return runningRemotePlay
+    }
     /// Seçilen pencereden okuma: gerçek ScreenCaptureKit'e gidilmez; açık pencereler ve izin elle verilir.
     var captureWindowStreams: [WindowCaptureTarget] = []
     var openCaptureWindows: [WindowCaptureTarget] = []
@@ -1017,6 +1032,43 @@ final class AppModelRunTests: XCTestCase {
         for _ in 0..<50 where model.sessionState != .disconnected(.consoleRemotePlayCrashed) { try await Task.sleep(for: .milliseconds(10)) }
         model.systemWoke()
         XCTAssertEqual(services.streams.count, 2)
+    }
+
+    /// PS5 eşleşmiş ve hesap bağlı olsa da Remote Play penceresi modunda PS5'e bağlanılmaz: başlatma, kopma, "Yeniden
+    /// bağlan", uykudan uyanış ve vazgeçilmiş oturum hiçbiri kendi PS5 oturumunu açmaz (resmi uygulamanın PS5 oturumu
+    /// düşmesin; Windows ile aynı).
+    func testWindowModeNeverOpensOurOwnPS5Session() async throws {
+        let services = FakeServices()
+        let model = readyModel(services)
+        model.settings.frameSource = .remotePlayWindow
+        await model.start()
+        defer { model.stop() }
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(services.windowStreams.count, 1)
+        let stream = try XCTUnwrap(services.streams.last)
+        stream.onState?(.disconnected(.other("pencere yok")))
+        try await Task.sleep(for: .milliseconds(50))
+        model.reconnect()
+        model.systemWoke()
+        stream.hasGivenUp = true
+        stream.onState?(.disconnected(.network))
+        try await Task.sleep(for: .milliseconds(50))
+        model.systemWoke()
+        model.reconnect(reason: "deneme")
+        XCTAssertTrue(services.streamPasscodes.isEmpty, "kendi PS5 oturumu açılmadı")
+        XCTAssertEqual(services.windowStreams.count, 1)
+    }
+
+    /// PS5 modunda bu Mac'te PS Remote Play de açıksa günlüğe uyarı düşer; PS5 bağlantısı yine kurulur.
+    func testPS5ModeWithOfficialAppOpenStillConnectsAndAsksForTheRunningApp() async {
+        let services = FakeServices()
+        services.runningRemotePlay = "PS Remote Play"
+        let model = readyModel(services)
+        await model.start()
+        defer { model.stop() }
+        XCTAssertEqual(services.streamPasscodes.count, 1)
+        XCTAssertGreaterThan(services.runningRemotePlayAsked, 0)
+        XCTAssertTrue(services.windowStreams.isEmpty)
     }
 
     func testReconnectsOnReturnUnlessRetryingEndsTheSameWay() {

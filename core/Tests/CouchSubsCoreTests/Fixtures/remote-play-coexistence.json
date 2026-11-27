@@ -1,0 +1,80 @@
+{
+  "_": "CouchSubs ile resmi PS Remote Play yan yana: günlük satırları. Windows RemotePlayCoexistenceTests.cs ve Mac/iPhone RemotePlayCoexistenceTests.swift aynı dosyayı okur.",
+  "windowMode": [
+    {
+      "app": "PS Remote Play",
+      "line": "Remote Play penceresi modu: CouchSubs PS5'e kendi bağlantısını açmaz, PS Remote Play uygulamasını kapatmaz, ona tuş göndermez, öne getirmez; yalnız penceresini okur"
+    },
+    {
+      "app": "Automatic",
+      "line": "Remote Play penceresi modu: CouchSubs PS5'e kendi bağlantısını açmaz, Automatic uygulamasını kapatmaz, ona tuş göndermez, öne getirmez; yalnız penceresini okur"
+    }
+  ],
+  "windowGone": [
+    {
+      "app": "RemotePlay",
+      "pid": 4120,
+      "why": "pencere kapandı",
+      "exited": true,
+      "exitCode": 0,
+      "line": "Remote Play penceresi kayboldu (pencere kapandı): RemotePlay (pid 4120) kapandı, çıkış kodu 0 (uygulama kendisi kapandı ya da kullanıcı kapattı); CouchSubs bu uygulamayı kapatmadı"
+    },
+    {
+      "app": "RemotePlay",
+      "pid": 4120,
+      "why": "pencere kapandı",
+      "exited": true,
+      "exitCode": 3221225477,
+      "line": "Remote Play penceresi kayboldu (pencere kapandı): RemotePlay (pid 4120) kapandı, çıkış kodu 0xC0000005 (uygulama çöktü); CouchSubs bu uygulamayı kapatmadı"
+    },
+    {
+      "app": "RemotePlay",
+      "pid": 4120,
+      "why": "pencere kapandı",
+      "exited": true,
+      "exitCode": 1,
+      "line": "Remote Play penceresi kayboldu (pencere kapandı): RemotePlay (pid 4120) kapandı, çıkış kodu 1; CouchSubs bu uygulamayı kapatmadı"
+    },
+    {
+      "app": "PS Remote Play",
+      "pid": 812,
+      "why": "yakalama durdu",
+      "exited": true,
+      "exitCode": null,
+      "line": "Remote Play penceresi kayboldu (yakalama durdu): PS Remote Play (pid 812) kapandı (çıkış kodu bilinmiyor); CouchSubs bu uygulamayı kapatmadı"
+    },
+    {
+      "app": "chiaki",
+      "pid": 77,
+      "why": "pencere kapandı",
+      "exited": false,
+      "exitCode": null,
+      "line": "Remote Play penceresi kayboldu (pencere kapandı): chiaki (pid 77) hâlâ açık (pencere kapandı, gizlendi ya da yeniden açılıyor); CouchSubs bu uygulamayı kapatmadı"
+    },
+    {
+      "app": "RemotePlay",
+      "pid": 9,
+      "why": "pencere kapandı",
+      "exited": null,
+      "exitCode": null,
+      "line": "Remote Play penceresi kayboldu (pencere kapandı): RemotePlay (pid 9) süreç durumu bilinmiyor; CouchSubs bu uygulamayı kapatmadı"
+    }
+  ],
+  "consoleConflict": [
+    {
+      "app": "PS Remote Play",
+      "reason": null,
+      "line": "Uyarı: PS Remote Play bu bilgisayarda açık ve CouchSubs PS5'e kendi bağlantısını açıyor. PS5 aynı anda tek Uzaktan Oynatma bağlantısı kabul eder; iki bağlantı birbirini düşürebilir. CouchSubs PS Remote Play uygulamasını kapatmaz. İkisi birlikte kullanılacaksa görüntü kaynağı \"Remote Play penceresi\" seçilmeli"
+    },
+    {
+      "app": "PS Remote Play",
+      "reason": "InUse",
+      "line": "PS5 oturumu bitti (InUse) ve PS Remote Play bu bilgisayarda açık. PS5 aynı anda tek Uzaktan Oynatma bağlantısı kabul eder; iki bağlantı birbirini düşürebilir. CouchSubs PS Remote Play uygulamasını kapatmaz. İkisi birlikte kullanılacaksa görüntü kaynağı \"Remote Play penceresi\" seçilmeli"
+    },
+    {
+      "app": "chiaki-ng",
+      "reason": "ConsoleClosed",
+      "line": "PS5 oturumu bitti (ConsoleClosed) ve chiaki-ng bu bilgisayarda açık. PS5 aynı anda tek Uzaktan Oynatma bağlantısı kabul eder; iki bağlantı birbirini düşürebilir. CouchSubs chiaki-ng uygulamasını kapatmaz. İkisi birlikte kullanılacaksa görüntü kaynağı \"Remote Play penceresi\" seçilmeli"
+    }
+  ]
+}
