@@ -93,7 +93,7 @@ class XboxCodecsTest {
     @Test fun diagnosticLineNamesSdpCodecAndMissingDecoderWhenNoVideoBytesArrive() {
         val line = XboxStreamStats.describe(10_000, false, 5, paddingOnly, "görüntü parça LIVE", negotiatedCodec = "H264 42e01f")
         assertEquals("tanı (10 sn, ilk kare yok): keyframe isteği 5; video paket 150, bayt 0, kayıp 0, çözülen 0, düşen 0, " +
-            "anahtar kare 0, PLI 0, çözücü kurulmadı, görüntü verisi gelmedi, kodek H264 42e01f (SDP yanıtı); aday seçilmedi; " +
+            "anahtar kare 0, PLI 0, çözücü kurulmadı, görüntü verisi gelmedi, kodek H264 42e01f (SDP yanıtı); ses yok; aday seçilmedi; " +
             "görüntü parça LIVE", line)
     }
 

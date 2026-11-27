@@ -59,7 +59,7 @@ public class XboxSdpTests
     {
         using var report = JsonDocument.Parse(PaddingOnly);
         Assert.Equal("tanı (10 sn, ilk kare yok): keyframe isteği 5; video paket 150, bayt 0, kayıp 0, çözülen 0, düşen 0, " +
-            "anahtar kare 0, PLI 0, çözücü kurulmadı, görüntü verisi gelmedi, kodek H264 42e01f (SDP yanıtı); aday seçilmedi; " +
+            "anahtar kare 0, PLI 0, çözücü kurulmadı, görüntü verisi gelmedi, kodek H264 42e01f (SDP yanıtı); ses yok; aday seçilmedi; " +
             "görüntü parça LIVE",
             XboxStreamStats.Describe(Ms(10_000), false, 5, report.RootElement, "görüntü parça LIVE", "H264 42e01f"));
     }

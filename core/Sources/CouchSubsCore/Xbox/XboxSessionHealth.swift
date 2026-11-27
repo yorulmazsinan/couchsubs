@@ -373,6 +373,13 @@ public enum XboxStreamStats {
         } else {
             line += "video yok; "
         }
+        // Ses de geliyor mu (#1416): video yalnız dolgu paketiyken (bayt 0) ses akıyorsa Xbox yayını başlatmış, yalnız
+        // görüntüyü kodlamıyor; ses de yoksa Xbox'ın yayın hizmeti hiç başlamamış.
+        if let audio = stats.first(where: { $0.type == "inbound-rtp" && (text($0, "kind") ?? text($0, "mediaType")) == "audio" }) {
+            line += "ses paket \(number(audio, "packetsReceived")), bayt \(number(audio, "bytesReceived")); "
+        } else {
+            line += "ses yok; "
+        }
         if let pair = selectedPair(stats) {
             let local = byId(stats, text(pair, "localCandidateId"))
             let remote = byId(stats, text(pair, "remoteCandidateId"))

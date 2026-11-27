@@ -51,6 +51,22 @@ object XboxChannels {
         return buffer.array()
     }
 
+    /**
+     * `input` kanalından gelen ikili iletinin günlük metni (#1416): tür, uzunluk ve ilk [INPUT_HEX_BYTES] bayt onaltılı.
+     * Xbox el sıkışmadan sonra 16 (ServerMetadata) gönderir; içeriği Xbox'ın görüntü ayarını gösterebilir (görüntü hiç
+     * gelmeyen oturumu çalışan oturumla karşılaştırmak için). 128 (titreşim) her an gelir, yazılmaz (null).
+     */
+    fun describeInput(bytes: ByteArray): String? {
+        val type = if (bytes.isEmpty()) -1 else bytes[0].toInt() and 0xff
+        if (type == 128) return null
+        val name = if (type == 16) " (ServerMetadata)" else ""
+        val hex = bytes.take(INPUT_HEX_BYTES).joinToString(" ") { "%02x".format(it.toInt() and 0xff) }
+        return "ikili ileti, tür $type$name, ${bytes.size} bayt" + (if (hex.isEmpty()) "" else ": $hex") +
+            (if (bytes.size > INPUT_HEX_BYTES) " …" else "")
+    }
+
+    const val INPUT_HEX_BYTES = 32
+
     /** Oynatıcı bir pakette en çok 29 kare onaylar (Input.ts `getMetadataQueue(30)` → `splice(0, 29)`). */
     const val MAX_FRAME_ACKS = 29
 

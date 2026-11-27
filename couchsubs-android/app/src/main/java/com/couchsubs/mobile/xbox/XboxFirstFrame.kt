@@ -96,6 +96,14 @@ object XboxStreamStats {
         } else {
             append("video yok; ")
         }
+        // Ses de geliyor mu (#1416): video yalnız dolgu paketiyken (bayt 0) ses akıyorsa Xbox yayını başlatmış, yalnız
+        // görüntüyü kodlamıyor; ses de yoksa Xbox'ın yayın hizmeti hiç başlamamış.
+        val audio = stats.firstOrNull { it.type == "inbound-rtp" && (text(it, "kind") ?: text(it, "mediaType")) == "audio" }
+        if (audio != null) {
+            append("ses paket ${number(audio, "packetsReceived")}, bayt ${number(audio, "bytesReceived")}; ")
+        } else {
+            append("ses yok; ")
+        }
         val pair = selectedPair(stats)
         if (pair != null) {
             val local = byId(stats, text(pair, "localCandidateId"))

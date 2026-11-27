@@ -562,9 +562,8 @@ public final class XboxStreamSession: NSObject, @unchecked Sendable {
 
     fileprivate func channelMessage(_ name: String, _ buffer: RTCDataBuffer) {
         if buffer.isBinary {
-            // input kanalından gelenler: 16 = ServerMetadata, 128 = titreşim (her an gelir, yazılmaz).
-            let type = buffer.data.first.map { Int($0) } ?? -1
-            if type != 128 { log("kanal \(name): ikili ileti, tür \(type), \(buffer.data.count) bayt") }
+            // input kanalından gelenler: 16 = ServerMetadata (baytlarıyla, #1416), 128 = titreşim (her an gelir, yazılmaz).
+            if let line = XboxChannels.describeInput(buffer.data) { log("kanal \(name): \(line)") }
             return
         }
         let text = String(decoding: buffer.data, as: UTF8.self)

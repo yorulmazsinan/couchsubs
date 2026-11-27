@@ -605,9 +605,8 @@ class XboxStreamSession(
         override fun onMessage(buffer: DataChannel.Buffer) {
             val bytes = ByteArray(buffer.data.remaining()).also { buffer.data.get(it) }
             if (buffer.binary) {
-                // input kanalından gelenler: 16 = ServerMetadata, 128 = titreşim (her an gelir, yazılmaz).
-                val type = if (bytes.isEmpty()) -1 else bytes[0].toInt() and 0xff
-                if (type != 128) log("kanal $name: ikili ileti, tür $type, ${bytes.size} bayt")
+                // input kanalından gelenler: 16 = ServerMetadata (baytlarıyla, #1416), 128 = titreşim (her an gelir, yazılmaz).
+                XboxChannels.describeInput(bytes)?.let { log("kanal $name: $it") }
                 return
             }
             val text = String(bytes, Charsets.UTF_8)

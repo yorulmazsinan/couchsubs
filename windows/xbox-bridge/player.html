@@ -261,6 +261,16 @@
         log(event.data.includes('"HandshakeAck"') ? 'kanal message: HandshakeAck' : 'kanal ' + name + ': ' + event.data.slice(0, 300));
       });
     }
+    // input kanalının ikili iletileri telefonlardaki gibi günlüğe girer (#1416): 16 = ServerMetadata baytlarıyla; 128
+    // (titreşim) her an gelir, yazılmaz. Biçim uygulamada (XboxInputMessage), buradan yalnız ilk 32 bayt gider.
+    player.getDataChannel('input')?.addEventListener('message', async event => {
+      try {
+        if (typeof event.data === 'string') return;
+        const buffer = event.data instanceof ArrayBuffer ? event.data : await event.data?.arrayBuffer?.();
+        if (!buffer || new Uint8Array(buffer, 0, Math.min(1, buffer.byteLength))[0] === 128) return;
+        send({ kind: 'input', bytes: Array.from(new Uint8Array(buffer, 0, Math.min(32, buffer.byteLength))), length: buffer.byteLength });
+      } catch { /* Yalnız tanı. */ }
+    });
     // xCloudPlayer'ın 'connectionstate' olayı görüntü kanalının (input) durumudur; ICE ve WebRTC bağlantısının asıl
     // durumu ayrıca bildirilir (eskiden ICE kurulamazsa ya da koparsa Windows bunu hiç görmüyordu).
     const peer = player._webrtcClient;

@@ -235,6 +235,19 @@ public enum XboxChannels {
         return data
     }
 
+    /// `input` kanalından gelen ikili iletinin günlük metni (#1416): tür, uzunluk ve ilk `inputHexBytes` bayt onaltılı.
+    /// Xbox el sıkışmadan sonra 16 (ServerMetadata) gönderir; içeriği Xbox'ın görüntü ayarını gösterebilir (görüntü hiç
+    /// gelmeyen oturumu çalışan oturumla karşılaştırmak için). 128 (titreşim) her an gelir, yazılmaz (nil).
+    public static func describeInput(_ data: Data) -> String? {
+        let type = data.first.map { Int($0) } ?? -1
+        if type == 128 { return nil }
+        let name = type == 16 ? " (ServerMetadata)" : ""
+        let hex = data.prefix(inputHexBytes).map { String(format: "%02x", $0) }.joined(separator: " ")
+        return "ikili ileti, tür \(type)\(name), \(data.count) bayt" + (hex.isEmpty ? "" : ": \(hex)") + (data.count > inputHexBytes ? " …" : "")
+    }
+
+    public static let inputHexBytes = 32
+
     /// Oynatıcı bir pakette en çok 29 kare onaylar (Input.ts `getMetadataQueue(30)` → `splice(0, 29)`).
     public static let maxFrameAcks = 29
 

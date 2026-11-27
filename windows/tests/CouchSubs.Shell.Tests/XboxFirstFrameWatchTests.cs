@@ -87,7 +87,7 @@ public class XboxFirstFrameWatchTests
              {"type":"codec","id":"C1","mimeType":"video/H264","sdpFmtpLine":"level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f"}]
             """);
         var line = XboxStreamStats.Describe(Ms(10_000), false, 4, report.RootElement, "görüntü");
-        Assert.Contains("çözücü kurulmadı, görüntü verisi gelmedi, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; aday seçilmedi", line);
+        Assert.Contains("çözücü kurulmadı, görüntü verisi gelmedi, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; ses yok; aday seçilmedi", line);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class XboxFirstFrameWatchTests
           {"type":"candidate-pair","id":"CP2","localCandidateId":"L2","remoteCandidateId":"R2","state":"succeeded","nominated":true},
           {"type":"local-candidate","id":"L2","candidateType":"host","protocol":"udp","networkType":"ethernet"},
           {"type":"remote-candidate","id":"R2","candidateType":"srflx","protocol":"udp"},
-          {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":900},
+          {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":900,"bytesReceived":45000},
           {"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":1234,"bytesReceived":567890.0,"packetsLost":3,
            "framesDecoded":0,"framesDropped":0,"keyFramesDecoded":0,"pliCount":4,"decoderImplementation":"D3D11VideoDecoder"}
         ]
@@ -119,7 +119,7 @@ public class XboxFirstFrameWatchTests
         var picture = XboxStreamStats.Picture(0, 0, 0, "visible", 0);
         Assert.Equal(
             "tanı (10 sn, ilk kare yok): keyframe isteği 5; video paket 1234, bayt 567890, kayıp 3, çözülen 0, düşen 0, anahtar kare 0, PLI 4, " +
-            "çözücü D3D11VideoDecoder; aday yerel host/udp ağ ethernet, uzak srflx, durum succeeded; " +
+            "çözücü D3D11VideoDecoder; ses paket 900, bayt 45000; aday yerel host/udp ağ ethernet, uzak srflx, durum succeeded; " +
             "görüntü readyState 0, 0x0, görünürlük visible, kare geri çağrısı 0",
             XboxStreamStats.Describe(Ms(10_400), false, 5, report.RootElement, picture));
     }
@@ -128,7 +128,7 @@ public class XboxFirstFrameWatchTests
     public void DiagnosticLineWithoutVideoOrSelectedPair()
     {
         using var report = JsonDocument.Parse("""[{"type":"candidate-pair","id":"CP1","state":"in-progress","nominated":false}]""");
-        Assert.Equal("tanı (20 sn, ilk kare yok): keyframe isteği 0; video yok; aday seçilmedi; görüntü readyState 2, 1920x1080, görünürlük hidden, kare geri çağrısı 0",
+        Assert.Equal("tanı (20 sn, ilk kare yok): keyframe isteği 0; video yok; ses yok; aday seçilmedi; görüntü readyState 2, 1920x1080, görünürlük hidden, kare geri çağrısı 0",
             XboxStreamStats.Describe(Ms(20_000), false, 0, report.RootElement, XboxStreamStats.Picture(2, 1920, 1080, "hidden", 0)));
     }
 
@@ -141,5 +141,31 @@ public class XboxFirstFrameWatchTests
             """);
         var line = XboxStreamStats.Describe(Ms(10_000), false, 1, report.RootElement, "görüntü");
         Assert.Contains("aday yerel relay/tcp ağ ?, uzak ?, durum succeeded;", line);
+    }
+
+    /// <summary>#1416: video yalnız dolgu paketi (bayt 0); ses akıyor mu ayrı yazılır (Mac/iPhone ve Android'le aynı satır).</summary>
+    [Fact]
+    public void DiagnosticLineShowsAudioNextToPaddingOnlyVideo()
+    {
+        using var report = JsonDocument.Parse("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":151,"bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","mediaType":"audio","packetsReceived":480,"bytesReceived":61234}]
+            """);
+        var line = XboxStreamStats.Describe(Ms(10_000), false, 5, report.RootElement, "görüntü");
+        Assert.Contains("video paket 151, bayt 0,", line);
+        Assert.Contains("; ses paket 480, bayt 61234; aday seçilmedi; görüntü", line);
+    }
+
+    /// <summary>#1416: input kanalının ServerMetadata iletisi baytlarıyla yazılır; titreşim (128) yazılmaz.</summary>
+    [Fact]
+    public void InputMessageLine()
+    {
+        byte[] metadata = [0x10, 0x00, 0x80, 0x07, 0x00, 0x00, 0x38, 0x04, 0x00, 0x00];
+        Assert.Equal("ikili ileti, tür 16 (ServerMetadata), 10 bayt: 10 00 80 07 00 00 38 04 00 00", XboxInputMessage.Describe(metadata, metadata.Length));
+        Assert.Null(XboxInputMessage.Describe([0x80, 0x00, 0x00], 3));
+        Assert.Equal("ikili ileti, tür -1, 0 bayt", XboxInputMessage.Describe([], 0));
+        // Oynatıcı sayfası yalnız ilk 32 baytı gönderir; tam uzunluk ayrıca gelir.
+        byte[] head = [0x02, .. Enumerable.Repeat((byte)0xff, 31)];
+        Assert.Equal("ikili ileti, tür 2, 40 bayt: 02 " + string.Join(" ", Enumerable.Repeat("ff", 31)) + " …", XboxInputMessage.Describe(head, 40));
     }
 }

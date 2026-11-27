@@ -120,7 +120,7 @@ final class XboxFirstFrameWatchTests: XCTestCase {
               {"type":"candidate-pair","id":"CP2","localCandidateId":"L2","remoteCandidateId":"R2","state":"succeeded","nominated":true},
               {"type":"local-candidate","id":"L2","candidateType":"host","protocol":"udp","networkType":"ethernet"},
               {"type":"remote-candidate","id":"R2","candidateType":"srflx","protocol":"udp"},
-              {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":900},
+              {"type":"inbound-rtp","id":"IA","kind":"audio","packetsReceived":900,"bytesReceived":45000},
               {"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":1234,"bytesReceived":567890.0,"packetsLost":3,
                "framesDecoded":0,"framesDropped":0,"keyFramesDecoded":0,"pliCount":4,"decoderImplementation":"VideoToolbox"}
             ]
@@ -128,13 +128,13 @@ final class XboxFirstFrameWatchTests: XCTestCase {
         XCTAssertEqual(
             XboxStreamStats.describe(sinceConnectedMs: 10_400, frameSeen: false, keyframes: 5, stats: stats, picture: XboxStreamStats.picture(trackState: "LIVE")),
             "tanı (10 sn, ilk kare yok): keyframe isteği 5; video paket 1234, bayt 567890, kayıp 3, çözülen 0, düşen 0, anahtar kare 0, PLI 4, "
-                + "çözücü VideoToolbox; aday yerel host/udp ağ ethernet, uzak srflx, durum succeeded; görüntü parça LIVE")
+                + "çözücü VideoToolbox; ses paket 900, bayt 45000; aday yerel host/udp ağ ethernet, uzak srflx, durum succeeded; görüntü parça LIVE")
     }
 
     func testDiagnosticLineWithoutVideoOrSelectedPair() throws {
         let stats = try report(#"[{"type":"candidate-pair","id":"CP1","state":"in-progress","nominated":false}]"#)
         XCTAssertEqual(XboxStreamStats.describe(sinceConnectedMs: 20_000, frameSeen: false, keyframes: 0, stats: stats, picture: "görüntü parça ENDED"),
-                       "tanı (20 sn, ilk kare yok): keyframe isteği 0; video yok; aday seçilmedi; görüntü parça ENDED")
+                       "tanı (20 sn, ilk kare yok): keyframe isteği 0; video yok; ses yok; aday seçilmedi; görüntü parça ENDED")
     }
 
     func testNominatedSucceededPairIsUsedWhenTransportHasNoSelection() throws {
@@ -152,8 +152,31 @@ final class XboxFirstFrameWatchTests: XCTestCase {
              {"type":"codec","id":"C1","mimeType":"video/H264","sdpFmtpLine":"level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f"}]
             """)
         let line = XboxStreamStats.describe(sinceConnectedMs: 10_000, frameSeen: false, keyframes: 4, stats: stats, picture: "görüntü")
-        XCTAssertTrue(line.contains("çözücü kurulmadı, görüntü verisi gelmedi, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; aday seçilmedi"), line)
+        XCTAssertTrue(line.contains("çözücü kurulmadı, görüntü verisi gelmedi, kodek video/H264 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f; ses yok; aday seçilmedi"), line)
         XCTAssertTrue(XboxStreamStats.types.contains("codec"))
+    }
+
+    /// #1416: video yalnız dolgu paketi (bayt 0); ses akıyor mu ayrı yazılır (Android ve Windows'la aynı satır).
+    func testDiagnosticLineShowsAudioNextToPaddingOnlyVideo() throws {
+        let stats = try report("""
+            [{"type":"inbound-rtp","id":"IV","kind":"video","packetsReceived":151,"bytesReceived":0},
+             {"type":"inbound-rtp","id":"IA","mediaType":"audio","packetsReceived":480,"bytesReceived":61234}]
+            """)
+        let line = XboxStreamStats.describe(sinceConnectedMs: 10_000, frameSeen: false, keyframes: 5, stats: stats, picture: "görüntü")
+        XCTAssertTrue(line.contains("video paket 151, bayt 0,"), line)
+        XCTAssertTrue(line.contains("; ses paket 480, bayt 61234; aday seçilmedi; görüntü"), line)
+    }
+
+    /// #1416: input kanalının ServerMetadata iletisi baytlarıyla yazılır; titreşim (128) yazılmaz.
+    func testInputMessageLine() {
+        let metadata = Data([0x10, 0x00, 0x80, 0x07, 0x00, 0x00, 0x38, 0x04, 0x00, 0x00])
+        XCTAssertEqual(XboxChannels.describeInput(metadata),
+                       "ikili ileti, tür 16 (ServerMetadata), 10 bayt: 10 00 80 07 00 00 38 04 00 00")
+        XCTAssertNil(XboxChannels.describeInput(Data([0x80, 0x00, 0x00])))
+        XCTAssertEqual(XboxChannels.describeInput(Data()), "ikili ileti, tür -1, 0 bayt")
+        let long = Data([0x02] + Array(repeating: 0xff, count: 39))
+        XCTAssertEqual(XboxChannels.describeInput(long),
+                       "ikili ileti, tür 2, 40 bayt: 02 " + Array(repeating: "ff", count: 31).joined(separator: " ") + " …")
     }
 
     func testFirstFrameLimitIsThirtySeconds() {

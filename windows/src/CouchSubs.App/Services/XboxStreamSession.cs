@@ -463,6 +463,15 @@ internal sealed class XboxStreamSession(XboxBridge bridge, XboxConsole console, 
                 case "keyframeReady":
                     keyframeReady = true;
                     break;
+                case "input":
+                    // input kanalının ikili iletisi (Mac/iPhone ve Android'deki "kanal input: ikili ileti …" satırı, #1416).
+                    var head = message.TryGetProperty("bytes", out var bytesValue) && bytesValue.ValueKind == JsonValueKind.Array
+                        ? bytesValue.EnumerateArray().Where(b => b.ValueKind == JsonValueKind.Number).Select(b => (byte)b.GetInt32()).ToArray()
+                        : Array.Empty<byte>();
+                    var inputLength = message.TryGetProperty("length", out var lengthValue) && lengthValue.ValueKind == JsonValueKind.Number
+                        ? lengthValue.GetInt32() : head.Length;
+                    if (XboxInputMessage.Describe(head, inputLength) is { } inputLine) Log("kanal input: " + inputLine);
+                    break;
                 case "log":
                     // Oynatıcı sayfasındaki yakalanmamış hata ya da video.play reddi: yayını bitirmez, yalnız yazılır.
                     Log("oynatıcı: " + XboxStop.Shorten(message.TryGetProperty("text", out var logText) ? logText.GetString() : null, 300));

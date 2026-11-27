@@ -98,6 +98,12 @@ public static class XboxStreamStats
             line.Append("; ");
         }
         else line.Append("video yok; ");
+        // Ses de geliyor mu (#1416): video yalnız dolgu paketiyken (bayt 0) ses akıyorsa Xbox yayını başlatmış, yalnız
+        // görüntüyü kodlamıyor; ses de yoksa Xbox'ın yayın hizmeti hiç başlamamış.
+        var audio = entries.FirstOrDefault(e => Text(e, "type") == "inbound-rtp" && (Text(e, "kind") ?? Text(e, "mediaType")) == "audio");
+        if (audio.ValueKind == JsonValueKind.Object)
+            line.Append(CultureInfo.InvariantCulture, $"ses paket {Number(audio, "packetsReceived")}, bayt {Number(audio, "bytesReceived")}; ");
+        else line.Append("ses yok; ");
         var pair = SelectedPair(entries);
         if (pair.ValueKind == JsonValueKind.Object)
         {
@@ -136,4 +142,27 @@ public static class XboxStreamStats
         entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
             ? ((long)value.GetDouble()).ToString(CultureInfo.InvariantCulture)
             : "?";
+}
+
+/// <summary>
+/// <c>input</c> kanalından gelen ikili iletinin günlük metni (#1416): tür, uzunluk ve ilk <see cref="HexBytes"/> bayt
+/// onaltılı. Xbox el sıkışmadan sonra 16 (ServerMetadata) gönderir; içeriği Xbox'ın görüntü ayarını gösterebilir (görüntü
+/// hiç gelmeyen oturumu çalışan oturumla karşılaştırmak için). 128 (titreşim) her an gelir, yazılmaz (null). Mac/iPhone
+/// ve Android'deki <c>XboxChannels.describeInput</c> ile aynı biçim; oynatıcı sayfası yalnız ilk baytları gönderir.
+/// </summary>
+public static class XboxInputMessage
+{
+    public const int HexBytes = 32;
+
+    /// <param name="head">İletinin ilk baytları (en çok <see cref="HexBytes"/>; fazlası yazılmaz).</param>
+    /// <param name="length">İletinin tam uzunluğu.</param>
+    public static string? Describe(IReadOnlyList<byte> head, int length)
+    {
+        var type = head.Count == 0 ? -1 : head[0];
+        if (type == 128) return null;
+        var name = type == 16 ? " (ServerMetadata)" : "";
+        var hex = string.Join(" ", head.Take(HexBytes).Select(b => b.ToString("x2", CultureInfo.InvariantCulture)));
+        return string.Create(CultureInfo.InvariantCulture, $"ikili ileti, tür {type}{name}, {length} bayt")
+            + (hex.Length == 0 ? "" : ": " + hex) + (length > HexBytes ? " …" : "");
+    }
 }
