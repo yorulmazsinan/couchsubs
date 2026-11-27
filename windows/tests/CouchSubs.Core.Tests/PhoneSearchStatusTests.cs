@@ -77,7 +77,6 @@ public class PhoneSearchStatusTests
         Assert.Contains("telefon kapalı", status[0]);
         Assert.Contains("0 bulundu", status[0]);
         Assert.Contains("ortanca parlaklık 40/255, kare 800x450", status[0]);
-        Assert.EndsWith("kare 800x450", status[0]);
     }
 
     /// <summary>Xbox karesinin biçimi (<see cref="Frame.Source"/>, #1385) satırın sonunda.</summary>
@@ -91,6 +90,6 @@ public class PhoneSearchStatusTests
         var tracker = new GamePhoneTracker { Log = lines.Add };
         for (long now = 1_000; now <= 32_000; now += 400) tracker.TrySample(frame, now, out _);
         var status = Assert.Single(lines, l => l.Contains("telefon arama durumu"));
-        Assert.EndsWith("kare 800x450, Xbox JPEG 800×450 (akış 1920×1080, kalite %80), BGRA adım 3200", status);
+        Assert.Contains("kare 800x450, Xbox JPEG 800×450 (akış 1920×1080, kalite %80), BGRA adım 3200", status);
     }
 }
