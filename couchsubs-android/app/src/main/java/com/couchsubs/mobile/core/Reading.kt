@@ -71,6 +71,13 @@ class Reading(lines: List<TextLine>) {
     companion object {
         val Empty = Reading(emptyList())
 
+        /**
+         * Satırların yerlerine göre blokları (aynı sütun, yakın satır aralığı, benzer yazı boyu: [belongs]), yukarıdan
+         * aşağı; her blok [lines] içindeki sıra numaralarıdır. Satırların hepsinin kutusu olmalı. [subtitleBlock] ve
+         * [SceneTextMemory.filter] aynı bölmeyi kullanır (Windows: Reading.Blocks, Mac: Reading.blocks).
+         */
+        internal fun blocks(lines: List<TextLine>, area: TextBox): List<List<Int>> = Empty.lineBlocks(lines, area)
+
         /** Altyazının okunduğu yükseklikten uzak ortalanmamış blok atılınca günlüğe yazılan neden (GitHub #1293). */
         internal const val OFF_BAND_REASON = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"
 
@@ -314,12 +321,7 @@ class Reading(lines: List<TextLine>) {
             dropped?.invoke(this, LIST_REASON)
             return Empty
         }
-        val blocks = mutableListOf<MutableList<TextLine>>()
-        for (line in lines.sortedBy { it.box!!.top }) {
-            val placed = line.box!!.placedIn(area)
-            val index = blocks.indexOfLast { belongs(placed, line.text, it, area) }
-            if (index >= 0) blocks[index].add(line) else blocks.add(mutableListOf(line))
-        }
+        val blocks = lineBlocks(lines, area).map { block -> block.map { lines[it] } }
         // Tabela, tişört, plaka gibi sahne yazısı ([SceneText]) altyazı alanına düşse de altyazı değildir.
         val candidates = blocks.flatMap { withoutSignLines(it) }.map { Reading(it) }.filter { block ->
             if (block.isMenu || block.isActionLabel) return@filter false
@@ -509,6 +511,18 @@ class Reading(lines: List<TextLine>) {
      * büyük harfsiz/kuyruksuz satırın kutusu daha alçak çıkıyor, cümlenin devamı ayrı blok sayılıp tek başına çevriliyordu
      * (GitHub #715).
      */
+    /** [blocks]: satırların yerlerine göre blokları ([belongs]); her blok [lines] içindeki sıra numaralarıdır. */
+    private fun lineBlocks(lines: List<TextLine>, area: TextBox): List<List<Int>> {
+        val blocks = mutableListOf<MutableList<Int>>()
+        for (index in lines.indices.sortedBy { lines[it].box!!.top }) {
+            val line = lines[index]
+            val placed = line.box!!.placedIn(area)
+            val at = blocks.indexOfLast { block -> belongs(placed, line.text, block.map { lines[it] }, area) }
+            if (at >= 0) blocks[at].add(index) else blocks.add(mutableListOf(index))
+        }
+        return blocks
+    }
+
     private fun belongs(box: TextBox, text: String, block: List<TextLine>, area: TextBox): Boolean {
         val last = block.last().box!!.placedIn(area)
         val own = box.bottom - box.top

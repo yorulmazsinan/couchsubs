@@ -202,7 +202,7 @@ object SceneText {
  * Windows: SubtitleBand).
  */
 class SubtitleBand {
-    private data class Span(val top: Double, val bottom: Double, val line: Double)
+    private data class Span(val top: Double, val bottom: Double, val line: Double, val texts: List<String>)
 
     private val spans = ArrayList<Span>()
 
@@ -215,6 +215,19 @@ class SubtitleBand {
         return spans.any { middle >= it.top - MARGIN * it.line && middle <= it.bottom + MARGIN * it.line }
     }
 
+    /**
+     * Kutunun tamamı (üstü ve altı) oyunun konuşma altyazısının okunduğu tek bir yüksekliğin içinde mi ([MARGIN] satır boyu
+     * payla; [SceneTextMemory.filter]). Yalnız konuşma izi taşıyan (konuşan adı ya da konuşma noktalaması,
+     * [SceneText.looksSpoken]) bloktan öğrenilen yükseklik sayılır: noktalamasız dört sözcük ("A LIBERTY CITY MEMOIR")
+     * altyazı sanılıp öğrenilebiliyor. Satırlarından biri [sceneText] olan yükseklik de sayılmaz (altyazı sanılıp
+     * öğrenilen telefon/tabela yazısı). Mac/Windows aynı.
+     */
+    fun holds(box: TextBox, sceneText: ((String) -> Boolean)? = null): Boolean = spans.any { span ->
+        box.top >= span.top - MARGIN * span.line && box.bottom <= span.bottom + MARGIN * span.line &&
+            span.texts.any { SpeakerPrefix.split(it) != null || SceneText.looksSpoken(it) } &&
+            (sceneText == null || span.texts.none(sceneText))
+    }
+
     /** Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları [area]'ya oranlıdır. */
     fun record(block: Reading, area: TextBox) {
         val first = block.lines.firstOrNull() ?: return
@@ -225,7 +238,7 @@ class SubtitleBand {
         if (!sure || SceneText.isSceneText(block, area)) return
         val line = (box.bottom - box.top) / block.lines.size
         spans.removeAll { abs(it.top - box.top) < line / 2 && abs(it.bottom - box.bottom) < line / 2 }
-        spans.add(Span(box.top, box.bottom, line))
+        spans.add(Span(box.top, box.bottom, line, block.lines.map { it.text }))
         while (spans.size > CAPACITY) spans.removeAt(0)
     }
 

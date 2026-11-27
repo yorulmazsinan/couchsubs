@@ -216,7 +216,7 @@ public sealed class SubtitleBand
     /// <summary>Kesin altyazı sayılmak için en az sözcük (noktalaması ya da konuşan adı yoksa).</summary>
     public const int SureWords = 4;
 
-    private readonly List<(double Top, double Bottom, double Line)> spans = [];
+    private readonly List<(double Top, double Bottom, double Line, string[] Texts)> spans = [];
 
     /// <summary>Bu oturumda hiç altyazı yüksekliği öğrenilmedi.</summary>
     public bool IsEmpty => spans.Count == 0;
@@ -234,6 +234,18 @@ public sealed class SubtitleBand
         return spans.Any(span => middle >= span.Top - Margin * span.Line && middle <= span.Bottom + Margin * span.Line);
     }
 
+    /// <summary>
+    /// Kutunun tamamı (üstü ve altı) oyunun konuşma altyazısının okunduğu tek bir yüksekliğin içinde mi (<see cref="Margin"/>
+    /// satır boyu payla; <see cref="SceneTextMemory.Filter"/>). Yalnız konuşma izi taşıyan (konuşan adı ya da konuşma
+    /// noktalaması, <see cref="SceneText.LooksSpoken"/>) bloktan öğrenilen yükseklik sayılır: noktalamasız dört sözcük
+    /// ("A LIBERTY CITY MEMOIR") altyazı sanılıp öğrenilebiliyor. Satırlarından biri <paramref name="sceneText"/> olan
+    /// yükseklik de sayılmaz (altyazı sanılıp öğrenilen telefon/tabela yazısı).
+    /// </summary>
+    public bool Holds(TextBox box, Func<string, bool>? sceneText = null) =>
+        spans.Any(span => box.Top >= span.Top - Margin * span.Line && box.Bottom <= span.Bottom + Margin * span.Line
+                          && span.Texts.Any(text => SpeakerPrefix.Parse(text) is not null || SceneText.LooksSpoken(text))
+                          && (sceneText is null || !span.Texts.Any(sceneText)));
+
     /// <summary>Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları alana oranlıdır.</summary>
     public void Record(Reading block, TextBox area)
     {
@@ -245,7 +257,7 @@ public sealed class SubtitleBand
         if (!sure || SceneText.IsSceneText(block, area)) return;
         var line = (box.Bottom - box.Top) / block.Lines.Count;
         spans.RemoveAll(span => Math.Abs(span.Top - box.Top) < line / 2 && Math.Abs(span.Bottom - box.Bottom) < line / 2);
-        spans.Add((box.Top, box.Bottom, line));
+        spans.Add((box.Top, box.Bottom, line, [.. block.Lines.Select(row => row.Text)]));
         if (spans.Count > Capacity) spans.RemoveRange(0, spans.Count - Capacity);
     }
 

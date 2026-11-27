@@ -1,5 +1,5 @@
 {
-  "comment": "Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz (SceneTextMemory, #1411; satırlar beta-105 günlüğünden). Her adım sırayla: 'dropped' satırlar 'reason' nedeniyle atıldı (hatırlanır), 'forget' o nedenle hatırlananları unutur, 'read' okunan satırlar ve 'kept' süzgeçten geçmesi gerekenler. 'at' milisaniye. Mac/iPhone SceneTextMemoryTests.swift, Windows SceneTextMemoryTests.cs ve Android SceneTextMemoryTest.kt aynı dosyayı okur.",
+  "comment": "Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz (SceneTextMemory, #1411; satırlar beta-105 günlüğünden). Her adım sırayla: 'dropped' satırlar 'reason' nedeniyle atıldı (hatırlanır), 'forget' o nedenle hatırlananları unutur, 'read' okunan satırlar ve 'kept' süzgeçten geçmesi gerekenler. 'at' milisaniye. Mac/iPhone SceneTextMemoryTests.swift, Windows SceneTextMemoryTests.cs ve Android SceneTextMemoryTest.kt aynı dosyayı okur. 'lines' kutulu satırlardır ([sol, üst, sağ, alt], 'area'ya oranlı; 'area' verilirse aynı bloğun kalan satırları da süzülür, 'leftovers' böyle çıkarılanlar); 'band' satırları o adımda altyazı yüksekliği olarak öğrenilir (SubtitleBand).",
   "cases": [
     {
       "name": "plaka yazısının başka okunuşu konuşmanın yanında çevrilmez",
@@ -79,6 +79,121 @@
         { "at": 100, "dropped": ["ALL GUN SALES ARE FINAL"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
         { "at": 200, "forget": "koyu yazı açık zeminde (kâğıt/tabela)" },
         { "at": 300, "read": ["We need to get out of here.", "ALL GUN SALES ARE FINAL"], "kept": ["We need to get out of here."] }
+      ]
+    },
+    {
+      "name": "kitap kapağının kalan alt satırı çevrilmez (gerçek kare gta6-n1-kitap; kısa satır oylamaya katılmaz)",
+      "steps": [
+        { "at": 0, "dropped": ["DESIGN"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 400, "area": [0.14, 0.62, 0.86, 0.97], "lines": [
+            {"text": "[TOM E", "box": [0.65979, -0.00171, 0.69066, 0.37668]},
+            {"text": "DESIGN", "box": [0.33799, 0.38031, 0.6969, 0.69905]},
+            {"text": "A LIBERTY CITY MEMOIR", "box": [0.34167, 0.69697, 0.69583, 0.78788]}
+          ], "kept": [], "leftovers": ["[TOM E", "A LIBERTY CITY MEMOIR"] },
+        { "at": 800, "area": [0.14, 0.62, 0.86, 0.97], "lines": [
+            {"text": "A LIBERTY CITY MEMOIR", "box": [0.34167, 0.69697, 0.69583, 0.78788]}
+          ], "kept": [] }
+      ]
+    },
+    {
+      "name": "altyazı yüksekliğine sarkan kapak satırı da çevrilmez: kapağın bütünü o yüksekliğe sığmaz",
+      "steps": [
+        { "at": 0, "area": [0.14, 0.62, 0.86, 0.97], "band": [
+            {"text": "Could I have another ice water, please?", "box": [0.25, 0.62, 0.75, 0.82]}
+          ] },
+        { "at": 0, "dropped": ["DESIGN"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 400, "area": [0.14, 0.62, 0.86, 0.97], "lines": [
+            {"text": "[TOM E", "box": [0.65979, -0.00171, 0.69066, 0.37668]},
+            {"text": "DESIGN", "box": [0.33799, 0.38031, 0.6969, 0.69905]},
+            {"text": "A LIBERTY CITY MEMOIR", "box": [0.34167, 0.69697, 0.69583, 0.78788]}
+          ], "kept": [] }
+      ]
+    },
+    {
+      "name": "telefon sohbetinin kalan son satırı çevrilmez (gerçek kare gta6-telefon-sohbet-1)",
+      "steps": [
+        { "at": 0, "dropped": ["Thx amigo! U find", "anything else AND I", "MEAN ANYTHING u"], "reason": "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)" },
+        { "at": 300, "area": [0.14, 0.62, 0.86, 0.97], "lines": [
+            {"text": "Thx arnigo! U find", "box": [0.66935, 0.09907, 0.85235, 0.20844]},
+            {"text": "anything else AND I", "box": [0.66792, 0.20237, 0.87721, 0.32039]},
+            {"text": "MEAN ANYTHING u", "box": [0.66927, 0.30654, 0.87874, 0.41486]},
+            {"text": "bring it 2 me •", "box": [0.66777, 0.4136, 0.8175, 0.51891]}
+          ], "kept": [], "leftovers": ["bring it 2 me •"] }
+      ]
+    },
+    {
+      "name": "eğik sohbet bloğunun yanlış okunan son satırı çevrilmez (gerçek kare gta6-telefon-sohbet-2-tam)",
+      "steps": [
+        { "at": 0, "dropped": ["Fishing Shacks. Show em", "who's king out here. Gonna", "there to be some cash n stash over", "Go get em", "Locating..."], "reason": "eğik satır (tabela)" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "New messages", "box": [0.439, 0.38828, 0.52859, 0.43038]},
+            {"text": "Thinking we send", "box": [0.39701, 0.44481, 0.49665, 0.4874]},
+            {"text": "Kingfishers a message. Hit", "box": [0.39415, 0.47436, 0.54888, 0.52616]},
+            {"text": "em back over by the", "box": [0.39138, 0.50766, 0.50954, 0.54955]},
+            {"text": "Fishing Shacks. Show ern", "box": [0.38817, 0.53265, 0.53469, 0.58792]},
+            {"text": "who's king out here. Gonna", "box": [0.38514, 0.55984, 0.54345, 0.62381]},
+            {"text": "there to be sorne cash n stash over", "box": [0.37956, 0.59386, 0.53899, 0.65661]},
+            {"text": "Go get ern", "box": [0.37358, 0.69008, 0.43747, 0.73111]},
+            {"text": "Locatlng...", "box": [0.3974, 0.74924, 0.4632, 0.79995]}
+          ], "kept": ["New messages", "Thinking we send", "Kingfishers a message. Hit", "em back over by the"], "leftovers": ["Go get ern", "Locatlng..."] }
+      ]
+    },
+    {
+      "name": "bloğun yarısından azı sahne yazısıysa kalanı çevrilir",
+      "steps": [
+        { "at": 0, "dropped": ["Nice! Once you're truly zen, the"], "reason": "telefon yazısı" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "Nice! Once you're truly zen, the", "box": [0.3, 0.8, 0.7, 0.84]},
+            {"text": "You said we'd be done by now,", "box": [0.3, 0.84, 0.7, 0.88]},
+            {"text": "and we're still out here.", "box": [0.33, 0.88, 0.67, 0.92]}
+          ], "kept": ["You said we'd be done by now,", "and we're still out here."], "leftovers": [] }
+      ]
+    },
+    {
+      "name": "konuşan adlı satırın bloğuna dokunulmaz",
+      "steps": [
+        { "at": 0, "dropped": ["ALL GUN SALES ARE FINAL"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "ALL GUN SALES ARE FINAL", "box": [0.36, 0.8, 0.64, 0.84]},
+            {"text": "Lucia: Hey, wait up.", "box": [0.38, 0.84, 0.62, 0.88]}
+          ], "kept": ["Lucia: Hey, wait up."], "leftovers": [] }
+      ]
+    },
+    {
+      "name": "oyunun altyazısının okunduğu yükseklikteki bloğun kalanı çevrilir",
+      "steps": [
+        { "at": 0, "area": [0, 0, 1, 1], "band": [
+            {"text": "Lucia: Could I have another ice water, please?", "box": [0.25, 0.86, 0.75, 0.9]}
+          ] },
+        { "at": 0, "dropped": ["GOOD TIME STATE"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "GOOD TIME STATE", "box": [0.4, 0.86, 0.6, 0.88]},
+            {"text": "I told you already.", "box": [0.38, 0.88, 0.62, 0.9]}
+          ], "kept": ["I told you already."], "leftovers": [] }
+      ]
+    },
+    {
+      "name": "altyazı yüksekliği bilinmiyorsa aynı bloğun kalanı da çıkarılır",
+      "steps": [
+        { "at": 0, "dropped": ["GOOD TIME STATE"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "GOOD TIME STATE", "box": [0.4, 0.86, 0.6, 0.88]},
+            {"text": "I told you already.", "box": [0.38, 0.88, 0.62, 0.9]}
+          ], "kept": [], "leftovers": ["I told you already."] },
+        { "at": 600, "read": ["I told you already."], "kept": [] }
+      ]
+    },
+    {
+      "name": "konuşma izi olmayan (noktalamasız) bloktan öğrenilen yükseklik altyazı yüksekliği sayılmaz",
+      "steps": [
+        { "at": 0, "area": [0, 0, 1, 1], "band": [
+            {"text": "Welcome to Vice City tonight", "box": [0.3, 0.86, 0.7, 0.9]}
+          ] },
+        { "at": 0, "dropped": ["GOOD TIME STATE"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "area": [0, 0, 1, 1], "lines": [
+            {"text": "GOOD TIME STATE", "box": [0.4, 0.86, 0.6, 0.88]},
+            {"text": "I told you already.", "box": [0.38, 0.88, 0.62, 0.9]}
+          ], "kept": [], "leftovers": ["I told you already."] }
       ]
     }
   ]

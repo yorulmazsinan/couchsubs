@@ -26,22 +26,38 @@ public class SceneTextMemoryTests
         {
             var name = vector.GetProperty("name").GetString();
             var memory = new SceneTextMemory();
+            var band = new SubtitleBand();
             foreach (var step in vector.GetProperty("steps").EnumerateArray())
             {
                 var at = step.GetProperty("at").GetInt64();
+                TextBox? area = step.TryGetProperty("area", out var place) ? Box(place) : null;
+                if (step.TryGetProperty("band", out var subtitle)) band.Record(Boxed(subtitle), area!.Value);
                 if (step.TryGetProperty("dropped", out var dropped))
                     memory.Remember(Texts(dropped), step.GetProperty("reason").GetString()!, at);
                 if (step.TryGetProperty("forget", out var forget)) memory.Forget(forget.GetString()!);
-                if (step.TryGetProperty("read", out var read))
-                {
-                    var kept = memory.Filter(new Reading(Texts(read).Select(text => new TextLine(text))), at);
-                    var expected = Texts(step.GetProperty("kept"));
-                    Assert.True(expected.SequenceEqual(kept.Lines.Select(line => line.Text)),
-                        $"{name}: {string.Join(" / ", kept.Lines.Select(line => line.Text))}");
-                }
+                Reading? reading = step.TryGetProperty("read", out var read)
+                    ? new Reading(Texts(read).Select(text => new TextLine(text)))
+                    : step.TryGetProperty("lines", out var lines) ? Boxed(lines) : null;
+                if (reading is null) continue;
+                var kept = memory.Filter(reading, at, area, band);
+                var expected = Texts(step.GetProperty("kept"));
+                Assert.True(expected.SequenceEqual(kept.Lines.Select(line => line.Text)),
+                    $"{name}: {string.Join(" / ", kept.Lines.Select(line => line.Text))}");
+                if (step.TryGetProperty("leftovers", out var leftovers))
+                    Assert.True(Texts(leftovers).SequenceEqual(memory.Leftovers.Select(left => left.Line.Text)),
+                        $"{name} (kalan): {string.Join(" / ", memory.Leftovers.Select(left => left.Line.Text))}");
             }
         }
     }
+
+    private static TextBox Box(JsonElement element)
+    {
+        var values = element.EnumerateArray().Select(value => value.GetDouble()).ToArray();
+        return new TextBox(values[0], values[1], values[2], values[3]);
+    }
+
+    private static Reading Boxed(JsonElement lines) => new(lines.EnumerateArray().Select(line =>
+        new TextLine(line.GetProperty("text").GetString()!, Box(line.GetProperty("box")), 1)));
 
     /// <summary>Ortak dosyadaki nedenler çekirdeğin nedenleriyle aynı yazılır (biri değişirse dosya da değişmeli).</summary>
     [Fact]
@@ -102,6 +118,44 @@ public class SceneTextMemoryTests
         var after = await Run(plate, reread);
         Assert.True(after.Requested.Count == 0, string.Join("\n", after.Log));
         Assert.Contains(after.Log, line => line.Contains(SceneTextMemory.Reason) && line.Contains("plaka/tabela"));
+    }
+
+    /// <summary>Gerçek karenin kayıtlı okuması (testdata/frames/ocr; Mac'te Apple Vision ile kaydedildi).</summary>
+    private static Reading Recorded(string id, [System.Runtime.CompilerServices.CallerFilePath] string source = "")
+    {
+        var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(source)!, "..", "..", "..",
+            "testdata", "frames", "ocr", id + ".json"));
+        using var fixture = JsonDocument.Parse(File.ReadAllText(path));
+        return Boxed(fixture.RootElement.GetProperty("lines"));
+    }
+
+    /// <summary>
+    /// #1414'ün yan etkisi (gerçek kare gta6-n1-kitap): kitap kapağının "[TOM E / DESIGN" satırları tabela sayılıp atılıyor,
+    /// alt satır ("A LIBERTY CITY MEMOIR") belirince DESIGN hatırlanıp çıkarılıyor, kapağın tek kalan satırı altyazı sanılıp
+    /// çevriliyordu. Bloğun çoğu sahne yazısıysa kalanı da çevrilmez; günlükte nedeniyle yazılır.
+    /// </summary>
+    [Fact]
+    public async Task LeftoverLineOfASceneBlockIsNotTranslated()
+    {
+        var cover = Recorded("gta6-n1-kitap");
+        var top = new Reading(cover.Lines.Where(line => line.Text != "A LIBERTY CITY MEMOIR"));
+        var run = await Run(top, cover);
+        Assert.True(run.Requested.Count == 0, string.Join("\n", run.Requested.Concat(run.Log)));
+        Assert.Contains(run.Log, line => line.Contains(SceneTextMemory.BlockReason) && line.Contains("A LIBERTY CITY MEMOIR"));
+    }
+
+    /// <summary>
+    /// Telefon sohbeti (gerçek kare gta6-telefon-sohbet-1): altyazının yüksekliği konuşmadan (gta6-01-lucia) öğrenildikten
+    /// sonra üç satırı menü açıklaması sayılıp atılan mesajın son satırı ("bring it 2 me •") tek başına çevrilmez.
+    /// </summary>
+    [Fact]
+    public async Task LeftoverLineOfAPhoneChatIsNotTranslated()
+    {
+        var chat = Recorded("gta6-telefon-sohbet-1");
+        var top = new Reading(chat.Lines.Where(line => !line.Text.StartsWith("bring", StringComparison.Ordinal)));
+        var run = await Run(Recorded("gta6-01-lucia"), top, chat);
+        Assert.True(run.Requested.SequenceEqual(["Could I have another ice water, please?"]),
+            string.Join("\n", run.Requested.Concat(run.Log)));
     }
 
     [Fact]

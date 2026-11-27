@@ -37,6 +37,8 @@ public struct SceneTextMemory {
     public static let phoneReason = "telefon yazısı"
     /// Günlükte atılma nedeni (ardından ilk atılışın nedeni yazılır).
     public static let reason = "az önce sahne yazısı sayılan satırın yeniden okunuşu"
+    /// Bloğun kalan satırının günlükteki atılma nedeni (ardından bloğun ilk atılış nedeni yazılır, bkz. `leftovers`).
+    public static let blockReason = "sahne yazısı sayılan bloğun kalan satırı"
 
     /// Hatırlanan nedenler: konuşmayı atmayan kurallar.
     static let remembered: Set<String> = [
@@ -53,6 +55,14 @@ public struct SceneTextMemory {
     private var entries: [Entry] = []
     /// Son `filter` çağrısında çıkarılan satırlar ve ilk atılışlarının nedeni (günlük için).
     public private(set) var removed: [(line: TextLine, reason: String)] = []
+    /// Son `filter` çağrısında, satırlarının en az yarısı az önce sahne yazısı sayıldığı için kalanıyla birlikte çıkarılan
+    /// bloğun kalan satırları ve bloğun ilk atılış nedeni (günlük için). Tabela, kitap kapağı ya da telefon sohbeti satır
+    /// satır hatırlanıp çıkarılınca aynı bloğun tek kalan satırı ("A LIBERTY CITY MEMOIR", "bring it 2 me •",
+    /// "Locatlng...") tek başına altyazı sanılıp çevriliyordu (#1414'ün yan etkisi). Blok `Reading.blocks` ile (aynı sütun,
+    /// yakın satır aralığı) ayrılır; konuşan adlı satır taşıyan blok ve bütünüyle oyunun konuşma altyazısının okunduğu
+    /// yükseklikte duran blok (`SubtitleBand.holds`) hiç çıkarılmaz. Kitap kapağının altyazı yüksekliğine sarkan alt satırı
+    /// çıkarılır: kapağın bütünü o yüksekliğe sığmaz. Çıkarılan satır da hatırlanır. Windows ve Android aynı.
+    public private(set) var leftovers: [(line: TextLine, reason: String)] = []
 
     public init() {}
 
@@ -71,20 +81,48 @@ public struct SceneTextMemory {
         if entries.count > Self.capacity { entries.removeFirst(entries.count - Self.capacity) }
     }
 
-    /// Okumanın az önce atılan satırlara benzeyenleri çıkarılmış hali.
-    public mutating func filter(_ reading: Reading, at time: Int) -> Reading {
+    /// Okumanın az önce atılan satırlara benzeyenleri çıkarılmış hali. `area` verilirse satırlarının en az yarısı böyle
+    /// çıkarılan bloğun kalan satırları da çıkarılır (`leftovers`; satır kutuları `area`'ya oranlı); `band`: bu oturumda
+    /// altyazının okunduğu yükseklikler.
+    public mutating func filter(_ reading: Reading, at time: Int, in area: TextBox? = nil,
+                                band: SubtitleBand? = nil) -> Reading {
         removed = []
+        leftovers = []
         entries.removeAll { time - $0.seenAt > Self.holdMs || time < $0.seenAt }
         guard !entries.isEmpty else { return reading }
-        var kept: [TextLine] = []
-        for line in reading.lines {
+        let lines = reading.lines
+        var reasons: [Int: String] = [:]
+        for (index, line) in lines.enumerated() {
             if let entry = match(line.text) {
                 removed.append((line, entry.reason))
-            } else {
-                kept.append(line)
+                reasons[index] = entry.reason
             }
         }
-        return removed.isEmpty ? reading : Reading(lines: kept)
+        guard !removed.isEmpty else { return reading }
+        if let area {
+            let memory = self
+            let boxed = lines.indices.filter { lines[$0].box != nil }
+            for block in Reading.blocks(boxed.map { lines[$0] }, in: area).map({ $0.map { boxed[$0] } }) {
+                let gone = block.filter { reasons[$0] != nil }
+                guard !gone.isEmpty, gone.count < block.count else { continue }
+                // Konuşan adlı satırın bloğu konuşmadır; bloğu oyunun altyazısının okunduğu yükseklikteyse altyazıdır.
+                guard !block.contains(where: { SpeakerPrefix.split(lines[$0].text) != nil }) else { continue }
+                if let band, !band.isEmpty, let box = Reading(lines: block.map { lines[$0] }).box?.placed(in: area),
+                   band.holds(box, sceneText: { memory.match($0) != nil }) { continue }
+                // Bloğun kalanı yalnız en az yarısı çıkarıldıysa gider; `minLetters` harf/rakamdan kısa satır ("[TOM E")
+                // oylamaya katılmaz.
+                let judged = block.filter {
+                    reasons[$0] == nil && lines[$0].text.filter { $0.isLetter || $0.isNumber }.count >= Self.minLetters
+                }.count
+                guard gone.count >= judged, let first = reasons[gone[0]] else { continue }
+                for index in block where reasons[index] == nil {
+                    leftovers.append((lines[index], first))
+                    reasons[index] = first
+                }
+            }
+        }
+        for (line, first) in leftovers { remember([line.text], reason: first, at: time) }
+        return Reading(lines: lines.indices.filter { reasons[$0] == nil }.map { lines[$0] })
     }
 
     /// Satırın benzediği hatırlanan satır (en yenisi); yoksa nil.
@@ -108,6 +146,7 @@ public struct SceneTextMemory {
     public mutating func reset() {
         entries = []
         removed = []
+        leftovers = []
     }
 
     static func isLongEnough(_ key: String) -> Bool { letters(key).count >= minLetters }

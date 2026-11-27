@@ -479,8 +479,11 @@ public final class SubtitlePipeline {
         let packaged = PackageText.filter(moving, in: place, look: PackageText.sampler(area))
         for line in packaged.removed { logSceneText(line.text, PackageText.reason) }
         // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (`SceneTextMemory`, #1411).
-        let rows = sceneMemory.filter(packaged.kept, at: now())
+        // Satırlarının çoğu böyle çıkarılan bloğun (tabela, kitap kapağı, telefon sohbeti) kalan satırı da çıkarılır;
+        // konuşan adlı satır ve altyazının okunduğu yükseklik hariç (`SceneTextMemory.leftovers`).
+        let rows = sceneMemory.filter(packaged.kept, at: now(), in: place, band: subtitleBand)
         for (line, first) in sceneMemory.removed { logSceneText(line.text, "\(SceneTextMemory.reason) (\(first))") }
+        for (line, first) in sceneMemory.leftovers { logSceneText(line.text, "\(SceneTextMemory.blockReason) (\(first))") }
         if mission.observe(stickyRows.removed + claimed, area: place, at: now()) {
             log(mission.region == nil ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor")
             onMissionChanged?(mission.region)

@@ -8,13 +8,21 @@ import XCTest
 /// SceneTextMemoryTest.kt aynı dosyayı okur).
 final class SceneTextMemoryTests: XCTestCase {
     private struct Vectors: Decodable {
+        struct Line: Decodable {
+            let text: String
+            let box: [Double]
+        }
         struct Step: Decodable {
             let at: Int
             let dropped: [String]?
             let reason: String?
             let forget: String?
             let read: [String]?
+            let area: [Double]?
+            let band: [Line]?
+            let lines: [Line]?
             let kept: [String]?
+            let leftovers: [String]?
         }
         struct Case: Decodable { let name: String; let steps: [Step] }
         let cases: [Case]
@@ -26,15 +34,29 @@ final class SceneTextMemoryTests: XCTestCase {
         XCTAssertFalse(vectors.cases.isEmpty)
         for vector in vectors.cases {
             var memory = SceneTextMemory()
+            var band = SubtitleBand()
             for step in vector.steps {
+                let area = step.area.map(Self.box)
+                if let subtitle = step.band { band.record(Self.boxed(subtitle), in: try XCTUnwrap(area)) }
                 if let dropped = step.dropped { memory.remember(dropped, reason: try XCTUnwrap(step.reason), at: step.at) }
                 if let reason = step.forget { memory.forget(reason: reason) }
-                if let read = step.read {
-                    let kept = memory.filter(Reading(lines: read.map { TextLine($0) }), at: step.at)
-                    XCTAssertEqual(kept.lines.map(\.text), step.kept, vector.name)
+                guard let reading = step.read.map({ Reading(lines: $0.map { TextLine($0) }) }) ?? step.lines.map(Self.boxed)
+                else { continue }
+                let kept = memory.filter(reading, at: step.at, in: area, band: band)
+                XCTAssertEqual(kept.lines.map(\.text), step.kept, vector.name)
+                if let leftovers = step.leftovers {
+                    XCTAssertEqual(memory.leftovers.map(\.line.text), leftovers, "\(vector.name) (kalan)")
                 }
             }
         }
+    }
+
+    private static func box(_ values: [Double]) -> TextBox {
+        TextBox(left: values[0], top: values[1], right: values[2], bottom: values[3])
+    }
+
+    private static func boxed(_ lines: [Vectors.Line]) -> Reading {
+        Reading(lines: lines.map { TextLine($0.text, box: box($0.box), confidence: 1) })
     }
 
     /// Ortak dosyadaki nedenler çekirdeğin nedenleriyle aynı yazılır (biri değişirse dosya da değişmeli).

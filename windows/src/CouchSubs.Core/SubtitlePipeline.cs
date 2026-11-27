@@ -603,8 +603,11 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             rows = packaged.Kept;
             foreach (var line in packaged.Removed) LogSceneText(line.Text, PackageText.Reason);
             // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (SceneTextMemory, #1411).
-            rows = sceneMemory.Filter(rows, now());
+            // Satırlarının çoğu böyle çıkarılan bloğun (tabela, kitap kapağı, telefon sohbeti) kalan satırı da çıkarılır;
+            // konuşan adlı satır ve altyazının okunduğu yükseklik hariç (SceneTextMemory.Leftovers).
+            rows = sceneMemory.Filter(rows, now(), area, subtitleBand);
             foreach (var (line, first) in sceneMemory.Removed) LogSceneText(line.Text, $"{SceneTextMemory.Reason} ({first})");
+            foreach (var (line, first) in sceneMemory.Leftovers) LogSceneText(line.Text, $"{SceneTextMemory.BlockReason} ({first})");
             missionMoved = mission.Observe([.. stickyRows.Removed, .. claimed], area, now());
             missionRegion = mission.Region;
             clearance = mission.Clearance;

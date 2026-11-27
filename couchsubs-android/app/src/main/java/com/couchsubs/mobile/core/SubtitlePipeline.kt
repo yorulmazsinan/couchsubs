@@ -522,8 +522,11 @@ class SubtitlePipeline(
             val (filtered, packaged) = PackageText.filter(moving, area, packageLook)
             for (line in packaged) logSceneText(line.text, PackageText.REASON)
             // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu ([SceneTextMemory], #1411).
-            val remembered = sceneMemory.filter(filtered, now())
+            // Satırlarının çoğu böyle çıkarılan bloğun (tabela, kitap kapağı, telefon sohbeti) kalan satırı da çıkarılır;
+            // konuşan adlı satır ve altyazının okunduğu yükseklik hariç ([SceneTextMemory.leftovers]).
+            val remembered = sceneMemory.filter(filtered, now(), area, subtitleBand)
             for ((line, first) in sceneMemory.removed) logSceneText(line.text, "${SceneTextMemory.REASON} ($first)")
+            for ((line, first) in sceneMemory.leftovers) logSceneText(line.text, "${SceneTextMemory.BLOCK_REASON} ($first)")
             filteredRows = filtered
             if (mission.observe(stickyRows.removed + claimed, area, now())) {
                 missionChanged = true

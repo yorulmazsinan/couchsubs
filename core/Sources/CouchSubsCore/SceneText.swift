@@ -211,6 +211,8 @@ public struct SubtitleBand: Equatable, Sendable {
         var top: Double
         var bottom: Double
         var line: Double
+        /// Öğrenildiği bloğun satırları (`holds`).
+        var texts: [String] = []
     }
 
     private(set) var spans: [Span] = []
@@ -231,13 +233,27 @@ public struct SubtitleBand: Equatable, Sendable {
         return spans.contains { middle >= $0.top - Self.margin * $0.line && middle <= $0.bottom + Self.margin * $0.line }
     }
 
+    /// Kutunun tamamı (üstü ve altı) oyunun konuşma altyazısının okunduğu tek bir yüksekliğin içinde mi (`margin` satır boyu
+    /// payla; `SceneTextMemory.filter`). Yalnız konuşma izi taşıyan (konuşan adı ya da konuşma noktalaması,
+    /// `SceneText.looksSpoken`) bloktan öğrenilen yükseklik sayılır: noktalamasız dört sözcük ("A LIBERTY CITY MEMOIR")
+    /// altyazı sanılıp öğrenilebiliyor. Satırlarından biri `sceneText` olan yükseklik de sayılmaz (altyazı sanılıp
+    /// öğrenilen telefon/tabela yazısı). Windows ve Android aynı.
+    public func holds(_ box: TextBox, sceneText: ((String) -> Bool)? = nil) -> Bool {
+        spans.contains { span in
+            box.top >= span.top - Self.margin * span.line && box.bottom <= span.bottom + Self.margin * span.line
+                && span.texts.contains { SpeakerPrefix.split($0) != nil || SceneText.looksSpoken($0) }
+                && !(sceneText.map { span.texts.contains(where: $0) } ?? false)
+        }
+    }
+
     /// Seçilen altyazı bloğu kesin altyazıysa yüksekliği hatırlanır. Satır kutuları `area`'ya oranlıdır.
     public mutating func record(_ block: Reading, in area: TextBox) {
         guard let first = block.lines.first, let box = block.box?.placed(in: area), SceneText.isCentered(box) else { return }
         let sure = SpeakerPrefix.split(first.text) != nil || SceneText.wordCount(block.text) >= Self.sureWords
             || block.lines.contains { SceneText.looksSpoken($0.text) }
         guard sure, !SceneText.isSceneText(block, in: area) else { return }
-        let span = Span(top: box.top, bottom: box.bottom, line: (box.bottom - box.top) / Double(block.lines.count))
+        let span = Span(top: box.top, bottom: box.bottom, line: (box.bottom - box.top) / Double(block.lines.count),
+                        texts: block.lines.map(\.text))
         if let index = spans.firstIndex(where: { abs($0.top - span.top) < span.line / 2 && abs($0.bottom - span.bottom) < span.line / 2 }) {
             spans.remove(at: index)
         }

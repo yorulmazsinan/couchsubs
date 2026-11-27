@@ -268,14 +268,7 @@ public sealed class Reading
             dropped?.Invoke(this, ListReason);
             return Empty;
         }
-        var blocks = new List<List<TextLine>>();
-        foreach (var line in Lines.OrderBy(line => line.Box!.Value.Top))
-        {
-            var box = line.Box!.Value.PlacedIn(area);
-            var index = blocks.FindLastIndex(block => Belongs(box, block, area, line.Text));
-            if (index >= 0) blocks[index].Add(line);
-            else blocks.Add([line]);
-        }
+        var blocks = Blocks(Lines, area);
         // Tabela, tişört, plaka gibi sahne yazısı (SceneText) altyazı alanına düşse de altyazı değildir.
         var candidates = blocks.SelectMany(WithoutSignLines).Select(block => new Reading(block)).Where(reading =>
         {
@@ -315,6 +308,24 @@ public sealed class Reading
             dropped?.Invoke(reading, OffBandReason);
             return false;
         }).MaxBy(reading => reading.Box!.Value.Bottom) ?? Empty;
+    }
+
+    /// <summary>
+    /// Satırların yerlerine göre blokları (aynı sütun, yakın satır aralığı, benzer yazı boyu: <see cref="Belongs"/>),
+    /// yukarıdan aşağı. Satırların hepsinin kutusu olmalı. <see cref="SubtitleBlock"/> ve
+    /// <see cref="SceneTextMemory.Filter"/> aynı bölmeyi kullanır (Mac: Reading.blocks, Android: Reading.blocks).
+    /// </summary>
+    internal static List<List<TextLine>> Blocks(IEnumerable<TextLine> lines, TextBox area)
+    {
+        var blocks = new List<List<TextLine>>();
+        foreach (var line in lines.OrderBy(line => line.Box!.Value.Top))
+        {
+            var box = line.Box!.Value.PlacedIn(area);
+            var index = blocks.FindLastIndex(block => Belongs(box, block, area, line.Text));
+            if (index >= 0) blocks[index].Add(line);
+            else blocks.Add([line]);
+        }
+        return blocks;
     }
 
     /// <summary>

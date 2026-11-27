@@ -34,6 +34,11 @@ public sealed class SceneTextMemory
     public const string PhoneReason = "telefon yazısı";
     /// <summary>Günlükte atılma nedeni (ardından ilk atılışın nedeni yazılır).</summary>
     public const string Reason = "az önce sahne yazısı sayılan satırın yeniden okunuşu";
+    /// <summary>
+    /// Bloğun kalan satırının günlükteki atılma nedeni (ardından bloğun ilk atılış nedeni yazılır, bkz.
+    /// <see cref="Leftovers"/>).
+    /// </summary>
+    public const string BlockReason = "sahne yazısı sayılan bloğun kalan satırı";
 
     private static readonly HashSet<string> Remembered =
     [
@@ -47,6 +52,17 @@ public sealed class SceneTextMemory
 
     /// <summary>Son <see cref="Filter"/> çağrısında çıkarılan satırlar ve ilk atılışlarının nedeni (günlük için).</summary>
     public IReadOnlyList<(TextLine Line, string Reason)> Removed { get; private set; } = [];
+
+    /// <summary>
+    /// Son <see cref="Filter"/> çağrısında, satırlarının en az yarısı az önce sahne yazısı sayıldığı için kalanıyla birlikte
+    /// çıkarılan bloğun kalan satırları ve bloğun ilk atılış nedeni (günlük için). Tabela, kitap kapağı ya da telefon
+    /// sohbeti satır satır hatırlanıp çıkarılınca aynı bloğun tek kalan satırı ("A LIBERTY CITY MEMOIR", "bring it 2 me •",
+    /// "Locatlng...") tek başına altyazı sanılıp çevriliyordu (#1414'ün yan etkisi). Blok <see cref="Reading.Blocks"/> ile
+    /// (aynı sütun, yakın satır aralığı) ayrılır; konuşan adlı satır taşıyan blok ve bütünüyle oyunun konuşma altyazısının
+    /// okunduğu yükseklikte duran blok (<see cref="SubtitleBand.Holds"/>) hiç çıkarılmaz. Kitap kapağının altyazı
+    /// yüksekliğine sarkan alt satırı çıkarılır: kapağın bütünü o yüksekliğe sığmaz. Çıkarılan satır da hatırlanır.
+    /// </summary>
+    public IReadOnlyList<(TextLine Line, string Reason)> Leftovers { get; private set; } = [];
 
     /// <summary>Bu nedenle atılan satır hatırlanır mı.</summary>
     public static bool Remembers(string reason) => Remembered.Contains(reason);
@@ -68,20 +84,48 @@ public sealed class SceneTextMemory
         if (entries.Count > Capacity) entries.RemoveRange(0, entries.Count - Capacity);
     }
 
-    /// <summary>Okumanın az önce atılan satırlara benzeyenleri çıkarılmış hali.</summary>
-    public Reading Filter(Reading reading, long time)
+    /// <summary>
+    /// Okumanın az önce atılan satırlara benzeyenleri çıkarılmış hali. <paramref name="area"/> verilirse satırlarının en
+    /// az yarısı böyle çıkarılan bloğun kalan satırları da çıkarılır (<see cref="Leftovers"/>; satır kutuları
+    /// <paramref name="area"/>'ya oranlı); <paramref name="band"/>: bu oturumda altyazının okunduğu yükseklikler.
+    /// </summary>
+    public Reading Filter(Reading reading, long time, TextBox? area = null, SubtitleBand? band = null)
     {
         var removed = new List<(TextLine, string)>();
+        var leftovers = new List<(TextLine, string)>();
         Removed = removed;
+        Leftovers = leftovers;
         entries.RemoveAll(entry => time - entry.SeenAt > HoldMs || time < entry.SeenAt);
         if (entries.Count == 0) return reading;
-        var kept = new List<TextLine>();
+        var reasons = new Dictionary<TextLine, string>(ReferenceEqualityComparer.Instance);
         foreach (var line in reading.Lines)
-        {
-            if (Match(line.Text) is { } entry) removed.Add((line, entry.Reason));
-            else kept.Add(line);
-        }
-        return removed.Count == 0 ? reading : new Reading(kept);
+            if (Match(line.Text) is { } entry)
+            {
+                removed.Add((line, entry.Reason));
+                reasons[line] = entry.Reason;
+            }
+        if (removed.Count == 0) return reading;
+        if (area is { } place)
+            foreach (var block in Reading.Blocks(reading.Lines.Where(line => line.Box is not null), place))
+            {
+                var gone = block.Where(reasons.ContainsKey).ToList();
+                if (gone.Count == 0 || gone.Count == block.Count) continue;
+                // Konuşan adlı satırın bloğu konuşmadır; bloğu oyunun altyazısının okunduğu yükseklikteyse altyazıdır.
+                if (block.Any(line => SpeakerPrefix.Parse(line.Text) is not null)) continue;
+                if (band is { IsEmpty: false } && band.Holds(new Reading(block).Box!.Value.PlacedIn(place), text => Match(text) is not null)) continue;
+                // Bloğun kalanı yalnız en az yarısı çıkarıldıysa gider; MinLetters harf/rakamdan kısa satır ("[TOM E")
+                // oylamaya katılmaz.
+                var judged = block.Count(line => !reasons.ContainsKey(line) && line.Text.Count(char.IsLetterOrDigit) >= MinLetters);
+                if (gone.Count < judged) continue;
+                var first = reasons[gone[0]];
+                foreach (var line in block.Where(line => !reasons.ContainsKey(line)))
+                {
+                    leftovers.Add((line, first));
+                    reasons[line] = first;
+                }
+            }
+        foreach (var (line, first) in leftovers) Remember([line.Text], first, time);
+        return new Reading(reading.Lines.Where(line => !reasons.ContainsKey(line)));
     }
 
     /// <summary>Bu nedenle hatırlanan satırları unutur (oyunun altyazısı koyu yazı sayılınca <see cref="InkTone.Reason"/>).</summary>
@@ -91,6 +135,7 @@ public sealed class SceneTextMemory
     {
         entries.Clear();
         Removed = [];
+        Leftovers = [];
     }
 
     /// <summary>Satırın benzediği hatırlanan satır (en yenisi); yoksa null.</summary>

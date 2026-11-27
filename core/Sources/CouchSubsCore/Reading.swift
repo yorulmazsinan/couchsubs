@@ -265,15 +265,7 @@ public struct Reading: Equatable, Sendable {
             dropped?(self, Self.listReason)
             return .empty
         }
-        var blocks: [[TextLine]] = []
-        for line in lines.sorted(by: { $0.box!.top < $1.box!.top }) {
-            let box = line.box!.placed(in: area)
-            if let index = blocks.lastIndex(where: { Self.belongs(box, line.text, to: $0, in: area) }) {
-                blocks[index].append(line)
-            } else {
-                blocks.append([line])
-            }
-        }
+        let blocks = Self.blocks(lines, in: area).map { $0.map { lines[$0] } }
         // Tabela, tişört, plaka gibi sahne yazısı (`SceneText`) altyazı alanına düşse de altyazı değildir.
         let candidates = blocks.flatMap(Self.withoutSignLines).map { Reading(lines: $0) }.filter { block in
             guard !block.isMenu, !block.isActionLabel else { return false }
@@ -310,6 +302,23 @@ public struct Reading: Equatable, Sendable {
             dropped?(block, Self.offBandReason)
             return false
         }.max(by: { $0.box!.bottom < $1.box!.bottom }) ?? .empty
+    }
+
+    /// Satırların yerlerine göre blokları (aynı sütun, yakın satır aralığı, benzer yazı boyu: `belongs`), yukarıdan aşağı;
+    /// her blok `lines` içindeki sıra numaralarıdır. Satırların hepsinin kutusu olmalı. `subtitleBlock` ve
+    /// `SceneTextMemory.filter` aynı bölmeyi kullanır (Windows: Reading.Blocks, Android: Reading.blocks).
+    static func blocks(_ lines: [TextLine], in area: TextBox) -> [[Int]] {
+        var blocks: [[Int]] = []
+        for index in lines.indices.sorted(by: { lines[$0].box!.top < lines[$1].box!.top }) {
+            let line = lines[index]
+            let box = line.box!.placed(in: area)
+            if let at = blocks.lastIndex(where: { Self.belongs(box, line.text, to: $0.map { lines[$0] }, in: area) }) {
+                blocks[at].append(index)
+            } else {
+                blocks.append([index])
+            }
+        }
+        return blocks
     }
 
     static let offBandReason = "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)"

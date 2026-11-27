@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.couchsubs.mobile.core
 
+import java.io.File
 import java.util.Collections
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -19,6 +20,14 @@ import org.junit.Test
 class SceneTextMemoryTest {
     private fun texts(array: JSONArray) = (0 until array.length()).map { array.getString(it) }
 
+    private fun box(values: JSONArray) =
+        TextBox(values.getDouble(0), values.getDouble(1), values.getDouble(2), values.getDouble(3))
+
+    private fun boxed(lines: JSONArray) = Reading((0 until lines.length()).map {
+        val line = lines.getJSONObject(it)
+        TextLine(line.getString("text"), box(line.getJSONArray("box")), confidence = 1f)
+    })
+
     @Test
     fun sharedVectors() {
         val cases = JSONObject(Fixtures.text("scene-text-memory.json")).getJSONArray("cases")
@@ -26,15 +35,21 @@ class SceneTextMemoryTest {
         for (i in 0 until cases.length()) {
             val case = cases.getJSONObject(i)
             val memory = SceneTextMemory()
+            val band = SubtitleBand()
             val steps = case.getJSONArray("steps")
             for (j in 0 until steps.length()) {
                 val step = steps.getJSONObject(j)
                 val at = step.getLong("at")
+                val area = step.optJSONArray("area")?.let { box(it) }
+                step.optJSONArray("band")?.let { band.record(boxed(it), area!!) }
                 step.optJSONArray("dropped")?.let { memory.remember(texts(it), step.getString("reason"), at) }
                 if (step.has("forget")) memory.forget(step.getString("forget"))
-                step.optJSONArray("read")?.let { read ->
-                    val kept = memory.filter(Reading(texts(read).map { TextLine(it) }), at)
-                    assertEquals(case.getString("name"), texts(step.getJSONArray("kept")), kept.lines.map { it.text })
+                val reading = step.optJSONArray("read")?.let { read -> Reading(texts(read).map { TextLine(it) }) }
+                    ?: step.optJSONArray("lines")?.let { boxed(it) } ?: continue
+                val kept = memory.filter(reading, at, area, band)
+                assertEquals(case.getString("name"), texts(step.getJSONArray("kept")), kept.lines.map { it.text })
+                step.optJSONArray("leftovers")?.let {
+                    assertEquals(case.getString("name") + " (kalan)", texts(it), memory.leftovers.map { left -> left.first.text })
                 }
             }
         }
@@ -105,5 +120,39 @@ class SceneTextMemoryTest {
         val (after, afterLog) = run(plate, reread)
         assertEquals(afterLog.joinToString("\n"), emptyList<String>(), after)
         assertTrue(afterLog.joinToString("\n"), afterLog.any { it.contains(SceneTextMemory.REASON) && it.contains("plaka/tabela") })
+    }
+
+    /** Gerçek karenin kayıtlı okuması (testdata/frames/ocr; Mac'te Apple Vision ile kaydedildi). */
+    private fun recorded(id: String): Reading {
+        val directory = generateSequence(File(System.getProperty("user.dir")!!).absoluteFile) { it.parentFile }
+            .map { File(it, "testdata/frames") }
+            .first { File(it, "frames.json").isFile }
+        return boxed(JSONObject(File(directory, "ocr/$id.json").readText()).getJSONArray("lines"))
+    }
+
+    /**
+     * #1414'ün yan etkisi (gerçek kare gta6-n1-kitap): kitap kapağının "[TOM E / DESIGN" satırları tabela sayılıp atılıyor,
+     * alt satır ("A LIBERTY CITY MEMOIR") belirince DESIGN hatırlanıp çıkarılıyor, kapağın tek kalan satırı altyazı sanılıp
+     * çevriliyordu. Bloğun çoğu sahne yazısıysa kalanı da çevrilmez; günlükte nedeniyle yazılır (Mac/Windows aynı).
+     */
+    @Test
+    fun leftoverLineOfASceneBlockIsNotTranslated() {
+        val cover = recorded("gta6-n1-kitap")
+        val top = Reading(cover.lines.filter { it.text != "A LIBERTY CITY MEMOIR" })
+        val (requested, log) = run(top, cover)
+        assertEquals((requested + log).joinToString("\n"), emptyList<String>(), requested)
+        assertTrue(log.joinToString("\n"), log.any { it.contains(SceneTextMemory.BLOCK_REASON) && it.contains("A LIBERTY CITY MEMOIR") })
+    }
+
+    /**
+     * Telefon sohbeti (gerçek kare gta6-telefon-sohbet-1): altyazının yüksekliği konuşmadan (gta6-01-lucia) öğrenildikten
+     * sonra üç satırı menü açıklaması sayılıp atılan mesajın son satırı ("bring it 2 me •") tek başına çevrilmez.
+     */
+    @Test
+    fun leftoverLineOfAPhoneChatIsNotTranslated() {
+        val chat = recorded("gta6-telefon-sohbet-1")
+        val top = Reading(chat.lines.filter { !it.text.startsWith("bring") })
+        val (requested, log) = run(recorded("gta6-01-lucia"), top, chat)
+        assertEquals((requested + log).joinToString("\n"), listOf("Could I have another ice water, please?"), requested)
     }
 }

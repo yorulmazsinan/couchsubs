@@ -154,6 +154,43 @@ final class SceneTextTests: XCTestCase {
                       after.log.joined(separator: "\n"))
     }
 
+    /// Gerçek karenin kayıtlı okuması (testdata/frames/ocr; Mac'te Apple Vision ile kaydedildi).
+    private static func recorded(_ id: String) throws -> Reading {
+        struct Line: Decodable { let text: String; let box: [Double] }
+        struct Fixture: Decodable { let lines: [Line] }
+        let url = FrameReplayTests.directory.appendingPathComponent("ocr/\(id).json")
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+        return Reading(lines: fixture.lines.map {
+            TextLine($0.text, box: TextBox(left: $0.box[0], top: $0.box[1], right: $0.box[2], bottom: $0.box[3]), confidence: 1)
+        })
+    }
+
+    /// #1414'ün yan etkisi (gerçek kare gta6-n1-kitap): kitap kapağının "[TOM E / DESIGN" satırları tabela sayılıp
+    /// atılıyor, alt satır ("A LIBERTY CITY MEMOIR") belirince DESIGN hatırlanıp çıkarılıyor, kapağın tek kalan satırı
+    /// altyazı sanılıp çevriliyordu. Bloğun çoğu sahne yazısıysa kalanı da çevrilmez; günlükte nedeniyle yazılır
+    /// (Windows/Android aynı).
+    @MainActor
+    func testLeftoverLineOfASceneBlockIsNotTranslated() async throws {
+        let cover = try Self.recorded("gta6-n1-kitap")
+        let top = Reading(lines: cover.lines.filter { $0.text != "A LIBERTY CITY MEMOIR" })
+        let run = try await Self.run([top, cover])
+        XCTAssertEqual(run.sent, [], run.log.joined(separator: "\n"))
+        XCTAssertTrue(run.log.contains { $0.contains(SceneTextMemory.blockReason) && $0.contains("A LIBERTY CITY MEMOIR") },
+                      run.log.joined(separator: "\n"))
+    }
+
+    /// Telefon sohbeti (gerçek kare gta6-telefon-sohbet-1): altyazının yüksekliği konuşmadan (gta6-01-lucia) öğrenildikten
+    /// sonra üç satırı menü açıklaması sayılıp atılan mesajın son satırı ("bring it 2 me •") tek başına çevrilmez.
+    @MainActor
+    func testLeftoverLineOfAPhoneChatIsNotTranslated() async throws {
+        let chat = try Self.recorded("gta6-telefon-sohbet-1")
+        let top = Reading(lines: chat.lines.filter { !$0.text.hasPrefix("bring") })
+        let run = try await Self.run([try Self.recorded("gta6-01-lucia"), top, chat])
+        XCTAssertEqual(run.sent.count, 1, run.log.joined(separator: "\n"))
+        XCTAssertTrue(run.sent.allSatisfy { $0.hasSuffix(String("Could I have another ice water, please?".reversed())) },
+                      run.sent.joined(separator: "\n"))
+    }
+
     /// Okumaları sırayla (her biri 12 kare) tam ekran alanda hattan geçirir; TV'ye gidenler ve günlük.
     @MainActor
     private static func run(_ readings: [Reading]) async throws -> (sent: [String], log: [String]) {
