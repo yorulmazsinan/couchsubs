@@ -56,6 +56,7 @@ public final class SubtitlePipeline {
         var read: ReadInfo
     }
     private var held: Held?
+    private let packOnly: Bool
     /// Son çevrilen (motora ya da pakete giden) okuma, puanı ve zamanı.
     private var lastSent: (source: String, score: Int, at: Int)?
     private var lastClearAt = Int.min
@@ -319,12 +320,13 @@ public final class SubtitlePipeline {
     /// `clock`: milisaniye saati; testlerde sahtesi verilir.
     /// `readQueue`: okumaların sırası (süreç genelinde tek); testlerde kısa süreli bir sıra verilir.
     public init(reader: TextReader, translator: TextTranslator, server: SubtitleSending, scheduler: ReadScheduler = .always,
-         clock: @escaping () -> Int = SubtitleStabilizer.uptimeMs, readQueue: ReadQueue = .shared) {
+         clock: @escaping () -> Int = SubtitleStabilizer.uptimeMs, readQueue: ReadQueue = .shared, packOnly: Bool = false) {
         self.reader = reader
         self.readQueue = readQueue
         self.translator = translator
         self.server = server
         self.scheduler = scheduler
+        self.packOnly = packOnly
         self.now = clock
         self.stabilizer = SubtitleStabilizer(clock: clock)
         self.own = OwnSubtitles(clock: clock)
@@ -682,6 +684,7 @@ public final class SubtitlePipeline {
     /// günlüğe yazılır. Kendi altyazımız ve telefon yazısı hiçbir zaman gönderilmez. İlke: fazladan bir HUD çevirisi
     /// kabul, diyaloğun kaybolması kabul değil (Windows, Android ile aynı).
     private func watchSilence(_ raw: Reading, stages: [(String, [TextLine])], place: TextBox) {
+        guard !packOnly else { return }
         guard let candidate = silence.due(raw.lines.map(\.text), at: now()) else { return }
         let key = TextMatch.normalize(candidate)
         func holds(_ lines: [TextLine]) -> Bool {
@@ -770,7 +773,7 @@ public final class SubtitlePipeline {
         if nameRead(source) { return }
         // Bozuk okuma beklemeye de alınmaz: önceki altyazı kalır, satır yeniden okunur.
         if rejectsImplausible(source) { return }
-        if !holdReadings { lineLeft(); return enqueue(source, box: box) }
+        if packOnly || !holdReadings { lineLeft(); return enqueue(source, box: box) }
         let packed = findPack(source) != nil
         let time = now()
         // Az önce çevrilen satırın daha iyi olmayan yeniden okuması yeni satır değildir (TV'de üst üste binmesin).
@@ -930,6 +933,16 @@ public final class SubtitlePipeline {
             return
         }
         onPackMiss?(source)
+        if packOnly {
+            lineOnScreen = nil
+            remember(request.number, source, nil)
+            if lastPair != nil {
+                clearScreen()
+                lastPair = nil
+            }
+            log(request, "\(SubtitleLog.excerpt(source)) → pakette yok, atlandı")
+            return
+        }
         guard let current = inFlight else {
             log(request, "\(SubtitleLog.excerpt(source)) → çeviriye")
             inFlight = request
@@ -1173,6 +1186,7 @@ public final class SubtitlePipeline {
                 _ = try? await readQueue.run(priority: .background, detail: "ısınma (ilk okuma, model yükleniyor)") { try reader.read(image) }
             }
         }
+        guard !packOnly else { return }
         let translator = self.translator
         Task { await translator.warmUp() }
     }

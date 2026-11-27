@@ -746,6 +746,11 @@ struct GamePacksPage: View {
             DSSwitchRow(title: "Use Game Packs",
                         subtitle: "Ready Turkish translations for some games. A line found in the pack appears instantly without going to the translation engine.",
                         isOn: $model.settings.gamePacks)
+            if model.settings.usesGamePacks {
+                DSSwitchRow(title: "Game Pack Only",
+                            subtitle: "Show only subtitles matched in a game pack. Skip lines without a match.",
+                            isOn: $model.settings.packOnlySubtitles)
+            }
             DSSwitchRow(title: "Send the English Subtitles Read to the Shared Pool",
                         subtitle: "Only the game's English text is sent, anonymously. It helps make better Turkish translations for everyone.",
                         isOn: $model.settings.sharePool)

@@ -791,9 +791,13 @@ final class AppModel: ObservableObject {
             }
             let languageChanged = settings.sourceLanguage != oldValue.sourceLanguage
                 || settings.targetLanguage != oldValue.targetLanguage
-            if isRunning, languageChanged || translationChanged || settings.fastSubtitleDetection != oldValue.fastSubtitleDetection {
+            let packOnlyChanged = settings.usesPackOnlySubtitles != oldValue.usesPackOnlySubtitles
+            if isRunning, languageChanged || translationChanged || packOnlyChanged || settings.fastSubtitleDetection != oldValue.fastSubtitleDetection {
                 if languageChanged { Task { await refreshTranslatorStatus() } }
                 makePipeline()
+                if packOnlyChanged {
+                    SubtitleLog.write("yalnızca oyun paketi: \(settings.usesPackOnlySubtitles ? "açık" : "kapalı")")
+                }
             }
         }
     }
@@ -1466,7 +1470,7 @@ final class AppModel: ObservableObject {
             regionWatcher?.packLookup = nil
             return
         }
-        let active = settings.gamePacks && settings.sourceLanguage == "en" && settings.targetLanguage == "tr"
+        let active = settings.usesGamePacks
         pipeline.packLookup = active ? { packs.match($0) } : nil
         pipeline.packName = { packs.searchScope }
         // Ek alanlar da pakette aranır ama havuza önerilmez (arayüz yazıları havuzu kirletmesin).
@@ -2540,6 +2544,7 @@ final class AppModel: ObservableObject {
         SubtitleLog.write("oturum başladı: CouchSubs \(AppIdentity.version), \(settings.sourceLanguage)→\(settings.targetLanguage), "
             + "motor: \(onlineTranslationActive ? settings.onlineEngine.rawValue : "ücretsiz"), "
             + "seçilen motor: \(settings.translationEngine.rawValue), paketler: \(settings.gamePacks ? "açık" : "kapalı"), "
+            + "yalnızca oyun paketi: \(!demoMode && settings.usesPackOnlySubtitles ? "açık" : "kapalı"), "
             + "görüntü: \(demoMode ? "deneme modu" : xbox != nil ? "Xbox (Beta)" : readsWindow ? "PS Remote Play penceresi" : captureTarget != nil ? "seçilen pencere" : "PS5"), "
             + SubtitleLog.areaSummary(settings))
 
@@ -3288,7 +3293,8 @@ final class AppModel: ObservableObject {
         menuSender = sender
         let pipeline = SubtitlePipeline(reader: VisionReader(language: settings.sourceLanguage),
                                         translator: makeTranslator(),
-                                        server: sender, scheduler: scheduler)
+                                        server: sender, scheduler: scheduler,
+                                        packOnly: !demoMode && settings.usesPackOnlySubtitles)
         // Altyazı alanında konuşan adıyla satır okundu: ekranda menü yok (#1240).
         pipeline.onDialogue = { [weak self] in self?.screenTextDetector?.noteDialogue(now: SubtitleStabilizer.uptimeMs()) }
         // Altyazı alanında menünün geçmiş listesi okundu: menü sürer, listeden bekletilen satır gönderilmez.
