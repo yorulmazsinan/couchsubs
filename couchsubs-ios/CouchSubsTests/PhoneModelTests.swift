@@ -135,6 +135,27 @@ final class PhoneModelTests: XCTestCase {
         XCTAssertEqual(model.settings.output, .tv)
     }
 
+    /// İki TV'li ev (X, beta.105): LG eşli ama CouchSubs onda yok, altyazı Android TV'deki (TCL) uygulamaya gidiyor. Ana
+    /// ekrandaki "TV uygulamasını bu telefondan kur" hiç kalkmıyordu; öbür TV'nin bildirdiği sürüm de LG'ninki sayılıyordu.
+    /// Öbür TV'nin uygulaması bağlanınca öneri kalkar, kayıtlı TV ve sürümü değişmez; kayıtlı TV'nin bağlanması da kaldırır.
+    func testOtherTVsAppDoesNotKeepTheInstallPromptOrTouchTheSavedTV() async throws {
+        services.launched = false
+        let model = makeModel()
+        try await model.pair(LGTV(name: "LG", host: "192.168.1.30", brand: .lg))
+        XCTAssertTrue(model.tvAppMissing)
+        model.tvAppReported("0.9.50", from: "192.168.1.41")
+        XCTAssertFalse(model.tvAppMissing)
+        XCTAssertNil(model.tvAppUpdate)
+        XCTAssertEqual(model.tv?.host, "192.168.1.30")
+        XCTAssertNil(model.installedTVApp)
+
+        try await model.pair(LGTV(name: "LG", host: "192.168.1.30", brand: .lg))
+        XCTAssertTrue(model.tvAppMissing)
+        model.tvAppReported("0.9.120", from: "192.168.1.30")
+        XCTAssertFalse(model.tvAppMissing)
+        model.stop()
+    }
+
     /// #985: Android TV DHCP'den yeni adres aldı. Kurulum TV'yi yeni adreste bulup kaydı güncelliyordu ama çeviri sürerken
     /// çalışan bekçi eski adresi tutuyor, TV uygulaması hep eski adreste açılmaya çalışılıyordu. Bekçi yeni adresle yeniden
     /// kurulur; eski bekçinin geç gelen açma sonucu yok sayılır.

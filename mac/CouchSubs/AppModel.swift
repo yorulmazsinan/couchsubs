@@ -708,6 +708,8 @@ final class AppModel: ObservableObject {
     private var runningCheck: TVAppRunningCheck?
     /// Bağlı TV uygulamasının son bildirdiği sürüm (boş: sürüm bildirmeyen eski uygulama); bağlı uygulama yoksa nil.
     private var runningTVAppVersion: String?
+    /// Sürümünü bildiren son kayıtsız TV'nin adresi (aynı satır her bağlantıda yeniden yazılmasın).
+    private var lastOtherTVReport: String?
     /// LG geliştirici modunun kalan süresi (saat); CouchSubs uzattıktan sonra bilinir.
     @Published var devModeHoursLeft: Int?
     /// Son eşleşmede TV uygulaması açılamadı.
@@ -1356,8 +1358,8 @@ final class AppModel: ObservableObject {
             }
         }
 
-        server.onTVAppVersion = { [weak self] version in
-            Task { @MainActor [weak self] in self?.tvAppReported(version) }
+        server.onTVAppVersion = { [weak self] version, host in
+            Task { @MainActor [weak self] in self?.tvAppReported(version, from: host) }
         }
         shareLatestTVAppVersion()
 
@@ -1757,9 +1759,22 @@ final class AppModel: ObservableObject {
     /// TV uygulaması altyazı akışına bağlandı ve sürümünü bildirdi (boş: 0.9.69'den eski, sürüm bildirmeyen uygulama).
     /// Eskiyse ana ekran "TV uygulamasını güncelle" der; geliştirici modu açık ve anahtar kayıtlıysa (LG) ya da TV'ye
     /// ulaşılıyorsa (Samsung, Android TV) güncelleme hemen, sorulmadan kurulur (önceki sürüm denetimiyle aynı yol).
-    func tvAppReported(_ version: String) {
+    ///
+    /// `host`: sürümü bildiren TV'nin adresi (bilinmiyorsa boş). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin
+    /// uygulaması bağlanınca bildirdiği sürüm seçili TV'ninki sanılıyor, seçili TV'ye güncelleme kurulmaya çalışılıyor ve
+    /// kurulum önerisi kalkmıyordu (X, beta.105). Öneriler yalnız seçili TV'yi ilgilendirir; bir TV uygulaması bağlanınca
+    /// "uygulama yok" bilgisi kalkar (yeniden kurma istendiyse kalır). iPhone, Windows ve Android ile aynı.
+    func tvAppReported(_ version: String, from host: String = "") {
         runningTVAppVersion = version
         shareLatestTVAppVersion()
+        if !lgReinstallRequested { tvAppMissing = false }
+        guard SubtitleServer.isFromSavedTV(reporter: host, saved: tv?.host) else {
+            if lastOtherTVReport != host {
+                SubtitleLog.write(SubtitleServer.otherTVReportLine(reporter: host, saved: tv?.host ?? "", version: version))
+            }
+            lastOtherTVReport = host
+            return
+        }
         if tv?.brand == .lg, lgRunningReported(version) { return }
         guard let bundled = bundledVersionForTV, SubtitleServer.isTVAppOutdated(reported: version, bundled: bundled) else {
             tvAppOutdated = nil

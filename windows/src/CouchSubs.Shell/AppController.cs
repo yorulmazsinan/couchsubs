@@ -301,7 +301,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         _ = RefreshTvAppAsync();
     });
 
-    private void OnTvAppVersion(string version) => post(() => TvAppReported(version));
+    private void OnTvAppVersion(string version, string host) => post(() => TvAppReported(version, host));
 
     private TvAppOutdated? tvAppOutdated;
 
@@ -333,6 +333,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     private TvAppRunningCheck? runningCheck;
     /// <summary>Bağlı TV uygulamasının son bildirdiği sürüm (boş: eski uygulama); bağlı uygulama yoksa null.</summary>
     private string? runningTvAppVersion;
+    /// <summary>Sürümünü bildiren son kayıtsız TV'nin adresi (aynı satır her bağlantıda yeniden yazılmasın).</summary>
+    private string? lastOtherTvReport;
 
     /// <summary>Ana ekranda "TV uygulamasını güncelle" görünür.</summary>
     public bool ShowTvAppUpdate => HasTv && tvAppOutdated is not null;
@@ -346,10 +348,23 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// Eskiyse ana ekran "TV uygulamasını güncelle" der; geliştirici modu açık ve anahtar kayıtlıysa (LG) ya da TV'ye
     /// ulaşılıyorsa (Samsung, Android TV) güncelleme hemen, sorulmadan kurulur (önceki sürüm denetimiyle aynı yol).
     /// </summary>
-    public void TvAppReported(string version)
+    /// <remarks>
+    /// <paramref name="host"/>: sürümü bildiren TV'nin adresi (bilinmiyorsa boş). Aynı ağda iki TV varken (LG ve Android
+    /// TV) öbür TV'nin uygulaması bağlanınca bildirdiği sürüm seçili TV'ninki sanılıyor, seçili TV'ye güncelleme kurulmaya
+    /// çalışılıyor ve kurulum önerisi kalkmıyordu (X, beta.105). Öneriler yalnız seçili TV'yi ilgilendirir; bir TV uygulaması
+    /// bağlanınca "uygulama yok" bilgisi kalkar (yeniden kurma istendiyse kalır). Mac, iPhone ve Android ile aynı.
+    /// </remarks>
+    public void TvAppReported(string version, string host = "")
     {
         runningTvAppVersion = version;
         ShareLatestTvAppVersion();
+        if (!lgReinstallRequested) tvAppMissing = false;
+        if (!SubtitleServer.IsFromSavedTv(host, tv?.Host))
+        {
+            if (lastOtherTvReport != host) SubtitleLog.Write(SubtitleServer.OtherTvReportLine(host, tv?.Host ?? "", version));
+            lastOtherTvReport = host;
+            return;
+        }
         if (tv?.Brand == TvBrand.Lg && LgRunningReported(version)) return;
         if (BundledVersionForTv is not { } bundled || !SubtitleServer.IsTvAppOutdated(version, bundled))
         {

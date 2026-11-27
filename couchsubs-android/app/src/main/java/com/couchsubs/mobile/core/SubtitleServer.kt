@@ -182,6 +182,26 @@ class SubtitleServer(
         fun tvAppVersion(value: String?): String =
             value?.takeIf { it.isNotEmpty() && it.length <= 20 && it.all { c -> c in '0'..'9' || c == '.' } } ?: ""
 
+        /**
+         * Sürümü bildiren TV kayıtlı (bu telefonun kurduğu ya da seçtiği) TV mi? Adreslerden biri bilinmiyorsa evet sayılır
+         * (Android TV adressiz eşlenebilir). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin uygulaması bağlanıp
+         * sürümünü bildirince bu sürüm kayıtlı TV'ninki sanılıyor, kayıtlı TV için güncelleme öneriliyor ve kayıttaki sürüm
+         * öbür TV'ninkiyle değişiyordu. Mac/iPhone ve Windows ile aynı.
+         */
+        fun isFromSavedTv(reporter: String, saved: String?): Boolean {
+            val from = reporter.trim()
+            val to = saved?.trim().orEmpty()
+            if (from.isEmpty() || to.isEmpty()) return true
+            if (from.equals(to, ignoreCase = true)) return true
+            val mapped = to.removePrefix("[").removeSuffix("]").let { if (it.lowercase().startsWith("::ffff:") && it.contains('.')) it.substring(7) else it }
+            return mapped.equals(from, ignoreCase = true)
+        }
+
+        /** Kayıtlı olmayan TV'nin uygulaması bağlandı: günlük satırı (Mac/iPhone ve Windows ile aynı metin). */
+        fun otherTvReportLine(reporter: String, saved: String, version: String): String =
+            "TV uygulaması kayıtlı TV'den ($saved) değil, başka bir TV'den ($reporter) bağlandı, sürüm " +
+                "${version.ifEmpty { "< 0.9.69" }}; kayıtlı TV için güncelleme ya da kurulum önerilmiyor."
+
         /** TV'nin bildirdiği sürüm (boş: sürüm bildirmeyen eski TV uygulaması) bu cihazdaki TV paketinden eski mi? */
         fun isTvAppOutdated(reported: String, bundled: String): Boolean {
             if (bundled.isEmpty()) return false
@@ -526,7 +546,7 @@ class SubtitleServer(
         private set
 
     /** TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) çağrılır (sunucunun iş parçacığında). */
-    @Volatile var onTvAppVersion: ((String) -> Unit)? = null
+    @Volatile var onTvAppVersion: ((version: String, host: String) -> Unit)? = null
 
     /**
      * Bu telefonun paketindeki TV uygulamasının sürümü: `link` olayının `latest` alanıyla TV'ye bildirilir. TV'deki
@@ -900,7 +920,7 @@ class SubtitleServer(
                         val version = tvAppVersion(request.parameter("v"))
                         tvAppVersion = version
                         unreported = version.isEmpty()
-                        onTvAppVersion?.invoke(version)
+                        onTvAppVersion?.invoke(version, SubtitleAccess.tvHost(socket.inetAddress))
                     }
                     openStream(socket, obs, cors, checkedKey, unreported)
                 }

@@ -3312,6 +3312,24 @@ public class TvAppInstallTests
         Assert.False(controller.ShowTvAppUpdate);
     }
 
+    /// <summary>İki TV'li ev (X, beta.105): seçili TV LG, altyazı aynı ağdaki Android TV'nin eski uygulamasına gidiyor.
+    /// Öbür TV'nin bildirdiği sürüm LG'ninki sayılmaz: LG için güncelleme önerilmez, kurulmaya çalışılmaz. LG'nin kendi
+    /// bildirimi sayılır. Mac, iPhone ve Android ile aynı.</summary>
+    [Fact]
+    public async Task OtherTvsReportDoesNotAskToUpdateTheSelectedTv()
+    {
+        var services = new FakeServices { DevMode = true };
+        var controller = Make(services);
+        await controller.PairAsync(Tv);
+        controller.TvAppReported("0.5.0", "192.168.1.41");
+        await Task.Yield();
+        Assert.Null(controller.TvAppOutdated);
+        Assert.False(controller.ShowTvAppUpdate);
+        Assert.Equal(0, services.Installs);
+        controller.TvAppReported("0.5.0", "192.168.1.153");
+        Assert.Equal(new TvAppOutdated("0.5.0", "0.6.1"), controller.TvAppOutdated);
+    }
+
     /// <summary>Eski TV uygulaması bağlı (eksik değil) ve geliştirici modu kapalı: TV adımında Developer Mode adımları
     /// görünür. Önceden kart boş kalıyor, "TV uygulamasını güncelle" yalnız eşleştirme/test gösteriyordu (Mac ile aynı).</summary>
     [Fact]

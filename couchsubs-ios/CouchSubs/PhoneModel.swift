@@ -45,6 +45,8 @@ final class PhoneModel: ObservableObject {
     private var lgRunningCheck: TVAppRunningCheck?
     /// Bağlı TV uygulamasının son bildirdiği sürüm (boş: sürüm bildirmeyen eski uygulama); kurulum ekranı LG'ye verir.
     private(set) var runningTVAppVersion: String?
+    /// Sürümünü bildiren son kayıtsız TV'nin adresi (aynı satır her bağlantıda yeniden yazılmasın).
+    private var lastOtherTVReport: String?
     /// Bu telefonun TV uygulamasını kurduğu ya da sürümünü okuduğu son TV.
     @Published private(set) var installedTVApp: InstalledTVApp?
     private var tvAppCheckedAt: Date?
@@ -576,8 +578,8 @@ final class PhoneModel: ObservableObject {
                 SubtitleLog.write("TV bağlantısı geçiş izniyle anahtarsız açıldı; TV uygulamasını güncelleyin.")
             }
         }
-        server.onTVAppVersion = { [weak self] version in
-            Task { @MainActor [weak self] in self?.tvAppReported(version) }
+        server.onTVAppVersion = { [weak self] version, host in
+            Task { @MainActor [weak self] in self?.tvAppReported(version, from: host) }
         }
         shareLatestTVAppVersion()
 
@@ -2384,9 +2386,25 @@ final class PhoneModel: ObservableObject {
     /// TV uygulaması altyazı akışına bağlanıp sürümünü bildirdi (boş: 0.9.69'den eski, sürüm bildirmeyen uygulama). LG'de
     /// geliştirici modu kapalıyken ya da anahtar bu telefonda değilken `checkTVApp` TV'deki sürümü okuyamıyor, TV uygulaması
     /// eski kalıyor ve hiç öneri çıkmıyordu (GitHub #884, #891). Eskiyse ana ekran "TV uygulamasını güncelle" önerir.
-    func tvAppReported(_ version: String) {
+    ///
+    /// `host`: sürümü bildiren TV'nin adresi (bilinmiyorsa boş). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin
+    /// uygulaması bağlanınca bildirdiği sürüm kayıtlı TV'ninki sanılıyor, kayıtlı TV'de uygulama yokken ana ekrandaki
+    /// "TV uygulamasını bu telefondan kur" hiç kalkmıyordu (X, beta.105). Öneriler yalnız kayıtlı TV'yi ilgilendirir;
+    /// başka TV'nin uygulaması bağlıyken kurulum önerisi kalkar. Mac, Windows ve Android ile aynı.
+    func tvAppReported(_ version: String, from host: String = "") {
         runningTVAppVersion = version
         shareLatestTVAppVersion()
+        let savedHost = installedTVApp?.host ?? tv?.host
+        guard SubtitleServer.isFromSavedTV(reporter: host, saved: savedHost) else {
+            if tvAppMissing || lastOtherTVReport != host {
+                SubtitleLog.write(SubtitleServer.otherTVReportLine(reporter: host, saved: savedHost ?? "", version: version))
+            }
+            lastOtherTVReport = host
+            tvAppMissing = false
+            return
+        }
+        // Kayıtlı TV'nin uygulaması bağlandı: TV'de kurulu.
+        tvAppMissing = false
         if lgRunningReported(version) { return }
         let target: (TVBrand, String, UInt16?)
         if let installed = installedTVApp {

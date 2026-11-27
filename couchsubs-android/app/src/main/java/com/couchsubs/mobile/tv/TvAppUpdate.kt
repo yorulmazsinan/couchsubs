@@ -93,14 +93,30 @@ object TvAppUpdate {
      * TV uygulaması altyazı akışına bağlanıp sürümünü bildirdi (boş: 0.9.69'den eski, sürüm bildirmeyen uygulama). LG'de
      * geliştirici modu kapalıyken ya da anahtar bu telefonda değilken [check] TV'deki sürümü okuyamıyor, TV uygulaması
      * eski kalıyor ve hiç öneri çıkmıyordu (GitHub #884, #891). Eskiyse ana ekran "TV uygulamasını güncelle" önerir.
+     *
+     * [host]: sürümü bildiren TV'nin adresi (bilinmiyorsa boş). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin
+     * uygulaması bağlanınca bildirdiği sürüm kayıtlı TV'ninki sanılıyor, kayıtlı TV için güncelleme öneriliyor ve kayıttaki
+     * sürüm değişiyordu (X, beta.105). Öneri yalnız kayıtlı TV'yi ilgilendirir. Mac, iPhone ve Windows ile aynı.
      */
-    fun reported(context: Context, version: String) {
+    fun reported(context: Context, version: String, host: String = "") {
         runningVersion = version
         val tv = Services.settings.installedTv ?: return
+        if (!concernsInstalled(tv, host, version) { line -> InstallLog(File(context.filesDir, "tvinstall.log")).write(line) }) return
         if (tv.brand == TvBrand.LG && lgRunningReported(context, tv, version)) return
         val bundled = bundledVersion(context, tv.brand) ?: return
         state.value = decide(tv, version, bundled) ?: return
         if (version.isNotEmpty() && tv.version != version) Services.settings.installedTv = tv.copy(version = version)
+    }
+
+    /** Sürümünü bildiren son kayıtsız TV'nin adresi (aynı satır her bağlantıda yeniden yazılmasın). */
+    @Volatile private var lastOtherReport: String? = null
+
+    /** Bildirim kayıtlı TV'den mi; değilse (aynı adres için bir kez) günlüğe yazılır. */
+    internal fun concernsInstalled(tv: InstalledTv, host: String, version: String, log: (String) -> Unit): Boolean {
+        if (com.couchsubs.mobile.core.SubtitleServer.isFromSavedTv(host, tv.host)) return true
+        if (lastOtherReport != host) log(com.couchsubs.mobile.core.SubtitleServer.otherTvReportLine(host, tv.host, version))
+        lastOtherReport = host
+        return false
     }
 
     /** Bağlı TV uygulamasının son bildirdiği sürüm (boş: eski uygulama); LG kurulum ekranı kuruluma verir. */

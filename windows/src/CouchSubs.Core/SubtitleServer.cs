@@ -365,9 +365,29 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     /// </summary>
     public string? LatestTvAppVersion { get; set; }
 
-    /// <summary>TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) çağrılır
-    /// (iş parçacığı havuzunda).</summary>
-    public event Action<string>? TvAppVersionReported;
+    /// <summary>TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) ve bağlanan
+    /// TV'nin adresiyle (bilinmiyorsa boş; bkz. <see cref="SubtitleAccess.TvHost"/>) çağrılır (iş parçacığı havuzunda).</summary>
+    public event Action<string, string>? TvAppVersionReported;
+
+    /// <summary>
+    /// Sürümü bildiren TV kayıtlı (seçilen) TV mi? Adreslerden biri bilinmiyorsa evet sayılır (Android TV adressiz
+    /// eşlenebilir). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin uygulaması bağlanıp sürümünü bildirince bu
+    /// sürüm kayıtlı TV'ninki sanılıyor, kayıtlı TV için güncelleme ya da kurulum öneriliyordu. Mac/iPhone ve Android ile aynı.
+    /// </summary>
+    public static bool IsFromSavedTv(string reporter, string? saved)
+    {
+        reporter = reporter.Trim();
+        saved = saved?.Trim();
+        if (reporter.Length == 0 || string.IsNullOrEmpty(saved)) return true;
+        if (string.Equals(reporter, saved, StringComparison.OrdinalIgnoreCase)) return true;
+        return System.Net.IPAddress.TryParse(saved.Trim('[', ']'), out var address)
+            && string.Equals(SubtitleAccess.TvHost(address), reporter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Kayıtlı olmayan TV'nin uygulaması bağlandı: günlük satırı (Mac/iPhone ve Android ile aynı metin).</summary>
+    public static string OtherTvReportLine(string reporter, string saved, string version) =>
+        $"TV uygulaması kayıtlı TV'den ({saved}) değil, başka bir TV'den ({reporter}) bağlandı, sürüm "
+        + $"{(version.Length == 0 ? "< 0.9.69" : version)}; kayıtlı TV için güncelleme ya da kurulum önerilmiyor.";
 
     /// <summary><c>v</c> parametresi: yalnız rakam ve nokta, en çok 20 karakter; yoksa ya da bozuksa boş (eski TV sayılır).</summary>
     public static string ParseTvAppVersion(string? value) =>
@@ -1027,7 +1047,7 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                     var version = ParseTvAppVersion(request.Parameter("v"));
                     lock (gate) tvAppVersion = version;
                     unreported = version.Length == 0;
-                    TvAppVersionReported?.Invoke(version);
+                    TvAppVersionReported?.Invoke(version, tcp.Client.RemoteEndPoint is System.Net.IPEndPoint reporter ? SubtitleAccess.TvHost(reporter.Address) : "");
                 }
                 await OpenStream(tcp, obs, cors, checkedKey, obs ? null : ParseHdmiPort(request.Parameter("hdmi")), unreported);
             }

@@ -1582,6 +1582,20 @@ final class TVAppInstallTests: XCTestCase {
         XCTAssertNil(model.tvAppOutdated)
     }
 
+    /// İki TV'li ev (X, beta.105): seçili TV LG, altyazı aynı ağdaki Android TV'nin eski uygulamasına gidiyor. Öbür TV'nin
+    /// bildirdiği sürüm LG'ninki sayılmaz: LG için güncelleme önerilmez, kurulmaya çalışılmaz. LG'nin kendi bildirimi sayılır.
+    func testOtherTVsReportDoesNotAskToUpdateTheSelectedTV() async throws {
+        let services = FakeServices()
+        services.devMode = true
+        let model = model(services)
+        try await model.pair(tv)
+        model.tvAppReported("0.5.0", from: "192.168.1.41")
+        XCTAssertNil(model.tvAppOutdated)
+        XCTAssertEqual(services.installs, 0)
+        model.tvAppReported("0.5.0", from: "192.168.1.153")
+        XCTAssertEqual(model.tvAppOutdated, TVAppOutdated(installed: "0.5.0", bundled: "0.6.1"))
+    }
+
     /// Eski TV uygulaması bağlı (eksik değil) ve geliştirici modu kapalı: TV adımında Developer Mode adımları görünür.
     /// Önceden kart boş kalıyor (`.unknown`), "TV uygulamasını güncelle" yalnız eşleştirme/test gösteriyordu (döngü).
     func testOldLGAppWithDevModeOffShowsTheDevModeSteps() async throws {

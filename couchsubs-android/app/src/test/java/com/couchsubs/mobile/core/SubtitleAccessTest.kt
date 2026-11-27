@@ -108,7 +108,7 @@ class SubtitleAccessTest {
     @Test fun remembersTheTvAppVersionAndTreatsSilentTvsAsOld() {
         val server = SubtitleServer(port = 0, allowLegacy = true)
         val reported = mutableListOf<String>()
-        server.onTvAppVersion = { synchronized(reported) { reported.add(it) } }
+        server.onTvAppVersion = { version, _ -> synchronized(reported) { reported.add(version) } }
         val port = server.start()
         try {
             assertNull(server.tvAppVersion)
@@ -132,6 +132,29 @@ class SubtitleAccessTest {
         assertEquals(com.couchsubs.mobile.tv.TvAppStatus.Outdated(tv, "< 0.9.69", "0.9.69"),
             com.couchsubs.mobile.tv.TvAppUpdate.decide(tv, "", "0.9.69"))
         assertEquals(com.couchsubs.mobile.tv.TvAppStatus.UpToDate("0.9.69"), com.couchsubs.mobile.tv.TvAppUpdate.decide(tv, "0.9.69", "0.9.69"))
+    }
+
+    /**
+     * İki TV'li ev (LG OLED ve TCL Google TV, X, beta.105): öbür TV'nin bildirdiği sürüm kayıtlı TV'ninki sayılmaz. Adreslerden
+     * biri bilinmiyorsa (adressiz Android TV, yerel olmayan bağlantı) kayıtlı TV sayılır. Mac/iPhone ve Windows ile aynı.
+     */
+    @Test fun tvAppReportOnlyConcernsTheSavedTv() {
+        assertTrue(SubtitleServer.isFromSavedTv("192.168.1.40", "192.168.1.40"))
+        assertTrue(SubtitleServer.isFromSavedTv("192.168.1.40", " 192.168.1.40 "))
+        assertTrue(SubtitleServer.isFromSavedTv("192.168.1.40", "::ffff:192.168.1.40"))
+        assertFalse(SubtitleServer.isFromSavedTv("192.168.1.41", "192.168.1.40"))
+        assertTrue(SubtitleServer.isFromSavedTv("", "192.168.1.40"))
+        assertTrue(SubtitleServer.isFromSavedTv("192.168.1.41", ""))
+        assertTrue(SubtitleServer.isFromSavedTv("192.168.1.41", null))
+        assertEquals("TV uygulaması kayıtlı TV'den (192.168.1.40) değil, başka bir TV'den (192.168.1.41) bağlandı, sürüm < 0.9.69; " +
+            "kayıtlı TV için güncelleme ya da kurulum önerilmiyor.", SubtitleServer.otherTvReportLine("192.168.1.41", "192.168.1.40", ""))
+        val lg = com.couchsubs.mobile.tv.InstalledTv(com.couchsubs.mobile.tv.TvBrand.LG, "192.168.1.40", version = "0.9.120")
+        val log = mutableListOf<String>()
+        val update = com.couchsubs.mobile.tv.TvAppUpdate
+        assertTrue(update.concernsInstalled(lg, "192.168.1.40", "0.9.120") { log += it })
+        assertFalse(update.concernsInstalled(lg, "192.168.1.41", "0.9.110") { log += it })
+        assertFalse(update.concernsInstalled(lg, "192.168.1.41", "0.9.110") { log += it })
+        assertEquals(1, log.size)
     }
     /** İkinci ekran eski TV'lere tanınan anahtarsız geçişten yararlanmaz (Mac ve Windows'ta aynı durumlar). */
     @Test fun secondScreenAlwaysNeedsTheKey() {

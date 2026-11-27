@@ -84,6 +84,21 @@ final class SubtitleServerTests: XCTestCase {
         XCTAssertFalse(SubtitleServer.isTVAppOutdated(reported: "", bundled: ""))
     }
 
+    /// İki TV'li ev (LG OLED ve TCL Google TV): öbür TV'nin bildirdiği sürüm kayıtlı TV'ninki sayılmaz. Adreslerden biri
+    /// bilinmiyorsa (adressiz Android TV, yerel olmayan bağlantı) kayıtlı TV sayılır. Windows ve Android ile aynı.
+    func testTVAppReportOnlyConcernsTheSavedTV() {
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "192.168.1.40", saved: "192.168.1.40"))
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "192.168.1.40", saved: " 192.168.1.40 "))
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "192.168.1.40", saved: "::ffff:192.168.1.40"))
+        XCTAssertFalse(SubtitleServer.isFromSavedTV(reporter: "192.168.1.41", saved: "192.168.1.40"))
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "", saved: "192.168.1.40"))
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "192.168.1.41", saved: ""))
+        XCTAssertTrue(SubtitleServer.isFromSavedTV(reporter: "192.168.1.41", saved: nil))
+        XCTAssertEqual(SubtitleServer.otherTVReportLine(reporter: "192.168.1.41", saved: "192.168.1.40", version: ""),
+                       "TV uygulaması kayıtlı TV'den (192.168.1.40) değil, başka bir TV'den (192.168.1.41) bağlandı, sürüm < 0.9.69; "
+                       + "kayıtlı TV için güncelleme ya da kurulum önerilmiyor.")
+    }
+
     /// Eski TV uygulaması (sürüm bildirmeyen; 0.9.7'den önceki sürümler `clear` gelir gelmez satırı kaldırır): `clear`
     /// ona satırın en az görünme süresi dolunca gider, yeni TV'ye hemen. Arada yeni satır gelirse eski `clear` hiç gitmez.
     func testClearReachesOldTVAppsOnlyAfterTheLineWasReadable() async throws {

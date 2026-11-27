@@ -152,6 +152,22 @@ public class SubtitleServerTests
         Assert.False(SubtitleServer.IsTvAppOutdated("", ""));
     }
 
+    /// <summary>İki TV'li ev (LG OLED ve TCL Google TV): öbür TV'nin bildirdiği sürüm kayıtlı TV'ninki sayılmaz. Adreslerden
+    /// biri bilinmiyorsa (adressiz Android TV, yerel olmayan bağlantı) kayıtlı TV sayılır. Mac/iPhone ve Android ile aynı.</summary>
+    [Fact]
+    public void TvAppReportOnlyConcernsTheSavedTv()
+    {
+        Assert.True(SubtitleServer.IsFromSavedTv("192.168.1.40", "192.168.1.40"));
+        Assert.True(SubtitleServer.IsFromSavedTv("192.168.1.40", " 192.168.1.40 "));
+        Assert.True(SubtitleServer.IsFromSavedTv("192.168.1.40", "::ffff:192.168.1.40"));
+        Assert.False(SubtitleServer.IsFromSavedTv("192.168.1.41", "192.168.1.40"));
+        Assert.True(SubtitleServer.IsFromSavedTv("", "192.168.1.40"));
+        Assert.True(SubtitleServer.IsFromSavedTv("192.168.1.41", ""));
+        Assert.True(SubtitleServer.IsFromSavedTv("192.168.1.41", null));
+        Assert.Equal("TV uygulaması kayıtlı TV'den (192.168.1.40) değil, başka bir TV'den (192.168.1.41) bağlandı, sürüm < 0.9.69; "
+            + "kayıtlı TV için güncelleme ya da kurulum önerilmiyor.", SubtitleServer.OtherTvReportLine("192.168.1.41", "192.168.1.40", ""));
+    }
+
     /// Konuşan adını renklendir açıkken adlı satır "speakerNames" alanını taşır (eski "speakers" hiç gitmez: 0.9.79'dan eski
     /// TV uygulamaları onunla bütün satırı boyuyordu); kapalıyken ve adsız satırda alan yoktur.
     [Fact]

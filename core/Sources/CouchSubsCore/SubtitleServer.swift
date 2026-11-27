@@ -389,8 +389,9 @@ public final class SubtitleServer: @unchecked Sendable {
     /// hiç "TV uygulamasını güncelle" çıkmıyordu (GitHub #884, #891). Windows ve Android ile aynı.
     public var tvAppVersion: String? { queue.sync { reportedVersion } }
 
-    /// TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) ana iş parçacığında çağrılır.
-    public var onTVAppVersion: (@Sendable (String) -> Void)?
+    /// TV uygulaması altyazı akışına her bağlandığında bildirdiği sürümle (boş: eski TV uygulaması) ve bağlanan TV'nin
+    /// adresiyle (bilinmiyorsa boş; bkz. `SubtitleAccess.tvHost`) ana iş parçacığında çağrılır.
+    public var onTVAppVersion: (@Sendable (_ version: String, _ host: String) -> Void)?
 
     /// `v` parametresi: yalnız rakam ve nokta, en çok 20 karakter; yoksa ya da bozuksa boş (eski TV sayılır).
     static func tvAppVersion(_ value: String?) -> String {
@@ -400,6 +401,22 @@ public final class SubtitleServer: @unchecked Sendable {
 
     /// 0.9.69'den eski TV uygulamaları sürüm bildirmez; ekranda böyle görünür.
     public static let unreportedTVAppVersion = "< 0.9.69"
+
+    /// Sürümü bildiren TV kayıtlı (seçilen ya da bu cihazın kurduğu) TV mi? Adreslerden biri bilinmiyorsa evet sayılır
+    /// (Android TV adressiz eşlenebilir). Aynı ağda iki TV varken (LG ve Android TV) öbür TV'nin uygulaması bağlanıp
+    /// sürümünü bildirince bu sürüm kayıtlı TV'ninki sanılıyor, kayıtlı TV için güncelleme ya da kurulum öneriliyordu.
+    /// Windows ve Android ile aynı.
+    public static func isFromSavedTV(reporter: String, saved: String?) -> Bool {
+        let reporter = reporter.trimmingCharacters(in: .whitespaces)
+        guard !reporter.isEmpty, let saved = saved?.trimmingCharacters(in: .whitespaces), !saved.isEmpty else { return true }
+        return SubtitleAccess.tvHost(fromPeer: saved).lowercased() == reporter.lowercased() || saved.lowercased() == reporter.lowercased()
+    }
+
+    /// Kayıtlı olmayan TV'nin uygulaması bağlandı: günlük satırı (Windows ve Android ile aynı metin).
+    public static func otherTVReportLine(reporter: String, saved: String, version: String) -> String {
+        "TV uygulaması kayıtlı TV'den (\(saved)) değil, başka bir TV'den (\(reporter)) bağlandı, sürüm "
+            + "\(version.isEmpty ? unreportedTVAppVersion : version); kayıtlı TV için güncelleme ya da kurulum önerilmiyor."
+    }
 
     /// TV'nin bildirdiği sürüm (boş: sürüm bildirmeyen eski TV uygulaması) bu cihazdaki TV paketinden eski mi?
     public static func isTVAppOutdated(reported: String, bundled: String) -> Bool {
@@ -1072,7 +1089,9 @@ public final class SubtitleServer: @unchecked Sendable {
                 let version = Self.tvAppVersion(request.parameter("v"))
                 reportedVersion = version
                 unreported = version.isEmpty
-                if let handler = onTVAppVersion { DispatchQueue.main.async { handler(version) } }
+                var peer = ""
+                if case let .hostPort(host, _) = connection.endpoint { peer = SubtitleAccess.tvHost(fromPeer: "\(host)") }
+                if let handler = onTVAppVersion { DispatchQueue.main.async { handler(version, peer) } }
             }
             openStream(connection, viewer: obs, legacy: unreported, cors: cors)
         } else if method == "GET" && path == "/ack" {
