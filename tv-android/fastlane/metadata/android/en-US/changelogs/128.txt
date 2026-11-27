@@ -1,0 +1,1 @@
+0.9.125: When the locked on-screen translation arrives again unchanged, its boxes are not rebuilt; menu and card translations no longer flicker.

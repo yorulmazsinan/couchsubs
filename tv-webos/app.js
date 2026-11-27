@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.124';
+  var APP_VERSION = '0.9.125';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -2498,7 +2498,9 @@
     var now = Date.now();
     // Göndericinin yenilemesi (keep): aynı alan yeniden çizilmez, katmanların sırası değişmez; yalnız ömrü uzar.
     var raw = JSON.stringify([data.text, data.box, data.line || 0, data.icons || null, data.blocks || null]);
-    if (data.keep === true && el && el.couchsubsRaw === raw) {
+    // Ekran kilidi (0.9.125): bilgisayar kilitli ekranın aynı bloklarını yeniden gönderse de kutular yeniden dizilmez;
+    // önceden bloklu alanın her olayı bütün kutuları kaldırıp yeniden kuruyordu (aynı içerikte de kısa bir kırpışma).
+    if (el && el.couchsubsRaw === raw && (data.keep === true || (kind === 'region-blocks' && el.className === kind))) {
       el.couchsubsSeen = now;
       return;
     }

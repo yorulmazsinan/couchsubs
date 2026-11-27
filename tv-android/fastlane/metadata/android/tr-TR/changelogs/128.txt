@@ -1,0 +1,1 @@
+0.9.125: Kilitli ekran yazısının aynı çevirisi yeniden gelince kutular yeniden kurulmuyor; menü ve kart çevirileri kırpışmıyor.

@@ -253,9 +253,33 @@ public sealed partial class RegionWatcher
             if (writesBeside == value) return;
             writesBeside = value;
             lock (rowPaints) rowPaints.Clear();
+            screenLock.Release("çizim ayarı değişti");
         }
     }
     private volatile bool writesBeside;
+
+    /// <summary>
+    /// Ekran kilidi (<see cref="ScreenLock"/>): otomatik ekran yazısının kararlı ekranı kilitlenir; küçük değişiklikte kutu
+    /// taşınmaz, eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında. Mac/iPhone ve Android aynı.
+    /// </summary>
+    public bool LocksScreen
+    {
+        get => locksScreen;
+        set
+        {
+            locksScreen = value;
+            if (!value) screenLock.Release("kilit kapatıldı");
+        }
+    }
+    private volatile bool locksScreen = true;
+    private readonly ScreenLock screenLock = new();
+    internal ScreenLock ScreenLock => screenLock;
+    /// <summary>Alanların bu turda (ya da iz değişmediyse en son) okunan ekran yazısı blokları (<see cref="ScreenLock.Observe"/>).</summary>
+    private readonly Dictionary<string, List<ScreenLock.Block>> observedBlocks = [];
+    /// <summary>Alanın gürültü/sahne yazısı sayılıp çizilmeyen okuması; aynı okuma kilidin bloklarına girmez.</summary>
+    private readonly Dictionary<string, string> rejectedKeys = [];
+    /// <summary>Denemeler: iz değişmese de her turda okunur (art arda okumaların oynatılması).</summary>
+    internal bool RereadsEveryPass { get; set; }
     public bool EnglishPhoneMessages { get; set; }
     /// <summary>"GTA 6 Telefon Mesajları: Yanda Panel / Balonların Üstünde" ve panelin yazı boyu; her gönderide okunur (Mac ile aynı).</summary>
     public Func<PhonePanelOptions> PhonePanel { get; set; } = () => new PhonePanelOptions();
@@ -311,6 +335,7 @@ public sealed partial class RegionWatcher
         drops = new DropLog(now);
         implausibleLog = new ReadPlausibility.Log(now);
         phoneTrace = new DropLog(now);
+        screenLock.Log = line => Log?.Invoke(line);
     }
 
     /// <summary>Son <see cref="Offer"/>'da telefon paneli var mıydı (açılışında <see cref="ClearScreenText"/>).</summary>
@@ -336,7 +361,7 @@ public sealed partial class RegionWatcher
                 latest = (frame, areas);
                 return;
             }
-            if (areas.Count == 0 && !AnyShown()) return;
+            if (areas.Count == 0 && !AnyShown() && !(locksScreen && screenLock.Holds)) return;
             var hasPhone = areas.Any(area => area.PanelLifetime.HasValue);
             var hasRegular = !hasPhone || areas.Any(area => !area.PanelLifetime.HasValue);
             // Altyazı okuması yavaşladıysa ek alanlar seyrek okunur: altyazı her zaman önce (ReadPressure).
@@ -489,7 +514,7 @@ public sealed partial class RegionWatcher
             removed = [.. map.Where(pair => !ids.Contains(pair.Key) && pair.Value.Shown.Length > 0).Select(pair => pair.Key)];
             foreach (var id in map.Keys.Where(id => !ids.Contains(id)).ToList()) map.Remove(id);
         }
-        foreach (var id in removed) server.SendRegion(id, "", null);
+        foreach (var id in removed) Emit(id, "", null);
         foreach (var area in areas)
         {
             var current = Latest();
@@ -508,6 +533,67 @@ public sealed partial class RegionWatcher
                 await VisitAsync(area, current?.Frame ?? frame, map, started, confirmOnly).ConfigureAwait(false);
             server.RegionsAlive();
             if (Volatile.Read(ref session) != started) return;
+        }
+        if (!regularDue || !locksScreen || Volatile.Read(ref session) != started) return;
+        // Ekran kilidi turun bütün ekran yazısına bakar (ScreenLock): kilitlenir, açılır ya da bekleyen yazı güncellenir.
+        List<ScreenLock.Block> blocks;
+        lock (observedBlocks)
+        {
+            foreach (var id in observedBlocks.Keys.Where(id => !ids.Contains(id)).ToList()) observedBlocks.Remove(id);
+            foreach (var id in rejectedKeys.Keys.Where(id => !ids.Contains(id)).ToList()) rejectedKeys.Remove(id);
+            blocks = [.. areas.Where(area => ScreenLock.Covers(area.Id))
+                .SelectMany(area => observedBlocks.GetValueOrDefault(area.Id) ?? [])];
+        }
+        Deliver(screenLock.Observe(blocks, now()));
+    }
+
+    /// <summary>Ekran yazısı alanının gönderisi ekran kilidinden geçer (<see cref="ScreenLock.Offer"/>); diğer alanlar doğrudan gider.</summary>
+    private void Emit(string id, string text, TextBox? box, double? lineHeight = null) =>
+        Emit(id, text, box, lineHeight, null, null, plain: true);
+
+    private void Emit(string id, string text, TextBox? box, double? lineHeight, IReadOnlyList<IconPlacement>? icons,
+                      IReadOnlyList<ScreenTranslation.Item>? blocks, bool plain = false)
+    {
+        if (!locksScreen || !ScreenLock.Covers(id))
+        {
+            if (plain) server.SendRegion(id, text, box, lineHeight);
+            else server.SendRegion(id, text, box, lineHeight, icons, blocks);
+            return;
+        }
+        var payload = text.Length == 0 ? null : new ScreenLock.Payload(text, box, lineHeight, icons, blocks);
+        Deliver(screenLock.Offer(id, payload));
+    }
+
+    private void Deliver(List<ScreenLock.Send> sends)
+    {
+        foreach (var send in sends)
+        {
+            if (send.Payload is { } p) server.SendRegion(send.Id, p.Text, p.Box, p.LineHeight, p.Icons, p.Blocks);
+            else server.SendRegion(send.Id, "", null);
+            // Kilit kutuyu izleyicinin bilmeden kaldırdı: alan unutulur, yazı geri gelince yeniden çizilir.
+            if (send.Forget)
+            {
+                var map = states;
+                lock (map) map.Remove(send.Id);
+            }
+        }
+    }
+
+    /// <summary>Bu okumanın ekran kilidine giren blokları: gürültü, boş ya da az önce çizilmeyip atılan okuma girmez.</summary>
+    private void NoteObserved(Candidate candidate, WatchedArea area)
+    {
+        if (!locksScreen || !ScreenLock.Covers(area.Id)) return;
+        var labelLike = area.Menu || IsUiLabel(candidate);
+        lock (observedBlocks)
+        {
+            if (candidate.Key.Length == 0 || rejectedKeys.GetValueOrDefault(area.Id) == candidate.Key
+                || ScreenTextNoise.IsNoise(string.Join(' ', candidate.Paragraphs), labelLike))
+            {
+                observedBlocks[area.Id] = [];
+                return;
+            }
+            observedBlocks[area.Id] = [.. BlockTexts(candidate).Select(b => new ScreenLock.Block(ScreenLock.Key(b.Text), b.Box))
+                .Where(b => b.Key.Length > 0)];
         }
     }
 
@@ -578,6 +664,7 @@ public sealed partial class RegionWatcher
             state.LastFullCheck = time;
             changed = !last.Pixels.AsSpan().SequenceEqual(crop.Pixels);
         }
+        if (RereadsEveryPass) changed = true;
         if (!changed)
         {
             // İz bir tur değişmedi: okunan yazı kararlıdır.
@@ -610,7 +697,7 @@ public sealed partial class RegionWatcher
                 state.RenderedLineHeight = null;
                 state.RenderedLayout = null;
                 state.RenderedBlocks = null;
-                server.SendRegion(area.Id, "", null);
+                Emit(area.Id, "", null);
                 Log?.Invoke($"ek alan {area.Name}: arayüz kutusu yok, kaldırıldı");
             }
             return;
@@ -618,6 +705,7 @@ public sealed partial class RegionWatcher
         state.PanelMisses = 0;
         var candidate = ReadCandidate(frame, crop, signature, area, state, started);
         if (candidate is null) return;
+        if (!(candidate.Key.Length == 0 && candidate.Unsure.Count > 0)) NoteObserved(candidate, area);
         if (!candidate.Unsure.SequenceEqual(state.UnsureLogged))
         {
             state.UnsureLogged = candidate.Unsure;
@@ -698,7 +786,7 @@ public sealed partial class RegionWatcher
                 }
                 if (kept.Count == 0)
                 {
-                    server.SendRegion(area.Id, "", null);
+                    Emit(area.Id, "", null);
                     state.ShownText = "";
                     state.RenderedText = null;
                     state.RenderedBlocks = null;
@@ -790,7 +878,7 @@ public sealed partial class RegionWatcher
                    && turns > patience;
         if (!gone && !UnsteadyLong(turns, time - since, patience)) return;
         var shownText = state.ShownText;
-        server.SendRegion(area.Id, "", null);
+        Emit(area.Id, "", null);
         state.Shown = state.ShownText = "";
         state.ShownIcons = 0;
         state.RenderedKey = state.RenderedText = null;
@@ -1660,7 +1748,13 @@ public sealed partial class RegionWatcher
         {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
-            if (state.Shown.Length > 0 || !string.IsNullOrEmpty(state.RenderedText)) server.SendRegion(area.Id, "", null);
+            if (state.Shown.Length > 0 || !string.IsNullOrEmpty(state.RenderedText)) Emit(area.Id, "", null);
+            if (locksScreen && ScreenLock.Covers(area.Id))
+                lock (observedBlocks)
+                {
+                    rejectedKeys[area.Id] = candidate.Key;
+                    observedBlocks[area.Id] = [];
+                }
             state.Shown = candidate.Key;
             state.ShownText = candidate.Text;
             state.RenderedKey = candidate.Key;
@@ -1721,7 +1815,7 @@ public sealed partial class RegionWatcher
         state.ShownIcons = IconCount(candidate);
         if (candidate.Key.Length == 0)
         {
-            server.SendRegion(area.Id, "", null);
+            Emit(area.Id, "", null);
             state.RenderedKey = candidate.Key;
             state.RenderedText = "";
             state.RenderedBox = null;
@@ -1745,7 +1839,7 @@ public sealed partial class RegionWatcher
                 // Yeni komut doğrulandı; yavaş motor yanıtını beklerken eski Türkçe onun üstünde kalmasın.
                 if (waited && !string.IsNullOrEmpty(state.RenderedText) && Volatile.Read(ref session) == started)
                 {
-                    server.SendRegion(area.Id, "", null);
+                    Emit(area.Id, "", null);
                     state.RenderedText = null;
                     state.RenderedKey = null;
                     previous = ("", "", 0);
@@ -1891,7 +1985,7 @@ public sealed partial class RegionWatcher
                 state.SentPhoneOptions = options;
             }
             if (screen) Send(area, text, box, lineHeight, icons, blocks);
-            else server.SendRegion(area.Id, text, box, lineHeight, icons, blocks);
+            else Emit(area.Id, text, box, lineHeight, icons, blocks);
         }
     }
 
@@ -1904,17 +1998,17 @@ public sealed partial class RegionWatcher
     {
         if (blocks is null)
         {
-            server.SendRegion(area.Id, text, box, lineHeight, icons, null);
+            Emit(area.Id, text, box, lineHeight, icons, null);
             return;
         }
         var shown = Drawable(blocks);
         if (shown.Count < blocks.Count) Log?.Invoke($"ek alan {area.Name}: {blocks.Count - shown.Count} boş kutu çizilmedi");
         if (shown.Count == 0)
         {
-            server.SendRegion(area.Id, "", null);
+            Emit(area.Id, "", null);
             return;
         }
-        server.SendRegion(area.Id, text, box, lineHeight, icons, shown);
+        Emit(area.Id, text, box, lineHeight, icons, shown);
     }
 
     /// <summary>
@@ -2404,6 +2498,13 @@ public sealed partial class RegionWatcher
             autoSeen.Clear();
         }
         lock (rowPaints) rowPaints.Clear();
+        lock (observedBlocks)
+        {
+            observedBlocks.Clear();
+            rejectedKeys.Clear();
+        }
+        if (screenLock.Holds) anyShown = true;
+        screenLock.Reset();
         if (anyShown) server.ClearRegions();
     }
 }

@@ -73,6 +73,10 @@ function render() {
         showRegion({ id: 'auto-1', text: 'z' + k, box: older.box, blocks: [older, piece, far] });
       }
       result.afterUpdates = { auto1: blocks('auto-1'), auto2: blocks('auto-2') };
+      // Ekran kilidi (0.9.125): kilitli ekranın aynı blokları yeniden gelince kutular yeniden kurulmaz (kırpışma yok).
+      var kept = regionBoxes['auto-2'], keptPiece = kept.firstChild;
+      showRegion({ id: 'auto-2', text: 'y2', box: list.box, blocks: [list] });
+      result.samePieces = regionBoxes['auto-2'] === kept && kept.firstChild === keptPiece && !!keptPiece;
       // "Ekranı çevir" kartın yerini çizer: alttaki otomatik yazı gizlenir, başka yerdeki kalır.
       showScreen([card], 20000);
       result.withScreen = { auto1: blocks('auto-1'), auto2: blocks('auto-2') };
@@ -116,6 +120,8 @@ test('aynı yazıyı çizen katmanlardan yalnız biri görünür; kutu tam opak'
   // Yerinde güncellenen eski alan yenisinin önüne geçmez (sıra sabit, gidip gelme yok).
   assert.deepEqual(r.afterUpdates.auto1, ["Kenton'la tanıştın mı?:true", 'Bulur:false', 'Para Kazan:true']);
   assert.deepEqual(r.afterUpdates.auto2, ["Donnie'nin Paketini Bul:true"]);
+  // Aynı bloklar yeniden geldi: kutular yerinde kalır, yeniden dizilmez.
+  assert.equal(r.samePieces, true);
   // "Ekranı çevir" kartın yerini çizer: eski kart çevirisi gizlenir, uzaktaki satır ve yeni alan kalır.
   assert.deepEqual(r.withScreen.auto1, ["Kenton'la tanıştın mı?:false", 'Bulur:false', 'Para Kazan:true']);
   assert.deepEqual(r.withScreen.auto2, ["Donnie'nin Paketini Bul:true"]);

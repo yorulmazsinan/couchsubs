@@ -226,8 +226,25 @@ public final class RegionWatcher {
     /// (`inPlaceKind`, `coveredInPlace`); yer özgün yazıdan geldiği için her okumada yeniden karar verilmez. Oyun dünyasındaki
     /// tabela ve sahne yazısı (#1300) eskisi gibi kalır. Değişince satırların saklı kipi unutulur. Windows ve Android aynı.
     public var writesBeside = false {
-        didSet { if writesBeside != oldValue { rowPaints.removeAll() } }
+        didSet {
+            guard writesBeside != oldValue else { return }
+            rowPaints.removeAll()
+            screenLock.release(reason: "çizim ayarı değişti")
+        }
     }
+
+    /// Ekran kilidi (`ScreenLock`): otomatik ekran yazısının kararlı ekranı kilitlenir; küçük değişiklikte kutu taşınmaz,
+    /// eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında. Windows ve Android aynı.
+    public var locksScreen = true {
+        didSet { if !locksScreen { screenLock.release(reason: "kilit kapatıldı") } }
+    }
+    let screenLock = ScreenLock()
+    /// Alanların bu turda (ya da iz değişmediyse en son) okunan ekran yazısı blokları (`ScreenLock.observe`).
+    private var observed: [String: [ScreenLock.Block]] = [:]
+    /// Alanın gürültü/sahne yazısı sayılıp çizilmeyen okuması; aynı okuma kilidin bloklarına girmez.
+    private var rejectedKeys: [String: String] = [:]
+    /// Denemeler: iz değişmese de her turda okunur (art arda okumaların oynatılması).
+    var rereadsEveryPass = false
 
     /// Oyun paketi: satırın hazır Türkçesi (ana altyazıyla aynı arama).
     public var packLookup: ((String) -> PackMatch?)?
@@ -317,6 +334,7 @@ public final class RegionWatcher {
         self.drops = DropLog(clock: clock)
         self.implausibleLog = ReadPlausibility.Log(clock: clock)
         self.phoneTrace = DropLog(clock: clock)
+        screenLock.onLog = { [weak self] in self?.onLog?($0) }
     }
 
     /// Bir tur sürüyor mu.
@@ -327,10 +345,16 @@ public final class RegionWatcher {
     /// önceki haberin "Vali karşılaştırıyor" kutusu hava uygulamasında) bir süre duruyordu. Telefon açıkken bu alanlar
     /// zaten önerilmez (Windows ve Android ile aynı).
     func clearScreenText() {
+        var cleared = Set<String>()
         for (id, state) in states where id.hasPrefix("auto-") && id != MissionLine.areaId {
-            if !state.shown.isEmpty { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
+            if !state.shown.isEmpty { cleared.insert(id) }
             states[id] = nil
         }
+        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir).
+        cleared.formUnion(screenLock.displayed.keys)
+        screenLock.release(reason: "telefon açıldı")
+        observed.removeAll()
+        for id in cleared.sorted() { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
     }
 
     /// Her karede çağrılır; tur zamanı geldiyse ve önceki tur bittiyse turu arka planda başlatır, hemen döner.
@@ -354,7 +378,7 @@ public final class RegionWatcher {
         let time = now()
         // Altyazı okuması sırada bekliyorsa (ya da okuyucu takılıysa) ek alanlar seyrek okunur: altyazı her zaman önce.
         let interval = (areas.contains(where: \.auto) ? min(intervalMs, Self.autoIntervalMs) : intervalMs) * slowdown()
-        let manualDue = (!areas.isEmpty || states.values.contains { !$0.shown.isEmpty })
+        let manualDue = (!areas.isEmpty || states.values.contains { !$0.shown.isEmpty } || (locksScreen && screenLock.holds))
             && (lastPass.map { time - $0 >= interval } ?? true)
         let phone = phoneSession
         let phoneDue = phone?.beginIfDue(time) ?? false
@@ -403,7 +427,7 @@ public final class RegionWatcher {
             yieldLogged = yielded
         }
         for (id, state) in states where !ids.contains(id) {
-            if !state.shown.isEmpty { server.sendRegion(id: id, text: "", box: nil, lineHeight: nil) }
+            if !state.shown.isEmpty { emit(id, text: "", box: nil, lineHeight: nil) }
             states[id] = nil
         }
         // Bütün kare (çizim kipi ve boş alan ölçümü, #1339) turda en çok bir kez, ilk okunan yazıda ve ana iş parçacığının
@@ -414,6 +438,53 @@ public final class RegionWatcher {
             await visit(area, frame: frame, screen: screen, session: started)
             server.regionsAlive()
         }
+        guard session == started, locksScreen else { return }
+        // Ekran kilidi turun bütün ekran yazısına bakar (`ScreenLock`): kilitlenir, açılır ya da bekleyen yazı güncellenir.
+        observed = observed.filter { ids.contains($0.key) }
+        rejectedKeys = rejectedKeys.filter { ids.contains($0.key) }
+        let blocks = areas.filter { ScreenLock.covers($0.id) }.flatMap { observed[$0.id] ?? [] }
+        deliver(screenLock.observe(blocks, at: now()))
+    }
+
+    /// Ekran yazısı alanının gönderisi ekran kilidinden geçer (`ScreenLock.offer`); diğer alanlar doğrudan gider.
+    private func emit(_ id: String, text: String, box: TextBox?, lineHeight: Double?, icons: [IconPlacement]? = nil,
+                      blocks: [ScreenTranslation.Item]? = nil) {
+        guard locksScreen, ScreenLock.covers(id) else {
+            if text.isEmpty, box == nil, icons == nil, blocks == nil {
+                server.sendRegion(id: id, text: text, box: box, lineHeight: lineHeight)
+            } else {
+                server.sendRegion(id: id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: blocks)
+            }
+            return
+        }
+        let payload = text.isEmpty ? nil
+            : ScreenLock.Payload(text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: blocks)
+        deliver(screenLock.offer(id: id, payload: payload))
+    }
+
+    private func deliver(_ sends: [ScreenLock.Send]) {
+        for send in sends {
+            if let p = send.payload {
+                server.sendRegion(id: send.id, text: p.text, box: p.box, lineHeight: p.lineHeight, icons: p.icons, blocks: p.blocks)
+            } else {
+                server.sendRegion(id: send.id, text: "", box: nil, lineHeight: nil)
+            }
+            // Kilit kutuyu izleyicinin bilmeden kaldırdı: alan unutulur, yazı geri gelince yeniden çizilir.
+            if send.forget { states[send.id] = nil }
+        }
+    }
+
+    /// Bu okumanın ekran kilidine giren blokları: gürültü, boş ya da az önce çizilmeyip atılan okuma girmez.
+    private func noteObserved(_ candidate: Candidate, area: ExtraArea) {
+        guard locksScreen, ScreenLock.covers(area.id) else { return }
+        let labelLike = area.menu || isUiLabel(candidate)
+        if candidate.key.isEmpty || rejectedKeys[area.id] == candidate.key
+            || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: labelLike) {
+            observed[area.id] = []
+            return
+        }
+        observed[area.id] = Self.blockTexts(candidate).map { ScreenLock.Block(key: ScreenLock.key($0.text), box: $0.box) }
+            .filter { !$0.key.isEmpty }
     }
 
     private func visit(_ area: ExtraArea, frame: CGImage, screen: ScreenFrame, session: Int) async {
@@ -429,7 +500,7 @@ public final class RegionWatcher {
             ReadScheduler.changed($0, signature, threshold: ReadScheduler.defaultChangeThreshold)
         } ?? true
         state.signature = signature
-        guard changed else {
+        guard changed || rereadsEveryPass else {
             // İz bir tur değişmedi: okunan yazı kararlıdır.
             state.unsteady = 0
             state.unsteadySince = nil
@@ -468,7 +539,7 @@ public final class RegionWatcher {
             state.renderedBlocks = nil
             states[area.id] = state
             if wasShown {
-                server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+                emit(area.id, text: "", box: nil, lineHeight: nil)
                 onLog?("ek alan \(area.name): arayüz kutusu yok, kaldırıldı")
             }
             return
@@ -524,6 +595,7 @@ public final class RegionWatcher {
                        + candidate.unsure.map { "«\(SubtitleLog.excerpt(IconText.plain($0)))»" }.joined(separator: ", "))
             }
         }
+        if !(candidate.key.isEmpty && !candidate.unsure.isEmpty) { noteObserved(candidate, area: area) }
         if candidate.key.isEmpty, !candidate.unsure.isEmpty {
             // Okunan her satır güvensiz: boş alan değildir (alan reddedilmez, gösterilen kutu kalır); sonraki tur yeniden okur.
             state.signature = nil
@@ -585,7 +657,7 @@ public final class RegionWatcher {
                     fresh += 1
                 }
                 if kept.isEmpty {
-                    server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+                    emit(area.id, text: "", box: nil, lineHeight: nil)
                     state.shownText = ""
                     state.renderedText = nil
                     state.renderedBlocks = nil
@@ -649,7 +721,7 @@ public final class RegionWatcher {
             && turns > patience
         guard gone || Self.unsteadyLong(turns: turns, elapsedMs: time - since, patience: patience) else { return }
         let shownText = state.shownText
-        server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+        emit(area.id, text: "", box: nil, lineHeight: nil)
         state.shown = ""
         state.shownText = ""
         state.shownIcons = 0
@@ -1390,8 +1462,10 @@ public final class RegionWatcher {
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
             if !state.shown.isEmpty || !(state.renderedText ?? "").isEmpty {
-                server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+                emit(area.id, text: "", box: nil, lineHeight: nil)
             }
+            rejectedKeys[area.id] = candidate.key
+            if ScreenLock.covers(area.id), locksScreen { observed[area.id] = [] }
             state.shown = candidate.key
             state.shownText = candidate.text
             state.renderedKey = candidate.key
@@ -1465,7 +1539,7 @@ public final class RegionWatcher {
         state.shownIcons = Self.iconCount(candidate)
         states[area.id] = state
         guard !candidate.key.isEmpty else {
-            server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+            emit(area.id, text: "", box: nil, lineHeight: nil)
             states[area.id]?.renderedKey = candidate.key
             states[area.id]?.renderedText = ""
             states[area.id]?.renderedIcons = nil
@@ -1520,7 +1594,7 @@ public final class RegionWatcher {
         if similar.allSatisfy({ $0 }) {
             drops.note("RegionWatcher", "\(area.name): çevirisi aslıyla aynı, gösterilmedi",
                        IconText.plain(candidate.paragraphs.joined(separator: " ")), log: onLog)
-            server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+            emit(area.id, text: "", box: nil, lineHeight: nil)
             states[area.id]?.renderedKey = candidate.key
             states[area.id]?.renderedText = ""
             states[area.id]?.renderedIcons = nil
@@ -1564,16 +1638,16 @@ public final class RegionWatcher {
     private func send(_ area: ExtraArea, text: String, box: TextBox?, lineHeight: Double?, icons: [IconPlacement]?,
                       blocks: [ScreenTranslation.Item]?) {
         guard let blocks else {
-            server.sendRegion(id: area.id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: nil)
+            emit(area.id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: nil)
             return
         }
         let shown = Self.drawable(blocks)
         if shown.count < blocks.count { onLog?("ek alan \(area.name): \(blocks.count - shown.count) boş kutu çizilmedi") }
         if shown.isEmpty {
-            server.sendRegion(id: area.id, text: "", box: nil, lineHeight: nil)
+            emit(area.id, text: "", box: nil, lineHeight: nil)
             return
         }
-        server.sendRegion(id: area.id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: shown)
+        emit(area.id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: shown)
     }
 
     /// Yazı taşıyan bloklar (#1365 beta.105: haritada boş koyu kutular): Türkçesinde harf, rakam ya da kumanda simgesi
@@ -1947,7 +2021,11 @@ public final class RegionWatcher {
         worldText.removeAll()
         autoSeen.removeAll()
         rowPaints.removeAll()
-        let anyShown = states.values.contains { !$0.shown.isEmpty }
+        observed.removeAll()
+        rejectedKeys.removeAll()
+        let lockShown = !screenLock.displayed.isEmpty
+        screenLock.reset()
+        let anyShown = states.values.contains { !$0.shown.isEmpty } || lockShown
         states.removeAll()
         if anyShown { server.clearRegions() }
     }

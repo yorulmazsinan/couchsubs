@@ -1,0 +1,82 @@
+{
+  "about": "Ekran kilidi (ScreenLock): gerçek GTA 6 menü ve harita kartı kareleri (testdata/frames) ve kayıtlı bütün ekran okumaları (testdata/frames/ocr/screen) art arda turlarla oynatılır; yazı tanıma koşmaz. Her tur bir okumadır (500 ms arayla). 'screen': okunan kare (null: ekran yazısı yok, alan önerilmez); 'idBase': dedektörün o ekrana verdiği otomatik alan kimliklerinin başı (auto-<idBase+sıra>; ekran her açılışta yeni kimlik alır). Turdaki değişiklikler yalnız kayıtlı okumayı oynatır: 'jitter' k: her satırın kutusu okuma oynaması kadar kayar (dx = 0.002*((k+i)%3-1), dy = 0.0015*((k+2i)%3-1), sağ kenar +0.001*(k%2); i satırın alan içindeki sırası; sözcük kutuları da); 'drop': bu yazılı satırlar bu turda okunmadı (imleç üstündeyken soluk okunan satır); 'edit': [eski, yeni] satırın yazısı değişti (saat/sayaç ilerledi, bir harf kaçtı). Mac/iPhone ScreenLockTests.swift, Windows ScreenLockTests.cs ve Android ScreenLockTest.kt aynı dosyayı okur.",
+  "passMs": 500,
+  "segments": [
+    {
+      "screen": "gta6-menu-gorevler",
+      "idBase": 1,
+      "passes": [
+        {},
+        {},
+        { "jitter": 1 },
+        { "jitter": 2 },
+        { "drop": ["HIGH TIDE"] },
+        { "jitter": 1, "edit": [["12:00 pm", "12:01 pm"]] },
+        { "edit": [["12:00 pm", "12:01 pm"]] },
+        { "edit": [["Keep an eye on the bachelor party while", "Keep an eye on the bachelor party whi1e"]] },
+        { "jitter": 2, "edit": [["Keep an eye on the bachelor party while", "Keep an eye on the bachelor party whi1e"]] },
+        { "jitter": 1, "drop": ["DOWN BY THE DOCKS"] },
+        {}
+      ]
+    },
+    {
+      "screen": "gta6-menu-harita",
+      "idBase": 10,
+      "passes": [
+        {},
+        {},
+        { "jitter": 1 },
+        { "drop": ["2D VIEW"] },
+        { "jitter": 2 },
+        { "jitter": 1, "edit": [["12:00 pm", "12:01 pm"]] },
+        {}
+      ]
+    },
+    {
+      "screen": "gta6-harita-kart",
+      "idBase": 20,
+      "passes": [
+        {},
+        {},
+        { "jitter": 2 },
+        { "edit": [["4 ft", "5 ft"]] },
+        { "edit": [["4 ft", "5 ft"]] },
+        { "jitter": 1, "edit": [["4 ft", "6 ft"]] },
+        { "jitter": 1, "edit": [["4 ft", "6 ft"]] },
+        { "drop": ["SOUVENIR"] },
+        {}
+      ]
+    },
+    {
+      "screen": "gta6-menu-gorevler",
+      "idBase": 30,
+      "passes": [
+        {},
+        {},
+        { "jitter": 1 },
+        { "jitter": 2 },
+        {}
+      ]
+    },
+    {
+      "screen": null,
+      "idBase": 0,
+      "passes": [{}, {}, {}, {}]
+    },
+    {
+      "screen": "gta6-menu-gorevler",
+      "idBase": 40,
+      "passes": [
+        {},
+        { "jitter": 2 },
+        {}
+      ]
+    }
+  ],
+  "expect": {
+    "locks": 5,
+    "unlocks": 4,
+    "cacheHits": 2,
+    "rebuildsPerChange": 1
+  }
+}

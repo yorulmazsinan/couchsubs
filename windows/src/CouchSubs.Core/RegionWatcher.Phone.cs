@@ -533,6 +533,10 @@ public sealed partial class RegionWatcher
             shown = [.. ids.Where(id => map[id].Shown.Length > 0)];
             foreach (var id in ids) map.Remove(id);
         }
+        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir).
+        shown = [.. shown.Union(screenLock.DisplayedIds).Distinct().OrderBy(id => id, StringComparer.Ordinal)];
+        screenLock.Release("telefon açıldı");
+        lock (observedBlocks) observedBlocks.Clear();
         foreach (var id in shown) server.SendRegion(id, "", null);
     }
 

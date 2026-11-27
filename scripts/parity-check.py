@@ -49,6 +49,17 @@ _DROID_TESTS = "couchsubs-android/app/src/test/java/com/couchsubs/mobile/core/"
 # ve ortak deneme dosyasını okuyan testi olmalı. (platform, dosya, düzenli ifade) üçlüleri; biri eksikse denetim kırmızı.
 # Android'de "RECENTER 13" gibi yanlış okunmuş tuş simgesi kutuda kalıyordu: markFree yalnız Mac ve Windows'taydı (#860).
 CAPABILITIES = {
+    "Ekran kilidi: kararlı ekran yazısı kilitlenir, küçük değişiklikte kutu taşınmaz/eklenmez/kalkmaz, ekran önbelleği (ScreenLock)": [
+        ("mac", _CORE + "ScreenLock.swift", r"func observe\(_ blocks: \[Block\], at now: Int\)"),
+        ("windows", _WIN + "ScreenLock.cs", r"internal List<Send> Observe\(IReadOnlyList<Block> blocks, long now\)"),
+        ("android", _DROID + "ScreenLock.kt", r"fun observe\(blocks: List<Block>, now: Long\)"),
+        ("mac", _CORE + "RegionWatcher.swift", r"screenLock\.observe\("),
+        ("windows", _WIN + "RegionWatcher.cs", r"screenLock\.Observe\("),
+        ("android", _DROID + "Areas.kt", r"screenLock\.observe\("),
+        ("mac", _CORE_TESTS + "ScreenLockTests.swift", r"func testReplayOfMenusAndCardsKeepsLockedBoxesStill"),
+        ("windows", _WIN_TESTS + "ScreenLockTests.cs", r"Task ReplayOfMenusAndCardsKeepsLockedBoxesStill"),
+        ("android", _DROID_TESTS + "ScreenLockTest.kt", r"fun replayOfMenusAndCardsKeepsLockedBoxesStill"),
+    ],
     "GTA 6 telefon paneli saydam altyazı penceresinde kartsız balonlar (stacked)": [
         ("mac", _CORE + "ScreenPhoneCard.swift", r"public static func stacked\("),
         ("mac", "mac/CouchSubs/UI/StreamWindow.swift", r"ScreenPhoneCard\.stacked\("),
