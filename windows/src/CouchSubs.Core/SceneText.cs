@@ -58,8 +58,10 @@ public static class SceneText
         var words = WordCount(block.Text);
         var middle = (box.Top + box.Bottom) / 2;
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
-        if (IsSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)";
-        if (IsNumber(block.Text)) return "harfsiz sayı";
+        if (IsSign(block)) return SignReason;
+        if (IsNumber(block.Text)) return NumberReason;
+        // Plaka numarası ("HV85.", "BN25 32."; #1411) altyazının yerinde de atılır.
+        if (IsPlateNumber(block.Text)) return PlateNumberReason;
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         var learned = band?.Contains(box) == true;
         // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
@@ -67,7 +69,7 @@ public static class SceneText
         if (IsMenuItem(block, learned)) return MenuItemReason;
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         var subtitleLike = IsCentered(box) && middle >= 1 - EdgeBand && words >= 2;
-        if (block.Lines.Any(IsTilted) && !subtitleLike) return "eğik satır (tabela)";
+        if (block.Lines.Any(IsTilted) && !subtitleLike) return TiltedReason;
         if (learned || subtitleLike) return null;
         if (block.Confidence is { } confidence && confidence < LowConfidence && words <= LowConfidenceWords)
             return $"düşük tanıma güveni ({confidence.ToString("0.00", CultureInfo.InvariantCulture)})";
@@ -126,6 +128,10 @@ public static class SceneText
 
     /// <summary>Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir.</summary>
     internal const string MenuItemReason = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)";
+    internal const string SignReason = "plaka/tabela (kısa büyük harfli satırlar)";
+    internal const string NumberReason = "harfsiz sayı";
+    internal const string PlateNumberReason = "plaka numarası (harfli rakamlı kısa yazı)";
+    internal const string TiltedReason = "eğik satır (tabela)";
 
     /// <summary>
     /// Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
@@ -167,6 +173,25 @@ public static class SceneText
          "HE", "SHE", "HIM", "HER", "THEY", "THEM"];
 
     internal static bool IsNumber(string text) => !text.Any(char.IsLetter) && text.Any(char.IsDigit);
+
+    /// <summary>
+    /// Plaka numarası: en çok <see cref="PlateTokens"/> parça, harfleri yalnız büyük Latin harfi (A–Z) ve en az bir parçada
+    /// hem harf hem rakam ("HV85.", "EN25.", "BN25 32.", "A80 3."). Kullanıcı bildirimi (#1411, GTA 6, Mac, beta-105):
+    /// arabanın plakası altyazı alanına girince numarası tek satır okunuyor, noktalı okunduğu için konuşma sanılıp
+    /// çevriliyordu. Küçük harfli satır ("855, on scene now."), dört ve daha çok parçalı bağırma ("I NEED 50 GRAND") ve
+    /// Latin dışı yazı (Japonca "あと3分だ") altyazı kalır (Mac: SceneText.isPlateNumber, Android: isPlateNumber).
+    /// </summary>
+    internal static bool IsPlateNumber(string text)
+    {
+        var tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Select(token => new string(token.Where(char.IsLetterOrDigit).ToArray())).Where(token => token.Length > 0).ToList();
+        if (tokens.Count == 0 || tokens.Count > PlateTokens) return false;
+        if (!tokens.All(token => token.All(c => c is >= 'A' and <= 'Z' or >= '0' and <= '9'))) return false;
+        return tokens.Any(token => token.Any(c => c is >= 'A' and <= 'Z') && token.Any(c => c is >= '0' and <= '9'));
+    }
+
+    /// <summary>Plaka numarasının en çok parçası (<see cref="IsPlateNumber"/>).</summary>
+    internal const int PlateTokens = 3;
 
     internal static bool IsCentered(TextBox box) => Math.Abs((box.Left + box.Right) / 2 - 0.5) <= CenterTolerance;
 

@@ -2114,6 +2114,118 @@
     }
    ],
    "subtitle": "HEY\nOver here, now."
+  },
+  {
+   "name": "plaka numarası altyazının yerinde de atılır (#1411: \"HV85.\")",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.6857,
+      0.7778,
+      0.7714
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "HV85.",
+     "box": [
+      0.46,
+      0.69,
+      0.54,
+      0.77
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "iki parçalı plaka numarası atılır (#1411: \"BN25 32.\")",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.6857,
+      0.7778,
+      0.7714
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "BN25 32.",
+     "box": [
+      0.44,
+      0.69,
+      0.56,
+      0.77
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": ""
+  },
+  {
+   "name": "rakamlı küçük harfli konuşma plaka numarası sayılmaz",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.6857,
+      0.7778,
+      0.7714
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "855, on scene now.",
+     "box": [
+      0.4,
+      0.69,
+      0.6,
+      0.77
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "855, on scene now."
+  },
+  {
+   "name": "rakamlı Japonca konuşma plaka numarası sayılmaz",
+   "before": [
+    {
+     "text": "We need to get out of here before they come back.",
+     "box": [
+      0.2222,
+      0.6857,
+      0.7778,
+      0.7714
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "lines": [
+    {
+     "text": "あと3分だ！",
+     "box": [
+      0.44,
+      0.69,
+      0.56,
+      0.77
+     ],
+     "confidence": 1.0
+    }
+   ],
+   "subtitle": "あと3分だ！"
   }
  ]
 }

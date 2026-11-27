@@ -193,6 +193,8 @@ class SubtitlePipeline(
     private val stickyRows = StickyRows()
     /** Kamerayla kayan yazı (plaka, tabela) altyazı alanına girse de altyazı sayılmaz ([SceneMotion]). */
     private val sceneMotion = SceneMotion()
+    /** Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz ([SceneTextMemory], #1411). */
+    private val sceneMemory = SceneTextMemory()
     /** Bu oturumda kesin altyazının okunduğu yükseklikler: oradaki kısa satır sahne yazısı sayılmaz ([SceneText]). */
     private val subtitleBand = SubtitleBand()
     /** Oyunun altyazısı koyu yazı mı (açık zemindeki koyu yazı kuralı o oturumda kapanır, [InkTone]; GitHub #1124). */
@@ -468,7 +470,12 @@ class SubtitlePipeline(
             }
             if (kept.size < seen.lines.size) {
                 val text = seen.lines.filter { it !in kept }.joinToString(" ") { it.text }
-                val fresh = synchronized(lock) { (text != loggedPhone).also { loggedPhone = text } }
+                val fresh = synchronized(lock) {
+                    if (!unconfirmed) {
+                        sceneMemory.remember(seen.lines.filter { it !in kept }.map { it.text }, SceneTextMemory.PHONE_REASON, now())
+                    }
+                    (text != loggedPhone).also { loggedPhone = text }
+                }
                 val excerpt = if (text.length > 120) text.take(120) + "…" else text
                 if (fresh) onLog?.invoke(
                     if (unconfirmed) "telefon adayı: \"$excerpt\" telefon doğrulanana dek bekletildi, altyazı sayılmadı"
@@ -503,6 +510,9 @@ class SubtitlePipeline(
             // Hareketsiz ürün/ambalaj yazısı (bira kutusu, süt kartonu) altyazı değildir ([PackageText], Sinan Bey beta.101).
             val (filtered, packaged) = PackageText.filter(moving, area, packageLook)
             for (line in packaged) logSceneText(line.text, PackageText.REASON)
+            // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu ([SceneTextMemory], #1411).
+            val remembered = sceneMemory.filter(filtered, now())
+            for ((line, first) in sceneMemory.removed) logSceneText(line.text, "${SceneTextMemory.REASON} ($first)")
             filteredRows = filtered
             if (mission.observe(stickyRows.removed, area, now())) {
                 missionChanged = true
@@ -529,17 +539,21 @@ class SubtitlePipeline(
             val darkBlocks = mutableListOf<Reading>()
             darkInkStyle.lightInk = lightInkGame
             if (listed) logSceneText(rows.text, Reading.LIST_REASON)
-            (if (listed) Reading.Empty else filtered).subtitleBlock(area, subtitleBand, notices = { block ->
+            (if (listed) Reading.Empty else remembered).subtitleBlock(area, subtitleBand, notices = { block ->
                 edge.add(Reading(block.lines.map { it.copy(box = it.box?.placedIn(area)) }))
             }, age = { stickyRows.unchangedMs(it, readAt) }, stale = { block -> staleTexts += block.lines.map { it.text } },
                 darkInk = if (darkInkStyle.isGameStyle) null else darkInk) { block, reason ->
+                sceneMemory.remember(block.lines.map { it.text }, reason, readAt)
                 if (reason == InkTone.REASON) darkBlocks += block
                 logSceneText(block.text, reason)
                 onSceneTextDropped?.invoke(reason)
             }.also {
                 for (block in darkBlocks) {
-                    if (darkInkStyle.observe(block, area)) onLog?.invoke(
-                        "koyu yazılı altyazı: bu oyunun altyazısı koyu yazı sayıldı, açık zemindeki koyu yazı bu oturumda atılmıyor")
+                    if (darkInkStyle.observe(block, area)) {
+                        sceneMemory.forget(InkTone.REASON)
+                        onLog?.invoke(
+                            "koyu yazılı altyazı: bu oyunun altyazısı koyu yazı sayıldı, açık zemindeki koyu yazı bu oturumda atılmıyor")
+                    }
                 }
                 logStale(staleTexts)
                 subtitleBand.record(it, area)
@@ -1133,6 +1147,7 @@ class SubtitlePipeline(
         pairs.clear()
         stickyRows.reset()
         sceneMotion.reset()
+        sceneMemory.reset()
         subtitleBand.reset()
         darkInkStyle.reset()
         loggedSceneText.clear()

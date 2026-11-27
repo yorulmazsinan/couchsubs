@@ -133,6 +133,49 @@ final class SceneTextTests: XCTestCase {
                        log.joined(separator: "\n"))
     }
 
+    /// #1411 (GTA 6, beta-105): plakanın "GOOD TIME STATE" yazısı bir karede plaka sayılıp atılıyor, bir sonraki karede
+    /// tek satır ve noktalı ("& COCOTIME STATE O.") okununca altyazı sanılıp çevriliyordu. Az önce atılan yazının başka
+    /// okunuşu artık altyazı olmaz (`SceneTextMemory`); aynı okuma önceden plaka görülmeden gelirse altyazı kuralı onu
+    /// geçirir (denemenin kendisi bunu da doğrular).
+    @MainActor
+    func testPlateRereadAfterBeingDroppedIsNotTranslated() async throws {
+        let plate = Reading(lines: [
+            TextLine("NIC", box: TextBox(left: 0.47, top: 0.82, right: 0.53, bottom: 0.85), confidence: 1),
+            TextLine("COCOTIME STATE A", box: TextBox(left: 0.42, top: 0.86, right: 0.58, bottom: 0.89), confidence: 1),
+        ])
+        let reread = Reading(lines: [
+            TextLine("& COCOTIME STATE O.", box: TextBox(left: 0.42, top: 0.86, right: 0.58, bottom: 0.89), confidence: 1),
+        ])
+        let alone = try await Self.run([reread])
+        XCTAssertEqual(alone.sent.count, 1, "denemede okuma kendi başına altyazı geçmeli: \(alone.log)")
+        let after = try await Self.run([plate, reread])
+        XCTAssertEqual(after.sent, [], after.log.joined(separator: "\n"))
+        XCTAssertTrue(after.log.contains { $0.contains(SceneTextMemory.reason) && $0.contains("plaka/tabela") },
+                      after.log.joined(separator: "\n"))
+    }
+
+    /// Okumaları sırayla (her biri 12 kare) tam ekran alanda hattan geçirir; TV'ye gidenler ve günlük.
+    @MainActor
+    private static func run(_ readings: [Reading]) async throws -> (sent: [String], log: [String]) {
+        let reader = FixedReader()
+        let server = Sent()
+        var now = 1_000_000
+        let pipeline = SubtitlePipeline(reader: reader, translator: Reversed(), server: server, clock: { now })
+        pipeline.holdReadings = false
+        var log: [String] = []
+        pipeline.onLog = { log.append($0) }
+        let frame = try XCTUnwrap(frame())
+        for reading in readings {
+            reader.reading = reading
+            for _ in 0..<12 {
+                await pipeline.process(frame, region: CropRegion())
+                now += 100
+            }
+        }
+        await pipeline.waitForTranslations()
+        return (server.texts, log)
+    }
+
     private final class Reversed: TextTranslator, @unchecked Sendable {
         func translate(_ text: String) async throws -> String { String(text.reversed()) }
     }

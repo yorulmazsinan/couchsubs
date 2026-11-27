@@ -1,0 +1,85 @@
+{
+  "comment": "Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz (SceneTextMemory, #1411; satırlar beta-105 günlüğünden). Her adım sırayla: 'dropped' satırlar 'reason' nedeniyle atıldı (hatırlanır), 'forget' o nedenle hatırlananları unutur, 'read' okunan satırlar ve 'kept' süzgeçten geçmesi gerekenler. 'at' milisaniye. Mac/iPhone SceneTextMemoryTests.swift, Windows SceneTextMemoryTests.cs ve Android SceneTextMemoryTest.kt aynı dosyayı okur.",
+  "cases": [
+    {
+      "name": "plaka yazısının başka okunuşu konuşmanın yanında çevrilmez",
+      "steps": [
+        { "at": 0, "dropped": ["NIC", "A COCOTIME STATE A"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 400, "read": ["NECE", "& COCOTIME STATE O.", "Hm, good combo."], "kept": ["NECE", "Hm, good combo."] }
+      ]
+    },
+    {
+      "name": "telefonda atılan mesaj telefon ıskalanınca altyazı olmaz",
+      "steps": [
+        { "at": 0, "dropped": ["Nice! Once you're truly zen, the"], "reason": "telefon yazısı" },
+        { "at": 5000, "read": ["Nice! Once you re truly zen, the"], "kept": [] }
+      ]
+    },
+    {
+      "name": "sola yaslı sohbet mesajı bir karede menü açıklaması sayıldıysa ötekinde de çevrilmez",
+      "steps": [
+        { "at": 0, "dropped": ["Yo Jason, Lucia, where y'all", "been? Miss you down here, ur"], "reason": "ortalanmamış, altyazının okunduğu yükseklikten uzak (menü açıklaması)" },
+        { "at": 600, "read": ["Wade", "Yo jason Lucia where v'all"], "kept": ["Wade"] }
+      ]
+    },
+    {
+      "name": "açık zemindeki koyu yazı (telefon balonu) başka okununca da çevrilmez",
+      "steps": [
+        { "at": 0, "dropped": ["sooo happy to hear that"], "reason": "koyu yazı açık zeminde (kâğıt/tabela)" },
+        { "at": 300, "read": ["sooo happy to hear that...."], "kept": [] }
+      ]
+    },
+    {
+      "name": "süre dolunca unutulur",
+      "steps": [
+        { "at": 0, "dropped": ["Nice! Once you're truly zen, the"], "reason": "telefon yazısı" },
+        { "at": 8001, "read": ["Nice! Once you're truly zen, the"], "kept": ["Nice! Once you're truly zen, the"] }
+      ]
+    },
+    {
+      "name": "her atılışta süre tazelenir",
+      "steps": [
+        { "at": 0, "dropped": ["ALL GUN SALES ARE FINAL"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 6000, "dropped": ["ALL GUN SALES ARE FINAL"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 13000, "read": ["ALL GUN SALES ARE FINAL."], "kept": [] }
+      ]
+    },
+    {
+      "name": "kamerayla kayan yazı hatırlanmaz (konuşmayı da bir kare atabiliyor)",
+      "steps": [
+        { "at": 0, "dropped": ["Green ass bitch!"], "reason": "kayan yazı (kamerayla kayan tabela/plaka)" },
+        { "at": 300, "read": ["Green ass bitch!"], "kept": ["Green ass bitch!"] }
+      ]
+    },
+    {
+      "name": "kısa plaka satırı yalnız birebir aynı harflerle çıkarılır; benzer konuşma kalır",
+      "steps": [
+        { "at": 0, "dropped": ["BOB RU"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "read": ["BOB ›RU", "Bob, run!", "Yeah."], "kept": ["Bob, run!", "Yeah."] }
+      ]
+    },
+    {
+      "name": "konuşan adlı satır çıkarılmaz",
+      "steps": [
+        { "at": 0, "dropped": ["Yo Jason, Lucia, where y'all"], "reason": "eğik satır (tabela)" },
+        { "at": 300, "read": ["Wade: Yo Jason, Lucia, where y'all"], "kept": ["Wade: Yo Jason, Lucia, where y'all"] }
+      ]
+    },
+    {
+      "name": "ilgisiz konuşma kalır",
+      "steps": [
+        { "at": 0, "dropped": ["ALL GUN SALES ARE FINAL", "NO RETURN ON AMMO"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 300, "read": ["Lu, we gettin' outta here?"], "kept": ["Lu, we gettin' outta here?"] }
+      ]
+    },
+    {
+      "name": "oyunun altyazısı koyu yazı sayılınca koyu yazı unutulur",
+      "steps": [
+        { "at": 0, "dropped": ["We need to get out of here"], "reason": "koyu yazı açık zeminde (kâğıt/tabela)" },
+        { "at": 100, "dropped": ["ALL GUN SALES ARE FINAL"], "reason": "plaka/tabela (kısa büyük harfli satırlar)" },
+        { "at": 200, "forget": "koyu yazı açık zeminde (kâğıt/tabela)" },
+        { "at": 300, "read": ["We need to get out of here.", "ALL GUN SALES ARE FINAL"], "kept": ["We need to get out of here."] }
+      ]
+    }
+  ]
+}

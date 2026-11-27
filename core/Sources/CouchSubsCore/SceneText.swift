@@ -54,8 +54,10 @@ public enum SceneText {
         let words = wordCount(block.text)
         let middle = (box.top + box.bottom) / 2
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
-        if isSign(block) { return "plaka/tabela (kısa büyük harfli satırlar)" }
-        if isNumber(block.text) { return "harfsiz sayı" }
+        if isSign(block) { return signReason }
+        if isNumber(block.text) { return numberReason }
+        // Plaka numarası ("HV85.", "BN25 32."; #1411) altyazının yerinde de atılır.
+        if isPlateNumber(block.text) { return plateNumberReason }
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         let learned = band.contains(box)
         // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
@@ -63,7 +65,7 @@ public enum SceneText {
         if isMenuItem(block, learned: learned) { return menuItemReason }
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         let subtitleLike = isCentered(box) && middle >= 1 - edgeBand && words >= 2
-        if block.lines.contains(where: isTilted), !subtitleLike { return "eğik satır (tabela)" }
+        if block.lines.contains(where: isTilted), !subtitleLike { return tiltedReason }
         if learned || subtitleLike { return nil }
         if let confidence = block.confidence, confidence < lowConfidence, words <= lowConfidenceWords {
             return "düşük tanıma güveni (\(String(format: "%.2f", confidence)))"
@@ -75,6 +77,10 @@ public enum SceneText {
     }
 
     static let menuItemReason = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)"
+    static let signReason = "plaka/tabela (kısa büyük harfli satırlar)"
+    static let numberReason = "harfsiz sayı"
+    static let plateNumberReason = "plaka numarası (harfli rakamlı kısa yazı)"
+    static let tiltedReason = "eğik satır (tabela)"
 
     /// Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
     /// düşen "srow LONGARMS O TAKE AMMO", "SHOW SHIRT (1/3) A BUY O BU", "IN LJ TYPE 9 SMG" konuşma sanılıp bozuk
@@ -155,6 +161,24 @@ public enum SceneText {
 
     /// Plaka/tabela satırının en çok karakteri ("C118 DISCOVER 76").
     static let signLineLength = 20
+
+    /// Plaka numarası: en çok `plateTokens` parça, harfleri yalnız büyük Latin harfi (A–Z) ve en az bir parçada hem harf
+    /// hem rakam ("HV85.", "EN25.", "BN25 32.", "A80 3."). Kullanıcı bildirimi (#1411, GTA 6, Mac, beta-105): arabanın
+    /// plakası altyazı alanına girince numarası tek satır okunuyor, noktalı okunduğu için konuşma sanılıp çevriliyordu.
+    /// Küçük harfli satır ("855, on scene now."), dört ve daha çok parçalı bağırma ("I NEED 50 GRAND") ve Latin dışı yazı
+    /// (Japonca "あと3分だ") altyazı kalır. Windows (SceneText.IsPlateNumber) ve Android (isPlateNumber) aynı.
+    static func isPlateNumber(_ text: String) -> Bool {
+        let tokens = text.split(whereSeparator: \.isWhitespace)
+            .map { $0.filter { $0.isLetter || $0.isNumber } }.filter { !$0.isEmpty }
+        guard !tokens.isEmpty, tokens.count <= plateTokens,
+              tokens.allSatisfy({ $0.allSatisfy { ("A"..."Z").contains($0) || ("0"..."9").contains($0) } }) else { return false }
+        return tokens.contains { token in
+            token.contains(where: { ("A"..."Z").contains($0) }) && token.contains(where: { ("0"..."9").contains($0) })
+        }
+    }
+
+    /// Plaka numarasının en çok parçası (`isPlateNumber`).
+    static let plateTokens = 3
 
     /// Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir.
     static func isNumber(_ text: String) -> Bool {

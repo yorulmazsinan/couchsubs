@@ -94,6 +94,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private readonly StickyRows stickyRows = new();
     /// <summary>Kamerayla kayan yazı (plaka, tabela) altyazı alanına girse de altyazı sayılmaz (SceneMotion).</summary>
     private readonly SceneMotion sceneMotion = new();
+    /// <summary>Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz (SceneTextMemory, #1411).</summary>
+    private readonly SceneTextMemory sceneMemory = new();
     /// <summary>Bu oturumda kesin altyazının okunduğu yükseklikler: oradaki kısa satır sahne yazısı sayılmaz (SceneText).</summary>
     private readonly SubtitleBand subtitleBand = new();
     /// <summary>Oyunun altyazısı koyu yazı mı (açık zemindeki koyu yazı kuralı o oturumda kapanır, InkTone; GitHub #1124).</summary>
@@ -538,6 +540,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 {
                     fresh = phoneText != loggedPhone;
                     loggedPhone = phoneText;
+                    if (!unconfirmed)
+                        sceneMemory.Remember(seen.Lines.Where(line => !kept.Contains(line)).Select(line => line.Text),
+                                             SceneTextMemory.PhoneReason, now());
                 }
                 if (fresh)
                     Write(unconfirmed
@@ -585,6 +590,9 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             var packaged = PackageText.Filter(rows, area, PackageText.Sampler(cropped));
             rows = packaged.Kept;
             foreach (var line in packaged.Removed) LogSceneText(line.Text, PackageText.Reason);
+            // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (SceneTextMemory, #1411).
+            rows = sceneMemory.Filter(rows, now());
+            foreach (var (line, first) in sceneMemory.Removed) LogSceneText(line.Text, $"{SceneTextMemory.Reason} ({first})");
             missionMoved = mission.Observe(stickyRows.Removed, area, now());
             missionRegion = mission.Region;
             clearance = mission.Clearance;
@@ -620,6 +628,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             if (listed) LogSceneText(rows.Text, Reading.ListReason);
             reading = (listed ? Reading.Empty : rows).SubtitleBlock(area, subtitleBand, (block, reason) =>
                                          {
+                                             sceneMemory.Remember(block.Lines.Select(line => line.Text), reason, readAt);
                                              if (reason == InkTone.Reason) darkBlocks.Add(block);
                                              LogSceneText(block.Text, reason);
                                              OnSceneTextDropped?.Invoke(reason);
@@ -630,7 +639,10 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                                          darkInk);
             foreach (var block in darkBlocks)
                 if (darkInkStyle.Observe(block, area))
+                {
+                    sceneMemory.Forget(InkTone.Reason);
                     Write("koyu yazılı altyazı: bu oyunun altyazısı koyu yazı sayıldı, açık zemindeki koyu yazı bu oturumda atılmıyor");
+                }
             LogStale(staleTexts);
             subtitleBand.Record(reading, area);
             noticesMoved = notices.Observe(edge, now());
@@ -1610,6 +1622,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             schedule.Reset();
             stickyRows.Reset();
             sceneMotion.Reset();
+            sceneMemory.Reset();
             subtitleBand.Reset();
             darkInkStyle.Reset();
             loggedSceneText.Clear();

@@ -53,8 +53,10 @@ object SceneText {
         val words = wordCount(block.text)
         val middle = (box.top + box.bottom) / 2
         // Plaka ve tabela altyazının yerinde de atılır (GitHub #1052).
-        if (isSign(block)) return "plaka/tabela (kısa büyük harfli satırlar)"
-        if (isNumber(block.text)) return "harfsiz sayı"
+        if (isSign(block)) return SIGN_REASON
+        if (isNumber(block.text)) return NUMBER_REASON
+        // Plaka numarası ("HV85.", "BN25 32."; #1411) altyazının yerinde de atılır.
+        if (isPlateNumber(block.text)) return PLATE_NUMBER_REASON
         // Bu oturumda altyazının okunduğu yükseklik: yalnız eğik tabela ve tuş simgeli menü eylemi atılır.
         val learned = band?.contains(box) == true
         // Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293); rakamlı büyük harfli ad yalnız altyazının yüksekliği
@@ -62,7 +64,7 @@ object SceneText {
         if (isMenuItem(block, learned)) return MENU_ITEM_REASON
         // Altyazı biçimi: ortalanmış, karenin alt şeridinde, en az iki sözcük.
         val subtitleLike = isCentered(box) && middle >= 1 - EDGE_BAND && words >= 2
-        if (block.lines.any { isTilted(it) } && !subtitleLike) return "eğik satır (tabela)"
+        if (block.lines.any { isTilted(it) } && !subtitleLike) return TILTED_REASON
         if (learned || subtitleLike) return null
         val confidences = block.lines.mapNotNull { it.confidence?.toDouble() }
         if (confidences.isNotEmpty() && confidences.average() < LOW_CONFIDENCE && words <= LOW_CONFIDENCE_WORDS) {
@@ -122,6 +124,10 @@ object SceneText {
     const val SIGN_LINE_LENGTH = 20
 
     internal const val MENU_ITEM_REASON = "menü/mağaza satırı (tuş simgeli eylem ya da rakamlı büyük harfli ad)"
+    internal const val SIGN_REASON = "plaka/tabela (kısa büyük harfli satırlar)"
+    internal const val NUMBER_REASON = "harfsiz sayı"
+    internal const val PLATE_NUMBER_REASON = "plaka numarası (harfli rakamlı kısa yazı)"
+    internal const val TILTED_REASON = "eğik satır (tabela)"
 
     /**
      * Silah çarkı, mağaza ve menü satırı (GitHub #1285, #1293; GTA 6, ekran yazısı çevirisi kapalıyken): altyazı alanına
@@ -163,6 +169,23 @@ object SceneText {
 
     /** Harfsiz sayı ("82403610."): plaka numarası, sayaç; altyazı değildir. */
     internal fun isNumber(text: String) = !text.any { it.isLetter() } && text.any { it.isDigit() }
+
+    /**
+     * Plaka numarası: en çok [PLATE_TOKENS] parça, harfleri yalnız büyük Latin harfi (A–Z) ve en az bir parçada hem harf
+     * hem rakam ("HV85.", "EN25.", "BN25 32.", "A80 3."). Kullanıcı bildirimi (#1411, GTA 6, Mac, beta-105): arabanın
+     * plakası altyazı alanına girince numarası tek satır okunuyor, noktalı okunduğu için konuşma sanılıp çevriliyordu.
+     * Küçük harfli satır ("855, on scene now."), dört ve daha çok parçalı bağırma ("I NEED 50 GRAND") ve Latin dışı yazı
+     * (Japonca "あと3分だ") altyazı kalır (Mac: SceneText.isPlateNumber, Windows: SceneText.IsPlateNumber).
+     */
+    internal fun isPlateNumber(text: String): Boolean {
+        val tokens = text.trim().split(Regex("\\s+")).map { token -> token.filter { it.isLetterOrDigit() } }.filter { it.isNotEmpty() }
+        if (tokens.isEmpty() || tokens.size > PLATE_TOKENS) return false
+        if (!tokens.all { token -> token.all { it in 'A'..'Z' || it in '0'..'9' } }) return false
+        return tokens.any { token -> token.any { it in 'A'..'Z' } && token.any { it in '0'..'9' } }
+    }
+
+    /** Plaka numarasının en çok parçası ([isPlateNumber]). */
+    internal const val PLATE_TOKENS = 3
 
     internal fun isCentered(box: TextBox) = abs((box.left + box.right) / 2 - 0.5) <= CENTER_TOLERANCE
 

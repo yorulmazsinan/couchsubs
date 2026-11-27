@@ -173,6 +173,8 @@ public final class SubtitlePipeline {
     private var stickyRows = StickyRows()
     /// Kamerayla kayan yazı (plaka, tabela) altyazı alanına girse de altyazı sayılmaz (`SceneMotion`).
     private var sceneMotion = SceneMotion()
+    /// Az önce sahne yazısı sayılıp atılan satırın başka okunuşu altyazı olmaz (`SceneTextMemory`, #1411).
+    private var sceneMemory = SceneTextMemory()
     /// Bu oturumda kesin altyazının okunduğu yükseklikler: oradaki kısa satır sahne yazısı sayılmaz (`SceneText`).
     private var subtitleBand = SubtitleBand()
     /// Oyunun altyazısı koyu yazı mı (açık zemindeki koyu yazı kuralı o oturumda kapanır, `InkTone`; GitHub #1124).
@@ -444,6 +446,10 @@ public final class SubtitlePipeline {
                     log(unconfirmed ? "telefon adayı: \(SubtitleLog.excerpt(text)) telefon doğrulanana dek bekletildi, altyazı sayılmadı"
                         : "telefon yazısı: \(SubtitleLog.excerpt(text)) telefonun ekranında, altyazı sayılmadı")
                 }
+                if !unconfirmed {
+                    sceneMemory.remember(seen.lines.filter { !kept.contains($0) }.map(\.text),
+                                         reason: SceneTextMemory.phoneReason, at: now())
+                }
                 seen = Reading(lines: kept)
                 countReject(unconfirmed ? "telefon adayı bekletti" : "telefon yazısı")
             }
@@ -461,7 +467,9 @@ public final class SubtitlePipeline {
         // Hareketsiz ürün/ambalaj yazısı (bira kutusu, süt kartonu) altyazı değildir (`PackageText`, Sinan Bey beta.101).
         let packaged = PackageText.filter(moving, in: place, look: PackageText.sampler(area))
         for line in packaged.removed { logSceneText(line.text, PackageText.reason) }
-        let rows = packaged.kept
+        // Az önce sahne yazısı (plaka, tabela, telefon mesajı) sayılıp atılan satırın başka okunuşu (`SceneTextMemory`, #1411).
+        let rows = sceneMemory.filter(packaged.kept, at: now())
+        for (line, first) in sceneMemory.removed { logSceneText(line.text, "\(SceneTextMemory.reason) (\(first))") }
         if mission.observe(stickyRows.removed, area: place, at: now()) {
             log(mission.region == nil ? "görev satırı kalktı" : "görev satırı kendi yerinde gösteriliyor")
             onMissionChanged?(mission.region)
@@ -497,12 +505,14 @@ public final class SubtitlePipeline {
         let darkInk = darkInkStyle.isGameStyle ? nil : InkTone.sampler(area)
         let reading = listed ? Reading.empty : rows.subtitleBlock(in: place, band: subtitleBand, darkInk: darkInk, dropped: { [weak self] block, reason in
             sceneTexts += block.lines.map(\.text)
+            self?.sceneMemory.remember(block.lines.map(\.text), reason: reason, at: readAt)
             if reason == InkTone.reason { darkBlocks.append(block) }
             self?.logSceneText(block.text, reason)
             self?.onSceneTextDropped?(reason)
         }, notices: { edge.append($0.placed(in: place)) },
            age: { sticky.unchangedMs($0, at: readAt) }, stale: { staleTexts += $0.lines.map(\.text) })
         for block in darkBlocks where darkInkStyle.observe(block, in: place) {
+            sceneMemory.forget(reason: InkTone.reason)
             log("koyu yazılı altyazı: bu oyunun altyazısı koyu yazı sayıldı, açık zemindeki koyu yazı bu oturumda atılmıyor")
         }
         logStale(staleTexts)
@@ -1281,6 +1291,7 @@ public final class SubtitlePipeline {
         scheduler.reset()
         stickyRows.reset()
         sceneMotion.reset()
+        sceneMemory.reset()
         subtitleBand.reset()
         darkInkStyle.reset()
         loggedSceneText.removeAll()
