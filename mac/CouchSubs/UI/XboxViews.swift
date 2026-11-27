@@ -271,6 +271,7 @@ struct ConsoleSettingsCard: View {
     @State private var enteringAddress = false
     @State private var address = ""
     @State private var addressRejected = false
+    @State private var confirmPSNSignOut = false
 
     var body: some View {
         DSCard(scrolls: false) {
@@ -319,7 +320,18 @@ struct ConsoleSettingsCard: View {
                         }
                     }
                 }
+                // PSN'den çıkış (iPhone/Android Profil ve Windows Ayarlar › Konsol ile aynı ad ve onay): ikinci hesap ve PS5
+                // eşleşmesi silinir; başka PSN hesabıyla girmek için kurulumu baştan almak gerekmez.
+                if model.canSignOutPSN {
+                    Button("Sign out of PSN and reset the account") { confirmPSNSignOut = true }
+                        .buttonStyle(DSButtonStyle(kind: .compact))
+                }
             }
+        }
+        .confirmationDialog("Sign out of PSN?", isPresented: $confirmPSNSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { model.signOutPSN() }
+        } message: {
+            Text("The second PSN account and the PS5 pairing are removed from this computer. To translate again, sign in with Sony and pair the PS5 again.")
         }
     }
 

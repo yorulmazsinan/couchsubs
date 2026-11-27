@@ -819,6 +819,10 @@
                                     </Grid>
                                     <TextBlock x:Name="Ps5AddressError" Style="{StaticResource ErrorText}" TextWrapping="Wrap" Visibility="Collapsed" />
                                 </c:SpacedStack>
+                                <!-- PSN'den çıkış (iPhone/Android Profil ile aynı ad ve onay): ikinci hesap ve PS5 eşleşmesi silinir, başka hesapla girilir. -->
+                                <WrapPanel x:Name="PsnSignOutRow" Visibility="Collapsed">
+                                    <Button Content="{t:T 'Sign out of PSN and reset the account'}" Style="{StaticResource CompactButton}" Click="OnSignOutPsn" />
+                                </WrapPanel>
                                 <c:SpacedStack x:Name="ConsoleXboxPanel">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource UnitTitleText}"><Run Text="{t:T 'Xbox and connection'}" /><Run x:Name="ConsoleXboxName" /></TextBlock>

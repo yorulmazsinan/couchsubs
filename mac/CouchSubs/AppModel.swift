@@ -1579,6 +1579,21 @@ final class AppModel: ObservableObject {
         xboxSignedIn = false
     }
 
+    /// PSN hesabı ya da eşleşmiş PS5 kayıtlı: Ayarlar › Konsol'da "PSN'den çıkış yap ve hesabı sıfırla" görünür.
+    var canSignOutPSN: Bool { !isXbox && (accountId != nil || console != nil) }
+
+    /// "PSN'den çıkış yap ve hesabı sıfırla" (iPhone signOutPSN, Android PsnSignOutRow ve Windows SignOutPsn ile aynı):
+    /// çeviri durur; ikinci hesabın kimliği, PS5 eşleşmesi (PS5 o hesaba bağlıdır) ve giriş şifresi bu Mac'ten silinir.
+    /// TV, Xbox ve çeviri ayarları kalır. Başka PSN hesabıyla girmek isteyen eskiden kurulumu baştan almak zorundaydı.
+    func signOutPSN() {
+        stop()
+        [StoreKey.accountId, StoreKey.console, StoreKey.loginPasscode].forEach(store.remove)
+        accountId = nil
+        console = nil
+        hasLoginPasscode = false
+        RemotePlayLog.write("PSN hesabından çıkıldı; PS5 eşleşmesi silindi")
+    }
+
     /// Konsol Xbox ama Microsoft girişi ya da Xbox seçimi eksik: Ayarlar'da "Xbox'ı bağla" görünür.
     /// Görüntü seçilen pencereden okunuyorsa Xbox'a bağlanılmaz, bağlama gerekmez (#853).
     var needsXboxLink: Bool { isXbox && !readsXboxWindow && (!xboxSignedIn || xboxConsole == nil) }

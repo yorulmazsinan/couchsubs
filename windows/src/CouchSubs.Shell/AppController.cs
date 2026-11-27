@@ -590,6 +590,25 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         Changed(nameof(HasXboxAccount), nameof(CanStart), nameof(CanAdvance), nameof(Ps5StatusText), nameof(NeedsXboxLink), nameof(XboxLinkTitle));
     }
 
+    /// <summary>PSN hesabı ya da eşleşmiş PS5 kayıtlı: Ayarlar › Konsol'da "PSN'den çıkış yap ve hesabı sıfırla" görünür.</summary>
+    public bool CanSignOutPsn => !IsXbox && (accountId is not null || console is not null);
+
+    /// <summary>
+    /// "PSN'den çıkış yap ve hesabı sıfırla" (iPhone signOutPSN, Android PsnSignOutRow ile aynı): çeviri durur; ikinci
+    /// hesabın kimliği, PS5 eşleşmesi (PS5 o hesaba bağlıdır) ve giriş şifresi bu bilgisayardan silinir. TV, Xbox ve çeviri
+    /// ayarları kalır. Başka PSN hesabıyla girmek isteyen eskiden kurulumu baştan almak zorundaydı.
+    /// </summary>
+    public void SignOutPsn()
+    {
+        Stop();
+        foreach (var key in new[] { StoreKeys.AccountId, StoreKeys.Console, StoreKeys.LoginPasscode }) store.Remove(key);
+        accountId = null;
+        console = null;
+        RemotePlayLog.Note("PSN hesabından çıkıldı; PS5 eşleşmesi silindi");
+        Changed(nameof(HasAccount), nameof(Console), nameof(CanSignOutPsn), nameof(NeedsPs5Link), nameof(CanStart), nameof(CanAdvance),
+            nameof(Ps5StatusText), nameof(HasLoginPasscode));
+    }
+
     public async Task<XboxLoginChallenge> BeginXboxLoginAsync()
     {
         var login = await (services.Xbox ?? throw new InvalidOperationException(text["Xbox streaming isn't available in this version."])).BeginLoginAsync();

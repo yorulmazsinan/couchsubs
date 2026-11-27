@@ -408,6 +408,22 @@
         }
       }
     },
+    "The second PSN account and the PS5 pairing are removed from this computer. To translate again, sign in with Sony and pair the PS5 again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The second PSN account and the PS5 pairing are removed from this computer. To translate again, sign in with Sony and pair the PS5 again."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İkinci PSN hesabı ve PS5 eşleşmesi bu bilgisayardan silinir. Yeniden çeviri yapmak için Sony ile giriş yapıp PS5'i yeniden eşleyin."
+          }
+        }
+      }
+    },
     "Sony's sign-in page could not be opened (%@). Check the phone's internet connection and try again.": {
       "localizations": {
         "en": {

@@ -1248,6 +1248,40 @@ public class AppControllerRunTests
         controller.Dispose();
     }
 
+    /// <summary>
+    /// "PSN'den çıkış yap ve hesabı sıfırla" (iPhone/Android Profil, Mac Ayarlar › Konsol ile aynı): çeviri durur; hesap,
+    /// PS5 eşleşmesi ve giriş şifresi silinir, TV kalır. Ayarlar'da "Hesabı bağla" görünür, sihirbaz ikinci hesap adımından açılır.
+    /// </summary>
+    [Fact]
+    public async Task SignOutOfPsnForgetsAccountAndPs5ButKeepsTheTv()
+    {
+        var store = new MemoryStore();
+        store.Save(StoreKeys.AccountId, Enumerable.Repeat((byte)1, 8).ToArray());
+        store.Save(StoreKeys.Console, new RegisteredConsole("192.168.1.253", "PS5", Enumerable.Repeat((byte)0x31, 16).ToArray(), Enumerable.Repeat((byte)2, 16).ToArray()));
+        store.Save(StoreKeys.Tv, new LgTv("LG TV", "127.0.0.1"));
+        store.Save(StoreKeys.TvKey, "tv-key");
+        var controller = AppControllerTests.Make(new FakeServices(), store, sleep: new FakeSleep());
+        Assert.True(controller.CanSignOutPsn);
+        Assert.True(controller.SetLoginPasscode("4321"));
+        await controller.StartAsync();
+        Assert.True(controller.IsRunning);
+
+        controller.SignOutPsn();
+        Assert.False(controller.IsRunning);
+        Assert.False(controller.HasAccount);
+        Assert.Null(controller.Console);
+        Assert.False(controller.HasLoginPasscode);
+        Assert.Null(store.Load<byte[]>(StoreKeys.AccountId));
+        Assert.Null(store.Load<RegisteredConsole>(StoreKeys.Console));
+        Assert.NotNull(store.Load<LgTv>(StoreKeys.Tv));
+        Assert.Equal("tv-key", store.Load<string>(StoreKeys.TvKey));
+        Assert.False(controller.CanSignOutPsn);
+        Assert.True(controller.NeedsPs5Link);
+        controller.LinkPs5Account();
+        Assert.Equal(OnboardingStep.SecondAccount, controller.Step);
+        controller.Dispose();
+    }
+
     /// <summary>Ayarlar'daki PS5 giriş şifresi oturuma verilir; yalnız 4 hane kaydedilir, kurulum sıfırlanınca silinir.</summary>
     [Fact]
     public async Task LoginPasscodeIsSavedAndPassedToTheSession()

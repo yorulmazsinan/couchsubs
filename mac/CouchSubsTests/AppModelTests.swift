@@ -1069,6 +1069,37 @@ final class AppModelRunTests: XCTestCase {
         XCTAssertFalse(model.hasLoginPasscode)
     }
 
+    /// "PSN'den çıkış yap ve hesabı sıfırla" (iPhone/Android Profil ile aynı): çeviri durur; hesap, PS5 eşleşmesi ve giriş
+    /// şifresi silinir, TV kalır. Ayarlar'da "Hesabı bağla" görünür ve sihirbaz ikinci hesap adımından açılır.
+    func testSignOutOfPSNForgetsAccountAndPS5ButKeepsTheTV() async {
+        let services = FakeServices()
+        let store = MemoryStore()
+        store.save(Data(repeating: 1, count: 8), for: StoreKey.accountId)
+        store.save(RegisteredConsole(host: "192.168.1.253", name: "PS5", registKey: Data(repeating: 0x31, count: 16), morning: Data(repeating: 2, count: 16)), for: StoreKey.console)
+        store.save(LGTV(name: "LG TV", host: "127.0.0.1"), for: StoreKey.tv)
+        store.save("tv-key", for: StoreKey.tvKey)
+        let model = AppModel(services: services, store: store, defaults: .isolated())
+        XCTAssertTrue(model.canSignOutPSN)
+        XCTAssertTrue(model.setLoginPasscode("4321"))
+        await model.start()
+        XCTAssertTrue(model.isRunning)
+
+        model.signOutPSN()
+        XCTAssertFalse(model.isRunning)
+        XCTAssertNil(model.accountId)
+        XCTAssertNil(model.console)
+        XCTAssertFalse(model.hasLoginPasscode)
+        XCTAssertNil(store.load(Data.self, for: StoreKey.accountId))
+        XCTAssertNil(store.load(RegisteredConsole.self, for: StoreKey.console))
+        XCTAssertNil(store.load(String.self, for: StoreKey.loginPasscode))
+        XCTAssertNotNil(store.load(LGTV.self, for: StoreKey.tv), "TV eşleşmesi kalır")
+        XCTAssertEqual(store.load(String.self, for: StoreKey.tvKey), "tv-key")
+        XCTAssertFalse(model.canSignOutPSN)
+        XCTAssertTrue(model.needsPS5Link)
+        model.linkPS5Account()
+        XCTAssertEqual(model.step, .secondAccount)
+    }
+
     func testRunningPreventsIdleSleep() async {
         let model = readyModel(FakeServices())
         await model.start()

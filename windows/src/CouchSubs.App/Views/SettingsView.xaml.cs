@@ -249,6 +249,7 @@ public partial class SettingsView : UserControl
             ConsolePs5Badge.Tone = Controls.ChipTone.Muted;
         }
         Ps5AddressActions.Visibility = !xbox && controller.Console is not null ? Visibility.Visible : Visibility.Collapsed;
+        PsnSignOutRow.Visibility = controller.CanSignOutPsn ? Visibility.Visible : Visibility.Collapsed;
         ConsoleXboxPanel.Visibility = xbox ? Visibility.Visible : Visibility.Collapsed;
         ConsoleXboxName.Text = controller.SelectedXboxConsole is { } console ? "  ·  " + (string.IsNullOrEmpty(console.Name) ? "Xbox" : console.Name) : "";
         // Microsoft hesap kartı (Mac DSAccountCard): girişliyse "Yeniden Giriş Yap" ve Diğer Giriş Yolları'nda Xbox seçimi ve çıkış.
@@ -284,6 +285,17 @@ public partial class SettingsView : UserControl
     private void OnSignOutXbox(object sender, RoutedEventArgs e)
     {
         controller.SignOutXbox();
+        ShowConsole();
+    }
+
+    /// <summary>"PSN'den çıkış yap ve hesabı sıfırla": telefonlardaki gibi önce onay sorulur.</summary>
+    private void OnSignOutPsn(object sender, RoutedEventArgs e)
+    {
+        var text = Localizer.Current;
+        var answer = MessageBox.Show(Host, text["The second PSN account and the PS5 pairing are removed from this computer. To translate again, sign in with Sony and pair the PS5 again."],
+            text["Sign out of PSN?"], MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.OK) return;
+        controller.SignOutPsn();
         ShowConsole();
     }
 
