@@ -1,0 +1,1 @@
+0.9.126: On LG TVs that report a 1920-wide or larger screen, the page is no longer rescaled; the TV log now records the webOS version, model, display mode and HDMI picture state.

@@ -1,0 +1,1 @@
+0.9.126: Ekranı 1920 ya da daha geniş bildiren LG TV'lerde sayfa yeniden ölçeklenmiyor; TV günlüğüne webOS sürümü, model, görüntü modu ve HDMI görüntüsünün durumu yazılıyor.

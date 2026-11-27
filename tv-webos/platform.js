@@ -24,19 +24,24 @@
   // Ortak index.html'deki <meta name="viewport" content="width=1920"> Android TV'nin WebView'i için eklendi (#7) ama LG
   // paketine de giriyor. LG 43LH590V'de (webOS 3.x, 05.70.50) sayfa ekranın yalnız sol üst kısmına çiziliyordu: panelin
   // alt yarısı ekranın ortasında kesik, yalnız sol üstteki çeviriler görünüyor. Bu TV'nin tarayıcısı ekranı 1920'den dar
-  // (ya da piksel oranı 1 değil) bildirince sabit 1920 görünüm küçültülmeden büyük çiziliyor (varsayım; tanı satırı "scr"
-  // doğrular). Ekran 1920 genişlikte ve oran 1 ise (bugüne kadarki bütün LG'ler) hiçbir şey değişmez. Değilse görünüm
+  // bildirince sabit 1920 görünüm küçültülmeden büyük çiziliyor. Ekran 1920 ya da daha genişse (piksel oranı ne olursa
+  // olsun) hiçbir şey değişmez. Değilse görünüm
   // ekran genişliğinde açılır, sayfa CSS zoom ile 1920x1080 uzayına sığdırılır; app.js ölçüleri COUCHSUBS_ZOOM'a böler
   // (fitPanel, altyazı ve ek alanlar 1920x1080 uzayında kalır).
   var PAGE_WIDTH = 1920;
+  // LG'nin tek görüntü modu (Android TV'deki "Katman"/"Uygulama içinde" seçimi LG'de yok).
+  var DISPLAY_MODE = 'in-app';
   var PAGE_HEIGHT = 1080;
   var screenFit = { content: 'width=' + PAGE_WIDTH, zoom: 1 };
 
   // Ekranın bildirdiği ölçü (CSS pikseli) ve piksel oranı → { content: görünüm ya da null (dokunulmaz), zoom }.
   function viewportPlan(screenWidth, screenHeight, ratio) {
     if (!(screenWidth > 0) || !(screenHeight > 0)) return { content: null, zoom: 1 };
-    var dpr = ratio > 0 ? ratio : 1;
-    if (screenWidth >= PAGE_WIDTH && Math.abs(dpr - 1) < 0.01) return { content: null, zoom: 1 };
+    // LG siyah ekran (X, 27 Kas; LG C6 2026, webOS 26 ve güncellemeden sonra başka LG'ler): ekranı 1920 ya da daha geniş
+    // bildiren TV'ye piksel oranı ne olursa olsun dokunulmaz. 0.9.114'ten beri oranı 1 olmayan 1920/4K TV'de de görünüm
+    // ekran genişliğine alınıyordu; 0.9.114'ten önce hiçbir 1920 LG'nin görünümü değişmiyordu. Sığdırma yalnız grafik
+    // katmanı gerçekten dar olan TV içindir (#1098: 43LH590V "scr 1280x720 dpr 1"; 960x540 oran 2).
+    if (screenWidth >= PAGE_WIDTH) return { content: null, zoom: 1 };
     var zoom = Math.round(Math.min(screenWidth / PAGE_WIDTH, screenHeight / PAGE_HEIGHT) * 10000) / 10000;
     return { content: 'width=device-width', zoom: zoom > 0 && zoom < 1 ? zoom : 1 };
   }
@@ -99,6 +104,11 @@
         (window.innerWidth > 0 && window.innerWidth !== PAGE_WIDTH);
       if (odd) tvLog('screen ' + screenText() + ' · ' + systemText());
     } catch (e) {}
+    // LG siyah ekran (X, 27 Kas; LG C6 2026 ve güncellemeden sonra başka LG'ler; günlük yoktu): TV'nin sürümü, modeli,
+    // görüntü modu ve ekranı her açılışta bir kez bilgisayarın/telefonun günlüğüne gider ("tv webOS 26.0.0 OLED65C6...
+    // cr120 dev 3840x2160 uhd · mode in-app · scr 1920x1080 dpr 1 vp 1920 iw 1920x1080"). LG'de Katman yok: PS5'in
+    // görüntüsü hep uygulamanın içinde, <video> (ext://hdmi) ile çizilir.
+    try { tvLog('tv ' + systemText() + ' · mode ' + DISPLAY_MODE + ' · ' + screenText()); } catch (e2) {}
   }, 2000);
 
   // --- Konsolun girişi ---
@@ -162,7 +172,7 @@
     pending: null, building: null, checkTimer: null, soonTimer: null, soonStrict: false, wasHidden: false,
     stalls: 0, stallNote: '', stallRebuiltAt: 0, stallTimer: null,
     stallVideo: null, stallTime: 0, stallFrames: -1, stallAt: 0, stallRebuilds: [], firstFrameAt: 0,
-    lastFrames: -1, flowing: false, stallAge: -1, stallBlind: false
+    lastFrames: -1, flowing: false, stallAge: -1, stallBlind: false, noPictureLogged: null
   };
 
   function nowMs() { return new Date().getTime(); }
@@ -716,6 +726,11 @@
     function picture(kind) {
       return function () {
         if (!current()) return;
+        // HDMI katmanının durumu günlüğe (LG siyah ekran, 27 Kas): bu <video>'nun ilk karesi, ölçüsü ve kaç ms'de geldiği.
+        if (!hdmi.firstFrameAt) {
+          tvLog('hdmi picture ' + hdmi.port + ' ' + (video.videoWidth || 0) + 'x' + (video.videoHeight || 0) + ' rs' +
+            video.readyState + ' ' + kind + ' after ' + (nowMs() - hdmi.builtAt) + 'ms');
+        }
         if (!hdmi.firstFrameAt) hdmi.firstFrameAt = nowMs();
         hdmi.played = true;
         hdmi.everPlayed = true;
@@ -736,12 +751,14 @@
     video.addEventListener('error', function () {
       if (!current()) return;
       hdmi.lastError = describeError(video.error) || 'error';
+      tvLog('hdmi error ' + hdmi.port + ' ' + hdmi.lastError);
       hdmi.onStatus('inputError');
       schedule('error');
     });
     source.addEventListener('error', function () {
       if (!current()) return;
       hdmi.lastError = 'source';
+      tvLog('hdmi source error ' + hdmi.port);
       hdmi.onStatus('sourceError');
     });
     // Bu olaylar çalışan görüntüde de gelebilir: tek başlarına yeniden kurdurmaz, yalnız denetimi öne çeker.
@@ -842,7 +859,16 @@
     if (!video.parentNode) return 'detached';
     if (video.error) return 'error';
     if (now - hdmi.builtAt < GRACE_MS) return '';
-    if (!(video.readyState >= 2 || video.videoWidth > 0)) return hdmi.played ? 'lost' : 'no picture';
+    if (!(video.readyState >= 2 || video.videoWidth > 0)) {
+      // Bu <video>'da görüntü hiç gelmedi: bir kez günlüğe (HDMI katmanının durumu; LG siyah ekran, 27 Kas).
+      if (!hdmi.played && hdmi.noPictureLogged !== video) {
+        hdmi.noPictureLogged = video;
+        tvLog('hdmi no picture ' + hdmi.port + ' rs' + video.readyState + ' ns' + video.networkState +
+          (video.paused ? ' paused' : '') + (hdmi.lastEvent ? ' ev ' + hdmi.lastEvent : '') + ' after ' +
+          Math.round((now - hdmi.builtAt) / 1000) + 's');
+      }
+      return hdmi.played ? 'lost' : 'no picture';
+    }
     if (video.paused || video.ended) {
       // Bu <video> hiç "oynuyor" görünmediyse (TV görüntüyü duraklamış sayarak gösteriyor olabilir) işaret sayılmaz.
       if (!hdmi.sawUnpaused) return '';
@@ -1011,9 +1037,12 @@
 
   function onVisibility() {
     if (pageHidden()) {
+      // Uygulama arkaya düştü (TV kendi girişine geçti, ana ekran ya da çökme öncesi): günlüğe bir kez.
+      if (!hdmi.wasHidden) tvLog('page hidden' + (hdmi.host ? ' (hdmi ' + (hdmi.played ? 'playing' : 'no picture') + ')' : ''));
       hdmi.wasHidden = true;
       return;
     }
+    if (hdmi.wasHidden) tvLog('page visible');
     var strict = hdmi.wasHidden;
     if (strict) black.returnedAt = nowMs();
     hdmi.wasHidden = false;
@@ -1039,7 +1068,14 @@
       text += ' ' + (info.platformVersion || '?') + (info.modelName ? ' ' + info.modelName : '');
     } catch (e) {}
     var chrome = /Chrom(?:e|ium)\/(\d+)/.exec((window.navigator && window.navigator.userAgent) || '');
-    return text + (chrome ? ' cr' + chrome[1] : '');
+    text += chrome ? ' cr' + chrome[1] : '';
+    // Panelin TV'nin bildirdiği ölçüsü ve UHD (deviceInfo screenWidth/screenHeight/uhd; webOSTV.js'in okuduğu alanlar).
+    try {
+      var device = JSON.parse(window.PalmSystem.deviceInfo);
+      if (device.screenWidth && device.screenHeight) text += ' dev ' + device.screenWidth + 'x' + device.screenHeight;
+      if (device.uhd === true || device.uhd === 'true') text += ' uhd';
+    } catch (e2) {}
+    return text;
   }
 
   function hdmiText() {
@@ -1320,9 +1356,10 @@
       if (hdmi.checkTimer === null) hdmi.checkTimer = setTimeout(tick, CHECK_MS);
     },
 
-    // Bilgi panelindeki ikinci tanı satırı: HDMI görüntüsünün durumu, yeniden kurma sayısı, son hata ve webOS sürümü.
+    // Bilgi panelindeki ikinci tanı satırı: HDMI görüntüsünün durumu, yeniden kurma sayısı, son hata, webOS sürümü,
+    // ekran ve görüntü modu (LG'de hep "in-app": PS5 uygulamanın içinde, ext://hdmi <video> ile).
     diagnostics: function () {
-      return hdmiText() + ' · ' + systemText() + ' · ' + screenText();
+      return hdmiText() + ' · ' + systemText() + ' · ' + screenText() + ' · mode ' + DISPLAY_MODE;
     },
 
     // Birim testi için (scripts/tv-webos-hdmi.test.js).

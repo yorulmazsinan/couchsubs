@@ -149,7 +149,7 @@ test('webOS HDMI: sağlam görüntüye dokunulmaz (sayaç ilerlese de ilerlemese
     assert.strictEqual(tv.videos.length, 1, moving ? 'sayaç ilerlerken' : 'sayaç hiç ilerlemezken');
     assert.strictEqual(tv.video.attributes.src, undefined);
     assert.strictEqual(tv.video.children[0].attributes.src, 'ext://hdmi:3');
-    assert.match(tv.platform.diagnostics(), /^hdmi playing rs4 1920x1080 t[+=] · snd on sx no · webOS 7\.4\.0 55NANO756PA cr79 · scr [^ ]+ dpr [0-9.]+ vp 1920 iw [0-9]+x[0-9]+$/);
+    assert.match(tv.platform.diagnostics(), /^hdmi playing rs4 1920x1080 t[+=] · snd on sx no · webOS 7\.4\.0 55NANO756PA cr79 · scr [^ ]+ dpr [0-9.]+ vp 1920 iw [0-9]+x[0-9]+ · mode in-app$/);
   }
 });
 
@@ -1166,4 +1166,38 @@ test('webOS findConsolePort: seçilen giriş, adı ve görüntü gelmezse sıray
   reply.devices = inputs([1, 'HDMI 1', false], [2, 'HDMI 2', false]);
   tv.platform.findConsolePort((...args) => { result = JSON.parse(JSON.stringify(args)); });
   assert.deepStrictEqual(result, [null, null, null, []]);
+});
+
+// LG siyah ekran (X, 27 Kas; LG C6 2026, webOS 26 ve güncellemeden sonra başka LG'ler; günlük yoktu): HDMI katmanının
+// durumu, TV'nin sürümü/modeli ve görüntü modu bilgisayarın/telefonun günlüğüne gider.
+test('webOS HDMI günlüğü: açılışta TV satırı (webOS, model, mod), ilk kare, hata, görüntüsüz giriş ve arkaya düşme yazılır', () => {
+  const tv = startTv();
+  const lines = [];
+  tv.window.COUCHSUBS_TVLOG = (text) => lines.push(text);
+  tv.advance(2100);
+  const system = lines.filter((l) => /^tv /.test(l));
+  assert.strictEqual(system.length, 1, JSON.stringify(lines));
+  assert.match(system[0], /^tv webOS 7\.4\.0 55NANO756PA cr79 · mode in-app · scr /);
+  assert.match(tv.platform.diagnostics(), / · webOS 7\.4\.0 55NANO756PA cr79 · scr .* · mode in-app$/);
+
+  // Görüntüsüz giriş: 8 sn'den sonra <video> başına bir kez.
+  tv.show(2);
+  tv.advance(14000);
+  const none = lines.filter((l) => /^hdmi no picture 2 rs0 /.test(l));
+  assert.strictEqual(none.length, 1, JSON.stringify(lines));
+
+  tv.show(3);
+  tv.advance(500);
+  tv.video.start();
+  assert.ok(lines.some((l) => /^hdmi picture 3 1920x1080 rs4 ready after \d+ms$/.test(l)), JSON.stringify(lines));
+  assert.strictEqual(lines.filter((l) => /^hdmi picture /.test(l)).length, 1, 'yalnız ilk kare');
+
+  tv.video.error = { code: 3 };
+  tv.video.fire('error');
+  assert.ok(lines.includes('hdmi error 3 code 3'), JSON.stringify(lines));
+
+  tv.hide();
+  tv.hide();
+  tv.unhide();
+  assert.deepStrictEqual(lines.filter((l) => /^page /.test(l)), ['page hidden (hdmi playing)', 'page visible']);
 });

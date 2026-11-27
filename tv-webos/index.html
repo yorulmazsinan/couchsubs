@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- Ekran her TV'de 1920 piksel genişliğinde düzenlenir. Android TV'nin WebView'i bunu vermezse 1080p ekranı 960 piksel
        sayıyor ve yazılar iki kat büyük çıkıyordu (TCL C6K, #7). LG ve Samsung zaten 1920 kullanır; ekranı 1920'den dar
-       (ya da piksel oranı 1 değil) bildiren LG'de tv-webos/platform.js görünümü ekran genişliğine alıp sayfayı CSS zoom ile
+       bildiren LG'de tv-webos/platform.js görünümü ekran genişliğine alıp sayfayı CSS zoom ile
        sığdırır (#1098, 43LH590V). initial-scale
        verilmez: Android'de 1 ölçeği sayfanın yalnız sol üst çeyreğini gösterip altyazıyı ekran dışında bırakıyordu;
        sığdırma ölçeğini MainActivity hesaplar. Samsung paketi de bu görünümü kullanır (Samsung UHD TV'de
@@ -14,15 +14,15 @@
        1280x720"). 43LH590V'de (webOS 3.x, #1098) sabit 1920 görünümde sayfa yalnız sol üst 1280x720 CSS pikselinde
        çiziliyor (ekranın sol üst üçte ikisi); platform.js'in görünümü sayfa açıldıktan sonra değiştirmesi bu TV'de
        işlemedi (tanı satırı "iw 1920x1080" kaldı, sayfa CSS zoom ile küçülüp sol üste sığdı; sağ ve alt üçte birdeki
-       çeviriler, alttaki altyazı ve telefon görünmedi). Ekranı 1920'den dar ya da piksel oranı 1 olmayan LG'de görünüm sayfa
-       ayrıştırılırken ekran genişliğine alınır (son viewport etiketi geçerlidir); platform.js sayfayı yine zoom ile
+       çeviriler, alttaki altyazı ve telefon görünmedi). Ekranı 1920'den dar LG'de görünüm sayfa
+       ayrıştırılırken ekran genişliğine alınır (son viewport etiketi geçerlidir; 1920 ve daha geniş ekrana piksel oranı ne olursa
+       olsun dokunulmaz); platform.js sayfayı yine zoom ile
        1920x1080 uzayına sığdırır. Diğer TV'lerde (PalmSystem yok, ya da 1920 ekran) hiçbir şey değişmez. -->
   <script>
     (function () {
       try {
         var s = window.screen || {};
-        var r = window.devicePixelRatio || 1;
-        if (window.PalmSystem && s.width > 0 && s.height > 0 && (s.width < 1920 || Math.abs(r - 1) >= 0.01)) {
+        if (window.PalmSystem && s.width > 0 && s.height > 0 && s.width < 1920) {
           document.write('<meta name="viewport" content="width=device-width">');
           window.COUCHSUBS_EARLY_VIEWPORT = 1;
         }

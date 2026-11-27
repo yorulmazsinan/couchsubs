@@ -63,8 +63,31 @@ test('viewportPlan: 1920 ve oran 1 ekranda dokunulmaz, dar ya da oranlı ekranda
   assert.deepEqual({ ...platform.viewportPlan(1280, 720, 1) }, { content: 'width=device-width', zoom: 0.6667 });
   assert.deepEqual({ ...platform.viewportPlan(960, 540, 2) }, { content: 'width=device-width', zoom: 0.5 });
   assert.deepEqual({ ...platform.viewportPlan(1280, 720, 1.5) }, { content: 'width=device-width', zoom: 0.6667 });
-  // Oran 1 değil ama ekran 1920 genişlikte: sabit görünüm kalkar, ölçek gerekmez.
-  assert.deepEqual({ ...platform.viewportPlan(1920, 1080, 2) }, { content: 'width=device-width', zoom: 1 });
+  // LG siyah ekran (X, 27 Kas; LG C6 2026): ekranı 1920 ya da daha geniş bildiren TV'ye oran ne olursa olsun dokunulmaz
+  // (0.9.114-0.9.125'te oranı 1 olmayan 1920/4K TV'nin görünümü de değişiyordu; 0.9.114'ten önce hiçbirininki değişmiyordu).
+  assert.deepEqual({ ...platform.viewportPlan(1920, 1080, 2) }, { content: null, zoom: 1 });
+  assert.deepEqual({ ...platform.viewportPlan(1920, 1080, 1.5) }, { content: null, zoom: 1 });
+  assert.deepEqual({ ...platform.viewportPlan(3840, 2160, 2) }, { content: null, zoom: 1 });
+});
+
+test('1920 ekranı oran 2 ile bildiren LG\'de (yeni webOS) görünüm ve ölçek değişmez; index.html de dokunmaz', () => {
+  const { platform, meta, root, window } = load([1920, 1080], 2);
+  assert.equal(meta.content, 'width=1920');
+  assert.equal(root.style.zoom, undefined);
+  assert.equal(window.COUCHSUBS_ZOOM, undefined);
+  assert.match(platform.diagnostics(), /webOS 3\.0\.0 43LH590V-ZE cr38 · scr 1920x1080 dpr 2 vp 1920 iw 1920x1080 · mode in-app$/);
+  // index.html'deki erken görünüm betiği aynı kuralı izler: yalnız 1920'den dar ekran.
+  const html = fs.readFileSync(path.join(tvRoot, 'index.html'), 'utf8');
+  const script = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
+  const cases = [[1920, 1080, 2, false], [3840, 2160, 1, false], [1920, 1080, 1, false], [1280, 720, 1, true], [960, 540, 2, true]];
+  for (const [w, h, r, early] of cases) {
+    const written = [];
+    const win = { PalmSystem: {}, screen: { width: w, height: h }, devicePixelRatio: r };
+    win.window = win;
+    vm.runInContext(script, vm.createContext({ window: win, document: { write: (x) => written.push(x) } }));
+    assert.equal(written.length === 1, early, `${w}x${h} oran ${r}`);
+    assert.equal(!!win.COUCHSUBS_EARLY_VIEWPORT, early, `${w}x${h} oran ${r}`);
+  }
 });
 
 test('1920 ekranda görünüm ve ölçek değişmez; tanı satırı ekranı yazar', () => {
