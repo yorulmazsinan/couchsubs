@@ -197,7 +197,21 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         public string? LinkId { get; init; }
         /// <summary>Son alındıdan beri geçen ping turu (<c>gate</c> altında); hiç alındı göndermemiş (eski) TV'de null.</summary>
         public int? AckMisses { get; set; }
+        /// <summary>TV'nin adresi (<see cref="SubtitleAccess.TvHost"/>; bilinmiyorsa boş), akışın açıldığı ve son alındının
+        /// geldiği an (<see cref="Environment.TickCount64"/>): kopma satırı için (<see cref="TvClosedLine"/>).</summary>
+        public string Host { get; init; } = "";
+        public long OpenedAt { get; } = Environment.TickCount64;
+        public long? AckAt { get; set; }
     }
+
+    /// <summary>
+    /// TV akışı bizim dışımızda (TV kapattı, okuma/yazma hatası) kapandı: günlük satırı. Beta-106/107'de "bağlantı birkaç
+    /// dakikada bir kopuyor" bildirimlerinde kopmanın hangi taraftan ve ne kadar açık kaldıktan sonra olduğu günlükte
+    /// yoktu. Mac/iPhone ve Android ile aynı metin.
+    /// </summary>
+    public static string TvClosedLine(string why, string host, long openSeconds, long? ackSecondsAgo) =>
+        $"TV bağlantısı koptu ({why}): {(host.Length == 0 ? "?" : host)}, {Math.Max(openSeconds, 0)} sn açıktı, son alındı "
+        + (ackSecondsAgo is { } ack ? $"{Math.Max(ack, 0)} sn önce" : "yok") + "; TV yeniden bağlanacak";
 
     /// <summary>Bu kurulumun kalıcı kimliği (<c>/hello</c> yanıtında). Aynı ağda iki CouchSubs varken TV uygulaması kendi
     /// bilgisayarını ya da telefonunu adres değişse de bununla tanır; eskiden ağda ilk bulduğuna bağlanıyordu (GitHub #425).</summary>
@@ -1059,7 +1073,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
                 lock (gate)
                 {
                     var client = link.Length == 0 ? null : clients.FirstOrDefault(c => c.LinkId == link);
-                    if (client is not null) client.AckMisses = 0;
+                    if (client is not null)
+                    {
+                        client.AckMisses = 0;
+                        client.AckAt = Environment.TickCount64;
+                    }
                     known = client is not null;
                 }
                 await RespondAndClose(tcp, known ? "204 No Content" : "404 Not Found", cors: cors);
@@ -1142,7 +1160,11 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
             .Append("Connection: keep-alive\r\n")
             .Append(cors).Append("\r\n")
             .Append("retry: 2000\n\n");
-        var client = new Client(tcp, viewer, legacy) { LinkId = viewer ? null : MakeLinkId() };
+        var client = new Client(tcp, viewer, legacy)
+        {
+            LinkId = viewer ? null : MakeLinkId(),
+            Host = !viewer && tcp.Client.RemoteEndPoint is IPEndPoint peer ? SubtitleAccess.TvHost(peer.Address) : "",
+        };
         int count;
         lock (gate)
         {
@@ -1238,21 +1260,29 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
     private async Task WatchForClose(Client client)
     {
         var buffer = new byte[1024];
+        var why = "TV kapattı";
         try
         {
             while (await client.Stream.ReadAsync(buffer) > 0) { }
         }
-        catch { }
-        Remove(client);
+        catch (Exception e) { why = "okuma hatası: " + e.GetBaseException().Message; }
+        Remove(client, why);
     }
 
-    private void Remove(Client client)
+    /// <summary>Bağlantıyı listeden çıkarıp kapatır. <paramref name="why"/>: TV ya da ağ kapattıysa nedeni; TV akışıysa günlüğe
+    /// yazılır (<see cref="TvClosedLine"/>). Kendi kapattığımız (alındısız, çıkış) bağlantılar kendi satırını yazar.</summary>
+    private void Remove(Client client, string? why = null)
     {
         int count;
         lock (gate)
         {
             if (!clients.Remove(client)) return;
             count = TvCount();
+        }
+        if (why is not null && !client.Viewer)
+        {
+            var now = Environment.TickCount64;
+            SubtitleLog.Write(TvClosedLine(why, client.Host, (now - client.OpenedAt) / 1000, client.AckAt is { } ack ? (now - ack) / 1000 : null));
         }
         client.Tcp.Dispose();
         ClientsChanged?.Invoke(count);
@@ -1269,7 +1299,8 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         var toTvs = !subtitle || SendsToTv;
         lock (gate) targets = [.. clients.Where(c => (toTvs || c.Viewer) && (legacy is null || c.Legacy == legacy))];
         foreach (var client in targets)
-            _ = Write(client, frame).ContinueWith(t => Remove(client), TaskContinuationOptions.OnlyOnFaulted);
+            _ = Write(client, frame).ContinueWith(t => Remove(client, "yazma hatası: " + t.Exception?.GetBaseException().Message),
+                                                  TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private static async Task Write(Client client, string text)

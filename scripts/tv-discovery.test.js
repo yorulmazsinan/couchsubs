@@ -1324,3 +1324,46 @@ test('kapatılan eski akıştan geç gelen hata, ping ve olaylar yok sayılır; 
   assert.ok(tv.streamCount() > opened, 'güncel akışın hatası yeniden bağlanmadı');
   assert.strictEqual(tv.lastOpened(), newServer + '/events');
 });
+
+// Beta-106/107 (X, 28 Kas): "bağlantı 3 dakikada bir kopuyor, TV bağlı görünüyor ama çeviri gelmiyor". Uzun oturum: ping
+// (15 sn) ve alındı akarken TV 30 dk boyunca bağlantıyı yenilemez; ping kesilince TV yeniden bağlanır ve kopmanın nedeni,
+// akışın ne kadar açık kaldığı ve ne kadar sessiz kaldığı bilgisayarın/telefonun günlüğüne gider (/tvlog).
+// Bu sahte sayfada window.XMLHttpRequest yok: satırlar gönderilmeyip TV'de bekler (localStorage "tvlog", bağlanınca gider).
+function tvLogLines(tv) {
+  return JSON.parse(tv.stored('tvlog') || '[]').map((item) => item.m);
+}
+
+test('uzun oturum: ping ve alındı akarken 30 dk yeniden bağlanılmaz; ping kesilince kopma nedeni günlüğe gider', () => {
+  const server = 'http://192.168.1.39:8787';
+  const tv = startTv({ saved: server, alive: new Set([server]), hasLocalAddress: false });
+  tv.clock.advance(1000);
+  assert.strictEqual(tv.lastOpened(), server + '/events');
+  const opened = tv.streamCount();
+  tv.emit('link', { id: 'abc123' });
+  for (let second = 0; second < 30 * 60; second += 15) {
+    tv.emit('ping');
+    tv.clock.advance(15000);
+  }
+  assert.strictEqual(tv.streamCount(), opened, '30 dk içinde bağlantı yenilendi');
+  assert.ok(tv.requests.filter((r) => r.url.indexOf('/ack?c=abc123') >= 0).length >= 100, 'alındı gitmedi');
+  assert.deepStrictEqual(tvLogLines(tv).filter((m) => /link drop/.test(m)), []);
+
+  // Bilgisayar/telefon susar (ping gelmez): TV ~45-55 sn sonra yeniden bağlanır, nedeni günlükte.
+  tv.clock.advance(60000);
+  assert.ok(tv.streamCount() > opened, 'susan bağlantı yenilenmedi');
+  tv.clock.advance(15000);
+  const drops = tvLogLines(tv).filter((m) => /link drop/.test(m));
+  assert.strictEqual(drops.length, 1, JSON.stringify(tvLogLines(tv)));
+  assert.match(drops[0], /^link drop \(no ping; open 18\d\ds, quiet [45]\ds\)$/);
+});
+
+test('akış hata verince TV kopma nedenini ve akışın ne kadar açık kaldığını günlüğe yazar', () => {
+  const server = 'http://192.168.1.39:8787';
+  const tv = startTv({ saved: server, alive: new Set([server]), hasLocalAddress: false });
+  tv.clock.advance(1000);
+  tv.clock.advance(200000);
+  tv.failStream();
+  tv.clock.advance(20000);
+  assert.ok(tvLogLines(tv).some((m) => /^link drop \(stream error rs\d; open 20\ds, quiet \d+s\)$/.test(m)),
+    JSON.stringify(tvLogLines(tv)));
+});

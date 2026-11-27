@@ -156,6 +156,13 @@ class SubtitleAccessTest {
         assertFalse(update.concernsInstalled(lg, "192.168.1.41", "0.9.110") { log += it })
         assertEquals(1, log.size)
     }
+    /** TV akışı TV ya da ağ tarafından kapanınca nedeni, ne kadar açık kaldığı ve son alındı günlükte (Mac/iPhone ve Windows aynı). */
+    @Test fun tvClosedLineNamesReasonUptimeAndLastAck() {
+        assertEquals("TV bağlantısı koptu (TV kapattı): 192.168.1.40, 183 sn açıktı, son alındı 14 sn önce; TV yeniden bağlanacak",
+            SubtitleServer.tvClosedLine("TV kapattı", "192.168.1.40", 183, 14))
+        assertEquals("TV bağlantısı koptu (yazma hatası): ?, 0 sn açıktı, son alındı yok; TV yeniden bağlanacak",
+            SubtitleServer.tvClosedLine("yazma hatası", "", -1, null))
+    }
     /** İkinci ekran eski TV'lere tanınan anahtarsız geçişten yararlanmaz (Mac ve Windows'ta aynı durumlar). */
     @Test fun secondScreenAlwaysNeedsTheKey() {
         val cases = listOf("/view" to 401, "/view?k=yanlis" to 401, "/view?k=anahtar" to 200, "/events?viewer=second" to 401,

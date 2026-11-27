@@ -237,6 +237,7 @@ public final class SubtitleServer: @unchecked Sendable {
             legacyClients.removeAll()
             linkIds.removeAll()
             ackMisses.removeAll()
+            tvLinks.removeAll()
             notifyClientsChanged()
         }
     }
@@ -310,6 +311,18 @@ public final class SubtitleServer: @unchecked Sendable {
     static func ackTimeout(pingInterval: TimeInterval) -> TimeInterval { pingInterval * Double(ackMissLimit) }
     /// Bu kadar ping turu alındısız geçerse bağlantı kopmuş sayılır.
     static let ackMissLimit = 3
+
+    /// Açık TV akışının adresi, açıldığı ve son alındısının geldiği an (ms, `uptimeMs`): akış TV ya da ağ tarafından
+    /// kapanınca nedeniyle günlüğe yazılır (`tvClosedLine`).
+    private var tvLinks: [ObjectIdentifier: (host: String, openedAt: Int, ackAt: Int?)] = [:]
+
+    /// TV akışı bizim dışımızda (TV kapattı, okuma/yazma hatası) kapandı: günlük satırı. Beta-106/107'de "bağlantı birkaç
+    /// dakikada bir kopuyor" bildirimlerinde kopmanın hangi taraftan ve ne kadar açık kaldıktan sonra olduğu günlükte
+    /// yoktu. Windows ve Android ile aynı metin.
+    public static func tvClosedLine(why: String, host: String, openSeconds: Int, ackSecondsAgo: Int?) -> String {
+        "TV bağlantısı koptu (\(why)): \(host.isEmpty ? "?" : host), \(max(openSeconds, 0)) sn açıktı, son alındı "
+            + (ackSecondsAgo.map { "\(max($0, 0)) sn önce" } ?? "yok") + "; TV yeniden bağlanacak"
+    }
 
     /// Alındısı kesilen TV bağlantısı kapatıldı (ana iş parçacığında). Çağıran "Yeniden bağlanılıyor" gösterip TV
     /// bekçisini yeniler (uygulama arka plandaysa öne getirilir).
@@ -541,6 +554,7 @@ public final class SubtitleServer: @unchecked Sendable {
             legacyClients.removeAll()
             linkIds.removeAll()
             ackMisses.removeAll()
+            tvLinks.removeAll()
             if !keepPairing { liveRegions.removeAll() }
         }
     }
@@ -1098,6 +1112,7 @@ public final class SubtitleServer: @unchecked Sendable {
             // TV'nin alındısı (bkz. ackTimeout). Bilinmeyen kimlik: sunucuda bu bağlantı yok, TV yeniden bağlanmalı.
             if let id = linkIds[request.parameter("c") ?? ""], clients[id] != nil {
                 ackMisses[id] = 0
+                tvLinks[id]?.ackAt = Self.uptimeMs()
                 respondAndClose(connection, status: "204 No Content", data: Data(), type: nil, cors: cors)
             } else {
                 respondAndClose(connection, status: "404 Not Found", cors: cors)
@@ -1162,7 +1177,11 @@ public final class SubtitleServer: @unchecked Sendable {
         connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
 
         clients[id] = connection
-        if viewer { viewers.insert(id) }
+        if viewer { viewers.insert(id) } else {
+            var host = ""
+            if case let .hostPort(peer, _) = connection.endpoint { host = SubtitleAccess.tvHost(fromPeer: "\(peer)") }
+            tvLinks[id] = (host, Self.uptimeMs(), nil)
+        }
         if legacy { legacyClients.insert(id) }
         notifyClientsChanged()
         watchForClose(connection, id: id)
@@ -1173,15 +1192,22 @@ public final class SubtitleServer: @unchecked Sendable {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] _, _, isComplete, error in
             guard let self else { return }
             if isComplete || error != nil {
-                self.drop(connection, id: id)
+                self.drop(connection, id: id, why: error.map { "okuma hatası: \($0)" } ?? "TV kapattı")
             } else {
                 self.watchForClose(connection, id: id)
             }
         }
     }
 
-    /// Bağlantıyı kapatır ve listelerden çıkarır (sunucunun kuyruğunda).
-    private func drop(_ connection: NWConnection, id: ObjectIdentifier) {
+    /// Bağlantıyı kapatır ve listelerden çıkarır (sunucunun kuyruğunda). `why`: TV ya da ağ kapattıysa nedeni; açık TV
+    /// akışıysa günlüğe yazılır (`tvClosedLine`). Kendi kapattığımız (alındısız, çıkış) bağlantılar kendi satırını yazar.
+    private func drop(_ connection: NWConnection, id: ObjectIdentifier, why: String? = nil) {
+        if let why, clients[id] != nil, let link = tvLinks[id] {
+            let now = Self.uptimeMs()
+            SubtitleLog.write(Self.tvClosedLine(why: why, host: link.host, openSeconds: (now - link.openedAt) / 1000,
+                                                ackSecondsAgo: link.ackAt.map { (now - $0) / 1000 }))
+        }
+        tvLinks[id] = nil
         connection.cancel()
         viewers.remove(id)
         legacyClients.remove(id)
@@ -1264,8 +1290,8 @@ public final class SubtitleServer: @unchecked Sendable {
         for (id, connection) in clients where (includingTVs || viewers.contains(id)) && !except.contains(id)
             && (only?.contains(id) ?? true) {
             connection.send(content: data, completion: .contentProcessed { [weak self] error in
-                guard let self, error != nil else { return }
-                self.drop(connection, id: id)
+                guard let self, let error else { return }
+                self.drop(connection, id: id, why: "yazma hatası: \(error)")
             })
         }
     }

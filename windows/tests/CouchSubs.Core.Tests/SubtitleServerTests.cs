@@ -168,6 +168,16 @@ public class SubtitleServerTests
             + "kayıtlı TV için güncelleme ya da kurulum önerilmiyor.", SubtitleServer.OtherTvReportLine("192.168.1.41", "192.168.1.40", ""));
     }
 
+    /// TV akışı TV ya da ağ tarafından kapanınca nedeni, ne kadar açık kaldığı ve son alındı günlükte (Mac/iPhone ve Android aynı).
+    [Fact]
+    public void TvClosedLineNamesReasonUptimeAndLastAck()
+    {
+        Assert.Equal("TV bağlantısı koptu (TV kapattı): 192.168.1.40, 183 sn açıktı, son alındı 14 sn önce; TV yeniden bağlanacak",
+            SubtitleServer.TvClosedLine("TV kapattı", "192.168.1.40", 183, 14));
+        Assert.Equal("TV bağlantısı koptu (yazma hatası): ?, 0 sn açıktı, son alındı yok; TV yeniden bağlanacak",
+            SubtitleServer.TvClosedLine("yazma hatası", "", -1, null));
+    }
+
     /// Konuşan adını renklendir açıkken adlı satır "speakerNames" alanını taşır (eski "speakers" hiç gitmez: 0.9.79'dan eski
     /// TV uygulamaları onunla bütün satırı boyuyordu); kapalıyken ve adsız satırda alan yoktur.
     [Fact]

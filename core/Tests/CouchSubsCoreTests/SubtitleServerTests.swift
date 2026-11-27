@@ -99,6 +99,14 @@ final class SubtitleServerTests: XCTestCase {
                        + "kayıtlı TV için güncelleme ya da kurulum önerilmiyor.")
     }
 
+    /// TV akışı TV ya da ağ tarafından kapanınca nedeni, ne kadar açık kaldığı ve son alındı günlükte (Windows ve Android aynı).
+    func testTVClosedLineNamesReasonUptimeAndLastAck() {
+        XCTAssertEqual(SubtitleServer.tvClosedLine(why: "TV kapattı", host: "192.168.1.40", openSeconds: 183, ackSecondsAgo: 14),
+                       "TV bağlantısı koptu (TV kapattı): 192.168.1.40, 183 sn açıktı, son alındı 14 sn önce; TV yeniden bağlanacak")
+        XCTAssertEqual(SubtitleServer.tvClosedLine(why: "yazma hatası", host: "", openSeconds: -1, ackSecondsAgo: nil),
+                       "TV bağlantısı koptu (yazma hatası): ?, 0 sn açıktı, son alındı yok; TV yeniden bağlanacak")
+    }
+
     /// Eski TV uygulaması (sürüm bildirmeyen; 0.9.7'den önceki sürümler `clear` gelir gelmez satırı kaldırır): `clear`
     /// ona satırın en az görünme süresi dolunca gider, yeni TV'ye hemen. Arada yeni satır gelirse eski `clear` hiç gitmez.
     func testClearReachesOldTVAppsOnlyAfterTheLineWasReadable() async throws {

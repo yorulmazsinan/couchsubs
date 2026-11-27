@@ -1,0 +1,1 @@
+0.9.127: TV bağlantıyı kopmuş sayıp yeniden kurduğunda nedeni (ping kesildi, alındı ulaşmadı, akış hatası) ve bağlantının ne kadar açık kaldığı TV günlüğüne yazılıyor.

@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.126';
+  var APP_VERSION = '0.9.127';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -113,6 +113,19 @@
   // Bağlantı bir an koptuğunda yazı silinmez; ancak bu süre içinde geri gelmezse silinir.
   var DROP_HIDE_MS = 6000;
   var dropTimer = null;
+  // Akışın açıldığı an (onopen): kopma satırında bağlantının ne kadar açık kaldığı (noteLinkDrop).
+  var linkOpenedAt = 0;
+
+  // TV'nin bağlantıyı kopmuş sayıp yeniden kurduğu her yer nedeniyle bilgisayarın/telefonun günlüğüne gider (tvLog,
+  // kopukken bekler, bağlanınca gönderilir): "link drop (no ping; open 183s, quiet 47s)". Beta-106/107'de "bağlantı
+  // birkaç dakikada bir kopuyor, TV bağlı görünüyor ama çeviri gelmiyor" bildirimlerinde kopmanın TV tarafındaki nedeni
+  // (ping kesildi, alındı ulaşmadı, akış hatası, bilgisayar akışı tanımadı) günlükte yoktu. Aynı tür 15 sn'de bir yazılır.
+  function noteLinkDrop(reason) {
+    var now = Date.now();
+    tvLog('link drop (' + reason + '; open ' + (linkOpenedAt ? Math.round((now - linkOpenedAt) / 1000) + 's' : '-') +
+      ', quiet ' + (lastActivity ? Math.round((now - lastActivity) / 1000) + 's' : '-') + ')');
+    linkOpenedAt = 0;
+  }
 
   // Panelde görünen tanı bilgisi: "yazı TV'ye gelmiyor" bildirimlerinde sebebi buradan okuruz.
   // regions/big: gelen ek alan ve "ekranı çevir" olayları ile çizilmeyen aşırı büyük kutular; speechWeb/speechElement:
@@ -3442,6 +3455,7 @@
     eventSource.onopen = function () {
       if (source !== eventSource) return;
       lastActivity = Date.now();
+      linkOpenedAt = lastActivity;
       failures = 0;
       clearTimeout(pairingTimer);
       cancelScan();
@@ -3454,6 +3468,7 @@
     };
     eventSource.onerror = function () {
       if (source !== eventSource) return;
+      if (linkOpenedAt) noteLinkDrop('stream error rs' + source.readyState);
       var failedGeneration = connectionGeneration;
       clearTimeout(pairingTimer);
       pairingTimer = setTimeout(function () { if (failedGeneration === connectionGeneration) connect(address); }, 5000);
@@ -3535,6 +3550,7 @@
     var closed = eventSource.readyState === 2;
     var silent = pingSeen && Date.now() - lastActivity > SILENCE_LIMIT_MS;
     if (closed || silent) {
+      noteLinkDrop(closed ? 'stream closed' : 'no ping');
       diag.drops++;
       renderDiag();
       pingSeen = false;
@@ -3573,6 +3589,7 @@
       if (ackMisses < ACK_MISS_LIMIT) return;
       ackMisses = 0;
       linkId = null;
+      noteLinkDrop('ack failed ' + ACK_MISS_LIMIT + 'x');
       diag.drops++;
       renderDiag();
       connect(server);
@@ -3584,6 +3601,7 @@
         if (!current()) return;
         ackMisses = 0;
         linkId = null;
+        noteLinkDrop('ack 404, sender dropped link');
         diag.drops++;
         renderDiag();
         connect(server);
@@ -4219,6 +4237,7 @@
   function dropWhileHidden() {
     if (!platform.closeWhenHidden || leaving || pausedByHidden || !eventSource) return;
     pausedByHidden = true;
+    noteLinkDrop('app hidden');
     eventSource.close();
     eventSource = null;
     clearTimeout(dropTimer);
@@ -4256,6 +4275,7 @@
     }
     diag.revived = (diag.revived || 0) + 1;
     renderDiag();
+    noteLinkDrop(open ? 'revive, no ping' : 'revive, stream not open');
     connect(server);
   }
 

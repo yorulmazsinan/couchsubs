@@ -198,6 +198,18 @@ class SubtitleServer(
         }
 
         /** Kayıtlı olmayan TV'nin uygulaması bağlandı: günlük satırı (Mac/iPhone ve Windows ile aynı metin). */
+        /**
+         * TV akışı bizim dışımızda (TV kapattı, okuma/yazma hatası) kapandı: günlük satırı. Beta-106/107'de "bağlantı birkaç
+         * dakikada bir kopuyor" bildirimlerinde kopmanın hangi taraftan ve ne kadar açık kaldıktan sonra olduğu günlükte
+         * yoktu. Mac/iPhone ve Windows ile aynı metin.
+         */
+        fun tvClosedLine(why: String, host: String, openSeconds: Long, ackSecondsAgo: Long?): String =
+            "TV bağlantısı koptu ($why): ${host.ifEmpty { "?" }}, ${maxOf(openSeconds, 0)} sn açıktı, son alındı " +
+                (ackSecondsAgo?.let { "${maxOf(it, 0)} sn önce" } ?: "yok") + "; TV yeniden bağlanacak"
+
+        /** Kopma satırının süreleri için tekdüze saat (ms; birim testlerinde Android saati olmadan da çalışır). */
+        private fun monotonicMs(): Long = System.nanoTime() / 1_000_000
+
         fun otherTvReportLine(reporter: String, saved: String, version: String): String =
             "TV uygulaması kayıtlı TV'den ($saved) değil, başka bir TV'den ($reporter) bağlandı, sürüm " +
                 "${version.ifEmpty { "< 0.9.69" }}; kayıtlı TV için güncelleme ya da kurulum önerilmiyor."
@@ -470,6 +482,12 @@ class SubtitleServer(
     private class Client(val socket: Socket, val viewer: Boolean, val legacy: Boolean = false, val link: String = "") {
         val output: OutputStream = socket.getOutputStream()
         @Volatile var ackMisses: Int = -1
+        /** TV'nin adresi ([SubtitleAccess.tvHost]), akışın açıldığı ve son alındının geldiği an: kopma satırı ([tvClosedLine]). */
+        val host: String = if (viewer) "" else SubtitleAccess.tvHost(socket.inetAddress)
+        val openedAt: Long = monotonicMs()
+        @Volatile var ackAt: Long = -1
+        /** Son yazma hatası (kopma satırı için). */
+        @Volatile var writeError: String? = null
     }
 
     private val lock = Any()
@@ -936,7 +954,10 @@ class SubtitleServer(
                     val id = request.parameter("c") ?: ""
                     val client = synchronized(lock) { clients.firstOrNull { !it.viewer && it.link.isNotEmpty() && it.link == id } }
                     if (client != null) {
-                        synchronized(lock) { client.ackMisses = 0 }
+                        synchronized(lock) {
+                            client.ackMisses = 0
+                            client.ackAt = monotonicMs()
+                        }
                         respondAndClose(socket, "204 No Content", cors = cors)
                     } else respondAndClose(socket, "404 Not Found", cors = cors)
                 }
@@ -1007,14 +1028,16 @@ class SubtitleServer(
         }
         onClientsChanged?.invoke(count)
         // İstemci bağlantıyı kapatınca okuma biter ve listeden çıkarılır.
+        var why = "TV kapattı"
         try {
             val input = socket.getInputStream()
             val buffer = ByteArray(1024)
             while (input.read(buffer) > 0) {
             }
         } catch (error: IOException) {
+            why = "okuma hatası: ${error.message ?: error.javaClass.simpleName}"
         }
-        remove(client)
+        remove(client, why)
     }
 
     /**
@@ -1036,6 +1059,9 @@ class SubtitleServer(
         }
         if (silent.isEmpty()) return false
         silent.forEach { remove(it) }
+        // Mac/iPhone ve Windows'taki satır (Android'de günlüğe hiç yazılmıyordu).
+        DropLog.sink?.invoke("TV $ACK_MISS_LIMIT ping turu alındı göndermedi: bağlantı kopmuş sayıldı, kapatıldı" +
+            if (remaining > 0) " (TV'nin başka bağlantısı açık, bekçiye dokunulmadı)" else "")
         if (remaining == 0) onTvStale?.invoke()
         return true
     }
@@ -1065,10 +1091,19 @@ class SubtitleServer(
         }
     }
 
-    private fun remove(client: Client) {
+    /**
+     * Bağlantıyı listeden çıkarıp kapatır. [why]: TV ya da ağ kapattıysa nedeni; TV akışıysa günlüğe yazılır ([tvClosedLine]).
+     * Kendi kapattığımız (alındısız, çıkış) bağlantılar kendi satırını yazar.
+     */
+    private fun remove(client: Client, why: String? = null) {
         val count = synchronized(lock) {
             if (!clients.remove(client)) return
             clients.count { !it.viewer }
+        }
+        if (why != null && !client.viewer) {
+            val now = monotonicMs()
+            DropLog.sink?.invoke(tvClosedLine(why, client.host, (now - client.openedAt) / 1000,
+                client.ackAt.takeIf { it >= 0 }?.let { (now - it) / 1000 }))
         }
         closeQuietly(client.socket)
         onClientsChanged?.invoke(count)
@@ -1084,7 +1119,9 @@ class SubtitleServer(
         val targets = synchronized(lock) { clients.filter { (toTvs || it.viewer) && (legacy == null || it.legacy == legacy) } }
         if (targets.isEmpty()) return
         try {
-            sender.execute { for (client in targets) if (!write(client, frame)) remove(client) }
+            sender.execute {
+                for (client in targets) if (!write(client, frame)) remove(client, "yazma hatası: ${client.writeError ?: "?"}")
+            }
         } catch (error: java.util.concurrent.RejectedExecutionException) {
         }
     }
@@ -1098,6 +1135,7 @@ class SubtitleServer(
         }
         true
     } catch (error: IOException) {
+        client.writeError = error.message ?: error.javaClass.simpleName
         false
     }
 

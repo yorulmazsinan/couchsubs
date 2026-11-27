@@ -1,0 +1,1 @@
+0.9.127: When the TV treats the connection as lost and reconnects, the TV log now records why (pings stopped, acknowledgement failed, stream error) and how long the connection had been open.
