@@ -6,18 +6,20 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **GTA 6 telefonu** (#1251): Karanlık sahnede ve koyu temalı ekranlarda da tanınıyor; elde sallanınca ya da biraz sağa kayınca kaybolmuyor; koyu zemindeki açık yazılar okunuyor. Bilgisayar ekranındaki panelde en üstteki uzun mesaj artık atılmıyor; cevap seçenekleri ayrı ayrı, aynı renkte çiziliyor.
-- **Menüler** (#1359, #1360, #1362): Seçim çubuğu kayınca çeviriler kaybolup gelmiyor; seçili satır kendi rengini alıyor. Tuş çubuğundaki etiketler aynı boy ve yazı tipinde. Kontrol şeması ekranında dev kutu ve panelden taşma yok; RUN "Koş", MOVE "Hareket" gibi komutlar doğru çevriliyor.
-- **Xbox** (#1308, #1252): Kopmadan ya da "Yeniden bağlan"dan sonra konsolu yeniden başlatmak gerekmiyor; eski oturum kapanmadan yenisi açılmıyor, uygulama kapanırken oturum kapatılıyor.
-- **LG** : Bazı modellerde ekranın sürekli kararıp gelmesi düzeldi. Eski Full HD LG'lerde (ör. 43LH590V) altyazı ve ekran çevirisi ekranın tamamında görünüyor 
-- **GTA 6 görev satırı**: Ekranın altındaki hedef yazısı ("Get in the speedboat" gibi) kendi kutusunda çevriliyor; altyazı kutusu artık onu örtmüyor. Tuş ipuçları telefon açıkken de çevriliyor.
-- **Uzun konuşmalar**: Parça parça beliren uzun satır tek altyazı olarak yerinde güncelleniyor; aynı satır tekrar tekrar çevrilip ekranı doldurmuyor.
-- **"Üstünü ört" modu**: Örtme kutusu artık her zaman tam opak, İngilizce altından görünmüyor; kalabalıkta önceki satırlar kutunun içine girmiyor (saydam kutu isteyen üstte/altta/sabit yerleşimi seçebilir).
-- **Mac ve iPhone çökmesi** (#1369): GTA 6'da telefon aranırken uygulamanın kendiliğinden kapanması düzeldi.
-- **GTA 6 haritası** (#1365): Harita ekranı menü gibi tek düzende çevriliyor; görev simgeleri yazı sanılmıyor, "GOAL" artık "Hedef"; üstteki sekme şeridi (#1372) her sekmeyi ayrı çeviriyor ve yanıp sönmüyor.
-- **Android TV'de köşedeki nokta**: Katman modunda sağ üstte kalan turuncu nokta kalktı; bağlantı gidince Katman kendini kapatıyor (TV uygulaması 0.9.120).
-- **Windows Ayarlar**: Koyu temada okunmayan yazılar ve boş kart düzeldi.
-- **İçe aktarılan paketler** (#1355): Yeni biçimdeki topluluk paketleri kabul ediliyor ve oyun seçiliyken de kullanılıyor; içe aktarma kaç satırı neden atladığını gösteriyor.
+- **Mac'te donma** (#1390): Yedek okuyucu her okumada bellek bırakıp onlarca GB'a çıkıyor, Mac'i kilitliyordu. Bellek artık sabit kalıyor; 1,5 GB'ı aşarsa okuyucu kendini yeniden açıyor. Video çözücü hata verince oturum yeniden kuruluyor.
+- **GTA 6 haritası, konum kartları** (#1391): Dükkân ve garaj açıklamaları tek paragraf olarak çevriliyor; yarım kalmıyor, araya ilgisiz parça girmiyor.
+- **GTA 6 haritası dağınıklığı** (#1365): Harita ekranı kaydırılınca ya da kararınca düzen bozulmuyor; haritanın üstünde ikiz ya da boş kutu çıkmıyor, satırların görünümü kareden kareye değişmiyor; sekme şeridi bölünüyor.
+- **Wi-Fi kopması** (#1366): Çeviri başlarken uygulama PS5'i ararken ağa saniyede yüzlerce paket gönderebiliyordu; bu, bazı modemlerde evdeki bütün cihazların Wi-Fi'ını düşürebiliyordu. Bağlıyken artık ağ taraması yapılmıyor, taramalar yavaşlatıldı ve seyreltildi.
+- **LG eşleşme** (#1058): Bazı LG'lerde eşleşme kodunun hiç çıkmaması düzeldi.
+- **Bozuk okunan satırlar** (#1293): Yazı tanımanın anlamsız okuduğu satırlar çeviriye gönderilmiyor; ekranda bir önceki altyazı kalıyor.
+- **Eski Full HD LG'ler** (#1098, ör. 43LH590V): 2016–2017 Full HD LG'lere TV uygulaması 1280×720 olarak kuruluyor; altyazı ve ekran çevirisi ekranın tamamında görünüyor.
+- **GTA 6 telefonu sol elde** (#1385, #1407): Karakter telefonu sol elinde tutunca telefon artık tanınıyor ve okunuyor. Xbox'ta karanlık sahnelerde telefonun kaçırılmasına yol açabilen tam aralıklı görüntü de doğru işleniyor.
+- **Gri/siyah altyazı zemini** (#1399): "Zeminsiz" seçiliyken "Üstünü ört" yerleşiminde altyazının arkasında gri ya da siyah kutu çıkmıyor (bilgisayar, telefon, TV ve OBS).
+- **İki TV'li evler** (#1405): Evde iki TV varken uygulama diğer TV'nin sürümünü kayıtlı TV'ninki sanmıyor; TV uygulaması kurulduğu halde "TV uygulamasını kur" uyarısı tekrar tekrar çıkmıyor.
+- **TV**: Eski bağlantıdan geç gelen yanıt TV'yi eski adrese döndürmüyor (TV uygulaması 0.9.123).
+- **DeepL dublajı**: Sözlük açıkken önbellekten gelen satırlarda dublaj kaybolmuyor.
+
+**beta.105'te gelenler:** GTA 6 telefonu, görev satırı, menüler ve harita, uzun konuşmalar, "Üstünü ört" kutusu, Mac/iPhone çökmesi, LG, Xbox, içe aktarılan paketler.
 
 **beta.104'te gelenler:** telefonun tanınması, beta.103'te kaçan altyazılar, dev tuş ipucu kutusu, akıcılık.
 
