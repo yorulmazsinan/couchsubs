@@ -733,8 +733,9 @@ struct DSFieldChrome<Field: View, Trailing: View>: View {
         .padding(.leading, DS.space("m"))
         .padding(.trailing, Trailing.self == EmptyView.self ? DS.space("m") : DS.space("xs"))
         .frame(height: DS.size("input"))
-        .background(Color.dsField, in: Capsule(style: .circular))
-        .overlay(Capsule(style: .circular).strokeBorder(focused ? Color.dsAmber : Color.dsBorder, lineWidth: focused ? 1.5 : 1))
+        // Kutunun her yerine tıklamak alanı açar (iPhone ile aynı): yalnız yazı satırı tıklamayı alıyordu.
+        .background { Capsule(style: .circular).fill(Color.dsField).contentShape(Capsule(style: .circular)).onTapGesture { focused = true } }
+        .overlay(Capsule(style: .circular).strokeBorder(focused ? Color.dsAmber : Color.dsBorder, lineWidth: focused ? 1.5 : 1).allowsHitTesting(false))
         .background(Capsule(style: .circular).inset(by: -4).fill(focused ? Color.dsAmberSoft : .clear))
         .animation(.easeOut(duration: DS.tokens.motion.short / 1000), value: focused)
     }

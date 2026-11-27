@@ -41,6 +41,18 @@ struct TVInstallScreen: View {
         }
         // Kurulum adımı: ortam ışığı (boşta çok yavaş; kurulumda reklam yok).
         .perdeAmbient()
+        // Ekran altyazı hedefi sayfasından açılır pencere olarak da açılır: açan sayfanın sekme çubuğu ve reklam şeridi
+        // pencereye geçmez; klavye açılınca alt çubuk değişip yazı alanının yeri kaymaz (gezinmeyle açıldığındaki gibi).
+        .environment(\.perdeTabBar, nil)
+        .environment(\.mobileAdBand, false)
+        // Tanı: "IP ve port kutusuna dokununca klavye açılmıyor" (X, 27 Kas). Klavyenin açılıp kapandığı tvinstall.log'a yazılır;
+        // dokunuş alana ulaşmıyorsa satır hiç olmaz, odak hemen düşüyorsa açıldı/kapandı art arda görünür.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            InstallLog.shared.write("TV kurulumu: klavye açıldı")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            InstallLog.shared.write("TV kurulumu: klavye kapandı")
+        }
         .task {
             guard brand == nil else { return }
             // Marka: güncellenen TV, bu telefonun kurduğu TV, eşlenen TV; yoksa ağda ilk görülen TV.
@@ -428,10 +440,12 @@ struct AndroidTVInstallSection: View {
         }
             .task { await search() }
             .foreignAppAlert(isPresented: $foreignApp) { install(replaceForeign: true) }
+            .onChange(of: wireless) { on in InstallLog.shared.write("TV kurulumu (Android TV): \(on ? "kablosuz hata ayıklama" : "ağ üzerinden hata ayıklama") seçildi") }
     }
 
     private func search() async {
         guard candidates == nil else { return }
+        InstallLog.shared.write("TV kurulumu (Android TV): ekran açıldı")
         if let update { address = update.port.map { "\(update.host):\($0)" } ?? update.host }
         let known = [update?.host, model.installedTVApp?.brand == .androidTV ? model.installedTVApp?.host : nil,
                      model.tv?.brand == .androidTV ? model.tv?.host : nil].compactMap { $0 }.filter { !$0.isEmpty }

@@ -366,8 +366,11 @@ struct DSFieldChrome<Field: View, Trailing: View>: View {
         .padding(.leading, DS.space("m") + 4)
         .padding(.trailing, Trailing.self == EmptyView.self ? DS.space("m") + 4 : DS.space("xxs"))
         .frame(minHeight: DS.size("input"))
-        .background(Color.dsField, in: Capsule())
-        .overlay(Capsule().strokeBorder(focused ? Color.dsAmber : Color.dsBorder, lineWidth: focused ? 1.5 : 1))
+        // Kutunun her yerine dokunmak alanı açar: yazı satırı 48'lik kutunun yalnız ortasındaki ince şerit ve iç boşluk
+        // dokunuşu almıyordu; kutunun üstüne/altına/soluna dokunan kullanıcıda klavye hiç açılmıyordu (TV kurulumu, X).
+        // Dokunuş zeminde yakalanır: yazı alanının ve sağdaki düğmenin kendi dokunuşu değişmez.
+        .background { Capsule().fill(Color.dsField).contentShape(Capsule()).onTapGesture { focused = true } }
+        .overlay(Capsule().strokeBorder(focused ? Color.dsAmber : Color.dsBorder, lineWidth: focused ? 1.5 : 1).allowsHitTesting(false))
         .background(Capsule().inset(by: -4).fill(focused ? Color.dsAmberSoft : .clear))
         .animation(.easeOut(duration: DS.tokens.motion.short / 1000), value: focused)
     }

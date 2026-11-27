@@ -6,6 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -80,7 +83,23 @@ internal fun AndroidTvInstallScreen(onBack: () -> Unit, onDone: () -> Unit, bran
     val working = state is AndroidState.Working
     val logFile = remember { File(context.filesDir, "tvinstall.log") }
 
+    // Tanı: "IP ve port kutusuna dokununca klavye açılmıyor" (X, 27 Kas; iPhone ile aynı satırlar). Klavyenin açılıp
+    // kapandığı ve seçilen hata ayıklama türü tvinstall.log'a yazılır.
+    @OptIn(ExperimentalLayoutApi::class)
+    val imeVisible = WindowInsets.isImeVisible
+    var imeLogged by remember { mutableStateOf(false) }
+    LaunchedEffect(imeVisible) {
+        if (imeVisible || imeLogged) withContext(Dispatchers.IO) { InstallLog(logFile).write("TV kurulumu: klavye ${if (imeVisible) "açıldı" else "kapandı"}") }
+        if (imeVisible) imeLogged = true
+    }
+    LaunchedEffect(wireless) {
+        withContext(Dispatchers.IO) {
+            InstallLog(logFile).write("TV kurulumu (Android TV): ${if (wireless) "kablosuz hata ayıklama" else "ağ üzerinden hata ayıklama"} seçildi")
+        }
+    }
+
     LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { InstallLog(logFile).write("TV kurulumu (Android TV): ekran açıldı") }
         val found = withContext(Dispatchers.IO) { findAndroidTvs(phoneIp) }
         candidates = found
         if (address.isEmpty()) {
