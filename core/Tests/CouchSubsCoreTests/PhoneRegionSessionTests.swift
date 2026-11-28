@@ -330,9 +330,13 @@ final class PhoneRegionSessionTests: XCTestCase {
             watcher.offer(b, areas: [], phone: pose)
             try await wait { !watcher.isBusy }
             XCTAssertEqual(server.sent.last?.items.count, 4)
-            clock = 1350
-            watcher.offer(b, areas: [], phone: pose)
-            try await wait { !watcher.isBusy }
+            // Aynı eksik düzen `PhoneSteady.degradedTurns` okuma sürerse geçer (X, 28 Kas, beta.107; Windows ile aynı).
+            for turn in 3...PhoneSteady.degradedTurns {
+                clock = 450 * turn
+                watcher.offer(b, areas: [], phone: pose)
+                try await wait { !watcher.isBusy }
+                if turn < PhoneSteady.degradedTurns { XCTAssertEqual(server.sent.last?.items.count, 4) }
+            }
             XCTAssertEqual(server.sent.last?.items.count, stillMissing ? 3 : 4)
         }
     }

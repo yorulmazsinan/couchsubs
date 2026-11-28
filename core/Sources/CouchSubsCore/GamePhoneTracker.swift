@@ -607,7 +607,7 @@ public enum GamePhoneGeometry {
         for gain in darkGains(level: level) {
             if let pose = confirmPass(whole.with(gain: gain), near: near) { return pose }
         }
-        guard level < darkLevel else { return nil }
+        guard level < darkLevel, equalizable(whole) else { return nil }
         return confirmPass(equalize(whole), near: near)
     }
 
@@ -653,7 +653,13 @@ public enum GamePhoneGeometry {
     static let darkLevel = 56
     /// Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×).
     static let darkTarget = 96
-    static let gainSteps = [384, 640, 1024]
+    /// Denenen kazançlar (×1,5–×12). Önceden en çok ×4'tü (1024): gece sahnesinde (beta-107 günlüğü, üst şerit 2–9/255)
+    /// kasa ile hoparlör yarığı arasındaki fark birkaç tonda kalıyor, ×4'te de yarık eşiğinin (14 ton) altında kalıp sıkı
+    /// arama "hoparlör yarığı yok"ta, "ön kamera yok"ta ve "alt çentik yok"ta takılıyordu; ton eşitleme ise geniş koyu
+    /// alanlardaki tek tonluk kıpırtıyı onlarca tona büyütüp kasayı düz göstermiyordu ("kasa kenarı düz değil"). ×7 yalnız
+    /// üst şerit 13/255, ×12 yalnız 8/255 ya da daha koyuyken denenir (`darkTarget`); telefonsuz kareler bu
+    /// karanlıkta da telefon açmıyor (Windows ve Android ile aynı).
+    static let gainSteps = [384, 640, 1024, 1792, 3072]
 
     /// Kazanç yerine ton eşitleme (`equalization`): `Probe.gain`'de ve kazanç listesinde bu değer.
     static let equalized = 0
@@ -666,14 +672,44 @@ public enum GamePhoneGeometry {
     /// ve kapalı yerde çevrilmiyor; günlükte parlaklık 7–60/255). Karanlık sahnede kazançlardan sonra denenir (Windows ve
     /// Android ile aynı).
     private static func equalization(_ grid: Grid) -> [UInt8] {
-        var counts = [Int](repeating: 0, count: 1021), total = 0
+        let counts = toneCounts(grid)
+        return equalization(counts: counts, total: counts.reduce(0, +))
+    }
+
+    /// Ton eşitleme denenir mi (`equalizable(counts:total:)`).
+    private static func equalizable(_ grid: Grid) -> Bool {
+        let counts = toneCounts(grid)
+        return equalizable(counts: counts, total: counts.reduce(0, +))
+    }
+
+    /// Izgaranın her iki noktasında bir ham ton (çeyrek ton adımıyla, 0–1020) sayıları.
+    private static func toneCounts(_ grid: Grid) -> [Int] {
+        var counts = [Int](repeating: 0, count: 1021)
         for y in stride(from: 0, to: 225, by: 2) {
-            for x in stride(from: 0, to: 400, by: 2) {
-                counts[min(1020, grid.raw(x, y) >> 8)] += 1
-                total += 1
-            }
+            for x in stride(from: 0, to: 400, by: 2) { counts[min(1020, grid.raw(x, y) >> 8)] += 1 }
         }
-        return equalization(counts: counts, total: total)
+        return counts
+    }
+
+    /// Ton eşitlemenin denendiği en koyu "parlak uç": ızgaranın en parlak %1'i (`brightShare`) en az bu tonda (0–255) olmalı.
+    /// Karenin tamamı simsiyaha yakınsa (parlak uç 2–7/255; kararan geçiş, gece sahnesinin en koyusu) ton eşitleme bir iki
+    /// tonluk sıkıştırma kıpırtısını 0–255'e yayıp telefonsuz karede telefon kuruyordu (Android'de gta6-n4-bildirim × 0,04:
+    /// telefon açıldı). Ton eşitlemenin bulduğu gerçek telefonlarda (gamayla koyulaşmış, karanlık oda) ekran aydınlık kalır,
+    /// parlak uç 22/255 ve üstü; bundan koyu karede telefonu ×7 ve ×12 kazanç bulur (`gainSteps`; Windows ve Android ile aynı).
+    static let equalizeFloor = 16
+
+    /// Parlak ucun ölçüldüğü pay: ızgara örneklerinin en parlak yüzde biri (`equalizeFloor`).
+    static let brightShare = 100
+
+    /// Ton eşitleme denenir mi (`equalizeFloor`): ham ton sayılarında (`counts`, çeyrek ton adımıyla, toplam `total`) en
+    /// parlak 1/`brightShare`'ün en koyu tonu taban tonun (çeyrek ton adımıyla 4 × `equalizeFloor`) altında değilse true.
+    static func equalizable(counts: [Int], total: Int) -> Bool {
+        var brighter = 0
+        for tone in counts.indices.reversed() {
+            brighter += counts[tone]
+            if brighter * brightShare >= total { return tone >= 4 * equalizeFloor }
+        }
+        return false
     }
 
     /// `counts`: ham ton (dört noktanın toplamı / 256, 0–1020) sayıları.
@@ -712,12 +748,13 @@ public enum GamePhoneGeometry {
         probe.level = level
         guard pose == nil else { return (pose, probe) }
         var passes = darkGains(level: level)
-        if level < darkLevel { passes.append(equalized) }
+        // Kare simsiyaha yakınsa ton eşitleme denenmez (`equalizeFloor`).
+        let whole = level < darkLevel ? Grid(image, columns: 0..<400, height: 225) : nil
+        if let whole, equalizable(whole) { passes.append(equalized) }
         var equalizedTop: Grid?
         for gain in passes {
-            if gain == equalized {
+            if gain == equalized, let whole {
                 // Ton eşitleme ızgaranın tamamından (`equalization`); üst şerit aynı eşlemeyle okunur.
-                guard let whole = Grid(image, columns: 0..<400, height: 225) else { break }
                 var top = topBand
                 top.map = equalization(whole)
                 equalizedTop = top

@@ -648,6 +648,11 @@ public final class SubtitleServer: @unchecked Sendable {
         }
         // Telefon mesajı kendi balonunda: TV çeviriyi balona sığdırır (eski TV yok sayar, özgün stilde çizer).
         if item.bubble { result["bubble"] = true }
+        // OCR kutusu balonun dış kenarını içermez. Köşe, oyun görünüşündeki gibi satır yüksekliğinin 0,6'sı kadar (kare
+        // yüksekliğine oranla, `TextPaint.radius` ile aynı birimde; TV uygulaması 0.9.128); ölçülmemiş kuyruk gönderilmez.
+        if item.phone?.role.isBubble == true, result["radius"] == nil, item.lineHeight > 0 {
+            result["radius"] = unitNumber(ScreenPhoneCard.bubbleRadius * item.lineHeight)
+        }
         // Telefonun yanındaki sohbet panelinin parçası: yeni TV paneli akışla, yuvarlak köşeli yarı saydam kartta çizer;
         // eski TV alanı yok sayar, öğeyi stilli kutu olarak yerinde çizer.
         if let panel = item.panel { result["panel"] = panel.rawValue }

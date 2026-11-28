@@ -914,6 +914,10 @@ public sealed class SubtitleServer(int port = 8787, TimeSpan? pingInterval = nul
         }
         // Telefon mesajı kendi balonunda: TV çeviriyi balona sığdırır (eski TV yok sayar, özgün stilde çizer).
         if (item.Bubble) json["bubble"] = true;
+        // OCR kutusu balonun dış kenarını içermez. Köşe, oyun görünüşündeki gibi satır yüksekliğinin 0,6'sı kadar
+        // (kare yüksekliğine oranla, TextPaint.Radius ile aynı birimde); ölçülmemiş kuyruk gönderilmez.
+        if (item.Phone?.Role.IsBubble() == true && !json.ContainsKey("radius") && item.LineHeight > 0)
+            json["radius"] = Round(ScreenPhoneCard.BubbleRadius * item.LineHeight);
         // Telefonun yanındaki sohbet panelinin parçası: yeni TV paneli akışla çizer; eski TV alanı yok sayar.
         if (item.Panel is { } panel) json["panel"] = panel.Json();
         // Hizalı panel (TV uygulaması 0.9.106): parçalar kutularının yerinde, zeminsiz; eski TV akışla çizer (Mac ile aynı).

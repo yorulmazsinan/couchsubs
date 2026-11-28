@@ -94,18 +94,55 @@ final class GamePhoneStabilityTests: XCTestCase {
         }
     }
 
-    /// Tek iç balon eksilip kalanlar aynı yerde duruyorsa okuma bir tur bekletilir; ilk ya da kaymış balon değil.
-    func testOnlyASingleInteriorBubbleBetweenUnchangedNeighborsIsHeld() {
-        func bubble(_ text: String, _ y: Double) -> (paragraphs: [String], box: TextBox) {
-            ([text], TextBox(left: 0.1, top: y, right: 0.6, bottom: y + 0.05))
+    /// Aynı sohbetin eksik okuması (düşen, kesilen, komşusuyla birleşen balon) gösterilenin yerine geçmez; yeni mesaj ve
+    /// kaydırma geçer (X, 28 Kas, beta.107; Windows ve Android ile aynı).
+    func testWorseChatReadKeepsTheShownBubbles() {
+        func row(_ text: String, _ y: Double, _ role: ScreenPhoneCard.Role = .outgoing) -> PhoneRegionSession.ChatRow {
+            .init(text: text, spot: TextBox(left: 0.4, top: y, right: 0.95, bottom: y + 0.08), role: role, lineHeight: 0.025,
+                  xScale: ScreenPhoneCard.Handset.screenShape)
         }
-        let shown = [bubble("Lucia!", 0.05), bubble("How's work?", 0.25), bubble("Not great.", 0.45), bubble("See you.", 0.7)]
-        XCTAssertTrue(PhoneRegionSession.missingInteriorBubble(shown, [shown[0], shown[1], shown[3]]))
-        XCTAssertFalse(PhoneRegionSession.missingInteriorBubble(shown, Array(shown.dropFirst())))
-        XCTAssertFalse(PhoneRegionSession.missingInteriorBubble(shown, [shown[0], shown[1], bubble("See you.", 0.8)]))
-        XCTAssertFalse(PhoneRegionSession.missingInteriorBubble(shown, [shown[0], shown[2]]))
-        // En alttaki balon düşüp kalanlar yerinde duruyorsa o da OCR atlamasıdır (yeni mesaj eklenir, silinmez).
-        XCTAssertTrue(PhoneRegionSession.missingInteriorBubble(shown, [shown[0], shown[1], shown[2]]))
+        let a = "Whatever the next stunt is, maybe add wearing underwear to the plan."
+        let b = "You still have that jumpsuit? I kinda wanna see Jay in it. You'll like it, Jay. Really breathable."
+        let shown = [row("New message", 0.20, .note), row("Jason", 0.25, .incoming), row(a, 0.55), row(b, 0.66)]
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(3)), than: shown))
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(3)) + [row("You still have that", 0.66)], than: shown))
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(2)) + [row(a + " " + b, 0.55)], than: shown))
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(2)) + [row(a + " You still have that", 0.55)], than: shown))
+        // Üst satırları okunmayan balon (üstü aşağı kayar, altı yerinde) ve ortası düşüp ikiye bölünen balon.
+        var tail = row("I kinda wanna see Jay in it. You'll like it, Jay. Really breathable.", 0.69)
+        tail.spot.bottom = 0.74
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(3)) + [tail], than: shown))
+        var head = row("You still have that jumpsuit?", 0.66)
+        head.spot.bottom = 0.68
+        XCTAssertTrue(PhoneRegionSession.worseChatRead(Array(shown.prefix(3)) + [head, tail], than: shown))
+        // Aynı okuma, OCR varyantı, alta eklenen yeni mesaj ve kaydırma eksik okuma değildir.
+        XCTAssertFalse(PhoneRegionSession.worseChatRead(shown, than: shown))
+        XCTAssertFalse(PhoneRegionSession.worseChatRead(Array(shown.prefix(3)) + [row(b.replacingOccurrences(of: "You'll", with: "Youll"), 0.66)],
+                                                        than: shown))
+        XCTAssertFalse(PhoneRegionSession.worseChatRead(shown + [row("See you there.", 0.77)], than: shown))
+        XCTAssertFalse(PhoneRegionSession.worseChatRead(shown.map { row($0.text, $0.spot.top - 0.1, $0.role!) }, than: shown))
+    }
+
+    /// Bir mesajın ilk çevirisi bütün OCR okunuşlarında kalır; anlamı değişen okuma ayrı çevrilir.
+    func testPhoneMemoryKeepsTheFirstTranslationAcrossReplyOcrVariants() {
+        let original = "You still have that jumpsuit? I kinda wanna see Jay in it. You'll like it, Jay. Really breathable."
+        let translation = "Tulum hâlâ sende mi? Jay'i onunla görmek isterim. Beğenirsin Jay, hava alıyor."
+        let variants = [original, original.replacingOccurrences(of: "You'll", with: "Youll"),
+                        original.replacingOccurrences(of: "You'll", with: "You'l"),
+                        original.replacingOccurrences(of: "it, Jay", with: "it,t Jay"),
+                        original.replacingOccurrences(of: "breathable", with: "breathabie")]
+        let memory = PhoneMemory()
+        memory.remember(original, translation)
+        for variant in variants {
+            XCTAssertTrue(PhoneSteady.sameReading(original, variant), variant)
+            XCTAssertEqual(memory.remember(variant, "Motorun sonraki çevirisi."), translation)
+            XCTAssertEqual(memory.translation(of: variant), translation)
+        }
+        XCTAssertTrue(PhoneSteady.sameReading("Thx amigo! U find", "Thx amigo! U flnd"))
+        XCTAssertTrue(PhoneSteady.sameReading("Balsero IS SOMETHING good tonight", "Balsero IS SOMETHINnG good tonight"))
+        XCTAssertFalse(PhoneSteady.sameReading("It is so cold outside tonight.", "It is so bold outside tonight."))
+        XCTAssertFalse(PhoneSteady.sameReading("I'm here waiting for you at the station.", "I'm there waiting for you at the station."))
+        XCTAssertNil(memory.translation(of: "Meet me at exit 16."))
     }
 
     /// Aynı mesajın OCR'la bir iki harfi farklı okunuşu yeni mesaj sayılmaz: bilinen çevirisi kullanılır, çeviri gidip

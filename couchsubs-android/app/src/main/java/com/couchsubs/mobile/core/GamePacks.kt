@@ -437,11 +437,20 @@ class GamePackLibrary(
         val indices = only?.sortedDescending() ?: listOfNotNull(chosen)
         for (index in indices) {
             val pack = current.getOrNull(index)?.first?.takeIf { it.id !in disabled } ?: continue
-            corrected(text, pack, current, only)?.let { return it }
+            corrected(text, pack, current, only)?.takeIf { keepsNumbers(text, it.text) }?.let { return it }
             val key = pack.fuzzy?.nearest(text) { lookup(current, it, only)?.text } ?: continue
-            lookup(current, key, only)?.let { return it }
+            lookup(current, key, only)?.takeIf { keepsNumbers(text, it.text) }?.let { return it }
         }
         return null
+    }
+
+    /**
+     * Bulanık eşleşmenin Türkçesindeki her sayı okunan satırda da var: tek harf düzeltmesi rakamı da değiştirebiliyordu
+     * ("3 Members" paketteki "5 Members" satırına çıkıp "5 üye" gösteriliyordu; X, 28 Kas, beta.107). Windows ve Mac aynı.
+     */
+    internal fun keepsNumbers(source: String, turkish: String): Boolean {
+        val known = Regex("""\d+""").findAll(source).map { it.value }.toSet()
+        return Regex("""\d+""").findAll(turkish).all { it.value in known }
     }
 
     /** Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa null. */

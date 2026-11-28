@@ -12,8 +12,13 @@ internal static class PhoneSteady
 {
     /// <summary>Telefon art arda bu kadar turda bulunamazsa ya da okuma doğrulanamazsa çeviriler silinir.</summary>
     internal const int MissTurns = 3;
-    /// <summary>Tek turluk OCR sapması (düşen balon, yan yana bozuk harfler) en çok bu kadar tur bekletilir.</summary>
+    /// <summary>Yan yana bozuk harfler en çok bu kadar tur bekletilir.</summary>
     internal const int HoldTurns = 2;
+    /// <summary>
+    /// Eksik düzen ancak sekiz ardışık okumada (~4 sn) doğrulanırsa gösterilen sohbeti değiştirir: ekran bir an parlayınca
+    /// okunamayan balonlar silinip yalnız tek balon kalıyordu (X, 28 Kas, beta.108). Kaydırma ve başka sohbet beklemez.
+    /// </summary>
+    internal const int DegradedTurns = 8;
     /// <summary>
     /// Sayfanın türü (sohbet listesi ya da sohbet) ancak bu kadar ardışık okuma aynı yeni türü verirse değişir: sallanan
     /// telefonda tek okumada bölüm başlığı kaçınca TV'deki panel liste ile balonlar arasında her saniye gidip geliyordu
@@ -33,29 +38,21 @@ internal static class PhoneSteady
     /// <summary>
     /// Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın OCR'la biraz farklı okunuşununki. Sayı ya da
     /// olumsuzluk ekleyen/düşüren okuma ("at 5" / "at 6", "can" / "can't") aynı mesaj sayılmaz. Birden çok aday varsa
-    /// uzunluğu en yakın olan, eşitlikte sıralamada önce gelen (her platformda aynı sonuç).
+    /// kayıt sırasında ilk eşleşen kullanılır.
     /// </summary>
-    internal static string? Translation(string source, IReadOnlyDictionary<string, string> known)
+    internal static string? Translation(string source, IReadOnlyDictionary<string, string> known, IEnumerable<string>? order = null)
     {
         if (known.TryGetValue(source, out var exact)) return exact;
-        var text = TextMatch.Normalize(source);
-        (int Distance, string Source, string Translation)? best = null;
-        foreach (var (old, translation) in known)
-        {
-            if (!SameReading(source, old)) continue;
-            var distance = Math.Abs(text.Length - TextMatch.Normalize(old).Length);
-            if (best is not { } current || distance < current.Distance
-                || (distance == current.Distance && string.CompareOrdinal(old, current.Source) < 0))
-                best = (distance, old, translation);
-        }
-        return best?.Translation;
+        foreach (var old in order ?? known.Keys)
+            if (SameReading(source, old)) return known[old];
+        return null;
     }
 
     /// <summary>
     /// İki okuma aynı mesaj mı: birebir aynı, sadeleştirilmiş hali aynı (soru işareti ikisinde de ya da hiçbirinde; "Ok." /
-    /// "ok" kısa satırda da aynı mesaj) ya da (en az <see cref="MinimumLetters"/> harfli iki uzun mesajda, "rn" / "m"
-    /// birleştirilerek) Levenshtein oranı en az <see cref="SameMessage"/>; sayı ya da olumsuzluk ekleyen/düşüren okuma aynı
-    /// sayılmaz (Mac ile aynı).
+    /// "ok" kısa satırda da aynı mesaj) ya da en az <see cref="MinimumLetters"/> harfli iki uzun mesajda yalnız OCR artığı farklı:
+    /// kesme işareti, noktalama, "rn" / "m", yan yana iki bozuk sözcük ya da en çok <see cref="SlipWords"/> sözcükte tek harf
+    /// kayması. Gerçek sözcük değişimi ("here" / "there"), sayı ya da olumsuzluk ekleyen/düşüren okuma aynı sayılmaz (Mac ile aynı).
     /// </summary>
     internal static bool SameReading(string a, string b)
     {
@@ -64,8 +61,80 @@ internal static class PhoneSteady
         if (x.Length == 0 || y.Length == 0 || TextMatch.AddsMeaning(a, b) || TextMatch.AddsMeaning(b, a)) return false;
         // Kısa satırda soru işareti anlam taşır ("Ok?" / "Ok."); uzun mesajda düşen soru işareti OCR'ın kaçırdığı noktalamadır.
         if (x == y) return a.Contains('?') == b.Contains('?') || x.Count(char.IsLetter) >= MinimumLetters;
-        return x.Count(char.IsLetter) >= MinimumLetters && y.Count(char.IsLetter) >= MinimumLetters
-            && TextMatch.IsSimilar(x.Replace("rn", "m"), y.Replace("rn", "m"), SameMessage);
+        if (x.Count(char.IsLetter) < MinimumLetters || y.Count(char.IsLetter) < MinimumLetters) return false;
+        // Uzun cümlede gerçek bir sözcüğün değişmesi ("here" / "there") benzerlik eşiğini geçebilir.
+        // Yalnız OCR'ın karıştırdığı harfler, kesme işareti ve noktalama artığı eşleşir.
+        // Bitişik ya da ayrık okunan sözcük ("Yo Istill" / "Yo I still") da aynı mesajdır.
+        string x2 = ReadingLetters(a), y2 = ReadingLetters(b);
+        return x2 == y2 || x2.Replace(" ", "") == y2.Replace(" ", "") || GamePhoneText.HasAdjacentOcrEdits(a, b) || LetterSlips(a, b);
+    }
+
+    /// <summary>Aynı mesajın okunuşunda en çok bu kadar sözcükte tek harf kayabilir.</summary>
+    internal const int SlipWords = 2;
+    /// <summary>Tek harf kayması yalnız en az bu kadar harfli sözcükte aranır ("cold" / "bold" gibi kısa sözcükler anlam taşır).</summary>
+    private const int SlipLetters = 5;
+
+    /// <summary>
+    /// Sözcük sayısı aynı, en çok <see cref="SlipWords"/> sözcükte OCR'ın tek harf kayması: aynı uzunlukta tek harf değişimi
+    /// ("breathabie") ya da yan yana yinelenen harf ("SOMETHINnG"). Başa harf eklenmesi ("here" / "there") eşleşmez
+    /// (X, 28 Kas, beta.107: her kayma yeni çeviri istiyor, Türkçe her turda değişiyordu).
+    /// </summary>
+    private static bool LetterSlips(string a, string b)
+    {
+        string[] x = ReadingLetters(a).Split(' '), y = ReadingLetters(b).Split(' ');
+        if (x.Length != y.Length) return false;
+        int slips = 0;
+        for (int i = 0; i < x.Length; i++)
+            if (x[i] != y[i] && (++slips > SlipWords || !LetterSlip(x[i], y[i]))) return false;
+        return slips > 0;
+    }
+
+    private static bool LetterSlip(string p, string q)
+    {
+        if (Math.Min(p.Length, q.Length) < SlipLetters || !p.All(char.IsLetter) || !q.All(char.IsLetter)) return false;
+        if (p.Length == q.Length) return p.Where((c, i) => c != q[i]).Count() == 1;
+        var (shorter, longer) = p.Length < q.Length ? (p, q) : (q, p);
+        if (longer.Length != shorter.Length + 1) return false;
+        for (int i = 1; i < longer.Length; i++)
+            if (longer[i] == longer[i - 1] && longer.Remove(i, 1) == shorter) return true;
+        return false;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex EchoedLetter = new(@"(\p{L}),\1\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static string ReadingLetters(string text) =>
+        TextMatch.Normalize(EchoedLetter.Replace(text, "$1").Replace('’', '\'')
+            .Replace("'l ", "'ll ", StringComparison.OrdinalIgnoreCase).Replace("'", ""))
+            .Replace("rn", "m").Replace('q', 'g').Replace('l', 'i'); // OCR'ın sık karıştırdığı harfler ("flnd" / "find").
+
+    /// <summary>Aynı yerdeki balonun başı, sonu ya da aradaki satırı eksik okunmuş mu.</summary>
+    internal static bool TruncatedReading(string read, string shown)
+    {
+        static string Normalized(string text) => TextMatch.Normalize(text.Replace("'", "").Replace("’", ""));
+        string shorter = Normalized(read), full = Normalized(shown);
+        if (shorter.Length == 0 || shorter.Length >= full.Length) return false;
+        if (full.StartsWith(shorter, StringComparison.Ordinal)
+            && (full[shorter.Length] == ' ' || shorter.Length >= MinimumLetters)) return true;
+        if (TextMatch.AddsMeaning(read, shown)) return false;
+        if (TextMatch.IsGrowth(shown, read)) return true;
+        // Bitişik okunan sözcüklerle de eksik okuma: boşluksuz hâli tam metnin içinde.
+        if (shorter.Length >= MinimumLetters && full.Replace(" ", "").Contains(shorter.Replace(" ", ""), StringComparison.Ordinal))
+            return true;
+        var words = shorter.Split(' ');
+        if (words.Length < 3) return false;
+        int kept = 0;
+        foreach (var word in full.Split(' '))
+            if (word == words[kept] && ++kept == words.Length) return true;
+        return false;
+    }
+
+    /// <summary>Önceki iki komşu balonun tek kutuda okunuşu; ikincisi yarım da kalabilir.</summary>
+    internal static bool MergedReading(string read, string first, string second)
+    {
+        var combined = first + " " + second;
+        return SameReading(read, combined)
+            || (TextMatch.IsGrowth(read, first) && TruncatedReading(read, combined));
     }
 
     // Ekrandaki balonların kararlılığı (X, 22 Kas, GTA 6 telefonu: "yazılar sürekli oynuyor okumak çok zor, balonların
@@ -238,7 +307,7 @@ internal static class PhoneSteady
         if (spotA is not { } x || spotB is not { } y || Math.Abs(x.Top - y.Top) > SameSpotShare || Math.Abs(x.Left - y.Left) > SameSpotShare
             || TextMatch.AddsMeaning(a, b) || TextMatch.AddsMeaning(b, a)) return false;
         string p = TextMatch.Normalize(a), q = TextMatch.Normalize(b);
-        return p.Count(char.IsLetter) >= MinimumLetters && q.Count(char.IsLetter) >= MinimumLetters
+        return TruncatedReading(b, a) && p.Count(char.IsLetter) >= MinimumLetters && q.Count(char.IsLetter) >= MinimumLetters
             && TextMatch.IsSimilar(p, q, SameSpotMessage);
     }
 

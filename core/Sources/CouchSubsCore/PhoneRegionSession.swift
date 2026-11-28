@@ -94,6 +94,9 @@ final class PhoneRegionSession {
     private var scrolling = false
     /// Bu okuma kaç turdur bekletiliyor (en çok `PhoneSteady.holdTurns`); sonra okuma her durumda ilerler.
     private var holds = 0
+    /// Gösterilen sohbetin eksik okuması ve art arda kaç turdur aynı geldiği (`PhoneSteady.degradedTurns`).
+    private var degradedRead: Page?
+    private var degradedTurns = 0
     /// Ekrandaki sayfanın türü (sohbet listesi mi) ve öbür türü veren ardışık okuma sayısı (`PhoneSteady.kindTurns`).
     private var shownList: Bool?
     private var kindVotes = 0
@@ -302,15 +305,26 @@ final class PhoneRegionSession {
             current = fresh
         }
         guard latest != nil, !Task.isCancelled else { return }
-        // Yerinde duran iki komşu arasından düşen balon ya da uzun mesajdaki yan yana birkaç bozuk harf tek okumada
-        // ekrandan silinmesin, yeniden çevrilmesin: okuma bir tur bekletilir, sonraki tur mutlaka yeniden okur. Aynı
-        // görünen gerçek değişiklik o turda ilerler (Windows ile aynı).
+        // Aynı sohbetin eksik okuması (düşen, kesilen ya da komşusuyla birleşen balon) gösterilen balonların yerine
+        // geçmez; aynı eksik düzen `PhoneSteady.degradedTurns` okuma sürerse geçer (X, 28 Kas, beta.107; Windows ile aynı).
+        if fresh, !scrolling, let shown = shownPage, !rendered.isEmpty,
+           Self.worseChatRead(Self.chatRows(current), than: Self.chatRows(shown)), holdDegraded(current) {
+            note("PhoneSteady", "sohbette eksik okuma, gösterilen balonlar korundu", Self.text(current))
+            page = nil
+            empties = 0
+            kindVotes = 0
+            return
+        }
+        if fresh {
+            degradedRead = nil
+            degradedTurns = 0
+        }
+        // Uzun mesajdaki yan yana birkaç bozuk harf tek okumada ekrandan silinmesin, yeniden çevrilmesin: okuma bir tur
+        // bekletilir, sonraki tur mutlaka yeniden okur. Aynı görünen gerçek değişiklik o turda ilerler (Windows ile aynı).
         if fresh, !scrolling, holds < PhoneSteady.holdTurns, let shown = shownPage, !rendered.isEmpty,
-           Self.missingInteriorBubble(shown, current)
-            || (Self.sameLayout(shown, current, frameSize) && GamePhoneText.hasAdjacentOcrEdits(Self.text(shown), Self.text(current))) {
+           Self.sameLayout(shown, current, frameSize), GamePhoneText.hasAdjacentOcrEdits(Self.text(shown), Self.text(current)) {
             if holds == 0 {
-                let why = Self.missingInteriorBubble(shown, current) ? "balon düştü" : "harf oynaması"
-                note("PhoneSteady", "okuma \(PhoneSteady.holdTurns) tura dek bekletildi (\(why))", Self.text(current))
+                note("PhoneSteady", "okuma \(PhoneSteady.holdTurns) tura dek bekletildi (harf oynaması)", Self.text(current))
             }
             holds += 1
             page = nil
@@ -323,7 +337,10 @@ final class PhoneRegionSession {
         let list = Self.isList(current)
         if fresh, !current.bubbles.isEmpty, let shownList, shownList != list, !rendered.isEmpty {
             kindVotes += 1
-            if kindVotes < PhoneSteady.kindTurns {
+            // Sohbet listesinin yalnız kart okunuşu (başlık ve önizlemeler seçilemedi, satırlar birbirine karışır) OCR
+            // sapmasıdır: liste ile kartlar arasında her saniye gidiliyordu (X, 28 Kas, beta.107; Windows ile aynı).
+            let cardsOnly = shownList && current.bubbles.allSatisfy { $0.group.phone?.role == .card }
+            if kindVotes < (cardsOnly ? PhoneSteady.degradedTurns : PhoneSteady.kindTurns) {
                 note("PhoneSteady", "sayfa türü değişti (\(list ? "liste" : "sohbet")), bir okuma daha bekleniyor", Self.text(current))
                 page = nil
                 return
@@ -414,8 +431,8 @@ final class PhoneRegionSession {
                 }
                 let shown = cuts[index] == nil ? translated
                     : GamePhoneText.cutTranslation(GamePhoneText.keepingLeadingSymbol(source, translated))
-                remember(source, shown)
-                available[source] = shown
+                // Aynı mesajın önceki okunuşu çevrildiyse onun Türkçesi kalır (`PhoneMemory.remember`).
+                available[source] = remember(source, shown)
             }
         } catch {
             needsWork = true
@@ -427,8 +444,12 @@ final class PhoneRegionSession {
         if latest.frame !== verified.frame, !matches(current, latest) {
             verified = latest
             guard let fresh = await reread(verified) else { missed(); return }
-            current = fresh
-            available = availableTranslations(current.bubbles.map(\.group), packLookup: packLookup, skipsTurkish: skipsTurkish)
+            // Motor çalışırken balon düşmüş, kesilmiş ya da birleşmiş okunduysa çevrilen tam sayfa gösterilir; sonraki tur
+            // aynı eksik düzeni olağan doğrulama yolunda yeniden okur (Windows ile aynı).
+            if !Self.worseChatRead(Self.chatRows(fresh), than: Self.chatRows(current)) {
+                current = fresh
+                available = availableTranslations(current.bubbles.map(\.group), packLookup: packLookup, skipsTurkish: skipsTurkish)
+            }
         }
         guard !Task.isCancelled, self.latest != nil else { return }
         publish(items(current, translations: available))
@@ -459,33 +480,6 @@ final class PhoneRegionSession {
 
     private static func text(_ page: Page) -> String {
         page.bubbles.flatMap(\.group.paragraphs).joined(separator: "\n")
-    }
-
-    /// Yalnız tek iç balon eksilmiş: kalanların yazısı ve kutuları aynı sırada, aynı yerde. Kaydırma, yeni yazı ya da
-    /// sayfanın kapanması bu denetime takılmaz.
-    nonisolated static func missingInteriorBubble(_ shownBubbles: [(paragraphs: [String], box: TextBox)],
-                                                  _ current: [(paragraphs: [String], box: TextBox)]) -> Bool {
-        guard current.count >= 2, shownBubbles.count == current.count + 1 else { return false }
-        var missing = false
-        for (index, bubble) in current.enumerated() {
-            var prior = shownBubbles[missing ? index + 1 : index]
-            if prior.paragraphs != bubble.paragraphs {
-                guard !missing, index > 0 else { return false }
-                missing = true
-                prior = shownBubbles[index + 1]
-                guard prior.paragraphs == bubble.paragraphs else { return false }
-            }
-            let a = prior.box, b = bubble.box
-            if abs(a.left - b.left) > 0.012 || abs(a.right - b.right) > 0.012 || abs(a.top - b.top) > 0.012
-                || abs(a.bottom - b.bottom) > 0.012 { return false }
-        }
-        // Kalanlar yerinde, yalnız en alttaki balon düştü: yeni mesaj eklenir, silinmez; bu da bir OCR atlamasıdır.
-        return true
-    }
-
-    private static func missingInteriorBubble(_ shown: Page, _ current: Page) -> Bool {
-        missingInteriorBubble(shown.bubbles.map { ($0.group.paragraphs, $0.group.box) },
-                              current.bubbles.map { ($0.group.paragraphs, $0.group.box) })
     }
 
     /// İki okumanın balonları aynı yerde (iki piksel içinde) ve aynı yüzeyde: telefon kıpırdamadı.
@@ -526,13 +520,28 @@ final class PhoneRegionSession {
             stable.source = match.source
             // Balonun tarafı (gelen/giden/not) da kimliğiyle kalır: hiza ya da renk okuması bir piksel oynadı diye balon
             // panelde sola sağa atlamaz.
-            if let role = match.phone?.role, stable.phone != nil { stable.phone?.role = role }
+            // Yanıt seçeneği gönderilmiş mesaja dönüşünce yeni rol geçer (Windows ile aynı).
+            if let kept = match.phone, let phone = stable.phone {
+                if phone.role.isBubble, kept.role.isBubble, phone.role != .option, kept.role != .option {
+                    stable.phone?.role = kept.role
+                }
+                let slack = PhoneSteady.positionShare * match.lineHeight
+                if abs(phone.spot.top - kept.spot.top) <= slack,
+                   abs(phone.spot.left - kept.spot.left) * ScreenPhoneCard.Handset.screenShape <= slack {
+                    stable.phone?.spot = kept.spot
+                }
+            }
             let width = item.box.right - item.box.left, height = item.box.bottom - item.box.top
             let oldWidth = match.box.right - match.box.left, oldHeight = match.box.bottom - match.box.top
             if oldWidth > 0, abs(width - oldWidth) <= oldWidth * 0.05 { stable.box.right = min(1, item.box.left + oldWidth) }
             if oldHeight > 0, abs(height - oldHeight) <= oldHeight * 0.10 { stable.box.bottom = min(1, item.box.top + oldHeight) }
             if abs(item.lineHeight - match.lineHeight) <= match.lineHeight * 0.15 { stable.lineHeight = match.lineHeight }
-            if let style = item.style, let before = match.style {
+            // Örnek alınamayan turda balonun son ölçülen rengi korunur: önceden yedek renge (turuncu) düşüyordu (X, 28 Kas,
+            // beta.107).
+            if let before = match.style, before != GamePhonePalette.neutral,
+               item.style == nil || item.style == GamePhonePalette.neutral {
+                stable.style = before
+            } else if let style = item.style, let before = match.style, before != GamePhonePalette.neutral {
                 // Ön ve arka renk ayrı ayrı: seçimin gerçek yazı/zemin rengi değişimi korunur.
                 // Yazı rengi zeminin aynı yanında kaldıysa (ikisi de zeminden koyu ya da ikisi de açık) eskisi kalır: yazı
                 // örneği balonun kenar pikselinden bir koyu, bir gri okunuyor, TV'de yazı rengi titriyordu. Seçimde yazı
@@ -595,8 +604,97 @@ final class PhoneRegionSession {
         publish([])
     }
 
-    private func remember(_ source: String, _ translation: String) {
+    private func remember(_ source: String, _ translation: String) -> String {
         memory.remember(source, translation)
+    }
+
+    /// Eksik okuma sayacı: kararı OCR yazımına değil sıradaki mesajlara bağlar; aynı eksik düzen art arda
+    /// `PhoneSteady.degradedTurns` okumada gelirse bekletme biter (ekran eski sayfada takılı kalmaz).
+    private func holdDegraded(_ read: Page) -> Bool {
+        let same = degradedRead.map { prior in
+            prior.bubbles.map { ($0.group.paragraphs.count, $0.group.phone?.role) }
+                .elementsEqual(read.bubbles.map { ($0.group.paragraphs.count, $0.group.phone?.role) }, by: { $0.0 == $1.0 && $0.1 == $1.1 })
+                && zip(prior.bubbles.flatMap(\.group.paragraphs), read.bubbles.flatMap(\.group.paragraphs))
+                    .allSatisfy { PhoneSteady.sameReading($0, $1) }
+        } ?? false
+        if !same {
+            degradedRead = read
+            degradedTurns = 0
+        }
+        degradedTurns += 1
+        return degradedTurns < PhoneSteady.degradedTurns
+    }
+
+    /// Sohbet karşılaştırmasının bir satırı: grubun yazısı, düz ekrandaki yeri (yoksa karedeki kutusu), rolü ve aynı
+    /// birimde satır yüksekliği; `xScale` yatay farkı dikey birime çevirir.
+    struct ChatRow: Equatable, Sendable {
+        var text: String
+        var spot: TextBox
+        var role: ScreenPhoneCard.Role?
+        var lineHeight: Double
+        var xScale: Double
+    }
+
+    private static func chatRows(_ page: Page) -> [ChatRow] {
+        let height = max(1e-6, page.layoutRegion.bottom - page.layoutRegion.top)
+        return page.bubbles.map { bubble in
+            let group = bubble.group
+            let text = group.paragraphs.map(IconText.plain).joined(separator: " ")
+            if let phone = group.phone {
+                return ChatRow(text: text, spot: phone.spot, role: phone.role, lineHeight: group.lineHeight / height,
+                               xScale: ScreenPhoneCard.Handset.screenShape)
+            }
+            return ChatRow(text: text, spot: group.box, role: nil, lineHeight: group.lineHeight, xScale: 16.0 / 9)
+        }
+    }
+
+    /// Aynı sohbetin eksik okuması: kalan gruplar aynı sırada ve yerinde, fakat biri düşmüş, kesilmiş ya da komşusuyla
+    /// birleşmiş (X, 28 Kas, beta.107; Windows: `RegionWatcher.WorsePhoneChatRead`). Yeni mesaj veya kaydırma geçer.
+    nonisolated static func worseChatRead(_ current: [ChatRow], than previous: [ChatRow]) -> Bool {
+        // Sohbet listesinin satırları da (kişi + önizleme) aynı kuralla korunur: satır düşüyor, iki satır birleşiyordu.
+        func isBubble(_ row: ChatRow) -> Bool {
+            guard let role = row.role else { return true }
+            return role.isBubble || role == .contact || role == .preview
+        }
+        func isChat(_ row: ChatRow) -> Bool { isBubble(row) || row.role == .header || row.role == .note || row.role == .heading }
+        guard !current.isEmpty, previous.contains(where: isBubble), previous.allSatisfy(isChat), current.allSatisfy(isChat)
+        else { return false }
+        // Gösterilen balonun içinde kalan eksik parça: başı, sonu ya da ortası okunmamış; ortadaki satır düşünce balon iki
+        // parçaya bölünür (X, 28 Kas, beta.107: uzun ilk mesaj her okumada başka satırdan başlıyordu, "in the Keys…").
+        func fragment(_ row: ChatRow, _ index: Int) -> Bool {
+            let prior = previous[index]
+            guard isBubble(row), isBubble(prior) else { return false }
+            let limit = PhoneSteady.positionShare * prior.lineHeight
+            return row.spot.top >= prior.spot.top - limit && row.spot.bottom <= prior.spot.bottom + limit
+                && row.spot.left < prior.spot.right && row.spot.right > prior.spot.left
+                && PhoneSteady.truncatedReading(row.text, of: prior.text)
+        }
+        var next = 0, fragmentOf = -1
+        var worse = current.count < previous.count
+        for row in current {
+            if fragmentOf >= 0, fragment(row, fragmentOf) { continue }
+            fragmentOf = -1
+            var matched = false
+            while next < previous.count, !matched {
+                let prior = previous[next]
+                let limit = PhoneSteady.positionShare * prior.lineHeight
+                let xLimit = limit / max(0.1, prior.xScale)
+                let sameTop = abs(row.spot.top - prior.spot.top) <= limit
+                let samePlace = abs(row.spot.left - prior.spot.left) <= xLimit || abs(row.spot.right - prior.spot.right) <= xLimit
+                if sameTop, samePlace, PhoneSteady.sameReading(row.text, prior.text) {
+                    matched = true
+                } else if fragment(row, next) {
+                    (matched, worse, fragmentOf) = (true, true, next)
+                } else if isBubble(row), isBubble(prior), sameTop, next + 1 < previous.count, isBubble(previous[next + 1]),
+                          PhoneSteady.mergedReading(row.text, prior.text, previous[next + 1].text) {
+                    (matched, worse) = (true, true)
+                    next += 1
+                }
+                next += 1
+            }
+            if !matched { return false }
+        }
+        return worse
     }
 
     /// Paketten, hafızadan ya da zaten Türkçe olduğu için hazır çeviriler. Kişinin adı (sohbet başlığı) çevrilmez: "Rose"
@@ -713,7 +811,14 @@ final class PhoneRegionSession {
                                      line: Double? = nil) -> [ScreenTranslation.Item] {
         guard options.enabled, let pose, !items.isEmpty else { return items.filter { !$0.unchanged } }
         let handset = ScreenPhoneCard.Handset(pose: pose, aspect: Double(frameSize.width) / Double(max(1, frameSize.height)))
-        return ScreenPhoneCard.layout(items, handset: handset, textScale: options.textScale, line: line).filter { !$0.unchanged }
+        // Hizalı panelde balonlar da panelin sabit telefon eksenini izler (Windows ile aynı).
+        let anchored = items.map { item -> ScreenTranslation.Item in
+            guard let placement = item.phone, placement.role.isBubble else { return item }
+            var moved = item
+            moved.box = handset.frameBox(placement.spot)
+            return moved
+        }
+        return ScreenPhoneCard.layout(anchored, handset: handset, textScale: options.textScale, line: line).filter { !$0.unchanged }
     }
 
     private static func sameSurface(_ a: PhoneTextStyle?, _ b: PhoneTextStyle?) -> Bool {

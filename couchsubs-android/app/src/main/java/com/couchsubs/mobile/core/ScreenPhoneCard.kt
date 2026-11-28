@@ -74,6 +74,8 @@ object ScreenPhoneCard {
     val CARD = TextSurface("#141518", "#F3EEE4")
     val INCOMING = TextSurface("#F3EEE4", "#17181B")
     val OUTGOING = TextSurface("#F5B83D", "#17181B")
+    /** Balon sınırı ölçülemiyorsa köşe yarıçapı, satır yüksekliğine oranla (Windows ve Mac ile aynı). */
+    const val BUBBLE_RADIUS = 0.6
     val NOTE = TextSurface("#141518", "#A9A59C")
     /** Panelin köşe yarıçapı (1080 satırlık ekranda piksel) ve zemin örtüsü. */
     const val PANEL_RADIUS = 18.0
@@ -156,6 +158,8 @@ object ScreenPhoneCard {
 
         /** Çevirmene gitmez, aslıyla gösterilir (ad). */
         val keepsText: Boolean get() = this == HEADER || this == CONTACT
+        /** Sohbet balonu ya da oyuncunun cevap seçeneği. */
+        val isBubble: Boolean get() = this == INCOMING || this == OUTGOING || this == MESSAGE || this == OPTION
         /**
          * Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun
          * üstüne çizilmez, panelde kart olur.
@@ -441,7 +445,8 @@ object ScreenPhoneCard {
             val longest = (lines.maxOfOrNull { it.length } ?: 0) * line * CHAR_WIDTH / handset.aspect + 2 * pad
             val width = if (bubble) minOf(widest, maxOf(cardWidth * BUBBLE_MIN, longest)) else widest
             val surface = when (kind) {
-                Role.OUTGOING -> bubbleColor(if (role == Role.OPTION) optionStyle else item.surface, OUTGOING)
+                // Örneği eksik seçenekte komşusunun rengi kullanılır; okunan seçeneğin kendi seçim rengi korunur.
+                Role.OUTGOING -> bubbleColor(item.surface, if (role == Role.OPTION) optionStyle ?: OUTGOING else OUTGOING)
                 Role.INCOMING -> bubbleColor(item.surface, INCOMING)
                 // Bölüm başlığı ("Önerilen", "Mesajlar") soluk ve kalın küçük başlık, sola yaslı; not ortalı (iPhone ile aynı).
                 else -> NOTE

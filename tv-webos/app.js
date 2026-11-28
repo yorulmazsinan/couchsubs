@@ -6,7 +6,7 @@
   'use strict';
 
   // TV uygulamasının sürümü: appinfo.json, tv-tizen/config.xml ve tv-android/app/build.gradle ile aynı tutulur.
-  var APP_VERSION = '0.9.127';
+  var APP_VERSION = '0.9.128';
   var t = window.t;
   var config = window.COUCHSUBS_CONFIG || {};
   var platform = window.COUCHSUBS_PLATFORM;
@@ -1462,6 +1462,12 @@
   // Panel ve mesajları yerinde güncellenir (TV uygulaması 0.9.78; X, 22 Kas: "yazılar sürekli oynuyor"): aynı mesajın satırı
   // (anahtarı: parçası, yazısı, aynı yazının kaçıncı tekrarı) yeniden yaratılmaz, yeni mesaj alta eklenir, düşen mesaj
   // kalkar. Panel gerçekten yer değiştirince CSS geçişiyle bir kerede kayar.
+  function phoneRadius(el, item, height) {
+    // Satır ve yarıçap tüm ekranın yüksekliğine oranlıdır. Yeniden kullanılan balon eski göndericinin CSS değerine dönebilir.
+    var radius = typeof item.radius === 'number' && item.radius >= 0 ? (item.radius * height) + 'px' : '';
+    if (el.style.borderRadius !== radius) el.style.borderRadius = radius;
+  }
+
   function placePanel(host, items, card, width, height, panel) {
     var box = validBox(card.box);
     if (!panel) {
@@ -1560,6 +1566,7 @@
         row.couchsubsKey = rowKey;
         row.couchsubsPaint = paint;
       }
+      phoneRadius(bubble, message, height);
       rows.push(row);
     }
     // Sıra yalnız değiştiyse taşınır; yerinde kalan satıra dokunulmaz.
@@ -1690,6 +1697,7 @@
         row.couchsubsPaint = paint;
       }
       if (row.className !== rowClass) row.className = rowClass;
+      if (!listing) phoneRadius(row.firstChild, item, height);
       var left = Math.round((at.left - box.left) * width), top = Math.round((at.top - box.top) * height);
       var rowWidth = Math.max(1, Math.round((at.right - at.left) * width));
       // Kart en az telefondaki satır boyunda (bilgisayarın kutusu); Türkçe uzunsa kart uzar, alttakiler itilir.
@@ -1785,6 +1793,7 @@
       var styled = false;
       if (phone) {
         el.className += ' phone';
+        phoneRadius(el, item, height);
         var surface = item.surface;
         if (surface && phoneColor(surface.background) && phoneColor(surface.foreground)) {
           el.style.backgroundColor = surface.background;
@@ -1798,6 +1807,7 @@
         // (setApart: false) bunlar da altyazı gibi siyah kutuda.
         styled = applyLook(el, item);
       }
+      if (!phone && item.bubble === true) phoneRadius(el, item, height);
       fillText(el, item.text, item.icons);
       // Yandaki kenar payı bilgisayarın verdiği alanda kalır (room): tuş simgesinin üstüne binmez (#1203).
       var room = !phone && validBox(item.room);

@@ -147,10 +147,8 @@ public partial class RegionWatcherTests
         Assert.Equal("Gidip bakarım.", server.Sent[^1].Text);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task OmittingOneBubbleBetweenUnchangedNeighborsRequiresASecondRead(bool stillMissing)
+    [Fact]
+    public async Task OmittingOneBubbleBetweenUnchangedNeighborsRequiresConfirmation()
     {
         using var lifetime = new CancellationTokenSource();
         var phone = Phone with { PanelLifetime = lifetime.Token, Region = new CropRegion(0, 1, 0, 1) };
@@ -166,14 +164,10 @@ public partial class RegionWatcherTests
         reader.Lines = [full[0], full[1], full[3]];
         await watcher.PassAsync(Shade(170), [phone]);
         Assert.Equal(sends, server.Sent.Count);
-        if (!stillMissing) reader.Lines = full;
-
-        await watcher.PassAsync(Shade(170), [phone]);
-        // Düşen balon PhoneSteady.HoldTurns tur bekletilir; sonra da yoksa silinir.
         Assert.Equal(3, server.Blocks[^1]?.Count);
-        await watcher.PassAsync(Shade(170), [phone]);
-        Assert.Equal(stillMissing ? 2 : 3, server.Blocks[^1]?.Count);
-        Assert.DoesNotContain(server.Blocks, blocks => blocks?.Count == 2 && !stillMissing);
+        for (var i = 0; i < PhoneSteady.DegradedTurns - 1; i++)
+            await watcher.PassAsync(Shade(170), [phone]);
+        Assert.Equal(2, server.Blocks[^1]?.Count);
     }
 
     [Fact]

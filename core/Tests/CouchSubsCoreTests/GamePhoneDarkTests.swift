@@ -101,6 +101,18 @@ final class GamePhoneDarkTests: XCTestCase {
         }
     }
 
+    /// Ton eşitleme simsiyaha yakın karede denenmez (`GamePhoneGeometry.equalizable`): her platformda aynı.
+    func testEqualizationNeedsABrightEnd() throws {
+        for item in try vectors()["equalizable"] as! [[String: Any]] {
+            var counts = [Int](repeating: 0, count: 1021), total = 0
+            for pair in item["counts"] as! [[NSNumber]] {
+                counts[pair[0].intValue] += pair[1].intValue
+                total += pair[1].intValue
+            }
+            XCTAssertEqual(GamePhoneGeometry.equalizable(counts: counts, total: total), item["equalizable"] as! Bool, item["name"] as! String)
+        }
+    }
+
     /// Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
     /// ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.
     func testDarkVariantsOpenThePhone() throws {

@@ -418,6 +418,10 @@ class SubtitleServer(
             }
             // Telefon mesajı kendi balonunda: TV çeviriyi balona sığdırır (eski TV yok sayar, özgün stilde çizer).
             if (item.bubble) json["bubble"] = true
+            // OCR kutusu balonun dış kenarını içermez. Köşe, oyun görünüşündeki gibi satır yüksekliğinin 0,6'sı kadar (kare
+            // yüksekliğine oranla, [TextPaint.radius] ile aynı birimde; TV uygulaması 0.9.128); ölçülmemiş kuyruk gönderilmez.
+            if (item.phone?.role?.isBubble == true && !json.containsKey("radius") && item.lineHeight > 0)
+                json["radius"] = Json.Decimal(Math.round((ScreenPhoneCard.BUBBLE_RADIUS * item.lineHeight).coerceIn(0.0, 1.0) * 10000) / 10000.0)
             // Telefonun yanındaki sohbet panelinin parçası: yeni TV paneli akışla çizer; eski TV alanı yok sayar.
             item.panel?.let { json["panel"] = it.wire }
             // Hizalı panel (TV uygulaması 0.9.106): parçalar kutularının yerinde, zeminsiz; eski TV akışla çizer (Mac ile aynı).

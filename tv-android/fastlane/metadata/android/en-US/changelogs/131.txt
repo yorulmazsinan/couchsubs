@@ -1,0 +1,1 @@
+0.9.128: Phone chat bubbles are drawn with rounded corners like the game's own bubbles.

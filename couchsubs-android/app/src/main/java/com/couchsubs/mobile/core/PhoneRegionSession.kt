@@ -35,11 +35,78 @@ internal class PhoneRegionSession(
          * ekran yazıları yerinde kalır), Balonların Üstünde'de her çeviri kendi balonunun yerinde (çevirisi aslıyla aynı
          * olanlar atılır). Telefonun yeri bilinmiyorsa balonlar yerinde kalır (Mac: PhoneRegionSession.arranged).
          */
+        /**
+         * Sohbet karşılaştırmasının bir satırı: grubun yazısı, düz ekrandaki yeri (yoksa karedeki kutusu), rolü ve aynı
+         * birimde satır yüksekliği; [xScale] yatay farkı dikey birime çevirir.
+         */
+        data class ChatRow(val text: String, val spot: TextBox, val role: ScreenPhoneCard.Role?, val lineHeight: Double,
+                           val xScale: Double)
+
+        /**
+         * Aynı sohbetin eksik okuması: kalan gruplar aynı sırada ve yerinde, fakat biri düşmüş, kesilmiş ya da komşusuyla
+         * birleşmiş (X, 28 Kas, beta.107; Windows: RegionWatcher.WorsePhoneChatRead). Yeni mesaj veya kaydırma geçer.
+         */
+        fun worseChatRead(current: List<ChatRow>, previous: List<ChatRow>): Boolean {
+            // Sohbet listesinin satırları da (kişi + önizleme) aynı kuralla korunur: satır düşüyor, iki satır birleşiyordu.
+            fun isBubble(row: ChatRow): Boolean {
+                val role = row.role ?: return true
+                return role.isBubble || role == ScreenPhoneCard.Role.CONTACT || role == ScreenPhoneCard.Role.PREVIEW
+            }
+            fun isChat(row: ChatRow) = isBubble(row) || row.role == ScreenPhoneCard.Role.HEADER ||
+                row.role == ScreenPhoneCard.Role.NOTE || row.role == ScreenPhoneCard.Role.HEADING
+            if (current.isEmpty() || previous.none(::isBubble) || !previous.all(::isChat) || !current.all(::isChat)) return false
+            // Gösterilen balonun içinde kalan eksik parça: başı, sonu ya da ortası okunmamış; ortadaki satır düşünce balon iki
+            // parçaya bölünür (X, 28 Kas, beta.107: uzun ilk mesaj her okumada başka satırdan başlıyordu, "in the Keys…").
+            fun fragment(row: ChatRow, index: Int): Boolean {
+                val prior = previous[index]
+                if (!isBubble(row) || !isBubble(prior)) return false
+                val limit = PhoneSteady.POSITION_SHARE * prior.lineHeight
+                return row.spot.top >= prior.spot.top - limit && row.spot.bottom <= prior.spot.bottom + limit &&
+                    row.spot.left < prior.spot.right && row.spot.right > prior.spot.left &&
+                    PhoneSteady.truncatedReading(row.text, prior.text)
+            }
+            var next = 0
+            var fragmentOf = -1
+            var worse = current.size < previous.size
+            for (row in current) {
+                if (fragmentOf >= 0 && fragment(row, fragmentOf)) continue
+                fragmentOf = -1
+                var matched = false
+                while (next < previous.size && !matched) {
+                    val prior = previous[next]
+                    val limit = PhoneSteady.POSITION_SHARE * prior.lineHeight
+                    val xLimit = limit / maxOf(0.1, prior.xScale)
+                    val sameTop = abs(row.spot.top - prior.spot.top) <= limit
+                    val samePlace = abs(row.spot.left - prior.spot.left) <= xLimit || abs(row.spot.right - prior.spot.right) <= xLimit
+                    if (sameTop && samePlace && PhoneSteady.sameReading(row.text, prior.text)) {
+                        matched = true
+                    } else if (fragment(row, next)) {
+                        matched = true
+                        worse = true
+                        fragmentOf = next
+                    } else if (isBubble(row) && isBubble(prior) && sameTop && next + 1 < previous.size && isBubble(previous[next + 1]) &&
+                        PhoneSteady.mergedReading(row.text, prior.text, previous[next + 1].text)) {
+                        matched = true
+                        worse = true
+                        next++
+                    }
+                    next++
+                }
+                if (!matched) return false
+            }
+            return worse
+        }
+
         fun arranged(items: List<ScreenTranslation.Item>, pose: GamePhoneGeometry.Pose?, aspect: Double,
                      options: PhonePanelOptions, line: Double? = null): List<ScreenTranslation.Item> {
             if (!options.enabled || pose == null || items.isEmpty()) return items.filter { !it.unchanged }
-            return ScreenPhoneCard.layout(items, ScreenPhoneCard.Handset(pose, aspect), options.textScale, line)
-                .filter { !it.unchanged }
+            val handset = ScreenPhoneCard.Handset(pose, aspect)
+            // Hizalı panelde balonlar da panelin sabit telefon eksenini izler (Windows ile aynı).
+            val anchored = items.map { item ->
+                val placement = item.phone
+                if (placement != null && placement.role.isBubble) item.copy(box = handset.frameBox(placement.spot)) else item
+            }
+            return ScreenPhoneCard.layout(anchored, handset, options.textScale, line).filter { !it.unchanged }
         }
 
         /**
@@ -63,7 +130,11 @@ internal class PhoneRegionSession(
                 val line = if (abs(item.lineHeight - before.lineHeight) <= before.lineHeight * 0.15) before.lineHeight else item.lineHeight
                 var surface = item.surface
                 val old = before.surface
-                if (surface != null && old != null) {
+                // Örnek alınamayan turda balonun son ölçülen rengi korunur: önceden yedek renge (turuncu) düşüyordu (X, 28 Kas,
+                // beta.107).
+                if (old != null && old != GamePhonePalette.neutral && (surface == null || surface == GamePhonePalette.neutral)) {
+                    surface = old
+                } else if (surface != null && old != null && old != GamePhonePalette.neutral) {
                     // Ön ve arka renk ayrı ayrı: seçimin gerçek yazı/zemin rengi değişimi korunur.
                     // Yazı rengi zeminin aynı yanında kaldıysa eskisi kalır (örnek bir siyah bir koyu gri okunuyordu); seçimde
                     // (siyahtan beyaza) değişim izlenir.
@@ -76,9 +147,17 @@ internal class PhoneRegionSession(
                     // İki ayrı okunur paletin karışımı kontrastı düşürebilir: o zaman güncel çift kullanılır.
                     if (surface != old && surface != item.surface && contrast(surface.background, surface.foreground) < 4.5) surface = item.surface
                 }
-                val role = before.phone?.role
-                item.copy(source = before.source, box = box, lineHeight = line, surface = surface,
-                    phone = if (role != null) item.phone?.copy(role = role) else item.phone)
+                var phone = item.phone
+                val kept = before.phone
+                if (phone != null && kept != null) {
+                    // Yanıt seçeneği gönderilmiş mesaja dönüşünce yeni rol geçer (Windows ile aynı).
+                    if (phone.role.isBubble && kept.role.isBubble && phone.role != ScreenPhoneCard.Role.OPTION &&
+                        kept.role != ScreenPhoneCard.Role.OPTION) phone = phone.copy(role = kept.role)
+                    val slack = PhoneSteady.POSITION_SHARE * before.lineHeight
+                    if (abs(phone.spot.top - kept.spot.top) <= slack &&
+                        abs(phone.spot.left - kept.spot.left) * ScreenPhoneCard.Handset.SCREEN_SHAPE <= slack) phone = phone.copy(spot = kept.spot)
+                }
+                item.copy(source = before.source, box = box, lineHeight = line, surface = surface, phone = phone)
             }
 
         /** Kanallar en çok [tolerance] farklı (palet sekizli basamaklara yuvarlar; bir basamak sıkıştırma titreşimidir). */
@@ -129,6 +208,9 @@ internal class PhoneRegionSession(
     private var shownPage: Page? = null
     /** Son okuma kaç turdur bekletiliyor (en çok [PhoneSteady.HOLD_TURNS]); sonra okuma her durumda ilerler. */
     private var holds = 0
+    /** Gösterilen sohbetin eksik okuması ve art arda kaç turdur aynı geldiği ([PhoneSteady.DEGRADED_TURNS]). */
+    private var degradedRead: Page? = null
+    private var degradedTurns = 0
     /** Ekrandaki sayfanın türü (sohbet listesi mi) ve öbür türü veren ardışık okuma sayısı ([PhoneSteady.KIND_TURNS]). */
     private var shownList: Boolean? = null
     private var kindVotes = 0
@@ -230,16 +312,22 @@ internal class PhoneRegionSession(
             lastRead = next
             scrolling = before != null && scrolled(before, next)
             if (scrolling) note("PhoneSteady", "kaydırma algılandı, bekletme ve konum sabitleme atlandı", text(next))
-            // Yerinde duran iki komşu arasından düşen balon ya da uzun mesajdaki birkaç bozuk harf tek okumada ekrandan
-            // silinmez, çeviri yenilenmez: sonraki tur mutlaka yeniden okur; aynı görünen gerçek değişiklik o turda ilerler.
+            // Aynı sohbetin eksik okuması (düşen, kesilen ya da komşusuyla birleşen balon) gösterilen balonların yerine
+            // geçmez; aynı eksik düzen [PhoneSteady.DEGRADED_TURNS] okuma sürerse geçer (X, 28 Kas, beta.107; Windows ile aynı).
             val previous = shownPage
+            if (!scrolling && previous != null && rendered.isNotEmpty() &&
+                worseChatRead(chatRows(next), chatRows(previous)) && holdDegraded(next)) {
+                note("PhoneSteady", "sohbette eksik okuma, gösterilen balonlar korundu", text(next))
+                recheck = true
+                return
+            }
+            degradedRead = null
+            degradedTurns = 0
+            // Uzun mesajdaki birkaç bozuk harf tek okumada ekrandan silinmez, çeviri yenilenmez: sonraki tur mutlaka yeniden
+            // okur; aynı görünen gerçek değişiklik o turda ilerler.
             if (!scrolling && holds < PhoneSteady.HOLD_TURNS && previous != null && previous.region.isClose(next.region, 0.01) &&
-                (missingInteriorBubble(previous, next) ||
-                    (sameLayout(previous, next, start.image) && GamePhoneText.hasAdjacentOcrEdits(text(previous), text(next))))) {
-                if (holds == 0) {
-                    val why = if (missingInteriorBubble(previous, next)) "balon düştü" else "harf oynaması"
-                    note("PhoneSteady", "okuma ${PhoneSteady.HOLD_TURNS} tura dek bekletildi ($why)", text(next))
-                }
+                sameLayout(previous, next, start.image) && GamePhoneText.hasAdjacentOcrEdits(text(previous), text(next))) {
+                if (holds == 0) note("PhoneSteady", "okuma ${PhoneSteady.HOLD_TURNS} tura dek bekletildi (harf oynaması)", text(next))
                 holds++
                 recheck = true
                 return
@@ -269,7 +357,10 @@ internal class PhoneRegionSession(
         val shownKind = shownList
         if (fresh && current.bubbles.isNotEmpty() && shownKind != null && shownKind != list && rendered.isNotEmpty()) {
             kindVotes++
-            if (kindVotes < PhoneSteady.KIND_TURNS) {
+            // Sohbet listesinin yalnız kart okunuşu (başlık ve önizlemeler seçilemedi, satırlar birbirine karışır) OCR
+            // sapmasıdır: liste ile kartlar arasında her saniye gidiliyordu (X, 28 Kas, beta.107; Windows ile aynı).
+            val cardsOnly = shownKind && current.bubbles.all { it.group.phone?.role == ScreenPhoneCard.Role.CARD }
+            if (kindVotes < (if (cardsOnly) PhoneSteady.DEGRADED_TURNS else PhoneSteady.KIND_TURNS)) {
                 note("PhoneSteady", "sayfa türü değişti (${if (list) "liste" else "sohbet"}), bir okuma daha bekleniyor", text(current))
                 page = null
                 return
@@ -360,8 +451,8 @@ internal class PhoneRegionSession(
                 }
                 val shown = if (cuts[index] == null) translated
                     else GamePhoneText.cutTranslation(GamePhoneText.keepingLeadingSymbol(source, translated))
-                remember(source, shown)
-                available[source] = shown
+                // Aynı mesajın önceki okunuşu çevrildiyse onun Türkçesi kalır ([PhoneMemory.remember]).
+                available[source] = remember(source, shown)
             }
         } catch (error: Exception) {
             needsWork = true
@@ -371,8 +462,13 @@ internal class PhoneRegionSession(
         val last = latest ?: return
         if (last.image !== verified.image && !matches(current, last)) {
             verified = last
-            current = reread(verified) ?: run { missed(); return }
-            available = availableTranslations(current.bubbles.map { it.group }, packLookup, skipsTurkish)
+            val fresh = reread(verified) ?: run { missed(); return }
+            // Motor çalışırken balon düşmüş, kesilmiş ya da birleşmiş okunduysa çevrilen tam sayfa gösterilir; sonraki tur
+            // aynı eksik düzeni olağan doğrulama yolunda yeniden okur (Windows ile aynı).
+            if (!worseChatRead(chatRows(fresh), chatRows(current))) {
+                current = fresh
+                available = availableTranslations(current.bubbles.map { it.group }, packLookup, skipsTurkish)
+            }
         }
         if (closed) return
         publish(items(current, available))
@@ -398,28 +494,32 @@ internal class PhoneRegionSession(
     private fun text(page: Page): String = page.bubbles.flatMap { it.group.paragraphs }.joinToString(" ")
 
     /**
-     * Yalnız tek iç balon eksilmiş: kalanların yazısı ve kutuları aynı sırada aynı yerde (0,012), eksilen ilk balon değil
-     * ve çevirisi gösteriliyordu. Bu bir OCR atlaması olabilir; kaydırma, yeni yazı ya da sayfanın kapanması buna takılmaz.
+     * Eksik okuma sayacı: kararı OCR yazımına değil sıradaki mesajlara bağlar; aynı eksik düzen art arda
+     * [PhoneSteady.DEGRADED_TURNS] okumada gelirse bekletme biter (ekran eski sayfada takılı kalmaz).
      */
-    private fun missingInteriorBubble(previous: Page, current: Page): Boolean {
-        val before = previous.bubbles
-        val now = current.bubbles
-        if (now.size < 2 || before.size != now.size + 1) return false
-        var missing = false
-        for (i in now.indices) {
-            val block = now[i].group
-            var prior = before[if (missing) i + 1 else i].group
-            if (prior.paragraphs != block.paragraphs) {
-                if (missing || i == 0 || before[i].group.paragraphs.any { !memory.knows(it) }) return false
-                missing = true
-                prior = before[i + 1].group
-                if (prior.paragraphs != block.paragraphs) return false
-            }
-            if (abs(block.box.left - prior.box.left) > 0.012 || abs(block.box.right - prior.box.right) > 0.012 ||
-                abs(block.box.top - prior.box.top) > 0.012 || abs(block.box.bottom - prior.box.bottom) > 0.012) return false
+    private fun holdDegraded(read: Page): Boolean {
+        val prior = degradedRead
+        val same = prior != null &&
+            prior.bubbles.map { it.group.paragraphs.size to it.group.phone?.role } ==
+                read.bubbles.map { it.group.paragraphs.size to it.group.phone?.role } &&
+            prior.bubbles.flatMap { it.group.paragraphs }.zip(read.bubbles.flatMap { it.group.paragraphs })
+                .all { (a, b) -> PhoneSteady.sameReading(a, b) }
+        if (!same) {
+            degradedRead = read
+            degradedTurns = 0
         }
-        // Kalanlar yerinde, yalnız en alttaki balon düştü: yeni mesaj eklenir, silinmez; bu da bir OCR atlamasıdır.
-        return missing || before.last().group.paragraphs.none { !memory.knows(it) }
+        return ++degradedTurns < PhoneSteady.DEGRADED_TURNS
+    }
+
+    private fun chatRows(page: Page): List<ChatRow> {
+        val height = maxOf(1e-6, page.region.bottom - page.region.top)
+        return page.bubbles.map { bubble ->
+            val group = bubble.group
+            val text = group.paragraphs.joinToString(" ") { IconText.plain(it) }
+            val phone = group.phone
+            if (phone != null) ChatRow(text, phone.spot, phone.role, group.lineHeight / height, ScreenPhoneCard.Handset.SCREEN_SHAPE)
+            else ChatRow(text, group.box, null, group.lineHeight, 16.0 / 9)
+        }
     }
 
     /** Aynı yerleşim: balon sayısı ve sınırları aynı, kutular iki pikselden az oynamış, zemin/yazı rengi yakın. */

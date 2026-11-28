@@ -56,6 +56,69 @@ public class PhoneOptionTests
             PhoneChat.WithOptions([ScreenPhoneCard.Role.Incoming, ScreenPhoneCard.Role.Outgoing, ScreenPhoneCard.Role.Note]));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    public void OutgoingRepliesWithALineHeightGapStaySeparate(string punctuation)
+    {
+        static TextLine Line(string text, double top)
+        {
+            var box = new TextBox(.31, top, .93, top + .025);
+            return new TextLine(text, box) { PhoneBox = box };
+        }
+        var reading = new Reading([
+            Line("Whatever the next stunt is, maybe", .60),
+            Line("add wearing underwear to the plan" + punctuation, .630),
+            Line("You still have that jumpsuit? I kinda", .678),
+            Line("wanna see Jay in it. You'll like it,", .708),
+            Line("Jay. Really breathable.", .738),
+        ]);
+        var groups = GamePhoneText.Groups(GamePhoneText.ForTranslation(reading));
+        Assert.Equal(["Whatever the next stunt is, maybe add wearing underwear to the plan" + punctuation,
+            "You still have that jumpsuit? I kinda wanna see Jay in it. You'll like it, Jay. Really breathable."],
+            groups.SelectMany(group => group.Paragraphs));
+    }
+
+    /// <summary>X, 28 Kas, beta.107: yayımlanan gönderide panelin yazısız zemini "boş kutu" sayılıp düşüyordu; TV balonları
+    /// köşeli kutu olarak çiziyor, panel her yayında köşeli kutularla yuvarlak balonlar arasında gidip geliyordu.</summary>
+    [Fact]
+    public void DrawableKeepsThePanelCard()
+    {
+        var handset = new ScreenPhoneCard.Handset(new GamePhoneGeometry.Pose(0.6087, 0.1026, 0.5528, 0.8395), 16.0 / 9);
+        var item = new ScreenTranslation.Item("Hey Lu, checking in.", "Selam Lu, haber vereyim dedim.", new TextBox(0.5, 0.3, 0.62, 0.33), 0.016)
+        {
+            Phone = new ScreenPhoneCard.Placement(ScreenPhoneCard.Role.Incoming, new TextBox(0.1, 0.3, 0.7, 0.33)),
+        };
+        var laid = ScreenPhoneCard.Layout([item], handset);
+        Assert.Contains(laid, block => block.Panel == ScreenPhoneCard.PanelPart.Card);
+        Assert.Equal(laid.Count, RegionWatcher.Drawable(laid).Count);
+    }
+
+    [Theory]
+    [InlineData(ScreenPhoneCard.Role.Incoming, true)]
+    [InlineData(ScreenPhoneCard.Role.Outgoing, true)]
+    [InlineData(ScreenPhoneCard.Role.Message, true)]
+    [InlineData(ScreenPhoneCard.Role.Option, true)]
+    [InlineData(ScreenPhoneCard.Role.Header, false)]
+    [InlineData(ScreenPhoneCard.Role.Note, false)]
+    [InlineData(ScreenPhoneCard.Role.Preview, false)]
+    public void PhoneRegionJsonCarriesRadiusOnlyForChatBubbles(ScreenPhoneCard.Role role, bool rounded)
+    {
+        var box = new TextBox(.2, .3, .5, .4);
+        var item = new ScreenTranslation.Item("Source", "Çeviri", box, .025)
+        {
+            Phone = new ScreenPhoneCard.Placement(role, box),
+        };
+        foreach (var block in new[] { item, item with { Panel = ScreenPhoneCard.PanelPart.Mine } })
+        {
+            var json = SubtitleServer.RegionData("game-phone", block.Translation, box, block.LineHeight, null, [block]);
+            var payload = Assert.Single(Assert.IsType<List<SortedDictionary<string, object>>>(json["blocks"]));
+            if (rounded) Assert.Equal(.015m, Assert.IsType<decimal>(payload["radius"]));
+            else Assert.DoesNotContain("radius", payload.Keys);
+            Assert.DoesNotContain("tail", payload.Keys);
+        }
+    }
+
     /// <summary>Yanda Panel: seçenekler oyuncunun tarafında ayrı balonlar, ikisi de aynı renkte.</summary>
     [Fact]
     public void OptionsShareOneLookInThePanel()
@@ -77,6 +140,14 @@ public class PhoneOptionTests
         Assert.Equal(blue, options[0].Style);
         Assert.Equal(blue, options[1].Style);
         Assert.True(options[0].Box.Bottom < options[1].Box.Top);
+        var selected = new PhoneTextStyle("#F5B83D", "#17181B");
+        var first = Make("First reply.", ScreenPhoneCard.Role.Option, .65, blue);
+        var second = Make("Second reply.", ScreenPhoneCard.Role.Option, .72, blue);
+        foreach (var styles in new[] { new[] { selected, blue }, new[] { blue, selected } })
+        {
+            var panel = ScreenPhoneCard.Layout([first with { Style = styles[0] }, second with { Style = styles[1] }], handset);
+            Assert.Equal(styles, panel.Where(item => item.Panel == ScreenPhoneCard.PanelPart.Mine).Select(item => item.Style));
+        }
     }
 
     /// <summary>Saydam pencere: uzun ilk mesaj dar sütuna sığmayınca düşmez; sütun genişler (gerekirse yazı küçülür).</summary>

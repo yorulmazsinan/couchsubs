@@ -9,8 +9,11 @@ import Foundation
 enum PhoneSteady {
     /// Telefon art arda bu kadar turda bulunamazsa ya da okuma doğrulanamazsa çeviriler silinir.
     static let missTurns = 3
-    /// Tek turluk OCR sapması (düşen balon, yan yana bozuk harfler) en çok bu kadar tur bekletilir.
+    /// Yan yana bozuk harfler en çok bu kadar tur bekletilir.
     static let holdTurns = 2
+    /// Eksik düzen (düşen, kesilen ya da komşusuyla birleşen balon) ancak sekiz ardışık okumada (~4 sn) doğrulanırsa gösterilen
+    /// sohbeti değiştirir (X, 28 Kas, beta.107; Windows ve Android ile aynı).
+    static let degradedTurns = 8
     /// Sayfanın türü (sohbet listesi ya da sohbet) ancak bu kadar ardışık okuma aynı yeni türü verirse değişir: sallanan
     /// telefonda tek okumada bölüm başlığı kaçınca TV'deki panel liste ile balonlar arasında her saniye gidip geliyordu
     /// (LG, beta.93).
@@ -27,26 +30,21 @@ enum PhoneSteady {
 
     /// Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın OCR'la biraz farklı okunuşununki. Sayı ya da
     /// olumsuzluk ekleyen/düşüren okuma ("at 5" / "at 6", "can" / "can't") aynı mesaj sayılmaz. Birden çok aday varsa
-    /// uzunluğu en yakın olan, eşitlikte alfabede önce gelen (her platformda aynı sonuç).
+    /// kayıt sırasında (`order`) ilk eşleşen; sıra verilmezse alfabede önce gelen (her platformda aynı sonuç).
     ///
     /// Sadeleştirilmiş hali birebir aynı okuma (yalnız büyük/küçük harf ya da noktalama farkı: "Ok." / "ok") kısa satırda
     /// da aynı mesajdır: önceden kısa mesaj her noktalama oynamasında yeniden çevriliyor, balonu kayboluyordu (X, GTA 6
     /// telefonu: "yazılar sürekli oynuyor").
-    static func translation(of source: String, in known: [String: String]) -> String? {
+    static func translation(of source: String, in known: [String: String], order: [String]? = nil) -> String? {
         if let exact = known[source] { return exact }
-        var best: (distance: Int, source: String, translation: String)?
-        let text = TextMatch.normalize(source)
-        for (old, translation) in known where sameReading(source, old) {
-            let distance = abs(text.count - TextMatch.normalize(old).count)
-            if best.map({ distance < $0.distance || (distance == $0.distance && old < $0.source) }) ?? true {
-                best = (distance, old, translation)
-            }
-        }
-        return best?.translation
+        for old in order ?? known.keys.sorted() where sameReading(source, old) { return known[old] }
+        return nil
     }
 
-    /// İki okuma aynı mesaj mı: birebir aynı, sadeleştirilmiş hali aynı ya da (en az `minimumLetters` harfli iki uzun
-    /// mesajda) Levenshtein oranı en az `sameMessage`; sayı ya da olumsuzluk ekleyen/düşüren okuma aynı sayılmaz.
+    /// İki okuma aynı mesaj mı: birebir aynı, sadeleştirilmiş hali aynı ya da en az `minimumLetters` harfli iki uzun
+    /// mesajda yalnız OCR artığı farklı: kesme işareti, noktalama, "rn" / "m", "l" / "i", yan yana iki bozuk sözcük ya da en
+    /// çok `slipWords` sözcükte tek harf kayması. Gerçek sözcük değişimi ("here" / "there"), sayı ya da olumsuzluk
+    /// ekleyen/düşüren okuma aynı sayılmaz (Windows ve Android ile aynı).
     static func sameReading(_ a: String, _ b: String) -> Bool {
         if a == b { return true }
         let x = TextMatch.normalize(a), y = TextMatch.normalize(b)
@@ -54,10 +52,90 @@ enum PhoneSteady {
         // "Ok?" / "Ok." aynı harfler, başka anlam: kısa satırda soru işareti ikisinde de olmalı. Uzun mesajda düşen soru
         // işareti OCR'ın kaçırdığı noktalamadır: mesaj yeniden çevrilmiyor.
         if x == y { return a.contains("?") == b.contains("?") || x.filter(\.isLetter).count >= minimumLetters }
-        // "rn" / "m": OCR'ın en sık karıştırdığı çift; benzerlik ölçülürken birleştirilir.
-        let folded = (x.replacingOccurrences(of: "rn", with: "m"), y.replacingOccurrences(of: "rn", with: "m"))
-        return x.filter(\.isLetter).count >= minimumLetters && y.filter(\.isLetter).count >= minimumLetters
-            && TextMatch.isSimilar(folded.0, folded.1, threshold: sameMessage)
+        guard x.filter(\.isLetter).count >= minimumLetters, y.filter(\.isLetter).count >= minimumLetters else { return false }
+        // Uzun cümlede gerçek bir sözcüğün değişmesi ("here" / "there") benzerlik eşiğini geçebilir (X, 28 Kas, beta.107):
+        // yalnız OCR'ın karıştırdığı harfler, kesme işareti ve noktalama artığı eşleşir.
+        // Bitişik ya da ayrık okunan sözcük ("Yo Istill" / "Yo I still") da aynı mesajdır.
+        let p = readingLetters(a), q = readingLetters(b)
+        return p == q || p.replacingOccurrences(of: " ", with: "") == q.replacingOccurrences(of: " ", with: "")
+            || GamePhoneText.hasAdjacentOcrEdits(a, b) || letterSlips(a, b)
+    }
+
+    /// Aynı mesajın okunuşunda en çok bu kadar sözcükte tek harf kayabilir.
+    static let slipWords = 2
+    /// Tek harf kayması yalnız en az bu kadar harfli sözcükte aranır ("cold" / "bold" gibi kısa sözcükler anlam taşır).
+    private static let slipLetters = 5
+    private static let echoedLetter = try! NSRegularExpression(pattern: #"(\p{L}),\1\b"#, options: [.caseInsensitive])
+
+    /// Karşılaştırma için okunuşun harfleri: "it,t" → "it", "You'l " → "You'll ", kesme işareti atılır; "rn" / "m",
+    /// "q" / "g" ve "l" / "i" (OCR'ın sık karıştırdığı harfler, "flnd" / "find") birleştirilir.
+    static func readingLetters(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let echoed = echoedLetter.stringByReplacingMatches(in: text, range: range, withTemplate: "$1")
+        let apostrophes = echoed.replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "'l ", with: "'ll ", options: .caseInsensitive)
+            .replacingOccurrences(of: "'", with: "")
+        return TextMatch.normalize(apostrophes).replacingOccurrences(of: "rn", with: "m")
+            .replacingOccurrences(of: "q", with: "g").replacingOccurrences(of: "l", with: "i")
+    }
+
+    /// Sözcük sayısı aynı, en çok `slipWords` sözcükte OCR'ın tek harf kayması: aynı uzunlukta tek harf değişimi
+    /// ("breathabie") ya da yan yana yinelenen harf ("SOMETHINnG"). Başa harf eklenmesi ("here" / "there") eşleşmez.
+    private static func letterSlips(_ a: String, _ b: String) -> Bool {
+        let x = readingLetters(a).split(separator: " ").map(String.init)
+        let y = readingLetters(b).split(separator: " ").map(String.init)
+        guard x.count == y.count else { return false }
+        var slips = 0
+        for (p, q) in zip(x, y) where p != q {
+            slips += 1
+            if slips > slipWords || !letterSlip(p, q) { return false }
+        }
+        return slips > 0
+    }
+
+    private static func letterSlip(_ p: String, _ q: String) -> Bool {
+        let a = Array(p), b = Array(q)
+        guard min(a.count, b.count) >= slipLetters, a.allSatisfy(\.isLetter), b.allSatisfy(\.isLetter) else { return false }
+        if a.count == b.count { return zip(a, b).filter { $0 != $1 }.count == 1 }
+        let (shorter, longer) = a.count < b.count ? (a, b) : (b, a)
+        guard longer.count == shorter.count + 1 else { return false }
+        for i in 1..<longer.count where longer[i] == longer[i - 1] {
+            var removed = longer
+            removed.remove(at: i)
+            if removed == shorter { return true }
+        }
+        return false
+    }
+
+    /// Aynı yerdeki balonun başı, sonu ya da aradaki satırı eksik okunmuş mu.
+    static func truncatedReading(_ read: String, of shown: String) -> Bool {
+        func normalized(_ text: String) -> [Character] {
+            Array(TextMatch.normalize(text.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")))
+        }
+        let shorter = normalized(read), full = normalized(shown)
+        guard !shorter.isEmpty, shorter.count < full.count else { return false }
+        if full.starts(with: shorter), full[shorter.count] == " " || shorter.count >= minimumLetters { return true }
+        if TextMatch.addsMeaning(read, to: shown) { return false }
+        if TextMatch.isGrowth(shown, of: read) { return true }
+        // Bitişik okunan sözcüklerle de eksik okuma: boşluksuz hâli tam metnin içinde.
+        if shorter.count >= minimumLetters,
+           String(full).replacingOccurrences(of: " ", with: "").contains(String(shorter).replacingOccurrences(of: " ", with: "")) {
+            return true
+        }
+        let words = String(shorter).split(separator: " ")
+        guard words.count >= 3 else { return false }
+        var kept = 0
+        for word in String(full).split(separator: " ") where word == words[kept] {
+            kept += 1
+            if kept == words.count { return true }
+        }
+        return false
+    }
+
+    /// Önceki iki komşu balonun tek kutuda okunuşu; ikincisi yarım da kalabilir.
+    static func mergedReading(_ read: String, _ first: String, _ second: String) -> Bool {
+        let combined = first + " " + second
+        return sameReading(read, combined) || (TextMatch.isGrowth(read, of: first) && truncatedReading(read, of: combined))
     }
 
     // MARK: Ekrandaki balonların kararlılığı (X, 22 Kas, GTA 6 telefonu: "yazılar sürekli oynuyor okumak çok zor,
@@ -218,8 +296,8 @@ enum PhoneSteady {
         guard let spotA, let spotB, abs(spotA.top - spotB.top) <= sameSpot, abs(spotA.left - spotB.left) <= sameSpot,
               !TextMatch.addsMeaning(a, to: b), !TextMatch.addsMeaning(b, to: a) else { return false }
         let x = TextMatch.normalize(a), y = TextMatch.normalize(b)
-        return x.filter(\.isLetter).count >= minimumLetters && y.filter(\.isLetter).count >= minimumLetters
-            && TextMatch.isSimilar(x, y, threshold: sameSpotMessage)
+        return truncatedReading(b, of: a) && x.filter(\.isLetter).count >= minimumLetters
+            && y.filter(\.isLetter).count >= minimumLetters && TextMatch.isSimilar(x, y, threshold: sameSpotMessage)
     }
 
     /// Ekranda aynı yerde duran aynı balonun gösterilen çevirisi (`sameBubble`); yoksa nil. Simgeli çeviri (yeri simgeye

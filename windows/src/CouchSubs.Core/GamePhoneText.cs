@@ -169,7 +169,8 @@ internal static partial class GamePhoneText
         return new Reading(lines.Select((line, index) =>
             previews.Contains(index) ? PreviewPunctuation(line) with { ListRole = ScreenPhoneCard.Role.Preview }
             : SectionLabel(line.Text) is not null ? line with { ListRole = ScreenPhoneCard.Role.Heading }
-            : InNameColumn(line) && (names.Contains(index) || LooksLikeName(line.Text)) ? line with { ListRole = ScreenPhoneCard.Role.Contact }
+            : InNameColumn(line) && (names.Contains(index) || LooksLikeName(line.Text) || LooksLikeGroupName(line.Text))
+                ? line with { ListRole = ScreenPhoneCard.Role.Contact }
             : line with { ListRole = ScreenPhoneCard.Role.Preview }));
     }
 
@@ -339,6 +340,14 @@ internal static partial class GamePhoneText
                            w.All(c => char.IsLetter(c) || c is '-' or '\''));
     }
 
+    /// <summary>Grup sohbetinin adı virgüllüdür ("Papa Audacity, Jaso", "Yasmani, Jason, Luc"): ad sayılmayınca önizleme sanılıyor, liste kartı ad ve önizleme diye ikiye bölünüyordu (X, 28 Kas, beta.108). Mac ve Android ile aynı.</summary>
+    /// Seçili satırın çerçevesi adın başını kesebilir ("smani, Jason, Lucia"): ilk sözcük küçük harfle başlasa da grup adıdır.
+    private static bool LooksLikeGroupName(string text)
+    {
+        var label = text.Replace(",", "").Trim();
+        return text.Contains(',') && label.Length > 0 && LooksLikeName(char.ToUpperInvariant(label[0]) + label[1..]);
+    }
+
     internal static bool IsMessagePreview(string text) =>
         text.Any(char.IsWhiteSpace) && SectionLabel(text) is null && !LooksLikeName(text);
 
@@ -346,7 +355,7 @@ internal static partial class GamePhoneText
     {
         var label = name.Text.Trim();
         bool lowerName = label.Length is >= 2 and <= 18 && label.All(char.IsLower);
-        if (!LooksLikeName(label) && !lowerName) return false;
+        if (!LooksLikeName(label) && !LooksLikeGroupName(label) && !lowerName) return false;
         var a = LayoutBox(name)!.Value;
         var b = LayoutBox(preview)!.Value;
         var h = a.Bottom - a.Top;
@@ -401,7 +410,8 @@ internal static partial class GamePhoneText
             if (run.Count > 0)
             {
                 var previous = run[^1];
-                if (listed || BreaksBlock(Layout(previous), Layout(line), flat && EndsSentence(previous.Text))) Finish();
+                var gapShare = flat && !home ? PhoneChat.BubbleGap : flat && EndsSentence(previous.Text) ? 0.65 : 1;
+                if (listed || BreaksBlock(Layout(previous), Layout(line), gapShare)) Finish();
             }
             run.Add(line);
         }
@@ -581,12 +591,11 @@ internal static partial class GamePhoneText
         return [.. kept];
     }
 
-    private static bool BreaksBlock(TextBox previous, TextBox next, bool afterFlatSentence)
+    private static bool BreaksBlock(TextBox previous, TextBox next, double gapShare)
     {
-        // Düzeltilmiş telefon görüntüsünde satır arası dar, ardışık balonlar arasındaki boşluk daha geniştir.
-        // Cümle sonunda bu aralığı kullan; aynı balonda alt satıra geçen ikinci cümle birlikte kalır.
+        // Sohbette balon aralığı cümle sonundan bağımsızdır: OCR nokta kaçırsa da iki cevap ayrı kalır (X, 28 Kas, beta.107).
         var lineHeight = Math.Max(previous.Bottom - previous.Top, next.Bottom - next.Top);
-        if (next.Top - previous.Bottom > lineHeight * (afterFlatSentence ? 0.65 : 1)) return true;
+        if (next.Top - previous.Bottom > lineHeight * gapShare) return true;
         bool alignedLeft = Math.Abs(previous.Left - next.Left) <= 0.08;
         bool alignedRight = Math.Min(previous.Left, next.Left) > 0.25 && Math.Abs(previous.Right - next.Right) <= 0.045;
         return !alignedLeft && !alignedRight;

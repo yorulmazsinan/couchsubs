@@ -126,6 +126,24 @@ class GamePhoneDarkTest {
         }
     }
 
+    /** Ton eşitleme simsiyaha yakın karede denenmez ([GamePhoneGeometry.equalizable]): her platformda aynı. */
+    @Test
+    fun equalizationNeedsABrightEnd() {
+        val items = vectors.getJSONArray("equalizable")
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val counts = IntArray(1021)
+            var total = 0
+            val pairs = item.getJSONArray("counts")
+            for (j in 0 until pairs.length()) {
+                val pair = pairs.getJSONArray(j)
+                counts[pair.getInt(0)] += pair.getInt(1)
+                total += pair.getInt(1)
+            }
+            assertEquals(item.getString("name"), item.getBoolean("equalizable"), GamePhoneGeometry.equalizable(counts, total))
+        }
+    }
+
     /**
      * Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
      * ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.

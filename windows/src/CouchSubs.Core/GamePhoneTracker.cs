@@ -586,8 +586,8 @@ internal static class GamePhoneGeometry
             if (dark.Step > probe.Step) probe = probe with { Step = dark.Step, Gain = gain };
             if (dark.Side > probe.Side) probe = probe with { Side = dark.Side, Candidate = dark.Candidate };
         }
-        // Karanlık sahnede kazançlardan sonra ton eşitleme (Equalization).
-        var dim = level < DarkLevel;
+        // Karanlık sahnede kazançlardan sonra ton eşitleme (Equalization); kare simsiyaha yakınsa denenmez (EqualizeFloor).
+        var dim = level < DarkLevel && grid.Equalizable();
         if (dim)
         {
             var even = grid.Equalized();
@@ -610,7 +610,15 @@ internal static class GamePhoneGeometry
     internal const int DarkLevel = 56;
     /// <summary>Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×).</summary>
     internal const int DarkTarget = 96;
-    internal static readonly int[] GainSteps = [384, 640, 1024];
+    /// <summary>
+    /// Denenen kazançlar (×1,5–×12). Önceden en çok ×4'tü (1024): gece sahnesinde (beta-107 günlüğü, üst şerit 2–9/255)
+    /// kasa ile hoparlör yarığı arasındaki fark birkaç tonda kalıyor, ×4'te de yarık eşiğinin (14 ton) altında kalıp sıkı
+    /// arama "hoparlör yarığı yok"ta, "ön kamera yok"ta ve "alt çentik yok"ta takılıyordu; ton eşitleme ise geniş koyu
+    /// alanlardaki tek tonluk kıpırtıyı onlarca tona büyütüp kasayı düz göstermiyordu ("kasa kenarı düz değil"). ×7 yalnız
+    /// üst şerit 13/255, ×12 yalnız 8/255 ya da daha koyuyken denenir (<see cref="DarkTarget"/>); telefonsuz kareler bu
+    /// karanlıkta da telefon açmıyor (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static readonly int[] GainSteps = [384, 640, 1024, 1792, 3072];
 
     /// <summary>Kazanç yerine ton eşitleme (<see cref="Equalization"/>): <see cref="Probe.Gain"/>'de bu değer.</summary>
     internal const int Equalized = 0;
@@ -634,6 +642,35 @@ internal static class GamePhoneGeometry
             below += counts[tone];
         }
         return map;
+    }
+
+    /// <summary>
+    /// Ton eşitlemenin denendiği en koyu "parlak uç": ızgaranın en parlak %1'i (<see cref="BrightShare"/>) en az bu tonda
+    /// (0–255) olmalı. Karenin tamamı simsiyaha yakınsa (parlak uç 2–7/255; kararan geçiş, gece sahnesinin en koyusu) ton
+    /// eşitleme bir iki tonluk sıkıştırma kıpırtısını 0–255'e yayıp telefonsuz karede telefon kuruyordu (Android'de
+    /// gta6-n4-bildirim × 0,04: telefon açıldı). Ton eşitlemenin bulduğu gerçek telefonlarda (gamayla koyulaşmış, karanlık
+    /// oda) ekran aydınlık kalır, parlak uç 22/255 ve üstü; bundan koyu karede telefonu ×7 ve ×12 kazanç bulur
+    /// (<see cref="GainSteps"/>; Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal const int EqualizeFloor = 16;
+
+    /// <summary>Parlak ucun ölçüldüğü pay: ızgara örneklerinin en parlak yüzde biri (<see cref="EqualizeFloor"/>).</summary>
+    internal const int BrightShare = 100;
+
+    /// <summary>
+    /// Ton eşitleme denenir mi (<see cref="EqualizeFloor"/>): ham ton sayılarında (<paramref name="counts"/>, çeyrek ton
+    /// adımıyla, toplam <paramref name="total"/>) en parlak 1/<see cref="BrightShare"/>'ün en koyu tonu taban tonun
+    /// (çeyrek ton adımıyla 4 × <see cref="EqualizeFloor"/>) altında değilse true.
+    /// </summary>
+    internal static bool Equalizable(int[] counts, int total)
+    {
+        var brighter = 0;
+        for (var tone = counts.Length - 1; tone >= 0; tone--)
+        {
+            brighter += counts[tone];
+            if (brighter * BrightShare >= total) return tone >= 4 * EqualizeFloor;
+        }
+        return false;
     }
 
     /// <summary>
@@ -999,8 +1036,22 @@ internal static class GamePhoneGeometry
         /// <summary>Ton eşitlemeli kopya (<see cref="Equalization"/>).</summary>
         internal Samples Equalized()
         {
+            var counts = ToneCounts(out var total);
+            return new(this, 256, Equalization(counts, total));
+        }
+
+        /// <summary>Ton eşitleme denenir mi (<see cref="GamePhoneGeometry.Equalizable(int[], int)"/>).</summary>
+        internal bool Equalizable()
+        {
+            var counts = ToneCounts(out var total);
+            return GamePhoneGeometry.Equalizable(counts, total);
+        }
+
+        /// <summary>Izgaranın her iki noktasında bir ham ton (çeyrek ton adımıyla, 0–1020) sayıları.</summary>
+        private int[] ToneCounts(out int total)
+        {
             var counts = new int[1021];
-            var total = 0;
+            total = 0;
             for (int y = 0; y < Height; y += 2)
             {
                 (int a, int b) = Rows(y);
@@ -1010,7 +1061,7 @@ internal static class GamePhoneGeometry
                     total++;
                 }
             }
-            return new(this, 256, Equalization(counts, total));
+            return counts;
         }
 
         /// <summary>Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek.</summary>

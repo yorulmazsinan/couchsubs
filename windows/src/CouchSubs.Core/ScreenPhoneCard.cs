@@ -152,6 +152,12 @@ public static class ScreenPhoneCard
     /// <summary>Çevirmene gitmez, aslıyla gösterilir (ad).</summary>
     internal static bool KeepsText(this Role role) => role is Role.Header or Role.Contact;
 
+    /// <summary>Sohbet balonu ya da oyuncunun cevap seçeneği.</summary>
+    internal static bool IsBubble(this Role role) => role is Role.Incoming or Role.Outgoing or Role.Message or Role.Option;
+
+    /// <summary>Balon sınırı ölçülemiyorsa köşe yarıçapı, satır yüksekliğine oranla.</summary>
+    internal const double BubbleRadius = 0.6;
+
     /// <summary>
     /// Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun üstüne
     /// çizilmez, panelde kart olur (Mac/iPhone ve Android ile aynı).
@@ -401,8 +407,7 @@ public static class ScreenPhoneCard
         // Sohbet dışı ekranın kartları tek renkte (telefonda en çok görünen satır kartı rengi): her kart kendi örneğiyle ayrı
         // renkte çiziliyordu (Sinan Bey, 3423: "stilleri tutarsız").
         var cardStyle = CommonStyle([.. body.Where(item => IsCard(item.Phone!.Role)).Select(item => item.Style)]);
-        // Cevap seçenekleri tek renkte (okunabilen örneklerin en çok görüneni): seçili seçeneğin çerçevesi ya da renk geçişi
-        // örneği bozunca biri telefonun renginde, öbürü yedek renkte çiziliyordu (X, 26 Kas; Mac ile aynı).
+        // Örneği eksik seçenekte komşusunun rengi kullanılır. Okunan seçeneğin kendi seçim rengi korunur.
         var optionStyle = CommonStyle([.. body.Where(item => item.Phone!.Role == Role.Option).Select(item => item.Style)]);
 
         // Her satırın panelde kaplayacağı yer: genişliği rolünden, yüksekliği Türkçenin o genişlikte kaç satır tuttuğundan.
@@ -459,7 +464,7 @@ public static class ScreenPhoneCard
                 Style = kind switch
                 {
                     // Bölüm başlığı ("Önerilen", "Mesajlar") soluk ve kalın küçük başlık, sola yaslı; not ortalı (Mac ile aynı).
-                    Role.Outgoing => BubbleColor(role == Role.Option ? optionStyle : item.Style, OutgoingColor),
+                    Role.Outgoing => BubbleColor(item.Style, role == Role.Option ? optionStyle ?? OutgoingColor : OutgoingColor),
                     Role.Incoming => BubbleColor(item.Style, IncomingColor),
                     _ => NoteColor,
                 },

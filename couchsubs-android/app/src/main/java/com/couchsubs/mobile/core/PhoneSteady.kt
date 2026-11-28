@@ -12,8 +12,13 @@ import kotlin.math.abs
 object PhoneSteady {
     /** Okuma art arda bu kadar turda doğrulanamazsa çeviriler silinir. */
     const val MISS_TURNS = 3
-    /** Tek turluk OCR sapması (düşen balon, yan yana bozuk harfler) en çok bu kadar tur bekletilir. */
+    /** Yan yana bozuk harfler en çok bu kadar tur bekletilir. */
     const val HOLD_TURNS = 2
+    /**
+     * Eksik düzen (düşen, kesilen ya da komşusuyla birleşen balon) ancak sekiz ardışık okumada (~4 sn) doğrulanırsa gösterilen
+     * sohbeti değiştirir (X, 28 Kas, beta.107; Windows ve Mac ile aynı).
+     */
+    const val DEGRADED_TURNS = 8
     /**
      * Sayfanın türü (sohbet listesi ya da sohbet) ancak bu kadar ardışık okuma aynı yeni türü verirse değişir: sallanan
      * telefonda tek okumada bölüm başlığı kaçınca TV'deki panel liste ile balonlar arasında her saniye gidip geliyordu
@@ -32,30 +37,20 @@ object PhoneSteady {
     /**
      * Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın OCR'la biraz farklı okunuşununki. Sayı ya da
      * olumsuzluk ekleyen/düşüren okuma ("at 5" / "at 6", "can" / "can't") aynı mesaj sayılmaz. Birden çok aday varsa
-     * uzunluğu en yakın olan, eşitlikte sıralamada önce gelen (her platformda aynı sonuç).
+     * kayıt sırasında ([order]) ilk eşleşen; sıra verilmezse sıralamada önce gelen (her platformda aynı sonuç).
      */
-    fun translation(source: String, known: Map<String, String>): String? {
+    fun translation(source: String, known: Map<String, String>, order: Iterable<String>? = null): String? {
         known[source]?.let { return it }
-        val text = TextMatch.normalize(source)
-        var bestDistance = Int.MAX_VALUE
-        var bestSource: String? = null
-        var best: String? = null
-        for ((old, translation) in known) {
-            if (!sameReading(source, old)) continue
-            val distance = abs(text.length - TextMatch.normalize(old).length)
-            if (distance < bestDistance || (distance == bestDistance && old < bestSource!!)) {
-                bestDistance = distance
-                bestSource = old
-                best = translation
-            }
-        }
-        return best
+        for (old in order ?: known.keys.sorted()) if (sameReading(source, old)) return known[old]
+        return null
     }
 
     /**
      * İki okuma aynı mesaj mı: birebir aynı, sadeleştirilmiş hali aynı (soru işareti ikisinde de ya da hiçbirinde; "Ok." /
-     * "ok" kısa satırda da aynı mesaj) ya da (en az [MINIMUM_LETTERS] harfli iki uzun mesajda, "rn" / "m" birleştirilerek)
-     * Levenshtein oranı en az [SAME_MESSAGE]; sayı ya da olumsuzluk ekleyen/düşüren okuma aynı sayılmaz (Mac ile aynı).
+     * "ok" kısa satırda da aynı mesaj) ya da en az [MINIMUM_LETTERS] harfli iki uzun mesajda yalnız OCR artığı farklı:
+     * kesme işareti, noktalama, "rn" / "m", "l" / "i", yan yana iki bozuk sözcük ya da en çok [SLIP_WORDS] sözcükte tek harf
+     * kayması. Gerçek sözcük değişimi ("here" / "there"), sayı ya da olumsuzluk ekleyen/düşüren okuma aynı sayılmaz
+     * (Windows ve Mac ile aynı).
      */
     fun sameReading(a: String, b: String): Boolean {
         if (a == b) return true
@@ -64,8 +59,79 @@ object PhoneSteady {
         if (x.isEmpty() || y.isEmpty() || TextMatch.addsMeaning(a, b) || TextMatch.addsMeaning(b, a)) return false
         // Kısa satırda soru işareti anlam taşır ("Ok?" / "Ok."); uzun mesajda düşen soru işareti OCR'ın kaçırdığı noktalamadır.
         if (x == y) return a.contains('?') == b.contains('?') || x.count { it.isLetter() } >= MINIMUM_LETTERS
-        return x.count { it.isLetter() } >= MINIMUM_LETTERS && y.count { it.isLetter() } >= MINIMUM_LETTERS &&
-            TextMatch.isSimilar(x.replace("rn", "m"), y.replace("rn", "m"), SAME_MESSAGE)
+        if (x.count { it.isLetter() } < MINIMUM_LETTERS || y.count { it.isLetter() } < MINIMUM_LETTERS) return false
+        // Uzun cümlede gerçek bir sözcüğün değişmesi ("here" / "there") benzerlik eşiğini geçebilir (X, 28 Kas, beta.107):
+        // yalnız OCR'ın karıştırdığı harfler, kesme işareti ve noktalama artığı eşleşir.
+        // Bitişik ya da ayrık okunan sözcük ("Yo Istill" / "Yo I still") da aynı mesajdır.
+        val p = readingLetters(a)
+        val q = readingLetters(b)
+        return p == q || p.replace(" ", "") == q.replace(" ", "") || GamePhoneText.hasAdjacentOcrEdits(a, b) || letterSlips(a, b)
+    }
+
+    /** Aynı mesajın okunuşunda en çok bu kadar sözcükte tek harf kayabilir. */
+    const val SLIP_WORDS = 2
+    /** Tek harf kayması yalnız en az bu kadar harfli sözcükte aranır ("cold" / "bold" gibi kısa sözcükler anlam taşır). */
+    private const val SLIP_LETTERS = 5
+    private val ECHOED_LETTER = Regex("""(\p{L}),\1\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Karşılaştırma için okunuşun harfleri: "it,t" → "it", "You'l " → "You'll ", kesme işareti atılır; "rn" / "m", "q" / "g"
+     * ve "l" / "i" (OCR'ın sık karıştırdığı harfler, "flnd" / "find") birleştirilir.
+     */
+    fun readingLetters(text: String): String {
+        val apostrophes = ECHOED_LETTER.replace(text, "$1").replace('’', '\'')
+            .replace("'l ", "'ll ", ignoreCase = true).replace("'", "")
+        return TextMatch.normalize(apostrophes).replace("rn", "m").replace('q', 'g').replace('l', 'i')
+    }
+
+    /**
+     * Sözcük sayısı aynı, en çok [SLIP_WORDS] sözcükte OCR'ın tek harf kayması: aynı uzunlukta tek harf değişimi
+     * ("breathabie") ya da yan yana yinelenen harf ("SOMETHINnG"). Başa harf eklenmesi ("here" / "there") eşleşmez.
+     */
+    private fun letterSlips(a: String, b: String): Boolean {
+        val x = readingLetters(a).split(' ')
+        val y = readingLetters(b).split(' ')
+        if (x.size != y.size) return false
+        var slips = 0
+        for (i in x.indices) {
+            if (x[i] == y[i]) continue
+            if (++slips > SLIP_WORDS || !letterSlip(x[i], y[i])) return false
+        }
+        return slips > 0
+    }
+
+    private fun letterSlip(p: String, q: String): Boolean {
+        if (minOf(p.length, q.length) < SLIP_LETTERS || !p.all { it.isLetter() } || !q.all { it.isLetter() }) return false
+        if (p.length == q.length) return p.indices.count { p[it] != q[it] } == 1
+        val (shorter, longer) = if (p.length < q.length) p to q else q to p
+        if (longer.length != shorter.length + 1) return false
+        for (i in 1 until longer.length)
+            if (longer[i] == longer[i - 1] && longer.removeRange(i, i + 1) == shorter) return true
+        return false
+    }
+
+    /** Aynı yerdeki balonun başı, sonu ya da aradaki satırı eksik okunmuş mu. */
+    fun truncatedReading(read: String, shown: String): Boolean {
+        fun normalized(text: String) = TextMatch.normalize(text.replace("'", "").replace("’", ""))
+        val shorter = normalized(read)
+        val full = normalized(shown)
+        if (shorter.isEmpty() || shorter.length >= full.length) return false
+        if (full.startsWith(shorter) && (full[shorter.length] == ' ' || shorter.length >= MINIMUM_LETTERS)) return true
+        if (TextMatch.addsMeaning(read, shown)) return false
+        if (TextMatch.isGrowth(shown, read)) return true
+        // Bitişik okunan sözcüklerle de eksik okuma: boşluksuz hâli tam metnin içinde.
+        if (shorter.length >= MINIMUM_LETTERS && full.replace(" ", "").contains(shorter.replace(" ", ""))) return true
+        val words = shorter.split(' ')
+        if (words.size < 3) return false
+        var kept = 0
+        for (word in full.split(' ')) if (word == words[kept] && ++kept == words.size) return true
+        return false
+    }
+
+    /** Önceki iki komşu balonun tek kutuda okunuşu; ikincisi yarım da kalabilir. */
+    fun mergedReading(read: String, first: String, second: String): Boolean {
+        val combined = "$first $second"
+        return sameReading(read, combined) || (TextMatch.isGrowth(read, first) && truncatedReading(read, combined))
     }
 
     // Ekrandaki balonların kararlılığı (X, 22 Kas, GTA 6 telefonu: "yazılar sürekli oynuyor okumak çok zor, balonların
@@ -213,8 +279,8 @@ object PhoneSteady {
             TextMatch.addsMeaning(a, b) || TextMatch.addsMeaning(b, a)) return false
         val x = TextMatch.normalize(a)
         val y = TextMatch.normalize(b)
-        return x.count { it.isLetter() } >= MINIMUM_LETTERS && y.count { it.isLetter() } >= MINIMUM_LETTERS &&
-            TextMatch.isSimilar(x, y, SAME_SPOT_MESSAGE)
+        return truncatedReading(b, a) && x.count { it.isLetter() } >= MINIMUM_LETTERS &&
+            y.count { it.isLetter() } >= MINIMUM_LETTERS && TextMatch.isSimilar(x, y, SAME_SPOT_MESSAGE)
     }
 
     /** Ekranda aynı yerde duran aynı balonun gösterilen çevirisi ([sameBubble]); yoksa null. */

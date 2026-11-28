@@ -84,6 +84,13 @@ object GamePhoneText {
         return heading
     }
 
+    /** Grup sohbetinin adı virgüllüdür ("Papa Audacity, Jaso", "Yasmani, Jason, Luc"): ad sayılmayınca önizleme sanılıyor, liste kartı ad ve önizleme diye ikiye bölünüyordu (X, 28 Kas, beta.108). Windows ve Mac ile aynı. */
+    // Seçili satırın çerçevesi adın başını kesebilir ("smani, Jason, Lucia"): ilk sözcük küçük harfle başlasa da grup adıdır.
+    private fun looksLikeGroupName(text: String): Boolean {
+        val label = text.replace(",", "").trim()
+        return ',' in text && label.isNotEmpty() && looksLikeName(label.replaceFirstChar { it.uppercaseChar() })
+    }
+
     private fun looksLikeName(text: String): Boolean {
         val label = text.takeWhile { it != '(' }.trim()
         val words = label.split(' ').filter { it.isNotEmpty() }
@@ -101,7 +108,7 @@ object GamePhoneText {
     private fun isContactPair(name: TextLine, preview: TextLine): Boolean {
         val label = name.text.trim()
         val lowerName = label.length in 2..18 && label.all { it.isLowerCase() }
-        if (!(looksLikeName(label) || lowerName)) return false
+        if (!(looksLikeName(label) || looksLikeGroupName(label) || lowerName)) return false
         val a = layout(name) ?: return false
         val b = layout(preview) ?: return false
         val h = a.bottom - a.top
@@ -216,7 +223,8 @@ object GamePhoneText {
             when {
                 index in previews -> previewPunctuation(line).copy(listRole = ScreenPhoneCard.Role.PREVIEW)
                 section(line.text) != null -> line.copy(listRole = ScreenPhoneCard.Role.HEADING)
-                inColumn(line) && (index in names || looksLikeName(line.text)) -> line.copy(listRole = ScreenPhoneCard.Role.CONTACT)
+                inColumn(line) && (index in names || looksLikeName(line.text) || looksLikeGroupName(line.text)) ->
+                    line.copy(listRole = ScreenPhoneCard.Role.CONTACT)
                 else -> line.copy(listRole = ScreenPhoneCard.Role.PREVIEW)
             }
         })
@@ -367,7 +375,10 @@ object GamePhoneText {
             }
         }
         for (line in reading.lines.filter { it.box != null }.sortedBy { box(it).top }) {
-            run.lastOrNull()?.let { if (listed || breaksBlock(box(it), box(line), flat && endsSentence(it.text))) finish() }
+            run.lastOrNull()?.let {
+                val gapShare = if (flat && !home) PhoneChat.BUBBLE_GAP else if (flat && endsSentence(it.text)) 0.65 else 1.0
+                if (listed || breaksBlock(box(it), box(line), gapShare)) finish()
+            }
             run.add(line)
         }
         finish()
@@ -526,12 +537,13 @@ object GamePhoneText {
     }
 
     /**
-     * Düzeltilmiş telefon ekranında satır arası dar, aynı taraftaki ardışık balonların arası daha geniştir: cümle sonundan
-     * sonra satır yüksekliğinin 0,65'inden geniş boşluk yeni balondur; aynı balonda alt satıra geçen ikinci cümle birlikte kalır.
+     * Düzeltilmiş telefon ekranında satır arası dar, aynı taraftaki ardışık balonların arası daha geniştir. Sohbette balon
+     * aralığı ([PhoneChat.BUBBLE_GAP]) cümle sonundan bağımsızdır: OCR nokta kaçırsa da iki cevap ayrı kalır (X, 28 Kas,
+     * beta.107; Windows ve Mac ile aynı).
      */
-    private fun breaksBlock(previous: TextBox, next: TextBox, afterFlatSentence: Boolean): Boolean {
+    private fun breaksBlock(previous: TextBox, next: TextBox, gapShare: Double): Boolean {
         val lineHeight = maxOf(previous.bottom - previous.top, next.bottom - next.top)
-        if (next.top - previous.bottom > lineHeight * (if (afterFlatSentence) 0.65 else 1.0)) return true
+        if (next.top - previous.bottom > lineHeight * gapShare) return true
         val alignedLeft = abs(previous.left - next.left) <= 0.08
         val alignedRight = minOf(previous.left, next.left) > 0.25 && abs(previous.right - next.right) <= 0.045
         return !alignedLeft && !alignedRight

@@ -971,7 +971,12 @@ class RegionWatcher(
          * olmayan blok (boş çeviri, yalnız görev imi) çizilmez. Mac/iPhone ve Windows aynı.
          */
         internal fun drawable(items: List<ScreenTranslation.Item>): List<ScreenTranslation.Item> =
-            items.filter { item -> !item.icons.isNullOrEmpty() || IconText.plain(item.translation).any { it.isLetter() || it.isDigit() } }
+            // Sohbet panelinin zemini (yazısız kart) çizilir: düşünce TV panel yerine balonları köşeli kutu olarak çiziyordu
+            // (X, 28 Kas, beta.107).
+            items.filter { item ->
+                item.panel == ScreenPhoneCard.PanelPart.CARD || !item.icons.isNullOrEmpty() ||
+                    IconText.plain(item.translation).any { it.isLetter() || it.isDigit() }
+            }
 
         /** En çok bu kadar satırın kipi hatırlanır; aşılınca yalnız bu okumanın satırları kalır. */
         const val ROW_PAINT_LIMIT = 128
