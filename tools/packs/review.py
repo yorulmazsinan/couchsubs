@@ -105,6 +105,8 @@ with ThreadPoolExecutor(4) as ex:
 print("proposed fixes", len(fixes), "spent $%.4f" % llm.spent())
 
 by_id = {iid: (en, tr) for iid, _, en, tr in items}
+# Mild English "hell"/"damn" may justify "lanet", but not severe insults.
+SEVERE_TR = re.compile(r"(?<!\w)(?:siktir|amk|amına|orospu|piç|göt|puşt|ibne|şerefsiz|yavşak)", re.I)
 applied, vetoed = [], []
 for f in fixes:
     if f["id"] not in by_id:
@@ -117,7 +119,7 @@ for f in fixes:
     elif problems(en, new) and not (problems(en, old) and len(problems(en, new)) < len(problems(en, old))):
         reason = "new-problem:" + ",".join(problems(en, new))
     elif STRONG_TR.search(new) and not STRONG_TR.search(old) and not STRONG_EN.search(en) \
-            and not re.search(r"\b(damn|hell|crap|goddamn)\b", en, re.I):
+            and (not re.search(r"\b(damn|hell|crap|goddamn)\b", en, re.I) or SEVERE_TR.search(new)):
         reason = "added-profanity"
     if reason:
         vetoed.append({**f, "en": en, "old": old, "veto": reason})
