@@ -178,6 +178,13 @@ public enum PSNAccount {
         return withUnsafeBytes(of: value.littleEndian) { Data($0) }
     }
 
+    /// Base64 PSN hesap kimliği: boşluklar atılır, çözülen değer tam 8 bayt olmalı (12 karakter).
+    public static func accountId(fromBase64 value: String) -> Data? {
+        let trimmed = value.filter { !$0.isWhitespace }
+        guard trimmed.count == 12, let data = Data(base64Encoded: trimmed), data.count == 8 else { return nil }
+        return data
+    }
+
     private static var basicAuth: String {
         "Basic " + Data("\(clientId):\(clientSecret)".utf8).base64EncodedString()
     }

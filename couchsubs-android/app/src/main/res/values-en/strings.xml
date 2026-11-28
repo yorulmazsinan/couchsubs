@@ -89,6 +89,12 @@
     <string name="psn_browser_google">Google sign-in does not open inside the app (Google does not allow it), so sign-in moved to the browser. You can choose \"Continue with Google\" there again.</string>
     <string name="psn_browser_field">Page address</string>
     <string name="psn_browser_wrong">This address has no sign-in code. It should start with https://remoteplay.dl.playstation.net/remoteplay/redirect?code=</string>
+    <string name="psn_manual">Enter account ID manually</string>
+    <string name="psn_manual_title">Enter account ID manually</string>
+    <string name="psn_manual_body">If Sony\'s sign-in page does not open (some internet providers block it) or you already have your ID, enter the second account\'s PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).</string>
+    <string name="psn_manual_field">PSN account ID (base64)</string>
+    <string name="psn_manual_wrong">This is not a valid account ID. It is 12 characters in base64, e.g. AbCdEfGhIjk=.</string>
+    <string name="psn_manual_save">Save</string>
     <string name="psn_problem_offline">Couldn\'t reach the internet or Sony. Check your connection.</string>
     <string name="psn_problem_timeout">The page took too long to open.</string>
     <string name="psn_problem_ssl">Couldn\'t make a secure connection (are the date and time right?).</string>

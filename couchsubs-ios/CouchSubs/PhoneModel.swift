@@ -676,6 +676,17 @@ final class PhoneModel: ObservableObject {
         }
     }
 
+    /// "Hesap kimliğini elle gir": Sony girişi açılamayan kullanıcılar (ör. servis sağlayıcı engelliyor) PSN hesap
+    /// kimliğini base64 olarak (8 bayt, 12 karakter) yazar. Web girişiyle aynı biçimde saklanır. Geçersizse false.
+    @discardableResult
+    func useManualAccountId(_ value: String) -> Bool {
+        guard let id = PSNAccount.accountId(fromBase64: value) else { return false }
+        RemotePlayLog.write("PSN hesap kimliği elle girildi")
+        accountId = id
+        store.save(id, for: StoreKey.accountId)
+        return true
+    }
+
     func discoverConsoles() async -> [ConsoleInfo] { await services.discoverConsoles() }
 
     /// PS5'e ikinci hesapla kayıt olur (PS5'teki 8 haneli kodla).

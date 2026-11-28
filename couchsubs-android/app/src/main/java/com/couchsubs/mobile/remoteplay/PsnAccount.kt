@@ -151,6 +151,17 @@ object PsnAccount {
     /** Kayıtta ve günlükte görünen biçim (masaüstüyle aynı): base64. */
     fun accountIdText(bytes: ByteArray): String = java.util.Base64.getEncoder().encodeToString(bytes)
 
+    /** Base64 PSN hesap kimliği: boşluklar atılır, çözülen değer tam 8 bayt olmalı (12 karakter). */
+    fun accountIdFromBase64(text: String?): ByteArray? {
+        val trimmed = text?.filterNot(Char::isWhitespace) ?: return null
+        if (trimmed.length != 12) return null
+        return try {
+            java.util.Base64.getDecoder().decode(trimmed).takeIf { it.size == 8 }
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+
     private val basicAuth: String
         get() = "Basic " + java.util.Base64.getEncoder().encodeToString("$CLIENT_ID:$CLIENT_SECRET".toByteArray(Charsets.UTF_8))
 

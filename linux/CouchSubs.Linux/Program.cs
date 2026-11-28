@@ -70,6 +70,7 @@ public static class Program
 internal static class Panel
 {
     private sealed record PsnRequest(string Redirect);
+    private sealed record ManualAccountRequest(string AccountId);
     private sealed record RegisterRequest(string Host, string Pin);
     private sealed record PairRequest(string Name, string Host, TvBrand Brand);
     private sealed record PassphraseRequest(string Passphrase);
@@ -92,6 +93,7 @@ internal static class Panel
         app.MapPost("/api/advance", () => Act(ui, controller.Advance));
         app.MapPost("/api/back", () => Act(ui, controller.Back));
         app.MapPost("/api/psn", (PsnRequest body) => Act(ui, () => controller.CompletePsnLoginAsync(ParseRedirect(body.Redirect))));
+        app.MapPost("/api/psn/manual", (ManualAccountRequest body) => Act(ui, () => SaveManualAccountId(controller, body.AccountId)));
         app.MapGet("/api/consoles", () => Query(ui, async () => (object)await controller.DiscoverConsolesAsync()));
         app.MapPost("/api/register", (RegisterRequest body) => Act(ui, () => controller.RegisterAsync(body.Host.Trim(), body.Pin)));
         app.MapGet("/api/tvs", () => Query(ui, async () => (object)await controller.DiscoverTvsAsync()));
@@ -212,6 +214,13 @@ internal static class Panel
             pasted = $"{PsnAccount.RedirectPrefix}?{(pasted.Contains('=') ? pasted.TrimStart('?') : "code=" + pasted)}";
         return Uri.TryCreate(pasted, UriKind.Absolute, out var uri) ? uri
             : throw new AppException(AppError.InvalidLogin, AppException.Describe(AppError.InvalidLogin, Program.Text));
+    }
+
+    /// <summary>Sony girişi yerine 12 karakterli base64 PSN hesap kimliğini elle kaydeder.</summary>
+    internal static void SaveManualAccountId(AppController controller, string? accountId)
+    {
+        if (!controller.UseManualAccountId(accountId ?? ""))
+            throw new InvalidOperationException(Program.Text["This is not a valid account ID. It is 12 characters in base64, e.g. AbCdEfGhIjk=."]);
     }
 
     private static Task<IResult> Act(UiThread ui, Action work) => Act(ui, () => { work(); return Task.CompletedTask; });

@@ -508,6 +508,28 @@ final class PhoneModelTests: XCTestCase {
         let removed = await model.deepLUsage()
         XCTAssertNil(removed)
     }
+
+    /// Sony girişi engellenen kullanıcı hesap kimliğini base64 olarak elle yazar; web girişiyle aynı biçimde saklanır.
+    func testManualAccountIdIsStoredLikeWebLogin() {
+        let store = EphemeralStore()
+        let model = PhoneModel(services: services, store: store, defaults: defaults)
+        model.step = .psnLogin
+        let id = Data([1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertTrue(model.useManualAccountId("  \(id.base64EncodedString()) "))
+        XCTAssertEqual(model.accountId, id)
+        XCTAssertTrue(model.canAdvance)
+        XCTAssertEqual(store.load(Data.self, for: StoreKey.accountId), id)
+    }
+
+    func testInvalidManualAccountIdIsRejected() {
+        for value in ["", "   ", "AQIDBAUGBw==", "AQIDBAUGBwgJ", "AQIDBAUGBw!=", "1234567890", "AQIDBAUGBwg"] {
+            let store = EphemeralStore()
+            let model = PhoneModel(services: services, store: store, defaults: defaults)
+            XCTAssertFalse(model.useManualAccountId(value), value)
+            XCTAssertNil(model.accountId, value)
+            XCTAssertNil(store.load(Data.self, for: StoreKey.accountId), value)
+        }
+    }
 }
 
 // MARK: - TV'nin adresi değişince yeniden bulma (Mac, Windows ve Android ile aynı senaryolar)

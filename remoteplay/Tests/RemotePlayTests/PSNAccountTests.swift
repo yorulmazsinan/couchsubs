@@ -73,6 +73,18 @@ final class PSNAccountTests: XCTestCase {
         XCTAssertNil(PSNAccount.accountIdBytes(userId: ""))
     }
 
+    func testBase64AccountIdAcceptsEightBytesAndTrimsWhitespace() {
+        let id = Data([1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertEqual(PSNAccount.accountId(fromBase64: id.base64EncodedString()), id)
+        XCTAssertEqual(PSNAccount.accountId(fromBase64: "  AQID BAUG\nBwg=  "), id)
+    }
+
+    func testInvalidBase64AccountIdIsRejected() {
+        for value in ["", "   ", "AQIDBAUGBw==", "AQIDBAUGBwgJ", "AQIDBAUGBw!=", "1234567890", "AQIDBAUGBwg"] {
+            XCTAssertNil(PSNAccount.accountId(fromBase64: value), value)
+        }
+    }
+
     /// Sony girişi tamamlamazsa yönlendirmede kod yerine hata gelir; o hata okunur ve token isteği yapılmaz.
     func testRedirectErrorIsRead() async {
         let url = URL(string: PSNAccount.redirectPrefix + "?error=access_denied&error_description=Access+denied&error_code=4002")!

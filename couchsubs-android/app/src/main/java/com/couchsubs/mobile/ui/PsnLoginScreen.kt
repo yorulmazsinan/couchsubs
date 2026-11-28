@@ -84,7 +84,7 @@ import kotlin.coroutines.resume
 
 private const val TAG = "CouchSubsPsn"
 
-private enum class PsnMode { INTRO, WEB, BROWSER }
+private enum class PsnMode { INTRO, WEB, BROWSER, MANUAL }
 
 @Composable
 fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, onDone: () -> Unit) {
@@ -178,6 +178,10 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
                 }
                 // Kol ikinci hesaba atanırsa ana hesapla açılan oyun onu kendi kolu saymaz (GitHub #231).
                 NoteTile(stringResource(R.string.psn_main_account))
+                GhostButton(stringResource(R.string.psn_manual)) {
+                    problem = null
+                    mode = PsnMode.MANUAL
+                }
                 problem?.let {
                     NoteTile(stringResource(R.string.psn_failed, it))
                     GhostButton(stringResource(R.string.psn_browser)) { openBrowser() }
@@ -190,6 +194,7 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
             onRedirect = ::finish,
             onClose = { mode = PsnMode.INTRO },
             onBrowser = { openBrowser() },
+            onManual = { problem = null; mode = PsnMode.MANUAL },
             onGoogle = { openBrowser(google = true) },
         )
         PsnMode.BROWSER -> PsnBrowserLogin(
@@ -197,6 +202,14 @@ fun PsnLoginScreen(onBack: (() -> Unit)? = null, onSkip: (() -> Unit)? = null, o
             tried = tried,
             onRedirect = ::finish,
             onReopen = { openInBrowser(context) },
+            onClose = { mode = PsnMode.INTRO },
+        )
+        PsnMode.MANUAL -> PsnManualLogin(
+            onSave = { id ->
+                Services.settings.accountId = id
+                Log.i(TAG, "PSN hesap kimliği elle girildi")
+                onDone()
+            },
             onClose = { mode = PsnMode.INTRO },
         )
     }
@@ -255,6 +268,7 @@ private fun PsnWebLogin(
     onRedirect: (String) -> Unit,
     onClose: () -> Unit,
     onBrowser: () -> Unit,
+    onManual: () -> Unit,
     onGoogle: () -> Unit,
 ) {
     // Her "Yeniden dene" yeni bir WebView kurar (çöken sayfa süreci de böyle atılır).
@@ -392,6 +406,9 @@ private fun PsnWebLogin(
                         PrimaryButton(stringResource(R.string.psn_retry)) { retry() }
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             GhostButton(stringResource(R.string.psn_browser), onClick = onBrowser)
+                        }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            GhostButton(stringResource(R.string.psn_manual), onClick = onManual)
                         }
                     }
                 }
@@ -576,6 +593,37 @@ private fun PsnBrowserLogin(
         if (viaGoogle) NoteTile(stringResource(R.string.psn_browser_google), Tokens.Color.secondary)
         Field(text, { text = it }, stringResource(R.string.psn_browser_field), keyboard = KeyboardOptions(keyboardType = KeyboardType.Uri))
         if (text.isNotBlank() && redirect == null) NoteTile(stringResource(R.string.psn_browser_wrong))
+    }
+}
+
+/**
+ * Elle hesap kimliği girişi: Sony girişi açılamıyorsa ya da kullanıcının elinde chiaki-ng / masaüstü CouchSubs'tan
+ * alınmış 12 karakterli base64 hesap kimliği varsa doğrudan kaydedilir.
+ */
+@Composable
+private fun PsnManualLogin(
+    onSave: (ByteArray) -> Unit,
+    onClose: () -> Unit,
+) {
+    var text by rememberSaveable { mutableStateOf("") }
+    var showError by rememberSaveable { mutableStateOf(false) }
+    val accountId = PsnAccount.accountIdFromBase64(text)
+    val looksInvalid = (showError || text.filterNot(Char::isWhitespace).length >= 12) && accountId == null
+    ScreenScaffold(top = { TopBar(onBack = onClose) }, bottom = {
+        PrimaryButton(stringResource(R.string.psn_manual_save), enabled = text.isNotBlank()) {
+            if (accountId != null) onSave(accountId) else showError = true
+        }
+    }) {
+        Heading(stringResource(R.string.psn_manual_title), stringResource(R.string.psn_manual_body))
+        Field(
+            value = text,
+            onChange = { text = it; showError = false },
+            label = stringResource(R.string.psn_manual_field),
+            keyboard = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            placeholder = "AbCdEfGhIjk=",
+            mono = true,
+        )
+        if (looksInvalid) NoteTile(stringResource(R.string.psn_manual_wrong))
     }
 }
 

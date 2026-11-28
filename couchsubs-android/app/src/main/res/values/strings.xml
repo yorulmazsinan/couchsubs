@@ -91,6 +91,12 @@
     <string name="psn_browser_google">Google ile giriş uygulama içinde açılmıyor (Google buna izin vermiyor), bu yüzden giriş tarayıcıya taşındı. Tarayıcıda yine \"Google ile giriş yap\"ı seçebilirsin.</string>
     <string name="psn_browser_field">Sayfanın adresi</string>
     <string name="psn_browser_wrong">Bu adreste giriş kodu yok. Adres https://remoteplay.dl.playstation.net/remoteplay/redirect?code= ile başlamalı.</string>
+    <string name="psn_manual">Hesap kimliğini elle gir</string>
+    <string name="psn_manual_title">Hesap kimliğini elle gir</string>
+    <string name="psn_manual_body">Sony\'nin giriş sayfası açılmıyorsa (bazı internet sağlayıcıları engelliyor) ya da kimliğini zaten biliyorsan, ikinci hesabın PSN hesap kimliğini base64 olarak yaz (12 karakter, ör. AbCdEfGhIjk=).</string>
+    <string name="psn_manual_field">PSN hesap kimliği (base64)</string>
+    <string name="psn_manual_wrong">Bu geçerli bir hesap kimliği değil. Kimlik base64 biçiminde 12 karakterdir, ör. AbCdEfGhIjk=.</string>
+    <string name="psn_manual_save">Kaydet</string>
     <string name="psn_problem_offline">İnternete ya da Sony\'ye ulaşılamadı. Bağlantını kontrol et.</string>
     <string name="psn_problem_timeout">Sayfa çok uzun sürede açılmadı.</string>
     <string name="psn_problem_ssl">Güvenli bağlantı kurulamadı (saat ve tarih doğru mu?).</string>

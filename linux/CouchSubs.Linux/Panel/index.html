@@ -49,6 +49,7 @@
   input[type=text], select { font: inherit; width: 100%; min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
     background: var(--background); color: var(--text); }
   input.code { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+  input.mono { font-family: ui-monospace, Consolas, monospace; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   ol { padding-left: 20px; margin: 0 0 12px; } li { margin-bottom: 6px; }
   .error { color: var(--danger); margin: 12px 0 0; }
@@ -144,7 +145,13 @@ function wizard(s) {
         '<li>' + t('Adresi aşağıya yapıştırın.', 'Paste the address below.') + '</li></ol>' +
         input('redirect', t('Yönlendirme adresi', 'Redirect address'), 'placeholder="https://remoteplay.dl.playstation.net/remoteplay/redirect?code=…" autocomplete="off" autocapitalize="off" spellcheck="false"') +
         '<div class="row" style="margin-top:12px">' + btn('psn', t('Girişi tamamla', 'Complete sign-in'), 'primary') +
-        (s.hasAccount ? '<span class="ok">' + t('Hesap alındı', 'Account saved') + '</span>' : '') + '</div>' + err('psn') + '</div>';
+        (s.hasAccount ? '<span class="ok">' + t('Hesap alındı', 'Account saved') + '</span>' : '') + '</div>' + err('psn') + '</div>' +
+        '<details class="card" id="manualPsnBox"' + (extra.manualPsnOpen ? ' open' : '') + '><summary>' + t('Hesap kimliğini elle gir', 'Enter account ID manually') + '</summary>' +
+        '<p class="muted" style="margin-top:8px">' + t('Sony\'nin giriş sayfası açılmıyorsa (bazı internet sağlayıcıları engelliyor) ya da kimliğinizi zaten biliyorsanız, ikinci hesabın PSN hesap kimliğini base64 olarak yazın (12 karakter, ör. AbCdEfGhIjk=).',
+                                                       'If Sony\'s sign-in page does not open (some internet providers block it) or you already have your ID, enter the second account\'s PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=).') + '</p>' +
+        input('manualAccountId', t('PSN hesap kimliği (base64)', 'PSN account ID (base64)'), 'class="mono" placeholder="AbCdEfGhIjk=" maxlength="24" autocomplete="off" autocapitalize="off" spellcheck="false"') +
+        '<div class="row" style="margin-top:12px">' + btn('psnManual', t('Kaydet', 'Save'), 'primary') +
+        (s.hasAccount ? '<span class="ok">' + t('Hesap alındı', 'Account saved') + '</span>' : '') + '</div>' + err('psnManual') + '</details>';
       break;
     case 'Console':
       body = '<h1>' + t('PS5\'i eşleyin', 'Pair your PS5') + '</h1>' +
@@ -382,7 +389,16 @@ document.addEventListener('change', function (e) {
     run('settings', 'POST', '/api/settings', { style: style });
   }
 });
-document.addEventListener('toggle', function (e) { if (e.target.id === 'logBox') { extra.logOpen = e.target.open; if (extra.logOpen) loadLog(); } }, true);
+document.addEventListener('toggle', function (e) {
+  if (e.target.id === 'logBox') { extra.logOpen = e.target.open; if (extra.logOpen) loadLog(); }
+  if (e.target.id === 'manualPsnBox') extra.manualPsnOpen = e.target.open;
+}, true);
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && e.target && e.target.id === 'manualAccountId') {
+    e.preventDefault();
+    run('psnManual', 'POST', '/api/psn/manual', { accountId: form.manualAccountId || '' }, function () { form.manualAccountId = ''; });
+  }
+});
 document.addEventListener('click', function (e) {
   var el = e.target.closest('button');
   if (!el) return;
@@ -393,6 +409,7 @@ document.addEventListener('click', function (e) {
     case 'advance': run('advance', 'POST', '/api/advance'); break;
     case 'back': run('back', 'POST', '/api/back'); break;
     case 'psn': run('psn', 'POST', '/api/psn', { redirect: form.redirect || '' }, function () { form.redirect = ''; }); break;
+    case 'psnManual': run('psnManual', 'POST', '/api/psn/manual', { accountId: form.manualAccountId || '' }, function () { form.manualAccountId = ''; }); break;
     case 'consoles': run('consoles', 'GET', '/api/consoles', null, function (list) { lists.consoles = list; if (list.length === 1) form.consoleHost = list[0].host; }); break;
     case 'register': run('register', 'POST', '/api/register', { host: form.consoleHost || '', pin: form.pin || '' }, function () { form.pin = ''; }); break;
     case 'tvs': run('tvs', 'GET', '/api/tvs', null, function (list) { lists.tvs = list; }); break;

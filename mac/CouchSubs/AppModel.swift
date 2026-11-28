@@ -1704,9 +1704,7 @@ final class AppModel: ObservableObject {
 
     /// Base64 PSN hesap kimliği: boşluklar atılır, çözülen değer tam 8 bayt olmalı (12 karakter).
     static func accountId(fromBase64 value: String) -> Data? {
-        let trimmed = value.filter { !$0.isWhitespace }
-        guard trimmed.count == 12, let data = Data(base64Encoded: trimmed), data.count == 8 else { return nil }
-        return data
+        PSNAccount.accountId(fromBase64: value)
     }
 
     func discoverTVs() async -> [LGTV] { await services.discoverTVs() }

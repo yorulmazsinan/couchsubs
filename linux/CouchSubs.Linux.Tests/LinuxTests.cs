@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using CouchSubs.Core;
 using CouchSubs.RemotePlay;
+using CouchSubs.Shell;
 
 namespace CouchSubs.Linux.Tests;
 
@@ -206,4 +207,64 @@ public sealed class PanelTests
     [InlineData("?code=abc123&cid=1")]
     public void YalnizKodYapistirilincaAdresTamamlanir(string pasted) =>
         Assert.Equal("abc123", PsnAccount.CodeFromRedirect(Panel.ParseRedirect(pasted)));
+
+    private sealed class MemorySettingsStore : ISettingsStore
+    {
+        private UserSettings current = new();
+        public UserSettings Load() => current;
+        public void Save(UserSettings settings) => current = settings;
+    }
+
+    [Fact]
+    public void ElleHesapKimligiKaydedilirVeIlerlemeyiAcar()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "couchsubs-panel-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new FileAppStore(Path.Combine(folder, "secure.json"));
+            using var controller = new AppController(new LinuxServices(), store, new MemorySettingsStore(), new NoSleepGuard(),
+                Localizer.ForLanguage("tr"), action => action());
+            controller.Step = OnboardingStep.PsnLogin;
+            var id = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+            Panel.SaveManualAccountId(controller, $"  {Convert.ToBase64String(id)} \n");
+
+            Assert.True(controller.HasAccount);
+            Assert.True(controller.CanAdvance);
+            Assert.Equal(id, store.Load<byte[]>(StoreKeys.AccountId));
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("AQIDBAUGBw==")] // 7 bayt
+    [InlineData("AQIDBAUGBwgJ")] // 9 bayt
+    [InlineData("AQIDBAUGBw!=")]
+    [InlineData("1234567890")]
+    [InlineData("AQIDBAUGBwg")]  // 11 karakter
+    public void GecersizElleHesapKimligiReddedilir(string value)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "couchsubs-panel-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new FileAppStore(Path.Combine(folder, "secure.json"));
+            using var controller = new AppController(new LinuxServices(), store, new MemorySettingsStore(), new NoSleepGuard(),
+                Localizer.ForLanguage("tr"), action => action());
+
+            var error = Assert.Throws<InvalidOperationException>(() => Panel.SaveManualAccountId(controller, value));
+
+            Assert.False(string.IsNullOrWhiteSpace(error.Message));
+            Assert.False(controller.HasAccount);
+            Assert.Null(store.Load<byte[]>(StoreKeys.AccountId));
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+    }
 }

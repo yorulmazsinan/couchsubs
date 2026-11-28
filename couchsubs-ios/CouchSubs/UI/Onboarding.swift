@@ -158,6 +158,9 @@ struct PSNScreen: View {
     @State private var browserError: String?
     /// Son denenen yönlendirme adresi: tek kullanımlık kod panodan ikinci kez denenmez.
     @State private var lastBrowserRedirect: String?
+    @State private var showManual = false
+    @State private var manualId = ""
+    @State private var manualError: String?
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -192,6 +195,17 @@ struct PSNScreen: View {
                 if let browserError { MobileNote(text: browserError) }
                 Button("Save", action: submitBrowser).buttonStyle(.mobileSecondary).disabled(working)
                 Button("Open the browser again") { openURL(PSNAccount.authorizeURL) }.buttonStyle(.mobileGhost)
+            }
+            if showManual {
+                MobileNote(text: String(localized: "If Sony's sign-in page does not open (some internet providers block it), enter the second account's PSN account ID in base64 (12 characters, e.g. AbCdEfGhIjk=)."))
+                TextField("", text: $manualId)
+                    .textFieldStyle(MobileFieldStyle())
+                    .font(.body.monospaced())
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit(saveManual)
+                if let manualError { MobileNote(text: manualError) }
+                Button("Save", action: saveManual).buttonStyle(.mobileSecondary).disabled(working)
             }
         } bottom: {
             // Giriş kartın içinde; adımın ana düğmesi giriş yapılınca açılır.
@@ -281,6 +295,15 @@ struct PSNScreen: View {
                             .buttonStyle(DSButtonStyle(kind: .secondary))
                             .disabled(working)
                     }
+                    if !showManual {
+                        Button("Enter Account ID Manually") {
+                            showManual = true
+                            manualError = nil
+                            error = nil
+                        }
+                        .buttonStyle(DSButtonStyle(kind: .secondary))
+                        .disabled(working)
+                    }
                     Button("Why a second account?") { showWhy = true }.buttonStyle(.mobileGhost)
                 }
                 .padding(.top, Mobile.Space.gap)
@@ -341,6 +364,19 @@ struct PSNScreen: View {
         browserURL = ""
         showBrowser = false
         received(redirect)
+    }
+
+    private func saveManual() {
+        guard !working else { return }
+        if model.useManualAccountId(manualId) {
+            manualError = nil
+            error = nil
+            manualId = ""
+            showManual = false
+            onDone()
+        } else {
+            manualError = String(localized: "This is not a valid account ID. It is 12 characters in base64, e.g. AbCdEfGhIjk=.")
+        }
     }
 
     private func received(_ url: URL) {
