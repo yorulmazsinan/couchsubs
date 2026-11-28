@@ -17,6 +17,12 @@ namespace CouchSubs.Core;
 /// <item>Ekran önbelleği: kilitli ekranın yuvaları yazılarının sadeleştirilmiş kümesiyle saklanır; aynı ekrana dönülünce
 /// aynı çeviriler aynı kutularda hemen çizilir.</item>
 /// <item>Her kilit ve açılış günlüğe nedeni ve blok sayısıyla bir satır yazılır.</item>
+/// <item>Hazır alanlar da (#1391, <c>preset-*</c>: GTA 6 sol üstteki yardım ve sağdaki mesaj alanı) kilidin altında: harita
+/// ve görev listesi menü durumu bir an kapanınca hazır alandan, sonra yine otomatik alandan okunuyor; hazır alanın kutuları
+/// kilitsiz kalıp her turda yeniden karar veriliyor, otomatik alanın kutularının üstüne biniyordu (beta.108).</item>
+/// <item>Yollar arası çakışma (#1391): aynı yeri iki yol (görev kutusu, otomatik ekran yazısı, hazır alan) birden çizerse
+/// sabit öncelikle (<see cref="Rank"/>) yalnız biri kalır: görev kutusu &gt; otomatik ekran yazısı &gt; hazır alan. Kilide
+/// giren bloklar da aynı öncelikle birleşir (<see cref="Merge"/>).</item>
 /// </list>
 /// Yalnız gönderilenleri süzer. Mac/iPhone (ScreenLock.swift) ve Android (ScreenLock.kt) aynı kurallar. İş parçacığına
 /// dayanıklıdır (her çağrı kendi kilidinde).
@@ -25,9 +31,74 @@ internal sealed class ScreenLock
 {
     /// <summary>Kilidin altındaki alan: otomatik ekran yazısı; görev kutusu ve kenar bildirimi kendi yuvasında kalır.</summary>
     internal static bool Covers(string id) =>
-        ScreenTextAreas.IsAuto(id) && id != MissionLine.AreaId && !ScreenNotices.IsNotice(id);
+        (ScreenTextAreas.IsAuto(id) || GameAreaPresets.IsPreset(id)) && id != MissionLine.AreaId && !ScreenNotices.IsNotice(id);
 
-    internal readonly record struct Block(string Key, TextBox Box);
+    /// <summary>Kilidin altındaki alan; <see cref="Routes"/> kapalıyken (beta.108 davranışı, yalnız denemelerin önce/sonra
+    /// sayısı) hazır alan kilide girmez.</summary>
+    internal bool CoversArea(string id) => Covers(id) && (Routes || !GameAreaPresets.IsPreset(id));
+
+    /// <summary>Hazır alanlar kilide girer ve yollar arası çakışma çözülür (#1391). false yalnız denemelerde (beta.108).</summary>
+    internal bool Routes { get; set; } = true;
+
+    /// <summary>Yolun önceliği (küçük olan kalır): görev kutusu, otomatik ekran yazısı, hazır alan, diğer.</summary>
+    internal static int Rank(string id)
+    {
+        if (id == MissionLine.AreaId) return 0;
+        if (ScreenTextAreas.IsAuto(id)) return 1;
+        if (GameAreaPresets.IsPreset(id)) return 2;
+        return 3;
+    }
+
+    /// <summary>Kilidin dışında kalıp yine de üstüne çizilmeyecek yol (görev kutusu).</summary>
+    internal static bool Blocks(string id) => id == MissionLine.AreaId;
+
+    /// <summary>Başka yolun kutusuyla (küçüğünün alanına oranla) en az bu kadar örtüşen kutu çakışır.</summary>
+    internal const double RouteOverlap = 0.1;
+
+    /// <summary>Öğenin TV'de kapladığı yerler: özgün yazının kutusu, örtüsü, yanına yazılan ya da ikiz kutusu.</summary>
+    internal static List<TextBox> Footprint(ScreenTranslation.Item item)
+    {
+        var result = new List<TextBox> { item.Box };
+        if (item.Paint is { } paint)
+        {
+            result.Add(paint.Cover);
+            if (paint.Spot is { } spot) result.Add(spot);
+            if (paint.Twin is { } twin) result.Add(twin);
+        }
+        return result;
+    }
+
+    internal static List<List<TextBox>> Footprints(Payload payload)
+    {
+        if (payload.Blocks is { Count: > 0 } items) return [.. items.Select(Footprint)];
+        return payload.Box is { } box ? [[box]] : [];
+    }
+
+    internal static bool Clash(IReadOnlyList<TextBox> a, IReadOnlyList<TextBox> b) =>
+        a.Any(x => b.Any(y => Overlap(x, y) >= RouteOverlap));
+
+    private static IOrderedEnumerable<string> ByRank(IEnumerable<string> ids) =>
+        ids.OrderBy(Rank).ThenBy(id => id, StringComparer.Ordinal);
+
+    /// <summary>Turun blokları alan alan: yüksek öncelikli yolun bloğuyla aynı yerdeki alçak yol bloğu atılır (aynı satırı iki
+    /// yol okudu). Aynı öncelikteki alanlar olduğu gibi kalır.</summary>
+    internal List<Block> Merge(IReadOnlyList<(string Id, IReadOnlyList<Block> Blocks)> areas)
+    {
+        if (!Routes) return [.. areas.SelectMany(a => a.Blocks)];
+        var kept = new List<(int Rank, TextBox Box)>();
+        var result = new List<Block>();
+        foreach (var area in areas.OrderBy(a => Rank(a.Id)).ThenBy(a => a.Id, StringComparer.Ordinal))
+        {
+            var rank = Rank(area.Id);
+            var fresh = area.Blocks.Where(b => !kept.Any(k => k.Rank < rank && Overlap(k.Box, b.Box) >= RouteOverlap)).ToList();
+            kept.AddRange(fresh.Select(b => (rank, b.Box)));
+            result.AddRange(fresh.Select(b => b with { Route = rank }));
+        }
+        return result;
+    }
+
+    /// <summary>Okunan blok; <c>Route</c>: bloğu okuyan yolun önceliği (<see cref="Rank"/>; <see cref="Merge"/> yazar).</summary>
+    internal readonly record struct Block(string Key, TextBox Box, int Route = 1);
 
     internal sealed record Payload(string Text, TextBox? Box, double? LineHeight, IReadOnlyList<IconPlacement>? Icons,
                                    IReadOnlyList<ScreenTranslation.Item>? Blocks)
@@ -47,21 +118,30 @@ internal sealed class ScreenLock
     internal const long EmptyMs = 1000;
     internal const double SamePlace = 0.5;
     internal const int CacheLimit = 16;
+    /// <summary>Yeri okunmayan yuva (#1391: GTA 6 haritasında menü durumu bir an kapanınca menü alanları kalkıyor, hazır alan
+    /// okuyordu) bu kadar süre ekran değişikliğine sayılmaz; daha uzun sürerse gitmiş sayılır.</summary>
+    internal const long UnreadMs = 1500;
 
     internal sealed class Slot
     {
         public required string Key { get; init; }
         public required TextBox Box { get; init; }
+        /// <summary>Yuvayı okuyan yolun önceliği: daha alçak yol (hazır alan) bu yuvayı doldurmaz, yazısını değiştirmez (#1391:
+        /// hazır alanın kesik okuması "Keep an eye or" görev listesinin satırına yazılıyordu).</summary>
+        public int Route { get; init; } = 1;
         public bool Observed { get; init; } = true;
         public string? Id { get; set; }
         public ScreenTranslation.Item? Item { get; set; }
         public required string Seen { get; set; }
         public int SeenPasses { get; set; }
         public ScreenTranslation.Item? Pending { get; set; }
+        /// <summary>Yuvanın yeri bu turdan beri okunan hiçbir alanın içinde değil (<see cref="UnreadMs"/>).</summary>
+        public long? UnreadSince { get; set; }
 
         public Slot Copy() => new()
         {
-            Key = Key, Box = Box, Observed = Observed, Id = Id, Item = Item, Seen = Seen, SeenPasses = SeenPasses, Pending = Pending,
+            Key = Key, Box = Box, Route = Route, Observed = Observed, Id = Id, Item = Item, Seen = Seen, SeenPasses = SeenPasses,
+            Pending = Pending, UnreadSince = UnreadSince,
         };
     }
 
@@ -80,6 +160,13 @@ internal sealed class ScreenLock
     private Dictionary<string, Payload> frames = [];
     private readonly Dictionary<string, Saved> cache = [];
     private readonly List<string> cacheOrder = [];
+    /// <summary>Kilidin dışındaki öncelikli yolların (görev kutusu) TV'de duran kutuları (<see cref="Blocker"/>).</summary>
+    private readonly Dictionary<string, Payload> blockers = [];
+    /// <summary>Tanı (#1391): son yazılan yol çakışması ve bir an okunmayan yuva sayısı (değişince bir satır).</summary>
+    private string routeLogged = "";
+    private int unreadLogged;
+    /// <summary>Son çözümde öncelikli yolun altında kalıp çizilmeyen öğe sayısı, alan alan.</summary>
+    private readonly Dictionary<string, int> hidden = [];
     public Action<string>? Log { get; set; }
     public int Locks { get; private set; }
     public int Unlocks { get; private set; }
@@ -109,6 +196,13 @@ internal sealed class ScreenLock
         public double Share => Total == 0 ? 0 : (double)(Gone + Fresh + Changed) / Total;
     }
 
+    /// <summary>Biri ötekinin parçası (#1391: menü durumu bir an kapanınca aynı paragraf satır satır okunuyor). En az 4 harf.</summary>
+    internal static bool Part(string a, string b)
+    {
+        var (shorter, longer) = a.Length <= b.Length ? (a, b) : (b, a);
+        return shorter.Length >= 4 && longer.Contains(shorter, StringComparison.Ordinal);
+    }
+
     internal static Diff Compare(IReadOnlyList<Block> old, IReadOnlyList<Block> fresh)
     {
         var used = new HashSet<int>();
@@ -126,7 +220,7 @@ internal sealed class ScreenLock
             if (best is { } b)
             {
                 used.Add(b);
-                if (!Similar(block.Key, fresh[b].Key)) changed++;
+                if (!Similar(block.Key, fresh[b].Key) && !Part(block.Key, fresh[b].Key)) changed++;
             }
             else
             {
@@ -134,7 +228,10 @@ internal sealed class ScreenLock
                 if (fresh.Any(other => Similar(other.Key, block.Key))) moved++;
             }
         }
-        return new Diff(gone, fresh.Count - used.Count, changed, moved, Math.Max(old.Count, fresh.Count));
+        // Eski bir bloğun yerinde onun parçası olan blok yeni sayılmaz (aynı yazı başka satırlara bölündü).
+        var added = Enumerable.Range(0, fresh.Count)
+            .Count(j => !used.Contains(j) && !old.Any(o => Overlap(o.Box, fresh[j].Box) >= SamePlace && Part(o.Key, fresh[j].Key)));
+        return new Diff(gone, added, changed, moved, Math.Max(old.Count, fresh.Count));
     }
 
     /// <summary>Ekranın önbellek anahtarı: yazıların sadeleştirilmiş kümesi.</summary>
@@ -149,7 +246,8 @@ internal sealed class ScreenLock
             if (payload is null) intended.Remove(id); else intended[id] = payload;
             if (!locked)
             {
-                // Kilit yokken gönderi olduğu gibi geçer.
+                // Kilit yokken gönderi geçer; yollar arası çakışmada öncelikli yol kalır (Resolved).
+                if (Routes) return Publish();
                 if (payload is null) displayed.Remove(id); else displayed[id] = payload;
                 return [new Send(id, payload)];
             }
@@ -159,7 +257,7 @@ internal sealed class ScreenLock
             var touched = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var item in items)
             {
-                if (SlotFor(item.Box) is not { } slot) continue;
+                if (SlotFor(item.Box, Routes ? Rank(id) : 0) is not { } slot) continue;
                 if (slot.Item is null)
                 {
                     slot.Item = item;
@@ -185,15 +283,52 @@ internal sealed class ScreenLock
                 }
                 else slot.Pending = item;
             }
-            return [.. touched.Select(Render).OfType<Send>()];
+            return Routes ? RenderAll(touched) : [.. touched.Select(Render).OfType<Send>()];
+        }
+    }
+
+    /// <summary>Alanın yazısı kesin gitti (hazır alanın arayüz kutusu PanelMissTurns tur bulunamadı): kilitliyken de kutuları
+    /// kalkar, yuvaları düzenden çıkar.</summary>
+    internal List<Send> Withdraw(string id)
+    {
+        lock (gate)
+        {
+            if (!Routes) return Offer(id, null);
+            intended.Remove(id);
+            if (!locked) return Publish();
+            slots.RemoveAll(s => s.Id == id);
+            frames.Remove(id);
+            var sends = new List<Send>();
+            if (displayed.Remove(id)) sends.Add(new Send(id, null));
+            // Kilitli ekranın bütün yazısı bu alanındı: kilit açılır.
+            if (!slots.Any(s => s.Observed)) sends.AddRange(Unlock($"{id} alanının yazısı gitti", clear: false, [], settled: false));
+            else sends.AddRange(RenderAll(new SortedSet<string>(StringComparer.Ordinal)));
+            return sends;
+        }
+    }
+
+    /// <summary>Kilidin dışındaki öncelikli yol (görev kutusu) TV'ye gitti ya da kalktı: onunla çakışan ekran yazısı
+    /// çizilmez, kalkınca yeniden çizilir (öncelikli yolun kendi gönderisi izleyicide).</summary>
+    internal List<Send> Blocker(string id, Payload? payload)
+    {
+        lock (gate)
+        {
+            if (!Routes) return [];
+            var current = blockers.GetValueOrDefault(id);
+            if (payload is null ? current is null : payload.Same(current)) return [];
+            if (payload is null) blockers.Remove(id); else blockers[id] = payload;
+            return locked ? RenderAll(new SortedSet<string>(StringComparer.Ordinal)) : Publish();
         }
     }
 
     private static bool SameIcons(IReadOnlyList<IconPlacement>? a, IReadOnlyList<IconPlacement>? b) =>
         (a?.Count ?? 0) == (b?.Count ?? 0) && (a is null || b is null || a.SequenceEqual(b));
 
-    /// <summary>Turun sonu: bu turda okunan bütün ekran yazısı blokları. Kilitlenir, açılır ya da bekleyen yazı güncellenir.</summary>
-    internal List<Send> Observe(IReadOnlyList<Block> blocks, long now)
+    /// <summary>Turun sonu: bu turda okunan bütün ekran yazısı blokları. Kilitlenir, açılır ya da bekleyen yazı güncellenir.
+    /// <paramref name="read"/>: bu turda yazı okunan alanların yeri ve yolu (Block.Box, Block.Route; null: bütün ekran okundu).
+    /// Yuvanın yeri kendi yolundan ya da daha öncelikli yoldan okunmadıysa yuva <see cref="UnreadMs"/> dolana dek ekran
+    /// değişikliğine sayılmaz.</summary>
+    internal List<Send> Observe(IReadOnlyList<Block> blocks, long now, IReadOnlyList<Block>? read = null)
     {
         lock (gate)
         {
@@ -210,14 +345,15 @@ internal sealed class ScreenLock
             {
                 foreach (var slot in slots.Where(s => s.Observed))
                 {
-                    Block? read = null;
+                    Block? seen = null;
                     var best = 0.0;
                     foreach (var block in blocks)
                     {
+                        if (block.Route > slot.Route) continue;
                         var o = Overlap(block.Box, slot.Box);
-                        if (o >= SamePlace && o > best) { read = block; best = o; }
+                        if (o >= SamePlace && o > best) { seen = block; best = o; }
                     }
-                    if (read is not { } r)
+                    if (seen is not { } r)
                     {
                         slot.SeenPasses = 0;
                         continue;
@@ -229,8 +365,28 @@ internal sealed class ScreenLock
                         slot.SeenPasses = 1;
                     }
                 }
-                var layout = slots.Where(s => s.Observed).Select(s => new Block(s.Key, s.Box)).ToList();
-                var diff = Compare(layout, blocks);
+                foreach (var slot in slots)
+                {
+                    var unread = read is not null && !read.Any(area => area.Route <= slot.Route && Overlap(slot.Box, area.Box) >= SamePlace);
+                    slot.UnreadSince = unread ? slot.UnreadSince ?? now : null;
+                }
+                var layout = slots.Where(s => s.Observed && (s.UnreadSince is not { } since || now - since > UnreadMs))
+                    .Select(s => new Block(s.Key, s.Box)).ToList();
+                // Kilitli ekranı kuran yoldan alçak yolun okuması (hazır alanın menü satırından kestiği parça, menü dışı okunan
+                // harita tuşu) ekran değişikliğine kanıt sayılmaz (#1391); yalnız kendi yolunun yuvasının üstündeki okuması
+                // sayılır. Kuran yol okumazsa yuvaları UnreadMs sonra gitmiş sayılır.
+                var top = slots.Where(s => s.Observed).Select(s => s.Route).DefaultIfEmpty(int.MaxValue).Min();
+                var evidence = Routes
+                    ? blocks.Where(b => b.Route <= top
+                        || slots.Any(s => s.Observed && s.Route == b.Route && Overlap(s.Box, b.Box) >= SamePlace)).ToList()
+                    : blocks;
+                var held = Routes ? slots.Count(s => s.Observed && s.UnreadSince is { } since && now - since <= UnreadMs) : 0;
+                if (held != unreadLogged)
+                {
+                    if (held > 0) Log?.Invoke($"ekran yazısı yolları: {held} blok bir an okunmadı (alan önerilmedi ya da boş okundu), kilit korunuyor");
+                    unreadLogged = held;
+                }
+                var diff = Compare(layout, evidence);
                 if (diff.Share >= ChangeShare)
                 {
                     // Ekran değişiyor: bekleyen yazı uygulanmaz; değişiklik sürerse kilit açılır.
@@ -256,7 +412,7 @@ internal sealed class ScreenLock
                     }
                 }
                 Save();
-                return [.. touched.Select(Render).OfType<Send>()];
+                return Routes ? RenderAll(touched) : [.. touched.Select(Render).OfType<Send>()];
             }
             if (Cached(blocks) is { } saved)
             {
@@ -300,6 +456,7 @@ internal sealed class ScreenLock
         lock (gate)
         {
             Release("çeviri durdu");
+            blockers.Clear();
             cache.Clear();
             cacheOrder.Clear();
         }
@@ -311,7 +468,7 @@ internal sealed class ScreenLock
         Locks++;
         changing = 0;
         lockKey = ScreenKey(blocks);
-        slots = [.. blocks.Select(b => new Slot { Key = b.Key, Box = b.Box, Seen = b.Key, SeenPasses = SteadyPasses })];
+        slots = [.. blocks.Select(b => new Slot { Key = b.Key, Box = b.Box, Route = b.Route, Seen = b.Key, SeenPasses = SteadyPasses })];
         frames = [];
         // Çizili kutular yuvalarına oturur; yuvası olmayan çizili kutu da yerinde kalır (kendi yuvası olur).
         foreach (var (id, payload) in displayed.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -319,7 +476,7 @@ internal sealed class ScreenLock
             frames[id] = new Payload("", payload.Box, payload.LineHeight, payload.Icons, null);
             foreach (var item in payload.Blocks ?? [])
             {
-                if (SlotFor(item.Box) is { Item: null } slot)
+                if (SlotFor(item.Box, Routes ? Rank(id) : 0) is { Item: null } slot)
                 {
                     slot.Item = item;
                     slot.Id = id;
@@ -327,7 +484,10 @@ internal sealed class ScreenLock
                 else
                 {
                     var key = Key(item.Source);
-                    slots.Add(new Slot { Key = key, Box = item.Box, Observed = false, Id = id, Item = item, Seen = key, SeenPasses = 0 });
+                    slots.Add(new Slot
+                    {
+                        Key = key, Box = item.Box, Route = Rank(id), Observed = false, Id = id, Item = item, Seen = key, SeenPasses = 0,
+                    });
                 }
             }
         }
@@ -355,6 +515,7 @@ internal sealed class ScreenLock
             copy.Seen = copy.Key;
             copy.SeenPasses = SteadyPasses;
             copy.Pending = null;
+            copy.UnreadSince = null;
             return copy;
         })];
         frames = new Dictionary<string, Payload>(saved.Frames);
@@ -392,12 +553,16 @@ internal sealed class ScreenLock
         // Yeni ekran daha önce kilitlenmişse (menüye dönüldü) aynı kutular ve çevirilerle hemen çizilir.
         if (Cached(next) is { } saved) return Restore(saved, ScreenKey(next), next.Count);
         // İzleyicinin şimdiki durumu çizilir (yeni ekran).
-        foreach (var id in displayed.Keys.Union(intended.Keys).Distinct().OrderBy(id => id, StringComparer.Ordinal).ToList())
+        if (Routes) sends.AddRange(Publish());
+        else
         {
-            var want = intended.GetValueOrDefault(id);
-            if (want is null ? displayed.ContainsKey(id) : !want.Same(displayed.GetValueOrDefault(id))) sends.Add(new Send(id, want));
+            foreach (var id in displayed.Keys.Union(intended.Keys).Distinct().OrderBy(id => id, StringComparer.Ordinal).ToList())
+            {
+                var want = intended.GetValueOrDefault(id);
+                if (want is null ? displayed.ContainsKey(id) : !want.Same(displayed.GetValueOrDefault(id))) sends.Add(new Send(id, want));
+            }
+            displayed = new Dictionary<string, Payload>(intended);
         }
-        displayed = new Dictionary<string, Payload>(intended);
         if (settled && next.Count > 0) LockOn(next);
         return sends;
     }
@@ -418,12 +583,14 @@ internal sealed class ScreenLock
         cache[lockKey] = new Saved([.. slots.Select(s => s.Copy())], new Dictionary<string, Payload>(frames));
     }
 
-    private Slot? SlotFor(TextBox box)
+    /// <summary>Kutunun yuvası; <paramref name="route"/>: gönderen yolun önceliği, daha öncelikli yolun yuvası seçilmez.</summary>
+    private Slot? SlotFor(TextBox box, int route)
     {
         Slot? best = null;
         var bestOverlap = SamePlace;
         foreach (var slot in slots)
         {
+            if (slot.Route < route) continue;
             var o = Overlap(slot.Box, box);
             if (o >= bestOverlap) { best = slot; bestOverlap = o; }
         }
@@ -471,11 +638,102 @@ internal sealed class ScreenLock
         return old with { Style = style, Paint = paint };
     }
 
+    /// <summary>İzleyicinin istediği, yollar arası çakışması çözülmüş hâli: alanlar öncelik sırasıyla yerleşir; daha öncelikli
+    /// yolun kutusuyla çakışan öğe çizilmez, bütün öğeleri çakışan alan hiç gönderilmez.</summary>
+    private Dictionary<string, Payload> Resolved()
+    {
+        var result = new Dictionary<string, Payload>();
+        hidden.Clear();
+        var boxes = new List<(int Rank, List<TextBox> Rects)>();
+        foreach (var id in blockers.Keys.OrderBy(id => id, StringComparer.Ordinal))
+            boxes.AddRange(Footprints(blockers[id]).Select(f => (Rank(id), f)));
+        foreach (var id in ByRank(intended.Keys).ToList())
+        {
+            var payload = intended[id];
+            var rank = Rank(id);
+            bool Free(List<TextBox> rects) => !boxes.Any(b => b.Rank < rank && Clash(b.Rects, rects));
+            if (payload.Blocks is not { Count: > 0 } items)
+            {
+                List<TextBox> rects = payload.Box is { } box ? [box] : [];
+                if (!Free(rects))
+                {
+                    hidden[id] = 1;
+                    continue;
+                }
+                boxes.Add((rank, rects));
+                result[id] = payload;
+                continue;
+            }
+            var keep = items.Where(item => Free(Footprint(item))).ToList();
+            if (keep.Count < items.Count) hidden[id] = items.Count - keep.Count;
+            if (keep.Count == 0) continue;
+            boxes.AddRange(keep.Select(item => (rank, Footprint(item))));
+            result[id] = keep.Count == items.Count
+                ? payload
+                : payload with { Blocks = keep, Text = string.Join("\n", keep.Select(i => i.Translation)) };
+        }
+        return result;
+    }
+
+    /// <summary>Kilitsizken TV'ye gidecekler: çakışması çözülmüş istek ile TV'de duran arasındaki fark.</summary>
+    private List<Send> Publish()
+    {
+        var next = Resolved();
+        var summary = string.Join(", ", hidden.OrderBy(h => h.Key, StringComparer.Ordinal).Select(h => $"{h.Key} {h.Value}"));
+        if (summary != routeLogged)
+        {
+            if (summary.Length > 0) Log?.Invoke($"ekran yazısı yolları: öncelikli yolun kutusuyla çakışan kutu çizilmedi ({summary})");
+            routeLogged = summary;
+        }
+        var sends = new List<Send>();
+        foreach (var id in displayed.Keys.Union(next.Keys).Distinct().OrderBy(id => id, StringComparer.Ordinal).ToList())
+        {
+            var want = next.GetValueOrDefault(id);
+            if (want is null ? displayed.ContainsKey(id) : !want.Same(displayed.GetValueOrDefault(id))) sends.Add(new Send(id, want));
+        }
+        displayed = next;
+        return sends;
+    }
+
+    /// <summary>Kilitliyken yazısı değişen ve görünürlüğü değişen alanlar yeniden çizilir: bir yolun yuvası dolunca ya da görev
+    /// kutusu gelip gidince alçak yolun çakışan öğesi gizlenir ya da yeniden görünür; kutular yerinde kalır.</summary>
+    private List<Send> RenderAll(SortedSet<string> touched)
+    {
+        var sends = new List<Send>();
+        foreach (var id in slots.Select(s => s.Id).OfType<string>().Distinct().OrderBy(id => id, StringComparer.Ordinal).ToList())
+        {
+            var shown = displayed.GetValueOrDefault(id)?.Blocks?.Count ?? 0;
+            if (!touched.Contains(id) && shown == Visible(id).Count) continue;
+            if (Render(id) is { } send) sends.Add(send);
+        }
+        return sends;
+    }
+
+    /// <summary>Alanın kilitli yuvalarından çizilecek öğeler: öncelikli yolun (görev kutusu, kilitli başka alanın yuvası)
+    /// kutusuyla çakışan öğe çizilmez.</summary>
+    private List<ScreenTranslation.Item> Visible(string id)
+    {
+        var all = slots.Where(s => s.Id == id).Select(s => s.Item).OfType<ScreenTranslation.Item>().ToList();
+        if (!Routes || all.Count == 0) return all;
+        var rank = Rank(id);
+        var above = blockers.Where(b => Rank(b.Key) < rank).OrderBy(b => b.Key, StringComparer.Ordinal)
+            .SelectMany(b => Footprints(b.Value)).ToList();
+        foreach (var slot in slots)
+        {
+            if (slot.Id is { } owner && Rank(owner) < rank && slot.Item is { } item) above.Add(Footprint(item));
+        }
+        return [.. all.Where(item => !above.Any(a => Clash(a, Footprint(item))))];
+    }
+
     private Send? Render(string id)
     {
-        var items = slots.Where(s => s.Id == id).Select(s => s.Item).OfType<ScreenTranslation.Item>()
-            .OrderBy(i => i.Box.Top).ThenBy(i => i.Box.Left).ToList();
-        if (items.Count == 0) return null;
+        if (!slots.Any(s => s.Id == id && s.Item is not null)) return null;
+        var items = Visible(id).OrderBy(i => i.Box.Top).ThenBy(i => i.Box.Left).ToList();
+        if (items.Count == 0)
+        {
+            if (!displayed.Remove(id)) return null;
+            return new Send(id, null);
+        }
         var frame = frames.GetValueOrDefault(id);
         var payload = new Payload(string.Join("\n", items.Select(i => i.Translation)), frame?.Box ?? items[0].Box,
                                   frame?.LineHeight ?? items[0].LineHeight, frame?.Icons, items);

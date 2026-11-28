@@ -1,0 +1,62 @@
+{
+  "about": "Ekran kilidi ve yollar (#1391): GTA 6 görev listesi, harita menüsü ve harita kartı gerçek kareleri (testdata/frames) ile kayıtlı bütün ekran okumaları (testdata/frames/ocr/screen: otomatik alanlar 'areas', hazır alanlar 'presets') art arda turlarla bütün izleyiciden (RegionWatcher) geçer; yazı tanıma koşmaz. Hazır alanlar (GTA 6 'Help' ve 'Messages') her turda önerilir, hangisinin okunacağına izleyici karar verir (yieldingPresets). Turdaki değişiklikler gerçek günlükteki dedektör davranışını oynatır: 'menu': false: menü durumu bir an kapandı, otomatik alanlar menü dışı önerilir; 'autos': bu turda önerilen otomatik alanlar (kayıtlı sıraya göre; yoksa hepsi): menü kapanınca bazı menü alanları kalkar, hazır alan onların yerini okur; 'idShift': menü yeniden açıldı, dedektör alanlara yeni kimlik verdi (auto-<idBase+sıra+idShift>); 'jitter', 'drop', 'edit': screen-lock.json'daki gibi (hazır alanların satırlarına da). Mac/iPhone ScreenLockTests.swift, Windows ScreenLockTests.cs ve Android ScreenLockTest.kt aynı dosyayı okur.",
+  "passMs": 500,
+  "segments": [
+    {
+      "screen": "gta6-menu-gorevler",
+      "idBase": 1,
+      "passes": [
+        {},
+        {},
+        { "jitter": 1 },
+        { "menu": false, "autos": [1, 2] },
+        { "menu": false, "autos": [1, 2], "jitter": 2 },
+        { "idShift": 100 },
+        { "idShift": 100, "jitter": 1 },
+        { "idShift": 100, "drop": ["HIGH TIDE"] },
+        { "idShift": 100 }
+      ]
+    },
+    {
+      "screen": "gta6-menu-harita",
+      "idBase": 10,
+      "passes": [
+        {},
+        {},
+        { "jitter": 2 },
+        { "menu": false, "autos": [0, 1, 3] },
+        { "menu": false, "autos": [0, 1, 3], "jitter": 1 },
+        { "idShift": 100 },
+        { "idShift": 100, "jitter": 2 },
+        { "idShift": 100, "menu": false, "autos": [0, 1, 3] },
+        { "idShift": 200 },
+        { "idShift": 200, "jitter": 1 }
+      ]
+    },
+    {
+      "screen": "gta6-harita-kart",
+      "idBase": 20,
+      "passes": [
+        {},
+        {},
+        { "jitter": 1 },
+        { "menu": false, "autos": [1] },
+        { "menu": false, "autos": [1], "jitter": 2 },
+        { "idShift": 100 },
+        { "idShift": 100, "edit": [["4 ft", "5 ft"]] },
+        { "idShift": 100, "edit": [["4 ft", "5 ft"]] },
+        { "idShift": 100 }
+      ]
+    },
+    {
+      "screen": "gta6-menu-gorevler",
+      "idBase": 30,
+      "passes": [
+        {},
+        { "menu": false, "autos": [1, 2] },
+        { "idShift": 100 },
+        { "idShift": 100, "jitter": 1 }
+      ]
+    }
+  ]
+}

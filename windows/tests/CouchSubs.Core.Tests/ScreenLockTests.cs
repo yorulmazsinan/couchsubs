@@ -27,7 +27,7 @@ public class ScreenLockTests(ITestOutputHelper output)
 
     private sealed record Line(string Text, double[]? Box, double? Confidence, List<(string Text, double[] Box)>? Words);
     private sealed record Area(bool Menu, CropRegion Region, List<Line> Lines);
-    private sealed record Screen(Frame Image, List<Area> Areas);
+    private sealed record Screen(Frame Image, List<Area> Areas, Dictionary<string, List<Line>> Presets);
     private sealed record Pass(int? Jitter, List<string> Drop, List<(string From, string To)> Edit);
     private sealed record Segment(string? Screen, int IdBase, List<Pass> Passes);
 
@@ -44,6 +44,15 @@ public class ScreenLockTests(ITestOutputHelper output)
                     ? [.. edit.EnumerateArray().Select(e => (e[0].GetString()!, e[1].GetString()!))]
                     : []))]))];
 
+    private static List<Line> LinesOf(JsonElement area) =>
+        [.. area.GetProperty("lines").EnumerateArray().Select(line => new Line(line.GetProperty("text").GetString()!,
+            line.TryGetProperty("box", out var box) ? [.. box.EnumerateArray().Select(v => v.GetDouble())] : null,
+            line.TryGetProperty("confidence", out var confidence) ? confidence.GetDouble() : null,
+            line.TryGetProperty("words", out var words)
+                ? [.. words.EnumerateArray().Select(word => (word.GetProperty("text").GetString()!,
+                    word.GetProperty("box").EnumerateArray().Select(v => v.GetDouble()).ToArray()))]
+                : null))];
+
     private static Screen LoadScreen(string id)
     {
         var directory = FramesDirectory();
@@ -51,18 +60,15 @@ public class ScreenLockTests(ITestOutputHelper output)
         var areas = new List<Area>();
         foreach (var area in fixture.RootElement.GetProperty("areas").EnumerateArray())
         {
-            var lines = area.GetProperty("lines").EnumerateArray().Select(line => new Line(line.GetProperty("text").GetString()!,
-                line.TryGetProperty("box", out var box) ? [.. box.EnumerateArray().Select(v => v.GetDouble())] : null,
-                line.TryGetProperty("confidence", out var confidence) ? confidence.GetDouble() : null,
-                line.TryGetProperty("words", out var words)
-                    ? [.. words.EnumerateArray().Select(word => (word.GetProperty("text").GetString()!,
-                        word.GetProperty("box").EnumerateArray().Select(v => v.GetDouble()).ToArray()))]
-                    : null)).ToList();
+            var lines = LinesOf(area);
             if (lines.Count == 0) continue;
             var r = area.GetProperty("region").EnumerateArray().Select(v => v.GetDouble()).ToArray();
             areas.Add(new Area(area.TryGetProperty("menu", out var menu) && menu.GetBoolean(), new CropRegion(r[1], r[3], r[0], r[2]), lines));
         }
-        return new Screen(Jpeg.Load(Path.Combine(directory, id + ".jpg")), areas);
+        var presets = new Dictionary<string, List<Line>>();
+        if (fixture.RootElement.TryGetProperty("presets", out var recorded))
+            foreach (var preset in recorded.EnumerateArray()) presets[preset.GetProperty("id").GetString()!] = LinesOf(preset);
+        return new Screen(Jpeg.Load(Path.Combine(directory, id + ".jpg")), areas, presets);
     }
 
     /// <summary>Kayıtlı okumanın turdaki hâli (kural screen-lock.json'da).</summary>
@@ -372,6 +378,232 @@ public class ScreenLockTests(ITestOutputHelper output)
         Assert.False(ScreenLock.Covers(MissionLine.AreaId));
         Assert.False(ScreenLock.Covers(ScreenNotices.IdPrefix + "1"));
         Assert.False(ScreenLock.Covers("game-phone"));
-        Assert.False(ScreenLock.Covers("preset-help"));
+        // Hazır alan da kilitte (#1391); kullanıcının kendi ek alanı dışında.
+        Assert.True(ScreenLock.Covers(GameAreaPresets.HelpId));
+        Assert.True(ScreenLock.Covers(GameAreaPresets.PhoneId));
+        Assert.False(ScreenLock.Covers("user-1"));
+    }
+
+    // Hazır alan ve yollar (#1391): GTA 6 haritası ve görev listesi beta.108'de de karışıyordu. Menü durumu bir an kapanınca
+    // menü alanları kalkıyor, hazır alanlar (sol üstteki yardım, sağdaki mesaj alanı) aynı yazıyı kendi kutularında okuyordu;
+    // hazır alan kilidin dışında kaldığı için kutuları her turda yeniden karar veriliyor, otomatik alanın kutularının üstüne
+    // biniyordu. Gerçek kareler ve kayıtlı okumalar (otomatik ve hazır alanlar) bütün izleyiciden geçer
+    // (core/Tests/CouchSubsCoreTests/Fixtures/screen-lock-routes.json; Mac/iPhone ve Android aynı dosya).
+
+    private sealed record RoutesPass(Pass Plain, bool? Menu, List<int>? Autos, int IdShift);
+    private sealed record RoutesSegment(string Screen, int IdBase, List<RoutesPass> Passes);
+
+    private static JsonDocument RoutesPlan() => JsonDocument.Parse(File.ReadAllText(PackFixtures.Path("screen-lock-routes.json")));
+
+    private static List<RoutesSegment> RoutesSegments(JsonDocument plan) =>
+        [.. plan.RootElement.GetProperty("segments").EnumerateArray().Select(segment => new RoutesSegment(
+            segment.GetProperty("screen").GetString()!,
+            segment.GetProperty("idBase").GetInt32(),
+            [.. segment.GetProperty("passes").EnumerateArray().Select(pass => new RoutesPass(
+                new Pass(pass.TryGetProperty("jitter", out var jitter) ? jitter.GetInt32() : null,
+                    pass.TryGetProperty("drop", out var drop) ? [.. drop.EnumerateArray().Select(d => d.GetString()!)] : [],
+                    pass.TryGetProperty("edit", out var edit)
+                        ? [.. edit.EnumerateArray().Select(e => (e[0].GetString()!, e[1].GetString()!))]
+                        : []),
+                pass.TryGetProperty("menu", out var menu) ? menu.GetBoolean() : null,
+                pass.TryGetProperty("autos", out var autos) ? [.. autos.EnumerateArray().Select(a => a.GetInt32())] : null,
+                pass.TryGetProperty("idShift", out var shift) ? shift.GetInt32() : 0))]))];
+
+    /// <summary>Kutuya göre okuma: hangi alanın okunduğu kesilen karenin boyundan bulunur.</summary>
+    private sealed class CropReader : ITextReader
+    {
+        public Dictionary<string, Reading> Readings { get; } = [];
+        public static string KeyOf(Frame image) => $"{image.Width}x{image.Height}";
+        public string Read(Frame image) => ReadLines(image, false).Text;
+        public Reading ReadLines(Frame image, bool deep)
+        {
+            lock (Readings) return Readings.GetValueOrDefault(KeyOf(image)) ?? Reading.Empty;
+        }
+    }
+
+    private sealed record RoutesRun(List<Changes> PerSegment, List<Changes> WhileLocked, List<int> Overlaps, int PresetBoxes,
+                                    int Locks, int Unlocks);
+
+    /// <summary>TV'de farklı öncelikli yolların üst üste binen kutu çiftleri.</summary>
+    private static int Crossings(Dictionary<string, List<(TextBox Box, string Text)>> shown)
+    {
+        var parts = shown.SelectMany(pair => pair.Value.Select(v => (Id: pair.Key, v.Box))).ToList();
+        var count = 0;
+        for (var i = 0; i < parts.Count; i++)
+            for (var j = i + 1; j < parts.Count; j++)
+                if (ScreenLock.Rank(parts[i].Id) != ScreenLock.Rank(parts[j].Id)
+                    && ScreenLock.Overlap(parts[i].Box, parts[j].Box) >= ScreenLock.RouteOverlap) count++;
+        return count;
+    }
+
+    private static async Task<RoutesRun> ReplayRoutesAsync(bool routes)
+    {
+        using var plan = RoutesPlan();
+        var passMs = plan.RootElement.GetProperty("passMs").GetInt32();
+        var reader = new CropReader();
+        var tv = new Tv();
+        long clock = 0;
+        var watcher = new RegionWatcher(reader, new FakeTranslator(), tv, passMs, () => clock)
+        {
+            LocksScreen = true,
+            RereadsEveryPass = true,
+        };
+        watcher.ScreenLock.Routes = routes;
+        var presets = GameAreaPresets.Areas("GTA 6");
+        Assert.Equal(2, presets.Count);
+        var perSegment = new List<Changes>();
+        var lockedPer = new List<Changes>();
+        var overlapsPer = new List<int>();
+        var presetBoxes = 0;
+        foreach (var segment in RoutesSegments(plan))
+        {
+            var screen = LoadScreen(segment.Screen);
+            var total = new Changes(0, 0, 0, 0);
+            var locked = new Changes(0, 0, 0, 0);
+            var overlaps = 0;
+            foreach (var pass in segment.Passes)
+            {
+                var areas = new List<WatchedArea>();
+                reader.Readings.Clear();
+                void Add(WatchedArea area, List<Line> lines)
+                {
+                    var key = CropReader.KeyOf(RegionCropper.Crop(screen.Image, area.Region));
+                    Assert.False(reader.Readings.ContainsKey(key), $"{segment.Screen}: iki alan aynı boyda");
+                    reader.Readings[key] = ReadingOf(lines, pass.Plain);
+                    areas.Add(area);
+                }
+                for (var k = 0; k < screen.Areas.Count; k++)
+                {
+                    if (pass.Autos is { } autos && !autos.Contains(k)) continue;
+                    var area = screen.Areas[k];
+                    Add(new WatchedArea($"auto-{segment.IdBase + k + pass.IdShift}", "Screen text", area.Region)
+                        { Auto = true, Menu = pass.Menu ?? area.Menu }, area.Lines);
+                }
+                foreach (var preset in presets) Add(preset, screen.Presets.GetValueOrDefault(preset.Id) ?? []);
+                var before = tv.Boxes();
+                var lockedBefore = watcher.ScreenLock.Locked;
+                var unlocks = watcher.ScreenLock.Unlocks;
+                await watcher.PassAsync(screen.Image, areas);
+                clock += passMs;
+                var change = Compare(before, tv.Boxes());
+                total += change;
+                if (lockedBefore && watcher.ScreenLock.Locked && watcher.ScreenLock.Unlocks == unlocks) locked += change;
+                lock (tv.Shown)
+                {
+                    overlaps += Crossings(tv.Shown);
+                    presetBoxes += tv.Shown.Where(pair => GameAreaPresets.IsPreset(pair.Key)).Sum(pair => pair.Value.Count);
+                }
+            }
+            perSegment.Add(total);
+            lockedPer.Add(locked);
+            overlapsPer.Add(overlaps);
+        }
+        return new RoutesRun(perSegment, lockedPer, overlapsPer, presetBoxes, watcher.ScreenLock.Locks, watcher.ScreenLock.Unlocks);
+    }
+
+    /// <summary>
+    /// Harita ve görev listesinde menü durumu bir an kapanıp açılsa, hazır alan okusa, dedektör yeni kimlik verse de kilitliyken
+    /// hiçbir kutu taşınmaz, kalkmaz, eklenmez; farklı yolların kutuları hiç üst üste binmez. beta.108 (hazır alan kilitsiz,
+    /// yollar çözülmüyor) sayıları önce/sonra karşılaştırması için yazdırılır.
+    /// </summary>
+    [Fact]
+    public async Task MapAndQuestListKeepBoxesStillAcrossPresetAndAutoRoutes()
+    {
+        using var plan = RoutesPlan();
+        var segments = RoutesSegments(plan);
+        var before = await ReplayRoutesAsync(false);
+        var after = await ReplayRoutesAsync(true);
+        for (var k = 0; k < segments.Count; k++)
+        {
+            var (b, a) = (before.PerSegment[k], after.PerSegment[k]);
+            output.WriteLine($"ekran kilidi yollar {segments[k].Screen}: kutu değişikliği önce {b.Boxes} (ekle {b.Added}, taşı {b.Moved}, "
+                             + $"kaldır {b.Removed}), sonra {a.Boxes} (ekle {a.Added}, taşı {a.Moved}, kaldır {a.Removed}); "
+                             + $"kilitliyken önce {before.WhileLocked[k].Boxes}, sonra {after.WhileLocked[k].Boxes}; "
+                             + $"üst üste binen önce {before.Overlaps[k]}, sonra {after.Overlaps[k]}");
+        }
+        output.WriteLine($"ekran kilidi yollar: kilit/açılış önce {before.Locks}/{before.Unlocks}, sonra {after.Locks}/{after.Unlocks}; "
+                         + $"hazır alanın çizdiği kutu (tur başına toplam) önce {before.PresetBoxes}, sonra {after.PresetBoxes}");
+        for (var k = 0; k < segments.Count; k++)
+        {
+            Assert.Equal(new Changes(0, 0, 0, 0), after.WhileLocked[k] with { Retexted = 0 });
+            Assert.Equal(0, after.Overlaps[k]);
+        }
+        // beta.108 bu turlarda hazır alanın kutularını otomatik alanın yerine çiziyordu ve kilitliyken kutular oynuyordu.
+        Assert.True(before.Overlaps.Sum() + before.WhileLocked.Sum(c => c.Boxes) > 0);
+        Assert.True(after.PerSegment.Sum(c => c.Boxes) < before.PerSegment.Sum(c => c.Boxes));
+        Assert.True(after.Unlocks < before.Unlocks);
+        Assert.True(after.PresetBoxes <= before.PresetBoxes);
+    }
+
+    [Fact]
+    public void PresetBoxUnderAutoTextIsNotDrawnAndReturnsWhenAutoLeaves()
+    {
+        var lockOn = new ScreenLock();
+        var line = new ScreenLock.Block("recenter", new TextBox(0.8, 0.7, 1.1, 0.74));
+        var auto = PayloadOf([Item("recenter", line)]);
+        var shifted = line with { Box = line.Box with { Left = line.Box.Left + 0.01 } };
+        var preset = PayloadOf([Item("recenter c3", shifted)]);
+        Assert.Equal(["auto-3"], lockOn.Offer("auto-3", auto).Select(s => s.Id));
+        // Hazır alan aynı satırı okudu: çizilmez (otomatik ekran yazısı öncelikli).
+        Assert.Empty(lockOn.Offer(GameAreaPresets.PhoneId, preset));
+        Assert.Null(lockOn.Displayed(GameAreaPresets.PhoneId));
+        // Otomatik alan kalktı: hazır alanın kutusu çizilir.
+        Assert.Equal(["auto-3", GameAreaPresets.PhoneId], lockOn.Offer("auto-3", null).Select(s => s.Id));
+        Assert.NotNull(lockOn.Displayed(GameAreaPresets.PhoneId));
+        // Öncelik sıra değil yol: otomatik alan geri gelince hazır alanın çakışan kutusu kalkar.
+        Assert.Equal(new HashSet<string> { "auto-9", GameAreaPresets.PhoneId }, lockOn.Offer("auto-9", auto).Select(s => s.Id).ToHashSet());
+        Assert.Null(lockOn.Displayed(GameAreaPresets.PhoneId));
+        // Kilide giren bloklar da birleşir: aynı yerdeki hazır alan bloğu sayılmaz.
+        var merged = lockOn.Merge([(GameAreaPresets.PhoneId, [new ScreenLock.Block("recenter c3", shifted.Box)]), ("auto-9", [line])]);
+        Assert.Equal([line], merged);
+    }
+
+    [Fact]
+    public void MissionBoxHidesOverlappingScreenTextEvenWhileLocked()
+    {
+        var lockOn = new ScreenLock();
+        var blocks = ScreenOf();
+        lockOn.Offer("auto-1", PayloadOf([.. blocks.Select(b => Item(b.Key, b))]));
+        lockOn.Observe(blocks, 0);
+        lockOn.Observe(blocks, 500);
+        Assert.True(lockOn.Locked);
+        // Görev kutusu ikinci satırın üstüne geldi: o satır gizlenir, diğer kutular yerinde kalır.
+        var hidden = lockOn.Blocker(MissionLine.AreaId, PayloadOf([Item("collect chemicals", blocks[1])]));
+        Assert.Single(hidden);
+        Assert.Equal(blocks.Where((_, i) => i != 1).Select(b => b.Box), hidden[0].Payload!.Blocks!.Select(i => i.Box));
+        Assert.True(lockOn.Locked);
+        // Görev kutusu kalktı: satır aynı kutusunda geri gelir.
+        var back = lockOn.Blocker(MissionLine.AreaId, null);
+        Assert.Equal(blocks.Select(b => b.Box), back[0].Payload!.Blocks!.Select(i => i.Box));
+        Assert.Equal(0, lockOn.Unlocks);
+    }
+
+    [Fact]
+    public void DetectorDroppingAnAreaForAMomentDoesNotUnlock()
+    {
+        var lockOn = new ScreenLock();
+        var list = ScreenOf();
+        List<ScreenLock.Block> header = [new("map", new TextBox(0.5, 0.02, 0.8, 0.06))];
+        lockOn.Offer("auto-1", PayloadOf([.. list.Select(b => Item(b.Key, b))]));
+        lockOn.Offer("auto-2", PayloadOf([.. header.Select(b => Item(b.Key, b))]));
+        var listArea = new ScreenLock.Block("", new TextBox(0, 0.05, 0.5, 0.6));
+        var headerArea = new ScreenLock.Block("", new TextBox(0.45, 0, 1, 0.08));
+        List<ScreenLock.Block> all = [.. list, .. header];
+        lockOn.Observe(all, 0, [listArea, headerArea]);
+        lockOn.Observe(all, 500, [listArea, headerArea]);
+        Assert.True(lockOn.Locked);
+        // Menü durumu bir an kapandı, liste alanı önerilmedi: kilit açılmaz, liste kutuları yerinde.
+        Assert.Empty(lockOn.Observe(header, 1000, [headerArea]));
+        Assert.Empty(lockOn.Observe(header, 1500, [headerArea]));
+        Assert.Empty(lockOn.Observe(header, 2000, [headerArea]));
+        Assert.True(lockOn.Locked);
+        Assert.Equal(list.Count, lockOn.Displayed("auto-1")!.Blocks!.Count);
+        Assert.Empty(lockOn.Observe(all, 2500, [listArea, headerArea]));
+        // Liste gerçekten gitti (alan UnreadMs'ten uzun okunmadı): ekran değişikliği, kilit açılır.
+        for (long now = 3000; now <= 4500; now += 500) lockOn.Observe(header, now, [headerArea]);
+        Assert.Equal(0, lockOn.Unlocks);
+        lockOn.Observe(header, 5000, [headerArea]);
+        lockOn.Observe(header, 5500, [headerArea]);
+        Assert.Equal(1, lockOn.Unlocks);
     }
 }

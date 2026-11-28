@@ -15,6 +15,9 @@ public static class GameAreaPresets
     /// <summary>Sol üstteki ipucu/yardım kutusu.</summary>
     public const string HelpId = "preset-help";
 
+    /// <summary>Hazır alanın kimliği mi (Mac/iPhone <c>GameAreaPresets.isPreset</c>, Android <c>GameAreaPresets.isPreset</c>).</summary>
+    public static bool IsPreset(string? id) => id is HelpId or PhoneId;
+
     private static readonly Dictionary<string, IReadOnlyList<WatchedArea>> Table = new()
     {
         ["gta 6"] =

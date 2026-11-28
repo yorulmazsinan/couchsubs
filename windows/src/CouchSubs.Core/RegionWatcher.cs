@@ -262,8 +262,9 @@ public sealed partial class RegionWatcher
     private volatile bool writesBeside;
 
     /// <summary>
-    /// Ekran kilidi (<see cref="ScreenLock"/>): otomatik ekran yazısının kararlı ekranı kilitlenir; küçük değişiklikte kutu
-    /// taşınmaz, eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında. Mac/iPhone ve Android aynı.
+    /// Ekran kilidi (<see cref="ScreenLock"/>): otomatik ekran yazısının ve hazır alanların (#1391) kararlı ekranı kilitlenir;
+    /// küçük değişiklikte kutu taşınmaz, eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında.
+    /// Mac/iPhone ve Android aynı.
     /// </summary>
     public bool LocksScreen
     {
@@ -539,15 +540,25 @@ public sealed partial class RegionWatcher
         }
         if (!regularDue || !locksScreen || Volatile.Read(ref session) != started) return;
         // Ekran kilidi turun bütün ekran yazısına bakar (ScreenLock): kilitlenir, açılır ya da bekleyen yazı güncellenir.
+        // Hazır alan da kilide girer; iki yolun aynı yerde okuduğu satır öncelikli yolunki sayılır (#1391).
         List<ScreenLock.Block> blocks;
+        var covered = areas.Where(area => screenLock.CoversArea(area.Id)).ToList();
+        List<WatchedArea> filled;
         lock (observedBlocks)
         {
             foreach (var id in observedBlocks.Keys.Where(id => !ids.Contains(id)).ToList()) observedBlocks.Remove(id);
             foreach (var id in rejectedKeys.Keys.Where(id => !ids.Contains(id)).ToList()) rejectedKeys.Remove(id);
-            blocks = [.. areas.Where(area => ScreenLock.Covers(area.Id))
-                .SelectMany(area => observedBlocks.GetValueOrDefault(area.Id) ?? [])];
+            blocks = screenLock.Merge([.. covered.Select(area =>
+                (area.Id, (IReadOnlyList<ScreenLock.Block>)(observedBlocks.GetValueOrDefault(area.Id) ?? [])))]);
+            filled = [.. covered.Where(area => observedBlocks.GetValueOrDefault(area.Id) is { Count: > 0 })];
         }
-        Deliver(screenLock.Observe(blocks, now()));
+        // Dedektörün bir an önermediği alanın kilitli kutuları hemen ekran değişikliği sayılmaz (ScreenLock.UnreadMs). Boş
+        // okunan alan da (menü durumu kapanınca menü dışı okunan liste) bir an okunmamış sayılır.
+        List<ScreenLock.Block>? read = screenLock.Routes
+            ? [.. filled.Select(area => new ScreenLock.Block("",
+                new TextBox(area.Region.Left, area.Region.Top, area.Region.Right, area.Region.Bottom), ScreenLock.Rank(area.Id)))]
+            : null;
+        Deliver(screenLock.Observe(blocks, now(), read));
     }
 
     /// <summary>Ekran yazısı alanının gönderisi ekran kilidinden geçer (<see cref="ScreenLock.Offer"/>); diğer alanlar doğrudan gider.</summary>
@@ -557,10 +568,13 @@ public sealed partial class RegionWatcher
     private void Emit(string id, string text, TextBox? box, double? lineHeight, IReadOnlyList<IconPlacement>? icons,
                       IReadOnlyList<ScreenTranslation.Item>? blocks, bool plain = false)
     {
-        if (!locksScreen || !ScreenLock.Covers(id))
+        if (!locksScreen || !screenLock.CoversArea(id))
         {
             if (plain) server.SendRegion(id, text, box, lineHeight);
             else server.SendRegion(id, text, box, lineHeight, icons, blocks);
+            // Görev kutusu kilidin dışında ama öncelikli yol: onunla çakışan ekran yazısı çizilmez (#1391).
+            if (locksScreen && ScreenLock.Blocks(id))
+                Deliver(screenLock.Blocker(id, text.Length == 0 ? null : new ScreenLock.Payload(text, box, lineHeight, icons, blocks)));
             return;
         }
         var payload = text.Length == 0 ? null : new ScreenLock.Payload(text, box, lineHeight, icons, blocks);
@@ -585,7 +599,7 @@ public sealed partial class RegionWatcher
     /// <summary>Bu okumanın ekran kilidine giren blokları: gürültü, boş ya da az önce çizilmeyip atılan okuma girmez.</summary>
     private void NoteObserved(Candidate candidate, WatchedArea area)
     {
-        if (!locksScreen || !ScreenLock.Covers(area.Id)) return;
+        if (!locksScreen || !screenLock.CoversArea(area.Id)) return;
         var labelLike = area.Menu || IsUiLabel(candidate);
         lock (observedBlocks)
         {
@@ -690,6 +704,12 @@ public sealed partial class RegionWatcher
             state.Candidate = null;
             (state.Held, state.Holds) = (null, 0);
             if (++state.PanelMisses < PanelMissTurns && state.Shown.Length > 0) return;
+            // Kilit de bu alanın yazısını gitmiş sayar (#1391: hazır alan kilitte).
+            if (locksScreen && screenLock.CoversArea(area.Id))
+            {
+                lock (observedBlocks) observedBlocks[area.Id] = [];
+                Deliver(screenLock.Withdraw(area.Id));
+            }
             state.LastRead = null;
             if (state.Shown.Length > 0)
             {
@@ -1752,7 +1772,7 @@ public sealed partial class RegionWatcher
             // Kendiliğinden bulunan alanda yazı yok ya da gürültü (sayaç, harita, kısa etiket): çevrilmez, dedektöre
             // bildirilir; o görüntü değişmedikçe alan yeniden önerilmez.
             if (state.Shown.Length > 0 || !string.IsNullOrEmpty(state.RenderedText)) Emit(area.Id, "", null);
-            if (locksScreen && ScreenLock.Covers(area.Id))
+            if (locksScreen && screenLock.CoversArea(area.Id))
                 lock (observedBlocks)
                 {
                     rejectedKeys[area.Id] = candidate.Key;

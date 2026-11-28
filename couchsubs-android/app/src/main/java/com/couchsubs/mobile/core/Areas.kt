@@ -1419,8 +1419,9 @@ class RegionWatcher(
         }
 
     /**
-     * Ekran kilidi ([ScreenLock]): otomatik ekran yazısının kararlı ekranı kilitlenir; küçük değişiklikte kutu taşınmaz,
-     * eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında. Mac/iPhone ve Windows aynı.
+     * Ekran kilidi ([ScreenLock]): otomatik ekran yazısının ve hazır alanların (#1391) kararlı ekranı kilitlenir; küçük
+     * değişiklikte kutu taşınmaz, eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında.
+     * Mac/iPhone ve Windows aynı.
      */
     @Volatile var locksScreen = true
         set(value) {
@@ -1464,8 +1465,11 @@ class RegionWatcher(
             if (states[id]!!.shown.isNotEmpty()) cleared.add(id)
             states.remove(id)
         }
-        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir).
-        cleared.addAll(screenLock.displayedIds)
+        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir). Hazır alanın kutusu kalkınca
+        // izleyici de unutur: yazı yeniden okununca yeniden çizilir (#1391).
+        val held = screenLock.displayedIds
+        for (id in held) states.remove(id)
+        cleared.addAll(held)
         screenLock.release("telefon açıldı")
         synchronized(observedBlocks) { observedBlocks.clear() }
         for (id in cleared) sender.sendRegion(id, "", null, null)
@@ -1612,13 +1616,21 @@ class RegionWatcher(
         }
         if (!locksScreen || started != session) return
         // Ekran kilidi turun bütün ekran yazısına bakar ([ScreenLock]): kilitlenir, açılır ya da bekleyen yazı güncellenir.
-        val readIds = crops.map { it.first.id }
+        // Hazır alan da kilide girer; iki yolun aynı yerde okuduğu satır öncelikli yolunki sayılır (#1391).
+        val covered = crops.map { it.first }.filter { screenLock.coversArea(it.id) }
+        var filled = emptyList<ExtraArea>()
         val blocks = synchronized(observedBlocks) {
             observedBlocks.keys.retainAll(ids)
             rejectedKeys.keys.retainAll(ids)
-            readIds.filter(ScreenLock::covers).flatMap { observedBlocks[it] ?: emptyList() }
+            filled = covered.filter { !observedBlocks[it.id].isNullOrEmpty() }
+            screenLock.merge(covered.map { it.id to (observedBlocks[it.id] ?: emptyList()) })
         }
-        synchronized(lock) { if (started == session) deliver(screenLock.observe(blocks, clock())) }
+        // Dedektörün bir an önermediği alanın kilitli kutuları hemen ekran değişikliği sayılmaz ([ScreenLock.UNREAD_MS]). Boş
+        // okunan alan da (menü durumu kapanınca menü dışı okunan liste) bir an okunmamış sayılır.
+        val read = if (screenLock.routes) filled.map {
+            ScreenLock.Block("", TextBox(it.region.left, it.region.top, it.region.right, it.region.bottom), ScreenLock.rank(it.id))
+        } else null
+        synchronized(lock) { if (started == session) deliver(screenLock.observe(blocks, clock(), read)) }
     }
 
     /** Ekran yazısı alanının gönderisi ekran kilidinden geçer ([ScreenLock.offer]); diğer alanlar doğrudan gider. */
@@ -1629,8 +1641,12 @@ class RegionWatcher(
         id: String, text: String, box: TextBox?, lineHeight: Double?, icons: List<IconPlacement>?,
         blocks: List<ScreenTranslation.Item>?, plain: Boolean = false,
     ) {
-        if (!locksScreen || !ScreenLock.covers(id)) {
+        if (!locksScreen || !screenLock.coversArea(id)) {
             if (plain) sender.sendRegion(id, text, box, lineHeight) else sender.sendRegion(id, text, box, lineHeight, icons, blocks)
+            // Görev kutusu kilidin dışında ama öncelikli yol: onunla çakışan ekran yazısı çizilmez (#1391).
+            if (locksScreen && ScreenLock.blocks(id)) {
+                deliver(screenLock.block(id, if (text.isEmpty()) null else ScreenLock.Payload(text, box, lineHeight, icons, blocks)))
+            }
             return
         }
         val payload = if (text.isEmpty()) null else ScreenLock.Payload(text, box, lineHeight, icons, blocks)
@@ -1649,7 +1665,7 @@ class RegionWatcher(
 
     /** Bu okumanın ekran kilidine giren blokları: boş ya da az önce çizilmeyip atılan okuma girmez. */
     private fun noteObserved(candidate: Candidate, area: ExtraArea) {
-        if (!locksScreen || !ScreenLock.covers(area.id)) return
+        if (!locksScreen || !screenLock.coversArea(area.id)) return
         synchronized(observedBlocks) {
             observedBlocks[area.id] = if (candidate.key.isEmpty() || rejectedKeys[area.id] == candidate.key) emptyList()
             else blockTexts(candidate).map { (box, text) -> ScreenLock.Block(ScreenLock.key(text), box) }.filter { it.key.isNotEmpty() }
@@ -1658,7 +1674,7 @@ class RegionWatcher(
 
     /** Gürültü/sahne yazısı sayılan okuma kilidin bloklarına girmez. */
     private fun noteRejected(candidate: Candidate, area: ExtraArea) {
-        if (!locksScreen || !ScreenLock.covers(area.id)) return
+        if (!locksScreen || !screenLock.coversArea(area.id)) return
         synchronized(observedBlocks) {
             rejectedKeys[area.id] = candidate.key
             observedBlocks[area.id] = emptyList()
@@ -1700,6 +1716,11 @@ class RegionWatcher(
             state.panelMisses++
             // Tek karelik ıska çeviriyi silmez: kutu [PANEL_MISS_TURNS] tur art arda yoksa gösterilen kutu kalkar.
             if (state.shown.isNotEmpty() && state.panelMisses < PANEL_MISS_TURNS) return
+            // Kilit de bu alanın yazısını gitmiş sayar (#1391: hazır alan kilitte).
+            if (locksScreen && screenLock.coversArea(area.id)) {
+                synchronized(observedBlocks) { observedBlocks[area.id] = emptyList() }
+                synchronized(lock) { if (started == session) deliver(screenLock.withdraw(area.id)) }
+            }
             state.candidate = null
             state.lastRead = null
             state.held = null
