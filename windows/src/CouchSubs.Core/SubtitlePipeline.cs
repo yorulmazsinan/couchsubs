@@ -320,6 +320,15 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// </summary>
     public bool LightInkGame { get; set; }
     /// <summary>
+    /// GTA 6'nın sağ alttaki açık bildirim kartı (<see cref="NoticeCard"/>; gelen arama, mesaj, uyarı) altyazı alanı ne
+    /// olursa olsun sahne yazısı süzgeçlerinden önce ayrılır, kartın tamamı "auto-notice-&lt;n&gt;" ek alanı olarak kendi
+    /// yerinde çevrilir (#1443). Uygulama oyun GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken açar (Mac/iPhone ve
+    /// Android aynı).
+    /// </summary>
+    public bool FindsNoticeCards { get; set; }
+    /// <summary>Günlüğe yazılmış son bildirim kartı (her karede yeniden yazılmasın).</summary>
+    private string loggedCard = "";
+    /// <summary>
     /// Telefon arandı (bulundu mu); <see cref="FindsPhone"/> açıkken GamePhoneTracker.IntervalMs arayla. Telefon çevirisi
     /// kapalıyken "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (<see cref="GamePhoneHint.ObservePhone"/>, #1282).
     /// Kararları değiştirmez; okuma iş parçacığında çağrılır.
@@ -399,6 +408,21 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private void CountReject(string reason)
     {
         foreach (var entry in rejects.Note(reason, null, now())) Write(entry);
+    }
+
+    /// <summary>Bulunan bildirim kartları günlüğe (yazısı değişince bir kez): yazısı, karedeki yeri ve altyazı sayılmadığı.</summary>
+    private void LogCards(List<(Reading Block, TextBox Card)> cards)
+    {
+        var line = string.Join("; ", cards.Select(entry =>
+            $"{SubtitleLog.Excerpt(string.Join(" / ", entry.Block.Lines.Select(l => l.Text)))} sağda açık kart ("
+            + string.Create(CultureInfo.InvariantCulture,
+                $"x {entry.Card.Left:0.00}-{entry.Card.Right:0.00}, y {entry.Card.Top:0.00}-{entry.Card.Bottom:0.00}") + ")"));
+        lock (gate)
+        {
+            if (line == loggedCard) return;
+            loggedCard = line;
+        }
+        if (line.Length > 0) Write($"bildirim kartı: {line}, altyazı sayılmadı; kart kendi yerinde çevrilecek");
     }
 
     /// <summary>Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933).</summary>
@@ -571,6 +595,14 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         // GTA ekran yazısı (silah adı, plaka, tabela, menü) altyazı değildir; konuşmaya yapışsa da çevrilmez.
         if (DropsScreenText?.Invoke() == true) cleaned = cleaned.WithoutScreenText();
         var rows = cleaned.JoiningRows();
+        // Sağ alttaki bildirim kartı (#1443) görev/HUD, sahne yazısı ve koyu yazı (kâğıt/tabela) süzgeçlerinden önce
+        // ayrılır: altyazı alanı kartı kesse de kartın tamamı kendi yerinde çevrilir (NoticeCard).
+        List<(Reading Block, TextBox Card)> cards = [];
+        if (FindsNoticeCards)
+        {
+            (rows, cards) = NoticeCard.Split(rows, area, NoticeCard.Sampler(frame));
+            LogCards(cards);
+        }
         // Menünün geçmiş listesi (Reading.IsHistoryList; sabit satır süzgecinden önce: liste bir satır kayınca yalnız yeni
         // satır "sabit değil" kalıp altyazı seçiliyordu): hiçbir satırı altyazı olmaz, konuşan adlı satırı menü durumunu
         // bitirmez, bekçi de listeden satır çevirmez.
@@ -660,7 +692,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 }
             LogStale(staleTexts);
             subtitleBand.Record(reading, area);
-            noticesMoved = notices.Observe(edge, now());
+            noticesMoved = notices.Observe(edge, now(), [.. cards.Select(entry => entry.Card)]);
             noticeAreas = notices.Areas;
         }
         // Kenardaki bildirim kartı altyazının yerinde (ekranın ortasında) değil, kendi yerinde çevrilir.
@@ -1652,6 +1684,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 sender.SendObjective(null);
             }
             notices.Reset();
+            loggedCard = "";
             Echo?.Reset();
             loggedOwn = null;
             phone = null;

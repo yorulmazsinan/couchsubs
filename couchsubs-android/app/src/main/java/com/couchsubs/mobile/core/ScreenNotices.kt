@@ -48,6 +48,10 @@ class ScreenNotices {
             top = max(0.0, box.top - 0.35 * line), bottom = min(1.0, box.bottom + 0.35 * line),
             left = max(0.0, box.left - 0.01), right = min(1.0, box.right + 0.01))
 
+        /** Bildirim kartının bölgesi: kartın kendisi, 0…1'e kırpılmış. */
+        internal fun cardRegion(box: TextBox) = CropRegion(
+            top = max(0.0, box.top), bottom = min(1.0, box.bottom), left = max(0.0, box.left), right = min(1.0, box.right))
+
         /**
          * İki kutu aynı bildirim mi: karenin aynı yarısında ve dikeyde (yana kayan kart) ya da yatayda (yukarı kayan kart)
          * küçüğünün en az yarısı kadar örtüşüyor.
@@ -69,7 +73,9 @@ class ScreenNotices {
             abs(a.right - b.right) <= MOVE_TOLERANCE && abs(a.bottom - b.bottom) <= MOVE_TOLERANCE
     }
 
-    private class Track(val number: Int, var box: TextBox, var line: Double, var still: Long, var lastSeen: Long) {
+    /** [card]: bildirim kartı ([NoticeCard]); kutu kartın bütün yeridir, bölge de odur. */
+    private class Track(val number: Int, var box: TextBox, var line: Double, var still: Long, var lastSeen: Long,
+                        val card: Boolean = false) {
         var region: CropRegion? = null
     }
 
@@ -81,16 +87,29 @@ class ScreenNotices {
         private set
 
     /**
-     * Bu karenin bildirim blokları (satır kutuları karede). Alan listesi değiştiyse true. Bildirim yokken de her karede
-     * çağrılır: görülmeyen bildirim [FORGET_MS] sonra kalkar.
+     * Bu karenin bildirim blokları (satır kutuları karede) ve bildirim kartları ([NoticeCard]; kartın karedeki yeri, alan
+     * türünden bağımsız). Alan listesi değiştiyse true. Bildirim yokken de her karede çağrılır: görülmeyen bildirim
+     * [FORGET_MS] sonra kalkar. Kartın bölgesi kartın kendisidir (başlık ve gövde birlikte okunur, çeviri kartı örter).
      */
-    fun observe(blocks: List<Reading>, time: Long): Boolean {
+    fun observe(blocks: List<Reading>, time: Long, cards: List<TextBox> = emptyList()): Boolean {
         val matched = mutableSetOf<Track>()
+        for (box in cards) {
+            val track = tracks.firstOrNull { it !in matched && it.card && same(it.box, box) }
+            if (track == null) {
+                counter++
+                tracks.add(Track(counter, box, 0.0, time, time, card = true).also { matched.add(it) })
+            } else {
+                if (moved(track.box, box)) track.still = time
+                track.box = box
+                track.lastSeen = time
+                matched.add(track)
+            }
+        }
         for (block in blocks) {
             val box = block.box ?: continue
             if (!isNotice(box)) continue
             val line = block.lines.mapNotNull { it.box?.let { b -> b.bottom - b.top } }.minOrNull() ?: (box.bottom - box.top)
-            val track = tracks.firstOrNull { it !in matched && same(it.box, box) }
+            val track = tracks.firstOrNull { it !in matched && !it.card && same(it.box, box) }
             if (track == null) {
                 counter++
                 tracks.add(Track(counter, box, line, time, time).also { matched.add(it) })
@@ -105,7 +124,7 @@ class ScreenNotices {
         tracks.removeAll { time - it.lastSeen > FORGET_MS }
         for (track in tracks) {
             if (time - track.still < SETTLE_MS) continue
-            val next = region(track.box, track.line)
+            val next = if (track.card) cardRegion(track.box) else region(track.box, track.line)
             // Okuma kutusunun küçük oynaması bölgeyi değiştirmez (bölge değişirse bildirim yeniden okunur).
             val current = track.region
             if (current != null && close(current, next)) continue

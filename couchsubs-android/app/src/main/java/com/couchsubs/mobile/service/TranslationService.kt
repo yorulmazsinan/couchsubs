@@ -625,7 +625,9 @@ class TranslationService : Service() {
         // (GTA 6 yardım/mesaj köşesi) dışlanmaz: üstlerine taşan yazı (haritanın konum kartı) tek alan olarak bulunur, hazır
         // alan o sırada okunmaz ([com.couchsubs.mobile.core.RegionWatcher.yieldingPresets], #1391).
         val phone = if (phoneSeen) phoneBounds else null
-        val excluded = extraAreas.map { it.region } +
+        // Kenar bildirimi ve bildirim kartı (NoticeCard, #1443) kendi alanında okunur: başlığı ikinci kez ekran yazısı olmaz
+        // (Mac/iPhone ve Windows aynı).
+        val excluded = extraAreas.map { it.region } + noticeAreas.map { it.region } +
             listOfNotNull(phone?.let { com.couchsubs.mobile.core.ScreenTextDetector.paddedPhone(it) })
         val subtitle = region
         try {
@@ -1087,10 +1089,21 @@ class TranslationService : Service() {
                 val unconfirmed = subtitlePhone == null && playsGta6 && com.couchsubs.mobile.core.SubtitlePipeline.holdsCandidate(
                     subtitlePhoneCandidate, subtitlePhoneCandidateSince, now)
                 val phone = subtitlePhone ?: if (unconfirmed) subtitlePhoneCandidate else null
+                // GTA 6'nın sağ alttaki bildirim kartı (gelen arama, mesaj) altyazı alanından bağımsız kendi yerinde çevrilir
+                // (NoticeCard, #1443): oyun GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken. Kart araması kare
+                // arabelleği yeniden kullanıldığı için Y düzleminin küçük kopyasında yapılır (Mac/iPhone ve Windows aynı).
+                val cards = if (com.couchsubs.mobile.core.NoticeCard.enabled(true, playedGame, settings.autoScreenText, settings.readsGamePhone)) {
+                    val buffer = frame.buffer
+                    val limit = buffer.capacity()
+                    com.couchsubs.mobile.core.NoticeCard.grid(frame.width, frame.height) { x, y ->
+                        val index = y * frame.rowStride + x
+                        if (index < limit) buffer.get(index).toInt() and 0xFF else 0
+                    }
+                } else null
                 SubtitleReader.copyRegion(frame, area)?.let { pixels ->
                     lastRead = now
                     reading.set(true)
-                    ocr.execute { read(pixels, area, capturedAt, phone, unconfirmed) }
+                    ocr.execute { read(pixels, area, capturedAt, phone, unconfirmed, cards) }
                 }
             }
             offerGamePhone(frame)
@@ -1519,7 +1532,8 @@ class TranslationService : Service() {
     }
 
     private fun read(pixels: RegionPixels, area: CropRegion, capturedAt: Long,
-                     phone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null, unconfirmed: Boolean = false) {
+                     phone: com.couchsubs.mobile.core.ScreenPhoneCard.Handset? = null, unconfirmed: Boolean = false,
+                     cards: com.couchsubs.mobile.core.GrayFrame? = null) {
         try {
             // Bölge değişmediyse (aynı altyazı duruyor) yeniden okunmaz; son okuma hattı yine besler (kararlılık ve
             // silme saate bağlıdır, Windows'taki ReadScheduler gibi). Aynı okuma en çok 20 kare (hızlı okumada 2) kullanılır.
@@ -1540,7 +1554,8 @@ class TranslationService : Service() {
                 com.couchsubs.mobile.core.RegionSignature.of(pixels.nv21, pixels.width, pixels.height),
                 capturedAt, ocrMs, phone, reused = reused,
                 darkInk = com.couchsubs.mobile.core.InkTone.sampler(pixels.gray),
-                packageLook = com.couchsubs.mobile.core.PackageText.sampler(pixels.gray, pixels.color), unconfirmed = unconfirmed)
+                packageLook = com.couchsubs.mobile.core.PackageText.sampler(pixels.gray, pixels.color), unconfirmed = unconfirmed,
+                noticeCard = cards?.let { com.couchsubs.mobile.core.NoticeCard.sampler(it) })
         } catch (error: java.util.concurrent.TimeoutException) {
             pipeline?.noteReadFailure(error)
             // Okuma süresinde bitmedi: takılan tanıyıcı bırakılır, sonraki kare yenisiyle okunur (yoksa yeni okuma da

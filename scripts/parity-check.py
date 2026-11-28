@@ -49,6 +49,21 @@ _DROID_TESTS = "couchsubs-android/app/src/test/java/com/couchsubs/mobile/core/"
 # ve ortak deneme dosyasını okuyan testi olmalı. (platform, dosya, düzenli ifade) üçlüleri; biri eksikse denetim kırmızı.
 # Android'de "RECENTER 13" gibi yanlış okunmuş tuş simgesi kutuda kalıyordu: markFree yalnız Mac ve Windows'taydı (#860).
 CAPABILITIES = {
+    "GTA 6 sağ alt bildirim kartı: altyazı alanından bağımsız, koyu yazı kuralından önce ayrılır, kartın tamamı kendi yerinde (NoticeCard, #1443)": [
+        ("mac", _CORE + "NoticeCard.swift", r"public static func split\("),
+        ("windows", _WIN + "NoticeCard.cs", r"public static \(Reading Kept, List<\(Reading Block, TextBox Card\)> Cards\) Split\("),
+        ("android", _DROID + "NoticeCard.kt", r"fun split\("),
+        ("mac", _CORE + "Pipeline/SubtitlePipeline.swift", r"NoticeCard\.split\("),
+        ("windows", _WIN + "SubtitlePipeline.cs", r"NoticeCard\.Split\("),
+        ("android", _DROID + "SubtitlePipeline.kt", r"NoticeCard\.split\("),
+        ("mac", "mac/CouchSubs/AppModel.swift", r"NoticeCard\.enabled\("),
+        ("iphone", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"NoticeCard\.enabled\("),
+        ("windows", "windows/src/CouchSubs.Shell/AppController.cs", r"NoticeCard\.Enabled\("),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/TranslationService.kt", r"NoticeCard\.enabled\("),
+        ("mac", _CORE_TESTS + "NoticeCardTests.swift", r"func testRealNotificationCardIsFoundWhole"),
+        ("windows", _WIN_TESTS + "NoticeCardTests.cs", r"void RealNotificationCardIsFoundWhole"),
+        ("android", _DROID_TESTS + "NoticeCardTest.kt", r"fun realNotificationCardIsFoundWhole"),
+    ],
     "Altyazı kutusunun opaklığı ve ayarlardaki Koyuluk notu: Örtsün'de en yeni satır tam opak, önizleme TV gibi (box-opacity.json)": [
         ("mac", _CORE + "OverlayCover.swift", r"func darknessFixedByCover\(placement: SubtitlePlacement, background: Int\)"),
         ("windows", "windows/src/CouchSubs.Shell/OverlayPlacement.cs", r"bool DarknessFixedByCover\("),

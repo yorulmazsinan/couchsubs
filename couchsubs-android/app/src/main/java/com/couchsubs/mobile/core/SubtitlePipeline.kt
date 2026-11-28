@@ -432,16 +432,33 @@ class SubtitlePipeline(
     var packHits = 0
         private set
 
+    /** Günlüğe yazılmış son bildirim kartı (her karede yeniden yazılmasın). */
+    private var loggedCard = ""
+
+    /** Bulunan bildirim kartları günlüğe (yazısı değişince bir kez): yazısı, karedeki yeri ve altyazı sayılmadığı. */
+    private fun logCards(cards: List<Pair<Reading, TextBox>>) {
+        val line = cards.joinToString("; ") { (block, card) ->
+            "\"${excerpt(block.lines.joinToString(" / ") { it.text })}\" sağda açık kart (" +
+                String.format(java.util.Locale.ROOT, "x %.2f-%.2f, y %.2f-%.2f", card.left, card.right, card.top, card.bottom) + ")"
+        }
+        val fresh = synchronized(lock) { (line != loggedCard).also { loggedCard = line } }
+        if (fresh && line.isNotEmpty()) onLog?.invoke("bildirim kartı: $line, altyazı sayılmadı; kart kendi yerinde çevrilecek")
+    }
+
     /**
      * Bir karenin okuması ve okunan alanın karedeki yeri. [signature]: bölgenin izi ([RegionSignature.of]); okuma boş
      * dönse de satırın yeri değişmediyse satır silinmez (parlak zemin). [darkInk]: okunan alanın görüntüsünde satır kutusu
      * açık zeminde koyu yazı mı ([InkTone.sampler]; kâğıt ilan altyazı değildir, GitHub #1124). [packageLook]: satırın
      * görünüşü ([PackageText.sampler]; ürün/ambalaj yazısı altyazı değildir). [unconfirmed]: [phone] doğrulanmamış aday
-     * ([CANDIDATE_HOLD_MS]); ekranındaki satırlar yine altyazı sayılmaz, günlükte "telefon adayı" yazılır.
+     * ([CANDIDATE_HOLD_MS]); ekranındaki satırlar yine altyazı sayılmaz, günlükte "telefon adayı" yazılır. [noticeCard]:
+     * GTA 6'nın sağ alttaki bildirim kartının karedeki yeri ([NoticeCard.sampler]; blok kutusu karede); verilirse kart
+     * blokları sahne yazısı süzgeçlerinden önce ayrılır, kartın tamamı "auto-notice-<n>" olur (#1443). Uygulama oyun GTA 6
+     * iken ve ekran yazısı ya da telefon çevirisi açıkken verir (Mac/iPhone ve Windows: findsNoticeCards).
      */
     fun process(raw: Reading, area: TextBox, signature: ByteArray? = null, capturedAt: Long? = null, ocrMs: Int? = null,
                 phone: ScreenPhoneCard.Handset? = null, reused: Boolean = false, darkInk: ((TextBox) -> Boolean)? = null,
-                packageLook: ((TextBox, List<TextBox>) -> PackageText.Look?)? = null, unconfirmed: Boolean = false) {
+                packageLook: ((TextBox, List<TextBox>) -> PackageText.Look?)? = null, unconfirmed: Boolean = false,
+                noticeCard: ((TextBox) -> TextBox?)? = null) {
         frameAt = capturedAt
         frameOcrMs = ocrMs
         synchronized(lock) {
@@ -492,7 +509,16 @@ class SubtitlePipeline(
             if (fresh) onLog?.invoke("kendi altyazısı: \"$excerpt\" karede okundu, " +
                 "yok sayıldı (görüntü kaynağı CouchSubs'ın OBS katmanını da içeriyor; OBS'te Kaynak projektörünü seçin)")
         }
-        val rows = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        var rows = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        // Sağ alttaki bildirim kartı (#1443) görev/HUD, sahne yazısı ve koyu yazı (kâğıt/tabela) süzgeçlerinden önce
+        // ayrılır: altyazı alanı kartı kesse de kartın tamamı kendi yerinde çevrilir ([NoticeCard]).
+        var cards: List<Pair<Reading, TextBox>> = emptyList()
+        if (noticeCard != null) {
+            val split = NoticeCard.split(rows, area, noticeCard)
+            rows = split.kept
+            cards = split.cards
+            logCards(cards)
+        }
         // Menünün geçmiş listesi ([Reading.isHistoryList]; sabit satır süzgecinden önce: liste bir satır kayınca yalnız yeni
         // satır "sabit değil" kalıp altyazı seçiliyordu): hiçbir satırı altyazı olmaz, konuşan adlı satırı menü durumunu
         // bitirmez, bekçi de listeden satır çevirmez.
@@ -571,7 +597,7 @@ class SubtitlePipeline(
                 }
                 logStale(staleTexts)
                 subtitleBand.record(it, area)
-                if (notices.observe(edge, now())) {
+                if (notices.observe(edge, now(), cards.map { it.second })) {
                     noticesChanged = true
                     noticeAreas = notices.areas
                 }
@@ -1175,6 +1201,7 @@ class SubtitlePipeline(
             sender.sendObjective(null)
         }
         notices.reset()
+        loggedCard = ""
         echo?.reset()
         loggedOwn = null
         loggedPhone = null
