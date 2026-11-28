@@ -83,6 +83,17 @@ CAPABILITIES = {
         ("windows", _WIN_TESTS + "PhoneGlowTests.cs", r"void DarkPhoneIsHeldByItsScreenAndClosesWhenLowered"),
         ("android", _DROID_TESTS + "PhoneGlowTest.kt", r"fun darkPhoneIsHeldByItsScreenAndClosesWhenLowered"),
     ],
+    "Altyazı hattının telefon takibi de karanlıkta ekran ışığıyla tutulur, telefonun yazıları altyazı sayılmaz (PhoneGlowKeeper, #1443; phone-glow.json subtitle)": [
+        ("mac", _CORE + "PhoneGlow.swift", r"struct PhoneGlowKeeper"),
+        ("windows", _WIN + "PhoneGlowKeeper.cs", r"internal sealed class PhoneGlowKeeper"),
+        ("android", _DROID + "PhoneGlowKeeper.kt", r"class PhoneGlowKeeper"),
+        ("mac", _CORE + "Pipeline/SubtitlePipeline.swift", r"glowing: glowing\.holds"),
+        ("windows", _WIN + "SubtitlePipeline.cs", r"HeldPhone\(found, phone, ref phoneMisses, glowing\.Holds\)"),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/TranslationService.kt", r"subtitlePhoneGlow\.observe\("),
+        ("mac", _CORE_TESTS + "PhoneGlowTests.swift", r"func testSubtitlePipelineHoldsTheDarkPhoneByItsScreen"),
+        ("windows", _WIN_TESTS + "PhoneGlowTests.cs", r"void SubtitlePipelineHoldsTheDarkPhoneByItsScreen"),
+        ("android", _DROID_TESTS + "PhoneGlowTest.kt", r"fun subtitlePipelineHoldsTheDarkPhoneByItsScreen"),
+    ],
     "Altyazı kutusunun opaklığı ve ayarlardaki Koyuluk notu: Örtsün'de en yeni satır tam opak, önizleme TV gibi (box-opacity.json)": [
         ("mac", _CORE + "OverlayCover.swift", r"func darknessFixedByCover\(placement: SubtitlePlacement, background: Int\)"),
         ("windows", "windows/src/CouchSubs.Shell/OverlayPlacement.cs", r"bool DarknessFixedByCover\("),

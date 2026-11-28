@@ -249,6 +249,8 @@ public final class SubtitlePipeline {
     /// izleyicinin toleransıyla tutulur ve son yerinde gevşek doğrulanır (`GamePhoneGeometry.locate(near:)`; Windows ve
     /// Android ile aynı).
     private var phoneMisses = 0
+    /// Açık telefonun ekran ışığı: karanlıkta arama ıskalasa da ışığı tutan telefon bırakılmaz (`PhoneGlowKeeper`, #1443).
+    private var phoneGlow = PhoneGlowKeeper()
     /// Doğrulanmamış telefon adayı (sıkı aramada yanları zayıf kalan; `GamePhoneGeometry.Probe.weak`) ve ilk görüldüğü an.
     /// Adayın ekranındaki satırlar `candidateHoldMs` boyunca altyazı sayılmaz; sonraki aramada adayın yerinde gevşek
     /// doğrulama telefonu bulursa süzgeç telefonu tutar, bulamazsa satırlar süre dolunca altyazıya geçer (#1251: telefon
@@ -379,13 +381,26 @@ public final class SubtitlePipeline {
         let looks = findsPhone && phoneLookedAt.map { captured < $0 || captured - $0 >= GamePhoneTracker.intervalMs } ?? findsPhone
         if looks { phoneLookedAt = captured }
         let near = phone ?? phoneCandidate
-        let (area, signature, search) = await Task.detached(priority: .userInitiated) {
+        let kept = phone
+        let keeper = phoneGlow
+        let (area, signature, search, glowing) = await Task.detached(priority: .userInitiated) {
             let area = RegionCropper.crop(frame, to: region)
             let none: (phone: ScreenPhoneCard.Handset?, candidate: ScreenPhoneCard.Handset?) = (nil, nil)
-            return (area, RegionCropper.signature(of: area), looks ? ScreenPhoneCard.search(in: frame, near: near) : none)
+            let search = looks ? ScreenPhoneCard.search(in: frame, near: near) : none
+            // Karanlıkta arama ıskalarsa son yerinde ekranın ışığına bakılır (izleyiciyle aynı eşikler ve süre, #1443).
+            var glow = keeper
+            let result = looks ? glow.observe(found: search.phone?.pose, shown: kept?.pose, now: captured,
+                                              measure: { GamePhoneGeometry.glow(frame, $0) }) : (holds: false, began: nil)
+            return (area, RegionCropper.signature(of: area), search, (keeper: glow, holds: result.holds, began: result.began))
         }.value
         if looks {
-            let next = Self.heldPhone(search.phone, shown: phone, misses: &phoneMisses)
+            phoneGlow = glowing.keeper
+            if let began = glowing.began {
+                log("telefon karanlıkta ekranının ışığıyla tutuluyor, ekranındaki satırlar altyazı sayılmıyor (ekran "
+                    + "\(Int(began.screen.rounded(.toNearestOrAwayFromZero)))/255, çevresi "
+                    + "\(Int(began.ring.rounded(.toNearestOrAwayFromZero)))/255)")
+            }
+            let next = Self.heldPhone(search.phone, shown: phone, misses: &phoneMisses, glowing: glowing.holds)
             (phoneCandidate, phoneCandidateSince) = Self.candidate(next == nil ? search.candidate : nil, previous: phoneCandidate,
                                                                    since: phoneCandidateSince, now: captured)
             // Telefonun bulunması/kalkması günlüğe yazılır: yanlış bulunan telefon altyazı satırlarını atarsa görünsün.
@@ -1281,10 +1296,17 @@ public final class SubtitlePipeline {
         candidate != nil && now >= since && now - since < candidateHoldMs
     }
 
-    static func heldPhone(_ found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?, misses: inout Int) -> ScreenPhoneCard.Handset? {
+    /// `glowing`: açık telefon son yerinde ekran ışığıyla tutuluyor (`PhoneGlowKeeper`, #1443): telefon bırakılmaz, ıskalar
+    /// `missGrace`'te durur; ışık tutmayınca (süre doldu, telefon indirildi) ilk ıskada kalkar (izleyiciyle aynı süre).
+    static func heldPhone(_ found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?, misses: inout Int,
+                          glowing: Bool = false) -> ScreenPhoneCard.Handset? {
         if let found {
             misses = 0
             return found
+        }
+        if let shown, glowing {
+            misses = min(misses + 1, GamePhoneTracker.missGrace)
+            return shown
         }
         guard let shown, misses < GamePhoneTracker.missGrace else {
             misses = 0
@@ -1307,6 +1329,7 @@ public final class SubtitlePipeline {
         phone = nil
         phoneLookedAt = nil
         phoneMisses = 0
+        phoneGlow.reset()
         phoneCandidate = nil
         phoneCandidateSince = 0
         loggedLeftOut = ""

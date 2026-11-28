@@ -129,6 +129,41 @@ public class PhoneGlowTests
         }
     }
 
+    /// <summary>
+    /// Altyazı hattının kendi telefon takibi de karanlıkta ekran ışığıyla tutulur (izleyiciyle aynı eşikler ve süre): tutulan
+    /// telefonun satırları altyazı sayılmaz; telefon indirilince her zamanki gibi kalkar.
+    /// </summary>
+    [Fact]
+    public void SubtitlePipelineHoldsTheDarkPhoneByItsScreen()
+    {
+        var vectors = Vectors();
+        var p = Doubles(vectors.GetProperty("scene").GetProperty("pose"));
+        var pose = new GamePhoneGeometry.Pose(p[0], p[1], p[2], p[3]);
+        var handset = new ScreenPhoneCard.Handset(pose, 16.0 / 9);
+        foreach (var sequence in vectors.GetProperty("subtitle").EnumerateArray())
+        {
+            var name = sequence.GetProperty("name").GetString();
+            var keeper = new PhoneGlowKeeper();
+            ScreenPhoneCard.Handset? shown = null;
+            var misses = 0;
+            long t = 0;
+            var step = 0;
+            foreach (var item in sequence.GetProperty("steps").EnumerateArray())
+            {
+                var found = item.GetProperty("found").GetBoolean();
+                PhoneGlow.Glow? glow = item.GetProperty("glow").ValueKind == JsonValueKind.Null ? null : Glow(item.GetProperty("glow"));
+                var repeat = item.TryGetProperty("repeat", out var r) ? r.GetInt32() : 1;
+                for (var i = 0; i < repeat; i++, t += GamePhoneTracker.IntervalMs)
+                {
+                    var result = keeper.Observe(found ? pose : null, shown?.Pose, t, _ => glow);
+                    shown = SubtitlePipeline.HeldPhone(found ? handset : null, shown, ref misses, result.Holds);
+                    step++;
+                    Assert.True((shown is not null) == item.GetProperty("open").GetBoolean(), $"{name}: {step}. arama");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void ShieldDropsOtherRoutesLinesOnThePhone()
     {

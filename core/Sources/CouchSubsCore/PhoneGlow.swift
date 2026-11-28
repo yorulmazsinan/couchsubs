@@ -32,7 +32,7 @@ enum PhoneGlow {
     static let holdMs = 6000
 
     /// Ekranın ve çevrenin ortanca tonları (0–255).
-    struct Glow: Equatable {
+    struct Glow: Equatable, Sendable {
         let screen: Double, ring: Double
     }
 
@@ -67,5 +67,51 @@ enum PhoneGlow {
     /// Son gerçek gözlemin ışığı (`recorded`) son yerde hâlâ tutuyor mu.
     static func holds(_ recorded: Glow, _ current: Glow) -> Bool {
         lit(recorded) && lit(current) && abs(current.screen - recorded.screen) <= screenShare * recorded.screen
+    }
+}
+
+/// Altyazı hattının kendi telefon takibinde ekran ışığıyla tutma (`PhoneGlow`; izleyiciyle aynı eşikler ve süre). #1443
+/// (beta-108 Mac günlüğü): altyazı hattı telefonu karanlıkta ~1 sn'de bir bırakıyordu ("telefon kalktı" / "telefon
+/// bulundu"), bırakınca telefonun mesajları altyazı sayılıp çevriliyordu (#5 "lot so if you're having any this is a",
+/// #6). Telefon bulununca ekranın ışığı kaydedilir; ıskada son yerinde ışık tutuyorsa telefon bırakılmaz
+/// (`SubtitlePipeline.heldPhone`). Windows (PhoneGlow.cs) ve Android (PhoneGlow.kt) aynı.
+struct PhoneGlowKeeper: Sendable {
+    private(set) var recorded: PhoneGlow.Glow?
+    private var recordedAt: Int?
+    private var seenAt = 0
+    private(set) var holding = false
+
+    /// Bu aramanın sonucu: `found` bulunan telefon (yoksa nil), `shown` süzgecin tuttuğu telefon; `measure` karede verilen
+    /// yerin ışığı. Dönüş: telefon ışığıyla tutuluyor mu ve tutma bu aramada başladıysa ölçülen ışık (günlük için).
+    mutating func observe(found: GamePhoneGeometry.Pose?, shown: GamePhoneGeometry.Pose?, now: Int,
+                          measure: (GamePhoneGeometry.Pose) -> PhoneGlow.Glow?) -> (holds: Bool, began: PhoneGlow.Glow?) {
+        if let found {
+            seenAt = now
+            if recordedAt.map({ now < $0 || now - $0 >= GamePhoneTracker.printRefreshMs }) ?? true {
+                recorded = measure(found).flatMap { PhoneGlow.lit($0) ? $0 : nil }
+                recordedAt = now
+            }
+            holding = false
+            return (false, nil)
+        }
+        guard let shown else {
+            reset()
+            return (false, nil)
+        }
+        guard let recorded, now >= seenAt, now - seenAt < PhoneGlow.holdMs, let current = measure(shown),
+              PhoneGlow.holds(recorded, current) else {
+            holding = false
+            return (false, nil)
+        }
+        let began = holding ? nil : current
+        holding = true
+        return (true, began)
+    }
+
+    mutating func reset() {
+        recorded = nil
+        recordedAt = nil
+        seenAt = 0
+        holding = false
     }
 }
