@@ -37,7 +37,9 @@ jobs:
       - name: Paket temizliği (Python ve sunucu aynı sonuç)
         run: |
           python3 -m unittest tools/packs/test_packclean.py
-          cd server/pool && node --test test/packclean.test.js test/autopack.test.js klasör değişince pahalı (özellikle macOS) işler çalışsın. Elle çalıştırmada hepsi çalışır.
+          cd server/pool && node --test test/packclean.test.js test/autopack.test.js
+
+  # Yalnız ilgili klasör değişince pahalı (özellikle macOS) işler çalışsın. Elle çalıştırmada hepsi çalışır.
   changes:
     name: Değişen yollar
     runs-on: ubuntu-latest
