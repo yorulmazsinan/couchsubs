@@ -159,7 +159,7 @@ final class PhoneTraceTests: XCTestCase {
     func testTurnSkippedBecauseThePhoneIsGoneIsLoggedOncePerMinute() async throws {
         let frame = GamePhoneTestFrame.phone()
         let pose = try XCTUnwrap(GamePhoneGeometry.locate(frame))
-        let log = try await turns(GamePhoneTestFrame.phone(camera: false), pose: pose, reader: Reader(), count: 4, step: 20_000)
+        let log = try await turns(GamePhoneTestFrame.gone(), pose: pose, reader: Reader(), count: 4, step: 20_000)
         XCTAssertEqual(log, Array(repeating: "düşen satır [PhoneTrace] PhoneMissing: telefon bu karede bulunamadı, tur atlandı: \"Phone\"",
                                   count: 2))
     }

@@ -16,7 +16,7 @@ public class GamePhoneFirstSightingTests
 {
     private static JsonElement Vectors() => JsonDocument.Parse(File.ReadAllText(PackFixtures.Path("phone-first-sighting.json"))).RootElement;
 
-    private static string FramePath(string name, [CallerFilePath] string source = "") =>
+    internal static string FramePath(string name, [CallerFilePath] string source = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", "..", "testdata", "frames", name));
 
     private static readonly Dictionary<string, Frame> Loaded = [];
@@ -115,9 +115,74 @@ public class GamePhoneFirstSightingTests
     private static double[]? CoverOf(JsonElement sample) =>
         sample.TryGetProperty("cover", out var cover) ? cover.EnumerateArray().Select(item => item.GetDouble()).ToArray() : null;
 
+    /// <summary>
+    /// Karanlık sahne dönüşümleri ("tür:değer", Mac/iPhone ve Android ile aynı formüller): <c>scale:k</c> parlaklık × k,
+    /// <c>gamma:g</c> gama, <c>nightgrade:k</c> gece renk ayarı (renk soluklaşır, maviye kayar, gama 1,3, × k),
+    /// <c>vignette:k</c> kenarlara doğru kararan görüntü × k, <c>darkbg:k</c> telefonun arkası koyu (<see cref="DarkBox"/>
+    /// dışı k/4, içi k).
+    /// </summary>
+    internal static readonly double[] DarkBox = [0.52, 0.1, 0.88, 0.98];
+
+    internal static Frame Darkened(Frame source, string spec)
+    {
+        var parts = spec.Split(':');
+        var kind = parts[0];
+        var k = double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+        var frame = Frame.Blank(source.Width, source.Height);
+        for (var y = 0; y < source.Height; y++)
+            for (var x = 0; x < source.Width; x++)
+            {
+                int p = y * source.Stride + x * 4, q = y * frame.Stride + x * 4;
+                var (r, g, b) = DarkPixel(kind, k, source.Pixels[p + 2], source.Pixels[p + 1], source.Pixels[p],
+                    (x + 0.5) / source.Width, (y + 0.5) / source.Height);
+                (frame.Pixels[q], frame.Pixels[q + 1], frame.Pixels[q + 2], frame.Pixels[q + 3]) = ((byte)b, (byte)g, (byte)r, 255);
+            }
+        return frame;
+    }
+
+    /// <summary>Tek noktanın karanlık dönüşümü (0–255); <paramref name="fx"/>/<paramref name="fy"/> noktanın karedeki yeri (0..1).</summary>
+    internal static (int R, int G, int B) DarkPixel(string kind, double k, int r, int g, int b, double fx, double fy)
+    {
+        double[] c = [r / 255.0, g / 255.0, b / 255.0];
+        switch (kind)
+        {
+            case "scale":
+                c = c.Select(v => v * k).ToArray();
+                break;
+            case "gamma":
+                c = c.Select(v => Math.Pow(v, k)).ToArray();
+                break;
+            case "nightgrade":
+            {
+                var l = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+                double[] tint = [0.8, 0.95, 1.25];
+                c = c.Select((v, i) => Math.Min(1, Math.Pow(Math.Min(1, (0.4 * v + 0.6 * l) * tint[i]), 1.3) * k)).ToArray();
+                break;
+            }
+            case "vignette":
+            {
+                double dx = (fx - 0.5) * 2, dy = (fy - 0.5) * 2;
+                var f = Math.Max(0.08, 1 - 0.75 * (dx * dx + dy * dy)) * k;
+                c = c.Select(v => v * f).ToArray();
+                break;
+            }
+            case "darkbg":
+            {
+                var inside = fx >= DarkBox[0] && fx <= DarkBox[2] && fy >= DarkBox[1] && fy <= DarkBox[3];
+                c = c.Select(v => v * (inside ? k : k / 4)).ToArray();
+                break;
+            }
+            default:
+                throw new ArgumentException(kind);
+        }
+        var o = c.Select(v => (int)Math.Clamp(Math.Round(v * 255, MidpointRounding.ToEven), 0, 255)).ToArray();
+        return (o[0], o[1], o[2]);
+    }
+
     internal static Frame Transform(Frame source, string transform)
     {
         if (transform == "none") return source;
+        if (transform.Contains(':')) return Darkened(source, transform);
         if (transform == "scale1440") return source.Resized(2560, 1440);
         if (transform == "scale720") return source.Resized(1280, 720);
         if (transform is "letterbox" or "pillarbox" or "titlebar") return Framed(source, transform);

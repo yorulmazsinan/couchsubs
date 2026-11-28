@@ -23,6 +23,12 @@ internal class TestPhoneImage(override val width: Int, override val height: Int,
         fun rgb(r: Int, g: Int, b: Int) = ((r and 0xff) shl 16) or ((g and 0xff) shl 8) or (b and 0xff)
         fun gray(g: Int) = rgb(g, g, g)
 
+        /**
+         * Telefon indirildi: telefonun yerinde düz zemin. Kamerasız telefon (`phone(camera = false)`) yalnız sıkı aramayı
+         * ıskalatır; izleyici onu iziyle ([PhonePrint]) yerinde tutar.
+         */
+        fun gone() = TestPhoneImage(400, 225) { _, _ -> gray(85) }
+
         /** 400×225 karede dik duran telefon: gövde, ekran, hoparlör yuvası, kamera ve alt yuva. [patch]: sol, üst, en, boy. */
         fun phone(casing: Int = 110, slot: Int = 25, camera: Boolean = true, patch: IntArray? = null) = TestPhoneImage(400, 225) { x, y ->
             var gray = 85
@@ -55,7 +61,7 @@ class GamePhoneTrackerTest {
         assertNotNull(tracker.sample(image, 330).pose)
         // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); son görülmeden ~1 sn sonra, üçüncü
         // ıskada kapanır (#1334; önceden dördüncü ıskada, ~1,3 sn).
-        val missing = TestPhoneImage.phone(camera = false)
+        val missing = TestPhoneImage.gone()
         assertNotNull(tracker.sample(missing, 660).pose)
         assertNotNull(tracker.sample(image, 990).pose)
         assertNotNull(tracker.sample(missing, 1320).pose)

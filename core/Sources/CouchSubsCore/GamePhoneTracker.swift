@@ -23,7 +23,18 @@ public final class GamePhoneTracker {
             let (pose, probe) = GamePhoneGeometry.search(image, near: near)
             return (pose, pose != nil && probe.step == .found, probe)
         }
+        holds = true
     }
+    /// Açık telefon ıskalanınca son yerinde izi karşılaştırılır mı (`PhonePrint`; gerçek aramada; denemelerin sahte
+    /// gözlemlerinde kapalı).
+    private var holds = false
+    /// Açık telefonun izi (son gerçek gözlemden), alındığı an ve iz tutuyor mu.
+    private var print: [Int]?
+    private var printAt = 0
+    private var holding = false
+    private var lastSimilarity = 0.0
+    /// İz gerçek gözlemde en çok bu aralıkla (ms) yenilenir.
+    static let printRefreshMs = 1000
     init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { sight = { image, _ in (locate(image), true, nil) } }
     init(locate: @escaping (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) {
         sight = { image, near in (locate(image, near), true, nil) }
@@ -84,6 +95,20 @@ public final class GamePhoneTracker {
             found = nil
             strict = false
         }
+        // Açık telefon bu örnekte bulunamadı: son yerinde izi tutuyorsa telefon yerinde sayılır (`PhonePrint`). Karanlıkta
+        // sıkı arama telefonu ara sıra buluyor, açılan telefon iki ıskada kapanıp yeniden açılmıyordu (X, beta-107: "bir kez
+        // çevrildi, sonra kayboldu").
+        var held = false
+        lastSimilarity = 0
+        if holds, found == nil, let current = shown, let print {
+            let hold = GamePhoneGeometry.hold(image, current, print: print)
+            lastSimilarity = hold.similarity
+            if let pose = hold.pose {
+                found = pose
+                strict = false
+                held = true
+            }
+        }
         let points = found == nil ? 0 : strict ? Self.strongPoints : Self.weakPoints
         var unseen = (ms: 0, misses: 0)
         var movedFrom: GamePhoneGeometry.Pose?
@@ -94,6 +119,7 @@ public final class GamePhoneTracker {
             shown = found
             misses = 0
             lastSeen = now
+            if !held { keepPrint(image, found, now: now) }
         } else if shown != nil, !Self.closes(misses: misses + 1, unseenMs: Self.elapsed(since: lastSeen, now)) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
@@ -123,6 +149,8 @@ public final class GamePhoneTracker {
                 misses = 0
                 lastSeen = now
                 clearPending()
+                print = nil
+                keepPrint(image, found, now: now)
             }
         } else if pending != nil {
             pendingMisses += 1
@@ -135,7 +163,11 @@ public final class GamePhoneTracker {
             note(PhoneTrace.opened)
         } else if wasShown, shown == nil {
             note(PhoneTrace.closed(afterMs: unseen.ms, misses: unseen.misses))
+            if holds, print != nil { note(PhoneTrace.printLost(lastSimilarity)) }
+            print = nil
         }
+        if held, !holding { note(PhoneTrace.held(lastSimilarity)) }
+        holding = held && shown != nil
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if shown == nil, let found, let movedFrom {
             note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, movedFrom.bounds)))
@@ -152,6 +184,14 @@ public final class GamePhoneTracker {
                              median: PhoneSearchStatus.median(image), frame: PhoneSearchStatus.frame(image)))
         }
         return (true, shown)
+    }
+
+    /// Açık telefonun izini gerçek gözlemden alır (en çok `printRefreshMs`'de bir).
+    private func keepPrint(_ image: CGImage, _ pose: GamePhoneGeometry.Pose, now: Int) {
+        guard holds, print == nil || now < printAt || now - printAt >= Self.printRefreshMs,
+              let fresh = GamePhoneGeometry.print(image, pose) else { return }
+        print = fresh
+        printAt = now
     }
 
     private func pendingFresh(_ now: Int) -> Bool { pending != nil && now >= pendingAt && now - pendingAt <= Self.pendingMs }
@@ -213,6 +253,8 @@ public final class GamePhoneTracker {
         misses = 0
         lastSeen = 0
         clearPending()
+        print = nil
+        holding = false
         missLog.reset()
         status.reset()
     }
@@ -245,6 +287,8 @@ public enum GamePhoneGeometry {
         /// Parlaklık kazancı (256 = 1×; `darkGain`). Karanlık sahnede telefonun kasası ve yarıkları aynı oranda koyulaşır,
         /// eşikler mutlak tonda kalıyordu; kazanç ızgarayı aydınlık sahnenin tonlarına taşır.
         var gain = 256
+        /// Ton eşitleme (`equalization`): ham tonun (dört noktanın toplamı / 256) eşlendiği ton; nil: kazanç.
+        var map: [UInt8]?
 
         init?(_ image: CGImage, columns: Range<Int>, height: Int) {
             let xScale = Double(image.width) / 400, yScale = Double(image.height) / 225
@@ -271,12 +315,26 @@ public enum GamePhoneGeometry {
                 77 * Int(pixels.bytes[i]) + 150 * Int(pixels.bytes[i+1]) + 29 * Int(pixels.bytes[i+2])
             }
             let sum = tone(p) + tone(p + 4) + tone(p + stride) + tone(p + stride + 4)
+            if let map { return Int(map[min(map.count - 1, sum >> 8)]) }
             return gain == 256 ? sum >> 10 : min(255, (sum * gain) >> 18)
+        }
+
+        /// Kazançsız ham toplam: dört noktanın tonu × 256 (0–261120; bir ton 1024). İz karşılaştırması (`PhonePrint`) karanlıkta
+        /// tam sayı tona yuvarlamadan okur.
+        func raw(_ x: Int, _ y: Int) -> Int {
+            let column = min(max(0, x - left), max(0, pixels.width / 2 - 1)), row = min(max(0, y), max(0, pixels.height / 2 - 1))
+            let p = (row * 2 * pixels.width + 2 * column) * 4
+            let stride = pixels.width * 4
+            func tone(_ i: Int) -> Int {
+                77 * Int(pixels.bytes[i]) + 150 * Int(pixels.bytes[i+1]) + 29 * Int(pixels.bytes[i+2])
+            }
+            return tone(p) + tone(p + 4) + tone(p + stride) + tone(p + stride + 4)
         }
 
         func with(gain: Int) -> Grid {
             var copy = self
             copy.gain = gain
+            copy.map = gain == GamePhoneGeometry.equalized ? map : nil
             return copy
         }
 
@@ -285,7 +343,7 @@ public enum GamePhoneGeometry {
             var counts = [Int](repeating: 0, count: 256), total = 0
             for y in stride(from: rows.lowerBound, to: rows.upperBound, by: 3) {
                 for x in stride(from: columns.lowerBound, through: columns.upperBound, by: 3) {
-                    counts[with(gain: 256).at(x, y)] += 1
+                    counts[raw(x, y) >> 10] += 1
                     total += 1
                 }
             }
@@ -400,32 +458,69 @@ public enum GamePhoneGeometry {
     static func search(_ image: CGImage, near: Pose? = nil) -> (pose: Pose?, probe: Probe) {
         guard image.width >= 400, image.height >= 225 else { return (nil, .missed(.noPicture)) }
         if abs(Double(image.width) / Double(image.height) - 400.0 / 225) <= 0.04 { return locatePicture(image, near: near) }
-        // Kare küçültülerek okunur (en çok 960 piksel genişlik); şeritlerin yeri piksel piksel gerekmez.
-        let scale = min(1, 960 / Double(image.width))
-        let sw = max(1, Int((Double(image.width) * scale).rounded())), sh = max(1, Int((Double(image.height) * scale).rounded()))
-        guard let small = GamePhonePixels(image, width: sw, height: sh),
-              let area = picture(width: image.width, height: image.height, tone: { x, y in
-                  let p = (min(sh - 1, Int(Double(y) * scale)) * sw + min(sw - 1, Int(Double(x) * scale))) * 4
-                  return (77 * Int(small.bytes[p]) + 150 * Int(small.bytes[p + 1]) + 29 * Int(small.bytes[p + 2])) >> 8
-              }),
-              let cropped = image.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)) else {
-            return (nil, .missed(.noPicture))
+        guard let view = PictureView(image) else { return (nil, .missed(.noPicture)) }
+        var (pose, probe) = locatePicture(view.image, near: near.map(view.inside))
+        probe.candidate = probe.candidate.map(view.outside)
+        return (pose.map(view.outside), probe)
+    }
+
+    /// Telefonun izi (`PhonePrint`): `pose`'taki telefonun kasasından üst ve alt şeritte örnekler (kazançsız ham ton).
+    /// Kare 16:9 değilse görüntü bulunamazsa nil.
+    static func print(_ image: CGImage, _ pose: Pose) -> [Int]? {
+        guard let view = PictureView(image), let grid = Grid(view.image, columns: 0..<400, height: 225) else { return nil }
+        return PhonePrint.samples(view.inside(pose), dx: 0, dy: 0, raw: grid.raw)
+    }
+
+    /// Açık telefonun son yerinde izi tutuyor mu (`PhonePrint.match`): tutarsa izin bulunduğu yer (kayma kadar oynamış) ve
+    /// benzerlik, tutmazsa nil yer ve en iyi benzerlik.
+    static func hold(_ image: CGImage, _ pose: Pose, print: [Int]) -> (pose: Pose?, similarity: Double) {
+        guard let view = PictureView(image), let grid = Grid(view.image, columns: 0..<400, height: 225) else { return (nil, 0) }
+        let local = view.inside(pose)
+        let match = PhonePrint.match(print, pose: local, raw: grid.raw)
+        guard match.similarity >= PhonePrint.holdSimilarity else { return (nil, match.similarity) }
+        let moved = Pose(topX: local.topX + Double(match.dx) / 400, topY: local.topY + Double(match.dy) / 225,
+                         bottomX: local.bottomX + Double(match.dx) / 400, bottomY: local.bottomY + Double(match.dy) / 225)
+        return (view.outside(moved), match.similarity)
+    }
+
+    /// Karedeki 16:9 oyun görüntüsü (`picture`) ve yerlerin kare ile görüntü arasında taşınması. Kare zaten 16:9 ise kendisi.
+    struct PictureView {
+        let image: CGImage
+        private let x: Double, y: Double, width: Double, height: Double, frameWidth: Double, frameHeight: Double
+
+        init?(_ frame: CGImage) {
+            guard frame.width >= 400, frame.height >= 225 else { return nil }
+            frameWidth = Double(frame.width)
+            frameHeight = Double(frame.height)
+            if abs(Double(frame.width) / Double(frame.height) - 400.0 / 225) <= 0.04 {
+                image = frame
+                (x, y, width, height) = (0, 0, frameWidth, frameHeight)
+                return
+            }
+            // Kare küçültülerek okunur (en çok 960 piksel genişlik); şeritlerin yeri piksel piksel gerekmez.
+            let scale = min(1, 960 / Double(frame.width))
+            let sw = max(1, Int((Double(frame.width) * scale).rounded())), sh = max(1, Int((Double(frame.height) * scale).rounded()))
+            guard let small = GamePhonePixels(frame, width: sw, height: sh),
+                  let area = GamePhoneGeometry.picture(width: frame.width, height: frame.height, tone: { x, y in
+                      let p = (min(sh - 1, Int(Double(y) * scale)) * sw + min(sw - 1, Int(Double(x) * scale))) * 4
+                      return (77 * Int(small.bytes[p]) + 150 * Int(small.bytes[p + 1]) + 29 * Int(small.bytes[p + 2])) >> 8
+                  }),
+                  let cropped = frame.cropping(to: CGRect(x: area.x, y: area.y, width: area.width, height: area.height)) else { return nil }
+            image = cropped
+            (x, y, width, height) = (Double(area.x), Double(area.y), Double(area.width), Double(area.height))
         }
-        let w = Double(image.width), h = Double(image.height)
-        // Açık telefonun yeri görüntünün içine taşınır.
-        let local = near.map { pose in
-            Pose(topX: (pose.topX * w - Double(area.x)) / Double(area.width), topY: (pose.topY * h - Double(area.y)) / Double(area.height),
-                 bottomX: (pose.bottomX * w - Double(area.x)) / Double(area.width),
-                 bottomY: (pose.bottomY * h - Double(area.y)) / Double(area.height))
+
+        /// Karedeki yer görüntünün içine.
+        func inside(_ pose: Pose) -> Pose {
+            Pose(topX: (pose.topX * frameWidth - x) / width, topY: (pose.topY * frameHeight - y) / height,
+                 bottomX: (pose.bottomX * frameWidth - x) / width, bottomY: (pose.bottomY * frameHeight - y) / height)
         }
-        func x(_ value: Double) -> Double { (Double(area.x) + value * Double(area.width)) / w }
-        func y(_ value: Double) -> Double { (Double(area.y) + value * Double(area.height)) / h }
+
+        /// Görüntüdeki yer karenin içine.
         func outside(_ pose: Pose) -> Pose {
-            Pose(topX: x(pose.topX), topY: y(pose.topY), bottomX: x(pose.bottomX), bottomY: y(pose.bottomY))
+            Pose(topX: (x + pose.topX * width) / frameWidth, topY: (y + pose.topY * height) / frameHeight,
+                 bottomX: (x + pose.bottomX * width) / frameWidth, bottomY: (y + pose.bottomY * height) / frameHeight)
         }
-        var (pose, probe) = locatePicture(cropped, near: local)
-        probe.candidate = probe.candidate.map(outside)
-        return (pose.map(outside), probe)
     }
 
     private static func locatePicture(_ image: CGImage, near: Pose? = nil) -> (pose: Pose?, probe: Probe) {
@@ -450,10 +545,12 @@ public enum GamePhoneGeometry {
     static func confirmPicture(_ image: CGImage, near: Pose) -> Pose? {
         guard let whole = Grid(image, columns: 0..<400, height: 225) else { return nil }
         if let pose = confirmPass(whole, near: near) { return pose }
-        for gain in darkGains(level: whole.level(rows: 0..<90, columns: 95...305)) {
+        let level = whole.level(rows: 0..<90, columns: 95...305)
+        for gain in darkGains(level: level) {
             if let pose = confirmPass(whole.with(gain: gain), near: near) { return pose }
         }
-        return nil
+        guard level < darkLevel else { return nil }
+        return confirmPass(equalize(whole), near: near)
     }
 
     private static func confirmPass(_ grid: Grid, near: Pose) -> Pose? {
@@ -500,6 +597,43 @@ public enum GamePhoneGeometry {
     static let darkTarget = 96
     static let gainSteps = [384, 640, 1024]
 
+    /// Kazanç yerine ton eşitleme (`equalization`): `Probe.gain`'de ve kazanç listesinde bu değer.
+    static let equalized = 0
+
+    /// Ton eşitleme: ızgaranın ham tonlarının (çeyrek ton adımıyla) sırası 0–255'e yayılır (her ton, kendinden koyu ve
+    /// yarısı kendisiyle aynı noktaların oranı). Parlaklıktan, gamadan ve gece renk ayarından bağımsızdır: tonları aynı
+    /// sırada kalan her karartma aynı ızgarayı verir. Kazanç (`darkGains`) karanlık sahnede yalnız ×4'e kadar aydınlatıyor,
+    /// çok karanlıkta (üst şerit 10/255'ten koyu) ve gamayla koyulaşmış görüntüde (açık kasa açık kalır, gölgeler kararır)
+    /// sıkı arama hoparlör yarığında, kamerada ya da kasa kenarında kalıyordu (X, beta-107: telefon gündüz çevriliyor, gece
+    /// ve kapalı yerde çevrilmiyor; günlükte parlaklık 7–60/255). Karanlık sahnede kazançlardan sonra denenir (Windows ve
+    /// Android ile aynı).
+    private static func equalization(_ grid: Grid) -> [UInt8] {
+        var counts = [Int](repeating: 0, count: 1021), total = 0
+        for y in stride(from: 0, to: 225, by: 2) {
+            for x in stride(from: 0, to: 400, by: 2) {
+                counts[min(1020, grid.raw(x, y) >> 8)] += 1
+                total += 1
+            }
+        }
+        return equalization(counts: counts, total: total)
+    }
+
+    /// `counts`: ham ton (dört noktanın toplamı / 256, 0–1020) sayıları.
+    static func equalization(counts: [Int], total: Int) -> [UInt8] {
+        var map = [UInt8](repeating: 0, count: counts.count), below = 0
+        for (tone, count) in counts.enumerated() {
+            map[tone] = UInt8(min(255, 255 * (2 * below + count) / max(1, 2 * total)))
+            below += count
+        }
+        return map
+    }
+
+    private static func equalize(_ grid: Grid) -> Grid {
+        var copy = grid.with(gain: 256)
+        copy.map = equalization(grid)
+        return copy
+    }
+
     /// Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi
     /// (X, beta.104): "telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor". Gece ya da karanlık odada telefonun
     /// kasası koyu, hoparlör yarığıyla kasa arasındaki fark mutlak eşiğin (14–20 ton) altında kalıyordu; sıkı arama hoparlör
@@ -519,8 +653,18 @@ public enum GamePhoneGeometry {
         var (pose, probe) = strictPass(image, topBand: topBand, gain: 256)
         probe.level = level
         guard pose == nil else { return (pose, probe) }
-        for gain in darkGains(level: level) {
-            var (dark, darkProbe) = strictPass(image, topBand: topBand, gain: gain)
+        var passes = darkGains(level: level)
+        if level < darkLevel { passes.append(equalized) }
+        var equalizedTop: Grid?
+        for gain in passes {
+            if gain == equalized {
+                // Ton eşitleme ızgaranın tamamından (`equalization`); üst şerit aynı eşlemeyle okunur.
+                guard let whole = Grid(image, columns: 0..<400, height: 225) else { break }
+                var top = topBand
+                top.map = equalization(whole)
+                equalizedTop = top
+            }
+            var (dark, darkProbe) = strictPass(image, topBand: equalizedTop ?? topBand, gain: gain)
             darkProbe.level = level
             darkProbe.gain = gain
             if dark != nil { return (dark, darkProbe) }
@@ -533,12 +677,14 @@ public enum GamePhoneGeometry {
 
     private static func strictPass(_ image: CGImage, topBand whole: Grid, gain: Int) -> (pose: Pose?, probe: Probe) {
         let topBand = whole.with(gain: gain)
+        let map = gain == equalized ? whole.map : nil
         // Normal gameplay ends here. Only sample the body after seeing both a speaker and a camera in the upper band.
         let speakers = scan(topBand, rows: 17..<75, lengths: 8...19, maximum: 12)
         guard !speakers.slots.isEmpty else { return (nil, .missed(speakers.crowded ? .topCrowded : .noTopSlot)) }
         let upper = speakers.slots.filter { hasCamera(topBand, $0) }
         guard !upper.isEmpty else { return (nil, .missed(.noCamera)) }
-        guard let grid = Grid(image, columns: 0..<400, height: 225)?.with(gain: gain) else { return (nil, .missed(.noPicture)) }
+        guard var grid = Grid(image, columns: 0..<400, height: 225)?.with(gain: gain) else { return (nil, .missed(.noPicture)) }
+        grid.map = map
         let notches = scan(grid, rows: 145..<217, lengths: 5...14, maximum: 16)
         guard !notches.slots.isEmpty else { return (nil, .missed(notches.crowded ? .bottomCrowded : .noBottomSlot)) }
         var best = 0.0, pose: Pose?

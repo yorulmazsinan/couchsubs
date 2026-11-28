@@ -17,13 +17,25 @@ public sealed partial class RegionWatcher
     // Telefon bu karede yoksa ya da izlenen yerden çok uzaktaysa nedeni günlüğe yazılır (PhoneTrace; önceden sessizdi, #1251).
     // İzleyici gibi açık telefonun yerinde gevşek doğrulama da denenir: önceden yalnız sıkı arama vardı, izleyicinin açık
     // tuttuğu telefonun turları "PhoneMissing" ile atlanıyordu (#1251; Mac ile aynı).
-    private bool PhoneMissing(Frame frame, WatchedArea area)
+    // Arama da gevşek doğrulama da ıskalarsa telefonun izi son yerinde karşılaştırılır (PhonePrint; iz, telefonun bu açılışının
+    // ilk karesinden): karanlık sahnede izleyici telefonu iziyle açık tutuyor, okuma turları ise "PhoneMissing" ile atlanıyor,
+    // çeviri bir kez gelip birkaç tur sonra siliniyordu (X, beta-107: "bir kez çevrildi, sonra kayboldu"; Mac ile aynı).
+    private bool PhoneMissing(Frame frame, WatchedArea area, State state)
     {
-        if (!area.PhonePose.HasValue) return false;
-        if (!GamePhoneGeometry.TryLocate(frame, area.PhonePose, out var pose))
+        if (area.PhonePose is not { } last) return false;
+        if (state.PhonePrint is null || !Equals(state.PhonePrintLifetime, area.PanelLifetime))
         {
-            Trace(PhoneTrace.Missing, area);
-            return true;
+            state.PhonePrint = GamePhoneGeometry.Print(frame, last);
+            state.PhonePrintLifetime = area.PanelLifetime;
+        }
+        if (!GamePhoneGeometry.TryLocate(frame, last, out var pose))
+        {
+            if (state.PhonePrint is not { } print || GamePhoneGeometry.Hold(frame, last, print).Pose is not { } held)
+            {
+                Trace(PhoneTrace.Missing, area);
+                return true;
+            }
+            pose = held;
         }
         if (pose.Bounds.IsClose(area.Region, 0.035)) return false;
         Trace(PhoneTrace.Displaced(PhoneTrace.Shift(pose.Bounds, area.Region)), area);
@@ -34,15 +46,16 @@ public sealed partial class RegionWatcher
 
     private async Task VisitPhoneAsync(WatchedArea area, Frame frame, Dictionary<string, State> map, int started)
     {
-        if (area.PanelLifetime is { IsCancellationRequested: true } || PhoneMissing(frame, area)) return;
-        var crop = RegionCropper.Crop(frame, area.Region);
-        var signature = RegionCropper.Signature(crop);
+        if (area.PanelLifetime is { IsCancellationRequested: true }) return;
         State state;
         lock (map)
         {
             if (area.PanelLifetime is { IsCancellationRequested: true }) return;
             if (!map.TryGetValue(area.Id, out state!)) map[area.Id] = state = new State();
         }
+        if (PhoneMissing(frame, area, state)) return;
+        var crop = RegionCropper.Crop(frame, area.Region);
+        var signature = RegionCropper.Signature(crop);
         state.PhoneAspect = frame.Width / (double)Math.Max(1, frame.Height);
         state.PhoneFrame = frame;
         var moved = state.ReadRegion is { } region && !area.Region.IsClose(region, 0.01);
@@ -434,7 +447,7 @@ public sealed partial class RegionWatcher
                 for (var i = 0; i < result.Length; i++)
                     if (!string.IsNullOrWhiteSpace(result[i])) phoneMemory.Remember(candidate.Paragraphs[i], result[i]!);
                 var latestFrame = LatestPhone(area);
-                if (latestFrame is { } observed && PhoneMissing(observed.Frame, observed.Area))
+                if (latestFrame is { } observed && PhoneMissing(observed.Frame, observed.Area, state))
                 {
                     // Telefon son karede bulunamadı: tek karelik ıska olabilir. Ekrandaki çeviri silinmez (önceden silinip
                     // sonraki turda geri geliyordu); çeviriler hafızada, sonraki tur yeniden dener. Telefon gerçekten
@@ -458,7 +471,7 @@ public sealed partial class RegionWatcher
                     // gösterilmiyordu (#1202, #1197, #1193, #1170). Sayfa gerçekten değiştiyse sonraki tur yeniden okur
                     // (Mac/iPhone ve Android ile aynı).
                     if (LatestPhone(area) is { } newer && !ReferenceEquals(newer.Frame, latest.Frame)
-                        && PhoneMissing(newer.Frame, newer.Area)) fresh = null;
+                        && PhoneMissing(newer.Frame, newer.Area, state)) fresh = null;
                     state.ReadRegion = latest.Area.Region;
                     if (fresh is not null) state.PhoneFrame = latest.Frame;
                     state.ReadPhonePage = fresh?.PhonePage;

@@ -141,7 +141,26 @@ class GamePhoneFirstSightingTest {
         return Picture(width, height, out)
     }
 
+    /**
+     * Karanlık sahne dönüşümleri ("tür:değer", Mac/iPhone ve Windows ile aynı formüller): `scale:k` parlaklık × k, `gamma:g`
+     * gama, `nightgrade:k` gece renk ayarı (renk soluklaşır, maviye kayar, gama 1,3, × k), `vignette:k` kenarlara doğru
+     * kararan görüntü × k, `darkbg:k` telefonun arkası koyu ([DARK_BOX] dışı k/4, içi k).
+     */
+    private fun darkened(source: Picture, spec: String): Picture {
+        val (kind, value) = spec.split(":")
+        val k = value.toDouble()
+        val width = source.width
+        val height = source.height
+        return Picture(width, height, IntArray(width * height) { i ->
+            val c = source.pixels[i]
+            val (r, g, b) = darkPixel(kind, k, (c shr 16) and 0xff, (c shr 8) and 0xff, c and 0xff,
+                (i % width + 0.5) / width, (i / width + 0.5) / height)
+            (r shl 16) or (g shl 8) or b
+        })
+    }
+
     internal fun transformed(source: Picture, transform: String, cover: List<Double>? = null): Picture {
+        if (':' in transform) return darkened(source, transform)
         if (transform == "scale1440") return resized(source, 2560, 1440)
         if (transform == "scale720") return resized(source, 1280, 720)
         if (transform in setOf("letterbox", "pillarbox", "titlebar")) return framed(source, transform)
@@ -334,4 +353,34 @@ class GamePhoneFirstSightingTest {
     internal companion object {
         val cache = mutableMapOf<String, Picture>()
     }
+}
+
+/** [GamePhoneFirstSightingTest.darkened]'ın telefonun arkası koyu dikdörtgeni (darkbg). */
+internal val DARK_BOX = doubleArrayOf(0.52, 0.1, 0.88, 0.98)
+
+/** Tek noktanın karanlık dönüşümü (0–255); [fx]/[fy] noktanın karedeki yeri (0..1). */
+internal fun darkPixel(kind: String, k: Double, r: Int, g: Int, b: Int, fx: Double, fy: Double): Triple<Int, Int, Int> {
+    var c = doubleArrayOf(r / 255.0, g / 255.0, b / 255.0)
+    c = when (kind) {
+        "scale" -> DoubleArray(3) { c[it] * k }
+        "gamma" -> DoubleArray(3) { Math.pow(c[it], k) }
+        "nightgrade" -> {
+            val l = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+            val tint = doubleArrayOf(0.8, 0.95, 1.25)
+            DoubleArray(3) { minOf(1.0, Math.pow(minOf(1.0, (0.4 * c[it] + 0.6 * l) * tint[it]), 1.3) * k) }
+        }
+        "vignette" -> {
+            val dx = (fx - 0.5) * 2
+            val dy = (fy - 0.5) * 2
+            val f = maxOf(0.08, 1 - 0.75 * (dx * dx + dy * dy)) * k
+            DoubleArray(3) { c[it] * f }
+        }
+        "darkbg" -> {
+            val inside = fx >= DARK_BOX[0] && fx <= DARK_BOX[2] && fy >= DARK_BOX[1] && fy <= DARK_BOX[3]
+            DoubleArray(3) { c[it] * if (inside) k else k / 4 }
+        }
+        else -> error(kind)
+    }
+    val o = IntArray(3) { Math.rint(c[it] * 255).toInt().coerceIn(0, 255) }
+    return Triple(o[0], o[1], o[2])
 }

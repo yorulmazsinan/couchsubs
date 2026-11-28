@@ -16,6 +16,16 @@ public enum PhoneTrace {
     public static let missing = "PhoneMissing: telefon bu karede bulunamadı, tur atlandı"
     public static let emptyFlat = "eğik ekran düzeltilmiş okuması boş"
 
+    /// Açık telefon sıkı aramada ve gevşek doğrulamada bulunamadı, son yerindeki iziyle tutuldu (`PhonePrint`; benzerlik %).
+    public static func held(_ similarity: Double) -> String {
+        "telefon aramada görünmedi, son yerinde iziyle tutuluyor (benzerlik %\(percent(similarity)))"
+    }
+
+    /// Telefon kapandı: son yerdeki iz de tutmadı (en iyi benzerlik %).
+    public static func printLost(_ similarity: Double) -> String {
+        "telefonun izi son yerinde tutmadı (benzerlik %\(percent(similarity)))"
+    }
+
     /// Telefon bulundu ama önceki örnekten çok oynadı; iki uyumlu gözlem olmadığı için açılmadı.
     public static func moving(_ share: Double) -> String { "telefon oynuyor, açılmadı (%\(percent(share)) oynama)" }
 
@@ -42,14 +52,16 @@ public enum PhoneTrace {
     /// Telefon açık değilken ilk açılış ıskalandı (#1251): `samples` aramada en ileri geçilen ölçüt, en sık ıska, en iyi
     /// adayın zayıf yanı (yan eşiğine oranla; aday yoksa yazılmaz), tek görülüp doğrulanmayan gözlemler ve üst şeridin
     /// ortalama parlaklığı (`level`, 0–255; -1: ölçülmedi). Karanlık sahnede (`GamePhoneGeometry.darkLevel`) en ileri
-    /// ölçüte ulaşan aramanın kazancı da yazılır (`gain`, 256 = ×1,0).
+    /// ölçüte ulaşan aramanın kazancı da yazılır (`gain`, 256 = ×1,0; `GamePhoneGeometry.equalized`: ton eşitleme).
     public static func missedFirst(samples: Int, furthest: String, common: String, commonCount: Int, side: Int,
                                    unconfirmed: Int, strict: Int, level: Int = -1, gain: Int = 256) -> String {
         let candidate = side >= 0 ? ", en iyi aday yan gücü \(side)/\(GamePhoneGeometry.sideThreshold)" : ""
         var light = ""
         if level >= 0 {
             light = ", parlaklık \(level)/255"
-            if level < GamePhoneGeometry.darkLevel { light += " (karanlık, kazanç ×\(times(gain)))" }
+            if level < GamePhoneGeometry.darkLevel {
+                light += gain == GamePhoneGeometry.equalized ? " (karanlık, ton eşitleme)" : " (karanlık, kazanç ×\(times(gain)))"
+            }
         }
         return "telefon ilk aramada bulunamadı (\(samples) arama): en ileri ölçüt \(furthest), en sık \(common) (\(commonCount))"
             + "\(candidate), doğrulanmayan gözlem \(unconfirmed) (\(strict) sıkı)\(light)"

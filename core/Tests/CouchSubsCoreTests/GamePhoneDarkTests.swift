@@ -85,6 +85,106 @@ final class GamePhoneDarkTests: XCTestCase {
         for part in spec["contains"] as! [String] { XCTAssertTrue(missed.first?.contains(part) == true, "\(missed)") }
     }
 
+    /// Ton eşitleme eşlemesi (`GamePhoneGeometry.equalization`): her platformda aynı tonlar.
+    func testEqualizationMap() throws {
+        for item in try vectors()["equalization"] as! [[String: Any]] {
+            let name = item["name"] as! String
+            var counts = [Int](repeating: 0, count: 1021), total = 0
+            for pair in item["counts"] as! [[NSNumber]] {
+                counts[pair[0].intValue] += pair[1].intValue
+                total += pair[1].intValue
+            }
+            let map = GamePhoneGeometry.equalization(counts: counts, total: total)
+            for pair in item["map"] as! [[NSNumber]] {
+                XCTAssertEqual(Int(map[pair[0].intValue]), pair[1].intValue, "\(name): \(pair[0])")
+            }
+        }
+    }
+
+    /// Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
+    /// ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.
+    func testDarkVariantsOpenThePhone() throws {
+        for item in try vectors()["darkVariants"] as! [[String: Any]] {
+            let frame = item["frame"] as! String
+            for transform in item["transforms"] as! [String] {
+                let image = try GamePhoneFirstSightingTests.load(frame, transform)
+                let tracker = GamePhoneTracker()
+                var opened = false
+                for i in 0..<3 where tracker.sample(image, now: i * GamePhoneTracker.intervalMs).pose != nil { opened = true }
+                XCTAssertTrue(opened, "\(frame) (\(transform)): \(GamePhoneGeometry.search(image).probe)")
+            }
+        }
+    }
+
+    /// İz benzerliği (`PhonePrint.similarity`): parlaklıktan ve karşıtlıktan bağımsız; düz ya da çok sönük iz 0.
+    func testPrintSimilarity() throws {
+        for item in try vectors()["printSimilarity"] as! [[String: Any]] {
+            let a = (item["a"] as! [NSNumber]).map(\.intValue), b = (item["b"] as! [NSNumber]).map(\.intValue)
+            XCTAssertEqual(PhonePrint.similarity(a, b), (item["similarity"] as! NSNumber).doubleValue, accuracy: 1e-6,
+                           item["name"] as! String)
+        }
+    }
+
+    /// Telefon aydınlıkta açılır, sahne kararır (sıkı arama ıskalar): son yerindeki iziyle açık kalır, okuma sürer. Telefon
+    /// indirilince (telefonsuz kare) iz tutmaz, telefon her zamanki sürede kapanır.
+    func testOpenPhoneIsHeldByItsPrint() throws {
+        for item in try vectors()["hold"] as! [[String: Any]] {
+            let name = item["name"] as! String
+            let open = try GamePhoneFirstSightingTests.load(item["frame"] as! String, "none")
+            let then = try GamePhoneFirstSightingTests.load(item["then"] as! String, item["transform"] as! String)
+            var log: [String] = []
+            let tracker = GamePhoneTracker()
+            tracker.onLog = { log.append($0) }
+            var t = 0
+            for _ in 0..<3 { _ = tracker.sample(open, now: t); t += GamePhoneTracker.intervalMs }
+            XCTAssertNotNil(tracker.sample(open, now: t).pose, name)
+            t += GamePhoneTracker.intervalMs
+            var last: GamePhoneGeometry.Pose?
+            var kept = 0
+            for _ in 0..<(item["samples"] as! NSNumber).intValue {
+                last = tracker.sample(then, now: t).pose
+                if last != nil { kept += 1 }
+                t += GamePhoneTracker.intervalMs
+            }
+            if item["held"] as! Bool {
+                XCTAssertEqual(kept, (item["samples"] as! NSNumber).intValue, "\(name): \(log)")
+            } else {
+                XCTAssertNil(last, "\(name): \(log)")
+            }
+            for part in (item["log"] as? [String]) ?? [] {
+                XCTAssertTrue(log.contains { $0.contains(part) }, "\(name): \(part) yok: \(log)")
+            }
+        }
+    }
+
+    /// İz telefonsuz karede telefonu tutmaz: telefon açıldıktan sonra telefonsuz gerçek kareler (karanlık hâlleriyle) gelince
+    /// telefon kapanır.
+    func testPrintNeverHoldsPhoneFreeFrames() throws {
+        let spec = try vectors()["holdNoPhone"] as! [String: Any]
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().appendingPathComponent("../../../testdata/frames/frames.json").standardized)) as! [String: Any]
+        let names = Set((manifest["frames"] as! [[String: Any]]).filter { $0["phone"] == nil }
+            .map { ($0["file"] as! String).replacingOccurrences(of: ".jpg", with: "") })
+        let openers = try (spec["openers"] as! [String]).map { try GamePhoneFirstSightingTests.load($0, "none") }
+        let samples = (spec["samples"] as! NSNumber).intValue
+        for name in names.sorted() {
+            for transform in spec["transforms"] as! [String] {
+                let frame = try GamePhoneFirstSightingTests.fresh(name, transform)
+                for (i, opener) in openers.enumerated() {
+                    let tracker = GamePhoneTracker()
+                    var t = 0
+                    for _ in 0..<3 { _ = tracker.sample(opener, now: t); t += GamePhoneTracker.intervalMs }
+                    var last: GamePhoneGeometry.Pose?
+                    for _ in 0..<samples {
+                        last = tracker.sample(frame, now: t).pose
+                        t += GamePhoneTracker.intervalMs
+                    }
+                    XCTAssertNil(last, "\(name) (\(transform)) telefon \(i) açık kaldı")
+                }
+            }
+        }
+    }
+
     func testDarkMissLineText() throws {
         let spec = try vectors()["missLine"] as! [String: Any]
         func int(_ key: String) -> Int { (spec[key] as! NSNumber).intValue }
