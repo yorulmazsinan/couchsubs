@@ -55,6 +55,7 @@ public sealed partial class SubtitleOverlayWindow : Window
     private readonly Grid adjustLayer = new() { Visibility = Visibility.Collapsed };
     /// <summary>Başka bir tam ekran ya da üstte duran pencere öne gelince altyazıyı yeniden en üste koyar.</summary>
     private readonly TopmostKeeper topmost;
+    private readonly ChiakiFullscreenOverlay chiakiFullscreen = new();
     private IntPtr handle;
     /// <summary>Pencere bir kez açılamadı ya da çizilemedi: bu oturumda bir daha denenmez, çeviri pencere olmadan sürer.</summary>
     private bool broken;
@@ -126,6 +127,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         controller.OverlayEvent += OnEvent;
         controller.OverlayHidden += OnHidden;
         controller.PropertyChanged += OnChanged;
+        Closed += (_, _) => chiakiFullscreen.Dispose();
     }
 
     public void Detach()
@@ -135,6 +137,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         controller.PropertyChanged -= OnChanged;
         timer.Stop();
         topmost.Dispose();
+        chiakiFullscreen.Dispose();
         try { Close(); }
         catch (InvalidOperationException error) { StartupGuard.Log("Altyazı penceresi kapatılamadı", error); }
     }
@@ -239,6 +242,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         {
             broken = true;
             StartupGuard.Log($"Altyazı penceresi ({where})", error);
+            chiakiFullscreen.Restore();
             try
             {
                 timer.Stop();
@@ -267,6 +271,13 @@ public sealed partial class SubtitleOverlayWindow : Window
             lines.Add(new SubtitleStack.Line(0, Localizer.Current["Subtitles appear here."], SubtitleStack.Role.Current, false, false));
         adjustLayer.Visibility = adjusting ? Visibility.Visible : Visibility.Collapsed;
 
+        var visible = controller.ShowsOnComputer && (lines.Count > 0 || regions.Count > 0);
+        if (visible && !IsVisible) Show();
+        if ((visible || controller.IsRunning) && controller.ShowsOnComputer
+            && controller.Settings.FrameSource == FrameSource.RemotePlayWindow)
+            chiakiFullscreen.Refresh(controller.Settings.RemotePlayApp);
+        else chiakiFullscreen.Restore();
+
         linesPanel.Children.Clear();
         foreach (var id in boxes.Keys.Except(lines.Select(l => l.Id)).ToList()) boxes.Remove(id);
         foreach (var line in lines)
@@ -289,9 +300,7 @@ public sealed partial class SubtitleOverlayWindow : Window
         regionsPanel.PanelFont = OverlayPlacement.FontSize(controller.Settings.Style.FontSize) * Scale * 0.55;
         regionsPanel.ShowRegions(regions, MakeRegionBox);
 
-        var visible = controller.ShowsOnComputer && (lines.Count > 0 || regions.Count > 0);
-        if (visible && !IsVisible) Show();
-        else if (!visible && IsVisible) Hide();
+        if (!visible && IsVisible) Hide();
         // Arada öne gelen tam ekran/üstte duran pencere altyazıyı örtmüş olabilir; odak alınmadan yeniden üste konur.
         if (visible) topmost.RaiseThrottled();
 

@@ -281,6 +281,14 @@ public sealed class RemotePlayWindowStream : IStreamSession
         return best;
     }
 
+    /// <summary>Bilgisayar altyazısını yakalanan Remote Play penceresine hizalamak için görünen oyun penceresi.</summary>
+    internal static IntPtr OverlayTarget(RemotePlayApp app) => FindGameWindow(app switch
+    {
+        RemotePlayApp.Sony => SonyProcesses,
+        RemotePlayApp.Chiaki => ChiakiProcesses,
+        _ => [.. SonyProcesses, .. ChiakiProcesses],
+    });
+
     /// <summary>Yalnız kullanıcıya görünür ve uygulamanın kendisine ait olmayan pencereler seçilebilir.</summary>
     public static IReadOnlyList<WindowCaptureTarget> ListCaptureWindows()
     {
