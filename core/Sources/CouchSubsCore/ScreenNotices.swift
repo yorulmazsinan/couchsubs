@@ -49,6 +49,8 @@ public struct ScreenNotices: Sendable {
         var still: Int
         var lastSeen: Int
         var region: CropRegion?
+        /// Bildirim kartı (`NoticeCard`): kutu kartın bütün yeridir, bölge de odur.
+        var card = false
     }
 
     private var tracks: [Track] = []
@@ -59,14 +61,27 @@ public struct ScreenNotices: Sendable {
 
     public init() {}
 
-    /// Bu karenin bildirim blokları (satır kutuları karede). Alan listesi değiştiyse true. Bildirim yokken de her karede
-    /// çağrılır: görülmeyen bildirim `forgetMs` sonra kalkar.
-    public mutating func observe(_ blocks: [Reading], at time: Int) -> Bool {
+    /// Bu karenin bildirim blokları (satır kutuları karede) ve bildirim kartları (`NoticeCard`; kartın karedeki yeri, alan
+    /// türünden bağımsız). Alan listesi değiştiyse true. Bildirim yokken de her karede çağrılır: görülmeyen bildirim
+    /// `forgetMs` sonra kalkar. Kartın bölgesi kartın kendisidir (başlık ve gövde birlikte okunur, çeviri kartı örter).
+    public mutating func observe(_ blocks: [Reading], cards: [TextBox] = [], at time: Int) -> Bool {
         var matched = Set<Int>()
+        for box in cards {
+            if let index = tracks.indices.first(where: { !matched.contains($0) && tracks[$0].card && Self.same(tracks[$0].box, box) }) {
+                if Self.moved(tracks[index].box, box) { tracks[index].still = time }
+                tracks[index].box = box
+                tracks[index].lastSeen = time
+                matched.insert(index)
+            } else {
+                counter += 1
+                tracks.append(Track(number: counter, box: box, line: 0, still: time, lastSeen: time, card: true))
+                matched.insert(tracks.count - 1)
+            }
+        }
         for block in blocks {
             guard let box = block.box, Self.isNotice(box) else { continue }
             let line = block.lines.compactMap { $0.box.map { $0.bottom - $0.top } }.min() ?? (box.bottom - box.top)
-            if let index = tracks.indices.first(where: { !matched.contains($0) && Self.same(tracks[$0].box, box) }) {
+            if let index = tracks.indices.first(where: { !matched.contains($0) && !tracks[$0].card && Self.same(tracks[$0].box, box) }) {
                 if Self.moved(tracks[index].box, box) { tracks[index].still = time }
                 tracks[index].box = box
                 tracks[index].line = line
@@ -80,7 +95,7 @@ public struct ScreenNotices: Sendable {
         }
         tracks.removeAll { time - $0.lastSeen > Self.forgetMs }
         for index in tracks.indices where time - tracks[index].still >= Self.settleMs {
-            let next = Self.region(tracks[index].box, line: tracks[index].line)
+            let next = tracks[index].card ? Self.cardRegion(tracks[index].box) : Self.region(tracks[index].box, line: tracks[index].line)
             // Okuma kutusunun küçük oynaması bölgeyi değiştirmez (bölge değişirse bildirim yeniden okunur).
             if let current = tracks[index].region, Self.close(current, next) { continue }
             tracks[index].region = next
@@ -102,6 +117,11 @@ public struct ScreenNotices: Sendable {
     static func region(_ box: TextBox, line: Double) -> CropRegion {
         CropRegion(top: max(0, box.top - 0.35 * line), bottom: min(1, box.bottom + 0.35 * line),
                    left: max(0, box.left - 0.01), right: min(1, box.right + 0.01))
+    }
+
+    /// Bildirim kartının bölgesi: kartın kendisi, 0…1'e kırpılmış.
+    static func cardRegion(_ box: TextBox) -> CropRegion {
+        CropRegion(top: max(0, box.top), bottom: min(1, box.bottom), left: max(0, box.left), right: min(1, box.right))
     }
 
     /// İki kutu aynı bildirim mi: karenin aynı yarısında ve dikeyde (yana kayan kart) ya da yatayda (yukarı kayan kart)

@@ -745,7 +745,10 @@ final class AppModel: ObservableObject {
                 server.setApart = settings.setTextApart
                 server.sendStyle(settings.style)
             }
-            if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
+            if settings.autoScreenText != oldValue.autoScreenText {
+                showsAutoScreenTextNotice = false
+                updateNoticeCards()
+            }
             if settings.hotkeys != oldValue.hotkeys { applyHotkeys() }
             if settings.usageData != oldValue.usageData {
                 usage.setEnabled(settings.usageData)
@@ -3381,6 +3384,14 @@ final class AppModel: ObservableObject {
         pipeline?.findsPhone = Self.findsGamePhone(running: pipeline != nil, game: gameChoice.game?.name)
         // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
         pipeline?.lightInkGame = pipeline?.findsPhone ?? false
+        updateNoticeCards()
+    }
+
+    /// GTA 6'nın sağ alttaki bildirim kartı (gelen arama, mesaj) altyazı alanından bağımsız kendi yerinde çevrilir: oyun
+    /// GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken (`NoticeCard`, #1443; iPhone, Windows, Android aynı).
+    private func updateNoticeCards() {
+        pipeline?.findsNoticeCards = NoticeCard.enabled(running: pipeline != nil, game: gameChoice.game?.name,
+                                                        screenText: settings.autoScreenText, phone: settings.readsGamePhone)
     }
 
     /// Altyazı hattı telefonu arar mı: çeviri sürüyor ve oyun GTA 6 (telefon ayarından bağımsız, #1282).

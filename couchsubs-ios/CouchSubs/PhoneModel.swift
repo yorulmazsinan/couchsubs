@@ -59,7 +59,10 @@ final class PhoneModel: ObservableObject {
             if settings.output != oldValue.output { outputChanged() }
             if settings.gamePacks != oldValue.gamePacks, let pipeline { connectPacks(to: pipeline) }
             pipeline?.showSpeakerNames = settings.showSpeakerNames
-            if settings.autoScreenText != oldValue.autoScreenText { showsAutoScreenTextNotice = false }
+            if settings.autoScreenText != oldValue.autoScreenText {
+                showsAutoScreenTextNotice = false
+                updateNoticeCards()
+            }
             server.speakerColors = settings.speakerColors
             if settings.setTextApart != oldValue.setTextApart {
                 server.setApart = settings.setTextApart
@@ -1572,6 +1575,14 @@ final class PhoneModel: ObservableObject {
         pipeline?.findsPhone = Self.tracksGamePhone(running: pipeline != nil, enabled: true, game: gameChoice.game?.name)
         // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
         pipeline?.lightInkGame = pipeline?.findsPhone ?? false
+        updateNoticeCards()
+    }
+
+    /// GTA 6'nın sağ alttaki bildirim kartı (gelen arama, mesaj) altyazı alanından bağımsız kendi yerinde çevrilir: oyun
+    /// GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken (`NoticeCard`, #1443; Mac, Windows, Android aynı).
+    private func updateNoticeCards() {
+        pipeline?.findsNoticeCards = NoticeCard.enabled(running: pipeline != nil, game: gameChoice.game?.name,
+                                                        screenText: settings.autoScreenText, phone: settings.readsGamePhone)
     }
 
     static func tracksGamePhone(running: Bool, enabled: Bool, game: String?) -> Bool {

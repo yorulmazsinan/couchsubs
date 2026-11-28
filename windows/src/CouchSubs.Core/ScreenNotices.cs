@@ -50,6 +50,8 @@ public sealed class ScreenNotices
         public long Still { get; set; } = time;
         public long LastSeen { get; set; } = time;
         public CropRegion? Region { get; set; }
+        /// <summary>Bildirim kartı (<see cref="NoticeCard"/>): kutu kartın bütün yeridir, bölge de odur.</summary>
+        public bool Card { get; init; }
     }
 
     private readonly List<Track> tracks = [];
@@ -59,18 +61,35 @@ public sealed class ScreenNotices
     public IReadOnlyList<WatchedArea> Areas { get; private set; } = [];
 
     /// <summary>
-    /// Bu karenin bildirim blokları (satır kutuları karede). Alan listesi değiştiyse true. Bildirim yokken de her karede
-    /// çağrılır: görülmeyen bildirim <see cref="ForgetMs"/> sonra kalkar.
+    /// Bu karenin bildirim blokları (satır kutuları karede) ve bildirim kartları (<see cref="NoticeCard"/>; kartın karedeki
+    /// yeri, alan türünden bağımsız). Alan listesi değiştiyse true. Bildirim yokken de her karede çağrılır: görülmeyen
+    /// bildirim <see cref="ForgetMs"/> sonra kalkar. Kartın bölgesi kartın kendisidir (başlık ve gövde birlikte okunur,
+    /// çeviri kartı örter).
     /// </summary>
-    public bool Observe(IReadOnlyList<Reading> blocks, long time)
+    public bool Observe(IReadOnlyList<Reading> blocks, long time, IReadOnlyList<TextBox>? cards = null)
     {
         var matched = new HashSet<Track>();
+        foreach (var box in cards ?? [])
+        {
+            var track = tracks.FirstOrDefault(t => !matched.Contains(t) && t.Card && Same(t.Box, box));
+            if (track is null)
+            {
+                tracks.Add(track = new Track(++counter, box, 0, time) { Card = true });
+            }
+            else
+            {
+                if (Moved(track.Box, box)) track.Still = time;
+                track.Box = box;
+                track.LastSeen = time;
+            }
+            matched.Add(track);
+        }
         foreach (var block in blocks)
         {
             if (block.Box is not { } box || !IsNotice(box)) continue;
             var heights = block.Lines.Where(l => l.Box is not null).Select(l => l.Box!.Value.Bottom - l.Box!.Value.Top).ToList();
             var line = heights.Count > 0 ? heights.Min() : box.Bottom - box.Top;
-            var track = tracks.FirstOrDefault(t => !matched.Contains(t) && Same(t.Box, box));
+            var track = tracks.FirstOrDefault(t => !matched.Contains(t) && !t.Card && Same(t.Box, box));
             if (track is null)
             {
                 tracks.Add(track = new Track(++counter, box, line, time));
@@ -87,7 +106,7 @@ public sealed class ScreenNotices
         tracks.RemoveAll(t => time - t.LastSeen > ForgetMs);
         foreach (var track in tracks.Where(t => time - t.Still >= SettleMs))
         {
-            var next = RegionOf(track.Box, track.Line);
+            var next = track.Card ? CardRegion(track.Box) : RegionOf(track.Box, track.Line);
             // Okuma kutusunun küçük oynaması bölgeyi değiştirmez (bölge değişirse bildirim yeniden okunur).
             if (track.Region is { } current && Close(current, next)) continue;
             track.Region = next;
@@ -109,6 +128,10 @@ public sealed class ScreenNotices
     internal static CropRegion RegionOf(TextBox box, double line) =>
         new(Math.Max(0, box.Top - 0.35 * line), Math.Min(1, box.Bottom + 0.35 * line),
             Math.Max(0, box.Left - 0.01), Math.Min(1, box.Right + 0.01));
+
+    /// <summary>Bildirim kartının bölgesi: kartın kendisi, 0…1'e kırpılmış.</summary>
+    internal static CropRegion CardRegion(TextBox box) =>
+        new(Math.Max(0, box.Top), Math.Min(1, box.Bottom), Math.Max(0, box.Left), Math.Min(1, box.Right));
 
     /// <summary>
     /// İki kutu aynı bildirim mi: karenin aynı yarısında ve dikeyde (yana kayan kart) ya da yatayda (yukarı kayan kart)

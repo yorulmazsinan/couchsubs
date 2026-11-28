@@ -3828,6 +3828,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             FindsPhone = GameName.Key(gameSense.Current?.Name) == "gta 6",
             // GTA 6'nın altyazısı beyazdır: telefon bulunamasa da sohbet balonları (açık zeminde koyu yazı) altyazı olmaz.
             LightInkGame = GameName.Key(gameSense.Current?.Name) == "gta 6",
+            // GTA 6'nın sağ alttaki bildirim kartı (gelen arama, mesaj) altyazı alanından bağımsız kendi yerinde çevrilir
+            // (NoticeCard, #1443): oyun GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken.
+            FindsNoticeCards = NoticeCard.Enabled(true, gameSense.Current?.Name, settings.AutoScreenText, settings.ReadsGamePhone),
         };
         built.MetricsReady += metrics => post(() =>
         {
@@ -4035,6 +4038,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 current.FindsPhone = running && GameName.Key(gameSense.Current?.Name) == "gta 6";
                 current.LightInkGame = current.FindsPhone;
+                // Sağ alttaki bildirim kartı (NoticeCard, #1443): GTA 6 ve ekran yazısı ya da telefon çevirisi açık (Mac,
+                // iPhone, Android aynı).
+                current.FindsNoticeCards = NoticeCard.Enabled(running, gameSense.Current?.Name, settings.AutoScreenText,
+                                                              settings.ReadsGamePhone);
             }
             if (running && settings.AutoScreenText && !settings.ExtraAreasPausedByFullScreen)
                 // Harita düzeni bulundu/bitti (#1365 tanısı).
@@ -4170,7 +4177,10 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
                 // telefon dışlanır: telefonun yazısı ekran yazısı olmaz, dışındaki tuş çubuğu olur.
                 // Hazır alanlar (GTA 6 yardım/mesaj köşesi) dışlanmaz: üstlerine taşan yazı (haritanın konum kartı) tek alan
                 // olarak bulunur, hazır alan o sırada okunmaz (RegionWatcher.YieldingPresets, #1391).
+                // Kenar bildirimi ve bildirim kartı (NoticeCard, #1443) kendi alanında okunur: başlığı ikinci kez ekran yazısı
+                // olmaz (Mac/iPhone ve Android aynı).
                 IReadOnlyList<CropRegion> excluded = [.. savedWatchedAreas.Select(item => item.Region),
+                                                      .. Volatile.Read(ref noticeAreas).Select(item => item.Region),
                                                       .. phoneArea is null ? [] : new[] { phoneArea.Region },
                                                       .. phoneSeen && phoneBounds is { } bounds ? new[] { ScreenTextDetector.PaddedPhone(bounds) } : []];
                 var subtitle = settings.Region;

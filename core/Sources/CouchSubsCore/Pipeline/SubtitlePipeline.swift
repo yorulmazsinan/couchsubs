@@ -232,6 +232,12 @@ public final class SubtitlePipeline {
     /// Oyunun altyazısı bilinen açık renkli yazı (GTA 6; uygulama `findsPhone` ile birlikte ayarlar): açık zemindeki koyu
     /// yazı kuralı (`InkTone`) oturumda kapanmaz; telefon bulunamasa da sohbet balonları altyazı olmaz (`DarkInkStyle`).
     public var lightInkGame = false
+    /// GTA 6'nın sağ alttaki açık bildirim kartı (`NoticeCard`; gelen arama, mesaj, uyarı) altyazı alanı ne olursa olsun
+    /// sahne yazısı süzgeçlerinden önce ayrılır, kartın tamamı "auto-notice-<n>" ek alanı olarak kendi yerinde çevrilir
+    /// (#1443). Uygulama oyun GTA 6 iken ve ekran yazısı ya da telefon çevirisi açıkken açar (Windows ve Android aynı).
+    public var findsNoticeCards = false
+    /// Günlüğe yazılmış son bildirim kartı (her karede yeniden yazılmasın).
+    private var loggedCard = ""
     /// Telefon arandı (bulundu mu); `findsPhone` açıkken `GamePhoneTracker.intervalMs` arayla. Telefon çevirisi kapalıyken
     /// "Telefon çevirisi kapalı, açmak ister misiniz?" ipucu (`GamePhoneHint.observePhone`, #1282). Kararları değiştirmez.
     public var onPhoneLooked: ((Bool) -> Void)?
@@ -461,7 +467,14 @@ public final class SubtitlePipeline {
             log("kendi altyazısı: \(SubtitleLog.excerpt(ownLines.map(\.text).joined(separator: " "))) karede okundu, yok "
                 + "sayıldı (görüntü kaynağı CouchSubs'ın OBS katmanını da içeriyor; OBS'te Kaynak projektörünü seçin)")
         }
-        let joined = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        var joined = seen.withoutButtonPrompts().withoutOcrNoise().joiningRows()
+        // Sağ alttaki bildirim kartı (#1443) görev/HUD, sahne yazısı ve koyu yazı (kâğıt/tabela) süzgeçlerinden önce ayrılır:
+        // altyazı alanı kartı kesse de kartın tamamı kendi yerinde çevrilir (`NoticeCard`).
+        var cards: [(block: Reading, card: TextBox)] = []
+        if findsNoticeCards {
+            (joined, cards) = NoticeCard.split(joined, in: place, card: NoticeCard.sampler(frame))
+            logCards(cards)
+        }
         // Görev sayılmış satır (kendi kutusunda gösteriliyor) tek başına kalsa ya da ıskadan sonra dönse de altyazı olmaz
         // (`MissionLine.claim`); görev satırı olarak görülmüş sayılır.
         let (cleaned, claimed) = mission.claim(joined, area: place)
@@ -532,7 +545,7 @@ public final class SubtitlePipeline {
         logStale(staleTexts)
         logLeftOut(rows, chosen: reading, logged: sceneTexts + staleTexts + edge.flatMap { $0.lines.map(\.text) })
         // Kenardaki bildirim kartı altyazının yerinde (ekranın ortasında) değil, kendi yerinde çevrilir.
-        if notices.observe(edge, at: now()) {
+        if notices.observe(edge, cards: cards.map(\.card), at: now()) {
             log(notices.areas.isEmpty ? "kenar bildirimi kalktı" : "kenar bildirimi kendi yerinde gösteriliyor (\(notices.areas.count))")
             onNoticesChanged?(notices.areas)
         }
@@ -1199,6 +1212,17 @@ public final class SubtitlePipeline {
     }
 
     /// Uzun süredir değişmeyen ortalı blok (haber bandı) yeni beliren bloğun yanında altyazı sayılmadı (GitHub #933).
+    /// Bulunan bildirim kartları günlüğe (yazısı değişince bir kez): yazısı, karedeki yeri ve altyazı sayılmadığı.
+    private func logCards(_ cards: [(block: Reading, card: TextBox)]) {
+        let line = cards.map { entry in
+            "\(SubtitleLog.excerpt(entry.block.lines.map(\.text).joined(separator: " / "))) sağda açık kart ("
+                + String(format: "x %.2f-%.2f, y %.2f-%.2f", entry.card.left, entry.card.right, entry.card.top, entry.card.bottom) + ")"
+        }.joined(separator: "; ")
+        guard line != loggedCard else { return }
+        loggedCard = line
+        if !line.isEmpty { log("bildirim kartı: \(line), altyazı sayılmadı; kart kendi yerinde çevrilecek") }
+    }
+
     private func logStale(_ texts: [String]) {
         if !texts.isEmpty { countReject("sabit blok (\(Reading.staleMs / 1000) sn değişmeyen)") }
         let key = texts.joined(separator: "\n")
@@ -1318,6 +1342,7 @@ public final class SubtitlePipeline {
             server.sendObjective(nil)
         }
         notices.reset()
+        loggedCard = ""
         echo?.reset()
         loggedOwn = nil
         if stabilizer.reset() == .clear { clearScreen() }

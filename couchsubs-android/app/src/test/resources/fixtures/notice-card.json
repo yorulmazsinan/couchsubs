@@ -1,0 +1,35 @@
+{
+  "about": "GTA 6 sağ alt bildirim kartı (#1443). real: gerçek kareler (testdata/frames) ve kayıtlı okumaları (testdata/frames/ocr; alan, kaydın region'ı). Bu listede olmayan, kayıtlı okuması olan bütün kareler (konuşma, kâğıt ilan, tabela, kitap, tişört, telefon, menü, görev) kart vermemeli. synthetic: kullanıcının fotoğrafındaki 'Withheld Number' kartının ölçüleriyle sentetik kare ve kullanıcı günlüğündeki (#1443, 13:19:54) alanın kestiği gövde okuması. Sentetik parlaklık: asfalt 110 + ((x*37 + y*91 + (x*y) % 53) % 90); kartın içinde zemin 236, simgede 130, yazı satırlarında (x / 3) çiftse 40; invert: kart zemini 40, yazı 236; shift: kart (simge ve satırlar) karenin eni kadar oranla sağa kayar.",
+  "tolerance": 0.02,
+  "real": [
+    { "frame": "gta6-n4-bildirim", "card": [0.79, 0.80, 0.98, 0.975], "texts": ["Cal", "Checked th"] }
+  ],
+  "synthetic": {
+    "width": 960,
+    "height": 540,
+    "card": [0.68, 0.63, 0.96, 0.93],
+    "icon": [0.695, 0.65, 0.725, 0.70],
+    "rows": [
+      [0.74, 0.66, 0.86, 0.69],
+      [0.695, 0.72, 0.94, 0.745],
+      [0.695, 0.765, 0.94, 0.79],
+      [0.695, 0.81, 0.94, 0.835],
+      [0.695, 0.855, 0.94, 0.88]
+    ],
+    "area": [0.1, 0.6, 0.85, 0.97],
+    "lines": [
+      { "text": "I need you to", "box": [0.69, 0.72, 0.85, 0.745] },
+      { "text": "from a chop", "box": [0.69, 0.765, 0.85, 0.79] },
+      { "text": "Towing Inc. Y", "box": [0.69, 0.81, 0.85, 0.835] },
+      { "text": "arrange a fac", "box": [0.69, 0.855, 0.85, 0.88] },
+      { "text": "Lucia: Just got a text from an unknown number.", "box": [0.3, 0.9, 0.7, 0.94] }
+    ],
+    "subtitle": "Lucia: Just got a text from an unknown number.",
+    "cardTexts": ["I need you to", "from a chop", "Towing Inc. Y", "arrange a fac"],
+    "cases": [
+      { "name": "kart yerinde: kartın tamamı bulunur", "shift": 0, "invert": false, "card": [0.68, 0.63, 0.96, 0.93] },
+      { "name": "kart karenin sağ kenarına dayalı (kapalı kart değil)", "shift": 0.04, "invert": false, "card": null },
+      { "name": "koyu zeminde açık yazı (altyazı gibi): kart değil", "shift": 0, "invert": true, "card": null }
+    ]
+  }
+}
