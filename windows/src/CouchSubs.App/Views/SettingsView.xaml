@@ -686,7 +686,7 @@
                                     </StackPanel>
                                 </c:Unit>
                                 <c:Unit Title="{t:T 'Background area'}"
-                                        Hint="{t:T 'Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.'}">
+                                        Hint="{t:T 'A full-width band also covers the sides of the English subtitle.'}">
                                     <ComboBox x:Name="BackgroundShape" SelectionChanged="OnBackgroundShape">
                                         <ComboBoxItem Content="{t:T 'Fit the text'}" Tag="Fit" />
                                         <ComboBoxItem Content="{t:T 'Full-width band'}" Tag="Band" />

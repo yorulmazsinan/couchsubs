@@ -349,7 +349,7 @@ struct SubtitlePreviewBox: View {
                 VStack(spacing: DS.space("unitHint")) {
                     Spacer(minLength: 0)
                     ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                        sample(line, index: index, style: style, size: CGFloat(display) * 0.5)
+                        sample(line, index: index, current: index == lines.count - 1, style: style, size: CGFloat(display) * 0.5)
                     }
                 }
                 .padding(DS.space("m"))
@@ -370,13 +370,17 @@ struct SubtitlePreviewBox: View {
     }
 
     /// Tek örnek satır: ad (ayarın renginde) + metin, zemin rengi ve koyuluğu; zeminsizken okunurluk gölgesi.
-    private func sample(_ line: (who: String, text: String), index: Int, style: SubtitleStyle, size: CGFloat) -> some View {
+    /// Zemin TV'deki gibi (OverlayCover.boxOpacity): "Örtsün"de en alttaki (en yeni) satır her koyulukta tam opak, üstteki
+    /// önceki satırlar koyuluğun %83'ü; öbür yerleşimlerde en yeni satır koyuluğun kendisi. Eskiden hepsi koyulukla
+    /// çiziliyordu, önizleme TV'de görünmeyen bir saydamlık gösteriyordu.
+    private func sample(_ line: (who: String, text: String), index: Int, current: Bool, style: SubtitleStyle, size: CGFloat) -> some View {
         let name = Text(verbatim: model.settings.showSpeakerNames ? line.who + ": " : "").foregroundColor(nameColor(line.who, index: index, style: style))
         let textColor: Color = model.settings.speakerColors && style.nameColorMode == .line
             ? nameColor(line.who, index: index, style: style)
             : SubtitlePalette.color(SubtitlePalette.textHex(style)) ?? .white
         let body = Text(verbatim: line.text).foregroundColor(textColor)
-        let plate: Color = (SubtitlePalette.color(style.backgroundColor) ?? .black).opacity(Double(style.background) / 100)
+        let plate: Color = (SubtitlePalette.color(style.backgroundColor) ?? .black)
+            .opacity(OverlayCover.boxOpacity(background: style.background, covering: style.placement == .cover, current: current))
         let bare = style.background == 0
         return (name + body)
             .font(.system(size: size, weight: .semibold))
@@ -485,7 +489,12 @@ private struct SubtitleLookSettings: View {
             update { $0.background = value }
             model.sendTestSubtitle()
         })
-        return DSUnit(title: "Darkness") {
+        // "Örtsün"de en yeni satır her koyulukta tam opak (OverlayCover.boxOpacity); ayar bunu söylemeyince "koyuluk
+        // ayarlanamıyor" sanılıyordu (X ve Google Play, beta.107). Yerleşim seçimi yalnız TV/OBS'de görünse de altyazı
+        // penceresi de "Örtsün"ü uygular, not yerleşime göre çıkar.
+        let note: LocalizedStringKey? = OverlayCover.darknessFixedByCover(placement: style.placement, background: style.background)
+            ? "With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements." : nil
+        return DSUnit(title: "Darkness", hint: note) {
             DSTabs(selection: level, items: [(Int?.some(45), "Light"), (Int?.some(75), "Medium"), (Int?.some(100), "Dark")])
                 .disabled(style.background == 0)
         }

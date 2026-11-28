@@ -393,7 +393,7 @@
     <string name="settings_background_area">Arka plan alanı</string>
     <string name="settings_background_fit">Yazı kadar</string>
     <string name="settings_background_band">Tam genişlik bant</string>
-    <string name="settings_background_note">Oyundaki İngilizce altyazıyı tamamen gizlemek için Altyazı Görünümü\'nde Koyu\'yu seçin. Tam genişlik bant yanları da örter.</string>
+    <string name="settings_background_note">Tam genişlik bant İngilizce altyazının yanlarını da örter.</string>
     <string name="settings_target">Altyazı hedefi</string>
     <string name="settings_placement">TV\'de altyazının yeri</string>
     <string name="settings_placement_cover">Örtsün</string>
@@ -817,6 +817,7 @@
     <string name="set_color_red">Kırmızı</string>
     <string name="set_color_blue">Mavi</string>
     <string name="set_darkness">Koyuluk</string>
+    <string name="set_darkness_cover_note">Örtsün\'de en yeni satırın kutusu, İngilizce altyazı alttan görünmesin diye hep tam koyudur. Koyuluk önceki satırlarda ve öbür yerleşimlerde geçerlidir.</string>
     <string name="set_darkness_medium">Orta</string>
     <string name="set_text_color">Yazı Rengi</string>
     <string name="set_character_name">Karakter Adı</string>

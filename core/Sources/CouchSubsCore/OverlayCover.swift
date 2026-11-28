@@ -32,6 +32,17 @@ public enum OverlayCover {
         if covering && current { return 1 }
         return Double(percent) / 100 * (current ? 1 : 0.83)
     }
+
+    /// Ayarlardaki "Koyuluk"un altına "Örtsün"de en yeni satırın hep tam koyu kaldığını söyleyen not çıksın mı. İki kullanıcı
+    /// (X ve Google Play, beta.107) "zemin koyuluğu ayarlanamıyor" dedi: varsayılan yerleşim "Örtsün"de en yeni satır her
+    /// koyulukta tam opak (#1378), Açık/Orta/Koyu yalnız önceki satırları ve öbür yerleşimleri değiştiriyor, ayar ekranı bunu
+    /// söylemiyordu. Örtüyü koyuluğa göre açmak İngilizceyi geri getirir: testdata/frames'teki 45 gerçek altyazıda örtü
+    /// %80'de İngilizce yazı ile çevresi arasındaki parlaklık farkı ΔL* ≈ 20 (okunur), %90'da ≈ 10, ancak %95 üstünde
+    /// fark edilmez; o aralıktaki değişikliği de kimse göremez. Bu yüzden örtü opak kalır, ayar ekranı neden böyle olduğunu
+    /// söyler ve önizleme TV'deki gibi çizilir (`boxOpacity`). Windows: OverlayPlacement.DarknessFixedByCover; Android aynı.
+    public static func darknessFixedByCover(placement: SubtitlePlacement, background: Int) -> Bool {
+        placement == .cover && background > 0
+    }
 }
 
 /// "Örtsün" yerleşiminde yazı boyu sabittir (TV ve OBS sayfası aynı kuralı uygular; Windows: CoverFontScale): her satır

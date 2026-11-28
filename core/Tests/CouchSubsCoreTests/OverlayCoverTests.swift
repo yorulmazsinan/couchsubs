@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import CoreGraphics
+import Foundation
 import XCTest
 @testable import CouchSubsCore
 
@@ -31,6 +32,26 @@ final class OverlayCoverTests: XCTestCase {
                 XCTAssertEqual(OverlayCover.boxOpacity(background: 0, covering: covering, current: current), 0)
                 XCTAssertEqual(OverlayCover.boxOpacity(background: -5, covering: covering, current: current), 0)
             }
+        }
+    }
+
+    /// Ortak vakalar Fixtures/box-opacity.json (Windows OverlayPlacementTests, Android OverlayCoverTest aynı): kutunun opaklığı
+    /// ve ayar ekranındaki "Koyuluk" notu. İki kullanıcı (X ve Google Play, beta.107) "zemin koyuluğu ayarlanamıyor" dedi:
+    /// "Örtsün"de en yeni satır her koyulukta opak kalır (İngilizce görünmesin), not bunu söyler, önizleme de öyle çizer.
+    func testSharedBoxOpacityCases() throws {
+        struct Opacity: Decodable { let background: Int; let covering: Bool; let current: Bool; let opacity: Double }
+        struct Note: Decodable { let placement: String; let background: Int; let shown: Bool }
+        struct Fixture: Decodable { let opacity: [Opacity]; let note: [Note] }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/box-opacity.json")
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+        XCTAssertFalse(fixture.opacity.isEmpty)
+        for item in fixture.opacity {
+            XCTAssertEqual(OverlayCover.boxOpacity(background: item.background, covering: item.covering, current: item.current), item.opacity,
+                           accuracy: 1e-9, "\(item)")
+        }
+        for item in fixture.note {
+            let placement = try XCTUnwrap(SubtitlePlacement(rawValue: item.placement))
+            XCTAssertEqual(OverlayCover.darknessFixedByCover(placement: placement, background: item.background), item.shown, "\(item)")
         }
     }
 

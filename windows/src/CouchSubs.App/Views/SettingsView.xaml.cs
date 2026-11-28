@@ -1623,7 +1623,8 @@ public partial class SettingsView : UserControl
     private void ShowMiniSubtitle()
     {
         var style = controller.Settings.Style;
-        var alpha = (byte)Math.Round(Math.Clamp(style.Background, 0, 100) / 100.0 * 255);
+        // Zemin TV'deki gibi (OverlayPlacement.BoxOpacity): "Örtsün"de tek (en yeni) satır her koyulukta tam opak.
+        var alpha = (byte)Math.Round(OverlayPlacement.BoxOpacity(style.Background, style.Placement == SubtitlePlacement.Cover, current: true) * 255);
         MiniSubtitle.Background = new SolidColorBrush(SpeakerText.Rgb(style.BackgroundRgb, alpha));
         MiniSubtitleText.Foreground = new SolidColorBrush(SpeakerText.Rgb(style.TextRgb));
         // Kaydırıcıdaki boy (16–50) yarıya (Mac ile aynı önizleme).

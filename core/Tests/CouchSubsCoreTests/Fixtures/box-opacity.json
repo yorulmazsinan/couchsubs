@@ -1,0 +1,29 @@
+{
+  "about": "Altyazı kutusunun zemin opaklığı (Mac/iPhone OverlayCover.boxOpacity, Windows OverlayPlacement.BoxOpacity, Android OverlayCover.boxOpacity) ve ayar ekranındaki Koyuluk notu (darknessFixedByCover). Örtsün'ün en yeni satırı her koyulukta tam opak (#1378): testdata/frames'teki 45 gerçek altyazıda örtü %80'de İngilizce yazı ile çevresi arasındaki fark ΔL* ≈ 20 (okunur), %90'da ≈ 10, ancak %95 üstünde fark edilmiyor. Zeminsiz (0) hiçbir yerleşimde zemin çizmez (#1399). Önceki satırlar koyuluğun %83'ü. Açık/Orta/Koyu = 45/75/100.",
+  "opacity": [
+    {"background": 0, "covering": true, "current": true, "opacity": 0},
+    {"background": 0, "covering": true, "current": false, "opacity": 0},
+    {"background": 0, "covering": false, "current": true, "opacity": 0},
+    {"background": -5, "covering": false, "current": false, "opacity": 0},
+    {"background": 1, "covering": true, "current": true, "opacity": 1},
+    {"background": 45, "covering": true, "current": true, "opacity": 1},
+    {"background": 75, "covering": true, "current": true, "opacity": 1},
+    {"background": 100, "covering": true, "current": true, "opacity": 1},
+    {"background": 45, "covering": true, "current": false, "opacity": 0.3735},
+    {"background": 75, "covering": true, "current": false, "opacity": 0.6225},
+    {"background": 100, "covering": true, "current": false, "opacity": 0.83},
+    {"background": 45, "covering": false, "current": true, "opacity": 0.45},
+    {"background": 75, "covering": false, "current": true, "opacity": 0.75},
+    {"background": 100, "covering": false, "current": true, "opacity": 1},
+    {"background": 150, "covering": false, "current": true, "opacity": 1},
+    {"background": 75, "covering": false, "current": false, "opacity": 0.6225}
+  ],
+  "note": [
+    {"placement": "cover", "background": 45, "shown": true},
+    {"placement": "cover", "background": 100, "shown": true},
+    {"placement": "cover", "background": 0, "shown": false},
+    {"placement": "above", "background": 75, "shown": false},
+    {"placement": "below", "background": 75, "shown": false},
+    {"placement": "fixed", "background": 75, "shown": false}
+  ]
+}

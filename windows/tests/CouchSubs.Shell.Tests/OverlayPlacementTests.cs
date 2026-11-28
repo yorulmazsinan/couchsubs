@@ -58,6 +58,35 @@ public class OverlayPlacementTests
         Assert.Equal(0.0, OverlayPlacement.BoxOpacity(-5, covering, current));
     }
 
+    /// <summary>
+    /// Ortak vakalar core/Tests/CouchSubsCoreTests/Fixtures/box-opacity.json (Mac OverlayCoverTests, Android OverlayCoverTest
+    /// aynı): kutunun opaklığı ve ayar ekranındaki "Koyuluk" notu. İki kullanıcı (X ve Google Play, beta.107) "zemin koyuluğu
+    /// ayarlanamıyor" dedi: "Örtsün"de en yeni satır her koyulukta opak kalır (İngilizce görünmesin), not bunu söyler.
+    /// </summary>
+    [Fact]
+    public void SharedBoxOpacityCases()
+    {
+        var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(FixtureDirectory(), "box-opacity.json"));
+        using var fixture = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var cases = fixture.RootElement.GetProperty("opacity").EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var item in cases)
+        {
+            var actual = OverlayPlacement.BoxOpacity(item.GetProperty("background").GetInt32(), item.GetProperty("covering").GetBoolean(),
+                item.GetProperty("current").GetBoolean());
+            Assert.True(Math.Abs(actual - item.GetProperty("opacity").GetDouble()) < 1e-9, item.ToString());
+        }
+        foreach (var item in fixture.RootElement.GetProperty("note").EnumerateArray())
+        {
+            var placement = Enum.Parse<CouchSubs.Core.SubtitlePlacement>(item.GetProperty("placement").GetString()!, ignoreCase: true);
+            Assert.True(OverlayPlacement.DarknessFixedByCover(placement, item.GetProperty("background").GetInt32()) == item.GetProperty("shown").GetBoolean(),
+                item.ToString());
+        }
+    }
+
+    private static string FixtureDirectory([System.Runtime.CompilerServices.CallerFilePath] string source = "") =>
+        System.IO.Path.Combine(System.IO.Path.GetDirectoryName(source)!, "..", "..", "..", "core", "Tests", "CouchSubsCoreTests", "Fixtures");
+
     /// <summary>Kutu yoksa, boşsa ya da altyazı olamayacak kadar yüksekse kutu eskisi gibi yazı kadar kalır.</summary>
     [Theory]
     [InlineData(0.4, 0.8, 0.4, 0.9)]
