@@ -478,6 +478,8 @@ private fun EngineTile(settings: AppSettings) {
     var keyNotStored by remember(engine) { mutableStateOf(false) }
     // Reddedilen DeepL anahtarının nedeni (geçersiz karakter, HTTP kodu, ağ yok); Mac ve iPhone ile aynı metinler.
     var deepLRejection by remember(engine) { mutableStateOf<KeyCheck.DeepLUsage?>(null) }
+    // Reddedilen yapay zekâ anahtarının nedeni (anahtar geçersiz ya da hizmete ulaşılamadı); Mac, Windows ve iPhone ile aynı metinler.
+    var aiRejection by remember(engine) { mutableStateOf<OnlineKeyState?>(null) }
     var paidTier by remember { mutableStateOf(settings.geminiPaidTier) }
     val scope = rememberCoroutineScope()
     val segment = when (engine) {
@@ -533,16 +535,17 @@ private fun EngineTile(settings: AppSettings) {
                 // Mac ve Windows'taki kullanım satırı (#625): kayıtlı DeepL anahtarının bu ayki karakter kullanımı.
                 if (engine == EngineChoice.DEEPL) DeepLUsageNote(settings)
             } else {
-                Field(key, { key = it; keyRejected = false; keyNotStored = false; deepLRejection = null }, stringResource(R.string.settings_key), secret = true)
+                Field(key, { key = it; keyRejected = false; keyNotStored = false; deepLRejection = null; aiRejection = null }, stringResource(R.string.settings_key), secret = true)
                 SecondaryButton(stringResource(if (checking) R.string.settings_key_checking else R.string.settings_key_save),
                     enabled = !checking && key.isNotBlank()) {
                     val choice = engine
-                    // DeepL anahtarındaki görünmez karakterler (araya giren boşluk, bölünmez boşluk…) her yerden silinir.
-                    val typed = if (choice == EngineChoice.DEEPL) DeepLKey.clean(key) else key.trim()
+                    // Anahtardaki görünmez karakterler (araya giren boşluk, satır sonu, bölünmez boşluk…) her yerden silinir.
+                    val typed = DeepLKey.clean(key)
                     checking = true
                     keyRejected = false
                     keyNotStored = false
                     deepLRejection = null
+                    aiRejection = null
                     scope.launch {
                         val logName = choice.aiProvider?.id ?: "deepl"
                         Backend.breadcrumb("API anahtarı testi başladı: $logName")
@@ -556,7 +559,10 @@ private fun EngineTile(settings: AppSettings) {
                             }
                         }
                         if (state != OnlineKeyState.VALID) Backend.breadcrumb("API anahtarı testi sonucu: $logName ${deepL?.logDescription ?: state}")
-                        if (!KeyCheck.accepted(state)) deepLRejection = deepL
+                        if (!KeyCheck.accepted(state)) {
+                            deepLRejection = deepL
+                            if (choice.aiProvider != null) aiRejection = state
+                        }
                         // Hizmet kabul etse de Keystore'a yazılamayan anahtar kayıtlı sayılmaz (Mac ile aynı).
                         val stored = KeyCheck.accepted(state) && withContext(Dispatchers.IO) { settings.storeApiKey(choice, typed) }
                         if (KeyCheck.accepted(state) && !stored) Backend.breadcrumb("API anahtarı gizli depoya kaydedilemedi: $logName")
@@ -573,7 +579,9 @@ private fun EngineTile(settings: AppSettings) {
                 }
                 AnimatedNote(when {
                     keyNotStored -> stringResource(R.string.settings_key_not_stored)
-                    keyRejected -> deepLRejection?.let { deepLUsageText(it) } ?: stringResource(R.string.settings_key_rejected)
+                    keyRejected -> deepLRejection?.let { deepLUsageText(it) }
+                        ?: aiRejection?.let(::onlineIssueReason)?.let { stringResource(it, engineName(context)) }
+                        ?: stringResource(R.string.settings_key_rejected)
                     else -> null
                 })
             }

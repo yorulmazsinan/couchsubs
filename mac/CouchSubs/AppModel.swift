@@ -3543,7 +3543,8 @@ final class AppModel: ObservableObject {
     /// Yapay zekâ anahtarı örnek bir satırla denenir. Anahtar kabul edildiyse (bakiye bitmiş ya da model adı yanlış olsa
     /// da) Anahtarlık'a yazılır ve bu motor seçilir.
     func setAIKey(_ key: String, for provider: AIProvider) async -> Result<String, AIFailure> {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Görünmez karakterler (araya giren boşluk, satır sonu, bölünmez boşluk…) her yerden silinir (DeepL ile aynı).
+        let key = DeepLKey.clean(key)
         SubtitleLog.write("API anahtarı testi başladı: \(provider.rawValue)")
         let result = await services.testAIKey(provider: provider, key: key, model: settings.model(for: provider))
         if case .failure(let error) = result {

@@ -253,6 +253,10 @@ struct EngineTile: View {
             // DeepL'de neden ayrı yazılır (geçersiz anahtar, geçersiz karakter, sunucu hatası, ağ yok); Mac ile aynı metinler.
             if engine == .deepL, let check = model.lastDeepLCheck {
                 keyResult = DeepLUsageText.describe(check, quotaUsedUp: String(localized: "This month's DeepL limit is used up. Until it renews, the free translation on this phone translates."))
+            } else if let failure = model.lastAIFailure {
+                // Yapay zekâ anahtarında da neden yazılır (geçersiz anahtar ya da hizmete ulaşılamadı); Mac ile aynı metinler.
+                keyResult = OnlineIssueText.describe(OnlineKeyState(failure), engine: engine, server: model.settings.localAIServer,
+                                                     keychainFailure: String(localized: "The API key could not be saved to this iPhone's keychain."))
             } else {
                 keyResult = String(localized: "The key did not work. Check it and try again.")
             }

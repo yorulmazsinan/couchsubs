@@ -113,7 +113,8 @@ data class AiModel(
 /**
  * DeepL anahtarının yazımı (Mac/iPhone ve Windows'taki DeepLKey ile aynı kural). Yapıştırırken araya giren boşluk, satır
  * sonu, sekme, bölünmez boşluk (U+00A0), sıfır genişlikli boşluk, BOM, yumuşak tire gibi görünmez karakterler her yerden
- * silinir; DeepL anahtarında bunlar hiç yoktur.
+ * silinir; DeepL anahtarında bunlar hiç yoktur. Gemini, OpenAI, Claude ve yerel model anahtarı da aynı kuralla temizlenir
+ * (bu hizmetlerin anahtarında da görünmez karakter yoktur).
  */
 object DeepLKey {
     fun clean(key: String): String {
@@ -234,7 +235,11 @@ object KeyCheck {
      * sunucu adresi [server]'dan gelir.
      */
     fun aiSample(provider: AiProvider, key: String, model: AiModel, http: Http = Http.Default, server: LocalAiServer? = null): Pair<OnlineKeyState, String?> {
-        if (provider != AiProvider.LOCAL && key.isBlank()) return OnlineKeyState.INVALID to null
+        // Yapıştırırken araya giren görünmez karakterler silinir (DeepL ile aynı kural). Geriye görünür ASCII dışında
+        // karakter kalırsa istek gönderilmez: hiçbir hizmetin anahtarında yoktur ve HTTP başlığına yazılamaz.
+        val key = DeepLKey.clean(key)
+        if (provider != AiProvider.LOCAL && key.isEmpty()) return OnlineKeyState.INVALID to null
+        if (key.isNotEmpty() && !DeepLKey.isWellFormed(key)) return OnlineKeyState.INVALID to null
         if (provider == AiProvider.LOCAL && server == null) return OnlineKeyState.UNREACHABLE to null
         return try {
             var request = AiRequest.build(provider, key, model, listOf(SAMPLE), emptyList(), server = server)
@@ -794,7 +799,7 @@ object AiRequest {
         // Ekran çevirisinin yazı başına karakter sınırları ([screenLimits]); altyazıda yok.
         limits: List<Int>? = null,
     ): AiHttpRequest {
-        val trimmed = key.trim()
+        val trimmed = DeepLKey.clean(key)
         val user = userMessage(sentences, context, game, names, limits)
         val system = systemPrompt(instruction)
         return when (provider) {
@@ -1136,7 +1141,7 @@ class AiTranslator(
         return texts.indices.map { results[it] ?: localTranslation(texts[it]) }
     }
 
-    private val key = key.trim()
+    private val key = DeepLKey.clean(key)
 
     /** Geçerli ek talimat ve önbellek etiketi; etiket yalnız talimat değişince yeniden hesaplanır. */
     private class InstructionScope(val instruction: String?, val tag: String?)

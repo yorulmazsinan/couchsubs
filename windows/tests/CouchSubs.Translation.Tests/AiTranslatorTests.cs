@@ -1279,6 +1279,30 @@ public class AiTranslatorTests
         Assert.Equal(new AiTestResult(OnlineKeyState.Valid, "KRATOS: [tr] We go now. [tr] Stay close, boy."), result);
     }
 
+    /// <summary>
+    /// Yapıştırırken araya giren görünmez karakterler (BOM, sıfır genişlikli boşluk, satır sonu, bölünmez boşluk, araya
+    /// giren boşluk, yumuşak tire) her yerden silinip gönderilir; geriye görünür ASCII dışında karakter kalırsa istek hiç
+    /// gönderilmez (Mac/iPhone ve Android ile aynı kural).
+    /// </summary>
+    [Fact]
+    public async Task TestCleansInvisibleCharactersFromKey()
+    {
+        const string key = "AIzaSyFAKE-test_key_0123456789abcdefghij";
+        string[] pasted = ["﻿" + key + "\n", key[..20] + "​" + key[20..], key[..10] + " " + key[10..],
+                           key[..10] + "\n" + key[10..], " " + key + "‎", key[..5] + "­" + key[5..]];
+        foreach (var typed in pasted)
+        {
+            var fake = new FakeAi();
+            Assert.Equal(OnlineKeyState.Valid, (await AiTranslator.TestAsync(AiProvider.Gemini, typed, null, new HttpClient(fake))).State);
+            Assert.Equal(key, fake.Requests[0].Request.Headers.GetValues("x-goog-api-key").Single());
+        }
+
+        var unused = new FakeAi();
+        Assert.Equal(OnlineKeyState.Invalid, (await AiTranslator.TestAsync(AiProvider.Gemini, key.Replace('a', 'á'), null, new HttpClient(unused))).State);
+        Assert.Equal(OnlineKeyState.Invalid, (await AiTranslator.TestAsync(AiProvider.Gemini, "​ \n", null, new HttpClient(unused))).State);
+        Assert.Empty(unused.Requests);
+    }
+
     /// <summary>Anahtar hiçbir hata metninde ya da durumda görünmez.</summary>
     [Fact]
     public async Task KeyNeverAppearsInErrors()

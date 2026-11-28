@@ -381,7 +381,7 @@ public enum AIRequest {
                             context: [AIContextLine], game: String? = nil, server: LocalAIServer? = nil,
                             maxOutputTokens: Int = AIRequest.maxOutputTokens, thinkingOff: Bool = true,
                             names: [String] = [], instruction: String? = nil, limits: [Int]? = nil) -> URLRequest {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = DeepLKey.clean(key)
         let user = userMessage(sentences: sentences, context: context, game: game, names: names, limits: limits)
         let system = systemPromptWith(instruction)
         var request: URLRequest
@@ -694,7 +694,7 @@ public final class AITranslationCore: @unchecked Sendable {
         self.game = game
         self.instruction = AIRequest.instruction(instruction)
         instructionTag = AIRequest.instructionTag(instruction)
-        self.key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.key = DeepLKey.clean(key)
         let resolved = provider.model(model)
         self.model = resolved
         self.server = provider.isLocal ? server ?? LocalAIServer(baseURL: LocalAIServer.ollamaURL, model: resolved.id) : nil
@@ -1024,8 +1024,11 @@ public final class AITranslationCore: @unchecked Sendable {
     /// anahtar isteğe bağlıdır ve model belleğe yüklenirken uzun beklenir.
     public static func test(provider: AIProvider, key: String, model: String?, server: LocalAIServer? = nil,
                             sample: String = AITranslationCore.sample, session: URLSession? = nil) async -> Result<String, AIFailure> {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Yapıştırırken araya giren görünmez karakterler silinir (DeepL ile aynı kural). Geriye görünür ASCII dışında
+        // karakter kalırsa istek gönderilmez: hiçbir hizmetin anahtarında yoktur ve HTTP başlığına yazılamaz.
+        let key = DeepLKey.clean(key)
         guard !key.isEmpty || provider.isLocal else { return .failure(.invalidKey) }
+        guard key.isEmpty || DeepLKey.isWellFormed(key) else { return .failure(.invalidKey) }
         let session = session ?? makeKeyTestSession(provider: provider)
         // Deneme tek istektir; çeviri hattının dakikalık hakkından yemez.
         let translator = AITranslationCore(provider: provider, key: key, model: model, server: server, session: session,
