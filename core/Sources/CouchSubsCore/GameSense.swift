@@ -37,6 +37,8 @@ public final class GameSense: @unchecked Sendable {
     private var carried = false
     private var running = false
     private var asked = false
+    /// Bu oturumda "telefon aranmıyor" satırı yazıldı (`shouldLogPhoneIdle`).
+    private var phoneIdleLogged = false
 
     public init() {}
 
@@ -106,6 +108,7 @@ public final class GameSense: @unchecked Sendable {
             packId = nil
             console = nil
             asked = false
+            phoneIdleLogged = false
             carried = chosen != nil && chosenWhileRunning
             running = true
         }
@@ -127,6 +130,21 @@ public final class GameSense: @unchecked Sendable {
     public func markAsked() {
         lock.withLock { asked = true }
     }
+
+    /// GTA 6 telefonu yalnız oyun GTA 6 olarak bilinince aranır. Telefon çevirisi açık, çeviri iki dakikadır sürüyor ve
+    /// oyun hiçbir yoldan bilinmiyorsa oturumda bir kez true: günlüğe `phoneIdleLog` yazılır (#1443: telefon hiç
+    /// aranmıyordu, günlükte tek satır yoktu). Windows ve Android ile aynı kural.
+    public func shouldLogPhoneIdle(runningFor seconds: TimeInterval, readsPhone: Bool) -> Bool {
+        lock.withLock {
+            guard readsPhone, !phoneIdleLogged, console == nil, pack == nil, chosen == nil, seconds >= Self.askAfter else { return false }
+            phoneIdleLogged = true
+            return true
+        }
+    }
+
+    public static let phoneIdleLog = "telefon aranmıyor: oynanan oyun bilinmiyor (PS5 bildirmedi, okunan satırlar bir oyun paketiyle eşleşmedi); GTA 6 telefonu için ana ekrandan oyunu seçin"
+    /// Oyun okunan satırlardan tanındı (paketler kapalıyken de, #1443).
+    public static func recognizedLog(_ name: String) -> String { "oyun okunan satırlardan tanındı: \(name)" }
 
     /// Xbox'ta son seçilen oyunun saklandığı ad (`lastGames` kaydında; Xbox'un adından bağımsız, Xbox'a özel).
     public static let xboxConsole = "Xbox"

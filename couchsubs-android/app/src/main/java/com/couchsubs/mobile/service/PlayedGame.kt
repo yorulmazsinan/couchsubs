@@ -6,6 +6,7 @@ import com.couchsubs.mobile.core.GameCatalog
 import com.couchsubs.mobile.core.GameName
 import com.couchsubs.mobile.core.GamePackLibrary
 import com.couchsubs.mobile.core.GameSense
+import com.couchsubs.mobile.core.PackLookup
 import com.couchsubs.mobile.core.RunningGame
 import com.couchsubs.mobile.core.restoreAreas
 import com.couchsubs.mobile.settings.AppSettings
@@ -107,16 +108,25 @@ object PlayedGame {
     /** Servis periyodik olarak sorar (15 saniyede bir): süre doldu ve oyun bilinmiyorsa kart açılır. */
     fun checkAsk(now: Long) {
         val settings = settings ?: return
+        if (sense.shouldLogPhoneIdle(now - startedAt, settings.readsGamePhone)) log(GameSense.PHONE_IDLE_LOG)
         if (!sense.shouldAsk(now - startedAt, settings.askGame && settings.sharePool)) return
         sense.markAsked()
         LiveState.update { it.copy(askingGame = true) }
     }
 
-    /** Ekrana bir satır geldi; [fromPack]: hazır paketten. */
-    fun noteLine(fromPack: Boolean, library: GamePackLibrary) {
-        val hit = library.takeDistinctiveHit()
-        val pack = if (fromPack) hit else null
+    /**
+     * Ekrana bir satır geldi; [fromPack]: hazır paketten. [identify]: paketler kapalıyken motorla çevrilen satır; pakette
+     * yalnız oyunu tanımak için aranır, çeviri paketten gelmez (#1443: paketler kapalı ve PS5 oyunu bildirmeyince oyun hiç
+     * tanınmıyor, GTA 6 telefonu hiç aranmıyordu; Windows, Mac ve iPhone ile aynı).
+     */
+    fun noteLine(fromPack: Boolean, library: GamePackLibrary, identify: String? = null) {
+        var pack = library.takeDistinctiveHit()
+        if (!fromPack) {
+            pack = null
+            if (identify != null && PackLookup.match(library, identify) != null) pack = library.takeDistinctiveHit()
+        }
         if (!sense.noteLine(pack?.id, pack?.title)) return
+        sense.current?.name?.let { log(GameSense.recognizedLog(it)) }
         LiveState.update { it.copy(askingGame = false) }
         publish()
     }

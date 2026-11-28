@@ -62,6 +62,20 @@ final class GameSenseTests: XCTestCase {
         XCTAssertEqual(sense.packLimit, "GTA 5")
     }
 
+    /// #1443: telefon çevirisi açıkken oyun iki dakikada tanınmazsa oturumda bir kez "telefon aranmıyor" yazılır; oyun
+    /// biliniyorsa ya da telefon kapalıysa yazılmaz (Windows GameSenseTests, Android GameSenseTest ile aynı).
+    func testPhoneIdleIsLoggedOncePerSessionWhileTheGameIsUnknown() {
+        let sense = GameSense()
+        sense.startSession()
+        XCTAssertFalse(sense.shouldLogPhoneIdle(runningFor: 60, readsPhone: true))
+        XCTAssertFalse(sense.shouldLogPhoneIdle(runningFor: 130, readsPhone: false))
+        XCTAssertTrue(sense.shouldLogPhoneIdle(runningFor: 130, readsPhone: true))
+        XCTAssertFalse(sense.shouldLogPhoneIdle(runningFor: 145, readsPhone: true))
+        sense.startSession()
+        sense.choose("GTA 6")
+        XCTAssertFalse(sense.shouldLogPhoneIdle(runningFor: 130, readsPhone: true))
+        XCTAssertTrue(GameSense.phoneIdleLog.hasPrefix("telefon aranmıyor: oynanan oyun bilinmiyor"))
+    }
 
     /// Xbox çalışan oyunu bildirmez: Xbox için son seçilen oyun kendiliğinden kullanılır (hatırlanan; değiştirilebilir),
     /// hiç seçim yoksa oyun bilinmez ve günlüğe tek satır yazılır (Windows GameSenseTests, Android GameSenseTest ile aynı).

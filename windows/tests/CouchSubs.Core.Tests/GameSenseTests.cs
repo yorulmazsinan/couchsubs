@@ -206,5 +206,24 @@ public class GameSenseTests
         Assert.Contains("Red Dead Redemption 2 (ek satırlar)", shelf[1].Titles);
         Assert.Equal(["pool-ppsa09999"], shelf[2].PackIds);
     }
+
+    /// <summary>
+    /// #1443: telefon çevirisi açıkken oyun iki dakikada tanınmazsa oturumda bir kez "telefon aranmıyor" yazılır; oyun
+    /// biliniyorsa ya da telefon kapalıysa yazılmaz (Mac/iPhone GameSenseTests, Android GameSenseTest ile aynı).
+    /// </summary>
+    [Fact]
+    public void PhoneIdleIsLoggedOncePerSessionWhileTheGameIsUnknown()
+    {
+        var sense = new GameSense();
+        sense.StartSession();
+        Assert.False(sense.ShouldLogPhoneIdle(TimeSpan.FromSeconds(60), readsPhone: true));
+        Assert.False(sense.ShouldLogPhoneIdle(TimeSpan.FromSeconds(130), readsPhone: false));
+        Assert.True(sense.ShouldLogPhoneIdle(TimeSpan.FromSeconds(130), readsPhone: true));
+        Assert.False(sense.ShouldLogPhoneIdle(TimeSpan.FromSeconds(145), readsPhone: true));
+        sense.StartSession();
+        sense.Choose("GTA 6");
+        Assert.False(sense.ShouldLogPhoneIdle(TimeSpan.FromSeconds(130), readsPhone: true));
+        Assert.StartsWith("telefon aranmıyor: oynanan oyun bilinmiyor", GameSense.PhoneIdleLog);
+    }
 }
 

@@ -3519,6 +3519,7 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             {
                 try { await Task.Delay(TimeSpan.FromSeconds(15), token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
+                if (gameSense.ShouldLogPhoneIdle(DateTime.UtcNow - started, settings.ReadsGamePhone)) SubtitleLog.Write(GameSense.PhoneIdleLog);
                 if (!gameSense.ShouldAsk(DateTime.UtcNow - started, settings.AskGame && settings.SharePool)) continue;
                 gameSense.MarkAsked();
                 post(() => { if (!token.IsCancellationRequested) AskingGame = true; });
@@ -3755,6 +3756,19 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         target.PartialPackLookup = PacksActive ? text => ScreenText.IsGta(gameSense.Current?.Name) ? services.FindPartialInPacks(text) : null : null;
     }
 
+    /// <summary>
+    /// Paketler kapalıyken motorla çevrilen satır pakette yalnız oyunu tanımak için aranır (çeviri paketten gelmez): satır
+    /// yalnız tek bir oyunun paketinde varsa o pakete bir oy (<see cref="GameSense.NoteLine"/>). #1443: paketler kapalı ve PS5
+    /// çalışan oyunu bildirmeyince oyun hiç tanınmıyor, GTA 6 telefonu hiç aranmıyordu (Mac, iPhone ve Android ile aynı).
+    /// Paketler açıkken motordan gelen satır pakette yoktur: oy yok.
+    /// </summary>
+    private GamePackLibrary.Info? IdentifyFromPacks(string source)
+    {
+        if (PacksActive || demoMode || services.GamePacks is not { } packs) return null;
+        packs.TakeDistinctiveHit();
+        return services.FindInPacks(source) is null ? null : packs.TakeDistinctiveHit();
+    }
+
     /// <summary>Gelişmiş ayarlardaki bekleme süreleri (0–2 sn).</summary>
     private void ApplyWaits(SubtitlePipeline target)
     {
@@ -3827,7 +3841,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
             var origin = built.LastOrigin == "paket" ? LineOrigin.Pack : LineOrigin.Engine;
             // Satır yalnız tek bir pakette bulunduysa o pakete bir oy: son 20 satırın 5'i aynı paketten gelince oyun odur.
             var hit = services.GamePacks?.TakeDistinctiveHit();
-            var recognised = gameSense.NoteLine(origin == LineOrigin.Pack ? hit?.Id : null, origin == LineOrigin.Pack ? hit?.Title : null);
+            if (origin != LineOrigin.Pack) hit = IdentifyFromPacks(source);
+            var recognised = gameSense.NoteLine(hit?.Id, hit?.Title);
+            if (recognised && gameSense.Current?.Name is { } recognisedName) SubtitleLog.Write(GameSense.RecognizedLog(recognisedName));
             var pack = origin == LineOrigin.Pack ? services.GamePacks?.SearchScope : null;
             post(() =>
             {

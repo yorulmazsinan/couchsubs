@@ -866,6 +866,8 @@ class TranslationService : Service() {
             null
         }
         Backend.breadcrumb("çeviri: paketler ${packTitles?.size ?: "yok"}")
+        // Paketler kapalıyken de oyun okunan satırlardan tanınır (#1443): GTA 6 telefonu oyun bilinmeden aranmaz.
+        var identifyFromPacks = !demo && settings.sourceLanguage == "en"
         // Ayarlardan paket içe aktarılınca ya da silinince bu oturumun paketleri hemen yeniden okunur.
         Services.onLocalPacksChanged = {
             try {
@@ -934,7 +936,19 @@ class TranslationService : Service() {
                     server = this@TranslationService.server
                     onCastChanged = { json -> settings.dubbingCast = json }
                 }.speak(com.couchsubs.mobile.core.SpokenLine.of(pair.source, pair.translation), settings.dubbingCast, settings.dubbingOutput)
-                if (replacement == null) PlayedGame.noteLine(pair.origin == "paket", library)
+                if (replacement == null) {
+                    // Paketler kapalıyken satır pakette yalnız oyunu tanımak için aranır (#1443; PlayedGame.noteLine). Paketler
+                    // ilk kez burada açılır; bellek yetmezse bu oturumda bir daha denenmez.
+                    val packsOn = packTitles != null && settings.packsEnabled
+                    val identify = if (pair.origin != "paket" && identifyFromPacks && !packsOn) pair.source else null
+                    try {
+                        if (identify != null) library.setDisabled(settings.disabledPacks)
+                        PlayedGame.noteLine(pair.origin == "paket", library, identify)
+                    } catch (error: OutOfMemoryError) {
+                        identifyFromPacks = false
+                        Log.e(TAG, "packs identify", error)
+                    }
+                }
                 Services.addToHistory(pair.source, pair.translation,
                     if (pair.origin == "paket") com.couchsubs.mobile.core.SubtitleHistory.PACK else com.couchsubs.mobile.core.SubtitleHistory.ENGINE)
                 // Paket başına oturumda bir kez (her satırda olay göndermeyelim); toplam sayı oturum sonunda gider.
