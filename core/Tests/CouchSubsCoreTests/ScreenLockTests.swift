@@ -42,11 +42,13 @@ final class ScreenLockTests: XCTestCase {
         struct Line: Decodable { let text: String; let box: [Double]?; let confidence: Double?; let words: [Word]? }
         struct Area: Decodable { let id: String; let menu: Bool?; let region: [Double]; let lines: [Line] }
         let areas: [Area]
+        let presets: [Area]?
     }
 
     private struct Screen {
         let image: CGImage
         let areas: [Fixture.Area]
+        var presets: [Fixture.Area] = []
     }
 
     static func plan() throws -> Plan {
@@ -59,7 +61,7 @@ final class ScreenLockTests: XCTestCase {
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: directory.appendingPathComponent("ocr/screen/\(id).json")))
         let source = try XCTUnwrap(CGImageSourceCreateWithURL(directory.appendingPathComponent("\(id).jpg") as CFURL, nil))
         let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
-        return Screen(image: image, areas: fixture.areas.filter { !$0.lines.isEmpty })
+        return Screen(image: image, areas: fixture.areas.filter { !$0.lines.isEmpty }, presets: fixture.presets ?? [])
     }
 
     private static func box(_ v: [Double]) -> TextBox { TextBox(left: v[0], top: v[1], right: v[2], bottom: v[3]) }
@@ -378,6 +380,269 @@ final class ScreenLockTests: XCTestCase {
         XCTAssertFalse(ScreenLock.covers(MissionLine.areaId))
         XCTAssertFalse(ScreenLock.covers(ScreenNotices.idPrefix + "1"))
         XCTAssertFalse(ScreenLock.covers("game-phone"))
-        XCTAssertFalse(ScreenLock.covers("preset-help"))
+        // Hazır alan da kilitte (#1391); kullanıcının kendi ek alanı dışında.
+        XCTAssertTrue(ScreenLock.covers(GameAreaPresets.helpId))
+        XCTAssertTrue(ScreenLock.covers(GameAreaPresets.phoneId))
+        XCTAssertFalse(ScreenLock.covers("user-1"))
+    }
+}
+
+// MARK: - Hazır alan ve yollar (#1391)
+
+/// GTA 6 haritası ve görev listesi beta.108'de de karışıyordu: menü durumu bir an kapanınca menü alanları kalkıyor, hazır
+/// alanlar (sol üstteki yardım, sağdaki mesaj alanı) aynı yazıyı kendi kutularında okuyordu; hazır alan kilidin dışında
+/// kaldığı için kutuları her turda yeniden karar veriliyor, otomatik alanın kutularının üstüne biniyordu. Gerçek kareler ve
+/// kayıtlı okumalar (otomatik ve hazır alanlar) bütün izleyiciden geçer (Fixtures/screen-lock-routes.json).
+extension ScreenLockTests {
+    struct RoutesPlan: Decodable {
+        struct Pass: Decodable {
+            var jitter: Int?
+            var drop: [String]?
+            var edit: [[String]]?
+            var menu: Bool?
+            var autos: [Int]?
+            var idShift: Int?
+            var plain: Plan.Pass { Plan.Pass(jitter: jitter, drop: drop, edit: edit) }
+        }
+        struct Segment: Decodable {
+            var screen: String
+            var idBase: Int
+            var passes: [Pass]
+        }
+        var passMs: Int
+        var segments: [Segment]
+    }
+
+    struct RoutesRun {
+        var perSegment: [Changes] = []
+        /// Kilitliyken (tur başında ve sonunda kilitli, arada açılmadı) görülen kutu değişikliği, ekran başına.
+        var whileLocked: [Changes] = []
+        /// Turların sonunda TV'de farklı yolların (görev kutusu, otomatik alan, hazır alan) üst üste binen kutu çiftleri.
+        var overlaps: [Int] = []
+        var presetBoxes = 0
+        var locks = 0
+        var unlocks = 0
+        var log: [String] = []
+    }
+
+    /// Kutuya göre okuma: izleyici alanları sırayla okur, hangi alanın okunduğu kesilen karenin boyundan bulunur.
+    private final class CropReader: TextReader, @unchecked Sendable {
+        var readings: [String: Reading] = [:]
+        static func key(_ image: CGImage) -> String { "\(image.width)x\(image.height)" }
+        func read(_ image: CGImage) throws -> String { try readLines(image, deep: false).text }
+        func read(_ image: CGImage, deep: Bool) throws -> String { try readLines(image, deep: deep).text }
+        func readLines(_ image: CGImage, deep: Bool) throws -> Reading { readings[Self.key(image)] ?? .empty }
+    }
+
+    static func routesPlan() throws -> RoutesPlan {
+        let url = Bundle.module.url(forResource: "Fixtures", withExtension: nil)!.appendingPathComponent("screen-lock-routes.json")
+        return try JSONDecoder().decode(RoutesPlan.self, from: Data(contentsOf: url))
+    }
+
+    private static func region(_ v: [Double]) -> CropRegion { CropRegion(top: v[1], bottom: v[3], left: v[0], right: v[2]) }
+
+    /// TV'de farklı öncelikli yolların üst üste binen kutu çiftleri.
+    private static func crossings(_ shown: [String: [ScreenTranslation.Item]]) -> Int {
+        let parts = shown.flatMap { id, items in items.map { (id: id, box: $0.box) } }
+        var count = 0
+        for i in parts.indices {
+            for j in parts.indices where j > i && ScreenLock.rank(parts[i].id) != ScreenLock.rank(parts[j].id) {
+                if ScreenLock.overlap(parts[i].box, parts[j].box) >= ScreenLock.routeOverlap { count += 1 }
+            }
+        }
+        return count
+    }
+
+    private func replayRoutes(routes: Bool) async throws -> RoutesRun {
+        let plan = try Self.routesPlan()
+        let reader = CropReader()
+        let tv = TVLog()
+        var clock = 0
+        let watcher = RegionWatcher(reader: reader, translator: RoutesTranslator(), server: tv, intervalMs: plan.passMs,
+                                    clock: { clock })
+        watcher.locksScreen = true
+        watcher.screenLock.routes = routes
+        watcher.rereadsEveryPass = true
+        var run = RoutesRun()
+        watcher.onLog = { run.log.append($0) }
+        let presets = GameAreaPresets.areas("GTA 6")
+        XCTAssertEqual(presets.count, 2)
+        for segment in plan.segments {
+            var total = Changes()
+            var locked = Changes()
+            var overlaps = 0
+            let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: FrameReplayTests.directory
+                .appendingPathComponent("ocr/screen/\(segment.screen).json")))
+            let source = try XCTUnwrap(CGImageSourceCreateWithURL(FrameReplayTests.directory
+                .appendingPathComponent("\(segment.screen).jpg") as CFURL, nil))
+            let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+            let autos = fixture.areas.filter { !$0.lines.isEmpty }
+            for pass in segment.passes {
+                var areas: [ExtraArea] = []
+                reader.readings = [:]
+                func add(_ area: ExtraArea, lines: [Fixture.Line]) {
+                    let key = CropReader.key(RegionCropper.crop(image, to: area.region))
+                    XCTAssertNil(reader.readings[key], "\(segment.screen): iki alan aynı boyda")
+                    reader.readings[key] = Self.reading(lines, pass.plain)
+                    areas.append(area)
+                }
+                for (k, area) in autos.enumerated() where pass.autos?.contains(k) ?? true {
+                    var extra = ExtraArea(id: "auto-\(segment.idBase + k + (pass.idShift ?? 0))", name: ScreenTextDetector.areaName,
+                                          region: Self.region(area.region), auto: true)
+                    extra.menu = pass.menu ?? (area.menu ?? false)
+                    add(extra, lines: area.lines)
+                }
+                for preset in presets {
+                    add(preset, lines: fixture.presets?.first { $0.id == preset.id }?.lines ?? [])
+                }
+                let before = tv.boxes
+                let lockedBefore = watcher.screenLock.locked
+                let unlocks = watcher.screenLock.unlocks
+                await watcher.pass(image, areas: areas)
+                clock += plan.passMs
+                let change = Self.changes(before, tv.boxes)
+                total.added += change.added
+                total.moved += change.moved
+                total.removed += change.removed
+                total.retexted += change.retexted
+                if lockedBefore, watcher.screenLock.locked, watcher.screenLock.unlocks == unlocks {
+                    locked.added += change.added
+                    locked.moved += change.moved
+                    locked.removed += change.removed
+                    locked.retexted += change.retexted
+                }
+                overlaps += Self.crossings(tv.shown)
+                run.presetBoxes += tv.shown.filter { GameAreaPresets.isPreset($0.key) }.values.reduce(0) { $0 + $1.count }
+            }
+            run.perSegment.append(total)
+            run.whileLocked.append(locked)
+            run.overlaps.append(overlaps)
+        }
+        run.locks = watcher.screenLock.locks
+        run.unlocks = watcher.screenLock.unlocks
+        return run
+    }
+
+    /// Harita ve görev listesinde menü durumu bir an kapanıp açılsa, hazır alan okusa, dedektör yeni kimlik verse de
+    /// kilitliyken hiçbir kutu taşınmaz, kalkmaz; farklı yolların kutuları hiç üst üste binmez. beta.108 (hazır alan
+    /// kilitsiz, yollar çözülmüyor) sayıları önce/sonra karşılaştırması için yazdırılır.
+    func testMapAndQuestListKeepBoxesStillAcrossPresetAndAutoRoutes() async throws {
+        let plan = try Self.routesPlan()
+        let before = try await replayRoutes(routes: false)
+        let after = try await replayRoutes(routes: true)
+        for (k, segment) in plan.segments.enumerated() {
+            let b = before.perSegment[k], a = after.perSegment[k]
+            print("ekran kilidi yollar \(segment.screen): kutu değişikliği önce \(b.boxes) (ekle \(b.added), taşı \(b.moved), "
+                  + "kaldır \(b.removed)), sonra \(a.boxes) (ekle \(a.added), taşı \(a.moved), kaldır \(a.removed)); "
+                  + "kilitliyken önce \(before.whileLocked[k].boxes), sonra \(after.whileLocked[k].boxes); "
+                  + "üst üste binen önce \(before.overlaps[k]), sonra \(after.overlaps[k])")
+        }
+        print("ekran kilidi yollar: kilit/açılış önce \(before.locks)/\(before.unlocks), sonra \(after.locks)/\(after.unlocks); "
+              + "hazır alanın çizdiği kutu (tur başına toplam) önce \(before.presetBoxes), sonra \(after.presetBoxes)")
+        print("ekran kilidi yollar günlüğü:\n" + after.log.filter { $0.hasPrefix("ekran kilidi") }.joined(separator: "\n"))
+        for (k, segment) in plan.segments.enumerated() {
+            XCTAssertEqual(after.whileLocked[k].moved, 0, "\(segment.screen): kilitliyken kutu taşındı")
+            XCTAssertEqual(after.whileLocked[k].removed, 0, "\(segment.screen): kilitliyken kutu kalktı")
+            XCTAssertEqual(after.whileLocked[k].added, 0, "\(segment.screen): kilitliyken kutu eklendi")
+            XCTAssertEqual(after.overlaps[k], 0, "\(segment.screen): farklı yolların kutuları üst üste")
+        }
+        // beta.108 bu turlarda hazır alanın kutularını otomatik alanın üstüne çiziyordu ve kilitliyken kutular oynuyordu.
+        XCTAssertGreaterThan(before.overlaps.reduce(0, +) + before.whileLocked.reduce(0) { $0 + $1.boxes }, 0)
+        let total = { (r: RoutesRun) in r.perSegment.reduce(0) { $0 + $1.boxes } }
+        XCTAssertLessThan(total(after), total(before))
+        XCTAssertLessThan(after.unlocks, before.unlocks)
+        XCTAssertLessThanOrEqual(after.presetBoxes, before.presetBoxes)
+    }
+
+    // MARK: - Yollar arası öncelik (ScreenLock tek başına)
+
+    func testPresetBoxUnderAutoTextIsNotDrawnAndReturnsWhenAutoLeaves() {
+        let lock = ScreenLock()
+        let line = Self.block("recenter", 0.7, left: 0.8)
+        let auto = Self.payload([Self.item("recenter", line)])
+        var shifted = line
+        shifted.box.left += 0.01
+        let preset = Self.payload([Self.item("recenter c3", shifted)])
+        XCTAssertEqual(lock.offer(id: "auto-3", payload: auto).map(\.id), ["auto-3"])
+        // Hazır alan aynı satırı okudu: çizilmez (otomatik ekran yazısı öncelikli).
+        XCTAssertTrue(lock.offer(id: GameAreaPresets.phoneId, payload: preset).isEmpty)
+        XCTAssertNil(lock.displayed[GameAreaPresets.phoneId])
+        // Otomatik alan kalktı: hazır alanın kutusu çizilir.
+        let sends = lock.offer(id: "auto-3", payload: nil)
+        XCTAssertEqual(sends.map(\.id), ["auto-3", GameAreaPresets.phoneId])
+        XCTAssertNotNil(lock.displayed[GameAreaPresets.phoneId])
+        // Öncelik sıra değil yol: otomatik alan geri gelince hazır alanın çakışan kutusu kalkar.
+        let back = lock.offer(id: "auto-9", payload: auto)
+        XCTAssertEqual(Set(back.map(\.id)), ["auto-9", GameAreaPresets.phoneId])
+        XCTAssertNil(lock.displayed[GameAreaPresets.phoneId])
+        // Kilide giren bloklar da birleşir: aynı yerdeki hazır alan bloğu sayılmaz.
+        let merged = lock.merge([(GameAreaPresets.phoneId, [ScreenLock.Block(key: "recenter c3", box: shifted.box)]),
+                                 ("auto-9", [line])])
+        XCTAssertEqual(merged, [line])
+    }
+
+    func testMissionBoxHidesOverlappingScreenTextEvenWhileLocked() {
+        let lock = ScreenLock()
+        let blocks = Self.screen()
+        _ = lock.offer(id: "auto-1", payload: Self.payload(blocks.map { Self.item($0.key, $0) }))
+        _ = lock.observe(blocks, at: 0)
+        _ = lock.observe(blocks, at: 500)
+        XCTAssertTrue(lock.locked)
+        // Görev kutusu ikinci satırın üstüne geldi: o satır gizlenir, diğer kutular yerinde kalır.
+        let mission = Self.payload([Self.item("collect chemicals", blocks[1])])
+        let hidden = lock.block(id: MissionLine.areaId, payload: mission)
+        XCTAssertEqual(hidden.count, 1)
+        XCTAssertEqual(hidden.first?.payload?.blocks?.map(\.box), blocks.enumerated().filter { $0.offset != 1 }.map(\.element.box))
+        XCTAssertTrue(lock.locked)
+        // Görev kutusu kalktı: satır aynı kutusunda geri gelir.
+        let back = lock.block(id: MissionLine.areaId, payload: nil)
+        XCTAssertEqual(back.first?.payload?.blocks?.map(\.box), blocks.map(\.box))
+        XCTAssertEqual(lock.unlocks, 0)
+    }
+
+    func testDetectorDroppingAnAreaForAMomentDoesNotUnlock() {
+        let lock = ScreenLock()
+        let list = Self.screen()
+        let header = [Self.block("map", 0.02, left: 0.5)]
+        _ = lock.offer(id: "auto-1", payload: Self.payload(list.map { Self.item($0.key, $0) }))
+        _ = lock.offer(id: "auto-2", payload: Self.payload(header.map { Self.item($0.key, $0) }))
+        let listArea = ScreenLock.Block(key: "", box: TextBox(left: 0, top: 0.05, right: 0.5, bottom: 0.6))
+        let headerArea = ScreenLock.Block(key: "", box: TextBox(left: 0.45, top: 0, right: 1, bottom: 0.08))
+        _ = lock.observe(list + header, at: 0, read: [listArea, headerArea])
+        _ = lock.observe(list + header, at: 500, read: [listArea, headerArea])
+        XCTAssertTrue(lock.locked)
+        // Menü durumu bir an kapandı, liste alanı önerilmedi: kilit açılmaz, liste kutuları yerinde.
+        XCTAssertTrue(lock.observe(header, at: 1000, read: [headerArea]).isEmpty)
+        XCTAssertTrue(lock.observe(header, at: 1500, read: [headerArea]).isEmpty)
+        XCTAssertTrue(lock.observe(header, at: 2000, read: [headerArea]).isEmpty)
+        XCTAssertTrue(lock.locked)
+        XCTAssertEqual(lock.displayed["auto-1"]?.blocks?.count, list.count)
+        XCTAssertTrue(lock.observe(list + header, at: 2500, read: [listArea, headerArea]).isEmpty)
+        // Liste gerçekten gitti (alan `unreadMs`'ten uzun okunmadı): ekran değişikliği, kilit açılır.
+        for now in stride(from: 3000, through: 4500, by: 500) { _ = lock.observe(header, at: now, read: [headerArea]) }
+        XCTAssertEqual(lock.unlocks, 0)
+        _ = lock.observe(header, at: 5000, read: [headerArea])
+        _ = lock.observe(header, at: 5500, read: [headerArea])
+        XCTAssertEqual(lock.unlocks, 1)
+    }
+
+    private final class RoutesTranslator: TextTranslator {
+        func translate(_ text: String) async throws -> String { "TR " + text }
+    }
+
+    /// TV'nin gördüğü: alan alan çizili kutular.
+    private final class TVLog: RegionSending {
+        var shown: [String: [ScreenTranslation.Item]] = [:]
+        func sendRegion(id: String, text: String, box: TextBox?, lineHeight: Double?) {
+            sendRegion(id: id, text: text, box: box, lineHeight: lineHeight, icons: nil, blocks: nil)
+        }
+        func sendRegion(id: String, text: String, box: TextBox?, lineHeight: Double?, icons: [IconPlacement]?,
+                        blocks: [ScreenTranslation.Item]?) {
+            if text.isEmpty { shown[id] = nil } else {
+                shown[id] = blocks ?? [ScreenTranslation.Item(source: "", translation: text, box: box ?? TextBox(left: 0, top: 0, right: 0, bottom: 0), lineHeight: lineHeight ?? 0)]
+            }
+        }
+        func clearRegions() { shown.removeAll() }
+        var boxes: [(box: TextBox, text: String)] { shown.values.flatMap { $0.map { ($0.box, $0.translation) } } }
     }
 }

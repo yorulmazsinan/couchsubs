@@ -59,10 +59,16 @@ class ScreenLockTest {
     }
 
     private class Area(val menu: Boolean, val region: CropRegion, val lines: List<JSONObject>)
-    private class Screen(val image: Picture, val areas: List<Area>)
+    private class Screen(val image: Picture, val areas: List<Area>, val presets: Map<String, List<JSONObject>> = emptyMap())
 
     private fun screen(id: String): Screen {
         val fixture = JSONObject(File(directory, "ocr/screen/$id.json").readText())
+        val recorded = fixture.optJSONArray("presets")
+        val presets = if (recorded == null) emptyMap() else (0 until recorded.length()).associate { i ->
+            val preset = recorded.getJSONObject(i)
+            val lines = preset.getJSONArray("lines")
+            preset.getString("id") to (0 until lines.length()).map { lines.getJSONObject(it) }
+        }
         val list = fixture.getJSONArray("areas")
         val areas = (0 until list.length()).map { list.getJSONObject(it) }.filter { it.getJSONArray("lines").length() > 0 }.map { area ->
             val r = area.getJSONArray("region")
@@ -70,7 +76,7 @@ class ScreenLockTest {
             Area(area.optBoolean("menu", false), CropRegion(r.getDouble(1), r.getDouble(3), r.getDouble(0), r.getDouble(2)),
                 (0 until lines.length()).map { lines.getJSONObject(it) })
         }
-        return Screen(load(File(directory, "$id.jpg")), areas)
+        return Screen(load(File(directory, "$id.jpg")), areas, presets)
     }
 
     private fun strings(array: JSONArray?) = array?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
@@ -356,6 +362,193 @@ class ScreenLockTest {
         assertFalse(ScreenLock.covers(MissionLine.AREA_ID))
         assertFalse(ScreenLock.covers(ScreenNotices.ID_PREFIX + "1"))
         assertFalse(ScreenLock.covers("game-phone"))
-        assertFalse(ScreenLock.covers("preset-help"))
+        // Hazır alan da kilitte (#1391); kullanıcının kendi ek alanı dışında.
+        assertTrue(ScreenLock.covers(GameAreaPresets.HELP_ID))
+        assertTrue(ScreenLock.covers(GameAreaPresets.PHONE_ID))
+        assertFalse(ScreenLock.covers("user-1"))
+    }
+
+    // Hazır alan ve yollar (#1391): GTA 6 haritası ve görev listesi beta.108'de de karışıyordu. Menü durumu bir an kapanınca
+    // menü alanları kalkıyor, hazır alanlar (sol üstteki yardım, sağdaki mesaj alanı) aynı yazıyı kendi kutularında okuyordu;
+    // hazır alan kilidin dışında kaldığı için kutuları her turda yeniden karar veriliyor, otomatik alanın kutularının üstüne
+    // biniyordu. Gerçek kareler ve kayıtlı okumalar (otomatik ve hazır alanlar) bütün izleyiciden geçer
+    // (fixtures/screen-lock-routes.json; Mac/iPhone ve Windows aynı dosya).
+
+    private val routesPlan = JSONObject(Fixtures.text("screen-lock-routes.json"))
+
+    private class RoutesRun(
+        val perSegment: List<Changes>, val whileLocked: List<Changes>, val overlaps: List<Int>, val presetBoxes: Int,
+        val locks: Int, val unlocks: Int,
+    )
+
+    /** TV'de farklı öncelikli yolların üst üste binen kutu çiftleri. */
+    private fun crossings(shown: Map<String, List<Pair<TextBox, String>>>): Int {
+        val parts = shown.flatMap { (id, items) -> items.map { id to it.first } }
+        var count = 0
+        for (i in parts.indices) for (j in i + 1 until parts.size) {
+            if (ScreenLock.rank(parts[i].first) != ScreenLock.rank(parts[j].first) &&
+                ScreenLock.overlap(parts[i].second, parts[j].second) >= ScreenLock.ROUTE_OVERLAP) count++
+        }
+        return count
+    }
+
+    private fun replayRoutes(routes: Boolean): RoutesRun {
+        val passMs = routesPlan.getLong("passMs")
+        val readings = HashMap<String, Reading>()
+        val tv = Tv()
+        var clock = 0L
+        val watcher = RegionWatcher({ readings[it.pixels as String] ?: Reading.Empty }, { "TR $it" }, tv, passMs, { clock })
+        watcher.locksScreen = true
+        watcher.screenLock.routes = routes
+        watcher.rereadsEveryPass = true
+        val presets = GameAreaPresets.areas("GTA 6")
+        assertEquals(2, presets.size)
+        val perSegment = mutableListOf<Changes>()
+        val lockedPer = mutableListOf<Changes>()
+        val overlapsPer = mutableListOf<Int>()
+        var presetBoxes = 0
+        val segments = routesPlan.getJSONArray("segments")
+        for (s in 0 until segments.length()) {
+            val segment = segments.getJSONObject(s)
+            val screen = screen(segment.getString("screen"))
+            val base = segment.getInt("idBase")
+            val passes = segment.getJSONArray("passes")
+            var total = Changes()
+            var locked = Changes()
+            var overlaps = 0
+            for (p in 0 until passes.length()) {
+                val pass = passes.getJSONObject(p)
+                val autos = pass.optJSONArray("autos")?.let { a -> (0 until a.length()).map { a.getInt(it) } }
+                val shift = pass.optInt("idShift", 0)
+                val offered = mutableListOf<Pair<ExtraArea, RegionWatcher.Crop>>()
+                readings.clear()
+                fun add(area: ExtraArea, lines: List<JSONObject>) {
+                    val part = crop(screen.image, area.region)
+                    readings[area.id] = reading(lines, pass)
+                    offered.add(area to RegionWatcher.Crop(area.id, ByteArray(RegionSignature.WIDTH * RegionSignature.HEIGHT) { 1 },
+                        part.gray, part.color, screen.image.gray, screen.image.color))
+                }
+                for ((k, area) in screen.areas.withIndex()) {
+                    if (autos != null && k !in autos) continue
+                    val menu = if (pass.has("menu")) pass.getBoolean("menu") else area.menu
+                    add(ExtraArea(id = "auto-${base + k + shift}", name = "Screen text", region = area.region, auto = true, menu = menu),
+                        area.lines)
+                }
+                for (preset in presets) add(preset, screen.presets[preset.id] ?: emptyList())
+                val before = tv.boxes()
+                val lockedBefore = watcher.screenLock.isLocked
+                val unlocks = watcher.screenLock.unlocks
+                watcher.pass(offered.map { it.first.id }.toSet(), offered)
+                clock += passMs
+                val change = changes(before, tv.boxes())
+                total += change
+                if (lockedBefore && watcher.screenLock.isLocked && watcher.screenLock.unlocks == unlocks) locked += change
+                overlaps += crossings(tv.shown)
+                presetBoxes += tv.shown.filterKeys { GameAreaPresets.isPreset(it) }.values.sumOf { it.size }
+            }
+            perSegment.add(total)
+            lockedPer.add(locked)
+            overlapsPer.add(overlaps)
+        }
+        return RoutesRun(perSegment, lockedPer, overlapsPer, presetBoxes, watcher.screenLock.locks, watcher.screenLock.unlocks)
+    }
+
+    /**
+     * Harita ve görev listesinde menü durumu bir an kapanıp açılsa, hazır alan okusa, dedektör yeni kimlik verse de kilitliyken
+     * hiçbir kutu taşınmaz, kalkmaz, eklenmez; farklı yolların kutuları hiç üst üste binmez. beta.108 (hazır alan kilitsiz,
+     * yollar çözülmüyor) sayıları önce/sonra karşılaştırması için yazdırılır.
+     */
+    @Test
+    fun mapAndQuestListKeepBoxesStillAcrossPresetAndAutoRoutes() {
+        val segments = routesPlan.getJSONArray("segments")
+        val names = (0 until segments.length()).map { segments.getJSONObject(it).getString("screen") }
+        val before = replayRoutes(false)
+        val after = replayRoutes(true)
+        for ((k, name) in names.withIndex()) {
+            val b = before.perSegment[k]
+            val a = after.perSegment[k]
+            println("ekran kilidi yollar $name: kutu değişikliği önce ${b.boxes} (ekle ${b.added}, taşı ${b.moved}, kaldır ${b.removed}), " +
+                "sonra ${a.boxes} (ekle ${a.added}, taşı ${a.moved}, kaldır ${a.removed}); kilitliyken önce ${before.whileLocked[k].boxes}, " +
+                "sonra ${after.whileLocked[k].boxes}; üst üste binen önce ${before.overlaps[k]}, sonra ${after.overlaps[k]}")
+        }
+        println("ekran kilidi yollar: kilit/açılış önce ${before.locks}/${before.unlocks}, sonra ${after.locks}/${after.unlocks}; " +
+            "hazır alanın çizdiği kutu (tur başına toplam) önce ${before.presetBoxes}, sonra ${after.presetBoxes}")
+        for ((k, name) in names.withIndex()) {
+            assertEquals("$name: kilitliyken kutu değişti", Changes(), after.whileLocked[k].copy(retexted = 0))
+            assertEquals("$name: farklı yolların kutuları üst üste", 0, after.overlaps[k])
+        }
+        // beta.108 bu turlarda hazır alanın kutularını otomatik alanın yerine çiziyordu ve kilitliyken kutular oynuyordu.
+        assertTrue(before.overlaps.sum() + before.whileLocked.sumOf { it.boxes } > 0)
+        assertTrue(after.perSegment.sumOf { it.boxes } < before.perSegment.sumOf { it.boxes })
+        assertTrue(after.unlocks < before.unlocks)
+        assertTrue(after.presetBoxes <= before.presetBoxes)
+    }
+
+    @Test
+    fun presetBoxUnderAutoTextIsNotDrawnAndReturnsWhenAutoLeaves() {
+        val lock = ScreenLock()
+        val line = ScreenLock.Block("recenter", TextBox(0.8, 0.7, 1.1, 0.74))
+        val auto = payload(listOf(item("recenter", line)))
+        val shifted = line.copy(box = line.box.copy(left = line.box.left + 0.01))
+        val preset = payload(listOf(item("recenter c3", shifted)))
+        assertEquals(listOf("auto-3"), lock.offer("auto-3", auto).map { it.id })
+        // Hazır alan aynı satırı okudu: çizilmez (otomatik ekran yazısı öncelikli).
+        assertTrue(lock.offer(GameAreaPresets.PHONE_ID, preset).isEmpty())
+        assertNull(lock.displayed(GameAreaPresets.PHONE_ID))
+        // Otomatik alan kalktı: hazır alanın kutusu çizilir.
+        assertEquals(listOf("auto-3", GameAreaPresets.PHONE_ID), lock.offer("auto-3", null).map { it.id })
+        assertTrue(lock.displayed(GameAreaPresets.PHONE_ID) != null)
+        // Öncelik sıra değil yol: otomatik alan geri gelince hazır alanın çakışan kutusu kalkar.
+        assertEquals(setOf("auto-9", GameAreaPresets.PHONE_ID), lock.offer("auto-9", auto).map { it.id }.toSet())
+        assertNull(lock.displayed(GameAreaPresets.PHONE_ID))
+        // Kilide giren bloklar da birleşir: aynı yerdeki hazır alan bloğu sayılmaz.
+        val merged = lock.merge(listOf(GameAreaPresets.PHONE_ID to listOf(ScreenLock.Block("recenter c3", shifted.box)), "auto-9" to listOf(line)))
+        assertEquals(listOf(line), merged)
+    }
+
+    @Test
+    fun missionBoxHidesOverlappingScreenTextEvenWhileLocked() {
+        val lock = ScreenLock()
+        val blocks = screenOf()
+        lock.offer("auto-1", payload(blocks.map { item(it.key, it) }))
+        lock.observe(blocks, 0)
+        lock.observe(blocks, 500)
+        assertTrue(lock.isLocked)
+        // Görev kutusu ikinci satırın üstüne geldi: o satır gizlenir, diğer kutular yerinde kalır.
+        val hidden = lock.block(MissionLine.AREA_ID, payload(listOf(item("collect chemicals", blocks[1]))))
+        assertEquals(1, hidden.size)
+        assertEquals(blocks.filterIndexed { i, _ -> i != 1 }.map { it.box }, hidden[0].payload!!.blocks!!.map { it.box })
+        assertTrue(lock.isLocked)
+        // Görev kutusu kalktı: satır aynı kutusunda geri gelir.
+        val back = lock.block(MissionLine.AREA_ID, null)
+        assertEquals(blocks.map { it.box }, back[0].payload!!.blocks!!.map { it.box })
+        assertEquals(0, lock.unlocks)
+    }
+
+    @Test
+    fun detectorDroppingAnAreaForAMomentDoesNotUnlock() {
+        val lock = ScreenLock()
+        val list = screenOf()
+        val header = listOf(ScreenLock.Block("map", TextBox(0.5, 0.02, 0.8, 0.06)))
+        lock.offer("auto-1", payload(list.map { item(it.key, it) }))
+        lock.offer("auto-2", payload(header.map { item(it.key, it) }))
+        val listArea = ScreenLock.Block("", TextBox(0.0, 0.05, 0.5, 0.6))
+        val headerArea = ScreenLock.Block("", TextBox(0.45, 0.0, 1.0, 0.08))
+        lock.observe(list + header, 0, listOf(listArea, headerArea))
+        lock.observe(list + header, 500, listOf(listArea, headerArea))
+        assertTrue(lock.isLocked)
+        // Menü durumu bir an kapandı, liste alanı önerilmedi: kilit açılmaz, liste kutuları yerinde.
+        assertTrue(lock.observe(header, 1000, listOf(headerArea)).isEmpty())
+        assertTrue(lock.observe(header, 1500, listOf(headerArea)).isEmpty())
+        assertTrue(lock.observe(header, 2000, listOf(headerArea)).isEmpty())
+        assertTrue(lock.isLocked)
+        assertEquals(list.size, lock.displayed("auto-1")!!.blocks!!.size)
+        assertTrue(lock.observe(list + header, 2500, listOf(listArea, headerArea)).isEmpty())
+        // Liste gerçekten gitti (alan UNREAD_MS'ten uzun okunmadı): ekran değişikliği, kilit açılır.
+        for (now in 3000L..4500L step 500L) lock.observe(header, now, listOf(headerArea))
+        assertEquals(0, lock.unlocks)
+        lock.observe(header, 5000, listOf(headerArea))
+        lock.observe(header, 5500, listOf(headerArea))
+        assertEquals(1, lock.unlocks)
     }
 }

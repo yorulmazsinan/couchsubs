@@ -233,8 +233,9 @@ public final class RegionWatcher {
         }
     }
 
-    /// Ekran kilidi (`ScreenLock`): otomatik ekran yazısının kararlı ekranı kilitlenir; küçük değişiklikte kutu taşınmaz,
-    /// eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında. Windows ve Android aynı.
+    /// Ekran kilidi (`ScreenLock`): otomatik ekran yazısının ve hazır alanların (#1391) kararlı ekranı kilitlenir; küçük
+    /// değişiklikte kutu taşınmaz, eklenmez, kalkmaz. Altyazı, görev kutusu, kenar bildirimi ve telefon kilidin dışında.
+    /// Windows ve Android aynı.
     public var locksScreen = true {
         didSet { if !locksScreen { screenLock.release(reason: "kilit kapatıldı") } }
     }
@@ -350,7 +351,9 @@ public final class RegionWatcher {
             if !state.shown.isEmpty { cleared.insert(id) }
             states[id] = nil
         }
-        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir).
+        // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir). Hazır alanın kutusu kalkınca
+        // izleyici de unutur: yazı yeniden okununca yeniden çizilir (#1391).
+        for id in screenLock.displayed.keys where !cleared.contains(id) { states[id] = nil }
         cleared.formUnion(screenLock.displayed.keys)
         screenLock.release(reason: "telefon açıldı")
         observed.removeAll()
@@ -442,18 +445,33 @@ public final class RegionWatcher {
         // Ekran kilidi turun bütün ekran yazısına bakar (`ScreenLock`): kilitlenir, açılır ya da bekleyen yazı güncellenir.
         observed = observed.filter { ids.contains($0.key) }
         rejectedKeys = rejectedKeys.filter { ids.contains($0.key) }
-        let blocks = areas.filter { ScreenLock.covers($0.id) }.flatMap { observed[$0.id] ?? [] }
-        deliver(screenLock.observe(blocks, at: now()))
+        // Hazır alan da kilide girer; iki yolun aynı yerde okuduğu satır öncelikli yolunki sayılır (#1391).
+        let covered = areas.filter { screenLock.covers($0.id) }
+        let blocks = screenLock.merge(covered.map { ($0.id, observed[$0.id] ?? []) })
+        // Dedektörün bir an önermediği alanın kilitli kutuları hemen ekran değişikliği sayılmaz (`ScreenLock.unreadMs`).
+        // Boş okunan alan da (menü durumu kapanınca menü dışı okunan liste) bir an okunmamış sayılır.
+        let read = screenLock.routes
+            ? covered.filter { !(observed[$0.id] ?? []).isEmpty }.map {
+                ScreenLock.Block(key: "", box: TextBox(left: $0.region.left, top: $0.region.top, right: $0.region.right,
+                                                       bottom: $0.region.bottom), route: ScreenLock.rank($0.id))
+            }
+            : nil
+        deliver(screenLock.observe(blocks, at: now(), read: read))
     }
 
     /// Ekran yazısı alanının gönderisi ekran kilidinden geçer (`ScreenLock.offer`); diğer alanlar doğrudan gider.
     private func emit(_ id: String, text: String, box: TextBox?, lineHeight: Double?, icons: [IconPlacement]? = nil,
                       blocks: [ScreenTranslation.Item]? = nil) {
-        guard locksScreen, ScreenLock.covers(id) else {
+        guard locksScreen, screenLock.covers(id) else {
             if text.isEmpty, box == nil, icons == nil, blocks == nil {
                 server.sendRegion(id: id, text: text, box: box, lineHeight: lineHeight)
             } else {
                 server.sendRegion(id: id, text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: blocks)
+            }
+            // Görev kutusu kilidin dışında ama öncelikli yol: onunla çakışan ekran yazısı çizilmez (#1391).
+            if locksScreen, ScreenLock.blocks(id) {
+                deliver(screenLock.block(id: id, payload: text.isEmpty ? nil
+                    : ScreenLock.Payload(text: text, box: box, lineHeight: lineHeight, icons: icons, blocks: blocks)))
             }
             return
         }
@@ -476,7 +494,7 @@ public final class RegionWatcher {
 
     /// Bu okumanın ekran kilidine giren blokları: gürültü, boş ya da az önce çizilmeyip atılan okuma girmez.
     private func noteObserved(_ candidate: Candidate, area: ExtraArea) {
-        guard locksScreen, ScreenLock.covers(area.id) else { return }
+        guard locksScreen, screenLock.covers(area.id) else { return }
         let labelLike = area.menu || isUiLabel(candidate)
         if candidate.key.isEmpty || rejectedKeys[area.id] == candidate.key
             || ScreenTextNoise.isNoise(candidate.paragraphs.joined(separator: " "), menu: labelLike) {
@@ -523,7 +541,11 @@ public final class RegionWatcher {
                 states[area.id] = state
                 return
             }
-            // Gösterilen kutu kalkar.
+            // Gösterilen kutu kalkar; kilit de bu alanın yazısını gitmiş sayar (#1391: hazır alan kilitte).
+            if locksScreen, screenLock.covers(area.id) {
+                observed[area.id] = []
+                deliver(screenLock.withdraw(id: area.id))
+            }
             state.candidate = nil
             state.lastRead = nil
             let wasShown = !state.shown.isEmpty
@@ -1465,7 +1487,7 @@ public final class RegionWatcher {
                 emit(area.id, text: "", box: nil, lineHeight: nil)
             }
             rejectedKeys[area.id] = candidate.key
-            if ScreenLock.covers(area.id), locksScreen { observed[area.id] = [] }
+            if screenLock.covers(area.id), locksScreen { observed[area.id] = [] }
             state.shown = candidate.key
             state.shownText = candidate.text
             state.renderedKey = candidate.key
