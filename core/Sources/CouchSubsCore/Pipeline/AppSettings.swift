@@ -163,6 +163,10 @@ public struct UserSettings: Codable, Equatable {
     public var overlayClickThrough = false
     /// Oyun paketlerindeki hazır Türkçe çeviriler kullanılır (yalnız İngilizce→Türkçe).
     public var gamePacks = true
+    /// Altyazı için yalnızca oyun paketindeki hazır çevirileri göster.
+    public var packOnlySubtitles = false
+    public var usesGamePacks: Bool { gamePacks && sourceLanguage == "en" && targetLanguage == "tr" }
+    public var usesPackOnlySubtitles: Bool { usesGamePacks && packOnlySubtitles }
     /// Pakette bulunmayan İngilizce satırlar ortak havuza gönderilir (anonim; bkz. `LinePool`).
     public var sharePool = LinePool.enabledByDefault
     /// Oynanan oyun paketle tanınmazsa çeviri başladıktan iki dakika sonra bir kez sorulur (bkz. `GameSense`).
@@ -286,6 +290,7 @@ public struct UserSettings: Codable, Equatable {
         // Bozuk tek bir kayıt bütün kısayolları silmesin: okunamayan seçimler atlanır.
         hotkeys = ((try? values.decodeIfPresent([LossyHotkeyChoice].self, forKey: .hotkeys)) ?? []).compactMap(\.choice)
         gamePacks = try values.decodeIfPresent(Bool.self, forKey: .gamePacks) ?? defaults.gamePacks
+        packOnlySubtitles = try values.decodeIfPresent(Bool.self, forKey: .packOnlySubtitles) ?? defaults.packOnlySubtitles
         sharePool = try values.decodeIfPresent(Bool.self, forKey: .sharePool) ?? defaults.sharePool
         askGame = try values.decodeIfPresent(Bool.self, forKey: .askGame) ?? defaults.askGame
         usageData = try values.decodeIfPresent(Bool.self, forKey: .usageData) ?? defaults.usageData

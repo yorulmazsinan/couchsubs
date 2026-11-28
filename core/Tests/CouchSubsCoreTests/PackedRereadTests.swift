@@ -11,8 +11,9 @@ private final class PackedReader: TextReader, @unchecked Sendable {
 }
 private final class PackedSender: SubtitleSending {
     var sent: [String] = []
+    var clears = 0
     func sendSubtitle(_ text: String, durationMs: Int, box: TextBox?, replaces: Bool) { sent.append(text) }
-    func clear() {}
+    func clear() { clears += 1 }
 }
 private final class PackedTranslator: TextTranslator {
     var requested: [String] = []
@@ -31,6 +32,46 @@ final class PackedRereadTests: XCTestCase {
     private var image: CGImage {
         CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+    }
+
+    func testPackOnlyShowsMatchesAndSkipsMissesWithoutWaiting() async {
+        let first = "Let's get to the car.", miss = "This sign is not in the pack.", next = "We should go now."
+        var time = 0
+        let frames = [first, miss, next].flatMap { Array(repeating: $0, count: 4) }
+        let translator = PackedTranslator(), sender = PackedSender()
+        translator.release()
+        let pipeline = SubtitlePipeline(reader: PackedReader(frames), translator: translator, server: sender,
+                                        clock: { time }, packOnly: true)
+        pipeline.packLookup = { source in
+            [first: "Arabaya gidelim.", next: "Artık gitmeliyiz."][source].map { PackMatch(text: $0, spoken: []) }
+        }
+        var log: [String] = []
+        pipeline.onLog = { log.append($0) }
+        for (index, _) in frames.enumerated() {
+            await pipeline.process(image, region: CropRegion())
+            if index == 7 { XCTAssertEqual(sender.clears, 1) }
+            time += 100
+        }
+        await pipeline.waitForTranslations()
+
+        XCTAssertEqual(sender.sent, ["Arabaya gidelim.", "Artık gitmeliyiz."])
+        XCTAssertTrue(translator.requested.isEmpty)
+        XCTAssertTrue(log.contains { $0.contains("pakette yok, atlandı") })
+        XCTAssertFalse(log.contains { $0.contains("bekletiliyor") })
+    }
+
+    func testPackOnlySettingDefaultsOffAndRoundTrips() throws {
+        let decoder = JSONDecoder()
+        var settings = try decoder.decode(UserSettings.self, from: Data("{}".utf8))
+        XCTAssertFalse(settings.usesPackOnlySubtitles)
+        settings.sourceLanguage = "en"
+        settings.targetLanguage = "tr"
+        settings.packOnlySubtitles = true
+        let saved = try JSONEncoder().encode(settings)
+        settings = try decoder.decode(UserSettings.self, from: saved)
+        XCTAssertTrue(settings.usesPackOnlySubtitles)
+        settings.gamePacks = false
+        XCTAssertFalse(settings.usesPackOnlySubtitles)
     }
     func testRecordedFragmentsDoNotReplaceSlowFullTranslation() async {
         for (full, fragment) in [("I'm king of the world.", "world."),
