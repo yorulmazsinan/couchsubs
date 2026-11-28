@@ -138,7 +138,13 @@ jobs:
       - name: Araçlar
         run: |
           # OpenSSL ve json-c uygulama için kaynaktan derlenir (build-chiaki-macos.sh); openssl@3 yalnız Sparkle imzası için.
-          brew install cmake ninja pkg-config protobuf openssl@3 xcodegen
+          brew install cmake ninja pkg-config protobuf openssl@3
+          # XcodeGen sabit sürüm: brew'deki yeni sürüm şema varsayılanını değiştirip Mac'i tek mimari derletmişti (beta.108).
+          XCODEGEN_VERSION=2.48.0
+          curl -fsSL "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip" -o "$RUNNER_TEMP/xcodegen.zip"
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen/xcodegen/bin/xcodegen" --version
           npm install -g @webos-tools/cli
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version

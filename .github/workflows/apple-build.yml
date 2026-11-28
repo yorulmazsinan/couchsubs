@@ -81,7 +81,12 @@ jobs:
 
       - name: Araçlar
         run: |
-          brew install xcodegen
+          # XcodeGen sabit sürüm (sürüm iş akışıyla aynı).
+          XCODEGEN_VERSION=2.48.0
+          curl -fsSL "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip" -o "$RUNNER_TEMP/xcodegen.zip"
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen/xcodegen/bin/xcodegen" --version
           if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then brew install cmake ninja pkg-config protobuf; fi
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version
