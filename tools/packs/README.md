@@ -74,3 +74,26 @@ güncellemesiyle gider; kuruluysa paket R2'ye yüklenince Mac, Windows, iPhone v
    `curl -X POST -H "authorization: Bearer $ADMIN_TOKEN" --data @/tmp/gta6/gta-6.pool-keys.json
    https://couchsubs-pool.enmera.workers.dev/v1/exported`
    Gün içinde yeni satırlar biriktikçe 2-8 tekrarlanır; `--limit` her turda küçük tutulur.
+
+## Bozuk satır temizliği (`packclean.py`)
+
+Yayınlanmış paketten yazı tanıma kaynaklı bozuk satırları siler; API yok, çeviriye dokunmaz (küfür, ton olduğu gibi
+kalır), yalnız satırı siler. Silinen türler: iki konuşmacının tek satıra birleştiği satır ("… Boobie: …"), aynı
+altyazının iki kez okunduğu satır, başında/sonunda çevrilmemiş büyük harf çöpü kalan satır. Her biri yalnız asıl
+parçaları pakette ayrı satır olarak zaten varsa silinir; havuz paketindeki (pool-*) anahtar ana pakette de varsa havuzdaki
+silinir (döküm öncelikli). Ayrıntılar betiğin başında.
+
+```sh
+python3 scripts/fetch-packs.py   # ya da paketleri R2'den packs/ önekinden indir
+python3 tools/packs/packclean.py /tmp/temiz gta-6.json.gz pool-gta-6.json.gz --report /tmp/silinen.jsonl
+python3 -m unittest tools/packs/test_packclean.py
+```
+
+Yayından önce `silinen.jsonl`'dan rastgele 200 satır elle gözden geçirilir (doğru satır silinme oranı %2'nin altında
+olmalı). Yayın: `server/packs/README.md` ("Yeni ya da güncellenen elle paket"): `packs/<id>.json.gz` yüklenir ve
+`index.json`'da sürüm artırılıp `sha256`/`size`/`entries` güncellenir. Havuz paketi her gece yeniden üretilir;
+temizlenmiş `pool-*` bir sonraki gece üretiminde yenisiyle değişir.
+
+28 Kasım 2026: `gta-6` v10 bu adımla yayınlandı (v9'dan 5.728 satır silindi: 5.344 birleşik konuşmacı, 281 tekrar, 103
+büyük harf çöpü; 200 satırlık elle denetimde doğru satır silinme oranı ~%1). v9 ve silinenler listesi R2'de
+`arsiv/2026-11-28/` altında.
