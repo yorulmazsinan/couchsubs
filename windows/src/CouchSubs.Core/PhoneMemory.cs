@@ -7,11 +7,11 @@ namespace CouchSubs.Core;
 /// durumundaydı; telefon izleyicisi telefonu bir an kaybedince alan kalkıyor, yeniden açılışta aynı İngilizce mesajlar
 /// motora yeniden gidiyor (yapay zekâ her seferinde biraz başka Türkçe veriyordu) ve yazı boyu baştan ölçülüyordu (X, 22 Kas:
 /// "her saniye şekli de hareketi de değişiyor"). Çeviri durunca (<see cref="RegionWatcher.Reset"/>) unutulur. Mac/iPhone
-/// (PhoneMemory.swift) ve Android (PhoneMemory.kt) aynı kural, aynı sınır.
+/// (PhoneMemory.swift) ve Android (PhoneMemory.kt) ile aynı kayıt sınırı kullanılır.
 /// </summary>
 internal sealed class PhoneMemory
 {
-    /// <summary>En çok bu kadar mesajın çevirisi tutulur; dolunca en eskisi düşer.</summary>
+    /// <summary>En çok bu kadar mesajın ilk çevirisi tutulur; dolunca en eskisi düşer.</summary>
     internal const int Capacity = 256;
 
     private readonly object gate = new();
@@ -32,19 +32,20 @@ internal sealed class PhoneMemory
     /// <summary>Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın biraz farklı okunuşununki.</summary>
     internal string? Translation(string source)
     {
-        lock (gate) return PhoneSteady.Translation(source, translations);
+        lock (gate) return PhoneSteady.Translation(source, translations, keys);
     }
 
-    internal void Remember(string source, string translation)
+    /// <summary>Aynı mesajın ilk çevirisini döndürür; OCR başka okusa da yeni çeviriyle üzerine yazılmaz.</summary>
+    internal string Remember(string source, string translation)
     {
         lock (gate)
         {
-            if (!translations.ContainsKey(source))
-            {
-                if (keys.Count >= Capacity) translations.Remove(keys.Dequeue());
-                keys.Enqueue(source);
-            }
-            translations[source] = translation;
+            // Varyant yeni eşleşmelere dayanak olmaz: ardışık OCR hataları iki ayrı mesajı birbirine bağlamaz.
+            if (PhoneSteady.Translation(source, translations, keys) is { } canonical) return canonical;
+            if (keys.Count >= Capacity) translations.Remove(keys.Dequeue());
+            keys.Enqueue(source);
+            translations.Add(source, translation);
+            return translation;
         }
     }
 

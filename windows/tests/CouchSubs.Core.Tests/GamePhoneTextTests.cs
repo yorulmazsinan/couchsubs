@@ -189,6 +189,20 @@ public class GamePhoneTextTests
             kept.Where(l => l.ListRole == Role.Contact).Select(l => l.Text));
     }
 
+    /// <summary>X, 28 Kas, beta.108: grup sohbetinin virgüllü adı önizleme sanılıyor, liste kartı ikiye bölünüyordu.</summary>
+    [Fact]
+    public void GroupChatNamesWithCommasAreContacts()
+    {
+        var rows = new Reading([Line("Suggested", .02), Line("Andy", .09), Line("Here's my new addres...", .13),
+            Line("Papa Audacity, Jaso", .21), Line("Might be hard to top t...", .25),
+            Line("Yasmani, Jason, Luc", .33), Line("Got the thing.", .37), Line("Messages", .45),
+            Line("Dre'Quan, Jason, Lu", .53), Line("Wooooooo!", .57), Line("smani, Jason, Lucia", .65), Line("Got it.", .69)]);
+        var kept = GamePhoneText.ForTranslation(rows).Lines;
+        Assert.Equal(["Andy", "Papa Audacity, Jaso", "Yasmani, Jason, Luc", "Dre'Quan, Jason, Lu", "smani, Jason, Lucia"],
+            kept.Where(l => l.ListRole == Role.Contact).Select(l => l.Text));
+        Assert.Equal(Role.Preview, kept.First(l => l.Text == "Got the thing.").ListRole);
+    }
+
     [Theory]
     [InlineData(0.72)]
     [InlineData(1.03)]

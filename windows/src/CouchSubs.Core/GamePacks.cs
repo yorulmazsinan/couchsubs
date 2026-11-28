@@ -460,8 +460,9 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
         }
         foreach (var pack in searched)
         {
-            if (Corrected(text, pack, translation) is { } corrected) return corrected;
-            if (pack.Fuzzy?.Nearest(text, translation) is { } found && translation(found) is { } turkish) return turkish;
+            if (Corrected(text, pack, translation) is { } corrected && KeepsNumbers(text, corrected)) return corrected;
+            if (pack.Fuzzy?.Nearest(text, translation) is { } found && translation(found) is { } turkish
+                && KeepsNumbers(text, turkish)) return turkish;
         }
         return null;
     }
@@ -486,6 +487,16 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
             if (found is not null) return found;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Bulanık eşleşmenin Türkçesindeki her sayı okunan satırda da var: tek harf düzeltmesi rakamı da değiştirebiliyordu
+    /// ("3 Members" paketteki "5 Members" satırına çıkıp "5 üye" gösteriliyordu; X, 28 Kas, beta.107). Mac ve Android ile aynı.
+    /// </summary>
+    internal static bool KeepsNumbers(string source, string turkish)
+    {
+        var numbers = System.Text.RegularExpressions.Regex.Matches(source, @"\d+").Select(match => match.Value).ToHashSet();
+        return System.Text.RegularExpressions.Regex.Matches(turkish, @"\d+").All(match => numbers.Contains(match.Value));
     }
 
     /// <summary>Bulanık aramanın yapılacağı paketin kimliği (son tam eşleşmenin paketi); yoksa null.</summary>

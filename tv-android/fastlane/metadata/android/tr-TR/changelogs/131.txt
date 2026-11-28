@@ -1,0 +1,1 @@
+0.9.128: Telefon sohbet balonları oyundakiler gibi yuvarlak köşeli çiziliyor.

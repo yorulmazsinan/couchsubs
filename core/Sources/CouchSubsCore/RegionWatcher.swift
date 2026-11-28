@@ -1693,9 +1693,12 @@ public final class RegionWatcher {
 
     /// Yazı taşıyan bloklar (#1365 beta.105: haritada boş koyu kutular): Türkçesinde harf, rakam ya da kumanda simgesi
     /// olmayan blok (boş çeviri, yalnız görev imi) çizilmez. Windows ve Android aynı.
+    /// Sohbet panelinin zemini (yazısız kart) çizilir: düşünce TV panel yerine balonları köşeli kutu olarak çiziyordu
+    /// (X, 28 Kas, beta.107).
     static func drawable(_ items: [ScreenTranslation.Item]) -> [ScreenTranslation.Item] {
         items.filter { item in
-            !(item.icons ?? []).isEmpty || IconText.plain(item.translation).contains { $0.isLetter || $0.isNumber }
+            item.panel == .card || !(item.icons ?? []).isEmpty
+                || IconText.plain(item.translation).contains { $0.isLetter || $0.isNumber }
         }
     }
 

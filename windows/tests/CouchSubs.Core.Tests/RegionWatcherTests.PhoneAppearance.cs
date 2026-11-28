@@ -7,6 +7,23 @@ namespace CouchSubs.Core.Tests;
 public partial class RegionWatcherTests
 {
     [Fact]
+    public void FailedPhoneSampleKeepsTheLastSampledBubbleColor()
+    {
+        var box = new TextBox(.3, .7, .9, .75);
+        var before = new ScreenTranslation.Item("You still have that jumpsuit?", "Tulum hâlâ sende mi?", box, .025)
+        {
+            Phone = new ScreenPhoneCard.Placement(ScreenPhoneCard.Role.Outgoing, box),
+            Style = new PhoneTextStyle("#3058D0", "#FFFFFF"),
+        };
+        foreach (var failed in new[] { null, GamePhonePalette.Neutral })
+        {
+            var next = before with { Style = failed };
+            var item = Assert.Single(RegionWatcher.StablePhoneBlocks([next], [before]));
+            Assert.Equal(before.Style, item.Style);
+        }
+    }
+
+    [Fact]
     public async Task StablePhoneBubbleKeepsAppearanceWhenOtherBubblesArriveAndTracksRealZoom()
     {
         using var lifetime = new CancellationTokenSource();

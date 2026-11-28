@@ -838,10 +838,14 @@ class PhoneRegionSessionTest {
         watcher.offer()
         wait { !watcher.isBusy }
         assertEquals(3, server.sent.last().items.size)
-        clock = 1350
-        watcher.observePhone(PhoneCapture(b, pose))
-        watcher.offer()
-        wait { !watcher.isBusy }
+        // Aynı eksik düzen [PhoneSteady.DEGRADED_TURNS] okuma sürerse geçer (X, 28 Kas, beta.107; Windows ile aynı).
+        for (turn in 3..PhoneSteady.DEGRADED_TURNS) {
+            clock = 450L * turn
+            watcher.observePhone(PhoneCapture(b, pose))
+            watcher.offer()
+            wait { !watcher.isBusy }
+            if (turn < PhoneSteady.DEGRADED_TURNS) assertEquals(3, server.sent.last().items.size)
+        }
         assertEquals(if (stillMissing) 2 else 3, server.sent.last().items.size)
         assertTrue(stillMissing || server.sent.none { it.items.size == 2 })
     }

@@ -32,6 +32,67 @@ public class PhoneSteadyTests
     }
 
     [Fact]
+    public void PhoneMemoryKeepsTheFirstTranslationAcrossReplyOcrVariants()
+    {
+        const string original = "You still have that jumpsuit? I kinda wanna see Jay in it. You'll like it, Jay. Really breathable.";
+        const string translation = "Tulum hâlâ sende mi? Jay'i onunla görmek isterim. Beğenirsin Jay, hava alıyor.";
+        string[] variants = [original, original.Replace("You'll", "Youll"), original.Replace("You'll", "You'l"),
+            original.Replace("it, Jay", "it,t Jay"), original.Replace("it, Jay", "it Jay")];
+        var memory = new PhoneMemory();
+        memory.Remember(original, translation);
+        foreach (var variant in variants)
+        {
+            Assert.True(PhoneSteady.SameReading(original, variant));
+            Assert.Equal(translation, memory.Translation(variant));
+            memory.Remember(variant, "Motorun sonraki çevirisi.");
+        }
+        Assert.All(variants, variant => Assert.Equal(translation, memory.Translation(variant)));
+    }
+
+    [Fact]
+    public void SingleLetterSlipsInLongWordsAreTheSameMessage()
+    {
+        const string original = "You still have that jumpsuit? I kinda wanna see Jay in it. You'll like it, Jay. Really breathable.";
+        Assert.True(PhoneSteady.SameReading(original, original.Replace("breathable", "breathabie")));
+        Assert.True(PhoneSteady.SameReading(original, original.Replace("jumpsuit", "jumpsuitt").Replace("Really", "Reaily")));
+        Assert.True(PhoneSteady.SameReading("Balsero IS SOMETHING good tonight", "Balsero IS SOMETHINnG good tonight"));
+        Assert.True(PhoneSteady.SameReading("Thx amigo! U find", "Thx amigo! U flnd"));
+        // Üç sözcükte kayma, kısa sözcükte değişim ve başa eklenen harf aynı mesaj değildir.
+        Assert.False(PhoneSteady.SameReading(original,
+            original.Replace("breathable", "breathahle").Replace("jumpsuit", "jumpsuil").Replace("Really", "Reaxly")));
+        Assert.False(PhoneSteady.SameReading("It is so cold outside tonight.", "It is so bold outside tonight."));
+        Assert.False(PhoneSteady.SameReading("I'm here waiting for you at the station.", "I'm there waiting for you at the station."));
+    }
+
+    /// <summary>X, 28 Kas, beta.107 (dördüncü günlük): bitişik okunan sözcük yeni mesaj sayılıyor, sayfa yeniden
+    /// yayımlanıyordu; paketin bulanık eşleşmesi "3 Members"ı "5 üye" gösteriyordu.</summary>
+    [Fact]
+    public void JoinedWordsAreTheSameMessageAndFuzzyPackKeepsNumbers()
+    {
+        const string message = "Yo I still can't believe them jits tried us. This the community center in Southside.";
+        Assert.True(PhoneSteady.SameReading(message, message.Replace("I still", "Istill")));
+        Assert.True(PhoneSteady.TruncatedReading("Yo Istill can't believe them jits", message));
+        Assert.False(GamePackLibrary.KeepsNumbers("3 Members", "5 üye"));
+        Assert.True(GamePackLibrary.KeepsNumbers("3 Members", "3 üye"));
+        Assert.True(GamePackLibrary.KeepsNumbers("Southside, SW 13th St", "Southside, SW 13. Cadde"));
+    }
+
+    [Fact]
+    public void DifferentMessagesKeepSeparateTranslations()
+    {
+        foreach (var (first, second) in new[] { ("I'm here.", "I'm there."),
+            ("I'm here waiting for you at the station.", "I'm there waiting for you at the station."),
+            ("Meet me at exit 15.", "Meet me at exit 16."), ("I can do that tonight.", "I can't do that tonight.") })
+        {
+            var memory = new PhoneMemory();
+            memory.Remember(first, "Birinci");
+            Assert.Null(memory.Translation(second));
+            Assert.False(PhoneSteady.SameBubble(first, new(0, 0, 1, 1), second, new(0, 0, 1, 1)));
+            Assert.Equal("İkinci", memory.Remember(second, "İkinci"));
+        }
+    }
+
+    [Fact]
     public void ScrollIsAllMatchedBubblesMovingTheSameWay()
     {
         // #1202, #1197: kaydırınca balonların hepsi aynı yöne kayar; bekletme ve konum sabitleme atlanır.

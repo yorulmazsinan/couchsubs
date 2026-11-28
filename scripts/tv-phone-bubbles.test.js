@@ -169,6 +169,32 @@ const panelBlocks = (count) => [
 ].concat(Array.from({ length: count }, (_, i) => i % 2
   ? part('mine', 'O şeyleri senin için bıraktım ' + i, [0.40, 0.32 + i * 0.01, 0.58, 0.33 + i * 0.01], { background: '#F5B83D', foreground: '#17181B' })
   : part('theirs', 'Sağ ol dostum! Başka bir şey bulursan bana getir ' + i, [0.32, 0.32 + i * 0.01, 0.52, 0.33 + i * 0.01], { background: '#F3EEE4', foreground: '#17181B' })));
+test('telefon balonunun yarıçapı ekran yüksekliğiyle ölçeklenir ve yeniden kullanılan öğede güncellenir', { skip: !browser }, () => {
+  const result = measure(`
+    var result = [];
+    [null, false, true].forEach(function (aligned) {
+      var blocks = aligned === null ? ${JSON.stringify(phoneBlocks)} : ${JSON.stringify(panelBlocks(2))};
+      if (aligned !== null) blocks[0].aligned = aligned;
+      var target = blocks[aligned === null ? 0 : 2];
+      var selector = aligned === null ? '.item.phone' : '.panel-row.theirs .panel-bubble';
+      var region = { id: 'game-phone', text: 'x', box: blocks[0].box, blocks: blocks };
+      var radii = [];
+      [0.015, 0.01, null].forEach(function (radius) {
+        if (radius === null) delete target.radius;
+        else target.radius = radius;
+        showRegion(region);
+        radii.push(document.querySelector(selector).style.borderRadius);
+      });
+      result.push(radii);
+    });
+    $('result').textContent = JSON.stringify({ height: pageSize(true).height, values: result });`);
+  for (const values of result.values) {
+    assert.ok(Math.abs(parseFloat(values[0]) - 0.015 * result.height) < 0.001);
+    assert.ok(Math.abs(parseFloat(values[1]) - 0.01 * result.height) < 0.001);
+    assert.equal(values[2], '');
+  }
+});
+
 const sidePanel = (count) => `
   showRegion({ id: 'game-phone', text: 'x', box: { left: 0.31, top: 0.26, right: 0.79, bottom: 0.81 }, blocks: ${JSON.stringify(panelBlocks(count))} });
   var panel = document.querySelector('.phone-panel');

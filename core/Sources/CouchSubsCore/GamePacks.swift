@@ -509,7 +509,17 @@ public enum PackLookup {
         guard !trimmed.isEmpty else { return nil }
         if let found = phase(trimmed, find: find) { return found }
         guard let nearest else { return nil }
-        return phase(trimmed) { find($0) ?? nearest($0) }
+        return phase(trimmed) { line in find(line) ?? nearest(line).flatMap { keepsNumbers(line, $0) ? $0 : nil } }
+    }
+
+    /// Bulanık eşleşmenin Türkçesindeki her sayı okunan satırda da var: tek harf düzeltmesi rakamı da değiştirebiliyordu
+    /// ("3 Members" paketteki "5 Members" satırına çıkıp "5 üye" gösteriliyordu; X, 28 Kas, beta.107). Windows ve Android aynı.
+    static func keepsNumbers(_ source: String, _ turkish: String) -> Bool {
+        func numbers(_ text: String) -> [String] {
+            text.split(whereSeparator: { !$0.isASCII || !$0.isNumber }).map(String.init)
+        }
+        let known = Set(numbers(source))
+        return numbers(turkish).allSatisfy(known.contains)
     }
 
     private static func phase(_ trimmed: String, find: (String) -> String?) -> PackMatch? {

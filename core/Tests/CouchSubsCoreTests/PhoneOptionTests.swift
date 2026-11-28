@@ -69,6 +69,13 @@ final class PhoneOptionTests: XCTestCase {
         XCTAssertEqual(options[0].style, blue)
         XCTAssertEqual(options[1].style, blue)
         XCTAssertLessThan(options[0].box.bottom, options[1].box.top)
+        // Okunan seçeneğin kendi seçim rengi korunur (X, 28 Kas, beta.107; Windows ile aynı).
+        let selected = PhoneTextStyle(background: "#F5B83D", foreground: "#17181B")
+        for styles in [[selected, blue], [blue, selected]] {
+            let panel = ScreenPhoneCard.layout([item("First reply.", .option, top: 0.65, style: styles[0]),
+                                                item("Second reply.", .option, top: 0.72, style: styles[1])], handset: handset)
+            XCTAssertEqual(panel.filter { $0.panel == .mine }.map(\.style), styles)
+        }
     }
 
     /// Saydam pencere: uzun ilk mesaj dar sütuna sığmayınca düşmez; sütun genişler (gerekirse yazı küçülür). Hiçbir düzen

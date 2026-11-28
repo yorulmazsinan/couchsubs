@@ -145,6 +145,8 @@ public sealed partial class RegionWatcher
         public double? RenderedLineHeight;
         public IReadOnlyList<Block>? RenderedLayout;
         public IReadOnlyList<string>? RenderedPhoneParagraphs;
+        public Candidate? DegradedPhoneRead;
+        public int DegradedPhoneTurns;
         /// <summary>Gönderilen bloklar ve her birinin <see cref="Candidate.Blocks"/> içindeki sırası.</summary>
         public IReadOnlyList<(int Group, ScreenTranslation.Item Item)>? RenderedBlocks;
         /// <summary>
@@ -2059,8 +2061,11 @@ public sealed partial class RegionWatcher
     /// Yazı taşıyan bloklar (#1365 beta.105: haritada boş koyu kutular): Türkçesinde harf, rakam ya da kumanda simgesi
     /// olmayan blok (boş çeviri, yalnız görev imi) çizilmez. Mac ve Android aynı.
     /// </summary>
+    /// Sohbet panelinin zemini (yazısız kart) çizilir: düşünce TV panel yerine balonları köşeli kutu olarak çiziyor, panel her
+    /// yayında köşeli kutularla balonlar arasında gidip geliyordu (X, 28 Kas, beta.107).
     internal static IReadOnlyList<ScreenTranslation.Item> Drawable(IReadOnlyList<ScreenTranslation.Item> items) =>
-        [.. items.Where(item => item.Icons is { Count: > 0 } || IconText.Plain(item.Translation).Any(char.IsLetterOrDigit))];
+        [.. items.Where(item => item.Panel == ScreenPhoneCard.PanelPart.Card || item.Icons is { Count: > 0 }
+                                || IconText.Plain(item.Translation).Any(char.IsLetterOrDigit))];
 
     /// <summary>Satırın bir kez seçilen çizim kipi ve o andaki ölçüleri (<see cref="SteadyPaints"/>).</summary>
     internal sealed record RowPaint(string Mode, TextPaint Paint, TextBox Box);
@@ -2159,7 +2164,10 @@ public sealed partial class RegionWatcher
     {
         if (!options.Enabled || pose is not { } found || items.Count == 0) return [.. items.Where(item => !item.Unchanged)];
         var handset = new ScreenPhoneCard.Handset(found, aspect);
-        return [.. ScreenPhoneCard.Layout(items, handset, options.TextScale, line).Where(item => !item.Unchanged)];
+        // Hizalı panelde balonlar da panelin sabit telefon eksenini izler.
+        var anchored = items.Select(item => item.Phone is { } p && p.Role.IsBubble()
+            ? item with { Box = handset.FrameBox(p.Spot) } : item).ToList();
+        return [.. ScreenPhoneCard.Layout(anchored, handset, options.TextScale, line).Where(item => !item.Unchanged)];
     }
 
     // Aynı balon hareket ederken konumu her pakette izlenir. Küçük OCR kutu farkları punto ve satır
@@ -2169,10 +2177,9 @@ public sealed partial class RegionWatcher
     {
         return items.Select(item =>
         {
-            ScreenTranslation.Item? match = null;
             // Aynı balon (PhoneSteady.Match: aynı çeviri, OCR'la biraz farklı okunsa da aynı mesaj) ilk okunuşunu ve tarafını
             // (gelen/giden/not) korur: bir harf ya da hiza oynadı diye gönderi yenilenmez (Mac ile aynı).
-            match = PhoneSteady.Match(item, previous);
+            var match = PhoneSteady.Match(item, previous);
             if (match is null) return item;
             var box = item.Box;
             double width = box.Right - box.Left, height = box.Bottom - box.Top;
@@ -2183,22 +2190,35 @@ public sealed partial class RegionWatcher
                 box = box with { Bottom = Math.Min(1, box.Top + oldHeight) };
             double line = Math.Abs(item.LineHeight - match.LineHeight) <= match.LineHeight * .15 ? match.LineHeight : item.LineHeight;
             var style = item.Style;
-            if (style is not null && match.Style is { } before)
+            // Örnek alınamayan turda balonun son ölçülen rengi korunur.
+            if (match.Style is { } before && before != GamePhonePalette.Neutral && (style is null || style == GamePhonePalette.Neutral))
+                style = before;
+            else if (style is not null && match.Style is { } sampled && sampled != GamePhonePalette.Neutral)
             {
                 // Ön ve arka renkler bağımsızdır: seçimin gerçek yazı/zemin rengi değişimi korunur.
                 style = style with
                 {
                     // Yazı rengi zeminin aynı yanında kaldıysa eskisi kalır (örnek bir siyah bir koyu gri okunuyordu); seçimde
                     // (siyahtan beyaza) değişim izlenir.
-                    Foreground = NearColor(style.Foreground, before.Foreground, 16)
-                        || PhoneSteady.SameInk(style.Foreground, before.Foreground, style.Background) ? before.Foreground : style.Foreground,
-                    Background = NearColor(style.Background, before.Background, 16) ? before.Background : style.Background
+                    Foreground = NearColor(style.Foreground, sampled.Foreground, 16)
+                        || PhoneSteady.SameInk(style.Foreground, sampled.Foreground, style.Background) ? sampled.Foreground : style.Foreground,
+                    Background = NearColor(style.Background, sampled.Background, 16) ? sampled.Background : style.Background
                 };
                 // Farklı iki okunabilir paletin karışımı kontrastı düşürebilir. Bu durumda güncel çifti kullan.
-                if (style != before && style != item.Style && DesignTokens.Contrast(style.Background, style.Foreground) < 4.5)
+                if (style != sampled && style != item.Style && DesignTokens.Contrast(style.Background, style.Foreground) < 4.5)
                     style = item.Style;
             }
-            var phone = item.Phone is { } placement && match.Phone is { } kept ? placement with { Role = kept.Role } : item.Phone;
+            var phone = item.Phone;
+            if (phone is not null && match.Phone is { } kept)
+            {
+                // Yanıt seçeneği gönderilmiş mesaja dönüşünce yeni rol geçer.
+                if (phone.Role.IsBubble() && kept.Role.IsBubble() && phone.Role != ScreenPhoneCard.Role.Option
+                    && kept.Role != ScreenPhoneCard.Role.Option) phone = phone with { Role = kept.Role };
+                var slack = PhoneSteady.PositionShare * match.LineHeight;
+                if (Math.Abs(phone.Spot.Top - kept.Spot.Top) <= slack &&
+                    Math.Abs(phone.Spot.Left - kept.Spot.Left) * ScreenPhoneCard.Handset.ScreenShape <= slack)
+                    phone = phone with { Spot = kept.Spot };
+            }
             return item with { Source = match.Source, Box = box, LineHeight = line, Style = style, Phone = phone };
         }).ToList();
     }
@@ -2206,6 +2226,7 @@ public sealed partial class RegionWatcher
     private void Publish(WatchedArea area, State state, int started, Candidate candidate, string?[] result, int readyCount,
                          IReadOnlyList<(string Text, IReadOnlyList<string> Names)> prepared, bool cached = false, bool partialPhone = false)
     {
+        var translatedCount = partialPhone ? result.Count(text => !string.IsNullOrWhiteSpace(text)) : candidate.Paragraphs.Count;
         var slots = new List<IconSlot>();
         var text = new List<string>(candidate.Paragraphs.Count);
         for (var i = 0; i < candidate.Paragraphs.Count; i++)
@@ -2237,7 +2258,7 @@ public sealed partial class RegionWatcher
             state.RenderedBlocks = null;
             return;
         }
-        var origin = cached || readyCount == candidate.Paragraphs.Count ? "hazır çeviri" : readyCount > 0 ? "hazır çeviri+motor" : "motor";
+        var origin = cached || readyCount == translatedCount ? "hazır çeviri" : readyCount > 0 ? "hazır çeviri+motor" : "motor";
         Log?.Invoke($"ek alan {area.Name}: {SubtitleLog.Excerpt(IconText.Plain(string.Join(' ', candidate.Paragraphs)))} → {origin}");
         if (candidate.Blocks is { } painted && PaintSummary(painted) is { } summary) Log?.Invoke($"ek alan {area.Name}: çizim {summary}");
         var (shown, icons) = IconText.Render(string.Join('\n', text), slots);
@@ -2245,7 +2266,7 @@ public sealed partial class RegionWatcher
         // Satır farkıyla yerinde tutulan, bu okumada da okunamayan satır (seçili satırın soluk yazısı, #1359) kalkmaz: ekran
         // durunca doğrulanan okumada o satır yoktu, çevirisi kayboluyordu. Yalnız satır farkından hemen sonraki çizimde
         // (RenderedKey null) ve yerinde başka yazı yoksa.
-        if (blocks is not null && state.RenderedBlocks is { } carried && state.RenderedKey is null)
+        if (!area.PanelLifetime.HasValue && blocks is not null && state.RenderedBlocks is { } carried && state.RenderedKey is null)
         {
             var diff = CarriedRows([.. carried.Select(row => row.Item)], BlockTexts(candidate), listMoved: false);
             foreach (var (r, c) in diff.Kept)

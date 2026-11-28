@@ -83,6 +83,14 @@ enum GamePhoneText {
         return heading
     }
 
+    /// Grup sohbetinin adı virgüllüdür ("Papa Audacity, Jaso", "Yasmani, Jason, Luc"): ad sayılmayınca önizleme sanılıyor, liste kartı ad ve önizleme diye ikiye bölünüyordu (X, 28 Kas, beta.108). Windows ve Android ile aynı.
+    /// Seçili satırın çerçevesi adın başını kesebilir ("smani, Jason, Lucia"): ilk sözcük küçük harfle başlasa da grup adıdır.
+    private static func looksLikeGroupName(_ text: String) -> Bool {
+        let label = text.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
+        guard text.contains(","), let first = label.first else { return false }
+        return looksLikeName(first.uppercased() + label.dropFirst())
+    }
+
     private static func looksLikeName(_ text: String) -> Bool {
         let label = String(text.prefix(while: { $0 != "(" })).trimmingCharacters(in: .whitespacesAndNewlines)
         let words = label.split(separator: " ")
@@ -102,7 +110,9 @@ enum GamePhoneText {
     private static func isContactPair(_ name: TextLine, _ preview: TextLine) -> Bool {
         let label = name.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowerName = (2...18).contains(label.count) && label.allSatisfy(\.isLowercase)
-        guard looksLikeName(label) || lowerName, let a = layout(name), let b = layout(preview) else { return false }
+        guard looksLikeName(label) || looksLikeGroupName(label) || lowerName, let a = layout(name), let b = layout(preview) else {
+            return false
+        }
         let h = a.bottom - a.top
         return a.left > 0.1 && a.left < 0.48 && abs(a.left - b.left) <= 0.06 &&
             b.top > a.top && b.top - a.bottom < h * 0.7 && b.bottom - b.top < h * 1.8
@@ -205,7 +215,7 @@ enum GamePhoneText {
                 line.listRole = .preview
             } else if section(line.text) != nil {
                 line.listRole = .heading
-            } else if inColumn(line) && (names.contains(index) || looksLikeName(line.text)) {
+            } else if inColumn(line) && (names.contains(index) || looksLikeName(line.text) || looksLikeGroupName(line.text)) {
                 line.listRole = .contact
             } else {
                 line.listRole = .preview
@@ -349,7 +359,10 @@ enum GamePhoneText {
         }
         for line in reading.lines.filter({ $0.box != nil }).sorted(by: { box($0).top < box($1).top }) {
             if let previous = run.last,
-               listed || breaksBlock(box(previous), box(line), afterFlatSentence: flat && endsSentence(previous.text)) { finish() }
+               listed || breaksBlock(box(previous), box(line),
+                                     gapShare: flat && !home ? PhoneChat.bubbleGap : flat && endsSentence(previous.text) ? 0.65 : 1) {
+                finish()
+            }
             run.append(line)
         }
         finish()
@@ -500,11 +513,12 @@ enum GamePhoneText {
         text.trimmingCharacters(in: .whitespacesAndNewlines).last.map { ".!?".contains($0) } ?? false
     }
 
-    /// Düzeltilmiş telefon görüntüsünde satır arası dar, ardışık balonlar arasındaki boşluk daha geniştir: cümle sonundan
-    /// sonra 0,65 satırdan geniş boşluk yeni balondur; aynı balonda alt satıra geçen ikinci cümle birlikte kalır.
-    private static func breaksBlock(_ previous: TextBox, _ next: TextBox, afterFlatSentence: Bool) -> Bool {
+    /// Düzeltilmiş telefon görüntüsünde satır arası dar, ardışık balonlar arasındaki boşluk daha geniştir. Sohbette balon
+    /// aralığı (`PhoneChat.bubbleGap`) cümle sonundan bağımsızdır: OCR nokta kaçırsa da iki cevap ayrı kalır (X, 28 Kas,
+    /// beta.107; Windows ve Android ile aynı).
+    private static func breaksBlock(_ previous: TextBox, _ next: TextBox, gapShare: Double) -> Bool {
         let lineHeight = max(previous.bottom - previous.top, next.bottom - next.top)
-        if next.top - previous.bottom > lineHeight * (afterFlatSentence ? 0.65 : 1) { return true }
+        if next.top - previous.bottom > lineHeight * gapShare { return true }
         let alignedLeft = abs(previous.left - next.left) <= 0.08
         let alignedRight = min(previous.left, next.left) > 0.25 && abs(previous.right - next.right) <= 0.045
         return !alignedLeft && !alignedRight

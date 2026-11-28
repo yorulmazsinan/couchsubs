@@ -30,14 +30,19 @@ internal class PhoneMemory {
     @Synchronized fun knows(source: String): Boolean = translations.containsKey(source)
 
     /** Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın biraz farklı okunuşununki. */
-    @Synchronized fun translation(source: String): String? = PhoneSteady.translation(source, translations)
+    @Synchronized fun translation(source: String): String? = PhoneSteady.translation(source, translations, keys)
 
-    @Synchronized fun remember(source: String, translation: String) {
-        if (translations[source] == null) {
-            if (keys.size >= CAPACITY) translations.remove(keys.removeFirst())
-            keys.addLast(source)
-        }
+    /**
+     * Aynı mesajın ilk çevirisini döndürür; OCR başka okusa da yeni çeviriyle üzerine yazılmaz (X, 28 Kas, beta.107: her
+     * okunuş ayrı çevrilip saklanıyor, Türkçe her turda değişiyordu; Windows ve Mac ile aynı).
+     */
+    @Synchronized fun remember(source: String, translation: String): String {
+        // Varyant yeni eşleşmelere dayanak olmaz: ardışık OCR hataları iki ayrı mesajı birbirine bağlamaz.
+        PhoneSteady.translation(source, translations, keys)?.let { return it }
+        if (keys.size >= CAPACITY) translations.remove(keys.removeFirst())
+        keys.addLast(source)
         translations[source] = translation
+        return translation
     }
 
     /** Çeviri durdu ya da hat yeniden kuruldu. */

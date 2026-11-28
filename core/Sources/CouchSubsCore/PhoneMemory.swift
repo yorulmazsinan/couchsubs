@@ -24,18 +24,22 @@ final class PhoneMemory {
     /// Mesajın bilinen çevirisi: birebir aynı okunuşunki, yoksa aynı mesajın OCR'la biraz farklı okunuşununki
     /// (`PhoneSteady.translation`).
     func translation(of source: String) -> String? {
-        PhoneSteady.translation(of: source, in: translations)
+        PhoneSteady.translation(of: source, in: translations, order: keys)
     }
 
     /// Bilinen çevirisi olan okunuşlar (testler ve eşleme için).
     var known: [String: String] { translations }
 
-    func remember(_ source: String, _ translation: String) {
-        if translations[source] == nil {
-            if keys.count >= Self.capacity { translations[keys.removeFirst()] = nil }
-            keys.append(source)
-        }
+    /// Aynı mesajın ilk çevirisini döndürür; OCR başka okusa da yeni çeviriyle üzerine yazılmaz (X, 28 Kas, beta.107:
+    /// her okunuş ayrı çevrilip saklanıyor, Türkçe her turda değişiyordu; Windows ve Android ile aynı).
+    @discardableResult
+    func remember(_ source: String, _ translation: String) -> String {
+        // Varyant yeni eşleşmelere dayanak olmaz: ardışık OCR hataları iki ayrı mesajı birbirine bağlamaz.
+        if let canonical = PhoneSteady.translation(of: source, in: translations, order: keys) { return canonical }
+        if keys.count >= Self.capacity { translations[keys.removeFirst()] = nil }
+        keys.append(source)
         translations[source] = translation
+        return translation
     }
 
     /// Çeviri durdu ya da hat yeniden kuruldu.

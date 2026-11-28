@@ -84,6 +84,8 @@ public enum ScreenPhoneCard {
     static let cardColor = PhoneTextStyle(background: "#141518", foreground: "#F3EEE4")
     static let incomingColor = PhoneTextStyle(background: "#F3EEE4", foreground: "#17181B")
     static let outgoingColor = PhoneTextStyle(background: "#F5B83D", foreground: "#17181B")
+    /// Balon sınırı ölçülemiyorsa köşe yarıçapı, satır yüksekliğine oranla (Windows ve Android ile aynı).
+    static let bubbleRadius = 0.6
     static let noteColor = PhoneTextStyle(background: "#141518", foreground: "#A9A59C")
     /// Telefonla kart arasındaki boşluk ve kartın ekran kenarından payı (ekran genişliğine oranla).
     static let gap = 0.008
@@ -138,6 +140,8 @@ public enum ScreenPhoneCard {
 
         /// Çevirmene gitmez, aslıyla gösterilir (ad).
         var keepsText: Bool { self == .header || self == .contact }
+        /// Sohbet balonu ya da oyuncunun cevap seçeneği.
+        var isBubble: Bool { self == .incoming || self == .outgoing || self == .message || self == .option }
         /// Telefonun yanındaki panelde dizilir. Sinan Bey (beta.100, 3422): ana ekran ve hava yazıları da artık telefonun
         /// üstüne çizilmez, panelde kart olur.
         var inCard: Bool { true }
@@ -418,7 +422,8 @@ public enum ScreenPhoneCard {
             placed.lineHeight = line
             switch kind {
             case .outgoing:
-                placed.style = bubbleColor(role == .option ? optionStyle : item.style, fallback: outgoingColor)
+                // Örneği eksik seçenekte komşusunun rengi kullanılır; okunan seçeneğin kendi seçim rengi korunur.
+                placed.style = bubbleColor(item.style, fallback: role == .option ? optionStyle ?? outgoingColor : outgoingColor)
                 placed.panel = .mine
             case .incoming:
                 placed.style = bubbleColor(item.style, fallback: incomingColor)
