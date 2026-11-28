@@ -793,7 +793,7 @@ final class PhoneModel: ObservableObject {
             gameAreas.start()
             // Xbox çalışan oyunu bildirmez: Xbox için son seçilen oyun kendiliğinden kullanılır, hiç seçim yoksa Oyun
             // satırı vurgulanır (`GameChoice.xboxNeedsGame`).
-            gameChoice.start(console: consoleName, xbox: xbox != nil) { [weak self] in
+            gameChoice.start(console: consoleName, xbox: xbox != nil, readsPhone: { [weak self] in self?.settings.readsGamePhone ?? false }) { [weak self] in
                 guard let self else { return false }
                 return self.settings.askGame && self.settings.sharePool
             }
@@ -1466,7 +1466,11 @@ final class PhoneModel: ObservableObject {
             self?.lastTranslation = translation
             let fromPack = pipeline?.lastOrigin == "paket"
             if fromPack, let title = self?.packs.scopeTitle { self?.packInUse = title }
-            if let self { self.gameChoice.noteLine(fromPack: fromPack, packs: self.packs) }
+            // Paketler kapalıyken satır pakette yalnız oyunu tanımak için aranır (#1443; GameChoice.noteLine).
+            if let self {
+                self.gameChoice.noteLine(fromPack: fromPack, packs: self.packs,
+                                         identify: !self.demoMode && !self.packsActive ? source : nil)
+            }
             self?.addToHistory(source: source, translation: translation, origin: fromPack ? .pack : .engine)
             self?.noteLine(source: source, translation: translation, fromPack: fromPack)
         }

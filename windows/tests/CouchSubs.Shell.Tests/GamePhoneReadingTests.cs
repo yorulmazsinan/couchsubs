@@ -183,6 +183,66 @@ public class GamePhoneReadingTests
         Assert.False(controller.XboxNeedsGame);
     }
 
+    /// <summary>
+    /// #1443 (Windows, PS5, paketler kapalı, telefon açık): PS5 çalışan oyunu bildirmiyor, paketler kapalı olduğu için
+    /// satırlar paketten gelmiyor; oyun hiç tanınmıyor, GTA 6 telefonu hiç aranmıyor, günlükte tek [PhoneTrace] satırı
+    /// yoktu. Paketler kapalıyken de motordan çevrilen satırlar oyunu tanır: GTA 6 tanınınca telefon aranır, okunur ve
+    /// günlüğe yazılır. Telefon araması çalışmazsa bu deneme düşer.
+    /// </summary>
+    [Fact]
+    public async Task PhoneIsSearchedAndLoggedInGta6EvenWhenPacksAreOffAndTheConsoleNamesNoGame()
+    {
+        string[] lines = ["Get in the car, now.", "Where is the money?", "Drive faster, Lucia!", "Call me tomorrow.", "Hold the gate.",
+                          "Watch your back."];
+        var gta = JsonSerializer.SerializeToUtf8Bytes(lines.ToDictionary(line => PackKey.Key(line)!, line => "PAKET " + line));
+        var other = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string> { [PackKey.Key("Let's go.")!] = "Gidelim." });
+        var services = new FakeServices { ReaderLines = Reading.FromText(lines[0]) };
+        services.GamePacks = new GamePackLibrary(() => [("Grand Theft Auto VI.json", gta), ("Hades.json", other)], null);
+        var settings = new MemorySettings();
+        settings.Save(new UserSettings { FrameSource = FrameSource.RemotePlayWindow, Output = SubtitleOutput.Computer, GamePacks = false,
+                                         AutoReadGamePhone = true, AutoScreenText = false, GameAreaPresets = false, ScreenTextExtrasReset = true });
+        var log = Path.Combine(Path.GetTempPath(), $"couchsubs-1443-{Guid.NewGuid():N}.log");
+        SubtitleLog.Enable(log);
+        var controller = AppControllerTests.Make(services, settings: settings);
+        var events = new ConcurrentQueue<SubtitleEvent>();
+        controller.StreamEvent += events.Enqueue;
+        try
+        {
+            await controller.StartAsync();
+            var stream = Assert.Single(services.Streams);
+            Assert.Null(controller.PlayedGame);
+            var frame = PhoneFrame();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            // Satırlar sırayla okunur; her biri yalnız GTA 6 paketinde var (çeviri yine motordan gelir, paketler kapalı).
+            foreach (var line in lines)
+            {
+                services.ReaderLines = Reading.FromText(line);
+                while (!events.Any(e => e.Kind == SubtitleEventKind.Subtitle && e.Text == $"TR: {line}"))
+                {
+                    stream.Emit(Frame.Blank(frame.Width, frame.Height));
+                    await Task.Delay(40, timeout.Token);
+                }
+            }
+            Assert.Equal("Grand Theft Auto VI", controller.PlayedGame);
+            Assert.All(controller.History, line => Assert.Equal(LineOrigin.Engine, line.Origin));
+            // Oyun tanındı: telefon aranır ve okunur.
+            while (!events.Any(e => e.Kind == SubtitleEventKind.Region && e.Id == "game-phone" && e.Text?.Length > 0))
+            {
+                stream.Emit(frame);
+                await Task.Delay(120, timeout.Token);
+            }
+        }
+        finally
+        {
+            controller.Dispose();
+            SubtitleLog.Disable();
+        }
+        var written = File.ReadAllText(log);
+        File.Delete(log);
+        Assert.Contains(GameSense.RecognizedLog("Grand Theft Auto VI"), written);
+        Assert.Contains($"[{PhoneTrace.Component}] {PhoneTrace.Opened}", written);
+    }
+
     // Kayıt gerektirmeden kasa kenarları, iki hoparlör yarığı ve ön kamerayla gerçek algılayıcıyı çalıştırır.
     private static Frame PhoneFrame()
     {

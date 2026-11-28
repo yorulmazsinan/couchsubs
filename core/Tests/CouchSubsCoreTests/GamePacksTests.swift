@@ -148,6 +148,29 @@ final class GamePackTests: XCTestCase {
         choice.stop()
     }
 
+    /// #1443: paketler kapalıyken (satırlar motordan) oyun yine okunan satırlardan tanınır; PS5 oyunu bildirmeyince GTA 6
+    /// hiç tanınmıyor, telefon hiç aranmıyordu. `identify` verilmezse (paketler açık, satır motordan) oy yok.
+    @MainActor
+    func testEngineLinesStillRecognizeTheGameWhenPacksAreOff() throws {
+        let library = try eldenAndRdr()
+        let choice = GameChoice(defaults: TestDefaults.make("game-choice"))
+        var log: [String] = []
+        choice.onLog = { log.append($0) }
+        choice.start(console: "PS5") { false }
+        for _ in 0..<6 { choice.noteLine(fromPack: false, packs: library) }
+        XCTAssertNil(choice.game)
+        // Birkaç pakette ortak satır oy getirmez.
+        for _ in 0..<6 { choice.noteLine(fromPack: false, packs: library, identify: "Let's go.") }
+        XCTAssertNil(choice.game)
+        for _ in 0..<4 { choice.noteLine(fromPack: false, packs: library, identify: "Rise, Tarnished.") }
+        XCTAssertNil(choice.game)
+        choice.noteLine(fromPack: false, packs: library, identify: "Rise, Tarnished.")
+        XCTAssertEqual(choice.game?.name, "Elden Ring")
+        XCTAssertEqual(choice.source, .pack)
+        XCTAssertEqual(log.last, "oyun okunan satırlardan tanındı: Elden Ring")
+        choice.stop()
+    }
+
     /// Xbox: son seçilen oyun Xbox'a özel saklanır ve sonraki oturumda kendiliğinden kullanılır; seçim yokken Oyun karosu
     /// vurgulanır (`xboxNeedsGame`) ve günlüğe tek satır gider; seçilince vurgu kalkar, "elle seçildi" yazılır.
     @MainActor

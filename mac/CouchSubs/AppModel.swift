@@ -2584,7 +2584,7 @@ final class AppModel: ObservableObject {
             // Xbox çalışan oyunu bildirmez: Xbox için son seçilen oyun (Xbox penceresinden okurken de) kendiliğinden
             // kullanılır, hiç seçim yoksa Oyun karosu vurgulanır (`GameChoice.xboxNeedsGame`).
             let consoleName = isXbox ? nil : console.map { $0.name.isEmpty ? $0.host : $0.name }
-            gameChoice.start(console: consoleName, xbox: isXbox) { [weak self] in
+            gameChoice.start(console: consoleName, xbox: isXbox, readsPhone: { [weak self] in self?.settings.readsGamePhone ?? false }) { [weak self] in
                 guard let self else { return false }
                 return self.settings.askGame && self.settings.sharePool
             }
@@ -3315,7 +3315,11 @@ final class AppModel: ObservableObject {
             self?.subtitleOffTip.lineShown()
             self?.updateSubtitleOffTip()
             self?.addToHistory(source: source, translation: translation, origin: pipeline?.lastOrigin == "paket" ? .pack : .engine)
-            if let self { self.gameChoice.noteLine(fromPack: pipeline?.lastOrigin == "paket", packs: self.packs) }
+            // Paketler kapalıyken satır pakette yalnız oyunu tanımak için aranır (#1443; GameChoice.noteLine).
+            if let self {
+                let packsOff = !self.demoMode && !(self.settings.gamePacks && self.settings.sourceLanguage == "en" && self.settings.targetLanguage == "tr")
+                self.gameChoice.noteLine(fromPack: pipeline?.lastOrigin == "paket", packs: self.packs, identify: packsOff ? source : nil)
+            }
             self?.countUsageLine(fromPack: pipeline?.lastOrigin == "paket")
             if let box = pipeline?.lastBox { self?.lastSubtitleBox = box }
         }

@@ -45,6 +45,8 @@ public sealed class GameSense
     private bool carried;
     private bool running;
     private bool asked;
+    /// <summary>Bu oturumda "telefon aranmıyor" satırı yazıldı (<see cref="ShouldLogPhoneIdle"/>).</summary>
+    private bool phoneIdleLogged;
 
     /// <summary>Havuza giden oyun: PS5'in bildirdiği, yoksa kullanıcının seçtiği, yoksa paketten tanınan.</summary>
     public RunningGame? Current { get { lock (gate) return console ?? chosen ?? pack; } }
@@ -126,6 +128,7 @@ public sealed class GameSense
             packId = null;
             console = null;
             asked = false;
+            phoneIdleLogged = false;
             carried = chosen is not null && chosenWhileRunning;
             running = true;
         }
@@ -148,6 +151,25 @@ public sealed class GameSense
     {
         lock (gate) asked = true;
     }
+
+    /// <summary>
+    /// GTA 6 telefonu yalnız oyun GTA 6 olarak bilinince aranır. Telefon çevirisi açık, çeviri iki dakikadır sürüyor ve oyun
+    /// hiçbir yoldan bilinmiyorsa oturumda bir kez true: günlüğe <see cref="PhoneIdleLog"/> yazılır (#1443: telefon hiç
+    /// aranmıyordu, günlükte tek satır yoktu). Mac, iPhone ve Android ile aynı kural.
+    /// </summary>
+    public bool ShouldLogPhoneIdle(TimeSpan runningFor, bool readsPhone)
+    {
+        lock (gate)
+        {
+            if (!readsPhone || phoneIdleLogged || console is not null || pack is not null || chosen is not null || runningFor < AskAfter) return false;
+            phoneIdleLogged = true;
+            return true;
+        }
+    }
+
+    public const string PhoneIdleLog = "telefon aranmıyor: oynanan oyun bilinmiyor (PS5 bildirmedi, okunan satırlar bir oyun paketiyle eşleşmedi); GTA 6 telefonu için ana ekrandan oyunu seçin";
+    /// <summary>Oyun okunan satırlardan tanındı (paketler kapalıyken de, #1443).</summary>
+    public static string RecognizedLog(string name) => $"oyun okunan satırlardan tanındı: {name}";
 
     /// <summary>Xbox'ta son seçilen oyunun saklandığı ad (<c>lastGames</c> kaydında; Xbox'un adından bağımsız, Xbox'a özel).</summary>
     public const string XboxConsole = "Xbox";

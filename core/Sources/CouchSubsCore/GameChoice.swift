@@ -50,7 +50,9 @@ public final class GameChoice: ObservableObject {
     /// Çeviri başladı. `console`: PS5'in adı (son oyun bununla hatırlanır); `xbox`: Xbox oturumu (son oyun
     /// `GameSense.xboxConsole` adıyla hatırlanır ve oyun bilinmiyorsa kendiliğinden kullanılır); `enabled`: soru ayarı ve
     /// ortak havuz açık mı.
-    public func start(console: String?, xbox: Bool = false, enabled: @escaping @MainActor () -> Bool) {
+    /// `readsPhone`: GTA 6 telefon çevirisi açık mı (oyun iki dakikada tanınmazsa günlüğe `GameSense.phoneIdleLog`, #1443).
+    public func start(console: String?, xbox: Bool = false, readsPhone: @escaping @MainActor () -> Bool = { false },
+                      enabled: @escaping @MainActor () -> Bool) {
         sense.startSession()
         self.xbox = xbox
         self.console = xbox ? GameSense.xboxConsole : console
@@ -62,6 +64,9 @@ public final class GameChoice: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.checkInterval)
                 guard let self, !Task.isCancelled else { return }
+                if self.sense.shouldLogPhoneIdle(runningFor: Date().timeIntervalSince(started), readsPhone: readsPhone()) {
+                    self.onLog(GameSense.phoneIdleLog)
+                }
                 if self.sense.shouldAsk(runningFor: Date().timeIntervalSince(started), enabled: enabled()) {
                     self.sense.markAsked()
                     self.asking = true
@@ -82,10 +87,17 @@ public final class GameChoice: ObservableObject {
     }
 
     /// Ekrana bir satır geldi; `fromPack`: hazır paketten. Satırın yalnız tek pakette bulunan anahtarı varsa o pakete
-    /// bir oy sayılır; son 20 satırın 5'i aynı paketten gelince oyun o paketin oyunudur.
-    public func noteLine(fromPack: Bool, packs: GamePackLibrary) {
-        let hit = packs.takeDistinctiveHit()
-        guard sense.noteLine(pack: fromPack ? hit : nil) else { return }
+    /// bir oy sayılır; son 20 satırın 5'i aynı paketten gelince oyun o paketin oyunudur. `identify`: paketler kapalıyken
+    /// motorla çevrilen satır; pakette yalnız oyunu tanımak için aranır, çeviri paketten gelmez (#1443: paketler kapalı ve
+    /// PS5 oyunu bildirmeyince oyun hiç tanınmıyor, GTA 6 telefonu hiç aranmıyordu; Windows ve Android ile aynı).
+    public func noteLine(fromPack: Bool, packs: GamePackLibrary, identify: String? = nil) {
+        var hit = packs.takeDistinctiveHit()
+        if !fromPack {
+            hit = nil
+            if let identify, packs.match(identify) != nil { hit = packs.takeDistinctiveHit() }
+        }
+        guard sense.noteLine(pack: hit) else { return }
+        if let name = sense.current?.name { onLog(GameSense.recognizedLog(name)) }
         asking = false
         publish()
     }

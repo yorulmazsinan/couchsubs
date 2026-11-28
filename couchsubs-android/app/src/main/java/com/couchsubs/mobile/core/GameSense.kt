@@ -35,6 +35,8 @@ class GameSense {
     private var packId: String? = null
     private var chosen: RunningGame? = null
     private var asked = false
+    /** Bu oturumda "telefon aranmıyor" satırı yazıldı ([shouldLogPhoneIdle]). */
+    private var phoneIdleLogged = false
 
     /** Havuza giden oyun: PS5'in bildirdiği, yoksa kullanıcının seçtiği, yoksa paketten tanınan. */
     val current: RunningGame? get() = synchronized(lock) { console ?: chosen ?: pack }
@@ -103,6 +105,7 @@ class GameSense {
         packId = null
         console = null
         asked = false
+        phoneIdleLogged = false
         carried = chosen != null && chosenWhileRunning
         running = true
     }
@@ -117,6 +120,17 @@ class GameSense {
 
     /** Kart gösterildi ya da "Sorma"ya basıldı: bu oturumda bir daha sorulmaz. */
     fun markAsked() = synchronized(lock) { asked = true }
+
+    /**
+     * GTA 6 telefonu yalnız oyun GTA 6 olarak bilinince aranır. Telefon çevirisi açık, çeviri iki dakikadır sürüyor ve oyun
+     * hiçbir yoldan bilinmiyorsa oturumda bir kez true: günlüğe [PHONE_IDLE_LOG] yazılır (#1443: telefon hiç aranmıyordu,
+     * günlükte tek satır yoktu). Windows, Mac ve iPhone ile aynı kural.
+     */
+    fun shouldLogPhoneIdle(runningForMs: Long, readsPhone: Boolean): Boolean = synchronized(lock) {
+        if (!readsPhone || phoneIdleLogged || console != null || pack != null || chosen != null || runningForMs < ASK_AFTER_MS) return false
+        phoneIdleLogged = true
+        true
+    }
 
     /**
      * Xbox çevirisi başladı. Xbox çalışan oyunu bildirmez: oyun başka yoldan bilinmiyorsa kullanıcının Xbox için son seçtiği
@@ -146,6 +160,9 @@ class GameSense {
         const val GENERAL_PACK = "pool-genel"
         /** Xbox'ta son seçilen oyunun saklandığı ad (Xbox'un adından bağımsız, Xbox'a özel). */
         const val XBOX_CONSOLE = "Xbox"
+        const val PHONE_IDLE_LOG = "telefon aranmıyor: oynanan oyun bilinmiyor (PS5 bildirmedi, okunan satırlar bir oyun paketiyle eşleşmedi); GTA 6 telefonu için ana ekrandan oyunu seçin"
+        /** Oyun okunan satırlardan tanındı (paketler kapalıyken de, #1443). */
+        fun recognizedLog(name: String) = "oyun okunan satırlardan tanındı: $name"
         const val XBOX_UNKNOWN_LOG = "Xbox: oyun tanınmadı, oyuna özel okumalar (telefon) kapalı"
         fun xboxRecalledLog(name: String) = "Xbox: son seçilen oyun kullanılıyor: $name"
         fun xboxChosenLog(name: String) = "Xbox: oyun elle seçildi: $name"

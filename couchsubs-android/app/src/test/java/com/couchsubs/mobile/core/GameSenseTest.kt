@@ -196,5 +196,23 @@ class GameSenseTest {
         assertTrue("Red Dead Redemption 2 (ek satırlar)" in shelf[1].titles)
         assertEquals(listOf("pool-ppsa09999"), shelf[2].packIds)
     }
+
+    /**
+     * #1443: telefon çevirisi açıkken oyun iki dakikada tanınmazsa oturumda bir kez "telefon aranmıyor" yazılır; oyun
+     * biliniyorsa ya da telefon kapalıysa yazılmaz (Windows GameSenseTests, Mac/iPhone GameSenseTests ile aynı).
+     */
+    @Test
+    fun phoneIdleIsLoggedOncePerSessionWhileTheGameIsUnknown() {
+        val sense = GameSense()
+        sense.startSession()
+        assertFalse(sense.shouldLogPhoneIdle(60_000, readsPhone = true))
+        assertFalse(sense.shouldLogPhoneIdle(130_000, readsPhone = false))
+        assertTrue(sense.shouldLogPhoneIdle(130_000, readsPhone = true))
+        assertFalse(sense.shouldLogPhoneIdle(145_000, readsPhone = true))
+        sense.startSession()
+        sense.choose("GTA 6")
+        assertFalse(sense.shouldLogPhoneIdle(130_000, readsPhone = true))
+        assertTrue(GameSense.PHONE_IDLE_LOG.startsWith("telefon aranmıyor: oynanan oyun bilinmiyor"))
+    }
 }
 
