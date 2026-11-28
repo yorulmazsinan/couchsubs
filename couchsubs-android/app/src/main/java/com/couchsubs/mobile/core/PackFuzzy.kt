@@ -60,12 +60,14 @@ object PackFuzzy {
      * Tek yönlü kapsama (yarım ya da fazlalıklı okuma): iki taraf da en az [minLength] harf; kısa tarafın en az [inner]'ı
      * uzun tarafta; uzun tarafın en az [partial]'ı (satır yarım okunmuş) ya da [extra]'sı (okumada fazlalık var: köşe
      * yazısı, çöp) kısa tarafta; benzerlik `inner - penalty` sayılır. Fazlalık az olmalı: iki ayrı altyazının birleştiği
-     * okuma tek bir altyazıya çıkmasın.
+     * okuma tek bir altyazıya çıkmasın. Yarım okuma uzun satırın en az üçte ikisi olmalı: "Jason: been friends ever since."
+     * okuması paketteki uzun satırın tamamının Türkçesini ("…Boobie: Ah, ben de onunla futbol sahasında tanıştım.")
+     * getiriyordu; daha kısa parça motora gider (Mac, Windows aynı).
      */
     object Containment {
         const val minLength = 22
         const val inner = 90.0
-        const val partial = 25.0
+        const val partial = 65.0
         const val extra = 55.0
         const val penalty = 10.0
     }

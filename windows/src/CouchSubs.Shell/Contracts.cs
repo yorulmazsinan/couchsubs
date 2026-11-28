@@ -1001,8 +1001,6 @@ public interface IAppServices
     GamePackLibrary? GamePacks => null;
     /// <summary>Satırın paketteki Türkçesi: konuşmacı etiketi, satır ve cümle parçalarıyla (CouchSubs.Translation.PackLookup).</summary>
     PackMatch? FindInPacks(string text) => null;
-    /// <summary>Çok satırlı okumanın yalnız bir satırı pakette yoksa satır satır sonuç (CouchSubs.Translation.PackLookup.MatchPartial).</summary>
-    PackPartial? FindPartialInPacks(string text) => null;
     /// <summary>Ortak havuz; testlerde null (hiçbir şey gönderilmez).</summary>
     LinePool? Pool => null;
     /// <summary>Kullanım verisi (GA4 Measurement Protocol); derlemede kimlik yoksa ve testlerde null (hiçbir şey gönderilmez).</summary>

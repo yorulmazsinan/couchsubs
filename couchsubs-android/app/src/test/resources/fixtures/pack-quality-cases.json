@@ -1,0 +1,37 @@
+{
+ "warmUp": "Give me the keys.",
+ "cases": [
+  {
+   "screen": "Give me the keys.",
+   "turkish": "Anahtarları ver."
+  },
+  {
+   "screen": "Jason: been friends ever since.",
+   "turkish": null
+  },
+  {
+   "screen": "SCOOP branding, pelican on the side. Can't miss'em.",
+   "turkish": null
+  },
+  {
+   "screen": "Who cares if you were? I actuâlly liked th",
+   "turkish": "Haklıysan ne olmuş? Ben o adamı severdim."
+  },
+  {
+   "screen": "WARNING\nWE OPERATE\nCAMERAS IN\nTHIS AREA.",
+   "turkish": null
+  },
+  {
+   "screen": "WE OPERATE\nCAMERAS IN F\nTHIS AREA.",
+   "turkish": null
+  },
+  {
+   "screen": "WARNING\nTHIS AREA.",
+   "turkish": "Uyarı\nBU BÖLGE!"
+  },
+  {
+   "screen": "Get in the car, we're leaving.\nMirror Park",
+   "turkish": "Arabaya bin, gidiyoruz."
+  }
+ ]
+}

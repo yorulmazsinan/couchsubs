@@ -137,6 +137,25 @@ class PackFuzzyTest {
         }
     }
 
+    /**
+     * Eşleşme kalitesi (pack-quality.json.gz, gerçek GTA 6 okumaları): yarım okunan satıra paketteki uzun satırın tamamının
+     * Türkçesi gelmez, neredeyse tam okuma yine paketten gelir; büyük harfli tabelanın bulunmayan satırları köşe yazısı
+     * sayılıp atlanmaz. Mac ve Windows'la aynı vakalar, aynı sonuç.
+     */
+    @Test
+    fun sharedPackQualityCases() {
+        val fixtures = JSONObject(Fixtures.text("pack-quality-cases.json"))
+        val library = GamePackLibrary({ listOf("pack-quality.json.gz" to { Fixtures.bytes("pack-quality.json.gz") }) }, null)
+        assertNotNull(PackLookup.match(library, fixtures.getString("warmUp")))
+        assertEquals("quality-test", library.searchScope)
+        val cases = fixtures.getJSONArray("cases")
+        for (index in 0 until cases.length()) {
+            val item = cases.getJSONObject(index)
+            val screen = item.getString("screen")
+            assertEquals(screen, if (item.isNull("turkish")) null else item.getString("turkish"), PackLookup.match(library, screen)?.text)
+        }
+    }
+
     /** İmza Mac, Windows ve paket betiğiyle bit bit aynı. */
     @Test
     fun signatureVectors() {
@@ -238,8 +257,8 @@ class PackFuzzyTest {
     }
 
     /**
-     * GTA V oyuncularının gerçek ıskalamaları: kısa satırda tek harf hatası, yutulmuş kesme işareti, köşe yazısı, iki
-     * satırlık altyazının yalnız bir satırı ve başına çöp eklenmiş okuma da paketten bulunur.
+     * GTA V oyuncularının gerçek ıskalamaları: kısa satırda tek harf hatası, yutulmuş kesme işareti, köşe yazısı ve
+     * başına çöp eklenmiş okuma da paketten bulunur; uzun satırın yalnız yarısı okunduysa tam çevirisi gelmez.
      */
     @Test
     fun gtaOcrReadsAreFound() {
@@ -255,7 +274,8 @@ class PackFuzzyTest {
         same("Yeah, well, well see.", "Yeah, well, we'll see.")
         same("You cant put a price on freedom.", "You can't put a price on freedom.")
         same("LOSNN\nI told him to leave it, Trevor.", "I told him to leave it, Trevor.")
-        same("I can't do crap with this deathship right", "I can't do crap with this deathship right on top of me! Bring it down, T!")
+        // Uzun satırın yarısından biraz fazlası: paketteki tam çevirisi gösterilmez, motora gider.
+        assertNull(library.match("I can't do crap with this deathship right"))
         same("San Andreas LOSNN but it does mean he's got money to pay people who help him.",
             "but it does mean he's got money to pay people who help him.")
         assertNull(library.match("The quick brown fox jumps over the lazy dog near the river bank."))

@@ -19,12 +19,6 @@ public static class PackFuzzy
 {
     /// <summary>Bundan kısa satırda bulanık arama yok.</summary>
     public const int MinLength = 16;
-    /// <summary>
-    /// GTA paketinde bulanık aramanın en kısa satırı: 8-15 harfli satırlarda da OCR hataları ("I'II take it." → "I'll take
-    /// it.") bulunsun diye. Paket betiği GTA paketine bu boydan imza yazar (common.py SHORT_MIN_LEN); öteki oyunlar
-    /// <see cref="MinLength"/>. Öteki oyunlarda da işe yarar; yalnız GTA'da denendi.
-    /// </summary>
-    public const int ShortMinLength = 8;
     internal const int MaxBits = 256;
     internal const int BitsPerGram = 3;
     internal const double Margin = 5;
@@ -32,9 +26,11 @@ public static class PackFuzzy
     /// Tek yönlü kapsama (yarım ya da fazlalıklı okuma): iki taraf da en az <c>MinLength</c> harf; kısa tarafın en az
     /// <c>Inner</c>'ı uzun tarafta; uzun tarafın en az <c>Partial</c>'ı (satır yarım okunmuş) ya da <c>Extra</c>'sı (okumada
     /// fazlalık var: köşe yazısı, çöp) kısa tarafta; benzerlik <c>Inner - Penalty</c> sayılır. Fazlalık az olmalı: iki ayrı
-    /// altyazının birleştiği okuma tek bir altyazıya çıkmasın.
+    /// altyazının birleştiği okuma tek bir altyazıya çıkmasın. Yarım okuma uzun satırın en az üçte ikisi olmalı: "Jason: been
+    /// friends ever since." okuması paketteki uzun satırın tamamının Türkçesini ("…Boobie: Ah, ben de onunla futbol
+    /// sahasında tanıştım.") getiriyordu; daha kısa parça motora gider (Mac, Android aynı).
     /// </summary>
-    internal static readonly (int MinLength, double Inner, double Partial, double Extra, double Penalty) Containment = (22, 90, 25, 55, 10);
+    internal static readonly (int MinLength, double Inner, double Partial, double Extra, double Penalty) Containment = (22, 90, 65, 55, 10);
     /// <summary>
     /// Fazlalıklı okumada yan cümle denetimi (<see cref="ClauseHashes"/>): okuma birden çok cümle ya da yan cümleyse en az
     /// <c>Letters</c> harfli her birinin üçlülerinin en az <c>Covered</c>'ı kısa adayda olmalı. İki altyazı yan yana
@@ -459,10 +455,10 @@ public static class PackFuzzy
     }
 
     /// <summary>(uzunluk, Bloom baytları) — paket betiğinin yazdığıyla aynı; satır çok kısaysa null.</summary>
-    internal static (int Length, byte[] Bytes)? Signature(string text, int minLength = MinLength)
+    internal static (int Length, byte[] Bytes)? Signature(string text)
     {
         var runes = Folded(text);
-        if (runes.Count < minLength) return null;
+        if (runes.Count < MinLength) return null;
         var length = Math.Min(runes.Count, 255);
         var words = Bloom(TrigramHashes(runes), Bits(length));
         var bytes = new byte[words.Length * 8];
@@ -600,11 +596,10 @@ public sealed class PackFuzzyIndex
     /// tek yönlü kapsamaya bakılır (<see cref="PackFuzzy.Containment"/>): yarım okunan satır (iki satırlık altyazının bir
     /// satırı) uzun adayın içinde, köşe yazısı ya da çöp eklenmiş okuma kısa adayın dışında kalır.
     /// </summary>
-    /// <param name="minLength">Bundan kısa satır aranmaz (GTA paketinde <see cref="PackFuzzy.ShortMinLength"/>).</param>
-    public ulong? Nearest(string text, Func<ulong, string?> translation, int minLength = PackFuzzy.MinLength)
+    public ulong? Nearest(string text, Func<ulong, string?> translation)
     {
         var runes = PackFuzzy.Folded(text);
-        if (runes.Count < minLength || keys.Length == 0) return null;
+        if (runes.Count < PackFuzzy.MinLength || keys.Length == 0) return null;
         var length = Math.Min(runes.Count, 255);
         var damaged = PackFuzzy.Damaged(text);
         var need = PackFuzzy.Required(length, damaged);

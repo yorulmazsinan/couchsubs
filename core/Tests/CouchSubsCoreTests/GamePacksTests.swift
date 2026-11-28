@@ -486,6 +486,27 @@ final class PackFuzzyTests: XCTestCase {
         }
     }
 
+    /// Eşleşme kalitesi (Fixtures/pack-quality.json.gz, gerçek GTA 6 okumaları): yarım okunan satıra paketteki uzun satırın
+    /// tamamının Türkçesi gelmez ("Jason: been friends ever since."), neredeyse tam okuma yine paketten gelir; büyük harfli
+    /// tabelanın bulunmayan satırları köşe yazısı sayılıp atlanmaz ("WARNING / WE OPERATE / …" yalnız "Uyarı / BU BÖLGE!"
+    /// olmaz). Android ve Windows aynı vakalarla aynı sonucu verir.
+    func testSharedPackQualityCases() throws {
+        struct Cases: Decodable {
+            struct Case: Decodable { let screen: String; let turkish: String? }
+            let warmUp: String
+            let cases: [Case]
+        }
+        let fixtures = try JSONDecoder().decode(Cases.self, from: Data(contentsOf: fixture("pack-quality-cases.json")))
+        let directory = temporaryDirectory()
+        try FileManager.default.copyItem(at: fixture("pack-quality.json.gz"), to: directory.appendingPathComponent("pack-quality.json.gz"))
+        let library = GamePackLibrary(bundled: directory, user: nil)
+        XCTAssertNotNil(library.match(fixtures.warmUp))
+        XCTAssertEqual(library.searchScope, "quality-test")
+        for item in fixtures.cases {
+            XCTAssertEqual(library.match(item.screen)?.text, item.turkish, item.screen)
+        }
+    }
+
     /// İmza Windows ve paket betiğiyle bit bit aynı.
     func testSignatureVectors() throws {
         let vectors = try FuzzyVectors.load()
@@ -571,7 +592,7 @@ final class PackFuzzyTests: XCTestCase {
     }
 
     /// GTA V oyuncularının gerçek ıskalamaları: kısa satırda tek harf hatası, yutulmuş kesme işareti, köşe yazısı,
-    /// iki satırlık altyazının yalnız bir satırı ve başına çöp eklenmiş okuma da paketten bulunur.
+    /// ve başına çöp eklenmiş okuma da paketten bulunur; uzun satırın yalnız yarısı okunduysa tam çevirisi gelmez.
     func testGtaOcrReadsAreFound() throws {
         let library = try library("gta-v.json.gz")
         XCTAssertNotNil(library.match("Are you listening to me?"))
@@ -584,7 +605,8 @@ final class PackFuzzyTests: XCTestCase {
         same("Yeah, well, well see.", as: "Yeah, well, we'll see.")
         same("You cant put a price on freedom.", as: "You can't put a price on freedom.")
         same("LOSNN\nI told him to leave it, Trevor.", as: "I told him to leave it, Trevor.")
-        same("I can't do crap with this deathship right", as: "I can't do crap with this deathship right on top of me! Bring it down, T!")
+        // Uzun satırın yarısından biraz fazlası: paketteki tam çevirisi gösterilmez, motora gider.
+        XCTAssertNil(library.match("I can't do crap with this deathship right"))
         same("San Andreas LOSNN but it does mean he's got money to pay people who help him.",
              as: "but it does mean he's got money to pay people who help him.")
         XCTAssertNil(library.match("The quick brown fox jumps over the lazy dog near the river bank."))

@@ -199,14 +199,20 @@ object PackLookup {
             val pieces = mutableListOf<SubtitleSegmenter.Piece>()
             val translations = mutableListOf<String?>()
             var all = true
+            var skipped = false
+            var subtitle = false
             for (line in lines) {
                 val found = single(line, find)
                 if (found == null) {
                     // Altyazıyla aynı bloğa düşen köşe yazısı ("San Andreas", "First Person • zoom") atlanır.
-                    if (isOverlay(line)) continue
+                    if (isOverlay(line)) {
+                        skipped = true
+                        continue
+                    }
                     all = false
                     break
                 }
+                if (hasLowercase(line)) subtitle = true
                 if (pieces.isNotEmpty()) {
                     pieces.add(SubtitleSegmenter.Piece("\n", false))
                     translations.add(null)
@@ -214,7 +220,10 @@ object PackLookup {
                 pieces.addAll(found.first)
                 translations.addAll(found.second)
             }
-            if (all && pieces.isNotEmpty()) return result(pieces, translations)
+            // Köşe yazısı yalnız bulunan satırlardan biri altyazıysa (küçük harf var) atlanır. Bütün satırları büyük harfli
+            // tabelada ("WARNING / WE OPERATE / CAMERAS IN / THIS AREA.") bulunmayan satırlar köşe yazısı değil tabelanın
+            // kendisidir: atlanınca yalnız "Uyarı / BU BÖLGE!" gösteriliyordu; tabela motorla çevrilir (Mac, Windows aynı).
+            if (all && pieces.isNotEmpty() && (!skipped || subtitle)) return result(pieces, translations)
         }
 
         // Cümle cümle (etiket, tire ve ayraçlar olduğu gibi kalır).
@@ -261,6 +270,17 @@ object PackLookup {
         if (words.isEmpty() || words.size > 4) return false
         if (line.contains('•')) return true
         return words.all { word -> Character.isUpperCase(word[0]) && word.all { PackFuzzy.isLetter(it) || PackFuzzy.isDigit(it) } }
+    }
+
+    /** Satırda küçük harf var mı (altyazı satırı; tabela ve köşe yazısı çoğunlukla büyük harflidir). */
+    fun hasLowercase(line: String): Boolean {
+        var index = 0
+        while (index < line.length) {
+            val point = line.codePointAt(index)
+            if (Character.isLowerCase(point)) return true
+            index += Character.charCount(point)
+        }
+        return false
     }
 
     /**

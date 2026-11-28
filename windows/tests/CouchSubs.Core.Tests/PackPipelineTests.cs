@@ -44,45 +44,6 @@ public class PackPipelineTests
         Assert.Equal(1, pipeline.PackHits);
     }
 
-    /// <summary>İki konuşma alt alta: paketteki satır paketten gösterilir, motora yalnız eksik satır gider; TV'de ikisi birlikte.</summary>
-    [Fact]
-    public async Task PartialPackMatchSendsOnlyTheMissingLine()
-    {
-        var sender = new FakeSender();
-        var translator = new FakeTranslator();
-        const string reading = "Get down!\nWho are you?";
-        var pipeline = new SubtitlePipeline(new FakeReader(reading, reading, reading), translator, sender)
-        {
-            PackLookup = Lookup,
-            PartialPackLookup = text => text == reading
-                ? new PackPartial([new PackLine("Get down!", "Yere yat!", [new SpokenLine("Get down!", "Yere yat!")]), new PackLine("Who are you?", null, [])])
-                : null,
-        };
-        var missed = new List<string>();
-        var spoken = new List<IReadOnlyList<SpokenLine>>();
-        pipeline.PackMissed += missed.Add;
-        pipeline.SpeechReady += spoken.Add;
-        await Run(pipeline, 3);
-        Assert.Equal(["Who are you?"], translator.Requested);
-        Assert.Equal(["Yere yat!\nTR: Who are you?"], sender.Sent);
-        Assert.Equal(["Who are you?"], missed);
-        Assert.Equal("Yere yat!", Assert.Single(Assert.Single(spoken)).Turkish);
-        Assert.Equal("motor", pipeline.LastOrigin);
-    }
-
-    /// <summary>Kısmi eşleşme verilmezse eski davranış: okumanın tamamı motora gider.</summary>
-    [Fact]
-    public async Task WithoutPartialLookupTheWholeReadingGoesToTheEngine()
-    {
-        var sender = new FakeSender();
-        var translator = new FakeTranslator();
-        const string reading = "Get down!\nWho are you?";
-        var pipeline = new SubtitlePipeline(new FakeReader(reading, reading, reading), translator, sender) { PackLookup = Lookup };
-        await Run(pipeline, 3);
-        Assert.Equal([reading], translator.Requested);
-        Assert.Equal(["TR: " + reading], sender.Sent);
-    }
-
     /// <summary>Saati her karede <paramref name="stepMs"/> ilerleterek çalıştırır (bekleme süreleri için).</summary>
     private static async Task RunTimed(SubtitlePipeline pipeline, int frames, Action advance)
     {

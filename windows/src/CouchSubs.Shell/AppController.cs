@@ -3748,12 +3748,9 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
         if (demoMode)
         {
             target.PackLookup = null;
-            target.PartialPackLookup = null;
             return;
         }
         target.PackLookup = PacksActive ? services.FindInPacks : null;
-        // Kısmi eşleşme yalnız GTA'da denendi; öteki oyunlarda okumanın tamamı eskisi gibi motora gider.
-        target.PartialPackLookup = PacksActive ? text => ScreenText.IsGta(gameSense.Current?.Name) ? services.FindPartialInPacks(text) : null : null;
     }
 
     /// <summary>

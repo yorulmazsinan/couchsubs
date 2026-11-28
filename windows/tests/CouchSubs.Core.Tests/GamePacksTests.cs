@@ -230,46 +230,6 @@ public class GamePackTests
         }
     }
 
-    /// <summary>Verilen satırlardan, kısa satırlara da imzalı (paket betiğinin GTA'ya yazdığı gibi) biçim 2 paketi.</summary>
-    private static byte[] ShortFuzzyPack(string title, params (string English, string Turkish)[] lines)
-    {
-        var entries = lines.ToDictionary(line => PackKey.Key(line.English)!, line => line.Turkish);
-        var english = lines.ToDictionary(line => PackKey.Number(PackKey.Key(line.English)!)!.Value, line => line.English);
-        var order = english.Keys.Order().ToList();
-        var mask = new byte[(order.Count + 7) / 8];
-        var lengths = new List<byte>();
-        var blooms = new List<byte>();
-        for (var index = 0; index < order.Count; index++)
-        {
-            if (PackFuzzy.Signature(english[order[index]], PackFuzzy.ShortMinLength) is not { } signature) continue;
-            mask[index >> 3] |= (byte)(1 << (index & 7));
-            lengths.Add((byte)signature.Length);
-            blooms.AddRange(signature.Bytes);
-        }
-        var fuzzy = new { version = 1, count = order.Count, mask = Convert.ToBase64String(mask), lengths = Convert.ToBase64String([.. lengths]), blooms = Convert.ToBase64String([.. blooms]) };
-        return JsonSerializer.SerializeToUtf8Bytes(new { format = 2, id = "deneme", title, entries, fuzzy });
-    }
-
-    /// <summary>
-    /// GTA paketinde 8-15 harfli satır da bulanık bulunur ("I'II take it." → "I'll take it."); öteki oyunun paketinde aynı
-    /// imza olsa da 16 harf sınırı kalır. Bu okuma artık ikinci tur tam anahtar düzeltmesiyle (<see cref="PackFuzzy.Edits"/>:
-    /// "ii" → "il") öteki oyunlarda da bulunur.
-    /// </summary>
-    [Fact]
-    public void ShortLinesAreFuzzyOnlyInTheGtaPack()
-    {
-        string? Near(string title)
-        {
-            var library = new GamePackLibrary(() => [("deneme.json", ShortFuzzyPack(title, ("I'll take it.", "Alırım."), ("Get in the car right now!", "Hemen arabaya bin!")))], null);
-            library.LimitToGame(title);
-            return library.Nearest("I'II take it.");
-        }
-        Assert.Equal("Alırım.", Near("Grand Theft Auto VI"));
-        Assert.Equal("Alırım.", Near("Mafia: The Old Country"));
-        Assert.Null(PackFuzzy.Signature("I'll take it."));
-        Assert.NotNull(PackFuzzy.Signature("I'll take it.", PackFuzzy.ShortMinLength));
-    }
-
     /// <summary>Biçim 2: Mafia paketinde parçalar ve imzalar da var; hiç tam eşleşme olmadan bulanık arama yapılmaz.</summary>
     [RealPackFact]
     public void VersionTwoPackHasSegmentsAndSignatures()

@@ -35,7 +35,7 @@ def key(text):
 # ---- fuzzy ----
 FOLD = {"l": "i", "1": "i", "ı": "i", "j": "i", "0": "o", "5": "s", "æ": "a", "ø": "o", "œ": "o", "ß": "s"}
 MIN_LEN, MAX_BITS, BPG = 16, 256, 3
-# GTA paketinde kısa satırlara da imza (PackFuzzy.ShortMinLength ile aynı); öteki oyunlar MIN_LEN.
+# GTA paketinde kısa satırlara da imza yazılır; uygulamalar (dört platform) MIN_LEN'den kısa satırda bulanık arama yapmaz.
 SHORT_MIN_LEN = 8
 
 

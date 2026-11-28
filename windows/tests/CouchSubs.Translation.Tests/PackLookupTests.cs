@@ -48,36 +48,6 @@ public class PackLookupTests
         Assert.Null(Match("Get down!\nWho are you?"));
     }
 
-    private static PackPartial? Partial(string text, Func<string, string?>? nearest = null) =>
-        PackLookup.MatchPartial(text, line => PackKey.Key(line) is { } key ? Pack.GetValueOrDefault(key) : null, nearest);
-
-    /// <summary>İki konuşma alt alta okununca yalnız bir satır pakette yoksa bulunan satır paketten, o satır motordan gelir.</summary>
-    [Fact]
-    public void PartialMatchKeepsTheFoundLines()
-    {
-        var partial = Partial("Get down!\nWho are you?");
-        Assert.NotNull(partial);
-        Assert.Equal(["Yere yat!", null], partial!.Lines.Select(line => line.Turkish));
-        Assert.Equal("Who are you?", partial.Missing);
-        Assert.Equal("Yere yat!", Assert.Single(partial.Lines[0].Spoken).Turkish);
-        Assert.Equal("ENZO: Yere yat!", Partial("ENZO: Get down!\nMARIA: Who are you?")!.Lines[0].Turkish);
-        // Tam anahtar yoksa bulanık arama da denenir.
-        Assert.Equal("Yere yat!", Partial("Get dovvn!\nWho are you?", line => line == "Get dovvn!" ? "Yere yat!" : null)!.Lines[0].Turkish);
-    }
-
-    /// <summary>Yalnız tam bir satır eksikse kısmi eşleşme var; hepsi bulununca <see cref="PackLookup.Match(string, Func{string, string?}, Func{string, string?}?)"/> yeter.</summary>
-    [Fact]
-    public void PartialMatchNeedsExactlyOneMissingLine()
-    {
-        Assert.Null(Partial("Get down!\nWho is that?"));
-        Assert.Null(Partial("Get out!\nWho are you?"));
-        Assert.Null(Partial("Get down!\nGet out!\nWho are you?"));
-        Assert.Null(Partial("Get out!"));
-        // Bulunmayan köşe yazısı eksik sayılmaz (Match onu zaten atlıyor).
-        Assert.Null(Partial("Get down!\nMirror Park"));
-        Assert.Equal(["Yere yat!", null], Partial("Get down!\nMirror Park\nWho are you?")!.Lines.Select(line => line.Turkish));
-    }
-
     /// <summary>Altyazının bloğuna düşen köşe yazısı (GTA V'te bölge adı, kamera ipucu) atlanır; tek başına eşleşme sayılmaz.</summary>
     [Fact]
     public void OverlayLineNextToTheSubtitleIsSkipped()
@@ -181,6 +151,26 @@ public class PackLookupTests
     }
 
     /// <summary>
+    /// Eşleşme kalitesi (Fixtures/pack-quality.json.gz, gerçek GTA 6 okumaları): yarım okunan satıra paketteki uzun satırın
+    /// tamamının Türkçesi gelmez, neredeyse tam okuma yine paketten gelir; büyük harfli tabelanın bulunmayan satırları köşe
+    /// yazısı sayılıp atlanmaz. Mac ve Android'le aynı vakalar, aynı sonuç.
+    /// </summary>
+    [Fact]
+    public void SharedPackQualityCases()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Fixture("pack-quality-cases.json")));
+        var library = new GamePackLibrary(() => [("pack-quality.json.gz", File.ReadAllBytes(Fixture("pack-quality.json.gz")))], null);
+        Assert.NotNull(PackLookup.Match(library, document.RootElement.GetProperty("warmUp").GetString()!));
+        Assert.Equal("quality-test", library.SearchScope);
+        foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            var screen = item.GetProperty("screen").GetString()!;
+            var expected = item.GetProperty("turkish").ValueKind == JsonValueKind.Null ? null : item.GetProperty("turkish").GetString();
+            Assert.True(expected == PackLookup.Match(library, screen)?.Text, $"{screen} => {PackLookup.Match(library, screen)?.Text} (beklenen {expected})");
+        }
+    }
+
+    /// <summary>
     /// Kullanıcılardan gelen gerçek ıskalamalar (Mafia: The Old Country, OCR hatalı, parça parça ve etiketi bozuk
     /// satırlar): paket betiğinin Python karşılığıyla ve Mac'le aynı Türkçe ya da hiç eşleşme (başka oyunların satırları).
     /// </summary>
@@ -206,7 +196,7 @@ public class PackLookupTests
 
     /// <summary>
     /// GTA V oyuncularının gerçek ıskalamaları (Mac'teki testGtaOcrReadsAreFound ile aynı): kısa satırda tek harf hatası,
-    /// yutulmuş kesme işareti, köşe yazısı, iki satırlık altyazının yalnız bir satırı ve başına çöp eklenmiş okuma.
+    /// yutulmuş kesme işareti, köşe yazısı ve başına çöp eklenmiş okuma; uzun satırın yalnız yarısı okunduysa tam çevirisi gelmez.
     /// </summary>
     [RealPackFact]
     public void GtaOcrReadsAreFound()
@@ -223,7 +213,8 @@ public class PackLookupTests
         Same("Yeah, well, well see.", "Yeah, well, we'll see.");
         Same("You cant put a price on freedom.", "You can't put a price on freedom.");
         Same("LOSNN\nI told him to leave it, Trevor.", "I told him to leave it, Trevor.");
-        Same("I can't do crap with this deathship right", "I can't do crap with this deathship right on top of me! Bring it down, T!");
+        // Uzun satırın yarısından biraz fazlası: paketteki tam çevirisi gösterilmez, motora gider.
+        Assert.Null(PackLookup.Match(library, "I can't do crap with this deathship right"));
         Same("San Andreas LOSNN but it does mean he's got money to pay people who help him.",
             "but it does mean he's got money to pay people who help him.");
         Assert.Null(PackLookup.Match(library, "The quick brown fox jumps over the lazy dog near the river bank."));

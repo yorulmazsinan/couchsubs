@@ -29,43 +29,6 @@ public static class PackLookup
         return Match(text, library.Find, line => asked.TryGetValue(line, out var known) ? known : asked[line] = library.Nearest(line));
     }
 
-    /// <summary>Kütüphanedeki paketlerde kısmi eşleşme (<see cref="MatchPartial(string, Func{string, string?}, Func{string, string?}?)"/>).</summary>
-    public static PackPartial? MatchPartial(GamePackLibrary library, string text)
-    {
-        if (TurkishText.LooksTurkish(text)) return null;
-        var asked = new Dictionary<string, string?>();
-        return MatchPartial(text, library.Find, line => asked.TryGetValue(line, out var known) ? known : asked[line] = library.Nearest(line));
-    }
-
-    /// <summary>
-    /// Çok satırlı okumada (iki konuşma alt alta) satırların hepsi pakette değilse <see cref="Match(string, Func{string, string?}, Func{string, string?}?)"/>
-    /// okumanın tamamını motora bırakır. Burada satırlar tek tek aranır (önce tam, sonra <paramref name="nearest"/>): yalnız bir
-    /// satır bulunamadıysa bulunanlar paketten, o satır motordan çevrilsin diye satır satır sonuç döner. Bulunamayan köşe
-    /// yazısı (<see cref="IsOverlay"/>) atlanır. Tek satırlı okumada, hepsi bulunduğunda, hiçbiri bulunmadığında ya da birden
-    /// çok satır bulunamadığında null.
-    /// </summary>
-    public static PackPartial? MatchPartial(string text, Func<string, string?> find, Func<string, string?>? nearest = null)
-    {
-        var lines = text.Trim().Replace("\r\n", "\n").Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
-        if (lines.Count < 2) return null;
-        var result = new List<PackLine>(lines.Count);
-        var missing = 0;
-        foreach (var line in lines)
-        {
-            var found = Single(line, find) ?? (nearest is null ? null : Single(line, piece => find(piece) ?? nearest(piece)));
-            if (found is { } hit)
-            {
-                var match = Result(hit.Pieces, hit.Translations);
-                result.Add(new PackLine(line, match.Text, match.Spoken));
-                continue;
-            }
-            if (IsOverlay(line)) continue;
-            missing++;
-            result.Add(new PackLine(line, null, []));
-        }
-        return missing == 1 && result.Count > 1 ? new PackPartial(result) : null;
-    }
-
     /// <param name="find">Tek bir metnin (tamamının) paketteki Türkçesi.</param>
     /// <param name="nearest">Tam anahtar yoksa en benzer satırın Türkçesi (bulanık arama); verilmezse yapılmaz.</param>
     public static PackMatch? Match(string text, Func<string, string?> find, Func<string, string?>? nearest = null)
@@ -87,15 +50,18 @@ public static class PackLookup
             var pieces = new List<SubtitleSegmenter.Piece>();
             var translations = new List<string?>();
             var all = true;
+            var skipped = false;
+            var subtitle = false;
             foreach (var line in lines)
             {
                 if (Single(line, find) is not { } found)
                 {
                     // Altyazıyla aynı bloğa düşen köşe yazısı ("San Andreas", "First Person • zoom") atlanır.
-                    if (IsOverlay(line)) continue;
+                    if (IsOverlay(line)) { skipped = true; continue; }
                     all = false;
                     break;
                 }
+                if (HasLowercase(line)) subtitle = true;
                 if (pieces.Count > 0)
                 {
                     pieces.Add(new SubtitleSegmenter.Piece("\n", false));
@@ -104,7 +70,10 @@ public static class PackLookup
                 pieces.AddRange(found.Pieces);
                 translations.AddRange(found.Translations);
             }
-            if (all && pieces.Count > 0) return Result(pieces, translations);
+            // Köşe yazısı yalnız bulunan satırlardan biri altyazıysa (küçük harf var) atlanır. Bütün satırları büyük harfli
+            // tabelada ("WARNING / WE OPERATE / CAMERAS IN / THIS AREA.") bulunmayan satırlar köşe yazısı değil tabelanın
+            // kendisidir: atlanınca yalnız "Uyarı / BU BÖLGE!" gösteriliyordu; tabela motorla çevrilir (Mac, Android aynı).
+            if (all && pieces.Count > 0 && (!skipped || subtitle)) return Result(pieces, translations);
         }
 
         // Cümle cümle (etiket, tire ve ayraçlar olduğu gibi kalır).
@@ -156,6 +125,9 @@ public static class PackLookup
             return Rune.IsUpper(runes[0]) && runes.All(rune => Rune.IsLetter(rune) || Rune.IsDigit(rune));
         });
     }
+
+    /// <summary>Satırda küçük harf var mı (altyazı satırı; tabela ve köşe yazısı çoğunlukla büyük harflidir).</summary>
+    internal static bool HasLowercase(string line) => line.EnumerateRunes().Any(Rune.IsLower);
 
     /// <summary>
     /// OCR'ın bozduğu konuşmacı etiketi: "-GAETANO:", "M]:", "li LUCA:", "MİNE GUARD•" (ilk 32 karakterde iki nokta ya da
