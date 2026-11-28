@@ -39,7 +39,7 @@
     {"name": "telefon sol elde, karanlık: kazançla açılır", "samples": [{"t": 0, "frame": "gta6-telefon-ana-1", "transform": "dark+mirror"}, {"t": 330, "frame": "gta6-telefon-ana-1", "transform": "dark+mirror"}], "opensAt": 1},
     {"name": "telefon sol elde, 720p: açılır", "samples": [{"t": 0, "frame": "gta6-telefon-ana-2", "transform": "mirror+scale720"}, {"t": 330, "frame": "gta6-telefon-ana-2", "transform": "mirror+scale720"}], "opensAt": 1}
   ],
-  "noPhone": {"transforms": ["none", "dark", "night", "gamma", "mirror", "scale:0.18", "gamma:2.8"], "samples": 3},
+  "noPhone": {"transforms": ["none", "dark", "night", "gamma", "mirror", "scale:0.18", "gamma:2.8", "scale:0.1", "scale:0.06", "scale:0.04", "nightgrade:0.12", "vignette:0.12", "gamma:4"], "samples": 3},
   "candidates": [
     {"name": "telefon yukarıda tutulmuş: altyazı hattı adayı bekletir, adayın yerinde telefonu doğrular", "frame": "gta6-telefon-sohbet-2", "transform": "shiftUp"}
   ],

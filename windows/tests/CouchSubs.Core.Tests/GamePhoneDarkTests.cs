@@ -137,6 +137,24 @@ public class GamePhoneDarkTests
         }
     }
 
+    /// <summary>Ton eşitleme simsiyaha yakın karede denenmez (<see cref="GamePhoneGeometry.Equalizable"/>): her platformda aynı.</summary>
+    [Fact]
+    public void EqualizationNeedsABrightEnd()
+    {
+        foreach (var item in Vectors().GetProperty("equalizable").EnumerateArray())
+        {
+            var counts = new int[1021];
+            var total = 0;
+            foreach (var pair in item.GetProperty("counts").EnumerateArray())
+            {
+                var values = pair.EnumerateArray().Select(v => v.GetInt32()).ToArray();
+                counts[values[0]] += values[1];
+                total += values[1];
+            }
+            Assert.True(GamePhoneGeometry.Equalizable(counts, total) == item.GetProperty("equalizable").GetBoolean(), item.GetProperty("name").GetString());
+        }
+    }
+
     /// <summary>
     /// Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
     /// ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.

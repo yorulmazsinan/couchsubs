@@ -436,15 +436,23 @@ object GamePhoneGeometry {
 
         /** Ton eşitlemeli kopya ([equalization]). */
         fun equalized(): Grid {
+            val counts = toneCounts()
+            return Grid(image, xs, ys, 256, equalization(counts, counts.sum()))
+        }
+
+        /** Ton eşitleme denenir mi ([GamePhoneGeometry.equalizable]). */
+        fun equalizable(): Boolean {
+            val counts = toneCounts()
+            return GamePhoneGeometry.equalizable(counts, counts.sum())
+        }
+
+        /** Izgaranın her iki noktasında bir ham ton (çeyrek ton adımıyla, 0–1020) sayıları. */
+        private fun toneCounts(): IntArray {
             val counts = IntArray(1021)
-            var total = 0
             for (y in 0 until 225 step 2) {
-                for (x in 0 until 400 step 2) {
-                    counts[minOf(1020, raw(x, y) shr 8)]++
-                    total++
-                }
+                for (x in 0 until 400 step 2) counts[minOf(1020, raw(x, y) shr 8)]++
             }
-            return Grid(image, xs, ys, 256, equalization(counts, total))
+            return counts
         }
 
         /** Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek. */
@@ -666,8 +674,9 @@ object GamePhoneGeometry {
         if (first.pose != null) return Search(first.pose, first.probe.copy(level = level))
         var probe = first.probe.copy(level = level)
         val gains = darkGains(level)
-        // Karanlık sahnede kazançlardan sonra ton eşitleme ([equalization]).
-        val passes = if (level < DARK_LEVEL) gains + EQUALIZED else gains
+        // Karanlık sahnede kazançlardan sonra ton eşitleme ([equalization]); kare simsiyaha yakınsa denenmez ([EQUALIZE_FLOOR]).
+        val dim = level < DARK_LEVEL && whole.equalizable()
+        val passes = if (dim) gains + EQUALIZED else gains
         for (gain in passes) {
             val dark = strictPicture(if (gain == EQUALIZED) whole.equalized() else whole.withGain(gain))
             if (dark.pose != null) return Search(dark.pose, dark.probe.copy(level = level, gain = gain))
@@ -677,7 +686,7 @@ object GamePhoneGeometry {
         }
         if (near == null) return Search(null, probe)
         val confirmed = confirmPicture(whole, near) ?: gains.firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
-            ?: if (level < DARK_LEVEL) confirmPicture(whole.equalized(), near) else null
+            ?: if (dim) confirmPicture(whole.equalized(), near) else null
         return Search(confirmed, probe)
     }
 
@@ -685,7 +694,15 @@ object GamePhoneGeometry {
     const val DARK_LEVEL = 56
     /** Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×). */
     const val DARK_TARGET = 96
-    val GAIN_STEPS = intArrayOf(384, 640, 1024)
+    /**
+     * Denenen kazançlar (×1,5–×12). Önceden en çok ×4'tü (1024): gece sahnesinde (beta-107 günlüğü, üst şerit 2–9/255)
+     * kasa ile hoparlör yarığı arasındaki fark birkaç tonda kalıyor, ×4'te de yarık eşiğinin (14 ton) altında kalıp sıkı
+     * arama "hoparlör yarığı yok"ta, "ön kamera yok"ta ve "alt çentik yok"ta takılıyordu; ton eşitleme ise geniş koyu
+     * alanlardaki tek tonluk kıpırtıyı onlarca tona büyütüp kasayı düz göstermiyordu ("kasa kenarı düz değil"). ×7 yalnız
+     * üst şerit 13/255, ×12 yalnız 8/255 ya da daha koyuyken denenir ([DARK_TARGET]); telefonsuz kareler bu
+     * karanlıkta da telefon açmıyor (Windows ve Mac/iPhone ile aynı).
+     */
+    val GAIN_STEPS = intArrayOf(384, 640, 1024, 1792, 3072)
 
     /** Kazanç yerine ton eşitleme ([equalization]): [Probe.gain]'de bu değer. */
     const val EQUALIZED = 0
@@ -707,6 +724,31 @@ object GamePhoneGeometry {
             below += counts[tone]
         }
         return map
+    }
+
+    /**
+     * Ton eşitlemenin denendiği en koyu "parlak uç": ızgaranın en parlak %1'i ([BRIGHT_SHARE]) en az bu tonda (0–255) olmalı.
+     * Karenin tamamı simsiyaha yakınsa (parlak uç 2–7/255; kararan geçiş, gece sahnesinin en koyusu) ton eşitleme bir iki
+     * tonluk sıkıştırma kıpırtısını 0–255'e yayıp telefonsuz karede telefon kuruyordu (Android'de gta6-n4-bildirim × 0,04:
+     * telefon açıldı). Ton eşitlemenin bulduğu gerçek telefonlarda (gamayla koyulaşmış, karanlık oda) ekran aydınlık kalır,
+     * parlak uç 22/255 ve üstü; bundan koyu karede telefonu ×7 ve ×12 kazanç bulur ([GAIN_STEPS]; Windows ve Mac/iPhone ile aynı).
+     */
+    const val EQUALIZE_FLOOR = 16
+
+    /** Parlak ucun ölçüldüğü pay: ızgara örneklerinin en parlak yüzde biri ([EQUALIZE_FLOOR]). */
+    const val BRIGHT_SHARE = 100
+
+    /**
+     * Ton eşitleme denenir mi ([EQUALIZE_FLOOR]): ham ton sayılarında ([counts], çeyrek ton adımıyla, toplam [total]) en
+     * parlak 1/[BRIGHT_SHARE]'ün en koyu tonu taban tonun (çeyrek ton adımıyla 4 × [EQUALIZE_FLOOR]) altında değilse true.
+     */
+    fun equalizable(counts: IntArray, total: Int): Boolean {
+        var brighter = 0
+        for (tone in counts.indices.reversed()) {
+            brighter += counts[tone]
+            if (brighter * BRIGHT_SHARE >= total) return tone >= 4 * EQUALIZE_FLOOR
+        }
+        return false
     }
 
     /**
@@ -765,7 +807,7 @@ object GamePhoneGeometry {
         val whole = Grid(image)
         val level = whole.level()
         return confirmPicture(whole, near) ?: darkGains(level).firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
-            ?: if (level < DARK_LEVEL) confirmPicture(whole.equalized(), near) else null
+            ?: if (level < DARK_LEVEL && whole.equalizable()) confirmPicture(whole.equalized(), near) else null
     }
 
     /**

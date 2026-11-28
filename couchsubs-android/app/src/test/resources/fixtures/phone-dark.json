@@ -1,5 +1,5 @@
 {
-  "about": "Karanlık sahnede ve koyu ekranlı GTA 6 telefonu (X, beta.104: \"telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor\"). Ortak deneme: Mac/iPhone GamePhoneDarkTests.swift, Windows GamePhoneDarkTests.cs, Android GamePhoneDarkTest.kt. 'gains': üst şeridin ortanca tonu (level) için denenen kazançlar (256 = 1×; boş: karanlık değil, kazanç denenmez). 'frames': testdata/frames gerçek kareleri phone-first-sighting.json'daki dönüşümlerle (none, dark, night, gamma); sıkı arama telefonu bulmalı, 'gain' true ise bulan aramanın kazancı 1×'ten büyük (kazanç gerekti). 'darkScreen': PhoneDarkScreen: 'histogram' [ton, adet] çiftleri; 'prepared' hazırlık yapılır mı; 'map' [giriş, çıkış] tonları. 'missLog': karanlıkta bulunamayan telefon 20 sn içinde tek satır yazar, parlaklık ve kazançla; 'missLine' satırın tam metni. 'equalization': GamePhoneGeometry.equalization: 'counts' [ham ton (dört noktanın toplamı / 256, 0–1020), adet] çiftleri; 'map' [ham ton, eşlenen ton] (255 × (2 × koyular + kendisi) / (2 × toplam), tam sayı bölme). 'darkVariants': gece, kapalı yer ve karanlık sahne (X, beta-107): gerçek telefon karelerinin phone-first-sighting.json'daki 'tür:değer' dönüşümleriyle karartılmış hâlleri; izleyici üç örnekte (330 ms arayla) telefonu açmalı. 'printSimilarity': PhonePrint.similarity (izin iki yarısının, üst ve alt şeridin, normalleştirilmiş çapraz ilintisinin küçüğü; bir yarının sapması 2048'den azsa ya da güncelinki kayıtlının 0,08'inden azsa 0). 'hold': telefon 'frame' (dönüşümsüz) ile dört örnekte açılır, sonra 'then' ('transform' ile) 'samples' örnek verilir; 'held' true ise her örnekte açık kalır (iz tuttu), false ise sonda kapalı; 'log' satırları günlükte. 'holdNoPhone': telefon 'openers' karelerinden biriyle açılır, sonra telefonsuz her kare (frames.json'da telefon işareti olmayanlar) 'transforms' ile 'samples' örnek verilir; sonda telefon kapalı olmalı (iz telefonsuz karede tutmaz).",
+  "about": "Karanlık sahnede ve koyu ekranlı GTA 6 telefonu (X, beta.104: \"telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor\"). Ortak deneme: Mac/iPhone GamePhoneDarkTests.swift, Windows GamePhoneDarkTests.cs, Android GamePhoneDarkTest.kt. 'gains': üst şeridin ortanca tonu (level) için denenen kazançlar (256 = 1×; boş: karanlık değil, kazanç denenmez). 'frames': testdata/frames gerçek kareleri phone-first-sighting.json'daki dönüşümlerle (none, dark, night, gamma); sıkı arama telefonu bulmalı, 'gain' true ise bulan aramanın kazancı 1×'ten büyük (kazanç gerekti). 'darkScreen': PhoneDarkScreen: 'histogram' [ton, adet] çiftleri; 'prepared' hazırlık yapılır mı; 'map' [giriş, çıkış] tonları. 'missLog': karanlıkta bulunamayan telefon 20 sn içinde tek satır yazar, parlaklık ve kazançla; 'missLine' satırın tam metni. 'equalization': GamePhoneGeometry.equalization: 'counts' [ham ton (dört noktanın toplamı / 256, 0–1020), adet] çiftleri; 'map' [ham ton, eşlenen ton] (255 × (2 × koyular + kendisi) / (2 × toplam), tam sayı bölme). 'equalizable': GamePhoneGeometry.equalizable: 'counts' (ham ton 0–1020, adet) ile ton eşitleme denenir mi; ızgaranın en parlak %1'inin en koyu tonu 64'ten (16/255) koyuysa false (kare simsiyaha yakın, ton eşitleme sıkıştırma kıpırtısından telefon kuruyordu). 'darkVariants': gece, kapalı yer ve karanlık sahne (X, beta-107): gerçek telefon karelerinin phone-first-sighting.json'daki 'tür:değer' dönüşümleriyle karartılmış hâlleri; izleyici üç örnekte (330 ms arayla) telefonu açmalı; çok karanlık hâller (scale:0.04–0.08, darkbg:0.08, nightgrade:0.1, gamma:4; üst şerit 1–6/255) beta-107 gece günlüğündeki gibi (parlaklık 2–9/255) ancak ×7 ve ×12 kazançla bulunur. 'printSimilarity': PhonePrint.similarity (izin iki yarısının, üst ve alt şeridin, normalleştirilmiş çapraz ilintisinin küçüğü; bir yarının sapması 2048'den azsa ya da güncelinki kayıtlının 0,08'inden azsa 0). 'hold': telefon 'frame' (dönüşümsüz) ile dört örnekte açılır, sonra 'then' ('transform' ile) 'samples' örnek verilir; 'held' true ise her örnekte açık kalır (iz tuttu), false ise sonda kapalı; 'log' satırları günlükte. 'holdNoPhone': telefon 'openers' karelerinden biriyle açılır, sonra telefonsuz her kare (frames.json'da telefon işareti olmayanlar) 'transforms' ile 'samples' örnek verilir; sonda telefon kapalı olmalı (iz telefonsuz karede tutmaz).",
   "gains": [
     {"level": 120, "gains": []},
     {"level": 56, "gains": []},
@@ -7,7 +7,9 @@
     {"level": 40, "gains": [384]},
     {"level": 30, "gains": [384, 640]},
     {"level": 20, "gains": [384, 640, 1024]},
-    {"level": 0, "gains": [384, 640, 1024]}
+    {"level": 12, "gains": [384, 640, 1024, 1792]},
+    {"level": 8, "gains": [384, 640, 1024, 1792, 3072]},
+    {"level": 0, "gains": [384, 640, 1024, 1792, 3072]}
   ],
   "frames": [
     {"name": "ana ekran, sahne × 0,6", "frame": "gta6-telefon-ana-1", "transform": "dark", "gain": true},
@@ -34,10 +36,17 @@
     {"name": "karanlık kare: koyu zemin, az sayıda açık nokta", "counts": [[10, 90], [40, 10]], "map": [[0, 0], [10, 114], [25, 229], [40, 242], [1020, 255]]},
     {"name": "dört ton", "counts": [[8, 30], [12, 40], [100, 25], [900, 5]], "map": [[0, 0], [8, 38], [12, 127], [50, 178], [100, 210], [500, 242], [900, 248], [1020, 255]]}
   ],
+  "equalizable": [
+    {"name": "simsiyaha yakın kare (parlak uç 6/255): ton eşitleme denenmez", "counts": [[0, 900], [16, 90], [24, 10]], "equalizable": false},
+    {"name": "aydınlık ekranlı karanlık kare (parlak uç 22/255)", "counts": [[0, 900], [88, 100]], "equalizable": true},
+    {"name": "sınırda: parlak uç tam 16/255", "counts": [[4, 990], [64, 10]], "equalizable": true},
+    {"name": "sınırın hemen altı", "counts": [[4, 990], [63, 10]], "equalizable": false},
+    {"name": "yüzde birden az parlak nokta sayılmaz", "counts": [[0, 995], [1000, 5]], "equalizable": false}
+  ],
   "darkVariants": [
     {"frame": "gta6-telefon-ana-1", "transforms": ["scale:0.18", "scale:0.12", "gamma:2.8", "gamma:3.4", "nightgrade:0.3", "vignette:0.3", "darkbg:0.3", "scale:0.12+mirror", "gamma:2.8+mirror"]},
-    {"frame": "gta6-telefon-ana-2", "transforms": ["scale:0.45", "scale:0.35", "scale:0.18", "scale:0.12", "gamma:1.8", "gamma:2.2", "gamma:2.8", "nightgrade:0.45", "nightgrade:0.3", "scale:0.25+mirror"]},
-    {"frame": "gta6-telefon-sohbet-1", "transforms": ["scale:0.12", "gamma:3.4", "nightgrade:0.3", "vignette:0.3", "darkbg:0.3"]},
+    {"frame": "gta6-telefon-ana-2", "transforms": ["scale:0.45", "scale:0.35", "scale:0.18", "scale:0.12", "gamma:1.8", "gamma:2.2", "gamma:2.8", "nightgrade:0.45", "nightgrade:0.3", "scale:0.25+mirror", "darkbg:0.2"]},
+    {"frame": "gta6-telefon-sohbet-1", "transforms": ["scale:0.12", "gamma:3.4", "nightgrade:0.3", "vignette:0.3", "darkbg:0.3", "scale:0.08", "scale:0.05", "scale:0.04", "darkbg:0.08", "nightgrade:0.1", "gamma:4"]},
     {"frame": "gta6-telefon-sohbet-2", "transforms": ["scale:0.18", "gamma:2.2", "nightgrade:0.3", "vignette:0.3"]}
   ],
   "printSimilarity": [
