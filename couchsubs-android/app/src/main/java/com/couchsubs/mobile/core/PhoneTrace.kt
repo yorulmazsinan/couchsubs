@@ -28,6 +28,22 @@ object PhoneTrace {
     /** Telefon kapandı: son yerdeki iz de tutmadı (en iyi benzerlik %). */
     fun printLost(similarity: Double) = "telefonun izi son yerinde tutmadı (benzerlik %${percent(similarity)})"
 
+    /**
+     * Açık telefon aramada ve izde bulunamadı, karanlık sahnede son yerindeki ekran ışığıyla tutuldu ([PhoneGlow]; ekranın ve
+     * çevresinin ortanca tonu, 0–255). Bu sırada telefonun alanında başka yollar bastırılır ([PhoneShield]).
+     */
+    fun glowHeld(screen: Double, ring: Double) =
+        "telefon karanlıkta aramada görünmedi, ekranının ışığıyla tutuluyor (ekran ${tone(screen)}/255, çevresi ${tone(ring)}/255)"
+
+    /** Telefon kapandı: son yerde ekran ışığı da tutmadı ya da ışıkla tutma süresi ([PhoneGlow.HOLD_MS]) doldu. */
+    fun glowLost(screen: Double, ring: Double) =
+        "telefonun ekran ışığı son yerinde tutmadı (ekran ${tone(screen)}/255, çevresi ${tone(ring)}/255)"
+
+    /** Telefon kapandı: ekran ışığıyla tutma süresi ([PhoneGlow.HOLD_MS], son gerçek gözlemden) doldu. */
+    val GLOW_EXPIRED = "telefonun ekran ışığıyla tutma süresi doldu (${PhoneGlow.HOLD_MS} ms)"
+
+    private fun tone(value: Double): Int = value.roundToInt()
+
     fun moving(share: Double) = "telefon oynuyor, açılmadı (%${percent(share)} oynama)"
 
     /** Okunacak karede telefon izlenen yerden çok uzakta: tur atlandı. */

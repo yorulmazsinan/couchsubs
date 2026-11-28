@@ -1441,6 +1441,8 @@ class RegionWatcher(
     /** Telefon açık: izleyicinin telefonu gördüğü son kare. Okuma sonraki [offer] turunda, 450 ms'de bir yapılır. */
     fun observePhone(capture: PhoneCapture) {
         val read = readPhone ?: return
+        if (phoneShield == null) synchronized(shieldLogged) { shieldLogged.clear() }
+        phoneShield = capture.region
         synchronized(lock) {
             (phoneSession ?: PhoneRegionSession(read, translator, sender, { phonePanel() }, phoneMemory)
                 .also {
@@ -1465,6 +1467,15 @@ class RegionWatcher(
             if (states[id]!!.shown.isNotEmpty()) cleared.add(id)
             states.remove(id)
         }
+        // Görev satırının kutusu telefonun alanındaysa (görev yolu telefonun yazısını okumuştu, #1443) o da kalkar.
+        val phone = phoneShield
+        val mission = states[MissionLine.AREA_ID]
+        val missionBox = mission?.renderedBox
+        if (phone != null && mission != null && mission.shown.isNotEmpty() && missionBox != null && PhoneShield.covers(missionBox, phone)) {
+            cleared.add(MissionLine.AREA_ID)
+            states.remove(MissionLine.AREA_ID)
+            onLog?.invoke("telefon açık: görev satırı yolunun telefonun üstündeki kutusu kaldırıldı")
+        }
         // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir). Hazır alanın kutusu kalkınca
         // izleyici de unutur: yazı yeniden okununca yeniden çizilir (#1391).
         val held = screenLock.displayedIds
@@ -1475,8 +1486,17 @@ class RegionWatcher(
         for (id in cleared) sender.sendRegion(id, "", null, null)
     }
 
+    /**
+     * Açık telefonun kutusu (kareye oranla): bu alanda başka yolların okuduğu satırlar atılır ([PhoneShield], #1443). Telefon
+     * kapalıyken null.
+     */
+    @Volatile private var phoneShield: CropRegion? = null
+    /** Telefonun bu açılışında satırları bastırıldığı günlüğe yazılan alanlar. */
+    private val shieldLogged = HashSet<String>()
+
     /** Telefon kapandı: kutusu kalkar, bekleyen çevirisi gösterilmez. */
     fun closePhone() {
+        phoneShield = null
         val phone = synchronized(lock) { phoneSession.also { phoneSession = null } }
         phone?.close()
     }
@@ -1758,7 +1778,12 @@ class RegionWatcher(
         // (bkz. [SubtitleEcho]). Menüde ve görev satırının kendi alanında yalnız metin eşleşmesi uygulanır.
         val geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.AREA_ID &&
             !ScreenNotices.isNotice(area.id)
-        val own = subtitleEcho?.filter(reading, area.region.box, geometry) ?: reading
+        // Telefon açıkken telefonun alanındaki satırlar telefon okuyucusunundur; bu yol onları okumaz ([PhoneShield], #1443).
+        val shielded = PhoneShield.filter(reading, area.region, phoneShield)
+        if (shielded.dropped > 0 && synchronized(shieldLogged) { shieldLogged.add(area.id) }) {
+            onLog?.invoke("telefon açık: ${area.name} yolunun telefonun alanındaki ${shielded.dropped} satırı bastırıldı, telefon önde")
+        }
+        val own = subtitleEcho?.filter(shielded.kept, area.region.box, geometry) ?: shielded.kept
         // Otomatik alanda aynı satırın yan yana okunan parçaları tek satırdır; menüde alanın kenarında kesik satır çevrilmez
         // ([joinedPieces], [cutAtAreaEdge]; Sinan Bey beta.100 3380-3383).
         val pieced = if (!area.auto) withoutPresetFragments(own, area) else {

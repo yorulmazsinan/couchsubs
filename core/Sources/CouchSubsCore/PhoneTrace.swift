@@ -26,6 +26,22 @@ public enum PhoneTrace {
         "telefonun izi son yerinde tutmadı (benzerlik %\(percent(similarity)))"
     }
 
+    /// Açık telefon aramada ve izde bulunamadı, karanlık sahnede son yerindeki ekran ışığıyla tutuldu (`PhoneGlow`; ekranın
+    /// ve çevresinin ortanca tonu, 0–255). Bu sırada telefonun alanında başka yollar bastırılır (`PhoneShield`).
+    public static func glowHeld(screen: Double, ring: Double) -> String {
+        "telefon karanlıkta aramada görünmedi, ekranının ışığıyla tutuluyor (ekran \(tone(screen))/255, çevresi \(tone(ring))/255)"
+    }
+
+    /// Telefon kapandı: son yerde ekran ışığı da tutmadı ya da ışıkla tutma süresi (`PhoneGlow.holdMs`) doldu.
+    public static func glowLost(screen: Double, ring: Double) -> String {
+        "telefonun ekran ışığı son yerinde tutmadı (ekran \(tone(screen))/255, çevresi \(tone(ring))/255)"
+    }
+
+    /// Telefon kapandı: ekran ışığıyla tutma süresi (`PhoneGlow.holdMs`, son gerçek gözlemden) doldu.
+    public static let glowExpired = "telefonun ekran ışığıyla tutma süresi doldu (\(PhoneGlow.holdMs) ms)"
+
+    private static func tone(_ value: Double) -> Int { Int(value.rounded(.toNearestOrAwayFromZero)) }
+
     /// Telefon bulundu ama önceki örnekten çok oynadı; iki uyumlu gözlem olmadığı için açılmadı.
     public static func moving(_ share: Double) -> String { "telefon oynuyor, açılmadı (%\(percent(share)) oynama)" }
 

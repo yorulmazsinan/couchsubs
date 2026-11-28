@@ -1,0 +1,43 @@
+{
+  "about": "Karanlık sahnede GTA 6 telefonunun ekran ışığıyla tutulması (PhoneGlow) ve telefon açıkken başka yolların telefonun alanındaki satırlarının bastırılması (PhoneShield). #1443, beta-108 Mac günlüğü: karanlık mekânda üst şerit 2–10/255, ortanca parlaklık 3–9/255; telefon ~1,1 sn görülmeyince kapanıyor (\"telefon kapandı (1047–1213 ms görülmedi, 3 ıska)\"), kasanın izi tutmuyor (\"benzerlik %0\"), görev satırı yolu telefonun mesajlarını okuyordu. Günlükteki kullanıcı verisi burada yok: yalnız ölçülen tonlar ve süreler. Ortak deneme: Mac/iPhone PhoneGlowTests.swift, Windows PhoneGlowTests.cs, Android PhoneGlowTest.kt. 'holds': PhoneGlow.lit(current) ve PhoneGlow.holds(recorded, current); glow [ekran, çevre] ortanca tonları (0–255). 'scene': 1920×1080 sentetik kare: her yer 'background' tonunda, telefon ekranı ('screenBox', kareye oranla [sol, üst, sağ, alt]) 'screen' tonunda; telefonun yeri 'pose' [üstX, üstY, altX, altY]. 'sequences': izleyici (sahte gözlem, gerçek karede ışık ölçümü) 'open' örnekte telefonu gözlemle açar (330 ms arayla); sonra 'then' parçaları gözlemsiz verilir: 'frame' lit (ekran yanık) ya da dark (telefon indirildi, ekran yok); 'background'/'screen' verilirse o parçada o tonlar; 'openAll' true ise parçanın her örneğinde telefon açık, 'openAtEnd' parçanın son örneğinde açık mı. 'log': günlükte geçmesi gereken, 'noLog': geçmemesi gereken parçalar. 'realFrame': gerçek karanlık oda karesi (gama 2,8) telefonun yerinde ışıklı ekran sayılır; telefonsuz gerçek karelerin (frames.json'da telefon işareti olmayanlar) 'transforms' hâllerinde aynı yerde ışık o kaydı tutmaz. 'shield': PhoneShield.filter: 'region' alan, 'phone' telefonun kutusu (null: telefon kapalı), satır kutuları alana oranla (null: kutusuz), 'kept' kalan satırlar; 'covers': PhoneShield.covers.",
+  "holds": [
+    {"name": "karanlık sahne, ekran yanık, aynı ışık", "recorded": [150, 6], "current": [140, 5], "lit": true, "holds": true},
+    {"name": "günlükteki en koyu sahne (çevre 2/255), ekran yanık", "recorded": [120, 2], "current": [118, 3], "lit": true, "holds": true},
+    {"name": "telefon indirildi: son yerde karanlık arka plan", "recorded": [150, 6], "current": [7, 6], "lit": false, "holds": false},
+    {"name": "çevre aydınlık (gündüz): ışık tutma yok", "recorded": [200, 120], "current": [200, 120], "lit": false, "holds": false},
+    {"name": "son yerde başka ışık (ekranın yarısından sönük)", "recorded": [150, 6], "current": [80, 6], "lit": true, "holds": false},
+    {"name": "ekran çevreden yalnız 30 ton aydınlık: ışıklı sayılmaz", "recorded": [150, 6], "current": [36, 6], "lit": false, "holds": false},
+    {"name": "kayıtlı ışık yok (aydınlık sahnede açıldı)", "recorded": [60, 50], "current": [140, 5], "lit": true, "holds": false}
+  ],
+  "scene": {"width": 1920, "height": 1080, "pose": [0.7, 0.25, 0.7, 0.85], "screenBox": [0.625, 0.28, 0.775, 0.82]},
+  "sequences": [
+    {"name": "karanlıkta arama ıskalıyor, ekran yanık: 6 sn'ye dek açık kalır, sonra kapanır", "background": 6, "screen": 150, "open": 3,
+     "then": [{"frame": "lit", "samples": 18, "openAll": true}, {"frame": "lit", "samples": 1, "openAtEnd": false}],
+     "log": ["telefon karanlıkta aramada görünmedi, ekranının ışığıyla tutuluyor (ekran 150/255, çevresi 6/255)", "telefon kapandı (6270 ms görülmedi, 19 ıska)", "telefonun ekran ışığıyla tutma süresi doldu (6000 ms)"]},
+    {"name": "telefon indirildi (karanlık sahne): her zamanki sürede kapanır, kutular takılı kalmaz", "background": 6, "screen": 150, "open": 3,
+     "then": [{"frame": "dark", "samples": 2, "openAll": true}, {"frame": "dark", "samples": 1, "openAtEnd": false}],
+     "log": ["telefon kapandı (990 ms görülmedi, 3 ıska)", "telefonun ekran ışığı son yerinde tutmadı (ekran 6/255, çevresi 6/255)"],
+     "noLog": ["ekranının ışığıyla tutuluyor"]},
+    {"name": "ışıkla tutulurken telefon indirildi: ışık gidince kapanır", "background": 6, "screen": 150, "open": 3,
+     "then": [{"frame": "lit", "samples": 6, "openAll": true}, {"frame": "dark", "samples": 1, "openAtEnd": false}],
+     "log": ["ekranının ışığıyla tutuluyor", "telefonun ekran ışığı son yerinde tutmadı"]},
+    {"name": "aydınlık sahne: ışıkla tutma yok, her zamanki sürede kapanır", "background": 120, "screen": 200, "open": 3,
+     "then": [{"frame": "lit", "samples": 2, "openAll": true}, {"frame": "lit", "samples": 1, "openAtEnd": false}],
+     "noLog": ["ekranının ışığıyla tutuluyor"]}
+  ],
+  "realFrame": {"frame": "gta6-telefon-ana-2", "transform": "gamma:2.8", "transforms": ["none", "gamma:2.8", "scale:0.35", "nightgrade:0.3"]},
+  "shield": [
+    {"name": "görev satırı yolu: telefonun içindeki mesaj atılır, telefonun dışındaki görev kalır, kutusuz satır kalır",
+     "region": [0.14, 0.62, 0.86, 0.97], "phone": [0.62, 0.26, 0.78, 0.84],
+     "lines": [{"text": "REMEMBER DON'T TEXT BACK", "box": [0.74, 0.1, 0.82, 0.3]}, {"text": "Go to the motel.", "box": [0.1, 0.5, 0.4, 0.7]}, {"text": "Kutusuz", "box": null}],
+     "kept": ["Go to the motel.", "Kutusuz"]},
+    {"name": "telefonun payının içi (kenardan 0,02) de telefonun", "region": [0.14, 0.62, 0.86, 0.97], "phone": [0.62, 0.26, 0.78, 0.84],
+     "lines": [{"text": "Edge", "box": [0.65, 0.1, 0.67, 0.2]}], "kept": []},
+    {"name": "telefon kapalı: hiçbir satır atılmaz", "region": [0.14, 0.62, 0.86, 0.97], "phone": null,
+     "lines": [{"text": "REMEMBER DON'T TEXT BACK", "box": [0.74, 0.1, 0.82, 0.3]}], "kept": ["REMEMBER DON'T TEXT BACK"]}
+  ],
+  "covers": [
+    {"box": [0.66, 0.5, 0.74, 0.55], "phone": [0.62, 0.26, 0.78, 0.84], "covers": true},
+    {"box": [0.1, 0.9, 0.3, 0.95], "phone": [0.62, 0.26, 0.78, 0.84], "covers": false}
+  ]
+}
