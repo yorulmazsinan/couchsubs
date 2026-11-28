@@ -131,6 +131,42 @@ class PhoneGlowTest {
         }
     }
 
+    /**
+     * Altyazı hattının kendi telefon takibi de karanlıkta ekran ışığıyla tutulur (izleyiciyle aynı eşikler ve süre): tutulan
+     * telefonun satırları altyazı sayılmaz; telefon indirilince her zamanki gibi kalkar.
+     */
+    @Test
+    fun subtitlePipelineHoldsTheDarkPhoneByItsScreen() {
+        val p = doubles(vectors.getJSONObject("scene").getJSONArray("pose"))
+        val pose = GamePhoneGeometry.Pose(p[0], p[1], p[2], p[3])
+        val handset = ScreenPhoneCard.Handset(pose, 16.0 / 9)
+        val sequences = vectors.getJSONArray("subtitle")
+        for (i in 0 until sequences.length()) {
+            val sequence = sequences.getJSONObject(i)
+            val name = sequence.getString("name")
+            val keeper = PhoneGlowKeeper()
+            var shown: ScreenPhoneCard.Handset? = null
+            var misses = 0
+            var t = 0L
+            var step = 0
+            val steps = sequence.getJSONArray("steps")
+            for (j in 0 until steps.length()) {
+                val item = steps.getJSONObject(j)
+                val found = item.getBoolean("found")
+                val glow = if (item.isNull("glow")) null else glow(item.getJSONArray("glow"))
+                repeat(item.optInt("repeat", 1)) {
+                    val result = keeper.observe(if (found) pose else null, shown?.pose, t) { glow }
+                    val (next, count) = SubtitlePipeline.heldPhone(if (found) handset else null, shown, misses, result.holds)
+                    shown = next
+                    misses = count
+                    step++
+                    assertEquals("$name: $step. arama", item.getBoolean("open"), shown != null)
+                    t += GamePhoneTracker.INTERVAL_MS
+                }
+            }
+        }
+    }
+
     @Test
     fun shieldDropsOtherRoutesLinesOnThePhone() {
         val items = vectors.getJSONArray("shield")

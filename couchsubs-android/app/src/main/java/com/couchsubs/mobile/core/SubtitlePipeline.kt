@@ -88,9 +88,15 @@ class SubtitlePipeline(
         fun holdsCandidate(candidate: ScreenPhoneCard.Handset?, since: Long, now: Long): Boolean =
             candidate != null && now >= since && now - since < CANDIDATE_HOLD_MS
 
+        /**
+         * [glowing]: açık telefon son yerinde ekran ışığıyla tutuluyor ([PhoneGlowKeeper], #1443): telefon bırakılmaz,
+         * ıskalar [GamePhoneTracker.MISS_GRACE]'te durur; ışık tutmayınca (süre doldu, telefon indirildi) ilk ıskada kalkar
+         * (izleyiciyle aynı süre).
+         */
         fun heldPhone(found: ScreenPhoneCard.Handset?, shown: ScreenPhoneCard.Handset?,
-                      misses: Int): Pair<ScreenPhoneCard.Handset?, Int> {
+                      misses: Int, glowing: Boolean = false): Pair<ScreenPhoneCard.Handset?, Int> {
             if (found != null) return found to 0
+            if (shown != null && glowing) return shown to minOf(misses + 1, GamePhoneTracker.MISS_GRACE)
             if (shown == null || misses >= GamePhoneTracker.MISS_GRACE) return null to 0
             return shown to misses + 1
         }

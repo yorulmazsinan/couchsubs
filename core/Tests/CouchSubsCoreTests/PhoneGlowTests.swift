@@ -109,6 +109,34 @@ final class PhoneGlowTests: XCTestCase {
         }
     }
 
+    /// Altyazı hattının kendi telefon takibi de karanlıkta ekran ışığıyla tutulur (izleyiciyle aynı eşikler ve süre): tutulan
+    /// telefonun satırları altyazı sayılmaz; telefon indirilince her zamanki gibi kalkar.
+    @MainActor
+    func testSubtitlePipelineHoldsTheDarkPhoneByItsScreen() throws {
+        let vectors = try vectors()
+        let p = Self.doubles((vectors["scene"] as! [String: Any])["pose"])
+        let pose = GamePhoneGeometry.Pose(topX: p[0], topY: p[1], bottomX: p[2], bottomY: p[3])
+        let handset = ScreenPhoneCard.Handset(pose: pose, aspect: 16.0 / 9)
+        for sequence in vectors["subtitle"] as! [[String: Any]] {
+            let name = sequence["name"] as! String
+            var keeper = PhoneGlowKeeper()
+            var shown: ScreenPhoneCard.Handset?
+            var misses = 0
+            var t = 0, step = 0
+            for item in sequence["steps"] as! [[String: Any]] {
+                let found = item["found"] as! Bool
+                let glow = (item["glow"] as? [NSNumber]).map { PhoneGlow.Glow(screen: $0[0].doubleValue, ring: $0[1].doubleValue) }
+                for _ in 0..<((item["repeat"] as? NSNumber)?.intValue ?? 1) {
+                    let result = keeper.observe(found: found ? pose : nil, shown: shown?.pose, now: t, measure: { _ in glow })
+                    shown = SubtitlePipeline.heldPhone(found ? handset : nil, shown: shown, misses: &misses, glowing: result.holds)
+                    step += 1
+                    XCTAssertEqual(shown != nil, item["open"] as! Bool, "\(name): \(step). arama")
+                    t += GamePhoneTracker.intervalMs
+                }
+            }
+        }
+    }
+
     func testShieldDropsOtherRoutesLinesOnThePhone() throws {
         let vectors = try vectors()
         for item in vectors["shield"] as! [[String: Any]] {

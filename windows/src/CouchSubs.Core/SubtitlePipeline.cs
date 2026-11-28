@@ -337,6 +337,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// Android ile aynı).
     /// </summary>
     private int phoneMisses;
+    /// <summary>Açık telefonun ekran ışığı: karanlıkta arama ıskalasa da ışığı tutan telefon bırakılmaz (<see cref="PhoneGlowKeeper"/>, #1443).</summary>
+    private readonly PhoneGlowKeeper phoneGlow = new();
     /// <summary>Günlüğe yazılmış son telefon yazısı (her karede yeniden yazılmasın).</summary>
     private string? loggedPhone;
     /// <summary>
@@ -467,7 +469,13 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 ScreenPhoneCard.Handset? next;
                 lock (gate)
                 {
-                    next = phone = HeldPhone(found, phone, ref phoneMisses);
+                    // Karanlıkta arama ıskalarsa son yerinde ekranın ışığına bakılır (izleyiciyle aynı eşikler ve süre, #1443).
+                    var glowing = phoneGlow.Observe(found?.Pose, phone?.Pose, captured, pose => GamePhoneGeometry.Glow(frame, pose));
+                    if (glowing.Began is { } began)
+                        Write("telefon karanlıkta ekranının ışığıyla tutuluyor, ekranındaki satırlar altyazı sayılmıyor (ekran "
+                              + $"{(int)Math.Round(began.Screen, MidpointRounding.AwayFromZero)}/255, çevresi "
+                              + $"{(int)Math.Round(began.Ring, MidpointRounding.AwayFromZero)}/255)");
+                    next = phone = HeldPhone(found, phone, ref phoneMisses, glowing.Holds);
                     (phoneCandidate, phoneCandidateSince) = Candidate(next is null ? weak : null, phoneCandidate, phoneCandidateSince, captured);
                 }
                 PhoneLooked?.Invoke(next is not null);
@@ -1664,6 +1672,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             phone = null;
             phoneLookedAt = null;
             phoneMisses = 0;
+            phoneGlow.Reset();
             loggedPhone = null;
             phoneCandidate = null;
             phoneCandidateSince = 0;
@@ -1693,12 +1702,23 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     internal static bool HoldsCandidate(ScreenPhoneCard.Handset? candidate, long since, long now) =>
         candidate is not null && now >= since && now - since < CandidateHoldMs;
 
-    internal static ScreenPhoneCard.Handset? HeldPhone(ScreenPhoneCard.Handset? found, ScreenPhoneCard.Handset? shown, ref int misses)
+    /// <summary>
+    /// <paramref name="glowing"/>: açık telefon son yerinde ekran ışığıyla tutuluyor (<see cref="PhoneGlowKeeper"/>, #1443):
+    /// telefon bırakılmaz, ıskalar <see cref="GamePhoneTracker.MissGrace"/>'te durur; ışık tutmayınca (süre doldu, telefon
+    /// indirildi) ilk ıskada kalkar (izleyiciyle aynı süre).
+    /// </summary>
+    internal static ScreenPhoneCard.Handset? HeldPhone(ScreenPhoneCard.Handset? found, ScreenPhoneCard.Handset? shown, ref int misses,
+                                                      bool glowing = false)
     {
         if (found is not null)
         {
             misses = 0;
             return found;
+        }
+        if (shown is not null && glowing)
+        {
+            misses = Math.Min(misses + 1, GamePhoneTracker.MissGrace);
+            return shown;
         }
         if (shown is null || misses >= GamePhoneTracker.MissGrace)
         {

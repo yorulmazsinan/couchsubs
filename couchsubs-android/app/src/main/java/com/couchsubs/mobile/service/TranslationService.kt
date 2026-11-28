@@ -475,6 +475,8 @@ class TranslationService : Service() {
      * aramada bulunamazsa kalkar ([com.couchsubs.mobile.core.SubtitlePipeline.heldPhone]; Mac/iPhone ve Windows ile aynı).
      */
     private var subtitlePhoneMisses = 0
+    /** Açık telefonun ekran ışığı: karanlıkta arama ıskalasa da ışığı tutan telefon bırakılmaz ([com.couchsubs.mobile.core.PhoneGlowKeeper], #1443). */
+    private val subtitlePhoneGlow = com.couchsubs.mobile.core.PhoneGlowKeeper()
     /**
      * Doğrulanmamış telefon adayı ve ilk görüldüğü an: ekranındaki satırlar kısa süre altyazı sayılmaz
      * ([com.couchsubs.mobile.core.SubtitlePipeline.CANDIDATE_HOLD_MS]; #1251, Mac/iPhone ve Windows ile aynı).
@@ -1060,6 +1062,7 @@ class TranslationService : Service() {
                 if (!playsGta6) {
                     subtitlePhone = null
                     subtitlePhoneMisses = 0
+                    subtitlePhoneGlow.reset()
                     subtitlePhoneCandidate = null
                 } else if (now - subtitlePhoneAt >= com.couchsubs.mobile.core.GamePhoneTracker.INTERVAL_MS || now < subtitlePhoneAt) {
                     subtitlePhoneAt = now
@@ -1072,7 +1075,17 @@ class TranslationService : Service() {
                         null
                     }
                     regionWatcher?.timing?.add(com.couchsubs.mobile.core.RegionWatcher.STAGE_TRACK, System.nanoTime() - started)
-                    val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked?.phone, subtitlePhone, subtitlePhoneMisses)
+                    // Karanlıkta arama ıskalarsa son yerinde ekranın ışığına bakılır (izleyiciyle aynı eşikler ve süre, #1443).
+                    val image = com.couchsubs.mobile.ocr.LivePhoneImage(frame)
+                    val glowing = subtitlePhoneGlow.observe(looked?.phone?.pose, subtitlePhone?.pose, now) {
+                        try { com.couchsubs.mobile.core.GamePhoneGeometry.glow(image, it) } catch (error: Exception) { null }
+                    }
+                    glowing.began?.let { began ->
+                        Log.i(TAG, "telefon karanlıkta ekranının ışığıyla tutuluyor, ekranındaki satırlar altyazı sayılmıyor (ekran " +
+                            "${Math.round(began.screen)}/255, çevresi ${Math.round(began.ring)}/255)")
+                    }
+                    val (next, misses) = com.couchsubs.mobile.core.SubtitlePipeline.heldPhone(looked?.phone, subtitlePhone,
+                        subtitlePhoneMisses, glowing.holds)
                     subtitlePhone = next
                     subtitlePhoneMisses = misses
                     val (candidate, since) = com.couchsubs.mobile.core.SubtitlePipeline.candidate(
