@@ -24,6 +24,7 @@ public final class GamePhoneTracker {
             return (pose, pose != nil && probe.step == .found, probe)
         }
         holds = true
+        glows = true
     }
     /// Açık telefon ıskalanınca son yerinde izi karşılaştırılır mı (`PhonePrint`; gerçek aramada; denemelerin sahte
     /// gözlemlerinde kapalı).
@@ -35,16 +36,26 @@ public final class GamePhoneTracker {
     private var lastSimilarity = 0.0
     /// İz gerçek gözlemde en çok bu aralıkla (ms) yenilenir.
     static let printRefreshMs = 1000
+    /// Açık telefon arama ve izde ıskalanınca son yerinde ekranının ışığına bakılır mı (`PhoneGlow`; gerçek aramada ve
+    /// ışık denemelerinde).
+    private var glows = false
+    /// Son gerçek gözlemde ışıklı ekran (karanlık sahnede; yoksa nil), alındığı an, ışıkla tutuluyor mu ve son ölçülen ışık.
+    private var glow: PhoneGlow.Glow?
+    private var glowAt: Int?
+    private var glowing = false
+    private var lastGlow: PhoneGlow.Glow?
     init(locate: @escaping (CGImage) -> GamePhoneGeometry.Pose?) { sight = { image, _ in (locate(image), true, nil) } }
     init(locate: @escaping (CGImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) {
         sight = { image, near in (locate(image, near), true, nil) }
     }
-    /// Denemeler: gözlem ve gücü (strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday).
-    init(sight: @escaping (CGImage) -> (pose: GamePhoneGeometry.Pose, strict: Bool)?) {
+    /// Denemeler: gözlem ve gücü (strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday). `glows`: açık
+    /// telefon ıskalanınca ekran ışığına gerçek karede bakılır (`PhoneGlow`).
+    init(sight: @escaping (CGImage) -> (pose: GamePhoneGeometry.Pose, strict: Bool)?, glows: Bool = false) {
         self.sight = { image, _ in
             guard let seen = sight(image) else { return (nil, false, nil) }
             return (seen.pose, seen.strict, nil)
         }
+        self.glows = glows
     }
 
     private func note(_ reason: String) { trace.note(PhoneTrace.component, reason, "", log: onLog) }
@@ -109,6 +120,19 @@ public final class GamePhoneTracker {
                 held = true
             }
         }
+        // Açık telefon aramada da izde de ıskalandı: karanlık sahnede ekranı son gerçek gözlemdeki kadar aydınlıksa ve çevresi
+        // karanlıksa telefon yerinde sayılır, `PhoneGlow.holdMs` dolana dek kapanmaz (#1443: kasa koyu ve düz, iz tutmuyor,
+        // telefon ~1 sn'de bir kapanıp açılıyordu). Telefon indirilince son yerde ışık kalmaz, her zamanki sürede kapanır.
+        var glowHeld = false, glowExpired = false
+        lastGlow = nil
+        if glows, found == nil, let current = shown, let glow {
+            if Self.elapsed(since: lastSeen, now) < PhoneGlow.holdMs {
+                lastGlow = GamePhoneGeometry.glow(image, current)
+                glowHeld = lastGlow.map { PhoneGlow.holds(glow, $0) } ?? false
+            } else {
+                glowExpired = true
+            }
+        }
         let points = found == nil ? 0 : strict ? Self.strongPoints : Self.weakPoints
         var unseen = (ms: 0, misses: 0)
         var movedFrom: GamePhoneGeometry.Pose?
@@ -119,8 +143,11 @@ public final class GamePhoneTracker {
             shown = found
             misses = 0
             lastSeen = now
-            if !held { keepPrint(image, found, now: now) }
-        } else if shown != nil, !Self.closes(misses: misses + 1, unseenMs: Self.elapsed(since: lastSeen, now)) {
+            if !held {
+                keepPrint(image, found, now: now)
+                keepGlow(image, found, now: now)
+            }
+        } else if shown != nil, glowHeld || !Self.closes(misses: misses + 1, unseenMs: Self.elapsed(since: lastSeen, now)) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
             // bildirim). Telefon gerçekten indirilince `missGraceMs` sonra kapanır (`closes`).
@@ -150,7 +177,10 @@ public final class GamePhoneTracker {
                 lastSeen = now
                 clearPending()
                 print = nil
+                glow = nil
+                glowAt = nil
                 keepPrint(image, found, now: now)
+                keepGlow(image, found, now: now)
             }
         } else if pending != nil {
             pendingMisses += 1
@@ -164,10 +194,20 @@ public final class GamePhoneTracker {
         } else if wasShown, shown == nil {
             note(PhoneTrace.closed(afterMs: unseen.ms, misses: unseen.misses))
             if holds, print != nil { note(PhoneTrace.printLost(lastSimilarity)) }
+            if glowExpired {
+                note(PhoneTrace.glowExpired)
+            } else if glows, glow != nil, let lastGlow {
+                note(PhoneTrace.glowLost(screen: lastGlow.screen, ring: lastGlow.ring))
+            }
             print = nil
+            glow = nil
+            glowAt = nil
+            lastGlow = nil
         }
         if held, !holding { note(PhoneTrace.held(lastSimilarity)) }
         holding = held && shown != nil
+        if glowHeld, !glowing, let lastGlow { note(PhoneTrace.glowHeld(screen: lastGlow.screen, ring: lastGlow.ring)) }
+        glowing = glowHeld && shown != nil
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if shown == nil, let found, let movedFrom {
             note(PhoneTrace.moving(PhoneTrace.shift(found.bounds, movedFrom.bounds)))
@@ -192,6 +232,14 @@ public final class GamePhoneTracker {
               let fresh = GamePhoneGeometry.print(image, pose) else { return }
         print = fresh
         printAt = now
+    }
+
+    /// Açık telefonun ekran ışığını gerçek gözlemden alır (en çok `printRefreshMs`'de bir): karanlık sahnede ışıklı ekran
+    /// (`PhoneGlow.lit`) değilse nil.
+    private func keepGlow(_ image: CGImage, _ pose: GamePhoneGeometry.Pose, now: Int) {
+        guard glows, glowAt.map({ now < $0 || now - $0 >= Self.printRefreshMs }) ?? true else { return }
+        glow = GamePhoneGeometry.glow(image, pose).flatMap { PhoneGlow.lit($0) ? $0 : nil }
+        glowAt = now
     }
 
     private func pendingFresh(_ now: Int) -> Bool { pending != nil && now >= pendingAt && now - pendingAt <= Self.pendingMs }
@@ -255,6 +303,10 @@ public final class GamePhoneTracker {
         clearPending()
         print = nil
         holding = false
+        glow = nil
+        glowAt = nil
+        glowing = false
+        lastGlow = nil
         missLog.reset()
         status.reset()
     }
@@ -469,6 +521,12 @@ public enum GamePhoneGeometry {
     static func print(_ image: CGImage, _ pose: Pose) -> [Int]? {
         guard let view = PictureView(image), let grid = Grid(view.image, columns: 0..<400, height: 225) else { return nil }
         return PhonePrint.samples(view.inside(pose), dx: 0, dy: 0, raw: grid.raw)
+    }
+
+    /// `pose`'taki telefonun ekran ışığı (`PhoneGlow`). Kare 16:9 değilse görüntü bulunamazsa nil.
+    static func glow(_ image: CGImage, _ pose: Pose) -> PhoneGlow.Glow? {
+        guard let view = PictureView(image), let grid = Grid(view.image, columns: 0..<400, height: 225) else { return nil }
+        return PhoneGlow.measure(view.inside(pose), raw: grid.raw)
     }
 
     /// Açık telefonun son yerinde izi tutuyor mu (`PhonePrint.match`): tutarsa izin bulunduğu yer (kayma kadar oynamış) ve

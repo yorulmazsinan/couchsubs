@@ -14,6 +14,8 @@ final class PhoneRegionSession {
         var time = 0
         /// Telefonun oturum başındaki izi (`PhonePrint`): arama ıskalarsa son yerinde iz karşılaştırılır.
         var print: [Int]?
+        /// Telefonun oturum başındaki ekran ışığı (`PhoneGlow`; karanlık sahnede ışıklı ekran, yoksa nil).
+        var glow: PhoneGlow.Glow?
         var region: CropRegion { pose.bounds }
 
         func isPresent() -> Bool { absence() == nil }
@@ -26,7 +28,12 @@ final class PhoneRegionSession {
         /// `PhoneSteady.missTurns` tur sonra siliniyordu (X, beta-107: "bir kez çevrildi, sonra kayboldu"; Windows ile aynı).
         func absence() -> String? {
             let held = { print.flatMap { GamePhoneGeometry.hold(frame, pose, print: $0).pose } }
-            guard let found = GamePhoneGeometry.locate(frame, near: pose) ?? held() else { return PhoneTrace.missing }
+            // Karanlık sahnede iz de tutmazsa ekranın ışığı (`PhoneGlow`, #1443): izleyici telefonu ışığıyla açık tutarken
+            // okuma turları atlanıp çeviri siliniyordu.
+            let lit = { glow.flatMap { recorded in
+                GamePhoneGeometry.glow(frame, pose).flatMap { PhoneGlow.holds(recorded, $0) ? pose : nil }
+            } }
+            guard let found = GamePhoneGeometry.locate(frame, near: pose) ?? held() ?? lit() else { return PhoneTrace.missing }
             return region.isClose(to: found.bounds, tolerance: 0.035) ? nil
                 : PhoneTrace.displaced(PhoneTrace.shift(found.bounds, region))
         }
@@ -58,6 +65,9 @@ final class PhoneRegionSession {
     private var latest: Capture?
     /// Telefonun oturum başındaki izi (`PhonePrint`; `Capture.absence`).
     private var print: [Int]?
+    /// Telefonun oturum başındaki ekran ışığı (`PhoneGlow`; `Capture.absence`) ve alınıp alınmadığı.
+    private var glow: PhoneGlow.Glow?
+    private var glowTaken = false
     private var lastPass: Int?
     private var task: Task<Void, Never>?
     private var page: Page?
@@ -137,7 +147,11 @@ final class PhoneRegionSession {
     func observe(_ frame: CGImage, pose: GamePhoneGeometry.Pose, at time: Int = SubtitleStabilizer.uptimeMs()) {
         // Telefonun izi oturumun ilk karesinden (izleyici telefonu bu karede açtı).
         if print == nil { print = GamePhoneGeometry.print(frame, pose) }
-        latest = Capture(frame: frame, pose: pose, time: time, print: print)
+        if !glowTaken {
+            glowTaken = true
+            glow = GamePhoneGeometry.glow(frame, pose).flatMap { PhoneGlow.lit($0) ? $0 : nil }
+        }
+        latest = Capture(frame: frame, pose: pose, time: time, print: print, glow: glow)
     }
 
     /// Türkçe çizimde balonlar her zaman kendi yerinde (panel yok).
@@ -171,6 +185,8 @@ final class PhoneRegionSession {
     func close() {
         latest = nil
         print = nil
+        glow = nil
+        glowTaken = false
         shownPage = nil
         shownList = nil
         kindVotes = 0

@@ -203,6 +203,11 @@ public final class RegionWatcher {
     private var states: [String: State] = [:]
     private var lastPass: Int?
     private var phoneSession: PhoneRegionSession?
+    /// Açık telefonun kutusu (kareye oranla): bu alanda başka yolların okuduğu satırlar atılır (`PhoneShield`, #1443).
+    /// Telefon kapalıyken nil.
+    var phoneShield: CropRegion?
+    /// Telefonun bu açılışında satırları bastırıldığı günlüğe yazılan alanlar.
+    private var shieldLogged = Set<String>()
     /// Telefonun açılışları arasında kalan çeviriler ve panelin yazı boyu (`PhoneMemory`); `reset` unutturur.
     private let phoneMemory = PhoneMemory()
     public var englishPhoneMessages = false
@@ -351,6 +356,13 @@ public final class RegionWatcher {
             if !state.shown.isEmpty { cleared.insert(id) }
             states[id] = nil
         }
+        // Görev satırının kutusu telefonun alanındaysa (görev yolu telefonun yazısını okumuştu, #1443) o da kalkar.
+        if let phone = phoneShield, let state = states[MissionLine.areaId], !state.shown.isEmpty,
+           let box = state.renderedBox, PhoneShield.covers(box, phone: phone) {
+            cleared.insert(MissionLine.areaId)
+            states[MissionLine.areaId] = nil
+            onLog?("telefon açık: görev satırı yolunun telefonun üstündeki kutusu kaldırıldı")
+        }
         // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir). Hazır alanın kutusu kalkınca
         // izleyici de unutur: yazı yeniden okununca yeniden çizilir (#1391).
         for id in screenLock.displayed.keys where !cleared.contains(id) { states[id] = nil }
@@ -362,6 +374,8 @@ public final class RegionWatcher {
 
     /// Her karede çağrılır; tur zamanı geldiyse ve önceki tur bittiyse turu arka planda başlatır, hemen döner.
     public func offer(_ frame: CGImage, areas: [ExtraArea], phone pose: GamePhoneGeometry.Pose? = nil, capturedAt: Int? = nil) {
+        if (pose == nil) != (phoneShield == nil) { shieldLogged.removeAll() }
+        phoneShield = pose?.bounds
         if let pose {
             if phoneSession == nil {
                 let session = PhoneRegionSession(reader: reader, translator: translator, server: server)
@@ -595,7 +609,12 @@ public final class RegionWatcher {
         let place = TextBox(left: region.left, top: region.top, right: region.right, bottom: region.bottom)
         let geometry = (area.auto || GameAreaPresets.isPreset(area.id)) && !area.menu && area.id != MissionLine.areaId
             && !ScreenNotices.isNotice(id: area.id)
-        let own = subtitleEcho?.filter(reading, place: place, geometry: geometry) ?? reading
+        // Telefon açıkken telefonun alanındaki satırlar telefon okuyucusunundur; bu yol onları okumaz (`PhoneShield`, #1443).
+        let shielded = PhoneShield.filter(reading, region: region, phone: phoneShield)
+        if shielded.dropped > 0, shieldLogged.insert(area.id).inserted {
+            onLog?("telefon açık: \(area.name) yolunun telefonun alanındaki \(shielded.dropped) satırı bastırıldı, telefon önde")
+        }
+        let own = subtitleEcho?.filter(shielded.kept, place: place, geometry: geometry) ?? shielded.kept
         // Kullanıcının kendi ek alanı da (#1324: "Telefon (sağ alt)" alanındaki tuş ipuçları) hazır ve otomatik alan gibi
         // özgün stilinde, grup grup ve çizim kipiyle (yanına yazma, ikiz kutu) çizilir: önceden tek kutu tuş simgelerinin
         // üstünü örtüyor, yazı boyu her okumada alanın kutusuna göre değişiyordu. Windows ve Android aynı.

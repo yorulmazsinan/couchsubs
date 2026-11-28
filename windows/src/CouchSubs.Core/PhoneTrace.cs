@@ -27,6 +27,22 @@ public static class PhoneTrace
     /// <summary>Telefon kapandı: son yerdeki iz de tutmadı (en iyi benzerlik %).</summary>
     public static string PrintLost(double similarity) => $"telefonun izi son yerinde tutmadı (benzerlik %{Percent(similarity)})";
 
+    /// <summary>
+    /// Açık telefon aramada ve izde bulunamadı, karanlık sahnede son yerindeki ekran ışığıyla tutuldu (<see cref="PhoneGlow"/>;
+    /// ekranın ve çevresinin ortanca tonu, 0–255). Bu sırada telefonun alanında başka yollar bastırılır (<see cref="PhoneShield"/>).
+    /// </summary>
+    public static string GlowHeld(double screen, double ring) =>
+        $"telefon karanlıkta aramada görünmedi, ekranının ışığıyla tutuluyor (ekran {Tone(screen)}/255, çevresi {Tone(ring)}/255)";
+
+    /// <summary>Telefon kapandı: son yerde ekran ışığı da tutmadı ya da ışıkla tutma süresi (<see cref="PhoneGlow.HoldMs"/>) doldu.</summary>
+    public static string GlowLost(double screen, double ring) =>
+        $"telefonun ekran ışığı son yerinde tutmadı (ekran {Tone(screen)}/255, çevresi {Tone(ring)}/255)";
+
+    /// <summary>Telefon kapandı: ekran ışığıyla tutma süresi (<see cref="PhoneGlow.HoldMs"/>, son gerçek gözlemden) doldu.</summary>
+    public static readonly string GlowExpired = $"telefonun ekran ışığıyla tutma süresi doldu ({PhoneGlow.HoldMs} ms)";
+
+    private static int Tone(double value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
+
     public static string Moving(double share) => $"telefon oynuyor, açılmadı (%{Percent(share)} oynama)";
 
     /// <summary>Okunacak karede telefon izlenen yerden çok uzakta: tur atlandı.</summary>

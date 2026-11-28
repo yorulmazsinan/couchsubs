@@ -116,6 +116,8 @@ public sealed partial class RegionWatcher
         public Frame? PhoneFrame;
         /// <summary>Telefonun bu açılışındaki izi (<see cref="PhonePrint"/>; PhoneMissing) ve ait olduğu açılış.</summary>
         public int[]? PhonePrint;
+        /// <summary>Telefonun bu açılışındaki ekran ışığı (<see cref="CouchSubs.Core.PhoneGlow"/>; karanlık sahnede ışıklı ekran, yoksa null).</summary>
+        public PhoneGlow.Glow? PhoneGlow;
         public CancellationToken? PhonePrintLifetime;
         public Frame? LastReadCrop;
         public TextBox[] Lines = [];
@@ -345,6 +347,14 @@ public sealed partial class RegionWatcher
     /// <summary>Son <see cref="Offer"/>'da telefon paneli var mıydı (açılışında <see cref="ClearScreenText"/>).</summary>
     private bool phoneOffered;
 
+    /// <summary>
+    /// Açık telefonun kutusu (kareye oranla): bu alanda başka yolların okuduğu satırlar atılır (<see cref="PhoneShield"/>,
+    /// #1443). Telefon kapalıyken null.
+    /// </summary>
+    private volatile CropRegion? phoneShield;
+    /// <summary>Telefonun bu açılışında satırları bastırıldığı günlüğe yazılan alanlar.</summary>
+    private readonly HashSet<string> shieldLogged = [];
+
     /// <summary>Tur aralığının çarpanı (<see cref="ReadPressure.Slowdown"/>); verilmezse 1.</summary>
     public Func<int>? Slowdown { get; set; }
 
@@ -353,6 +363,8 @@ public sealed partial class RegionWatcher
     {
         // Telefon paneli yeni açıldı: telefonun ekranına çizilmiş otomatik ekran yazısı kutuları beklemeden kalkar.
         var phoneOpen = areas.Any(area => area.PanelLifetime.HasValue);
+        if (phoneOpen != phoneOffered) lock (shieldLogged) shieldLogged.Clear();
+        phoneShield = areas.FirstOrDefault(area => area.PanelLifetime.HasValue)?.PhonePose?.Bounds;
         if (phoneOpen && !phoneOffered) ClearScreenText();
         phoneOffered = phoneOpen;
         var time = now();
@@ -1044,6 +1056,15 @@ public sealed partial class RegionWatcher
         state.LastReadCrop = crop;
         state.LastFullCheck = now();
         state.Lines = [.. reading.Lines.Where(line => line.Box.HasValue).Take(32).Select(line => line.Box!.Value)];
+        // Telefon açıkken telefonun alanındaki satırlar telefon okuyucusunundur; bu yol onları okumaz (PhoneShield, #1443).
+        var shielded = area.PanelLifetime.HasValue ? (Kept: reading, Dropped: 0) : PhoneShield.Filter(reading, area.Region, phoneShield);
+        if (shielded.Dropped > 0)
+        {
+            bool first;
+            lock (shieldLogged) first = shieldLogged.Add(area.Id);
+            if (first) Log?.Invoke($"telefon açık: {area.Name} yolunun telefonun alanındaki {shielded.Dropped} satırı bastırıldı, telefon önde");
+        }
+        reading = shielded.Kept;
         // Altyazı alanındaki ya da altyazı hattının okuduğu satırlar ekran yazısı değildir; altyazı iki yerde çizilmesin
         // (bkz. SubtitleEcho). Menüde ve görev satırının kendi alanında yalnız metin eşleşmesi uygulanır.
         if (SubtitleEcho is { } echo)

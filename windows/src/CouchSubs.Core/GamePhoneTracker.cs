@@ -22,6 +22,28 @@ public sealed class GamePhoneTracker
         locateOverride = frame => locate(frame) is { } region ? (region, true) : null;
     /// <summary>Denemeler: gözlem ve gücü (Strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday).</summary>
     internal GamePhoneTracker(Func<Frame, (CropRegion Region, bool Strict)?> sight) : this() => locateOverride = sight;
+    /// <summary>
+    /// Işık denemeleri: gözlem telefonun yeriyle; açık telefon ıskalanınca ekran ışığına gerçek karede bakılır
+    /// (<see cref="PhoneGlow"/>; iz karşılaştırılmaz).
+    /// </summary>
+    internal GamePhoneTracker(Func<Frame, (GamePhoneGeometry.Pose Pose, bool Strict)?> sight, bool glows) : this()
+    {
+        poseOverride = sight;
+        this.glows = glows;
+    }
+    private readonly Func<Frame, (GamePhoneGeometry.Pose Pose, bool Strict)?>? poseOverride;
+    /// <summary>Açık telefon ıskalanınca son yerinde izi karşılaştırılır mı (<see cref="PhonePrint"/>; yalnız gerçek aramada).</summary>
+    private bool Holds => locateOverride is null && poseOverride is null;
+    /// <summary>
+    /// Açık telefon arama ve izde ıskalanınca son yerinde ekranının ışığına bakılır mı (<see cref="PhoneGlow"/>; gerçek
+    /// aramada ve ışık denemelerinde).
+    /// </summary>
+    private readonly bool glows = true;
+    /// <summary>Son gerçek gözlemde ışıklı ekran (karanlık sahnede; yoksa null), alındığı an, ışıkla tutuluyor mu ve son ölçülen ışık.</summary>
+    private PhoneGlow.Glow? glow;
+    private long? glowAt;
+    private bool glowing;
+    private PhoneGlow.Glow? lastGlow;
 
     /// <summary>Telefonun açılması, kapanması ve oynadığı için açılmaması altyazı günlüğüne (<see cref="PhoneTrace"/>; sınırlı).</summary>
     public Action<string>? Log { get; set; }
@@ -79,7 +101,15 @@ public sealed class GamePhoneTracker
         var points = 0;
         var strict = false;
         GamePhoneGeometry.Probe? probe = null;
-        if (locateOverride is not null)
+        if (poseOverride is not null)
+        {
+            var sighting = poseOverride(frame);
+            pose = sighting?.Pose;
+            candidate = pose?.Bounds;
+            strict = sighting?.Strict == true;
+            points = strict ? StrongPoints : WeakPoints;
+        }
+        else if (locateOverride is not null)
         {
             var sighting = locateOverride(frame);
             candidate = sighting?.Region;
@@ -121,7 +151,7 @@ public sealed class GamePhoneTracker
         // çevrildi, sonra kayboldu").
         var held = false;
         lastSimilarity = 0;
-        if (locateOverride is null && candidate is null && shown is not null && shownPose is { } open && print is { } kept)
+        if (Holds && candidate is null && shown is not null && shownPose is { } open && print is { } kept)
         {
             var hold = GamePhoneGeometry.Hold(frame, open, kept);
             lastSimilarity = hold.Similarity;
@@ -134,6 +164,20 @@ public sealed class GamePhoneTracker
                 held = true;
             }
         }
+        // Açık telefon aramada da izde de ıskalandı: karanlık sahnede ekranı son gerçek gözlemdeki kadar aydınlıksa ve çevresi
+        // karanlıksa telefon yerinde sayılır, PhoneGlow.HoldMs dolana dek kapanmaz (#1443: kasa koyu ve düz, iz tutmuyor,
+        // telefon ~1 sn'de bir kapanıp açılıyordu). Telefon indirilince son yerde ışık kalmaz, her zamanki sürede kapanır.
+        bool glowHeld = false, glowExpired = false;
+        lastGlow = null;
+        if (glows && candidate is null && shown is not null && shownPose is { } lastPose && glow is { } recorded)
+        {
+            if (Elapsed(lastSeen, now) < PhoneGlow.HoldMs)
+            {
+                lastGlow = GamePhoneGeometry.Glow(frame, lastPose);
+                glowHeld = lastGlow is { } current && PhoneGlow.Holds(recorded, current);
+            }
+            else glowExpired = true;
+        }
         long unseenMs = 0;
         var unseenMisses = 0;
         CropRegion? movedFrom = null;
@@ -145,9 +189,13 @@ public sealed class GamePhoneTracker
             shownPose = pose;
             misses = 0;
             lastSeen = now;
-            if (!held) KeepPrint(frame, pose, now);
+            if (!held)
+            {
+                KeepPrint(frame, pose, now);
+                KeepGlow(frame, pose, now);
+            }
         }
-        else if (shown is not null && !Closes(misses + 1, Elapsed(lastSeen, now)))
+        else if (shown is not null && (glowHeld || !Closes(misses + 1, Elapsed(lastSeen, now))))
         {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
@@ -188,7 +236,10 @@ public sealed class GamePhoneTracker
                 lastSeen = now;
                 ClearPending();
                 print = null;
+                glow = null;
+                glowAt = null;
                 KeepPrint(frame, pose, now);
+                KeepGlow(frame, pose, now);
             }
         }
         else if (pending is not null)
@@ -204,11 +255,18 @@ public sealed class GamePhoneTracker
         else if (wasShown && shown is null)
         {
             Trace(PhoneTrace.ClosedAfter(unseenMs, unseenMisses));
-            if (locateOverride is null && print is not null) Trace(PhoneTrace.PrintLost(lastSimilarity));
+            if (Holds && print is not null) Trace(PhoneTrace.PrintLost(lastSimilarity));
+            if (glowExpired) Trace(PhoneTrace.GlowExpired);
+            else if (glows && glow is not null && lastGlow is { } lost) Trace(PhoneTrace.GlowLost(lost.Screen, lost.Ring));
             print = null;
+            glow = null;
+            glowAt = null;
+            lastGlow = null;
         }
         if (held && !holding) Trace(PhoneTrace.Held(lastSimilarity));
         holding = held && shown is not null;
+        if (glowHeld && !glowing && lastGlow is { } litNow) Trace(PhoneTrace.GlowHeld(litNow.Screen, litNow.Ring));
+        glowing = glowHeld && shown is not null;
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if (shown is null && candidate is not null && movedFrom is not null)
             Trace(PhoneTrace.Moving(PhoneTrace.Shift(candidate, movedFrom)));
@@ -233,14 +291,26 @@ public sealed class GamePhoneTracker
     /// <summary>Açık telefonun izini gerçek gözlemden alır (en çok <see cref="PrintRefreshMs"/>'de bir; denemelerin sahte gözlemlerinde alınmaz).</summary>
     private void KeepPrint(Frame frame, GamePhoneGeometry.Pose? pose, long now)
     {
-        if (locateOverride is not null || pose is not { } at) return;
+        if (!Holds || pose is not { } at) return;
         if (print is not null && now >= printAt && now - printAt < PrintRefreshMs) return;
         if (GamePhoneGeometry.Print(frame, at) is not { } fresh) return;
         print = fresh;
         printAt = now;
     }
 
-        private bool PendingFresh(long now) => pending is not null && now >= pendingAt && now - pendingAt <= PendingMs;
+    /// <summary>
+    /// Açık telefonun ekran ışığını gerçek gözlemden alır (en çok <see cref="PrintRefreshMs"/>'de bir): karanlık sahnede ışıklı
+    /// ekran (<see cref="PhoneGlow.Lit"/>) değilse null.
+    /// </summary>
+    private void KeepGlow(Frame frame, GamePhoneGeometry.Pose? pose, long now)
+    {
+        if (!glows || pose is not { } at) return;
+        if (glowAt is { } taken && now >= taken && now - taken < PrintRefreshMs) return;
+        glow = GamePhoneGeometry.Glow(frame, at) is { } fresh && PhoneGlow.Lit(fresh) ? fresh : null;
+        glowAt = now;
+    }
+
+    private bool PendingFresh(long now) => pending is not null && now >= pendingAt && now - pendingAt <= PendingMs;
 
     private void ClearPending()
     {
@@ -309,6 +379,10 @@ public sealed class GamePhoneTracker
         ClearPending();
         print = null;
         holding = false;
+        glow = null;
+        glowAt = null;
+        glowing = false;
+        lastGlow = null;
         missLog.Reset();
         status.Reset();
     }
@@ -463,6 +537,13 @@ internal static class GamePhoneGeometry
     {
         if (PictureArea(frame) is not { } area) return null;
         return PhonePrint.Samples(Inside(frame, area, pose), 0, 0, RawGrid(frame, area));
+    }
+
+    /// <summary>Telefonun ekran ışığı (<see cref="PhoneGlow"/>); görüntü bulunamazsa null.</summary>
+    internal static PhoneGlow.Glow? Glow(Frame frame, Pose pose)
+    {
+        if (PictureArea(frame) is not { } area) return null;
+        return PhoneGlow.Measure(Inside(frame, area, pose), RawGrid(frame, area));
     }
 
     /// <summary>

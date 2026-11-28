@@ -54,7 +54,19 @@ class GamePhoneTracker internal constructor(
         Sighting(search.pose, search.pose != null && search.probe.step == GamePhoneGeometry.Step.FOUND, search.probe)
     }, Unit) {
         holds = true
+        glows = true
     }
+
+    /**
+     * Açık telefon arama ve izde ıskalanınca son yerinde ekranının ışığına bakılır mı ([PhoneGlow]; gerçek aramada ve ışık
+     * denemelerinde).
+     */
+    internal var glows = false
+    /** Son gerçek gözlemde ışıklı ekran (karanlık sahnede; yoksa null), alındığı an, ışıkla tutuluyor mu ve son ölçülen ışık. */
+    private var glow: PhoneGlow.Glow? = null
+    private var glowAt: Long? = null
+    private var glowing = false
+    private var lastGlow: PhoneGlow.Glow? = null
 
     /** Açık telefon ıskalanınca son yerinde izi karşılaştırılır mı ([PhonePrint]; gerçek aramada; denemelerin sahte gözlemlerinde kapalı). */
     private var holds = false
@@ -137,6 +149,22 @@ class GamePhoneTracker internal constructor(
                 held = true
             }
         }
+        // Açık telefon aramada da izde de ıskalandı: karanlık sahnede ekranı son gerçek gözlemdeki kadar aydınlıksa ve çevresi
+        // karanlıksa telefon yerinde sayılır, [PhoneGlow.HOLD_MS] dolana dek kapanmaz (#1443: kasa koyu ve düz, iz tutmuyor,
+        // telefon ~1 sn'de bir kapanıp açılıyordu). Telefon indirilince son yerde ışık kalmaz, her zamanki sürede kapanır.
+        var glowHeld = false
+        var glowExpired = false
+        lastGlow = null
+        val recorded = glow
+        if (glows && found == null && open != null && recorded != null) {
+            if (elapsed(lastSeen, now) < PhoneGlow.HOLD_MS) {
+                val measured = GamePhoneGeometry.glow(image, open)
+                lastGlow = measured
+                glowHeld = measured != null && PhoneGlow.holds(recorded, measured)
+            } else {
+                glowExpired = true
+            }
+        }
         val points = if (found == null) 0 else if (strict) STRONG_POINTS else WEAK_POINTS
         val current = shown
         var unseenMs = 0L
@@ -150,8 +178,11 @@ class GamePhoneTracker internal constructor(
             shown = sighted
             misses = 0
             lastSeen = now
-            if (!held) keepPrint(image, sighted, now)
-        } else if (current != null && !closes(misses + 1, elapsed(lastSeen, now))) {
+            if (!held) {
+                keepPrint(image, sighted, now)
+                keepGlow(image, sighted, now)
+            }
+        } else if (current != null && (glowHeld || !closes(misses + 1, elapsed(lastSeen, now)))) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
             // bildirim). Telefon gerçekten indirilince [MISS_GRACE_MS] sonra kapanır ([closes]).
@@ -183,7 +214,10 @@ class GamePhoneTracker internal constructor(
                 lastSeen = now
                 clearPending()
                 print = null
+                glow = null
+                glowAt = null
                 keepPrint(image, sighted, now)
+                keepGlow(image, sighted, now)
             }
         } else if (pending != null) {
             pendingMisses++
@@ -196,10 +230,19 @@ class GamePhoneTracker internal constructor(
         else if (wasShown && shown == null) {
             note(PhoneTrace.closed(unseenMs, unseenMisses))
             if (holds && print != null) note(PhoneTrace.printLost(lastSimilarity))
+            val lost = lastGlow
+            if (glowExpired) note(PhoneTrace.GLOW_EXPIRED)
+            else if (glows && glow != null && lost != null) note(PhoneTrace.glowLost(lost.screen, lost.ring))
             print = null
+            glow = null
+            glowAt = null
+            lastGlow = null
         }
         if (held && !holding) note(PhoneTrace.held(lastSimilarity))
         holding = held && shown != null
+        val litNow = lastGlow
+        if (glowHeld && !glowing && litNow != null) note(PhoneTrace.glowHeld(litNow.screen, litNow.ring))
+        glowing = glowHeld && shown != null
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         val moved = movedFrom
         if (shown == null && sighted != null && moved != null) note(PhoneTrace.moving(PhoneTrace.shift(sighted.bounds, moved.bounds)))
@@ -222,7 +265,19 @@ class GamePhoneTracker internal constructor(
         printAt = now
     }
 
-        private fun pendingFresh(now: Long): Boolean = pending != null && now >= pendingAt && now - pendingAt <= PENDING_MS
+    /**
+     * Açık telefonun ekran ışığını gerçek gözlemden alır (en çok [PRINT_REFRESH_MS]'de bir): karanlık sahnede ışıklı ekran
+     * ([PhoneGlow.lit]) değilse null.
+     */
+    private fun keepGlow(image: PhoneImage, pose: GamePhoneGeometry.Pose, now: Long) {
+        if (!glows) return
+        val taken = glowAt
+        if (taken != null && now >= taken && now - taken < PRINT_REFRESH_MS) return
+        glow = GamePhoneGeometry.glow(image, pose)?.takeIf { PhoneGlow.lit(it) }
+        glowAt = now
+    }
+
+    private fun pendingFresh(now: Long): Boolean = pending != null && now >= pendingAt && now - pendingAt <= PENDING_MS
 
     private fun clearPending() {
         pending = null
@@ -244,6 +299,10 @@ class GamePhoneTracker internal constructor(
         clearPending()
         print = null
         holding = false
+        glow = null
+        glowAt = null
+        glowing = false
+        lastGlow = null
         missLog.reset()
         status.reset()
     }
@@ -553,6 +612,13 @@ object GamePhoneGeometry {
         val view = view(image) ?: return null
         val grid = Grid(view.image)
         return PhonePrint.samples(view.inside(pose), 0, 0, grid::raw)
+    }
+
+    /** Telefonun ekran ışığı ([PhoneGlow]); görüntü bulunamazsa null. */
+    fun glow(image: PhoneImage, pose: Pose): PhoneGlow.Glow? {
+        val view = view(image) ?: return null
+        val grid = Grid(view.image)
+        return PhoneGlow.measure(view.inside(pose), grid::raw)
     }
 
     /** İzin sonucu: tutarsa bulunduğu yer (kayma kadar oynamış), tutmazsa null; en iyi benzerlik. */

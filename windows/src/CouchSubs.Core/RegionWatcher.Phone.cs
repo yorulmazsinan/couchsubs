@@ -27,15 +27,20 @@ public sealed partial class RegionWatcher
         {
             state.PhonePrint = GamePhoneGeometry.Print(frame, last);
             state.PhonePrintLifetime = area.PanelLifetime;
+            state.PhoneGlow = GamePhoneGeometry.Glow(frame, last) is { } glow && PhoneGlow.Lit(glow) ? glow : null;
         }
         if (!GamePhoneGeometry.TryLocate(frame, last, out var pose))
         {
-            if (state.PhonePrint is not { } print || GamePhoneGeometry.Hold(frame, last, print).Pose is not { } held)
+            if (state.PhonePrint is { } print && GamePhoneGeometry.Hold(frame, last, print).Pose is { } held) pose = held;
+            // Karanlık sahnede iz de tutmazsa ekranın ışığı (PhoneGlow, #1443): izleyici telefonu ışığıyla açık tutarken okuma
+            // turları atlanıp çeviri siliniyordu (Mac ile aynı).
+            else if (state.PhoneGlow is { } recorded && GamePhoneGeometry.Glow(frame, last) is { } current
+                     && PhoneGlow.Holds(recorded, current)) pose = last;
+            else
             {
                 Trace(PhoneTrace.Missing, area);
                 return true;
             }
-            pose = held;
         }
         if (pose.Bounds.IsClose(area.Region, 0.035)) return false;
         Trace(PhoneTrace.Displaced(PhoneTrace.Shift(pose.Bounds, area.Region)), area);
@@ -545,6 +550,14 @@ public sealed partial class RegionWatcher
             var ids = map.Keys.Where(id => ScreenTextAreas.IsAuto(id) && id != MissionLine.AreaId).ToList();
             shown = [.. ids.Where(id => map[id].Shown.Length > 0)];
             foreach (var id in ids) map.Remove(id);
+            // Görev satırının kutusu telefonun alanındaysa (görev yolu telefonun yazısını okumuştu, #1443) o da kalkar.
+            if (phoneShield is { } phone && map.TryGetValue(MissionLine.AreaId, out var mission) && mission.Shown.Length > 0
+                && mission.RenderedBox is { } box && PhoneShield.Covers(box, phone))
+            {
+                shown.Add(MissionLine.AreaId);
+                map.Remove(MissionLine.AreaId);
+                Log?.Invoke("telefon açık: görev satırı yolunun telefonun üstündeki kutusu kaldırıldı");
+            }
         }
         // Kilidin çizili tuttuğu kutular da kalkar (izleyici onları çoktan bırakmış olabilir). Hazır alanın kutusu kalkınca
         // izleyici de unutur: yazı yeniden okununca yeniden çizilir (#1391).
