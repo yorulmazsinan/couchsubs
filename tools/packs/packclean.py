@@ -72,6 +72,7 @@ class Index:
         vocabulary = collections.Counter()
         caps = collections.Counter()
         distinct = {value for pack in packs for value in rows(pack)}
+        self.raw = distinct
         for value in distinct:
             self.values[norm(value)] += 1
             for sentence in set(sentence_keys(value)):
@@ -94,12 +95,14 @@ class Index:
     def known(self, text, own):
         """Metin (ya da etiketsiz gövdesi) pakette ayrı bir satırın Türkçesi mi; değilse bütün cümleleri başka
         satırlarda (tek başına ya da başka bir satırın cümlesi olarak) var mı. `own`: incelenen satırın Türkçesi."""
-        own_key = norm(own)
+        # Satırın kendisi (ya da birebir aynı Türkçeli kopyası) kanıt sayılmaz; ikinci turda kendisi dizinde olmayabilir.
+        present = own in self.raw
+        own_key = norm(own) if present else None
         for candidate in (text, strip_label(text)):
             n = norm(candidate)
             if n and self.values[n] - (1 if n == own_key else 0) > 0:
                 return True
-        own_sentences = set(sentence_keys(own))
+        own_sentences = set(sentence_keys(own)) if present else set()
         keys = sentence_keys(strip_label(text))
         return bool(keys) and all(self.values[k] - (1 if k == own_key else 0) > 0
                                   or self.sentences[k] - (1 if k in own_sentences else 0) > 0 for k in keys)
@@ -224,42 +227,63 @@ def rebuild_fuzzy(pack, records):
     return {"version": 1, "count": len(order), "mask": b64(mask), "lengths": b64(lengths), "blooms": b64(blooms)}
 
 
-def clean(packs):
-    """packs: (ad, paket) listesi. Silinenleri döner ve paketleri yerinde temizler.
+def is_pool(pack):
+    return pack.get("id", "").startswith("pool-")
 
-    İki tur: önce adaylar bulunur, sonra adaylar bir kez daha, bu kez adayların kendisi kanıt sayılmadan denetlenir.
-    Bir parçanın tek kanıtı başka bir birleşik satırsa (o da silinecek) satır kalır: hiçbir parça paketten tümden düşmez.
-    """
-    tables = [(name, pack, section, pack.get(section, {})) for name, pack in packs for section in ("entries", "segments")]
-    index = Index([pack for _, pack in packs])
-    main_keys = set()
-    for name, pack in packs:
-        if not pack.get("id", "").startswith("pool-"):
-            main_keys.update(pack.get("entries", {}))
-            main_keys.update(pack.get("segments", {}))
+
+def stage(targets, fixed, main_keys):
+    """targets: temizlenecek (ad, paket) listesi; fixed: değişmeyen kanıt paketleri. İki tur: önce adaylar bulunur, sonra
+    adaylar bir kez daha, bu kez adayların kendisi kanıt sayılmadan denetlenir. Bir parçanın tek kanıtı başka bir
+    birleşik satırsa (o da silinecek) satır kalır: hiçbir parça paketten tümden düşmez. Silinecekleri döner."""
+    index = Index(fixed + [pack for _, pack in targets])
     candidates = {}
-    for name, pack, section, table in tables:
-        pool = pack.get("id", "").startswith("pool-")
-        for key, value in table.items():
-            reason = "havuz-dokumde-var" if pool and key in main_keys else classify(value, index)
-            if reason:
-                candidates[(name, section, key)] = reason
+    for name, pack in targets:
+        for section in ("entries", "segments"):
+            for key, value in pack.get(section, {}).items():
+                reason = "havuz-dokumde-var" if is_pool(pack) and key in main_keys else classify(value, index)
+                if reason:
+                    candidates[(name, section, key)] = reason
     survivors = [{section: {k: v for k, v in pack.get(section, {}).items() if (name, section, k) not in candidates}
-                  for section in ("entries", "segments")} for name, pack in packs]
-    reduced = Index(survivors)
+                  for section in ("entries", "segments")} for name, pack in targets]
+    reduced = Index(fixed + survivors)
     reduced.labels = index.labels
     removed = []
-    for name, pack in packs:
-        records = fuzzy_records(pack)
+    for name, pack in targets:
         for section in ("entries", "segments"):
             table = pack.get(section, {})
-            for key in list(table):
+            for key in table:
                 reason = candidates.get((name, section, key))
                 if reason and reason != "havuz-dokumde-var" and classify(table[key], reduced) != reason:
                     reason = None
                 if reason:
                     removed.append({"pack": name, "section": section, "key": key, "reason": reason, "turkish": table[key]})
-                    del table[key]
+    return removed
+
+
+def clean(packs):
+    """packs: (ad, paket) listesi. Silinenleri döner ve paketleri yerinde temizler.
+
+    Önce elle hazırlanmış (döküm) paketler kendi aralarında temizlenir; sonra havuz paketleri (pool-*), temizlenmiş döküm
+    paketleri değişmeyen kanıt sayılarak. Sunucudaki gecelik havuz paketi aynı sırayla temizlenir
+    (server/pool/src/packclean.js; kanıt dosyası temizlenmiş döküm paketlerinden üretilir)."""
+    mains = [(name, pack) for name, pack in packs if not is_pool(pack)]
+    pools = [(name, pack) for name, pack in packs if is_pool(pack)]
+    main_keys = set()
+    for _, pack in mains:
+        main_keys.update(pack.get("entries", {}))
+        main_keys.update(pack.get("segments", {}))
+    removed = stage(mains, [], main_keys)
+    gone = {(item["pack"], item["section"], item["key"]) for item in removed}
+    kept = [{section: {k: v for k, v in pack.get(section, {}).items() if (name, section, k) not in gone}
+             for section in ("entries", "segments")} for name, pack in mains]
+    removed += stage(pools, kept, main_keys)
+    gone = {(item["pack"], item["section"], item["key"]) for item in removed}
+    for name, pack in packs:
+        records = fuzzy_records(pack)
+        for section in ("entries", "segments"):
+            table = pack.get(section, {})
+            for key in [k for k in table if (name, section, k) in gone]:
+                del table[key]
         if not pack["entries"]:
             raise SystemExit(f"{name}: temizlikten sonra tam satır kalmadı")
         if records is not None:

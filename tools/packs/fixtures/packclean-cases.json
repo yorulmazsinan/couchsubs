@@ -1,0 +1,105 @@
+{
+ "packs": [
+  {
+   "id": "gta-6",
+   "entries": {
+    "8928c2d28c5915cd": "Jason: Buradayım.",
+    "1577421e85056b52": "Jason: Gidelim.",
+    "771454e039d5fdcd": "Jason: Tamam.",
+    "37d4dd899c788ec2": "Jason: Hadi.",
+    "25ab2112ad023548": "Jason: Dur.",
+    "8e276293b7349429": "Boobie: Evet.",
+    "04dd2227283b5f6f": "Boobie: Hayır.",
+    "0a75eebb3aaf3215": "Boobie: Belki.",
+    "1f0939a90e0cddc9": "Boobie: Sonra.",
+    "8d407e7112617a12": "Boobie: Şimdi.",
+    "b2c5b39a3dbdcc9f": "Kingfishers: Peki.",
+    "e354dfa6480ab831": "Kingfishers: Hey!",
+    "eb1dff08c58a3304": "Kingfishers: Tamam.",
+    "17be1274b3cd41ff": "Kingfishers: Of.",
+    "577cec42212cc8de": "Kingfishers: Gel.",
+    "67ec874081ca4468": "O zamandan beri arkadaşız. Ahh, onunla da bir futbol sahasında tanıştım.",
+    "bbd76b9543d19787": "Ahh, ben de onunla futbol sahasında tanıştım.",
+    "f0c77a3a414c0f59": "Paketimi ver yeter. Yoluma giderim.",
+    "c8646a4a2198e53f": "Paket mi? Sana amına koyduğumun Sahara'sı gibi mi görünüyoruz? Siktir git buradan!",
+    "a9f315ba4bb17402": "Siktir git o zaman!",
+    "df7608cc791d89e1": "Şuraya geç.",
+    "9ae2417d477bd71b": "Sustur şu lanet köpeği!",
+    "a598cd7de1f4e3eb": "Ve en kötüsünü görüyorum.",
+    "45ab6dd71e539a4c": "hasta bir orospu çocuğu.",
+    "a47719db11f8eafc": "Bu ülkede annelerin emzirmediğini okudum.",
+    "ec2b17943dc351b3": "Arabaya bin.",
+    "538b14c8cd9aa2fd": "Arabaya bin. Jason: Buradayım.",
+    "1472e2f3f5922ea8": "Arabaya bin."
+   },
+   "segments": {}
+  },
+  {
+   "id": "pool-gta-6",
+   "entries": {
+    "dcc81bf5a244afe0": "o zamandan beri arkadaşız. Boobie: Ah, ben de onunla futbol sahasında tanıştım.",
+    "9203b76bcab0fb7e": "Paketimi ver yeter. Kingfishers: Paket mi? Sana amına koyduğumun Sahara'sı gibi mi görünüyoruz? Siktir git buradan!",
+    "ec048f7f7c6946c2": "Siktir git o zaman! Boobie: Bu da kimdi amına koyayım?",
+    "913633355e46d355": "[köpek havlar] Jason: Sustur şu lanet köpeği!",
+    "5c7c5c9dab36af5c": "Ve en kötüsünü görüyorum. Teşhis: hasta bir orospu çocuğu.",
+    "61769501fdf7bc1c": "Gel buraya. Jason: Geliyorum, dur!",
+    "f0d0a6aa1361e84d": "Bir şey olduğunu biliyordum, benim kamyonetle gidelim. Bir şey olduğunu biliyordum, benim kamyonetle gidelim.",
+    "bd38e025288acce2": "Prezervatif ver! Prezervatif ver!",
+    "d60545c9480ac446": "Sakin ol, merak etme. Sakin ol, merak etme.",
+    "5721fc6b8f95adbb": "Bu ülkede annelerin emzirmediğini okudum. Arabaya bin. Bu ülkede annelerin emzirmediğini okudum.",
+    "e149e2411fd4a93f": "LOESERT Şuraya geç.",
+    "a6bef92008473418": "Ateş etmek için RT kullan",
+    "be1ab1be93814024": "UPPER .38 TABANCA",
+    "b8912cb7b9cdc506": "Sustur şu lanet köpeği! CAMPION!",
+    "1472e2f3f5922ea8": "Arabaya gir."
+   },
+   "segments": {
+    "7acd9807d197e658": "Geliyorum, dur! Kingfishers: Gel buraya."
+   }
+  }
+ ],
+ "removed": [
+  {
+   "pack": "gta-6",
+   "section": "entries",
+   "key": "538b14c8cd9aa2fd",
+   "reason": "konusmaci-birlesik"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "dcc81bf5a244afe0",
+   "reason": "konusmaci-birlesik"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "9203b76bcab0fb7e",
+   "reason": "konusmaci-birlesik"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "f0d0a6aa1361e84d",
+   "reason": "tekrar"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "5721fc6b8f95adbb",
+   "reason": "tekrar"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "e149e2411fd4a93f",
+   "reason": "buyuk-harf-copu"
+  },
+  {
+   "pack": "pool-gta-6",
+   "section": "entries",
+   "key": "1472e2f3f5922ea8",
+   "reason": "havuz-dokumde-var"
+  }
+ ]
+}

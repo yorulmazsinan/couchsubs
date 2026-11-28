@@ -91,8 +91,14 @@ python3 -m unittest tools/packs/test_packclean.py
 
 Yayından önce `silinen.jsonl`'dan rastgele 200 satır elle gözden geçirilir (doğru satır silinme oranı %2'nin altında
 olmalı). Yayın: `server/packs/README.md` ("Yeni ya da güncellenen elle paket"): `packs/<id>.json.gz` yüklenir ve
-`index.json`'da sürüm artırılıp `sha256`/`size`/`entries` güncellenir. Havuz paketi her gece yeniden üretilir;
-temizlenmiş `pool-*` bir sonraki gece üretiminde yenisiyle değişir.
+`index.json`'da sürüm artırılıp `sha256`/`size`/`entries` güncellenir.
+
+Havuz paketleri (`pool-*`) sunucuda her gece aynı kurallarla temizlenir (`server/pool/src/packclean.js`; ortak deneme
+dosyası `tools/packs/fixtures/packclean-cases.json`, `packcleanfixture.py` üretir). Önce döküm paketleri kendi aralarında,
+sonra havuz paketleri temizlenmiş döküm kanıt sayılarak temizlenir; sunucu dökümü R2'deki kanıt dosyasından okur. Elle
+paket değişince kanıt yenilenir:
+`cd server/pool && node scripts/build-evidence.mjs gta-6.json.gz > gta-6.bin && npx wrangler r2 object put
+couchsubs-packs/auto/evidence/gta-6.bin --file gta-6.bin --remote`.
 
 28 Kasım 2026: `gta-6` v10 bu adımla yayınlandı (v9'dan 5.728 satır silindi: 5.344 birleşik konuşmacı, 281 tekrar, 103
 büyük harf çöpü; 200 satırlık elle denetimde doğru satır silinme oranı ~%1). v9 ve silinenler listesi R2'de

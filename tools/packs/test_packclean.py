@@ -1,5 +1,7 @@
 """packclean.py: yalnız bozuk satırları siler, çeviriye dokunmaz, bulanık imzaları korur."""
 import base64
+import copy
+import json
 import os
 import sys
 import unittest
@@ -98,6 +100,18 @@ class PackCleanTests(unittest.TestCase):
         self.assertEqual(after, {k: v for k, v in before.items() if k != gone})
         self.assertEqual(main["fuzzy"]["count"], len(main["entries"]) + len(main["segments"]))
         base64.b64decode(main["fuzzy"]["blooms"])
+
+
+class SharedCasesTests(unittest.TestCase):
+    def test_same_rows_as_the_pool_server(self):
+        """Ortak deneme dosyası (server/pool/test/packclean.test.js da okur): sunucu aynı satırları siler."""
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "packclean-cases.json")
+        with open(path, encoding="utf-8") as f:
+            cases = json.load(f)
+        packs = copy.deepcopy(cases["packs"])
+        removed = packclean.clean([(p["id"], p) for p in packs])
+        self.assertEqual([{k: item[k] for k in ("pack", "section", "key", "reason")} for item in removed], cases["removed"])
+        self.assertTrue(any(item["pack"] == "pool-gta-6" for item in cases["removed"]))
 
 
 if __name__ == "__main__":
