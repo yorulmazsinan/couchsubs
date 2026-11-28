@@ -52,7 +52,17 @@ class GamePhoneTracker internal constructor(
     constructor() : this({ image, near ->
         val search = GamePhoneGeometry.search(image, near)
         Sighting(search.pose, search.pose != null && search.probe.step == GamePhoneGeometry.Step.FOUND, search.probe)
-    }, Unit)
+    }, Unit) {
+        holds = true
+    }
+
+    /** Açık telefon ıskalanınca son yerinde izi karşılaştırılır mı ([PhonePrint]; gerçek aramada; denemelerin sahte gözlemlerinde kapalı). */
+    private var holds = false
+    /** Açık telefonun izi (son gerçek gözlemden), alındığı an ve iz tutuyor mu. */
+    private var print: IntArray? = null
+    private var printAt = 0L
+    private var holding = false
+    private var lastSimilarity = 0.0
     constructor(locateNear: (PhoneImage, GamePhoneGeometry.Pose?) -> GamePhoneGeometry.Pose?) :
         this({ image, near -> Sighting(locateNear(image, near), true, null) }, Unit)
     constructor(locate: (PhoneImage) -> GamePhoneGeometry.Pose?) : this({ image, _ -> Sighting(locate(image), true, null) }, Unit)
@@ -111,6 +121,22 @@ class GamePhoneTracker internal constructor(
                 strict = false
             }
         }
+        // Açık telefon bu örnekte bulunamadı: son yerinde izi tutuyorsa telefon yerinde sayılır ([PhonePrint]). Karanlıkta
+        // sıkı arama telefonu ara sıra buluyor, açılan telefon iki ıskada kapanıp yeniden açılmıyordu (X, beta-107: "bir kez
+        // çevrildi, sonra kayboldu").
+        var held = false
+        lastSimilarity = 0.0
+        val open = shown
+        val kept = print
+        if (holds && found == null && open != null && kept != null) {
+            val hold = GamePhoneGeometry.hold(image, open, kept)
+            lastSimilarity = hold.similarity
+            if (hold.pose != null) {
+                found = hold.pose
+                strict = false
+                held = true
+            }
+        }
         val points = if (found == null) 0 else if (strict) STRONG_POINTS else WEAK_POINTS
         val current = shown
         var unseenMs = 0L
@@ -124,6 +150,7 @@ class GamePhoneTracker internal constructor(
             shown = sighted
             misses = 0
             lastSeen = now
+            if (!held) keepPrint(image, sighted, now)
         } else if (current != null && !closes(misses + 1, elapsed(lastSeen, now))) {
             // Açık telefon tek bir karede bulunamadı ya da el titredi: hemen kapanmaz. Önceden tek ıska paneli kapatıyor,
             // yeniden açılış iki gözlem bekleyip bütün sayfayı yeniden çeviriyordu; çeviriler gidip geliyordu (X'teki
@@ -155,6 +182,8 @@ class GamePhoneTracker internal constructor(
                 misses = 0
                 lastSeen = now
                 clearPending()
+                print = null
+                keepPrint(image, sighted, now)
             }
         } else if (pending != null) {
             pendingMisses++
@@ -164,7 +193,13 @@ class GamePhoneTracker internal constructor(
             }
         }
         if (!wasShown && shown != null) note(PhoneTrace.OPENED)
-        else if (wasShown && shown == null) note(PhoneTrace.closed(unseenMs, unseenMisses))
+        else if (wasShown && shown == null) {
+            note(PhoneTrace.closed(unseenMs, unseenMisses))
+            if (holds && print != null) note(PhoneTrace.printLost(lastSimilarity))
+            print = null
+        }
+        if (held && !holding) note(PhoneTrace.held(lastSimilarity))
+        holding = held && shown != null
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         val moved = movedFrom
         if (shown == null && sighted != null && moved != null) note(PhoneTrace.moving(PhoneTrace.shift(sighted.bounds, moved.bounds)))
@@ -179,7 +214,15 @@ class GamePhoneTracker internal constructor(
         return Sample(true, shown)
     }
 
-    private fun pendingFresh(now: Long): Boolean = pending != null && now >= pendingAt && now - pendingAt <= PENDING_MS
+    /** Açık telefonun izini gerçek gözlemden alır (en çok [PRINT_REFRESH_MS]'de bir). */
+    private fun keepPrint(image: PhoneImage, pose: GamePhoneGeometry.Pose, now: Long) {
+        if (!holds) return
+        if (print != null && now >= printAt && now - printAt < PRINT_REFRESH_MS) return
+        print = GamePhoneGeometry.print(image, pose) ?: return
+        printAt = now
+    }
+
+        private fun pendingFresh(now: Long): Boolean = pending != null && now >= pendingAt && now - pendingAt <= PENDING_MS
 
     private fun clearPending() {
         pending = null
@@ -199,6 +242,8 @@ class GamePhoneTracker internal constructor(
         misses = 0
         lastSeen = 0L
         clearPending()
+        print = null
+        holding = false
         missLog.reset()
         status.reset()
     }
@@ -231,6 +276,9 @@ class GamePhoneTracker internal constructor(
          * örnekler süreye bakılmadan birleşir (seyrek örneklemede de telefon açılır).
          */
         const val PENDING_MS = 1000L
+
+        /** İz gerçek gözlemde en çok bu aralıkla (ms) yenilenir. */
+        const val PRINT_REFRESH_MS = 1000L
 
         /** Denemeler: gözlem ve gücü (strict: sıkı arama; değilse gevşek doğrulama ya da yanları zayıf aday). */
         internal fun sighting(sight: (PhoneImage) -> Pair<GamePhoneGeometry.Pose, Boolean>?): GamePhoneTracker =
@@ -308,8 +356,11 @@ object GamePhoneGeometry {
         private val ys: IntArray = IntArray(450) { ((it + 0.5) * image.height / 450).toInt().coerceIn(0, image.height - 1) },
         /** Parlaklık kazancı (256 = 1×; [darkGains]). */
         private val gain: Int = 256,
+        /** Ton eşitleme ([equalization]): ham tonun (dört noktanın toplamı / 256) eşlendiği ton; null: kazanç. */
+        private val map: IntArray? = null,
     ) {
-        private fun raw(x: Int, y: Int): Int {
+        /** Kazançsız ham toplam: dört noktanın tonu × 256 (0–261120; bir ton 1024; [PhonePrint]). */
+        fun raw(x: Int, y: Int): Int {
             val cx = (2 * x).coerceIn(0, 798)
             val cy = (2 * y).coerceIn(0, 448)
             return image.tone(xs[cx], ys[cy]) + image.tone(xs[cx + 1], ys[cy]) +
@@ -318,10 +369,24 @@ object GamePhoneGeometry {
 
         fun at(x: Int, y: Int): Int {
             val sum = raw(x, y)
+            if (map != null) return map[minOf(map.size - 1, sum shr 8)]
             return if (gain == 256) sum shr 10 else minOf(255L, (sum.toLong() * gain) shr 18).toInt()
         }
 
         fun withGain(gain: Int): Grid = Grid(image, xs, ys, gain)
+
+        /** Ton eşitlemeli kopya ([equalization]). */
+        fun equalized(): Grid {
+            val counts = IntArray(1021)
+            var total = 0
+            for (y in 0 until 225 step 2) {
+                for (x in 0 until 400 step 2) {
+                    counts[minOf(1020, raw(x, y) shr 8)]++
+                    total++
+                }
+            }
+            return Grid(image, xs, ys, 256, equalization(counts, total))
+        }
 
         /** Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek. */
         fun level(): Int {
@@ -463,6 +528,48 @@ object GamePhoneGeometry {
         val weak: Pose? get() = if (side >= WEAK_SIDE) candidate else null
     }
 
+    /** Karedeki 16:9 oyun görüntüsü ([picture]) ve yerlerin kare ile görüntü arasında taşınması. */
+    private class View(val image: PhoneImage, private val area: Area, private val w: Double, private val h: Double) {
+        /** Karedeki yer görüntünün içine. */
+        fun inside(pose: Pose) = Pose((pose.topX * w - area.x) / area.width, (pose.topY * h - area.y) / area.height,
+            (pose.bottomX * w - area.x) / area.width, (pose.bottomY * h - area.y) / area.height)
+
+        /** Görüntüdeki yer karenin içine. */
+        fun outside(pose: Pose) = Pose((area.x + pose.topX * area.width) / w, (area.y + pose.topY * area.height) / h,
+            (area.x + pose.bottomX * area.width) / w, (area.y + pose.bottomY * area.height) / h)
+    }
+
+    private fun view(image: PhoneImage): View? {
+        if (image.width < 400 || image.height < 225) return null
+        val w = image.width.toDouble()
+        val h = image.height.toDouble()
+        if (widescreen(image.width, image.height)) return View(image, Area(0, 0, image.width, image.height), w, h)
+        val area = picture(image.width, image.height) { x, y -> image.tone(x, y) shr 8 } ?: return null
+        return View(Cropped(image, area), area, w, h)
+    }
+
+    /** Telefonun izi ([PhonePrint]): [pose]'taki telefonun kasasından üst ve alt şeritte örnekler (kazançsız ham ton). */
+    fun print(image: PhoneImage, pose: Pose): IntArray? {
+        val view = view(image) ?: return null
+        val grid = Grid(view.image)
+        return PhonePrint.samples(view.inside(pose), 0, 0, grid::raw)
+    }
+
+    /** İzin sonucu: tutarsa bulunduğu yer (kayma kadar oynamış), tutmazsa null; en iyi benzerlik. */
+    class Hold(val pose: Pose?, val similarity: Double)
+
+    /** Açık telefonun son yerinde izi tutuyor mu ([PhonePrint.match]). */
+    fun hold(image: PhoneImage, pose: Pose, print: IntArray): Hold {
+        val view = view(image) ?: return Hold(null, 0.0)
+        val grid = Grid(view.image)
+        val local = view.inside(pose)
+        val match = PhonePrint.match(print, local, grid::raw)
+        if (match.similarity < PhonePrint.HOLD_SIMILARITY) return Hold(null, match.similarity)
+        val moved = Pose(local.topX + match.dx / 400.0, local.topY + match.dy / 225.0,
+            local.bottomX + match.dx / 400.0, local.bottomY + match.dy / 225.0)
+        return Hold(view.outside(moved), match.similarity)
+    }
+
     /** Arama: bulunan telefon (sıkı arama ya da [near]'da gevşek doğrulama) ve sıkı aramanın sonucu. */
     class Search(val pose: Pose?, val probe: Probe)
 
@@ -493,8 +600,10 @@ object GamePhoneGeometry {
         if (first.pose != null) return Search(first.pose, first.probe.copy(level = level))
         var probe = first.probe.copy(level = level)
         val gains = darkGains(level)
-        for (gain in gains) {
-            val dark = strictPicture(whole.withGain(gain))
+        // Karanlık sahnede kazançlardan sonra ton eşitleme ([equalization]).
+        val passes = if (level < DARK_LEVEL) gains + EQUALIZED else gains
+        for (gain in passes) {
+            val dark = strictPicture(if (gain == EQUALIZED) whole.equalized() else whole.withGain(gain))
             if (dark.pose != null) return Search(dark.pose, dark.probe.copy(level = level, gain = gain))
             // Iskada en ileri geçilen ölçüt ve en iyi aday bütün aramalardan.
             if (dark.probe.step > probe.step) probe = probe.copy(step = dark.probe.step, gain = gain)
@@ -502,6 +611,7 @@ object GamePhoneGeometry {
         }
         if (near == null) return Search(null, probe)
         val confirmed = confirmPicture(whole, near) ?: gains.firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
+            ?: if (level < DARK_LEVEL) confirmPicture(whole.equalized(), near) else null
         return Search(confirmed, probe)
     }
 
@@ -510,6 +620,28 @@ object GamePhoneGeometry {
     /** Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×). */
     const val DARK_TARGET = 96
     val GAIN_STEPS = intArrayOf(384, 640, 1024)
+
+    /** Kazanç yerine ton eşitleme ([equalization]): [Probe.gain]'de bu değer. */
+    const val EQUALIZED = 0
+
+    /**
+     * Ton eşitleme: ızgaranın ham tonlarının (çeyrek ton adımıyla; [counts], toplam [total]) sırası 0–255'e yayılır (her ton,
+     * kendinden koyu ve yarısı kendisiyle aynı noktaların oranı). Parlaklıktan, gamadan ve gece renk ayarından bağımsızdır:
+     * tonları aynı sırada kalan her karartma aynı ızgarayı verir. Kazanç ([darkGains]) karanlık sahnede yalnız ×4'e kadar
+     * aydınlatıyor, çok karanlıkta (üst şerit 10/255'ten koyu) ve gamayla koyulaşmış görüntüde (açık kasa açık kalır,
+     * gölgeler kararır) sıkı arama hoparlör yarığında, kamerada ya da kasa kenarında kalıyordu (X, beta-107: telefon gündüz
+     * çevriliyor, gece ve kapalı yerde çevrilmiyor; günlükte parlaklık 7–60/255). Karanlık sahnede kazançlardan sonra
+     * denenir (Mac/iPhone ve Windows ile aynı).
+     */
+    fun equalization(counts: IntArray, total: Int): IntArray {
+        val map = IntArray(counts.size)
+        var below = 0
+        for (tone in counts.indices) {
+            map[tone] = minOf(255, 255 * (2 * below + counts[tone]) / maxOf(1, 2 * total))
+            below += counts[tone]
+        }
+        return map
+    }
 
     /**
      * Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi (X,
@@ -565,7 +697,9 @@ object GamePhoneGeometry {
      */
     internal fun confirmPicture(image: PhoneImage, near: Pose): Pose? {
         val whole = Grid(image)
-        return confirmPicture(whole, near) ?: darkGains(whole.level()).firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
+        val level = whole.level()
+        return confirmPicture(whole, near) ?: darkGains(level).firstNotNullOfOrNull { confirmPicture(whole.withGain(it), near) }
+            ?: if (level < DARK_LEVEL) confirmPicture(whole.equalized(), near) else null
     }
 
     /**

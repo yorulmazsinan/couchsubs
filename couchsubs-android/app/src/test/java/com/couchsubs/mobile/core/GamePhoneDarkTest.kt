@@ -102,6 +102,142 @@ class GamePhoneDarkTest {
         for (k in 0 until parts.length()) assertTrue(missed.toString(), missed[0].contains(parts.getString(k)))
     }
 
+    /** Ton eşitleme eşlemesi ([GamePhoneGeometry.equalization]): her platformda aynı tonlar. */
+    @Test
+    fun equalizationMap() {
+        val items = vectors.getJSONArray("equalization")
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val name = item.getString("name")
+            val counts = IntArray(1021)
+            var total = 0
+            val pairs = item.getJSONArray("counts")
+            for (j in 0 until pairs.length()) {
+                val pair = pairs.getJSONArray(j)
+                counts[pair.getInt(0)] += pair.getInt(1)
+                total += pair.getInt(1)
+            }
+            val map = GamePhoneGeometry.equalization(counts, total)
+            val expected = item.getJSONArray("map")
+            for (j in 0 until expected.length()) {
+                val pair = expected.getJSONArray(j)
+                assertEquals("$name: ${pair.getInt(0)}", pair.getInt(1), map[pair.getInt(0)])
+            }
+        }
+    }
+
+    /**
+     * Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
+     * ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.
+     */
+    @Test
+    fun darkVariantsOpenThePhone() {
+        val items = vectors.getJSONArray("darkVariants")
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val name = item.getString("frame")
+            val transforms = item.getJSONArray("transforms")
+            for (j in 0 until transforms.length()) {
+                val transform = transforms.getString(j)
+                val frame = frames.load(name, transform)
+                val tracker = GamePhoneTracker()
+                var opened = false
+                for (k in 0 until 3) if (tracker.sample(frame, k * 330L).pose != null) opened = true
+                assertTrue("$name ($transform): ${GamePhoneGeometry.search(frame).probe}", opened)
+            }
+        }
+    }
+
+    /** İz benzerliği ([PhonePrint.similarity]): parlaklıktan ve karşıtlıktan bağımsız; düz ya da çok sönük iz 0. */
+    @Test
+    fun printSimilarity() {
+        val items = vectors.getJSONArray("printSimilarity")
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val a = ints(item.getJSONArray("a")).toIntArray()
+            val b = ints(item.getJSONArray("b")).toIntArray()
+            assertEquals(item.getString("name"), item.getDouble("similarity"), PhonePrint.similarity(a, b), 1e-6)
+        }
+    }
+
+    /**
+     * Telefon aydınlıkta açılır, sahne kararır (sıkı arama ıskalar): son yerindeki iziyle açık kalır, okuma sürer. Telefon
+     * indirilince (telefonsuz kare) iz tutmaz, telefon her zamanki sürede kapanır.
+     */
+    @Test
+    fun openPhoneIsHeldByItsPrint() {
+        val items = vectors.getJSONArray("hold")
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val name = item.getString("name")
+            val open = frames.load(item.getString("frame"), "none")
+            val then = frames.load(item.getString("then"), item.getString("transform"))
+            val log = mutableListOf<String>()
+            val tracker = GamePhoneTracker()
+            tracker.onLog = { log.add(it) }
+            var t = 0L
+            repeat(3) {
+                tracker.sample(open, t)
+                t += 330
+            }
+            assertNotNull(name, tracker.sample(open, t).pose)
+            t += 330
+            val samples = item.getInt("samples")
+            var last: GamePhoneGeometry.Pose? = null
+            var kept = 0
+            repeat(samples) {
+                last = tracker.sample(then, t).pose
+                if (last != null) kept++
+                t += 330
+            }
+            if (item.getBoolean("held")) assertEquals("$name: $log", samples, kept) else assertNull("$name: $log", last)
+            val parts = item.optJSONArray("log")
+            if (parts != null) for (j in 0 until parts.length()) {
+                val part = parts.getString(j)
+                assertTrue("$name: $part yok: $log", log.any { it.contains(part) })
+            }
+        }
+    }
+
+    /**
+     * İz telefonsuz karede telefonu tutmaz: telefon açıldıktan sonra telefonsuz gerçek kareler (karanlık hâlleriyle) gelince
+     * telefon kapanır.
+     */
+    @Test
+    fun printNeverHoldsPhoneFreeFrames() {
+        val directory = frames.frames
+        org.junit.Assume.assumeTrue("gerçek kare yok", directory != null)
+        val spec = vectors.getJSONObject("holdNoPhone")
+        val transforms = spec.getJSONArray("transforms").let { array -> (0 until array.length()).map { array.getString(it) } }
+        val openerNames = spec.getJSONArray("openers")
+        val openers = (0 until openerNames.length()).map { frames.load(openerNames.getString(it), "none") }
+        val samples = spec.getInt("samples")
+        val manifest = JSONObject(java.io.File(directory, "frames.json").readText()).getJSONArray("frames")
+        val names = (0 until manifest.length()).map { manifest.getJSONObject(it) }.filter { !it.has("phone") }
+            .map { it.getString("file").removeSuffix(".jpg") }.distinct()
+        for (name in names) {
+            val source = frames.original(name)
+            GamePhoneFirstSightingTest.cache.remove(name)
+            for (transform in transforms) {
+                val frame = frames.transformed(source, transform)
+                for ((o, opener) in openers.withIndex()) {
+                    val tracker = GamePhoneTracker()
+                    var t = 0L
+                    repeat(3) {
+                        tracker.sample(opener, t)
+                        t += 330
+                    }
+                    var last: GamePhoneGeometry.Pose? = null
+                    repeat(samples) {
+                        last = tracker.sample(frame, t).pose
+                        t += 330
+                    }
+                    assertNull("$name ($transform) telefon $o açık kaldı", last)
+                }
+            }
+        }
+    }
+
     @Test
     fun darkMissLineText() {
         val spec = vectors.getJSONObject("missLine")

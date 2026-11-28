@@ -143,26 +143,25 @@ class XboxPhoneFramesTest {
 
     /**
      * Tam aralıklı akış (libwebrtc aralığı bildirmez): karanlık sahnede telefon, sınırlı aralık sanılınca koyu tonlar kırpılıp
-     * bulunmuyordu. Aralık karelerden ölçülür, kare sınırlıya çevrilir; sonuç sınırlı aralıklı akıştakiyle aynı.
+     * bulunmuyordu. Aralık karelerden ölçülür, kare sınırlıya çevrilir; sonuç sınırlı aralıklı akıştakiyle aynı. Çevrilmemiş
+     * ilk kare artık ıska sayılmaz: karanlık sahnede ton eşitleme ([GamePhoneGeometry.equalization]) kırpılmış koyu tonlarda
+     * da telefonu bulabiliyor.
      */
     @Test
     fun fullRangeStreamIsLimitedLikeThePs5Decoder() {
-        var missedBefore = 0
         for (transform in listOf("dark", "night", "dark+scale720")) {
             val picture = loader.load("gta6-telefon-ana-1", transform)
             val limited = searchThroughHandoff(encode(picture, 64)).first
             val full = encode(picture, 64, full = true)
-            // Tek karede çevrilmez (ölçüm birkaç kare ister): kırpılmış koyu tonlarla telefon çoğu zaman bulunmuyor.
-            val (first, firstFrame) = searchThroughHandoff(full)
+            // Tek karede çevrilmez (ölçüm birkaç kare ister).
+            val (_, firstFrame) = searchThroughHandoff(full)
             assertTrue(firstFrame.source!!, firstFrame.source!!.endsWith("aralık sınırlı"))
-            if (first.pose == null) missedBefore++
             val (search, frame) = searchThroughHandoff(full, repeat = XboxLumaRange.VOTES)
             assertTrue(frame.source!!, frame.source!!.endsWith("aralık tam, sınırlıya çevriliyor"))
             assertNotNull(transform, limited.pose)
             assertEquals(transform, limited.probe.step, search.probe.step)
             assertTrue("$transform: ${limited.pose} / ${search.pose}", close(limited.pose, search.pose))
         }
-        assertTrue("tam aralık çevrilmeden telefon bulunuyordu: deneme hatayı göstermiyor", missedBefore >= 2)
     }
 
     /** Sınırlı aralıklı gerçek kareler (karanlık, gece, açık hâlleriyle) hiçbir zaman tam aralık sayılmaz. */

@@ -26,6 +26,13 @@ final class GamePhoneFirstSightingTests: XCTestCase {
     static func load(_ name: String, _ transform: String, cover: [Double]? = nil, shift: [Double]? = nil) throws -> CGImage {
         let key = "\(name)|\(transform)|\(cover?.map { "\($0)" }.joined(separator: ",") ?? "")|\(shift?.map { "\($0)" }.joined(separator: ",") ?? "")"
         if let cached = loaded[key] { return cached }
+        let result = try fresh(name, transform, cover: cover, shift: shift)
+        loaded[key] = result
+        return result
+    }
+
+    /// `load`, önbelleğe almadan (telefonsuz karelerin çok dönüşümü belleği doldurmasın).
+    static func fresh(_ name: String, _ transform: String, cover: [Double]? = nil, shift: [Double]? = nil) throws -> CGImage {
         let url = frames.appendingPathComponent(name + ".jpg")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               var image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw XCTSkip("gerçek kare yok: \(name)") }
@@ -35,13 +42,71 @@ final class GamePhoneFirstSightingTests: XCTestCase {
             case "scale720": image = scaled(image, width: 1280, height: 720)
             case "letterbox", "pillarbox", "titlebar": image = framed(image, part)
             case "mirror": image = mirrored(image)
+            case let part where part.contains(":"): image = darkened(image, part)
             default: image = transformed(image, part)
             }
         }
         if let shift { image = shifted(image, dx: shift[0], dy: shift[1]) }
-        let result = cover == nil ? image : transformed(image, "none", cover: cover)
-        loaded[key] = result
-        return result
+        return cover == nil ? image : transformed(image, "none", cover: cover)
+    }
+
+    /// Karanlık sahne dönüşümleri ("tür:değer", Windows ve Android ile aynı formüller): `scale:k` parlaklık × k, `gamma:g`
+    /// gama, `nightgrade:k` gece renk ayarı (renk soluklaşır, maviye kayar, gama 1,3, × k), `vignette:k` kenarlara doğru
+    /// kararan görüntü × k, `darkbg:k` telefonun arkası koyu (`darkBox` dışı k/4, içi k).
+    static let darkBox = [0.52, 0.1, 0.88, 0.98]
+
+    static func darkened(_ image: CGImage, _ spec: String) -> CGImage {
+        let parts = spec.split(separator: ":"), kind = String(parts[0]), k = Double(parts[1])!
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        // Hata ayıklama derlemesinde de hızlı: kanal başına tablo (scale, gamma) ya da noktada yalnız sayı işlemi.
+        func byte(_ v: Double) -> UInt8 { UInt8(max(0, min(255, (v * 255).rounded(.toNearestOrEven)))) }
+        let table = (0..<256).map { v -> UInt8 in
+            let c = Double(v) / 255
+            switch kind {
+            case "scale": return byte(c * k)
+            case "gamma": return byte(pow(c, k))
+            default: return 0
+            }
+        }
+        pixels.withUnsafeMutableBufferPointer { px in
+            for y in 0..<height {
+                let fy = (Double(y) + 0.5) / Double(height)
+                for x in 0..<width {
+                    let p = (y * width + x) * 4
+                    switch kind {
+                    case "scale", "gamma":
+                        px[p] = table[Int(px[p])]; px[p + 1] = table[Int(px[p + 1])]; px[p + 2] = table[Int(px[p + 2])]
+                    case "nightgrade":
+                        let r = Double(px[p]) / 255, g = Double(px[p + 1]) / 255, b = Double(px[p + 2]) / 255
+                        let l = 0.3 * r + 0.59 * g + 0.11 * b
+                        px[p] = byte(min(1, pow(min(1, (0.4 * r + 0.6 * l) * 0.8), 1.3) * k))
+                        px[p + 1] = byte(min(1, pow(min(1, (0.4 * g + 0.6 * l) * 0.95), 1.3) * k))
+                        px[p + 2] = byte(min(1, pow(min(1, (0.4 * b + 0.6 * l) * 1.25), 1.3) * k))
+                    case "vignette", "darkbg":
+                        let fx = (Double(x) + 0.5) / Double(width)
+                        let f: Double
+                        if kind == "vignette" {
+                            let dx = (fx - 0.5) * 2, dy = (fy - 0.5) * 2
+                            f = max(0.08, 1 - 0.75 * (dx * dx + dy * dy)) * k
+                        } else {
+                            let inside = fx >= darkBox[0] && fx <= darkBox[2] && fy >= darkBox[1] && fy <= darkBox[3]
+                            f = inside ? k : k / 4
+                        }
+                        px[p] = byte(Double(px[p]) / 255 * f)
+                        px[p + 1] = byte(Double(px[p + 1]) / 255 * f)
+                        px[p + 2] = byte(Double(px[p + 2]) / 255 * f)
+                    default: fatalError(kind)
+                    }
+                }
+            }
+        }
+        let result = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                               space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        return result.makeImage()!
     }
 
     /// Telefon sol elde (#1385): görüntü yatayda aynalanır.

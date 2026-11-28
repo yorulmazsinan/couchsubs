@@ -21,6 +21,12 @@ public static class PhoneTrace
     public const string EmptyFlat = "eğik ekran düzeltilmiş okuması boş";
 
     /// <summary>Telefon bulundu ama önceki örnekten çok oynadı; iki uyumlu gözlem olmadığı için açılmadı.</summary>
+    /// <summary>Açık telefon sıkı aramada ve gevşek doğrulamada bulunamadı, son yerindeki iziyle tutuldu (<see cref="PhonePrint"/>; benzerlik %).</summary>
+    public static string Held(double similarity) => $"telefon aramada görünmedi, son yerinde iziyle tutuluyor (benzerlik %{Percent(similarity)})";
+
+    /// <summary>Telefon kapandı: son yerdeki iz de tutmadı (en iyi benzerlik %).</summary>
+    public static string PrintLost(double similarity) => $"telefonun izi son yerinde tutmadı (benzerlik %{Percent(similarity)})";
+
     public static string Moving(double share) => $"telefon oynuyor, açılmadı (%{Percent(share)} oynama)";
 
     /// <summary>Okunacak karede telefon izlenen yerden çok uzakta: tur atlandı.</summary>
@@ -57,7 +63,8 @@ public static class PhoneTrace
         if (level >= 0)
         {
             light = $", parlaklık {level}/255";
-            if (level < GamePhoneGeometry.DarkLevel) light += $" (karanlık, kazanç ×{Times(gain)})";
+            if (level < GamePhoneGeometry.DarkLevel)
+                light += gain == GamePhoneGeometry.Equalized ? " (karanlık, ton eşitleme)" : $" (karanlık, kazanç ×{Times(gain)})";
         }
         return $"telefon ilk aramada bulunamadı ({samples} arama): en ileri ölçüt {furthest}, en sık {common} ({commonCount}){candidate}, "
                + $"doğrulanmayan gözlem {unconfirmed} ({strict} sıkı){light}";

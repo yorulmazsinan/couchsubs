@@ -116,6 +116,24 @@ public sealed class GamePhoneTracker
             points = 0;
             strict = false;
         }
+        // Açık telefon bu örnekte bulunamadı: son yerinde izi tutuyorsa telefon yerinde sayılır (PhonePrint). Karanlıkta sıkı
+        // arama telefonu ara sıra buluyor, açılan telefon iki ıskada kapanıp yeniden açılmıyordu (X, beta-107: "bir kez
+        // çevrildi, sonra kayboldu").
+        var held = false;
+        lastSimilarity = 0;
+        if (locateOverride is null && candidate is null && shown is not null && shownPose is { } open && print is { } kept)
+        {
+            var hold = GamePhoneGeometry.Hold(frame, open, kept);
+            lastSimilarity = hold.Similarity;
+            if (hold.Pose is { } heldPose)
+            {
+                pose = heldPose;
+                candidate = heldPose.Bounds;
+                points = WeakPoints;
+                strict = false;
+                held = true;
+            }
+        }
         long unseenMs = 0;
         var unseenMisses = 0;
         CropRegion? movedFrom = null;
@@ -127,6 +145,7 @@ public sealed class GamePhoneTracker
             shownPose = pose;
             misses = 0;
             lastSeen = now;
+            if (!held) KeepPrint(frame, pose, now);
         }
         else if (shown is not null && !Closes(misses + 1, Elapsed(lastSeen, now)))
         {
@@ -168,6 +187,8 @@ public sealed class GamePhoneTracker
                 misses = 0;
                 lastSeen = now;
                 ClearPending();
+                print = null;
+                KeepPrint(frame, pose, now);
             }
         }
         else if (pending is not null)
@@ -180,7 +201,14 @@ public sealed class GamePhoneTracker
             }
         }
         if (!wasShown && shown is not null) Trace(PhoneTrace.Opened);
-        else if (wasShown && shown is null) Trace(PhoneTrace.ClosedAfter(unseenMs, unseenMisses));
+        else if (wasShown && shown is null)
+        {
+            Trace(PhoneTrace.ClosedAfter(unseenMs, unseenMisses));
+            if (locateOverride is null && print is not null) Trace(PhoneTrace.PrintLost(lastSimilarity));
+            print = null;
+        }
+        if (held && !holding) Trace(PhoneTrace.Held(lastSimilarity));
+        holding = held && shown is not null;
         // Telefon art arda iki örnekte bulundu ama yeri çok oynadı: hiç açılmıyor, okuma da başlamıyor (önceden sessizdi).
         if (shown is null && candidate is not null && movedFrom is not null)
             Trace(PhoneTrace.Moving(PhoneTrace.Shift(candidate, movedFrom)));
@@ -194,7 +222,25 @@ public sealed class GamePhoneTracker
         return true;
     }
 
-    private bool PendingFresh(long now) => pending is not null && now >= pendingAt && now - pendingAt <= PendingMs;
+    /// <summary>Açık telefonun izi (son gerçek gözlemden; <see cref="PhonePrint"/>), alındığı an ve iz tutuyor mu.</summary>
+    private int[]? print;
+    private long printAt;
+    private bool holding;
+    private double lastSimilarity;
+    /// <summary>İz gerçek gözlemde en çok bu aralıkla (ms) yenilenir.</summary>
+    internal const long PrintRefreshMs = 1000;
+
+    /// <summary>Açık telefonun izini gerçek gözlemden alır (en çok <see cref="PrintRefreshMs"/>'de bir; denemelerin sahte gözlemlerinde alınmaz).</summary>
+    private void KeepPrint(Frame frame, GamePhoneGeometry.Pose? pose, long now)
+    {
+        if (locateOverride is not null || pose is not { } at) return;
+        if (print is not null && now >= printAt && now - printAt < PrintRefreshMs) return;
+        if (GamePhoneGeometry.Print(frame, at) is not { } fresh) return;
+        print = fresh;
+        printAt = now;
+    }
+
+        private bool PendingFresh(long now) => pending is not null && now >= pendingAt && now - pendingAt <= PendingMs;
 
     private void ClearPending()
     {
@@ -261,6 +307,8 @@ public sealed class GamePhoneTracker
         lastSeen = 0;
         shownPose = null;
         ClearPending();
+        print = null;
+        holding = false;
         missLog.Reset();
         status.Reset();
     }
@@ -369,25 +417,67 @@ internal static class GamePhoneGeometry
         if (frame.Width < Width || frame.Height < Height) return false;
         if (Widescreen(frame.Width, frame.Height)) return TryLocate(frame, (0, 0, frame.Width, frame.Height), near, out pose, out probe);
         if (!frame.IsConsistent) return false;
+        if (PictureArea(frame) is not { } area) return false;
+        // Açık telefonun yeri görüntünün içine taşınır.
+        Pose? local = near is { } last ? Inside(frame, area, last) : null;
+        var located = TryLocate(frame, area, local, out var within, out probe);
+        if (probe.Candidate is { } candidate) probe = probe with { Candidate = Outside(frame, area, candidate) };
+        if (!located) return false;
+        pose = Outside(frame, area, within);
+        return true;
+    }
+
+    /// <summary>Karedeki 16:9 oyun görüntüsü (<see cref="Picture"/>); kare zaten 16:9 ise tamamı.</summary>
+    private static (int X, int Y, int Width, int Height)? PictureArea(Frame frame)
+    {
+        if (frame.Width < Width || frame.Height < Height || !frame.IsConsistent) return null;
+        if (Widescreen(frame.Width, frame.Height)) return (0, 0, frame.Width, frame.Height);
         int Tone(int x, int y)
         {
             var p = (y * frame.Stride) + (x * 4);
             return (frame.Pixels[p] * 29 + frame.Pixels[p + 1] * 150 + frame.Pixels[p + 2] * 77) >> 8;
         }
-        if (Picture(frame.Width, frame.Height, Tone) is not { } area) return false;
-        // Açık telefonun yeri görüntünün içine taşınır.
-        Pose? local = near is { } last
-            ? new Pose((last.TopX * frame.Width - area.X) / area.Width, (last.TopY * frame.Height - area.Y) / area.Height,
-                       (last.BottomX * frame.Width - area.X) / area.Width, (last.BottomY * frame.Height - area.Y) / area.Height)
-            : null;
-        double X(double value) => (area.X + value * area.Width) / frame.Width;
-        double Y(double value) => (area.Y + value * area.Height) / frame.Height;
-        Pose Outside(Pose inside) => new(X(inside.TopX), Y(inside.TopY), X(inside.BottomX), Y(inside.BottomY));
-        var located = TryLocate(frame, area, local, out var within, out probe);
-        if (probe.Candidate is { } candidate) probe = probe with { Candidate = Outside(candidate) };
-        if (!located) return false;
-        pose = Outside(within);
-        return true;
+        return Picture(frame.Width, frame.Height, Tone);
+    }
+
+    /// <summary>Karedeki yer görüntünün içine.</summary>
+    private static Pose Inside(Frame frame, (int X, int Y, int Width, int Height) area, Pose pose) =>
+        new((pose.TopX * frame.Width - area.X) / area.Width, (pose.TopY * frame.Height - area.Y) / area.Height,
+            (pose.BottomX * frame.Width - area.X) / area.Width, (pose.BottomY * frame.Height - area.Y) / area.Height);
+
+    /// <summary>Görüntüdeki yer karenin içine.</summary>
+    private static Pose Outside(Frame frame, (int X, int Y, int Width, int Height) area, Pose pose) =>
+        new((area.X + pose.TopX * area.Width) / frame.Width, (area.Y + pose.TopY * area.Height) / frame.Height,
+            (area.X + pose.BottomX * area.Width) / frame.Width, (area.Y + pose.BottomY * area.Height) / frame.Height);
+
+    /// <summary>Görüntünün 400×225 ızgarasının kazançsız ham tonları (<see cref="PhonePrint"/>), satır satır.</summary>
+    private static int[] RawGrid(Frame frame, (int X, int Y, int Width, int Height) area)
+    {
+        Span<int> columns = stackalloc int[Width * 2];
+        var grid = new Samples(frame, columns, area, 256);
+        return grid.RawGrid();
+    }
+
+    /// <summary>Telefonun izi (<see cref="PhonePrint"/>): <paramref name="pose"/>'taki telefonun kasasından üst ve alt şeritte örnekler.</summary>
+    internal static int[]? Print(Frame frame, Pose pose)
+    {
+        if (PictureArea(frame) is not { } area) return null;
+        return PhonePrint.Samples(Inside(frame, area, pose), 0, 0, RawGrid(frame, area));
+    }
+
+    /// <summary>
+    /// Açık telefonun son yerinde izi tutuyor mu (<see cref="PhonePrint.Match"/>): tutarsa izin bulunduğu yer (kayma kadar
+    /// oynamış), tutmazsa null; en iyi benzerlik.
+    /// </summary>
+    internal static (Pose? Pose, double Similarity) Hold(Frame frame, Pose pose, int[] print)
+    {
+        if (PictureArea(frame) is not { } area) return (null, 0);
+        var local = Inside(frame, area, pose);
+        var match = PhonePrint.Match(print, local, RawGrid(frame, area));
+        if (match.Similarity < PhonePrint.HoldSimilarity) return (null, match.Similarity);
+        var moved = new Pose(local.TopX + match.Dx / 400.0, local.TopY + match.Dy / 225.0,
+                             local.BottomX + match.Dx / 400.0, local.BottomY + match.Dy / 225.0);
+        return (Outside(frame, area, moved), match.Similarity);
     }
 
     // Telefon karenin içindeki 16:9 görüntüde (area) aranır; yer görüntüye göre 0..1.
@@ -415,11 +505,24 @@ internal static class GamePhoneGeometry
             if (dark.Step > probe.Step) probe = probe with { Step = dark.Step, Gain = gain };
             if (dark.Side > probe.Side) probe = probe with { Side = dark.Side, Candidate = dark.Candidate };
         }
+        // Karanlık sahnede kazançlardan sonra ton eşitleme (Equalization).
+        var dim = level < DarkLevel;
+        if (dim)
+        {
+            var even = grid.Equalized();
+            if (Strict(even, out pose, out var equal))
+            {
+                probe = equal with { Level = level, Gain = Equalized };
+                return true;
+            }
+            if (equal.Step > probe.Step) probe = probe with { Step = equal.Step, Gain = Equalized };
+            if (equal.Side > probe.Side) probe = probe with { Side = equal.Side, Candidate = equal.Candidate };
+        }
         if (near is not { } last) return false;
         if (Confirm(grid, last, out pose)) return true;
         foreach (var gain in gains)
             if (Confirm(grid.WithGain(gain), last, out pose)) return true;
-        return false;
+        return dim && Confirm(grid.Equalized(), last, out pose);
     }
 
     /// <summary>Karanlık sahne: üst şeridin ortanca tonu bundan azsa (0–255) sıkı arama kazançla da yapılır (<see cref="DarkGains"/>).</summary>
@@ -427,6 +530,30 @@ internal static class GamePhoneGeometry
     /// <summary>Kazançlı aramada üst şeridin ortanca tonunun en çok taşındığı ton; denenen kazançlar (256 = 1×).</summary>
     internal const int DarkTarget = 96;
     internal static readonly int[] GainSteps = [384, 640, 1024];
+
+    /// <summary>Kazanç yerine ton eşitleme (<see cref="Equalization"/>): <see cref="Probe.Gain"/>'de bu değer.</summary>
+    internal const int Equalized = 0;
+
+    /// <summary>
+    /// Ton eşitleme: ızgaranın ham tonlarının (çeyrek ton adımıyla; <paramref name="counts"/>, toplam <paramref name="total"/>)
+    /// sırası 0–255'e yayılır (her ton, kendinden koyu ve yarısı kendisiyle aynı noktaların oranı). Parlaklıktan, gamadan ve
+    /// gece renk ayarından bağımsızdır: tonları aynı sırada kalan her karartma aynı ızgarayı verir. Kazanç
+    /// (<see cref="DarkGains"/>) karanlık sahnede yalnız ×4'e kadar aydınlatıyor, çok karanlıkta (üst şerit 10/255'ten koyu)
+    /// ve gamayla koyulaşmış görüntüde (açık kasa açık kalır, gölgeler kararır) sıkı arama hoparlör yarığında, kamerada ya da
+    /// kasa kenarında kalıyordu (X, beta-107: telefon gündüz çevriliyor, gece ve kapalı yerde çevrilmiyor; günlükte parlaklık
+    /// 7–60/255). Karanlık sahnede kazançlardan sonra denenir (Mac/iPhone ve Android ile aynı).
+    /// </summary>
+    internal static int[] Equalization(int[] counts, int total)
+    {
+        var map = new int[counts.Length];
+        var below = 0;
+        for (var tone = 0; tone < counts.Length; tone++)
+        {
+            map[tone] = Math.Min(255, 255 * (2 * below + counts[tone]) / Math.Max(1, 2 * total));
+            below += counts[tone];
+        }
+        return map;
+    }
 
     /// <summary>
     /// Karanlık sahnede denenen kazançlar (256 = 1×; küçükten büyüğe); sahne karanlık değilse boş. Kullanıcı bildirimi (X,
@@ -757,10 +884,13 @@ internal static class GamePhoneGeometry
         private readonly int top, height;
         /// <summary>Parlaklık kazancı (256 = 1×; <see cref="DarkGains"/>).</summary>
         private readonly int gain;
+        /// <summary>Ton eşitleme (<see cref="Equalization"/>): ham tonun (dört noktanın toplamı / 256) eşlendiği ton; null: kazanç.</summary>
+        private readonly int[]? map;
         internal Samples(Frame frame, Span<int> columns, (int X, int Y, int Width, int Height) area, int gain)
         {
             this.frame = frame;
             this.gain = gain;
+            map = null;
             top = area.Y;
             height = area.Height;
             x1 = columns[..Width];
@@ -772,7 +902,7 @@ internal static class GamePhoneGeometry
             }
         }
 
-        private Samples(Samples source, int gain)
+        private Samples(Samples source, int gain, int[]? map = null)
         {
             frame = source.frame;
             x1 = source.x1;
@@ -780,9 +910,27 @@ internal static class GamePhoneGeometry
             top = source.top;
             height = source.height;
             this.gain = gain;
+            this.map = map;
         }
 
         internal Samples WithGain(int gain) => new(this, gain);
+
+        /// <summary>Ton eşitlemeli kopya (<see cref="Equalization"/>).</summary>
+        internal Samples Equalized()
+        {
+            var counts = new int[1021];
+            var total = 0;
+            for (int y = 0; y < Height; y += 2)
+            {
+                (int a, int b) = Rows(y);
+                for (int x = 0; x < Width; x += 2)
+                {
+                    counts[Math.Min(1020, Raw(x, a, b) >> 8)]++;
+                    total++;
+                }
+            }
+            return new(this, 256, Equalization(counts, total));
+        }
 
         /// <summary>Üst şeridin (satır 0–89, sütun 95–305) ortanca tonu, kazançsız; her üç noktada bir örnek.</summary>
         internal int Level()
@@ -807,7 +955,19 @@ internal static class GamePhoneGeometry
             return 255;
         }
 
-        internal void Row(int y, scoped Span<byte> dest)
+        /// <summary>Izgaranın kazançsız ham toplamları: dört noktanın tonu × 256 (0–261120; bir ton 1024), satır satır.</summary>
+        internal int[] RawGrid()
+        {
+            var raw = new int[Width * Height];
+            for (int y = 0; y < Height; y++)
+            {
+                (int a, int b) = Rows(y);
+                for (int x = 0; x < Width; x++) raw[y * Width + x] = Raw(x, a, b);
+            }
+            return raw;
+        }
+
+                internal void Row(int y, scoped Span<byte> dest)
         {
             (int a, int b) = Rows(Math.Clamp(y, 0, Height - 1));
             for (int i = 0; i < dest.Length; i++)
@@ -828,6 +988,7 @@ internal static class GamePhoneGeometry
         private int Sample(int x, int row1, int row2)
         {
             int sum = Raw(x, row1, row2);
+            if (map is not null) return map[Math.Min(map.Length - 1, sum >> 8)];
             return gain == 256 ? sum >> 10 : (int)Math.Min(255, ((long)sum * gain) >> 18);
         }
 

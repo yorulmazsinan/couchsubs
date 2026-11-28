@@ -261,7 +261,7 @@ final class PhoneRegionSessionTests: XCTestCase {
         let watcher = RegionWatcher(reader: reader, translator: translator, server: server, clock: { clock })
         // Bu sınamalar balonların üstündeki düzeni (kararlılık) ölçer; panel ayrı sınanır.
         watcher.phonePanel = { PhonePanelOptions(enabled: false) }
-        let a = GamePhoneTestFrame.phone(), gone = GamePhoneTestFrame.phone(camera: false)
+        let a = GamePhoneTestFrame.phone(), gone = GamePhoneTestFrame.gone()
         let pose = try XCTUnwrap(GamePhoneGeometry.locate(a))
         reader.set([TextLine("Where are you man", box: first)])
         watcher.offer(a, areas: [], phone: pose)
@@ -285,7 +285,7 @@ final class PhoneRegionSessionTests: XCTestCase {
         let watcher = RegionWatcher(reader: reader, translator: translator, server: server, clock: { clock })
         // Bu sınamalar balonların üstündeki düzeni (kararlılık) ölçer; panel ayrı sınanır.
         watcher.phonePanel = { PhonePanelOptions(enabled: false) }
-        let a = GamePhoneTestFrame.phone(), gone = GamePhoneTestFrame.phone(camera: false)
+        let a = GamePhoneTestFrame.phone(), gone = GamePhoneTestFrame.gone()
         let pose = try XCTUnwrap(GamePhoneGeometry.locate(a))
         reader.set([TextLine("Reply today.", box: first)])
         await translator.delay("Reply today.")

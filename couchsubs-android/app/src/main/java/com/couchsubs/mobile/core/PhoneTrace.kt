@@ -22,6 +22,12 @@ object PhoneTrace {
     const val EMPTY_FLAT = "eğik ekran düzeltilmiş okuması boş"
 
     /** Telefon bulundu ama önceki örnekten çok oynadı; iki uyumlu gözlem olmadığı için açılmadı. */
+    /** Açık telefon sıkı aramada ve gevşek doğrulamada bulunamadı, son yerindeki iziyle tutuldu ([PhonePrint]; benzerlik %). */
+    fun held(similarity: Double) = "telefon aramada görünmedi, son yerinde iziyle tutuluyor (benzerlik %${percent(similarity)})"
+
+    /** Telefon kapandı: son yerdeki iz de tutmadı (en iyi benzerlik %). */
+    fun printLost(similarity: Double) = "telefonun izi son yerinde tutmadı (benzerlik %${percent(similarity)})"
+
     fun moving(share: Double) = "telefon oynuyor, açılmadı (%${percent(share)} oynama)"
 
     /** Okunacak karede telefon izlenen yerden çok uzakta: tur atlandı. */
@@ -56,7 +62,9 @@ object PhoneTrace {
         var light = ""
         if (level >= 0) {
             light = ", parlaklık $level/255"
-            if (level < GamePhoneGeometry.DARK_LEVEL) light += " (karanlık, kazanç ×${times(gain)})"
+            if (level < GamePhoneGeometry.DARK_LEVEL) {
+                light += if (gain == GamePhoneGeometry.EQUALIZED) " (karanlık, ton eşitleme)" else " (karanlık, kazanç ×${times(gain)})"
+            }
         }
         return "telefon ilk aramada bulunamadı ($samples arama): en ileri ölçüt $furthest, en sık $common ($commonCount)$candidate, " +
             "doğrulanmayan gözlem $unconfirmed ($strict sıkı)$light"

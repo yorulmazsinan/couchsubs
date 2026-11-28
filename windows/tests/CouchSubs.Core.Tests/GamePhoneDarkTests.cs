@@ -113,6 +113,139 @@ public class GamePhoneDarkTests
         foreach (var part in spec.GetProperty("contains").EnumerateArray()) Assert.Contains(part.GetString()!, missed[0]);
     }
 
+    /// <summary>Ton eşitleme eşlemesi (<see cref="GamePhoneGeometry.Equalization"/>): her platformda aynı tonlar.</summary>
+    [Fact]
+    public void EqualizationMap()
+    {
+        foreach (var item in Vectors().GetProperty("equalization").EnumerateArray())
+        {
+            var name = item.GetProperty("name").GetString();
+            var counts = new int[1021];
+            var total = 0;
+            foreach (var pair in item.GetProperty("counts").EnumerateArray())
+            {
+                var values = pair.EnumerateArray().Select(v => v.GetInt32()).ToArray();
+                counts[values[0]] += values[1];
+                total += values[1];
+            }
+            var map = GamePhoneGeometry.Equalization(counts, total);
+            foreach (var pair in item.GetProperty("map").EnumerateArray())
+            {
+                var values = pair.EnumerateArray().Select(v => v.GetInt32()).ToArray();
+                Assert.True(map[values[0]] == values[1], $"{name}: {values[0]} → {map[values[0]]}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gece, kapalı yer ve karanlık sahne: gerçek telefon karelerinin karartılmış hâlleri (parlaklık × k, gama, gece renk
+    /// ayarı, kararan kenarlar, koyu arka plan; kare ortalaması ~5–60/255) telefonu açar.
+    /// </summary>
+    [Fact]
+    public void DarkVariantsOpenThePhone()
+    {
+        foreach (var item in Vectors().GetProperty("darkVariants").EnumerateArray())
+        {
+            var name = item.GetProperty("frame").GetString()!;
+            foreach (var transform in item.GetProperty("transforms").EnumerateArray().Select(t => t.GetString()!))
+            {
+                var frame = GamePhoneFirstSightingTests.Load(name, transform);
+                var tracker = new GamePhoneTracker();
+                var opened = false;
+                for (var i = 0; i < 3; i++)
+                {
+                    tracker.TrySample(frame, i * 330L, out var visible);
+                    opened |= visible is not null;
+                }
+                GamePhoneGeometry.TryLocate(frame, null, out _, out var probe);
+                Assert.True(opened, $"{name} ({transform}): {probe}");
+            }
+        }
+    }
+
+    /// <summary>İz benzerliği (<see cref="PhonePrint.Similarity"/>): parlaklıktan ve karşıtlıktan bağımsız; düz ya da çok sönük iz 0.</summary>
+    [Fact]
+    public void PrintSimilarity()
+    {
+        foreach (var item in Vectors().GetProperty("printSimilarity").EnumerateArray())
+        {
+            var a = item.GetProperty("a").EnumerateArray().Select(v => v.GetInt32()).ToArray();
+            var b = item.GetProperty("b").EnumerateArray().Select(v => v.GetInt32()).ToArray();
+            var expected = item.GetProperty("similarity").GetDouble();
+            var actual = PhonePrint.Similarity(a, b);
+            Assert.True(Math.Abs(actual - expected) < 1e-6, $"{item.GetProperty("name").GetString()}: {actual}");
+        }
+    }
+
+    /// <summary>
+    /// Telefon aydınlıkta açılır, sahne kararır (sıkı arama ıskalar): son yerindeki iziyle açık kalır, okuma sürer. Telefon
+    /// indirilince (telefonsuz kare) iz tutmaz, telefon her zamanki sürede kapanır.
+    /// </summary>
+    [Fact]
+    public void OpenPhoneIsHeldByItsPrint()
+    {
+        foreach (var item in Vectors().GetProperty("hold").EnumerateArray())
+        {
+            var name = item.GetProperty("name").GetString();
+            var open = GamePhoneFirstSightingTests.Load(item.GetProperty("frame").GetString()!, "none");
+            var then = GamePhoneFirstSightingTests.Load(item.GetProperty("then").GetString()!, item.GetProperty("transform").GetString()!);
+            var log = new List<string>();
+            var tracker = new GamePhoneTracker { Log = log.Add };
+            long t = 0;
+            for (var i = 0; i < 3; i++, t += 330) tracker.TrySample(open, t, out _);
+            tracker.TrySample(open, t, out var shown);
+            Assert.True(shown is not null, name);
+            t += 330;
+            var samples = item.GetProperty("samples").GetInt32();
+            CropRegion? last = null;
+            var kept = 0;
+            for (var i = 0; i < samples; i++, t += 330)
+            {
+                tracker.TrySample(then, t, out last);
+                if (last is not null) kept++;
+            }
+            if (item.GetProperty("held").GetBoolean()) Assert.True(kept == samples, $"{name}: {kept}/{samples} {string.Join(" | ", log)}");
+            else Assert.True(last is null, $"{name}: {string.Join(" | ", log)}");
+            if (item.TryGetProperty("log", out var parts))
+                foreach (var part in parts.EnumerateArray())
+                    Assert.True(log.Any(line => line.Contains(part.GetString()!)), $"{name}: {part.GetString()} yok: {string.Join(" | ", log)}");
+        }
+    }
+
+    /// <summary>
+    /// İz telefonsuz karede telefonu tutmaz: telefon açıldıktan sonra telefonsuz gerçek kareler (karanlık hâlleriyle) gelince
+    /// telefon kapanır.
+    /// </summary>
+    [Fact]
+    public void PrintNeverHoldsPhoneFreeFrames()
+    {
+        var spec = Vectors().GetProperty("holdNoPhone");
+        var transforms = spec.GetProperty("transforms").EnumerateArray().Select(item => item.GetString()!).ToList();
+        var openers = spec.GetProperty("openers").EnumerateArray().Select(item => GamePhoneFirstSightingTests.Load(item.GetString()!, "none")).ToList();
+        var samples = spec.GetProperty("samples").GetInt32();
+        using var manifest = JsonDocument.Parse(File.ReadAllText(GamePhoneFirstSightingTests.FramePath("frames.json")));
+        var names = manifest.RootElement.GetProperty("frames").EnumerateArray()
+            .Where(frame => !frame.TryGetProperty("phone", out _))
+            .Select(frame => Path.GetFileNameWithoutExtension(frame.GetProperty("file").GetString()!)).Distinct().ToList();
+        foreach (var name in names)
+        {
+            var source = Jpeg.Load(GamePhoneFirstSightingTests.FramePath(name + ".jpg"));
+            foreach (var transform in transforms)
+            {
+                var frame = GamePhoneFirstSightingTests.Transform(source, transform);
+                for (var o = 0; o < openers.Count; o++)
+                {
+                    var tracker = new GamePhoneTracker();
+                    long t = 0;
+                    for (var i = 0; i < 3; i++, t += 330) tracker.TrySample(openers[o], t, out _);
+                    CropRegion? last = null;
+                    for (var i = 0; i < samples; i++, t += 330) tracker.TrySample(frame, t, out last);
+                    Assert.True(last is null, $"{name} ({transform}) telefon {o} açık kaldı");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void DarkMissLineText()
     {

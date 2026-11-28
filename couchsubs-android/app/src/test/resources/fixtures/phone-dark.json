@@ -1,5 +1,5 @@
 {
-  "about": "Karanlık sahnede ve koyu ekranlı GTA 6 telefonu (X, beta.104: \"telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor\"). Ortak deneme: Mac/iPhone GamePhoneDarkTests.swift, Windows GamePhoneDarkTests.cs, Android GamePhoneDarkTest.kt. 'gains': üst şeridin ortanca tonu (level) için denenen kazançlar (256 = 1×; boş: karanlık değil, kazanç denenmez). 'frames': testdata/frames gerçek kareleri phone-first-sighting.json'daki dönüşümlerle (none, dark, night, gamma); sıkı arama telefonu bulmalı, 'gain' true ise bulan aramanın kazancı 1×'ten büyük (kazanç gerekti). 'darkScreen': PhoneDarkScreen: 'histogram' [ton, adet] çiftleri; 'prepared' hazırlık yapılır mı; 'map' [giriş, çıkış] tonları. 'missLog': karanlıkta bulunamayan telefon 20 sn içinde tek satır yazar, parlaklık ve kazançla; 'missLine' satırın tam metni.",
+  "about": "Karanlık sahnede ve koyu ekranlı GTA 6 telefonu (X, beta.104: \"telefonda parlaklık varsa çeviri oluyor karanlıksa olmuyor\"). Ortak deneme: Mac/iPhone GamePhoneDarkTests.swift, Windows GamePhoneDarkTests.cs, Android GamePhoneDarkTest.kt. 'gains': üst şeridin ortanca tonu (level) için denenen kazançlar (256 = 1×; boş: karanlık değil, kazanç denenmez). 'frames': testdata/frames gerçek kareleri phone-first-sighting.json'daki dönüşümlerle (none, dark, night, gamma); sıkı arama telefonu bulmalı, 'gain' true ise bulan aramanın kazancı 1×'ten büyük (kazanç gerekti). 'darkScreen': PhoneDarkScreen: 'histogram' [ton, adet] çiftleri; 'prepared' hazırlık yapılır mı; 'map' [giriş, çıkış] tonları. 'missLog': karanlıkta bulunamayan telefon 20 sn içinde tek satır yazar, parlaklık ve kazançla; 'missLine' satırın tam metni. 'equalization': GamePhoneGeometry.equalization: 'counts' [ham ton (dört noktanın toplamı / 256, 0–1020), adet] çiftleri; 'map' [ham ton, eşlenen ton] (255 × (2 × koyular + kendisi) / (2 × toplam), tam sayı bölme). 'darkVariants': gece, kapalı yer ve karanlık sahne (X, beta-107): gerçek telefon karelerinin phone-first-sighting.json'daki 'tür:değer' dönüşümleriyle karartılmış hâlleri; izleyici üç örnekte (330 ms arayla) telefonu açmalı. 'printSimilarity': PhonePrint.similarity (izin iki yarısının, üst ve alt şeridin, normalleştirilmiş çapraz ilintisinin küçüğü; bir yarının sapması 2048'den azsa ya da güncelinki kayıtlının 0,08'inden azsa 0). 'hold': telefon 'frame' (dönüşümsüz) ile dört örnekte açılır, sonra 'then' ('transform' ile) 'samples' örnek verilir; 'held' true ise her örnekte açık kalır (iz tuttu), false ise sonda kapalı; 'log' satırları günlükte. 'holdNoPhone': telefon 'openers' karelerinden biriyle açılır, sonra telefonsuz her kare (frames.json'da telefon işareti olmayanlar) 'transforms' ile 'samples' örnek verilir; sonda telefon kapalı olmalı (iz telefonsuz karede tutmaz).",
   "gains": [
     {"level": 120, "gains": []},
     {"level": 56, "gains": []},
@@ -27,6 +27,31 @@
     {"name": "koyu ve boş ekran (yazı yok): değişmez", "histogram": [[18, 50], [22, 49], [40, 1]], "prepared": false},
     {"name": "ortanca 96: koyu sayılmaz", "histogram": [[96, 90], [250, 10]], "prepared": false}
   ],
-  "missLog": {"name": "karanlık odada çok karanlık telefon (ana-2 gece): bulunamadı, 20 sn'de tek satır parlaklık ve kazançla", "frame": "gta6-telefon-ana-2", "transform": "night", "intervalMs": 330, "durationMs": 20500, "contains": ["telefon ilk aramada bulunamadı (", ", parlaklık ", "/255 (karanlık, kazanç ×"]},
-  "missLine": {"samples": 61, "furthest": "noCamera", "common": "noTopSlot", "commonCount": 40, "side": -1, "unconfirmed": 0, "strict": 0, "level": 11, "gain": 1024, "line": "telefon ilk aramada bulunamadı (61 arama): en ileri ölçüt ön kamera yok, en sık hoparlör yarığı yok (40), doğrulanmayan gözlem 0 (0 sıkı), parlaklık 11/255 (karanlık, kazanç ×4,0)"}
+  "missLog": {"name": "karanlık odada çok karanlık telefon (ana-2, gamma:3.4): kazanç ve ton eşitlemeyle de bulunamadı, 20 sn'de tek satır parlaklıkla", "frame": "gta6-telefon-ana-2", "transform": "gamma:3.4", "intervalMs": 330, "durationMs": 20500, "contains": ["telefon ilk aramada bulunamadı (", ", parlaklık ", "/255 (karanlık, "]},
+  "missLine": {"samples": 61, "furthest": "noCamera", "common": "noTopSlot", "commonCount": 40, "side": -1, "unconfirmed": 0, "strict": 0, "level": 11, "gain": 1024, "line": "telefon ilk aramada bulunamadı (61 arama): en ileri ölçüt ön kamera yok, en sık hoparlör yarığı yok (40), doğrulanmayan gözlem 0 (0 sıkı), parlaklık 11/255 (karanlık, kazanç ×4,0)"},
+  "equalization": [
+    {"name": "iki ton yarı yarıya", "counts": [[0, 50], [4, 50]], "map": [[0, 63], [2, 127], [4, 191], [1020, 255]]},
+    {"name": "karanlık kare: koyu zemin, az sayıda açık nokta", "counts": [[10, 90], [40, 10]], "map": [[0, 0], [10, 114], [25, 229], [40, 242], [1020, 255]]},
+    {"name": "dört ton", "counts": [[8, 30], [12, 40], [100, 25], [900, 5]], "map": [[0, 0], [8, 38], [12, 127], [50, 178], [100, 210], [500, 242], [900, 248], [1020, 255]]}
+  ],
+  "darkVariants": [
+    {"frame": "gta6-telefon-ana-1", "transforms": ["scale:0.18", "scale:0.12", "gamma:2.8", "gamma:3.4", "nightgrade:0.3", "vignette:0.3", "darkbg:0.3", "scale:0.12+mirror", "gamma:2.8+mirror"]},
+    {"frame": "gta6-telefon-ana-2", "transforms": ["scale:0.45", "scale:0.35", "scale:0.18", "scale:0.12", "gamma:1.8", "gamma:2.2", "gamma:2.8", "nightgrade:0.45", "nightgrade:0.3", "scale:0.25+mirror"]},
+    {"frame": "gta6-telefon-sohbet-1", "transforms": ["scale:0.12", "gamma:3.4", "nightgrade:0.3", "vignette:0.3", "darkbg:0.3"]},
+    {"frame": "gta6-telefon-sohbet-2", "transforms": ["scale:0.18", "gamma:2.2", "nightgrade:0.3", "vignette:0.3"]}
+  ],
+  "printSimilarity": [
+    {"name": "aynı iz, karanlıkta (× 0,25, kayık)", "a": [0, 40960, 81920, 40960, 0, 81920], "b": [1000, 11240, 21480, 11240, 1000, 21480], "similarity": 1.0},
+    {"name": "ters iz", "a": [0, 40960, 81920, 40960, 0, 81920], "b": [90000, 49040, 8080, 49040, 90000, 8080], "similarity": -1.0},
+    {"name": "düz (simsiyah) yer", "a": [0, 40960, 81920, 40960, 0, 81920], "b": [5000, 5000, 5000, 5000, 5000, 5000], "similarity": 0.0},
+    {"name": "çok sönük (kayıtlının 1/16'sı)", "a": [0, 40960, 81920, 40960, 0, 81920], "b": [1000, 3560, 6120, 3560, 1000, 6120], "similarity": 0.0},
+    {"name": "üst şerit aynı, alt şerit ters: küçüğü", "a": [0, 40960, 81920, 40960, 0, 81920], "b": [0, 40960, 81920, 40960, 81920, 0], "similarity": -1.0}
+  ],
+  "hold": [
+    {"name": "karanlık odada kenarlar karardı (sıkı arama alt çentikte kalıyor): iziyle açık kalır", "frame": "gta6-telefon-ana-2", "then": "gta6-telefon-ana-2", "transform": "vignette:0.5", "samples": 9, "held": true},
+    {"name": "çok koyu gama: iziyle açık kalır", "frame": "gta6-telefon-ana-2", "then": "gta6-telefon-ana-2", "transform": "gamma:3.4", "samples": 9, "held": true},
+    {"name": "telefon indirildi (telefonsuz kare): kapanır, iz tutmadı", "frame": "gta6-telefon-ana-1", "then": "gta6-01-lucia", "transform": "none", "samples": 6, "held": false, "log": ["telefonun izi son yerinde tutmadı"]},
+    {"name": "telefon indirildi, gece sahnesi: kapanır", "frame": "gta6-telefon-ana-1", "then": "gta6-19-gece", "transform": "scale:0.35", "samples": 6, "held": false}
+  ],
+  "holdNoPhone": {"openers": ["gta6-telefon-sohbet-2"], "transforms": ["gamma:2.8"], "samples": 3}
 }

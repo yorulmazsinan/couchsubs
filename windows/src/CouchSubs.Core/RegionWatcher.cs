@@ -114,6 +114,9 @@ public sealed partial class RegionWatcher
         public double PhoneAspect = 16.0 / 9;
         /// <summary>Telefonun son okunduğu kare: liste kartlarının avatarı, rozeti ve seçim çerçevesi bundan kesilir (<see cref="PhoneListLook"/>).</summary>
         public Frame? PhoneFrame;
+        /// <summary>Telefonun bu açılışındaki izi (<see cref="PhonePrint"/>; PhoneMissing) ve ait olduğu açılış.</summary>
+        public int[]? PhonePrint;
+        public CancellationToken? PhonePrintLifetime;
         public Frame? LastReadCrop;
         public TextBox[] Lines = [];
         public long LastFullCheck;

@@ -12,6 +12,8 @@ final class PhoneRegionSession {
         let pose: GamePhoneGeometry.Pose
         /// Karenin geldiği an (ms): çapanın o karedeki yeri bununla bulunur.
         var time = 0
+        /// Telefonun oturum başındaki izi (`PhonePrint`): arama ıskalarsa son yerinde iz karşılaştırılır.
+        var print: [Int]?
         var region: CropRegion { pose.bounds }
 
         func isPresent() -> Bool { absence() == nil }
@@ -19,8 +21,12 @@ final class PhoneRegionSession {
         /// Telefon bu karede yoksa ya da izlenen yerden çok uzaktaysa nedeni (`PhoneTrace`); yerindeyse nil. İzleyici gibi
         /// açık telefonun yerinde gevşek doğrulama da denenir: önceden yalnız sıkı arama vardı, izleyicinin açık tuttuğu
         /// telefonun turları "PhoneMissing" ile atlanıyordu (#1251; Windows ile aynı).
+        /// Arama da gevşek doğrulama da ıskalarsa telefonun izi son yerinde karşılaştırılır (`PhonePrint`): karanlık sahnede
+        /// izleyici telefonu iziyle açık tutuyor, okuma turları ise "PhoneMissing" ile atlanıyor, çeviri bir kez gelip
+        /// `PhoneSteady.missTurns` tur sonra siliniyordu (X, beta-107: "bir kez çevrildi, sonra kayboldu"; Windows ile aynı).
         func absence() -> String? {
-            guard let found = GamePhoneGeometry.locate(frame, near: pose) else { return PhoneTrace.missing }
+            let held = { print.flatMap { GamePhoneGeometry.hold(frame, pose, print: $0).pose } }
+            guard let found = GamePhoneGeometry.locate(frame, near: pose) ?? held() else { return PhoneTrace.missing }
             return region.isClose(to: found.bounds, tolerance: 0.035) ? nil
                 : PhoneTrace.displaced(PhoneTrace.shift(found.bounds, region))
         }
@@ -50,6 +56,8 @@ final class PhoneRegionSession {
     private let translator: TextTranslator
     private let server: RegionSending
     private var latest: Capture?
+    /// Telefonun oturum başındaki izi (`PhonePrint`; `Capture.absence`).
+    private var print: [Int]?
     private var lastPass: Int?
     private var task: Task<Void, Never>?
     private var page: Page?
@@ -127,7 +135,9 @@ final class PhoneRegionSession {
     }
 
     func observe(_ frame: CGImage, pose: GamePhoneGeometry.Pose, at time: Int = SubtitleStabilizer.uptimeMs()) {
-        latest = Capture(frame: frame, pose: pose, time: time)
+        // Telefonun izi oturumun ilk karesinden (izleyici telefonu bu karede açtı).
+        if print == nil { print = GamePhoneGeometry.print(frame, pose) }
+        latest = Capture(frame: frame, pose: pose, time: time, print: print)
     }
 
     /// Türkçe çizimde balonlar her zaman kendi yerinde (panel yok).
@@ -160,6 +170,7 @@ final class PhoneRegionSession {
 
     func close() {
         latest = nil
+        print = nil
         shownPage = nil
         shownList = nil
         kindVotes = 0

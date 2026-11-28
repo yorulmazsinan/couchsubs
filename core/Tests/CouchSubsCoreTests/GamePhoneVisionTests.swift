@@ -23,6 +23,10 @@ enum GamePhoneTestFrame {
                        shouldInterpolate: false, intent: .defaultIntent)!
     }
 
+    /// Telefon indirildi: telefonun yerinde düz zemin. Kamerasız telefon (`phone(camera: false)`) yalnız sıkı aramayı
+    /// ıskalatır; izleyici onu iziyle (`PhonePrint`) yerinde tutar.
+    static func gone() -> CGImage { image(width: 400, height: 225) { _, _ in (85, 85, 85) } }
+
     static func phone(casing: UInt8 = 110, slot: UInt8 = 25, camera: Bool = true, patch: CGRect? = nil) -> CGImage {
         image(width: 400, height: 225) { x,y in
             let gray = phoneGray(x, y, casing: casing, slot: slot, camera: camera, patch: patch)
@@ -65,7 +69,7 @@ final class GamePhoneTrackerTests: XCTestCase {
         XCTAssertNotNil(tracker.sample(image, now: 330).pose)
         // Açık telefon kısa süre bulunamayınca kapanmaz (panel kaybolup gelmesin); son görülmeden ~1 sn sonra, üçüncü
         // ıskada kapanır (#1334; önceden dördüncü ıskada, ~1,3 sn).
-        let missing = GamePhoneTestFrame.phone(camera: false)
+        let missing = GamePhoneTestFrame.gone()
         XCTAssertNotNil(tracker.sample(missing, now: 660).pose)
         XCTAssertNotNil(tracker.sample(image, now: 990).pose)
         XCTAssertNotNil(tracker.sample(missing, now: 1320).pose)
