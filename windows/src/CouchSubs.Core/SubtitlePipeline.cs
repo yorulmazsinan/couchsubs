@@ -191,8 +191,6 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         public bool Abandoned { get; set; }
         /// <summary>Satırın okunduğu kare (ölçümler için).</summary>
         public ReadInfo Read { get; init; }
-        /// <summary>Okumanın yalnız bir satırı pakette yok: motora yalnız o satır gider, ötekiler paketten gösterilir.</summary>
-        public PackPartial? Partial { get; set; }
     }
 
     /// <summary>Süren ve sırada bekleyen istekler.</summary>
@@ -219,12 +217,6 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     /// motor hiç çağrılmaz ve çeviri beklemeden gösterilir. Uygulama paketler açıkken verir.
     /// </summary>
     public Func<string, PackMatch?>? PackLookup { get; set; }
-    /// <summary>
-    /// Çok satırlı okumanın yalnız bir satırı pakette yoksa satır satır sonuç (<see cref="PackPartial"/>): bulunan satırlar
-    /// paketten, yalnız eksik satır motordan çevrilir. Verilmezse (ya da <see cref="PackLookup"/> yoksa) okumanın tamamı
-    /// motora gider.
-    /// </summary>
-    public Func<string, PackPartial?>? PartialPackLookup { get; set; }
     /// <summary>Konuşan adı ("ARTHUR: …") TV'ye giden çeviride gösterilir; kapalıysa yalnız cümle gider.</summary>
     public bool ShowSpeakerNames { get; set; } = true;
     /// <summary>
@@ -1032,7 +1024,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     {
         after = null;
         if (SpeakerPrefix.Parse(source) is not { } prefix) return false;
-        var request = Requests.LastOrDefault(r => r.Session == session && !r.Superseded && !r.Abandoned && r.Partial is null
+        var request = Requests.LastOrDefault(r => r.Session == session && !r.Superseded && !r.Abandoned
             && r.Prefix is null && SameSentence(prefix.Body, r.Source));
         if (request is not null)
         {
@@ -1233,8 +1225,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         {
             if (ReadPlausibility.Reason(source) is null) return false;
             if (PackLookup is { } lookup && (lookup(source) is not null
-                || SpeakerPrefix.Parse(source) is { } prefix && lookup(prefix.Body) is not null
-                || PartialPackLookup?.Invoke(source) is not null)) return false;
+                || SpeakerPrefix.Parse(source) is { } prefix && lookup(prefix.Body) is not null)) return false;
         }
         lastImplausible = source;
         if (source == stabilizerSource) stabilizer.WithdrawSent();
@@ -1260,20 +1251,16 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             return null;
         }
         if (FindPack(source) is { } packed) return ShowPacked(request, packed);
-        // Yalnız bir satırı pakette olmayan çok satırlı okuma (iki konuşma alt alta): bulunan satırlar paketten gösterilir,
-        // motora yalnız o satır gider. Hepsi motora giderse paketteki satırın da motor çevirisi gösterilirdi.
-        if (PackLookup is not null && PartialPackLookup?.Invoke(source) is { } partial) request.Partial = partial;
         var missed = PackMissed;
-        var missedText = request.Partial?.Missing ?? source;
         if (inFlight is not { } current)
         {
-            Write(request, $"{SubtitleLog.Excerpt(source)} → çeviriye{PartialNote(request)}");
+            Write(request, $"{SubtitleLog.Excerpt(source)} → çeviriye");
             inFlight = request;
             pump = Pump(request);
         }
         else
         {
-            Write(request, $"{SubtitleLog.Excerpt(source)} → sırada (çeviri sürüyor: #{current.Number}){PartialNote(request)}");
+            Write(request, $"{SubtitleLog.Excerpt(source)} → sırada (çeviri sürüyor: #{current.Number})");
             // Aynı cümlenin eski okuması sırada bekliyorsa çıkar; sıra dolduysa en eski bekleyen atlanır.
             foreach (var old in waiting.Where(w => ReplacesQueued(source, w.Source)))
                 Write(old, $"atıldı: yerine düzelmiş okuması geldi (#{request.Number})");
@@ -1293,7 +1280,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 inFlightCancel?.Cancel();
             }
         }
-        return missed is null ? null : () => missed(missedText);
+        return missed is null ? null : () => missed(source);
     }
 
     /// <summary>
@@ -1309,7 +1296,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         if (pending.Count > 0)
         {
             var newest = pending[^1];
-            if (newest.Partial is not null || !TextMatch.IsJitterOf(source, newest.Source)) return false;
+            if (!TextMatch.IsJitterOf(source, newest.Source)) return false;
             newest.LeftAt = null;
             lineOnScreen = newest.Number;
             lastSent = (newest.Source, ReadingScore(newest.Source), now());
@@ -1323,13 +1310,6 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         Send(last.Translation, last.Source, 15000, box ?? LastBox, replaces: true);
         return true;
     }
-
-    private static string PartialNote(Request request) =>
-        request.Partial is { } partial ? $" (yalnız 1 satır; {partial.Lines.Count - 1} satır paketten)" : "";
-
-    /// <summary>Kısmi eşleşmenin Türkçesi: paketteki satırlar ve motorun çevirdiği eksik satır, okunan sırayla.</summary>
-    private string Combine(PackPartial partial, string sentence) =>
-        string.Join("\n", partial.Lines.Select(line => SpeakerPrefix.Present(line.Turkish ?? sentence, line.Source, ShowSpeakerNames)));
 
     // Tam okuma sıradayken geri geldiyse aradaki kısalmış okumaları birleştir; sıra ve okuma zamanı korunur.
     // Gerçek bir boş bölgeyi aşma: sonra gelen kısa metin ayrı bir replik olabilir.
@@ -1503,10 +1483,8 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
     private async Task Translate(Request request, CancellationToken token)
     {
         var source = request.Source;
-        // Kısmi eşleşmede çevirmene yalnız paketteki karşılığı bulunmayan satır gider (adı varsa onunla).
-        var partial = request.Partial;
-        var speaker = partial is null ? request.Prefix : SpeakerPrefix.Parse(partial.Missing);
-        var input = partial is null ? request.Prefix?.Body ?? source : speaker?.Body ?? partial.Missing;
+        var speaker = request.Prefix;
+        var input = speaker?.Body ?? source;
         // Ayrılan ad çevirmene gitmez; cümle içinde geçtiğinde korunsun diye ayrıca bildirilir (#287).
         if (speaker is { } prefix) translator.NoteSpeaker(prefix.Name);
         var started = now();
@@ -1560,7 +1538,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
             if (request.Session != session || request.Abandoned) return;
             // Çeviri sürerken konuşan adı okunduysa (NameRead) çeviri adlı okumayla gösterilir.
             source = request.Source;
-            translated = partial is null ? Present(sentence, request) : Combine(partial, sentence);
+            translated = Present(sentence, request);
             var shouldSend = stabilizer.ShouldSend(input, sentence);
             Remember(request.Number, source, shouldSend ? translated : null);
             if (!shouldSend) settled.Settle(source, request.Box, target: true, shown: false, now());
@@ -1578,7 +1556,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
                 Write(request, $"{result}, geç: satır {now() - left} ms önce kalktı, gösterilmedi");
                 return;
             }
-            Write(request, $"{result}, gösterildi{(onScreen ? "" : " (satır kalkmıştı)")}{PartialNote(request)}");
+            Write(request, $"{result}, gösterildi{(onScreen ? "" : " (satır kalkmıştı)")}");
             settled.Settle(source, request.Box, target: false, shown: true, now());
             lastShown = request.Number;
             // Satır hâlâ ekrandaysa kalkınca silinir; kalktıysa okunacak kadar gösterilir.
@@ -1593,11 +1571,7 @@ public sealed class SubtitlePipeline(ITextReader reader, ITextTranslator transla
         }
         MetricsReady?.Invoke(metrics);
         PairShown?.Invoke(source, translated);
-        if (SpeechReady is { } speech)
-        {
-            var engine = SpeakerPrefix.Voiced(translator.SpokenLines(input), speaker);
-            speech(partial is null ? engine : [.. partial.Lines.SelectMany(line => line.Turkish is null ? engine : line.Spoken)]);
-        }
+        if (SpeechReady is { } speech) speech(SpeakerPrefix.Voiced(translator.SpokenLines(input), speaker));
     }
 
     private void Remember(int number, string source, string? translation)

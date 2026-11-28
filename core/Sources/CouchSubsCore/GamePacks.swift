@@ -522,13 +522,16 @@ public enum PackLookup {
             var pieces: [SubtitleSegmenter.Piece] = []
             var translations: [String?] = []
             var all = true
+            var skipped = false
+            var subtitle = false
             for line in lines {
                 guard let found = single(line, find: find) else {
                     // Altyazıyla aynı bloğa düşen köşe yazısı ("San Andreas", "First Person • zoom") atlanır.
-                    if isOverlay(line) { continue }
+                    if isOverlay(line) { skipped = true; continue }
                     all = false
                     break
                 }
+                if hasLowercase(line) { subtitle = true }
                 if !pieces.isEmpty {
                     pieces.append(SubtitleSegmenter.Piece("\n", translate: false))
                     translations.append(nil)
@@ -536,7 +539,10 @@ public enum PackLookup {
                 pieces += found.pieces
                 translations += found.translations
             }
-            if all, !pieces.isEmpty { return result(pieces, translations) }
+            // Köşe yazısı yalnız bulunan satırlardan biri altyazıysa (küçük harf var) atlanır. Bütün satırları büyük harfli
+            // tabelada ("WARNING / WE OPERATE / CAMERAS IN / THIS AREA.") bulunmayan satırlar köşe yazısı değil tabelanın
+            // kendisidir: atlanınca yalnız "Uyarı / BU BÖLGE!" gösteriliyordu; tabela motorla çevrilir.
+            if all, !pieces.isEmpty, !skipped || subtitle { return result(pieces, translations) }
         }
 
         // Cümle cümle (etiket, tire ve ayraçlar olduğu gibi kalır).
@@ -586,6 +592,11 @@ public enum PackLookup {
             guard let first = word.unicodeScalars.first, first.properties.isUppercase else { return false }
             return word.unicodeScalars.allSatisfy { PackFuzzy.isLetter($0) || PackFuzzy.isDigit($0) }
         }
+    }
+
+    /// Satırda küçük harf var mı (altyazı satırı; tabela ve köşe yazısı çoğunlukla büyük harflidir).
+    static func hasLowercase(_ line: String) -> Bool {
+        line.unicodeScalars.contains { $0.properties.isLowercase }
     }
 
     /// OCR'ın bozduğu konuşmacı etiketi: "-GAETANO:", "M]:", "li LUCA:", "MİNE GUARD•" (ilk 32 karakterde iki nokta ya

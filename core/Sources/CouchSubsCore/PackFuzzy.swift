@@ -24,8 +24,10 @@ public enum PackFuzzy {
     /// Tek yönlü kapsama (yarım ya da fazlalıklı okuma): iki taraf da en az `minLength` harf; kısa tarafın en az
     /// `inner`'ı uzun tarafta; uzun tarafın en az `partial`'ı (satır yarım okunmuş) ya da `extra`'sı (okumada fazlalık
     /// var: köşe yazısı, çöp) kısa tarafta; benzerlik `inner - penalty` sayılır. Fazlalık az olmalı: iki ayrı altyazının
-    /// birleştiği okuma tek bir altyazıya çıkmasın.
-    static let containment = (minLength: 22, inner: 90.0, partial: 25.0, extra: 55.0, penalty: 10.0)
+    /// birleştiği okuma tek bir altyazıya çıkmasın. Yarım okuma uzun satırın en az üçte ikisi olmalı: "Jason: been friends
+    /// ever since." okuması paketteki uzun satırın tamamının Türkçesini ("…Boobie: Ah, ben de onunla futbol sahasında
+    /// tanıştım.") getiriyordu; daha kısa parça motora gider (Windows, Android aynı).
+    static let containment = (minLength: 22, inner: 90.0, partial: 65.0, extra: 55.0, penalty: 10.0)
     /// Fazlalıklı okumada yan cümle denetimi (`clauseHashes`): okuma birden çok cümle ya da yan cümleyse en az `letters`
     /// harfli her birinin üçlülerinin en az `covered`'ı kısa adayda olmalı. İki altyazı yan yana okununca ("Hey, look. …
     /// But listen, I got some other work.") ikinci cümle adayda yoktur: yalnız birinin Türkçesi gösterilmez, satır cümle

@@ -7,10 +7,10 @@ düzeltme) → `translate.py` (Claude ile cümle cümle çeviri) → `review.py`
 
 GTA VI için kısa OCR satırlarını kapsama önizlemesine dahil etmek üzere:
 `python3 tools/packs/coverage.py yerel-rows.jsonl yerel-havuz.json - --title "Grand Theft Auto VI"`.
-Başlık verilmezse genel 16 karakterlik alt sınır kullanılır; GTA başlığıyla Windows GTA
-paketlerindeki 8 karakterlik bulanık eşleşme alt sınırı kullanılır. **Bu yalnız tahmindir:**
-`fuzzy>=0.6` gerçek istemcinin benzerlik/eşsiz aday eşiği değildir, 8–15 karakterlik
-bulanık aramayı Mac/iOS dahil tüm platformlarda garanti etmez. Yerel oyun metinleri ve
+Başlık verilmezse genel 16 karakterlik alt sınır kullanılır; GTA başlığıyla 8 karakterlik alt sınır
+kullanılır (paket GTA'ya kısa satır imzası da yazar). **Bu yalnız tahmindir:** `fuzzy>=0.6` gerçek
+istemcinin benzerlik/eşsiz aday eşiği değildir; uygulamalar (dört platform) 16 karakterden kısa satırda
+bulanık arama yapmaz. Yerel oyun metinleri ve
 OCR dışa aktarımları repoya eklenmez.
 
 Anthropic anahtarı `~/.config/couchsubs/anthropic-key` dosyasından okunur; depoya konmaz. Harcama `ledger.jsonl`'a

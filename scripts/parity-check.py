@@ -253,6 +253,20 @@ CAPABILITIES = {
         ("windows", "windows/src/CouchSubs.Translation/PackLookup.cs", r"if \(TurkishText\.LooksTurkish\(text\)\) return null;"),
         ("android", _DROID + "SubtitleSegmenter.kt", r"if \(TurkishText\.looksTurkish\(text\)\) return null"),
     ],
+    # GTA 6 çeviri kalitesi (28 Kas): yarım okumaya uzun satırın tam çevirisi gelmez (kapsama en az üçte iki), büyük harfli
+    # tabelanın bulunmayan satırları köşe yazısı sayılıp atlanmaz; Windows'a özel kısa satır bulanık araması ve kısmi
+    # eşleşme kaldırıldı. Ortak deneme dosyası pack-quality-cases.json.
+    "Paket eşleşme kalitesi (pack-quality-cases.json)": [
+        ("mac", _CORE + "PackFuzzy.swift", r"containment = \(minLength: 22, inner: 90\.0, partial: 65\.0, extra: 55\.0, penalty: 10\.0\)"),
+        ("windows", _WIN + "PackFuzzy.cs", r"Containment = \(22, 90, 65, 55, 10\);"),
+        ("android", _DROID + "PackFuzzy.kt", r"const val partial = 65\.0"),
+        ("mac", _CORE + "GamePacks.swift", r"if all, !pieces\.isEmpty, !skipped \|\| subtitle \{"),
+        ("windows", "windows/src/CouchSubs.Translation/PackLookup.cs", r"if \(all && pieces\.Count > 0 && \(!skipped \|\| subtitle\)\)"),
+        ("android", _DROID + "SubtitleSegmenter.kt", r"if \(all && pieces\.isNotEmpty\(\) && \(!skipped \|\| subtitle\)\)"),
+        ("mac", _CORE_TESTS + "GamePacksTests.swift", r"pack-quality-cases\.json"),
+        ("windows", "windows/tests/CouchSubs.Translation.Tests/PackLookupTests.cs", r"pack-quality-cases\.json"),
+        ("android", _DROID_TESTS + "PackFuzzyTest.kt", r"pack-quality-cases\.json"),
+    ],
     # GitHub #1259: kamerayla kayan plaka/tabela altyazı alanına girse de altyazı sayılmaz; dört platformun hattında da.
     "Kamerayla kayan yazıyı altyazıdan çıkarma (SceneMotion)": [
         ("mac", _CORE + "Pipeline/SubtitlePipeline.swift", r"sceneMotion\.filter\("),

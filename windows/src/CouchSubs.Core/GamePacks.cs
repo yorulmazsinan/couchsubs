@@ -218,19 +218,6 @@ public sealed class GamePack(string id, string title, IReadOnlyDictionary<ulong,
 public sealed record PackMatch(string Text, IReadOnlyList<SpokenLine> Spoken);
 
 /// <summary>
-/// Çok satırlı okumanın yalnız bir satırı pakette yok: satırlar sırasıyla, bulunanın Türkçesi ve seslendirmesiyle;
-/// bulunmayanın <see cref="PackLine.Turkish"/>'i null (yalnız o satır motora gider). Bkz. PackLookup.MatchPartial.
-/// </summary>
-public sealed record PackPartial(IReadOnlyList<PackLine> Lines)
-{
-    /// <summary>Motora gidecek tek satır.</summary>
-    public string Missing => Lines.First(line => line.Turkish is null).Source;
-}
-
-/// <summary>Kısmi eşleşmede bir satır: okunan İngilizce, paketteki Türkçesi (yoksa null) ve seslendirmesi.</summary>
-public sealed record PackLine(string Source, string? Turkish, IReadOnlyList<SpokenLine> Spoken);
-
-/// <summary>
 /// Uygulamayla gelen ve kullanıcının klasörüne bırakılan paketler; hepsi tek bir sözlükte birleşir.
 /// Sıra: uygulamanınkiler, sonra kullanıcınınkiler (dosya adına göre); aynı anahtarda sonraki kazanır,
 /// aynı kimlikli pakette kullanıcının dosyası uygulamanınkinin yerine geçer.
@@ -474,9 +461,7 @@ public sealed class GamePackLibrary(Func<IEnumerable<(string Name, byte[] Data)>
         foreach (var pack in searched)
         {
             if (Corrected(text, pack, translation) is { } corrected) return corrected;
-            // GTA paketinde kısa satırlar da aranır (paket betiği GTA'ya kısa satır imzası da yazar).
-            var minimum = ScreenText.IsGta(pack.Title) ? PackFuzzy.ShortMinLength : PackFuzzy.MinLength;
-            if (pack.Fuzzy?.Nearest(text, translation, minimum) is { } found && translation(found) is { } turkish) return turkish;
+            if (pack.Fuzzy?.Nearest(text, translation) is { } found && translation(found) is { } turkish) return turkish;
         }
         return null;
     }
