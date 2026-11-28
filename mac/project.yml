@@ -252,6 +252,9 @@ targets:
 schemes:
   CouchSubsAppStore:
     build:
+      # XcodeGen 2.47+ şemayı varsayılan olarak "Match Run Destination" üretiyor; Apple Silicon derleyicide yalnız arm64
+      # çıkıyordu. Mimari hedef ayarlarından (ARCHS, Release'te ONLY_ACTIVE_ARCH=NO) gelsin: uygulama evrensel kalır.
+      buildArchitectures: useTargetSettings
       targets:
         CouchSubsAppStore: all
         CouchSubsAppStoreTests: [test]
@@ -262,6 +265,9 @@ schemes:
       config: Release
   CouchSubs:
     build:
+      # XcodeGen 2.47+ şemayı varsayılan olarak "Match Run Destination" üretiyor; Apple Silicon derleyicide yalnız arm64
+      # çıkıyordu. Mimari hedef ayarlarından (ARCHS, Release'te ONLY_ACTIVE_ARCH=NO) gelsin: uygulama evrensel kalır.
+      buildArchitectures: useTargetSettings
       targets:
         CouchSubs: all
         CouchSubsTests: [test]
