@@ -16,6 +16,7 @@
 // (gecenin ilk tetiklemesi plan, sonrakiler oyun başına çeviri parçaları ve en son paket). Durum R2'de auto/state.json.
 
 import { accepts } from "./filter.js";
+import { EMPTY_EVIDENCE, cleanPool, decodeEvidence } from "./packclean.js";
 import { STATS_KEY, canon, key } from "./index.js";
 import { EXTRA_SUFFIX, gameKey, gameSlug } from "./games.js";
 
@@ -549,6 +550,27 @@ async function loadKnown(env) {
   return new BigUint64Array(buffer);
 }
 
+/** Aynı oyunun elle hazırlanmış paketinin kimliği (listede auto olmayan, adı ya da oyun kimliği aynı); yoksa null. */
+export function mainPackFor(job, packs) {
+  const id = jobPackId(job);
+  const k = gameKey(job.game || job.titleId);
+  const main = packs.find((p) => p && !p.auto && p.id !== id
+    && ((k && typeof p.title === "string" && gameKey(p.title) === k) || (job.titleId && p.titleId === job.titleId)));
+  return main?.id ?? null;
+}
+
+/** Elle hazırlanmış paketin temizlik kanıtı (scripts/build-evidence.mjs); yoksa ya da bozuksa boş kanıt. */
+async function loadEvidence(env, mainId) {
+  if (!mainId) return EMPTY_EVIDENCE;
+  try {
+    const object = await env.PACKS.get(`auto/evidence/${mainId}.bin`);
+    if (!object?.arrayBuffer) return EMPTY_EVIDENCE;
+    return decodeEvidence(new Uint8Array(await object.arrayBuffer()));
+  } catch {
+    return EMPTY_EVIDENCE;
+  }
+}
+
 async function sha256Hex(data) {
   const digest = await crypto.subtle.digest("SHA-256", data);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -561,8 +583,11 @@ async function gzip(text) {
 
 const sorted = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
-/** Çeviri önbelleğinden paket gövdesi (elle hazırlanmış paketlerdeki anahtarlar hariç). */
-export function packBody(id, title, cache, known, titleId = null) {
+/** Çeviri önbelleğinden paket gövdesi (elle hazırlanmış paketlerdeki anahtarlar hariç). Yazı tanıma kaynaklı bozuk
+ *  satırlar (iki konuşmacının birleştiği, iki kez okunan, İngilizce büyük harf çöpü kalan) parçaları pakette ya da aynı
+ *  oyunun elle hazırlanmış paketinde (`evidence`, R2 auto/evidence/<paket>.bin) zaten varsa pakete girmez
+ *  (src/packclean.js; tools/packs/packclean.py ile aynı kurallar). */
+export function packBody(id, title, cache, known, titleId = null, evidence = EMPTY_EVIDENCE) {
   const entries = {};
   const segments = {};
   for (const [pool, line] of Object.entries(cache.lines)) {
@@ -573,6 +598,7 @@ export function packBody(id, title, cache, known, titleId = null) {
     if (pool !== line.k && !isKnown(known, pool)) segments[pool] = line.tr;
   }
   for (const k of Object.keys(segments)) if (k in entries) delete segments[k];
+  cleanPool({ entries, segments }, evidence ?? EMPTY_EVIDENCE, (k) => isKnown(known, k));
   const count = Object.keys(entries).length;
   // Oyun kimliği uygulamalara da gider: paketle tanınan oyun havuza kimliğiyle döner.
   const head = titleId ? { format: 2, id, title, titleId } : { format: 2, id, title };
@@ -617,7 +643,8 @@ async function buildPack(env, job, cache, known) {
   // Ad gövdede de durduğundan ad değişince (asıl paket eklendi ya da kalktı) içerik özeti de değişir ve paket aynı
   // gece yeniden yazılır; listedeki ad böylece kendiliğinden güncellenir.
   const title = packTitle(job, packs);
-  const { body, count } = packBody(id, title, cache, known, job.titleId === GENERAL ? null : job.titleId);
+  const evidence = job.titleId === GENERAL ? EMPTY_EVIDENCE : await loadEvidence(env, mainPackFor(job, packs));
+  const { body, count } = packBody(id, title, cache, known, job.titleId === GENERAL ? null : job.titleId, evidence);
   const previous = packs.find((p) => p.id === id);
   // A syntactically valid but empty translation cache (or lines filtered into
   // segments only) can produce a pack clients reject: GamePack requires entries.
