@@ -184,8 +184,9 @@ public enum NoticeCard {
         return w * h >= 0.5 * smaller
     }
 
-    /// Bütün kare için kart araması (`bounds`). Kare yalnız ilk soruda, ağ boyunda (`gridWidth` × `gridHeight`) bir kez
-    /// çözülür; sağda aday blok yoksa hiç çözülmez.
+    /// Bütün kare için kart araması (`bounds`). Karenin sağ kısmı (`cardLeft`'ten biraz solundan sağ kenara) yalnız ilk
+    /// soruda, karenin kendi çözünürlüğünde bir kez çözülür (küçültülerek çizilen kare makineden makineye farklı noktaları
+    /// örnekliyordu; Windows ve Android karenin kendi noktalarına bakar); sağda aday blok yoksa hiç çözülmez.
     public static func sampler(_ frame: CGImage) -> (TextBox) -> TextBox? {
         var loaded = false
         var pixels: GamePhonePixels?
@@ -193,12 +194,15 @@ public enum NoticeCard {
             guard isCandidate(box) else { return nil }
             if !loaded {
                 loaded = true
-                pixels = GamePhonePixels(frame, width: gridWidth, height: gridHeight)
+                let x0 = Int(Double(frame.width) * (cardLeft - 0.05))
+                pixels = GamePhonePixels(frame, in: CGRect(x: x0, y: 0, width: frame.width - x0, height: frame.height))
             }
-            guard let grid = pixels else { return nil }
-            return bounds(around: box, width: grid.width, height: grid.height) { x, y in
-                let i = (y * grid.width + x) * 4
-                return (299 * Int(grid.bytes[i]) + 587 * Int(grid.bytes[i + 1]) + 114 * Int(grid.bytes[i + 2])) / 1000
+            guard let part = pixels else { return nil }
+            return bounds(around: box, width: frame.width, height: frame.height) { x, y in
+                let px = x - part.x, py = y - part.y
+                guard px >= 0, px < part.width, py >= 0, py < part.height else { return 0 }
+                let i = (py * part.width + px) * 4
+                return (299 * Int(part.bytes[i]) + 587 * Int(part.bytes[i + 1]) + 114 * Int(part.bytes[i + 2])) / 1000
             }
         }
     }

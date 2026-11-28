@@ -71,7 +71,14 @@ final class NoticeCardTests: XCTestCase {
                 throw XCTSkip("gerçek kare yok: \(real.frame)")
             }
             let (kept, cards) = NoticeCard.split(reading, in: area, card: NoticeCard.sampler(frame))
-            XCTAssertEqual(cards.count, 1, real.frame)
+            // Bulunamazsa tanı: kartın içinden ve dışından parlaklıklar (makineye göre renk dönüşümü farkı).
+            let probe = GamePhonePixels(frame).map { p in
+                [(0.85, 0.82), (0.85, 0.87), (0.95, 0.83), (0.75, 0.85), (0.99, 0.85)].map { fx, fy -> Int in
+                    let i = (Int(fy * Double(p.height)) * p.width + Int(fx * Double(p.width))) * 4
+                    return (299 * Int(p.bytes[i]) + 587 * Int(p.bytes[i + 1]) + 114 * Int(p.bytes[i + 2])) / 1000
+                }
+            }
+            XCTAssertEqual(cards.count, 1, "\(real.frame) parlaklık \(String(describing: probe))")
             assertClose(cards.first?.card, real.card, vectors.tolerance, real.frame)
             XCTAssertEqual(cards.first.map { $0.block.lines.map(\.text) }, real.texts, real.frame)
             XCTAssertTrue(kept.lines.allSatisfy { !real.texts.contains($0.text) }, real.frame)
