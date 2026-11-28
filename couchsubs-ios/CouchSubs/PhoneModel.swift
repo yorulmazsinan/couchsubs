@@ -1933,19 +1933,25 @@ final class PhoneModel: ObservableObject {
 
     /// Son DeepL anahtar denemesinin sonucu: reddedilince Ayarlar nedenini (geçersiz karakter, 5xx, ağ yok…) gösterir.
     private(set) var lastDeepLCheck: OnlineKeyCheck?
+    /// Son yapay zekâ anahtar denemesinin hatası: reddedilince Ayarlar nedenini (geçersiz anahtar, ağ yok) gösterir (Mac ile aynı).
+    private(set) var lastAIFailure: AIFailure?
 
     /// Anahtar denenir; kabul edildiyse Anahtarlık'a yazılır ve motor seçilir. Anahtarlık'tan geri okunamazsa kayıt
     /// başarılı sayılmaz (Mac'teki `saveKey` ile aynı kural).
     func saveKey(_ key: String, for engine: TranslationEngine) async -> KeySaveResult {
-        // DeepL anahtarındaki görünmez karakterler (araya giren boşluk, bölünmez boşluk, satır sonu…) her yerden silinir.
-        let key = engine == .deepL ? DeepLKey.clean(key) : key.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Anahtardaki görünmez karakterler (araya giren boşluk, bölünmez boşluk, satır sonu…) her yerden silinir.
+        let key = DeepLKey.clean(key)
         lastDeepLCheck = nil
+        lastAIFailure = nil
         guard !key.isEmpty, let storeKey = engine.storeKey else { return .rejected }
         let accepted: Bool
         SubtitleLog.write("API anahtarı testi başladı: \(engine.rawValue)")
         if let provider = engine.aiProvider {
             let result = await services.testAIKey(provider: provider, key: key, model: settings.model(for: provider))
-            if case .failure(let error) = result { SubtitleLog.write("API anahtarı testi sonucu: \(provider.rawValue) \(error)") }
+            if case .failure(let error) = result {
+                SubtitleLog.write("API anahtarı testi sonucu: \(provider.rawValue) \(error)")
+                lastAIFailure = error
+            }
             switch result {
             case .success, .failure(.quotaExceeded), .failure(.modelRejected), .failure(.busy): accepted = true
             case .failure: accepted = false

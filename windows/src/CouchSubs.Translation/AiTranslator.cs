@@ -149,7 +149,7 @@ public static class AiRequest
                                            IReadOnlyList<string>? names = null, string? instruction = null,
                                            IReadOnlyList<int>? limits = null)
     {
-        key = key.Trim();
+        key = DeepLKey.Clean(key);
         var user = UserMessage(sentences, context, game, names, limits);
         var system = SystemPromptWith(instruction);
         HttpRequestMessage request;
@@ -577,7 +577,7 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
         ErrorPause = provider.IsLocal() ? LocalRetryAfter : RetryAfter;
         Model = provider.Model(model);
         Server = provider.IsLocal() ? server ?? LocalAiServer.Create(LocalAiServer.OllamaUrl, Model.Id) : null;
-        _key = key.Trim();
+        _key = DeepLKey.Clean(key);
         _fallback = fallback;
         _http = http ?? ClientFor(provider);
         _screenHttp = http ?? (provider.IsLocal() ? LocalTestClient.Value : ScreenClient.Value);
@@ -932,8 +932,11 @@ public sealed class AiTranslator : ITextTranslator, IOnlineTranslator
                                                      CancellationToken cancellationToken = default, LocalAiServer? server = null,
                                                      string? instruction = null)
     {
-        key = key.Trim();
+        // Yapıştırırken araya giren görünmez karakterler silinir (DeepL ile aynı kural). Geriye görünür ASCII dışında
+        // karakter kalırsa istek gönderilmez: hiçbir hizmetin anahtarında yoktur ve HTTP başlığına yazılamaz.
+        key = DeepLKey.Clean(key);
         if (key.Length == 0 && !provider.IsLocal()) return new(OnlineKeyState.Invalid);
+        if (key.Length > 0 && !DeepLKey.IsWellFormed(key)) return new(OnlineKeyState.Invalid);
         http ??= provider.IsLocal() ? LocalTestClient.Value : CloudTestClient.Value;
         // Deneme tek istektir; çeviri hattının dakikalık hakkından yemez.
         var translator = new AiTranslator(provider, key, model, new FailingTranslator(), http, budget: new RequestBudget(int.MaxValue),

@@ -4354,7 +4354,8 @@ public sealed class AppController : INotifyPropertyChanged, IDisposable
     /// </summary>
     public async Task<AiTestResult> SetAiKeyAsync(AiProvider provider, string key)
     {
-        key = key.Trim();
+        // Görünmez karakterler (araya giren boşluk, satır sonu, bölünmez boşluk…) her yerden silinir (DeepL ile aynı).
+        key = DeepLKey.Clean(key);
         var name = provider.ToString().ToLowerInvariant();
         SubtitleLog.Write($"API anahtarı testi başladı: {name}");
         var result = await services.TestAiKeyAsync(provider, key, provider.Model(settings.ModelFor(provider)).Id);

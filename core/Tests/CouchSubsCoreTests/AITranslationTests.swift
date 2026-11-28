@@ -1138,6 +1138,30 @@ final class AITranslationTests: XCTestCase {
         XCTAssertEqual(result, .success("KRATOS: [tr] We go now. [tr] Stay close, boy."))
     }
 
+    /// Yapıştırırken araya giren görünmez karakterler (BOM, sıfır genişlikli boşluk, satır sonu, bölünmez boşluk, araya
+    /// giren boşluk, yumuşak tire) her yerden silinip gönderilir; geriye görünür ASCII dışında karakter kalırsa istek hiç
+    /// gönderilmez (Windows ve Android ile aynı kural).
+    func testTestCleansInvisibleCharactersFromKey() async {
+        let key = "AIzaSyFAKE-test_key_0123456789abcdefghij"
+        let head = { (count: Int) in String(key.prefix(count)) }
+        let tail = { (count: Int) in String(key.dropFirst(count)) }
+        let pasted = ["\u{FEFF}\(key)\n", head(20) + "\u{200B}" + tail(20), head(10) + " " + tail(10),
+                      head(10) + "\n" + tail(10), "\u{00A0}\(key)\u{200E}", head(5) + "\u{00AD}" + tail(5)]
+        for typed in pasted {
+            let result = await AITranslationCore.test(provider: .gemini, key: typed, model: nil, session: FakeAI.session())
+            XCTAssertEqual(result, .success("KRATOS: [tr] We go now. [tr] Stay close, boy."))
+        }
+        XCTAssertEqual(FakeAI.requests.map { $0.request.value(forHTTPHeaderField: "x-goog-api-key") }, Array(repeating: key, count: pasted.count))
+
+        FakeAI.requests = []
+        let accented = await AITranslationCore.test(provider: .gemini, key: key.replacingOccurrences(of: "a", with: "á"), model: nil,
+                                                    session: FakeAI.session())
+        XCTAssertEqual(accented, .failure(.invalidKey))
+        let blank = await AITranslationCore.test(provider: .gemini, key: "\u{200B} \n", model: nil, session: FakeAI.session())
+        XCTAssertEqual(blank, .failure(.invalidKey))
+        XCTAssertTrue(FakeAI.requests.isEmpty)
+    }
+
     /// Anahtar hiçbir hata metninde ya da durumda görünmez.
     func testKeyNeverAppearsInErrors() async {
         FakeAI.failure = (401, #"{"error":{"message":"Incorrect API key provided: \#(secret)"}}"#)

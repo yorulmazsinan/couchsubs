@@ -67,6 +67,7 @@ public struct OnlineKeyCheck: Equatable {
 /// sonu, sekme, bölünmez boşluk (U+00A0), sıfır genişlikli boşluk, BOM, yumuşak tire gibi görünmez karakterler her yerden
 /// silinir; DeepL anahtarında bunlar hiç yoktur. Bölünmez boşluk başlıkta kalınca istek "sunucuya bağlanılamadı"
 /// (-1004), é gibi Latin-1 harfleri DeepL'den 502 döndürüyordu; ikisi de "DeepL'e ulaşılamadı" görünüyordu.
+/// Gemini, OpenAI, Claude ve yerel model anahtarı da aynı kuralla temizlenir (bu anahtarlarda da görünmez karakter yoktur).
 public enum DeepLKey {
     public static func clean(_ key: String) -> String {
         var scalars = String.UnicodeScalarView()
