@@ -6,7 +6,10 @@ CouchSubs'ın yeni deneme sürümü. Türkçe dil desteği olmayan PS5 oyunları
 
 **Bu sürümde yeni**
 
-- **Ekran yazısı kilidi** (#1423): Menü, harita kartı, görev kutusu ve ekran yazısı çevirisi ekran değişmedikçe sabit kalıyor; kutular titremiyor, yer değiştirmiyor, kaybolup gelmiyor. Aynı menüye dönünce çeviri bekletmeden geliyor. TV uygulaması 0.9.126.
+- **Ekran yazısı kilidi** (#1423): Menü, harita kartı, görev kutusu ve ekran yazısı çevirisi ekran değişmedikçe sabit kalıyor; kutular titremiyor, yer değiştirmiyor, kaybolup gelmiyor. Aynı menüye dönünce çeviri bekletmeden geliyor. 
+- **GTA 6 telefonu karanlıkta** (#1439): Gece ve iç mekânda telefon artık çok daha sık tanınıyor; bir kez bulunan telefon karanlıkta kaybolmuyor, mesajlar okunmaya devam ediyor.
+- **Xbox'ta görüntü gelmemesi** (#1435): Xbox ses gönderip görüntü göndermediğinde uygulama boşuna yeniden bağlanmıyor, ekranda Xbox'u tamamen kapatıp açmanızı söylüyor; Windows'ta boş karenin "bağlandı" sayılması düzeltildi.
+- **Bağlantı kopması günlüğü** (#1436): TV ya da PS5 bağlantısı koptuğunda günlükte nedeni yazıyor. TV uygulaması 0.9.127.
 - **Tabela ve kitap kapağı** (#1428): Tabela, kitap kapağı ya da telefon sohbetinden arta kalan tek satır ayrıca çevrilmiyor.
 - **TV kurulumunda klavye** (#1422): iPhone ve Mac'te IP ve port kutusunun her yerine dokununca klavye açılıyor.
 - **Mac'te tekrarlayan güncelleme** (#1424): Güncelleme penceresi yeniden çıkıyorsa ana ekranda nedeni (başka kopya, disk görüntüsünden çalışma) ve çözümü gösteriliyor.
