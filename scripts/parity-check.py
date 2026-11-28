@@ -472,10 +472,10 @@ CAPABILITIES = {
     "Xbox'ta son seçilen oyun ve oyun bilinmiyorsa Oyun karosu notu (xboxNeedsGame)": [
         ("mac", _CORE + "GameSense.swift", r"public func startXbox\(lastChosen:"),
         ("mac", _CORE + "GameChoice.swift", r"sense\.startXbox\(lastChosen: lastPlayed\)"),
-        ("mac", "mac/CouchSubs/AppModel.swift", r"gameChoice\.start\(console: consoleName, xbox: isXbox\)"),
+        ("mac", "mac/CouchSubs/AppModel.swift", r"gameChoice\.start\(console: consoleName, xbox: isXbox[,)]"),
         ("mac", "mac/CouchSubs/UI/Yeni/HomeStatus.swift", r"choice\.xboxNeedsGame"),
         ("mac", _CORE_TESTS + "GameSenseTests.swift", r"func testXboxStartUsesTheLastChosenGameOrLogsThatTheGameIsUnknown\("),
-        ("ios", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"gameChoice\.start\(console: consoleName, xbox: xbox != nil\)"),
+        ("ios", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"gameChoice\.start\(console: consoleName, xbox: xbox != nil[,)]"),
         ("ios", "couchsubs-ios/CouchSubs/UI/GameAsk.swift", r"choice\.xboxNeedsGame"),
         ("windows", _WIN + "GameSense.cs", r"public string StartXbox\("),
         ("windows", "windows/src/CouchSubs.Shell/AppController.cs", r"gameSense\.StartXbox\(LastPlayedGame\)"),
@@ -485,6 +485,22 @@ CAPABILITIES = {
         ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/PlayedGame.kt", r"sense\.startXbox\("),
         ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/ui/GameAskCard.kt", r"status\.xboxNeedsGame"),
         ("android", _DROID_TESTS + "GameSenseTest.kt", r"fun xboxStartUsesTheLastChosenGameOrLogsThatTheGameIsUnknown\("),
+    ],
+    # #1443: PS5 oyunu bildirmeyince ve paketler kapalıyken oyun hiç tanınmıyor, GTA 6 telefonu hiç aranmıyordu. Motorla
+    # çevrilen satır pakette yalnız oyunu tanımak için aranır; oyun tanınmazsa günlüğe bir kez "telefon aranmıyor".
+    "Paketler kapalıyken oyunu okunan satırlardan tanıma ve telefon aranmıyor günlüğü (#1443)": [
+        ("mac", _CORE + "GameChoice.swift", r"public func noteLine\(fromPack: Bool, packs: GamePackLibrary, identify:"),
+        ("mac", _CORE + "GameSense.swift", r"public func shouldLogPhoneIdle\("),
+        ("mac", "mac/CouchSubs/AppModel.swift", r"identify: packsOff \? source : nil"),
+        ("mac", _CORE_TESTS + "GamePacksTests.swift", r"func testEngineLinesStillRecognizeTheGameWhenPacksAreOff\("),
+        ("ios", "couchsubs-ios/CouchSubs/PhoneModel.swift", r"identify: !self\.demoMode && !self\.packsActive \? source : nil"),
+        ("windows", "windows/src/CouchSubs.Shell/AppController.cs", r"hit = IdentifyFromPacks\(source\)"),
+        ("windows", _WIN + "GameSense.cs", r"public bool ShouldLogPhoneIdle\("),
+        ("windows", _WIN_TESTS + "GameSenseTests.cs", r"void PhoneIdleIsLoggedOncePerSessionWhileTheGameIsUnknown\("),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/PlayedGame.kt", r"fun noteLine\(fromPack: Boolean, library: GamePackLibrary, identify:"),
+        ("android", _DROID + "GameSense.kt", r"fun shouldLogPhoneIdle\("),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/service/TranslationService.kt", r"PlayedGame\.noteLine\(pair\.origin == \"paket\", library, identify\)"),
+        ("android", _DROID_TESTS + "GameSenseTest.kt", r"fun phoneIdleIsLoggedOncePerSessionWhileTheGameIsUnknown\("),
     ],
     # beta.89: TV'nin adresi değişince kayıtlı adres sessiz kalıyor, kurulum "Key Server kapalı" diyordu; eşli TV kaldırılamıyordu.
     "Kayıtlı TV adresi sessizse TV'yi ağda yeniden bulma (TVReach; reddedilen bağlantı yanıt sayılır)": [
