@@ -386,7 +386,7 @@
     <string name="settings_background_area">Background area</string>
     <string name="settings_background_fit">Fit the text</string>
     <string name="settings_background_band">Full-width band</string>
-    <string name="settings_background_note">Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides.</string>
+    <string name="settings_background_note">A full-width band also covers the sides of the English subtitle.</string>
     <string name="settings_target">Subtitle target</string>
     <string name="settings_placement">Subtitle position on TV</string>
     <string name="settings_placement_cover">Cover</string>
@@ -808,6 +808,7 @@
     <string name="set_color_red">Red</string>
     <string name="set_color_blue">Blue</string>
     <string name="set_darkness">Darkness</string>
+    <string name="set_darkness_cover_note">With Cover, the newest line\'s box always stays fully dark so the English subtitle can\'t show through. Darkness applies to earlier lines and to the other placements.</string>
     <string name="set_darkness_medium">Medium</string>
     <string name="set_text_color">Text Color</string>
     <string name="set_character_name">Character Name</string>

@@ -3903,22 +3903,6 @@
         }
       }
     },
-    "Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Drag Background all the way to Solid to fully hide the English subtitle in the game. A full-width band also covers the sides."
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arka plan kaydırıcısını sonuna çekince arka plan tamamen opak olur, oyundaki İngilizce yazı kapanır. Tam genişlik bant yanları da örter."
-          }
-        }
-      }
-    },
     "Over the English subtitle": {
       "localizations": {
         "en": {
@@ -16143,6 +16127,8 @@
     "%lld px": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "%lld px"}}, "tr": {"stringUnit": {"state": "translated", "value": "%lld px"}}}},
     "Background Color": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Background Color"}}, "tr": {"stringUnit": {"state": "translated", "value": "Zemin Rengi"}}}},
     "Selected: %@.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Selected: %@."}}, "tr": {"stringUnit": {"state": "translated", "value": "Seçili: %@."}}}},
+    "With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements."}}, "tr": {"stringUnit": {"state": "translated", "value": "Örtsün'de en yeni satırın kutusu, İngilizce altyazı alttan görünmesin diye hep tam koyudur. Koyuluk önceki satırlarda ve öbür yerleşimlerde geçerlidir."}}}},
+    "A full-width band also covers the sides of the English subtitle.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "A full-width band also covers the sides of the English subtitle."}}, "tr": {"stringUnit": {"state": "translated", "value": "Tam genişlik bant İngilizce altyazının yanlarını da örter."}}}},
     "Darkness": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Darkness"}}, "tr": {"stringUnit": {"state": "translated", "value": "Koyuluk"}}}},
     "Text Color": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Text Color"}}, "tr": {"stringUnit": {"state": "translated", "value": "Yazı Rengi"}}}},
     "Character Name": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Character Name"}}, "tr": {"stringUnit": {"state": "translated", "value": "Karakter Adı"}}}},
@@ -16309,7 +16295,6 @@
     "Characters you meet while playing appear here.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Characters you meet while playing appear here."}}, "tr": {"stringUnit": {"state": "translated", "value": "Oynarken karşılaştığınız karakterler burada görünür."}}}},
     "Check Unchanged Subtitle Areas More Often": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Check Unchanged Subtitle Areas More Often"}}, "tr": {"stringUnit": {"state": "translated", "value": "Değişmeyen Altyazı Alanını Daha Sık Oku"}}}},
     "Set On-Screen Text Apart from Subtitles": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Set On-Screen Text Apart from Subtitles"}}, "tr": {"stringUnit": {"state": "translated", "value": "Ekran Yazılarını Altyazıdan Ayır"}}}},
-    "Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides."}}, "tr": {"stringUnit": {"state": "translated", "value": "Oyundaki İngilizce altyazıyı tamamen gizlemek için Altyazı Görünümü'nde Koyu'yu seçin. Tam genişlik bant yanları da örter."}}}},
     "Xbox · Beta": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Xbox · Beta"}}, "tr": {"stringUnit": {"state": "translated", "value": "Xbox · Beta"}}}},
     "Beta": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Beta"}}, "tr": {"stringUnit": {"state": "translated", "value": "Beta"}}}},
     "Copy All": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Copy All"}}, "tr": {"stringUnit": {"state": "translated", "value": "Tümünü Kopyala"}}}},

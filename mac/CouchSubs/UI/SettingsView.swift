@@ -32,7 +32,7 @@ struct AppearanceCard: View {
             }
             DSSelectRow(title: "Background area", selection: $model.settings.style.backgroundShape,
                         options: [(SubtitleBackgroundShape.fit, String(localized: "Fit the text")), (SubtitleBackgroundShape.band, String(localized: "Full-width band"))],
-                        hint: "Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides.")
+                        hint: "A full-width band also covers the sides of the English subtitle.")
             SwitchRow(title: "Bold text", isOn: $model.settings.style.bold)
             SwitchRow(title: "Keep previous lines above in fast dialogue", isOn: $model.settings.style.stackPrevious,
                       hint: "When off, each new line replaces the previous one. Needs TV app 0.9.16 or later.")

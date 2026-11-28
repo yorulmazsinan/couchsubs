@@ -57,6 +57,7 @@ import com.couchsubs.mobile.R
 import com.couchsubs.mobile.Services
 import com.couchsubs.mobile.account.Backend
 import com.couchsubs.mobile.core.NameColorMode
+import com.couchsubs.mobile.core.OverlayCover
 import com.couchsubs.mobile.core.SpeakerColors
 import com.couchsubs.mobile.core.SubtitleBackgroundShape
 import com.couchsubs.mobile.core.SubtitlePalette
@@ -210,7 +211,7 @@ private fun SubtitlePreview(lines: Int, version: Int = 0) {
     val speakerColors = remember(version) { settings.speakerColors }
     val display = SubtitlePalette.display(style.fontSize)
     val text = color(SubtitlePalette.textHex(style)) ?: Color.White
-    val background = (color(style.backgroundColor) ?: Color.Black).copy(alpha = style.background / 100f)
+    val plate = color(style.backgroundColor) ?: Color.Black
     // Perde önizlemesi: sıcak oyun sahnesi, 16:9, 20 köşe, ekran çerçevesi (tasarim.json screenFrame).
     val shape = RoundedCornerShape(Tokens.Radius.preview)
     Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape).border(4.dp, Tokens.Color.screenFrame, shape)) {
@@ -219,7 +220,12 @@ private fun SubtitlePreview(lines: Int, version: Int = 0) {
         Modifier.fillMaxSize().padding(Tokens.Space.gap),
         verticalArrangement = Arrangement.spacedBy(Tokens.Space.hair, Alignment.Bottom), horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        sampleLines.take(lines).forEachIndexed { index, (who, line) ->
+        val shown = sampleLines.take(lines)
+        shown.forEachIndexed { index, (who, line) ->
+            // Zemin TV'deki gibi (OverlayCover.boxOpacity; Mac ve iPhone önizlemesi aynı): "Örtsün"de en alttaki (en yeni)
+            // satır her koyulukta tam opak, önceki satırlar koyuluğun %83'ü. Eskiden hepsi koyulukla çiziliyordu.
+            val background = plate.copy(alpha = OverlayCover.boxOpacity(style.background, style.placement == SubtitlePlacement.COVER,
+                current = index == shown.size - 1).toFloat())
             val name = when {
                 !speakerColors || style.nameColorMode == NameColorMode.TEXT -> text
                 style.nameColorMode == NameColorMode.SINGLE -> color(style.nameHex ?: SubtitlePalette.names[0].hex) ?: text
@@ -323,7 +329,10 @@ private fun AppearancePage() {
                 test()
             }
         }
-        SettingUnit(stringResource(R.string.set_darkness)) {
+        // "Örtsün"de en yeni satır her koyulukta tam opak; ayar bunu söylemeyince "koyuluk ayarlanamıyor" sanılıyordu
+        // (X ve Google Play, beta.107). Mac ve iPhone aynı not.
+        val darknessNote = if (OverlayCover.darknessFixedByCover(style.placement, style.background)) stringResource(R.string.set_darkness_cover_note) else null
+        SettingUnit(stringResource(R.string.set_darkness), darknessNote) {
             val level = SubtitlePalette.darknessLevel(style.background)
             Segmented(listOf(stringResource(R.string.set_look_light), stringResource(R.string.set_darkness_medium), stringResource(R.string.set_look_dark)),
                 level?.let { SubtitlePalette.darkness.indexOf(it) } ?: -1) { index ->

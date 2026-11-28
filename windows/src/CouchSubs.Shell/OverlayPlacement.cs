@@ -84,6 +84,15 @@ public static class OverlayPlacement
     }
 
     /// <summary>
+    /// Ayarlardaki "Koyuluk"un altına "Örtsün"de en yeni satırın hep tam koyu kaldığını söyleyen not çıksın mı (Mac/iPhone
+    /// OverlayCover.darknessFixedByCover, Android aynı). İki kullanıcı (X ve Google Play, beta.107) "zemin koyuluğu
+    /// ayarlanamıyor" dedi: "Örtsün"de en yeni satır her koyulukta tam opak (#1378), ayar ekranı bunu söylemiyordu. Örtüyü
+    /// koyuluğa göre açmak İngilizceyi geri getirir (testdata/frames: %80'de ΔL* ≈ 20, ancak %95 üstünde fark edilmez).
+    /// </summary>
+    public static bool DarknessFixedByCover(CouchSubs.Core.SubtitlePlacement placement, int background) =>
+        placement == CouchSubs.Core.SubtitlePlacement.Cover && background > 0;
+
+    /// <summary>
     /// Kayıtlı yer ya da çalışma alanının altında ortada, %70 genişlikte. Kayıt bir ekranın adını taşıyorsa ve o ekran
     /// bağlıysa yer o ekrana göre hesaplanır (ekranların dizilişi değişse de pencere aynı ekranda kalır); ekran artık
     /// yoksa ya da eski kayıtsa tüm ekranlardaki yeri, o da görünmüyorsa varsayılan yer. <paramref name="height"/> yazı

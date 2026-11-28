@@ -285,7 +285,7 @@ struct PlacementTile: View {
                 }
             }
             SettingUnit(title: "Background area",
-                        hint: "Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides.") {
+                        hint: "A full-width band also covers the sides of the English subtitle.") {
                 SegmentedTabs(options: [SubtitleBackgroundShape.fit: "Fit the text", .band: "Full-width band"],
                               selection: $model.settings.style.backgroundShape)
             }

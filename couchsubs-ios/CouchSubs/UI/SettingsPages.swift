@@ -201,7 +201,11 @@ struct PhoneSubtitlePreview: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Mobile.Space.inline)
                         .padding(.vertical, Mobile.Space.micro)
-                        .background((SubtitlePalette.color(style.backgroundColor) ?? .black).opacity(Double(style.background) / 100),
+                        // Zemin TV'deki gibi (OverlayCover.boxOpacity; Mac SubtitlePreviewBox, Android aynı): "Örtsün"de en
+                        // alttaki (en yeni) satır her koyulukta tam opak, önceki satırlar koyuluğun %83'ü.
+                        .background((SubtitlePalette.color(style.backgroundColor) ?? .black)
+                                        .opacity(OverlayCover.boxOpacity(background: style.background, covering: style.placement == .cover,
+                                                                         current: index == lines.count - 1)),
                                     in: RoundedRectangle(cornerRadius: DS.radius("small")))
                         .shadow(color: style.background == 0 ? .black.opacity(0.85) : .clear, radius: 1.5, y: 1)
                 }
@@ -313,7 +317,11 @@ private struct AppearancePage: View {
             update { $0.background = value }
             model.sendTestSubtitle()
         })
-        return SettingUnit(title: "Darkness") {
+        // "Örtsün"de en yeni satır her koyulukta tam opak; ayar bunu söylemeyince "koyuluk ayarlanamıyor" sanılıyordu
+        // (X ve Google Play, beta.107). Mac ve Android aynı not.
+        let note: LocalizedStringKey? = OverlayCover.darknessFixedByCover(placement: style.placement, background: style.background)
+            ? "With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements." : nil
+        return SettingUnit(title: "Darkness", hint: note) {
             DSTabs(selection: level, items: [(Int?.some(45), "Light"), (Int?.some(75), "Medium"), (Int?.some(100), "Dark")])
                 .disabled(style.background == 0)
                 .opacity(style.background == 0 ? 0.5 : 1)

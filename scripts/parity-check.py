@@ -49,6 +49,18 @@ _DROID_TESTS = "couchsubs-android/app/src/test/java/com/couchsubs/mobile/core/"
 # ve ortak deneme dosyasını okuyan testi olmalı. (platform, dosya, düzenli ifade) üçlüleri; biri eksikse denetim kırmızı.
 # Android'de "RECENTER 13" gibi yanlış okunmuş tuş simgesi kutuda kalıyordu: markFree yalnız Mac ve Windows'taydı (#860).
 CAPABILITIES = {
+    "Altyazı kutusunun opaklığı ve ayarlardaki Koyuluk notu: Örtsün'de en yeni satır tam opak, önizleme TV gibi (box-opacity.json)": [
+        ("mac", _CORE + "OverlayCover.swift", r"func darknessFixedByCover\(placement: SubtitlePlacement, background: Int\)"),
+        ("windows", "windows/src/CouchSubs.Shell/OverlayPlacement.cs", r"bool DarknessFixedByCover\("),
+        ("android", _DROID + "OverlayCover.kt", r"fun darknessFixedByCover\(placement: SubtitlePlacement, background: Int\)"),
+        ("mac", "mac/CouchSubs/UI/Yeni/SettingsPage.swift", r"OverlayCover\.darknessFixedByCover\("),
+        ("iphone", "couchsubs-ios/CouchSubs/UI/SettingsPages.swift", r"OverlayCover\.darknessFixedByCover\("),
+        ("windows", "windows/src/CouchSubs.App/Views/AppearanceEditor.cs", r"OverlayPlacement\.DarknessFixedByCover\("),
+        ("android", "couchsubs-android/app/src/main/java/com/couchsubs/mobile/ui/SettingsPages.kt", r"OverlayCover\.darknessFixedByCover\("),
+        ("mac", _CORE_TESTS + "OverlayCoverTests.swift", r"func testSharedBoxOpacityCases"),
+        ("windows", "windows/tests/CouchSubs.Shell.Tests/OverlayPlacementTests.cs", r"void SharedBoxOpacityCases"),
+        ("android", _DROID_TESTS + "OverlayCoverTest.kt", r"fun sharedBoxOpacityCases"),
+    ],
     "Ekran kilidi: kararlı ekran yazısı kilitlenir, küçük değişiklikte kutu taşınmaz/eklenmez/kalkmaz, ekran önbelleği (ScreenLock)": [
         ("mac", _CORE + "ScreenLock.swift", r"func observe\(_ blocks: \[Block\], at now: Int\)"),
         ("windows", _WIN + "ScreenLock.cs", r"internal List<Send> Observe\(IReadOnlyList<Block> blocks, long now\)"),

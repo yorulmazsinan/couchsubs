@@ -815,7 +815,8 @@ install CouchSubs?", "Remove And Install", "Cancel".
 | Characters you meet while playing appear here. | Oynarken karşılaştığınız karakterler burada görünür. |
 | Check Unchanged Subtitle Areas More Often | Değişmeyen Altyazı Alanını Daha Sık Oku |
 | Set On-Screen Text Apart from Subtitles | Ekran Yazılarını Altyazıdan Ayır |
-| Choose Dark under Subtitle Appearance to fully hide the English subtitle in the game. A full-width band also covers the sides. | Oyundaki İngilizce altyazıyı tamamen gizlemek için Altyazı Görünümü'nde Koyu'yu seçin. Tam genişlik bant yanları da örter. |
+| A full-width band also covers the sides of the English subtitle. | Tam genişlik bant İngilizce altyazının yanlarını da örter. |
+| With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements. | Örtsün'de en yeni satırın kutusu, İngilizce altyazı alttan görünmesin diye hep tam koyudur. Koyuluk önceki satırlarda ve öbür yerleşimlerde geçerlidir. |
 | Xbox · Beta | Xbox · Beta |
 | Beta | Beta |
 | Live Preview | Canlı Önizleme |

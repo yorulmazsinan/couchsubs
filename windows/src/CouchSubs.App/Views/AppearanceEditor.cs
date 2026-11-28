@@ -50,6 +50,9 @@ public sealed class AppearanceEditor : Grid
     private readonly WrapPanel textSwatches = new();
     private readonly StackPanel nameArea = new();
     private readonly RadioButton[] darknessButtons = new RadioButton[3];
+    /// <summary>"Örtsün"de en yeni satırın hep tam koyu kaldığını söyleyen not (Mac/iPhone/Android aynı).</summary>
+    private readonly TextBlock darknessNote = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+    private SubtitlePlacement shownPlacement;
     private readonly RadioButton[] nameModes = new RadioButton[4];
     private int background;
     private int text;
@@ -128,11 +131,15 @@ public sealed class AppearanceEditor : Grid
         }
         backgroundName.SetResourceReference(StyleProperty, "HintText");
         right.Children.Add(Unit("Background Color", backgroundSwatches, backgroundName));
+        // "Örtsün"de en yeni satır her koyulukta tam opak (OverlayPlacement.BoxOpacity); ayar bunu söylemeyince "koyuluk
+        // ayarlanamıyor" sanılıyordu (X ve Google Play, beta.107). Not yerleşime göre Preview'da açılır.
+        darknessNote.Text = l["With Cover, the newest line's box always stays fully dark so the English subtitle can't show through. Darkness applies to earlier lines and to the other placements."];
+        darknessNote.SetResourceReference(StyleProperty, "HintText");
         right.Children.Add(Unit("Darkness", Segments(["Light", "Medium", "Dark"], darknessButtons, index =>
         {
             SaveBackground();
             Preview();
-        })));
+        }), darknessNote));
 
         for (var i = 0; i < TextColors.Length; i++)
         {
@@ -172,6 +179,13 @@ public sealed class AppearanceEditor : Grid
         loading = false;
         ShowNameArea();
         Preview();
+        // Yerleşim Ayarlar'ın başka biriminde değişir; önizleme ve not yeni yerleşime göre yeniden çizilir.
+        shownPlacement = controller.Settings.Style.Placement;
+        controller.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(AppController.Settings) || controller.Settings.Style.Placement == shownPlacement) return;
+            Dispatcher.BeginInvoke(Preview);
+        };
     }
 
     /// <summary>Kayıttan: boyut eşlemesi, zemin rengi ve koyuluğu, yazı rengi, karakter adı.</summary>
@@ -290,9 +304,12 @@ public sealed class AppearanceEditor : Grid
     {
         if (loading) return;
         var l = Localizer.Current;
-        var darkness = Darkness[Math.Max(0, Array.FindIndex(darknessButtons, b => b.IsChecked == true))] / 100.0;
+        var darknessPercent = Darkness[Math.Max(0, Array.FindIndex(darknessButtons, b => b.IsChecked == true))];
+        var darkness = darknessPercent / 100.0;
         // Önizleme (Mac ile aynı): kaydırıcıdaki boyun yarısı.
         var bg = Backgrounds[background].Value;
+        var placement = shownPlacement = controller.Settings.Style.Placement;
+        darknessNote.Visibility = OverlayPlacement.DarknessFixedByCover(placement, bg is null ? 0 : darknessPercent) ? Visibility.Visible : Visibility.Collapsed;
         var fg = TextColors[text].Value;
         backgroundName.Text = l.Format("Selected: %@.", l[Backgrounds[background].Name]);
         textName.Text = l.Format("Selected: %@.", l[TextColors[text].Name]);
@@ -310,7 +327,12 @@ public sealed class AppearanceEditor : Grid
             {
                 Effect = bg is null ? null : new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 5, Direction = 270, Opacity = 0.3, Color = Colors.Black },
                 Child = line, Padding = Sp.T("s", "titleBody", "s", "titleBody"), CornerRadius = new CornerRadius(10), Margin = Sp.T("0", "titleBody", "0", "0"), HorizontalAlignment = HorizontalAlignment.Center,
-                Background = bg is { } color ? new SolidColorBrush(Color.FromArgb((byte)(darkness * 255), color.R, color.G, color.B)) : Brushes.Transparent,
+                // Zemin TV'deki gibi (OverlayPlacement.BoxOpacity; Mac SubtitlePreviewBox aynı): "Örtsün"de en alttaki (en yeni)
+                // satır her koyulukta tam opak, önceki satırlar koyuluğun %83'ü. Eskiden hepsi koyulukla çiziliyordu.
+                Background = bg is { } color
+                    ? new SolidColorBrush(Color.FromArgb((byte)Math.Round(OverlayPlacement.BoxOpacity(darknessPercent, placement == SubtitlePlacement.Cover, i == Sample.Length - 1) * 255),
+                        color.R, color.G, color.B))
+                    : Brushes.Transparent,
             });
         }
         // Yarı saydam zemin TV görüntüsüyle (orta ton) karışır; kontrast karışık renge göre.
